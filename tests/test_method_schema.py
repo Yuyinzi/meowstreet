@@ -128,3 +128,102 @@ def test_normalize_graph_observation_payload_rejects_bad_symbol():
         method_schema.normalize_graph_observation_payload(
             {"symbol": "bad symbol", "observations": {}}
         )
+
+
+def test_normalize_method_payload_keeps_enriched_node_fields():
+    payload = valid_method()
+    payload["graph_review"] = {
+        "previous_nodes": ["bottom_up_fundamental_bias"],
+        "actions": [
+            {
+                "action": "split",
+                "from": "bottom_up_fundamental_bias",
+                "to": [
+                    "fundamental_quantitative_bias",
+                    "fundamental_qualitative_bias",
+                ],
+                "rationale": "The method separates quantitative and qualitative processing.",
+            }
+        ],
+    }
+    payload["workflow_nodes"][0]["sub_methods"] = [
+        {
+            "id": "estimate_skew_analysis",
+            "title": "Estimate Skew Analysis",
+            "summary": "Compare analyst estimate mean to the range midpoint.",
+            "source_refs": [
+                {
+                    "document": "",
+                    "section": "Methodology / Workflow",
+                }
+            ],
+        }
+    ]
+    payload["workflow_nodes"][0]["indicators"] = [
+        {
+            "id": "estimate_skew",
+            "title": "Estimate Skew",
+            "description": "Mean estimate compared with midpoint of low/high estimates.",
+            "formula": "mean - ((low + high) / 2)",
+            "required_inputs": [
+                "estimates.next_year_eps_low",
+                "estimates.next_year_eps_high",
+                "estimates.next_year_eps_mean",
+            ],
+            "compute_status": "computed",
+            "future_tool_hooks": ["analyst_estimates"],
+            "source_refs": [
+                {
+                    "document": "",
+                    "section": "Methodology / Workflow",
+                }
+            ],
+        }
+    ]
+    payload["workflow_nodes"][0]["cautions"] = [
+        {
+            "id": "analyst_ratings_lag",
+            "title": "Analyst ratings lag price",
+            "summary": "Do not rely on ratings as leading indicators.",
+            "source_refs": [
+                {
+                    "document": "",
+                    "section": "Cautions / Common Mistakes",
+                }
+            ],
+        }
+    ]
+
+    normalized = method_schema.normalize_method_payload(payload)
+
+    node = normalized["workflow_nodes"][0]
+    assert node["sub_methods"][0]["id"] == "estimate_skew_analysis"
+    assert node["indicators"][0]["compute_status"] == "computed"
+    assert node["cautions"][0]["id"] == "analyst_ratings_lag"
+    assert normalized["graph_review"]["actions"][0]["action"] == "split"
+
+
+def test_normalize_method_payload_rejects_bad_indicator_compute_status():
+    payload = valid_method()
+    payload["workflow_nodes"][0]["indicators"] = [
+        {
+            "id": "estimate_skew",
+            "title": "Estimate Skew",
+            "description": "Mean estimate compared with midpoint.",
+            "formula": "mean - midpoint",
+            "required_inputs": [],
+            "compute_status": "bad",
+            "source_refs": [
+                {
+                    "document": "",
+                    "section": "Methodology / Workflow",
+                }
+            ],
+        }
+    ]
+
+    with pytest.raises(
+        ValueError,
+        match="workflow node instrument_identity indicator estimate_skew compute_status is invalid",
+    ):
+        method_schema.normalize_method_payload(payload)

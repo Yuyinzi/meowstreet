@@ -19,6 +19,22 @@ _VALID_OPERATORS = {
     "lte",
 }
 
+_VALID_COMPUTE_STATUSES = {
+    "computed",
+    "manual_input",
+    "future_tool_hook",
+    "supporting_only",
+}
+
+_VALID_GRAPH_REVIEW_ACTIONS = {
+    "keep",
+    "rename",
+    "split",
+    "merge",
+    "demote_to_sub_method",
+    "remove",
+}
+
 
 def _text(value):
     if not isinstance(value, str):
@@ -54,6 +70,147 @@ def _required_text(obj, key, label):
         raise ValueError(f"{label} {key} is required")
     obj[key] = value
     return value
+
+
+def _source_refs(source_refs, label):
+    if source_refs is None:
+        return []
+    if not isinstance(source_refs, list):
+        raise ValueError(f"{label} source_refs must be a list")
+    for index, source_ref in enumerate(source_refs):
+        if not isinstance(source_ref, dict):
+            raise ValueError(f"{label} source_ref {index} must be an object")
+        _required_text(source_ref, "document", f"{label} source_ref {index}")
+        _required_text(source_ref, "section", f"{label} source_ref {index}")
+    return source_refs
+
+
+def _normalize_sub_methods(node):
+    node_id = node["id"]
+    sub_methods = node.get("sub_methods", [])
+    if not isinstance(sub_methods, list):
+        raise ValueError(f"workflow node {node_id} sub_methods must be a list")
+    for index, sub_method in enumerate(sub_methods):
+        if not isinstance(sub_method, dict):
+            raise ValueError(
+                f"workflow node {node_id} sub_method {index} must be an object"
+            )
+        sub_method_id = _required_text(
+            sub_method, "id", f"workflow node {node_id} sub_method"
+        )
+        _required_text(
+            sub_method, "title", f"workflow node {node_id} sub_method {sub_method_id}"
+        )
+        _required_text(
+            sub_method, "summary", f"workflow node {node_id} sub_method {sub_method_id}"
+        )
+        sub_method["source_refs"] = _source_refs(
+            sub_method.get("source_refs", []),
+            f"workflow node {node_id} sub_method {sub_method_id}",
+        )
+    node["sub_methods"] = sub_methods
+
+
+def _normalize_indicators(node):
+    node_id = node["id"]
+    indicators = node.get("indicators", [])
+    if not isinstance(indicators, list):
+        raise ValueError(f"workflow node {node_id} indicators must be a list")
+    indicator_ids = set()
+    for index, indicator in enumerate(indicators):
+        if not isinstance(indicator, dict):
+            raise ValueError(
+                f"workflow node {node_id} indicator {index} must be an object"
+            )
+        indicator_id = _required_text(
+            indicator, "id", f"workflow node {node_id} indicator"
+        )
+        if indicator_id in indicator_ids:
+            raise ValueError(
+                f"workflow node {node_id} indicator {indicator_id} is duplicated"
+            )
+        _required_text(
+            indicator, "title", f"workflow node {node_id} indicator {indicator_id}"
+        )
+        _required_text(
+            indicator,
+            "description",
+            f"workflow node {node_id} indicator {indicator_id}",
+        )
+        if "formula" not in indicator:
+            indicator["formula"] = ""
+        if "required_inputs" not in indicator:
+            indicator["required_inputs"] = []
+        if not isinstance(indicator["required_inputs"], list):
+            raise ValueError(
+                f"workflow node {node_id} indicator {indicator_id} required_inputs must be a list"
+            )
+        compute_status = _text(indicator.get("compute_status")) or "supporting_only"
+        if compute_status not in _VALID_COMPUTE_STATUSES:
+            raise ValueError(
+                f"workflow node {node_id} indicator {indicator_id} compute_status is invalid"
+            )
+        indicator["compute_status"] = compute_status
+        if "future_tool_hooks" not in indicator:
+            indicator["future_tool_hooks"] = []
+        if not isinstance(indicator["future_tool_hooks"], list):
+            raise ValueError(
+                f"workflow node {node_id} indicator {indicator_id} future_tool_hooks must be a list"
+            )
+        indicator["source_refs"] = _source_refs(
+            indicator.get("source_refs", []),
+            f"workflow node {node_id} indicator {indicator_id}",
+        )
+        indicator_ids.add(indicator_id)
+    node["indicators"] = indicators
+
+
+def _normalize_cautions_and_examples(node):
+    node_id = node["id"]
+    for key in ("cautions", "examples"):
+        values = node.get(key, [])
+        if not isinstance(values, list):
+            raise ValueError(f"workflow node {node_id} {key} must be a list")
+        for index, value in enumerate(values):
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"workflow node {node_id} {key} {index} must be an object"
+                )
+            value_id = _required_text(value, "id", f"workflow node {node_id} {key}")
+            _required_text(value, "title", f"workflow node {node_id} {key} {value_id}")
+            _required_text(
+                value, "summary", f"workflow node {node_id} {key} {value_id}"
+            )
+            value["source_refs"] = _source_refs(
+                value.get("source_refs", []),
+                f"workflow node {node_id} {key} {value_id}",
+            )
+        node[key] = values
+
+
+def _normalize_graph_review(normalized):
+    graph_review = normalized.get("graph_review", {})
+    if graph_review is None:
+        graph_review = {}
+    if not isinstance(graph_review, dict):
+        raise ValueError("graph_review must be an object")
+    previous_nodes = graph_review.get("previous_nodes", [])
+    if not isinstance(previous_nodes, list):
+        raise ValueError("graph_review previous_nodes must be a list")
+    actions = graph_review.get("actions", [])
+    if not isinstance(actions, list):
+        raise ValueError("graph_review actions must be a list")
+    for index, action in enumerate(actions):
+        if not isinstance(action, dict):
+            raise ValueError(f"graph_review action {index} must be an object")
+        action_name = _required_text(action, "action", f"graph_review action {index}")
+        if action_name not in _VALID_GRAPH_REVIEW_ACTIONS:
+            raise ValueError(f"graph_review action {index} action is invalid")
+        _required_text(action, "rationale", f"graph_review action {index}")
+    normalized["graph_review"] = {
+        "previous_nodes": previous_nodes,
+        "actions": actions,
+    }
 
 
 def normalize_method_payload(payload):
@@ -96,6 +253,9 @@ def normalize_method_payload(payload):
             if not isinstance(node[key], list):
                 raise ValueError(f"workflow node {node_id} {key} must be a list")
         node_ids.add(node_id)
+        _normalize_sub_methods(node)
+        _normalize_indicators(node)
+        _normalize_cautions_and_examples(node)
 
     for node in workflow_nodes:
         node_id = node["id"]
@@ -103,9 +263,13 @@ def normalize_method_payload(payload):
             for edge_node_id in node[key]:
                 edge_node_id = _text(edge_node_id)
                 if not edge_node_id:
-                    raise ValueError(f"workflow node {node_id} {key} contains invalid node id")
+                    raise ValueError(
+                        f"workflow node {node_id} {key} contains invalid node id"
+                    )
                 if edge_node_id not in node_ids:
-                    raise ValueError(f"workflow node {node_id} {key} references unknown node")
+                    raise ValueError(
+                        f"workflow node {node_id} {key} references unknown node"
+                    )
 
     for index, check in enumerate(node_checks):
         if not isinstance(check, dict):
@@ -128,11 +292,18 @@ def normalize_method_payload(payload):
             raise ValueError(f"node check {check_id} source_refs must be a list")
         check["required"] = check.get("required") is True
 
-    for key in ("source_documents", "concepts", "decision_rules", "extraction_warnings"):
+    for key in (
+        "source_documents",
+        "concepts",
+        "decision_rules",
+        "extraction_warnings",
+    ):
         if key not in normalized:
             normalized[key] = []
         if not isinstance(normalized[key], list):
             raise ValueError(f"{key} must be a list")
+
+    _normalize_graph_review(normalized)
 
     return normalized
 
@@ -147,7 +318,9 @@ def normalize_graph_observation_payload(payload):
     symbol = symbol.upper()
     if not _SYMBOL_RE.match(symbol):
         raise ValueError("observation symbol is invalid")
-    if "observations" not in normalized or not isinstance(normalized.get("observations"), dict):
+    if "observations" not in normalized or not isinstance(
+        normalized.get("observations"), dict
+    ):
         raise ValueError("observations must be an object")
     normalized["symbol"] = symbol
     return normalized
