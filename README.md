@@ -10,7 +10,7 @@ Meowstreet evaluates a ticker through a method-derived workflow graph. It is sep
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python scripts/build_method.py
-PYTHONPATH=src .venv/bin/uvicorn meowstreet.api:app --reload --port 8797
+PYTHONPATH=src .venv/bin/uvicorn app.api:app --reload --port 8797
 ```
 
 Open:

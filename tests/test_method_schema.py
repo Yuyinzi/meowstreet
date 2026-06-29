@@ -1,6 +1,6 @@
 import pytest
 
-from meowstreet import method_schema
+from app import method_schema
 
 
 def valid_method():

@@ -5,7 +5,7 @@ from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from meowstreet import workflow_engine
+from app import workflow_engine
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = ROOT / "static"

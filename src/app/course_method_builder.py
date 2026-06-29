@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from meowstreet import method_notes_parser
-from meowstreet.method_schema import normalize_method_payload
+from app import method_notes_parser
+from app.method_schema import normalize_method_payload
 
 
 DEFAULT_NODE_ORDER = [

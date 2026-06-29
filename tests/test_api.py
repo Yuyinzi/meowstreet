@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from meowstreet.api import app
+from app.api import app
 
 
 client = TestClient(app)

@@ -1,4 +1,4 @@
-from meowstreet import workflow_engine
+from app import workflow_engine
 
 
 def method_payload():

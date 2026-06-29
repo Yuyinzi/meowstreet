@@ -17,7 +17,7 @@ python3 -m venv .venv
 ### Run
 
 ```bash
-PYTHONPATH=src .venv/bin/uvicorn meowstreet.api:app --reload --port 8797
+PYTHONPATH=src .venv/bin/uvicorn app.api:app --reload --port 8797
 ```
 
 ### Run all tests
@@ -47,7 +47,7 @@ PYTHONPATH=src .venv/bin/uvicorn meowstreet.api:app --reload --port 8797
 ### Check Python syntax (no test execution)
 
 ```bash
-python3 -m py_compile src/meowstreet/api.py
+python3 -m py_compile src/app/api.py
 ```
 
 ### Check JS syntax
@@ -68,7 +68,7 @@ There is no linter (no ruff, flake8, mypy) configured for this project.
 
 ### Imports
 
-Group imports into three blocks separated by blank lines: stdlib, third-party, local (`meowstreet`). Always import individual names rather than modules.
+Group imports into three blocks separated by blank lines: stdlib, third-party, local (`app`). Always import individual names rather than modules.
 
 ```python
 import json
@@ -76,8 +76,8 @@ from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException
 
-from meowstreet import workflow_engine
-from meowstreet.method_schema import normalize_method_payload
+from app import workflow_engine
+from app.method_schema import normalize_method_payload
 ```
 
 Scripts in `scripts/` inject the project root into `sys.path` before importing:
@@ -89,7 +89,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from meowstreet import method_builder
+from app import method_builder
 ```
 
 ### Naming
@@ -116,7 +116,7 @@ raise ValueError(f"workflow node {node_id} is duplicated")
 raise ValueError("observation symbol is required")
 ```
 
-In the API layer (meowstreet/api.py), re-wrap with `HTTPException` and chain with `from exc`:
+In the API layer (app/api.py), re-wrap with `HTTPException` and chain with `from exc`:
 
 ```python
 except ValueError as exc:
@@ -164,7 +164,7 @@ No docstrings. No inline comments. Rely entirely on descriptive function and var
 
 ```
 src/
-  meowstreet/              # Python package (all application code)
+  app/              # Python package (all application code)
     __init__.py
     method_notes_parser.py
     method_schema.py
@@ -186,4 +186,4 @@ data/local_system/      # generated JSON method artifacts
 
 ## Self-Containment Rule
 
-This repo is a standalone product. Do not import from or reference `traderdash`, `serenity`, `scripts.server`, `chat_service`, `chat_index`, `x_curl`, `tweets`, `strategy`, or any external repos. All imports must resolve within `meowstreet/`, stdlib, or the three third-party packages listed in `requirements.txt`.
+This repo is a standalone product. Do not import from or reference `traderdash`, `serenity`, `scripts.server`, `chat_service`, `chat_index`, `x_curl`, `tweets`, `strategy`, or any external repos. All imports must resolve within `app/`, stdlib, or the three third-party packages listed in `requirements.txt`.

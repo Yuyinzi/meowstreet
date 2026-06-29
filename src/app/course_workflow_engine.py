@@ -1,6 +1,6 @@
 from numbers import Real
 
-from meowstreet.method_schema import (
+from app.method_schema import (
     normalize_method_payload,
     normalize_graph_observation_payload,
 )
