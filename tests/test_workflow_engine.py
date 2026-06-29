@@ -119,3 +119,61 @@ def test_evaluate_workflow_method_returns_wait_for_timing_when_optional_timing_m
     assert result["final_status"] == "wait_for_timing"
     assert result["missing_information"]
     assert "wait_for_timing" in result["next_actions"]
+
+
+def test_evaluate_workflow_method_uses_computed_indicator_values():
+    payload = method_payload()
+    payload["workflow_nodes"][1]["indicators"] = [
+        {
+            "id": "estimate_skew",
+            "title": "Estimate Skew",
+            "description": "Mean estimate compared with midpoint.",
+            "formula": "mean - ((low + high) / 2)",
+            "required_inputs": [
+                "estimates.next_year_eps_low",
+                "estimates.next_year_eps_high",
+                "estimates.next_year_eps_mean",
+            ],
+            "compute_status": "computed",
+            "source_refs": [],
+        }
+    ]
+    payload["node_checks"].append(
+        {
+            "id": "positive_estimate_skew",
+            "node_id": "technical_timing",
+            "title": "Positive estimate skew",
+            "field": "estimates.next_year_eps_skew",
+            "operator": "gt",
+            "value": 0,
+            "side": "long",
+            "required": False,
+            "fail_effect": "watchlist",
+            "source_refs": [],
+        }
+    )
+
+    result = workflow_engine.evaluate_workflow_method(
+        payload,
+        {
+            "symbol": "NVDA",
+            "observations": {
+                "signals": {"trend": "up"},
+                "estimates": {
+                    "next_year_eps_low": 1,
+                    "next_year_eps_high": 2,
+                    "next_year_eps_mean": 1.75,
+                },
+            },
+        },
+    )
+
+    technical_node = result["nodes"][1]
+    estimate_check = next(
+        check
+        for check in technical_node["checks"]
+        if check["check_id"] == "positive_estimate_skew"
+    )
+    assert estimate_check["actual"] == 0.25
+    assert estimate_check["status"] == "pass"
+    assert technical_node["indicators"][0]["id"] == "estimate_skew"

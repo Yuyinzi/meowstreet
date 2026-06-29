@@ -1,5 +1,6 @@
 from numbers import Real
 
+from app.method_indicators import apply_computed_indicators
 from app.method_schema import (
     normalize_method_payload,
     normalize_graph_observation_payload,
@@ -151,6 +152,7 @@ def _build_node_result(node, checks):
         "tool_hooks": node["tool_hooks"],
         "incoming_edges": node["incoming_edges"],
         "outgoing_edges": node["outgoing_edges"],
+        "indicators": node.get("indicators", []),
         "checks": checks,
         "method_basis": {
             "long": long_result["method_basis"],
@@ -266,7 +268,7 @@ def _final_status(node_results):
 def evaluate_workflow_method(method_payload, observation_payload):
     method = normalize_method_payload(method_payload)
     observation = normalize_graph_observation_payload(observation_payload)
-    graph_observation = dict(observation["observations"])
+    graph_observation = apply_computed_indicators(dict(observation["observations"]))
     graph_observation["symbol"] = observation["symbol"]
 
     checks_by_node = {}
