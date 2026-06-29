@@ -17,7 +17,7 @@ python3 -m venv .venv
 ### Run
 
 ```bash
-PYTHONPATH=src .venv/bin/uvicorn app.api:app --reload --port 8797
+.venv/bin/uvicorn app.api:app --reload --port 8797
 ```
 
 ### Run all tests
@@ -47,7 +47,7 @@ PYTHONPATH=src .venv/bin/uvicorn app.api:app --reload --port 8797
 ### Check Python syntax (no test execution)
 
 ```bash
-python3 -m py_compile src/app/api.py
+python3 -m py_compile app/api.py
 ```
 
 ### Check JS syntax
@@ -87,7 +87,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 from app import method_builder
 ```
@@ -132,7 +132,7 @@ All data is nested dicts with string keys. No dataclasses, namedtuples, or ORM m
 Always use `pathlib.Path`, never `os.path` or raw strings for paths:
 
 ```python
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
 ```
 
@@ -163,14 +163,13 @@ No docstrings. No inline comments. Rely entirely on descriptive function and var
 ## Target File Structure
 
 ```
-src/
-  app/              # Python package (all application code)
-    __init__.py
-    method_notes_parser.py
-    method_schema.py
-    method_builder.py
-    workflow_engine.py
-    api.py
+app/              # Python package (all application code)
+  __init__.py
+  method_notes_parser.py
+  method_schema.py
+  method_builder.py
+  workflow_engine.py
+  api.py
 tests/                   # pytest tests
   conftest.py
   test_*.py

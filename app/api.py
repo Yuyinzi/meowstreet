@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import workflow_engine
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
 METHOD_PATH = ROOT / "data" / "local_system" / "method.v1.json"
 
