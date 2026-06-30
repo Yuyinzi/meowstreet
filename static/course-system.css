@@ -229,6 +229,7 @@ button {
   height: 100%;
   pointer-events: none;
   overflow: visible;
+  z-index: 2;
 }
 
 .graph-edge {
@@ -785,24 +786,6 @@ button {
   color: #5C5C5C;
   font-size: 13px;
   line-height: 1.45;
-}
-
-.select-hint {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 2;
-  pointer-events: none;
-  color: #B5B0A6;
-  font-size: 15px;
-  font-weight: 500;
-  transition: opacity 300ms ease;
-  text-align: center;
-}
-
-.select-hint.hidden {
-  opacity: 0;
 }
 
 @media (max-width: 980px) {

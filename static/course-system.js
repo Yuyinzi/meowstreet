@@ -445,18 +445,15 @@
   function renderNodeDetail() {
     const section = $("nodeDetailSection");
     const panel = $("nodeDetailPanel");
-    const hint = $("selectHint");
 
     if (!state.selectedNodeId) {
       section.classList.remove("visible");
-      if (hint) hint.classList.remove("hidden");
       return;
     }
 
     const node = state.graphNodes.find((item) => item.node_id === state.selectedNodeId);
     if (!node) {
       section.classList.remove("visible");
-      if (hint) hint.classList.remove("hidden");
       return;
     }
 
