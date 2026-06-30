@@ -319,3 +319,72 @@ def test_call_openai_json_does_not_retry_length_refinement_failure():
         raise AssertionError("expected length failure")
 
     assert client.completions.calls == 1
+
+
+def test_refine_doc_merges_patch_and_writes_prompt_and_output(tmp_path):
+    module = load_refine_module()
+    doc = {
+        "path": "",
+        "title": "",
+        "sections": {
+            "Methodology / Workflow": "Compute month-on-month changes.",
+            "Actionable Checklist": "Calculate year-on-year changes.",
+        },
+    }
+    baseline = baseline_extraction()
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    prompts_dir = tmp_path / "prompts"
+    repairs_dir = tmp_path / "repairs"
+    audits_dir = tmp_path / "audits"
+    input_path = module._extraction_path_for(input_dir, doc)
+    module._write_json_atomic(input_path, baseline)
+    patch = {
+        "items": [
+            {
+                "id": "permits_mom_pct_change",
+                "type": "formula",
+                "title": "Permits Month-on-Month Percentage Change",
+                "summary": "Computes month-on-month percentage change in building permits.",
+                "decision_area": "macro regime",
+                "formula": "(permits_t - permits_t_minus_1) / permits_t_minus_1 * 100",
+                "required_inputs": ["macro.permits_sa", "macro.permits_sa_lag_1"],
+                "long_side_usage": "",
+                "short_side_usage": "",
+                "compute_status": "future_tool_hook",
+                "future_tool_hooks": ["census_housing_permits"],
+                "source_sections": ["Methodology / Workflow"],
+            }
+        ],
+        "proposed_nodes": [],
+        "dependencies": [],
+    }
+
+    async def fake_call(prompt, label):
+        return patch
+
+    result_path = asyncio.run(
+        module._refine_doc(
+            doc,
+            input_dir,
+            output_dir,
+            prompts_dir,
+            repairs_dir,
+            audits_dir,
+            type(
+                "Args",
+                (),
+                {"allow_repair_overwrite": False, "write_prompts_only": False},
+            )(),
+            fake_call,
+        )
+    )
+
+    refined = json.loads(Path(result_path).read_text(encoding="utf-8"))
+
+    assert [item["id"] for item in refined["items"]] == [
+        "building_permits_sa_annual_rate",
+        "permits_mom_pct_change",
+    ]
+    assert list(prompts_dir.glob("*.prompt.md"))
+    assert list(repairs_dir.glob("*.patch.json"))
