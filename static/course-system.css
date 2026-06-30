@@ -652,8 +652,17 @@ button {
 .graph-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
   justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.legend-main {
+  border-left: 4px solid #1F2937;
+}
+
+.legend-support {
+  border-left: 4px dashed #64748B;
 }
 
 .legend-item {

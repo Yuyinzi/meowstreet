@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Method System</title>
+  <title>Meowstreet</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/method-system.css?v=2" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/method-system.css?v=9" />
 </head>
 <body>
   <nav class="topnav">
@@ -16,98 +16,84 @@
   </nav>
 
   <main class="method-shell">
-    <section class="hero-band">
-      <div>
-        <div class="eyebrow">Workflow Graph Engine</div>
-        <h1>Method Trade Console</h1>
-        <p class="hero-copy">Run the method workflow against a ticker, inspect each node, and keep a local run history.</p>
+    <section class="graph-hero">
+      <div class="hero-head">
+        <h1>Workflow Graph</h1>
+        <div class="hero-meta" id="methodMeta">Loading method graph&hellip;</div>
       </div>
-      <div class="hero-meta" id="methodMeta">Loading method graph...</div>
+
+      <div class="command-card">
+        <form id="workflowForm" class="workflow-form">
+          <div class="ticker-row">
+            <label class="ticker-field">
+              <span>Symbol</span>
+              <input type="text" name="symbol" placeholder="NVDA" required autocomplete="off" />
+            </label>
+            <button type="submit" class="primary-button">Run Graph</button>
+            <div id="workflowStatus" class="status-line">Ready</div>
+          </div>
+
+          <details class="context-panel">
+            <summary>Optional context</summary>
+            <div class="context-grid">
+              <label class="field">
+                <span>Trend</span>
+                <select name="trend">
+                  <option value="">Unknown</option>
+                  <option value="up">Up</option>
+                  <option value="down">Down</option>
+                  <option value="flat">Flat</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Catalyst</span>
+                <input type="text" name="catalyst" placeholder="Earnings, product, theme, macro" />
+              </label>
+              <label class="field">
+                <span>Price</span>
+                <input type="number" name="price" min="0" step="0.01" placeholder="120.50" />
+              </label>
+              <label class="field">
+                <span>Avg Dollar Volume (M)</span>
+                <input type="number" name="avgDollarVolume" min="0" step="0.1" placeholder="25" />
+              </label>
+              <label class="field wide">
+                <span>Tags</span>
+                <input type="text" name="tags" placeholder="ai, semis" />
+              </label>
+              <label class="field wide">
+                <span>Thesis</span>
+                <textarea name="thesis" rows="2" placeholder="Method-based reason this symbol belongs in the workflow."></textarea>
+              </label>
+              <label class="field wide">
+                <span>Notes</span>
+                <textarea name="notes" rows="3" placeholder="What is known, what is missing, what still needs checking."></textarea>
+              </label>
+            </div>
+          </details>
+        </form>
+      </div>
+
+      <div class="graph-frame" id="graphFrame">
+        <svg class="graph-links" id="graphLinks" aria-hidden="true"></svg>
+        <div class="select-hint" id="selectHint">Select a node to inspect</div>
+        <div id="workflowGraph" class="workflow-graph" aria-label="Method workflow graph"></div>
+      </div>
+
+      <div class="graph-legend" aria-label="Graph legend">
+        <span class="legend-item legend-main">Main workflow</span>
+        <span class="legend-item legend-support">Supporting input</span>
+        <span class="legend-item legend-idle">Idle</span>
+        <span class="legend-item legend-running">Running</span>
+        <span class="legend-item legend-pass">Pass</span>
+        <span class="legend-item legend-fail">Fail</span>
+        <span class="legend-item legend-missing">Missing</span>
+        <span class="legend-item legend-mixed">Mixed</span>
+      </div>
     </section>
 
-    <section class="command-card">
-      <form id="workflowForm" class="workflow-form">
-        <div class="ticker-row">
-          <label class="ticker-field">
-            <span>Ticker</span>
-            <input type="text" name="symbol" placeholder="NVDA" required autocomplete="off" />
-          </label>
-          <button type="submit" class="primary-button">Run Graph</button>
-          <div id="workflowStatus" class="status-line">Ready.</div>
-        </div>
-
-        <details class="context-panel">
-          <summary>Optional context</summary>
-          <div class="context-grid">
-            <label class="field">
-              <span>Trend</span>
-              <select name="trend">
-                <option value="">Unknown</option>
-                <option value="up">Up</option>
-                <option value="down">Down</option>
-                <option value="flat">Flat</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Catalyst</span>
-              <input type="text" name="catalyst" placeholder="Earnings, product, theme, macro" />
-            </label>
-            <label class="field">
-              <span>Price</span>
-              <input type="number" name="price" min="0" step="0.01" placeholder="120.50" />
-            </label>
-            <label class="field">
-              <span>Avg Dollar Volume (M)</span>
-              <input type="number" name="avgDollarVolume" min="0" step="0.1" placeholder="25" />
-            </label>
-            <label class="field wide">
-              <span>Tags</span>
-              <input type="text" name="tags" placeholder="ai, semis" />
-            </label>
-            <label class="field wide">
-              <span>Thesis</span>
-              <textarea name="thesis" rows="2" placeholder="What is the method-based reason this ticker matters?"></textarea>
-            </label>
-            <label class="field wide">
-              <span>Notes</span>
-              <textarea name="notes" rows="3" placeholder="What is known, what is missing, what still needs checking."></textarea>
-            </label>
-          </div>
-        </details>
-      </form>
-    </section>
-
-    <section class="workflow-stage">
-      <section class="graph-pane">
-        <div class="pane-header">
-          <div>
-            <h2>Workflow Graph</h2>
-            <p class="pane-subtitle">Nodes run in one backend call. The graph stays readable on smaller screens.</p>
-          </div>
-          <div class="graph-legend" aria-label="Status legend">
-            <span class="legend-item legend-idle">Idle</span>
-            <span class="legend-item legend-running">Running</span>
-            <span class="legend-item legend-pass">Pass</span>
-            <span class="legend-item legend-fail">Fail</span>
-            <span class="legend-item legend-missing">Missing</span>
-            <span class="legend-item legend-mixed">Mixed</span>
-          </div>
-        </div>
-        <div class="graph-frame" id="graphFrame">
-          <svg class="graph-links" id="graphLinks" aria-hidden="true"></svg>
-          <div id="workflowGraph" class="workflow-graph" aria-label="Method workflow graph"></div>
-        </div>
-      </section>
-
-      <aside class="detail-pane">
-        <div class="pane-header">
-          <div>
-            <h2>Node Detail</h2>
-            <p class="pane-subtitle">Inspect the selected node and its long/short checks.</p>
-          </div>
-        </div>
-        <div id="nodeDetail" class="node-detail empty">Select a node.</div>
-      </aside>
+    <section class="node-detail" id="nodeDetailSection">
+      <div class="node-detail-panel" id="nodeDetailPanel"></div>
     </section>
 
     <section class="inspector-band">
@@ -115,7 +101,7 @@
         <div class="pane-header">
           <div>
             <h2>Latest Run</h2>
-            <p class="pane-subtitle">The latest run is shown here and stored locally for comparison.</p>
+            <p class="pane-subtitle">Shown here and stored locally for comparison.</p>
           </div>
         </div>
         <div id="resultPanel" class="result-panel empty">No workflow run yet.</div>
@@ -133,6 +119,6 @@
     </section>
   </main>
 
-  <script src="/method-system.js?v=2"></script>
+  <script src="/method-system.js?v=10"></script>
 </body>
 </html>
