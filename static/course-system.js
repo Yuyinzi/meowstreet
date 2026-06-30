@@ -1,18 +1,52 @@
 (function () {
   const LOCAL_STORAGE_KEY = "methodWorkflowRuns.v1";
-  const EDGE_COLOR = "rgba(56, 63, 55, 0.28)";
+  const EDGE_COLOR = "#94A3B8";
+  const EDGE_COLOR_MAIN = "#334155";
+
+  const MAIN_PIPELINE = [
+    "data_readiness",
+    "macro_regime",
+    "sector_theme_context",
+    "fundamental_quantitative_bias",
+    "fundamental_qualitative_bias",
+    "catalyst_window",
+    "technical_timing",
+    "trade_risk_management",
+  ];
+
+  const SUPPORT_NODES = new Set([
+    "international_adr_workflow",
+    "portfolio_construction",
+  ]);
+
+  const DETACHED_NODES = new Set([
+    "process_discipline",
+  ]);
+
+  const MAIN_PIPELINE_EDGES = new Set(
+    MAIN_PIPELINE.slice(0, -1).map((from, i) => `${from}->${MAIN_PIPELINE[i + 1]}`)
+  );
+
+  const SUPPORT_EDGES = new Set([
+    "international_adr_workflow->sector_theme_context",
+    "international_adr_workflow->fundamental_quantitative_bias",
+    "macro_regime->portfolio_construction",
+    "data_readiness->portfolio_construction",
+    "portfolio_construction->trade_risk_management",
+  ]);
+
   const NODE_LAYOUT = {
-    data_readiness: { row: 1, col: 2, span: 1 },
-    macro_regime: { row: 2, col: 1, span: 1 },
-    international_adr_workflow: { row: 2, col: 3, span: 1 },
-    sector_theme_context: { row: 3, col: 2, span: 1 },
-    portfolio_construction: { row: 4, col: 1, span: 1 },
-    fundamental_quantitative_bias: { row: 4, col: 3, span: 1 },
-    fundamental_qualitative_bias: { row: 5, col: 1, span: 1 },
-    catalyst_window: { row: 5, col: 3, span: 1 },
-    technical_timing: { row: 6, col: 1, span: 1 },
-    trade_risk_management: { row: 6, col: 3, span: 1 },
-    process_discipline: { row: 7, col: 2, span: 1 },
+    data_readiness: { row: 2, col: 2, span: 1, role: "main" },
+    macro_regime: { row: 3, col: 2, span: 1, role: "main" },
+    sector_theme_context: { row: 4, col: 2, span: 1, role: "main" },
+    fundamental_quantitative_bias: { row: 5, col: 2, span: 1, role: "main" },
+    fundamental_qualitative_bias: { row: 6, col: 2, span: 1, role: "main" },
+    catalyst_window: { row: 7, col: 2, span: 1, role: "main" },
+    technical_timing: { row: 8, col: 2, span: 1, role: "main" },
+    trade_risk_management: { row: 9, col: 2, span: 1, role: "main" },
+    international_adr_workflow: { row: 4, col: 1, span: 1, role: "support" },
+    portfolio_construction: { row: 8, col: 1, span: 1, role: "support" },
+    process_discipline: { row: 2, col: 3, span: 1, role: "detached" },
   };
 
   const state = {
@@ -110,6 +144,37 @@
     return NODE_LAYOUT[nodeId] || { row: 6, col: 1, span: 1 };
   }
 
+  function nodeRole(nodeId) {
+    if (MAIN_PIPELINE.includes(nodeId)) return "main";
+    if (SUPPORT_NODES.has(nodeId)) return "support";
+    if (DETACHED_NODES.has(nodeId)) return "detached";
+    return "support";
+  }
+
+  function edgeKey(from, to) {
+    return `${from}->${to}`;
+  }
+
+  function edgeRole(from, to) {
+    const key = edgeKey(from, to);
+    if (MAIN_PIPELINE_EDGES.has(key)) return "main";
+    if (SUPPORT_EDGES.has(key)) return "support";
+    return "cross";
+  }
+
+  function selectedEdgeState(from, to) {
+    if (!state.selectedNodeId) return "";
+    if (from === state.selectedNodeId || to === state.selectedNodeId) return "selected";
+    return "muted";
+  }
+
+  function entryNodeIds() {
+    if (!state.method) return [];
+    return state.method.workflow_nodes
+      .filter((n) => !n.incoming_edges || n.incoming_edges.length === 0)
+      .map((n) => n.id);
+  }
+
   function cloneNode(node) {
     return {
       node_id: node.id || node.node_id,
@@ -124,6 +189,7 @@
       incoming_edges: node.incoming_edges || [],
       outgoing_edges: node.outgoing_edges || [],
       method_basis: node.method_basis || [],
+      role: node.role || nodeRole(node.id || node.node_id),
       layout: node.layout || nodeLayout(node.id || node.node_id),
     };
   }
@@ -153,6 +219,7 @@
         incoming_edges: result.incoming_edges || node.incoming_edges || [],
         outgoing_edges: result.outgoing_edges || node.outgoing_edges || [],
         method_basis: result.method_basis || node.source_refs || [],
+        role: nodeRole(node.id),
         layout: nodeLayout(node.id),
       };
     });
@@ -194,29 +261,39 @@
       return;
     }
 
+    const entryIds = entryNodeIds();
     graph.className = "workflow-graph";
-    graph.innerHTML = state.graphNodes
-      .map((node) => {
-        const layout = node.layout || nodeLayout(node.node_id);
-        const selected = state.selectedNodeId === node.node_id ? " selected" : "";
-        return `
-          <button
-            type="button"
-            class="graph-node status-${escapeHtml(node.status)}${selected}"
-            data-node-id="${escapeHtml(node.node_id)}"
-            style="grid-row:${layout.row}; grid-column:${layout.col} / span ${layout.span};"
-          >
-            <span class="node-kicker">${escapeHtml(fmtStatus(node.status))}</span>
-            <span class="node-title">${escapeHtml(node.title)}</span>
-            <span class="node-question">${escapeHtml(node.decision_question)}</span>
-          </button>
-        `;
-      })
-      .join("");
+    graph.innerHTML = `
+      <div class="graph-start-bar" id="graphStartBar" aria-hidden="true">
+        <span>START</span>
+      </div>
+      ${state.graphNodes
+        .map((node) => {
+          const layout = node.layout || nodeLayout(node.node_id);
+          const selected = state.selectedNodeId === node.node_id ? " selected" : "";
+          return `
+            <button
+              type="button"
+              class="graph-node status-${escapeHtml(node.status)}${selected}"
+              data-node-id="${escapeHtml(node.node_id)}"
+              style="grid-row:${layout.row}; grid-column:${layout.col} / span ${layout.span};"
+            >
+              <span class="node-kicker">${escapeHtml(fmtStatus(node.status))}</span>
+              <span class="node-title">${escapeHtml(node.title)}</span>
+              <span class="node-question">${escapeHtml(node.decision_question)}</span>
+            </button>
+          `;
+        })
+        .join("")}
+    `;
 
     graph.querySelectorAll(".graph-node").forEach((button) => {
       button.addEventListener("click", () => {
-        state.selectedNodeId = button.dataset.nodeId;
+        if (state.selectedNodeId === button.dataset.nodeId) {
+          state.selectedNodeId = null;
+        } else {
+          state.selectedNodeId = button.dataset.nodeId;
+        }
         renderGraph();
         renderNodeDetail();
       });
@@ -248,6 +325,35 @@
     });
 
     const paths = [];
+
+    function nodeRect(el) {
+      const r = el.getBoundingClientRect();
+      return {
+        left: r.left - frameRect.left,
+        top: r.top - frameRect.top,
+        right: r.right - frameRect.left,
+        bottom: r.bottom - frameRect.top,
+        cx: r.left + r.width / 2 - frameRect.left,
+        cy: r.top + r.height / 2 - frameRect.top,
+      };
+    }
+
+    const startBar = graph.querySelector(".graph-start-bar");
+    if (startBar) {
+      const barRect = startBar.getBoundingClientRect();
+      const sx = barRect.left + barRect.width / 2 - frameRect.left;
+      const sy = barRect.top + barRect.height - frameRect.top;
+      const entryIds = entryNodeIds();
+      entryIds.forEach((entryId) => {
+        const entryEl = nodeEls.get(entryId);
+        if (!entryEl) return;
+        const r = nodeRect(entryEl);
+        const c1y = sy + (r.top - sy) * 0.55;
+        const c2y = r.top - (r.top - sy) * 0.15;
+        paths.push([`M ${sx} ${sy} C ${sx} ${c1y}, ${r.cx} ${c2y}, ${r.cx} ${r.top}`, false]);
+      });
+    }
+
     const edges = [];
     state.method.workflow_nodes.forEach((node) => {
       (node.outgoing_edges || []).forEach((target) => {
@@ -260,39 +366,82 @@
       const toEl = nodeEls.get(to);
       if (!fromEl || !toEl) return;
 
-      const fromRect = fromEl.getBoundingClientRect();
-      const toRect = toEl.getBoundingClientRect();
-      const x1 = fromRect.left + fromRect.width / 2 - frameRect.left;
-      const y1 = fromRect.top + fromRect.height / 2 - frameRect.top;
-      const x2 = toRect.left + toRect.width / 2 - frameRect.left;
-      const y2 = toRect.top + toRect.height / 2 - frameRect.top;
-      const dx = Math.max(Math.abs(x2 - x1), 120);
-      const midY = (y1 + y2) / 2;
-      const c1x = x1 + (x2 > x1 ? dx * 0.35 : -dx * 0.35);
-      const c2x = x2 - (x2 > x1 ? dx * 0.35 : -dx * 0.35);
+      const s = nodeRect(fromEl);
+      const t = nodeRect(toEl);
 
-      paths.push(`M ${x1} ${y1} C ${c1x} ${midY}, ${c2x} ${midY}, ${x2} ${y2}`);
+      const gap = 12;
+      let x1, y1, x2, y2, c1x, c1y, c2x, c2y;
+      const dx = t.cx - s.cx;
+      const dy = t.cy - s.cy;
+
+      if (Math.abs(dx) < 40) {
+        x1 = s.cx; y1 = s.bottom + gap * 0.4;
+        x2 = t.cx; y2 = t.top - gap * 0.4;
+        const midY = (y1 + y2) / 2;
+        c1x = s.cx + dx * 0.2;
+        c1y = y1 + Math.max(40, Math.abs(dy) * 0.35);
+        c2x = t.cx - dx * 0.2;
+        c2y = y2 - Math.max(40, Math.abs(dy) * 0.35);
+      } else if (dx > 0) {
+        x1 = s.right + gap * 0.3; y1 = s.cy;
+        x2 = t.left - gap * 0.3;  y2 = t.cy;
+        const hMid = (x1 + x2) / 2;
+        c1x = x1 + Math.abs(dx) * 0.35;
+        c1y = y1 + dy * 0.15;
+        c2x = x2 - Math.abs(dx) * 0.35;
+        c2y = y2 - dy * 0.15;
+      } else {
+        x1 = s.left - gap * 0.3; y1 = s.cy;
+        x2 = t.right + gap * 0.3; y2 = t.cy;
+        const hMid = (x1 + x2) / 2;
+        c1x = x1 - Math.abs(dx) * 0.35;
+        c1y = y1 + dy * 0.15;
+        c2x = x2 + Math.abs(dx) * 0.35;
+        c2y = y2 - dy * 0.15;
+      }
+
+      const isMain = MAIN_PIPELINE_EDGES.has(`${from}\u2192${to}`);
+      paths.push([`M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`, isMain]);
     });
 
     svg.setAttribute("viewBox", `0 0 ${frame.clientWidth} ${frame.clientHeight}`);
     svg.innerHTML = `
       <defs>
-        <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L9,3 z" fill="${EDGE_COLOR}" />
+        <marker id="arrowHead" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
+          <path d="M0,1 L0,9 L12,5 z" fill="${EDGE_COLOR}" opacity="0.45" />
+        </marker>
+        <marker id="arrowHeadMain" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
+          <path d="M0,1 L0,9 L12,5 z" fill="${EDGE_COLOR_MAIN}" opacity="0.65" />
         </marker>
       </defs>
-      ${paths.map((path) => `<path class="graph-edge" d="${path}" marker-end="url(#arrowHead)"></path>`).join("")}
+      ${paths.map(([path, isMain]) => {
+        const marker = isMain ? "url(#arrowHeadMain)" : "url(#arrowHead)";
+        const cls = isMain ? "graph-edge graph-edge-main" : "graph-edge";
+        return `<path class="${cls}" d="${path}" marker-end="${marker}"></path>`;
+      }).join("")}
     `;
   }
 
   function renderNodeDetail() {
-    const panel = $("nodeDetail");
-    const node = state.graphNodes.find((item) => item.node_id === state.selectedNodeId) || state.graphNodes[0];
-    if (!node) {
-      panel.className = "node-detail empty";
-      panel.textContent = "Select a node.";
+    const section = $("nodeDetailSection");
+    const panel = $("nodeDetailPanel");
+    const hint = $("selectHint");
+
+    if (!state.selectedNodeId) {
+      section.classList.remove("visible");
+      if (hint) hint.classList.remove("hidden");
       return;
     }
+
+    const node = state.graphNodes.find((item) => item.node_id === state.selectedNodeId);
+    if (!node) {
+      section.classList.remove("visible");
+      if (hint) hint.classList.remove("hidden");
+      return;
+    }
+
+    if (hint) hint.classList.add("hidden");
+    section.classList.add("visible");
 
     const longChecks = (node.long.checks || [])
       .map((check) => `<li><strong>${escapeHtml(check.status)}</strong> ${escapeHtml(check.title)}: ${escapeHtml(check.message)}</li>`)
@@ -308,7 +457,6 @@
       .map((field) => `<li>${escapeHtml(field)}</li>`)
       .join("");
 
-    panel.className = "node-detail";
     panel.innerHTML = `
       <div class="node-detail-head">
         <div>
@@ -473,7 +621,7 @@
   async function loadMethod() {
     state.method = await jsonFetch("/api/method-system/method");
     state.graphNodes = normalizeMethodNodes(state.method.workflow_nodes || []);
-    state.selectedNodeId = state.graphNodes[0]?.node_id || null;
+    state.selectedNodeId = null;
     renderMethodMeta();
     renderGraph();
     renderNodeDetail();
