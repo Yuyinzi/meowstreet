@@ -163,7 +163,7 @@
   function selectedEdgeState(from, to) {
     if (!state.selectedNodeId) return "";
     if (from === state.selectedNodeId) return "outgoing";
-    if (to === state.selectedNodeId) return "incoming";
+    if (to === state.selectedNodeId) return "connected";
     return "muted";
   }
 
@@ -381,31 +381,52 @@
       let x1, y1, x2, y2, c1x, c1y, c2x, c2y;
       const dx = t.cx - s.cx;
       const dy = t.cy - s.cy;
+      const fromLayout = NODE_LAYOUT[from];
+      const toLayout = NODE_LAYOUT[to];
+      const sameCol = fromLayout && toLayout && fromLayout.col === toLayout.col;
+      const rowDiff = fromLayout && toLayout ? Math.abs(fromLayout.row - toLayout.row) : 0;
 
-      if (Math.abs(dx) < 40) {
+      if (sameCol && rowDiff === 1) {
         x1 = s.cx; y1 = s.bottom + gap * 0.4;
         x2 = t.cx; y2 = t.top - gap * 0.4;
-        const midY = (y1 + y2) / 2;
-        c1x = s.cx + dx * 0.2;
-        c1y = y1 + Math.max(40, Math.abs(dy) * 0.35);
-        c2x = t.cx - dx * 0.2;
-        c2y = y2 - Math.max(40, Math.abs(dy) * 0.35);
-      } else if (dx > 0) {
-        x1 = s.right + gap * 0.3; y1 = s.cy;
-        x2 = t.left - gap * 0.3;  y2 = t.cy;
-        const hMid = (x1 + x2) / 2;
-        c1x = x1 + Math.abs(dx) * 0.35;
-        c1y = y1 + dy * 0.15;
-        c2x = x2 - Math.abs(dx) * 0.35;
-        c2y = y2 - dy * 0.15;
+        c1x = s.cx;
+        c1y = y1 + Math.max(30, Math.abs(dy) * 0.35);
+        c2x = t.cx;
+        c2y = y2 - Math.max(30, Math.abs(dy) * 0.35);
+      } else if (sameCol && rowDiff > 1) {
+        const routeRight = fromLayout.col === 2;
+        const offset = routeRight ? s.right + gap * 2 : s.left - gap * 2;
+        x1 = offset; y1 = s.bottom + gap * 0.4;
+        x2 = offset; y2 = t.top - gap * 0.4;
+        c1x = x1;
+        c1y = s.cy + dy * 0.4;
+        c2x = x2;
+        c2y = t.cy - dy * 0.4;
+      } else if (!sameCol && rowDiff === 0) {
+        if (dx > 0) {
+          x1 = s.right + gap * 0.3; y1 = s.cy;
+          x2 = t.left - gap * 0.3;  y2 = t.cy;
+        } else {
+          x1 = s.left - gap * 0.3; y1 = s.cy;
+          x2 = t.right + gap * 0.3; y2 = t.cy;
+        }
+        c1x = (x1 + x2) / 2;
+        c1y = y1;
+        c2x = (x1 + x2) / 2;
+        c2y = y2;
       } else {
-        x1 = s.left - gap * 0.3; y1 = s.cy;
-        x2 = t.right + gap * 0.3; y2 = t.cy;
-        const hMid = (x1 + x2) / 2;
-        c1x = x1 - Math.abs(dx) * 0.35;
-        c1y = y1 + dy * 0.15;
-        c2x = x2 + Math.abs(dx) * 0.35;
-        c2y = y2 - dy * 0.15;
+        const corridorX = (s.cx + t.cx) / 2;
+        if (dx > 0) {
+          x1 = s.right + gap * 0.3; y1 = s.cy;
+          x2 = t.left - gap * 0.3; y2 = t.cy;
+        } else {
+          x1 = s.left - gap * 0.3; y1 = s.cy;
+          x2 = t.right + gap * 0.3; y2 = t.cy;
+        }
+        c1x = corridorX;
+        c1y = y1;
+        c2x = corridorX;
+        c2y = y2;
       }
 
       const role = edgeRole(from, to);
@@ -419,29 +440,25 @@
     svg.setAttribute("viewBox", `0 0 ${frame.clientWidth} ${frame.clientHeight}`);
     svg.innerHTML = `
       <defs>
-        <marker id="arrowHeadStart" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-          <path d="M0,1 L0,7 L7,4 z" />
+        <marker id="arrowHeadStart" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
+          <path d="M0,0.5 L0,5.5 L5.5,3 z" />
         </marker>
-        <marker id="arrowHeadMain" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-          <path d="M0,1 L0,7 L7,4 z" />
+        <marker id="arrowHeadMain" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
+          <path d="M0,0.5 L0,5.5 L5.5,3 z" />
         </marker>
-        <marker id="arrowHeadSupport" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-          <path d="M0,1 L0,7 L7,4 z" />
+        <marker id="arrowHeadSupport" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
+          <path d="M0,0.5 L0,5.5 L5.5,3 z" />
         </marker>
-        <marker id="arrowHeadCross" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-          <path d="M0,1 L0,7 L7,4 z" />
+        <marker id="arrowHeadCross" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
+          <path d="M0,0.5 L0,5.5 L5.5,3 z" />
         </marker>
-        <marker id="arrowHeadOutgoing" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-          <path d="M0,1 L0,7 L7,4 z" />
-        </marker>
-        <marker id="arrowHeadIncoming" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-          <path d="M0,1 L0,7 L7,4 z" />
+        <marker id="arrowHeadOutgoing" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
+          <path d="M0,0.5 L0,5.5 L5.5,3 z" />
         </marker>
       </defs>
       ${paths.map((path) => {
-        const stateMarker = path.state === "outgoing" ? "Outgoing" : path.state === "incoming" ? "Incoming" : "";
-        const marker = stateMarker
-          ? `url(#arrowHead${stateMarker})`
+        const marker = path.state === "outgoing"
+          ? "url(#arrowHeadOutgoing)"
           : `url(#arrowHead${path.role.charAt(0).toUpperCase()}${path.role.slice(1)})`;
         const stateClass = path.state ? ` graph-edge-${path.state}` : "";
         return `<path class="graph-edge graph-edge-${path.role}${stateClass}" d="${path.d}" marker-end="${marker}"></path>`;

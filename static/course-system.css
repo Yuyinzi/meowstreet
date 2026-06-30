@@ -264,10 +264,8 @@ button {
   stroke-opacity: 0.88;
 }
 
-.graph-edge-incoming {
-  stroke: #4A7C8C;
-  stroke-width: 2.5;
-  stroke-opacity: 0.8;
+.graph-edge-connected {
+  stroke-opacity: 0.7;
 }
 
 .graph-edge-muted {
@@ -293,11 +291,6 @@ button {
 #arrowHeadOutgoing path {
   fill: #D9848C;
   opacity: 0.88;
-}
-
-#arrowHeadIncoming path {
-  fill: #4A7C8C;
-  opacity: 0.82;
 }
 
 .workflow-graph {
