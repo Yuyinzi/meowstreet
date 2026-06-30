@@ -103,3 +103,12 @@ The LLM does not directly create final workflow nodes during synthesis. Its `pro
 Review `data/local_system/synthesis/method_review.md` after synthesis. The report lists proposed-node mappings, fallback decision areas, and dependency edge suggestions so taxonomy gaps can be fixed explicitly.
 
 Use `--omit-empty-seed-nodes` when you want the synthesized graph to include only nodes with extracted method content. Without this flag, synthesis preserves seed workflow nodes from the base method method for compatibility.
+
+After changing taxonomy aliases, regenerate synthesis and inspect suspicious nodes directly:
+
+```bash
+.venv/bin/python scripts/synthesize_method.py --omit-empty-seed-nodes
+python3 -c 'import json, pathlib; payload=json.loads(pathlib.Path("data/local_system/synthesis/method.v1.json").read_text()); [print(node["id"], len(node.get("indicators", [])), len(node.get("sub_methods", []))) for node in payload["workflow_nodes"]]'
+```
+
+Check `catalyst_window`, `trade_risk_management`, and `fundamental_quantitative_bias` after alias changes because broad words such as `measurement`, `target`, and `process` can misroute unrelated methods.
