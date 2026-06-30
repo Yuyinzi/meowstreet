@@ -263,7 +263,7 @@
     graph.className = "workflow-graph";
     graph.innerHTML = `
       <div class="graph-start-bar" id="graphStartBar" aria-hidden="true">
-        <span>START</span>
+        <span class="graph-paw">&#x1F43E;</span><span>START</span>
       </div>
       ${state.graphNodes
         .map((node) => {
