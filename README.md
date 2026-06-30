@@ -24,3 +24,80 @@ http://127.0.0.1:8797
 ```bash
 .venv/bin/pytest -q
 ```
+
+## Extract Method Method JSON
+
+Generate reviewable prompts only:
+
+```bash
+.venv/bin/python scripts/extract_method.py --write-prompts-only
+```
+
+Run extraction with the OpenAI client:
+
+```bash
+OPENAI_API_KEY=... .venv/bin/python scripts/extract_method.py
+```
+
+Useful options:
+
+```bash
+.venv/bin/python scripts/extract_method.py \
+  --model gpt-4.1-mini \
+  --max-output-tokens 12000 \
+  --max-retries 4 \
+  --workers 3 \
+  --skip-existing \
+  --log-level INFO
+```
+
+The extractor loads `.env` with `python-dotenv` and uses the async OpenAI client with bounded concurrency from `--workers`. Use `--skip-existing` to resume an interrupted extraction without reprocessing JSON files that already exist. Completed extractions are written with a temporary file and atomic replace. The script logs each prompt, extraction attempt, retry, skip, and output file. If the model stops with `finish_reason=length`, the script does not retry; increase `--max-output-tokens` or narrow the input before rerunning.
+
+By default, prompts go to `data/local_system/extraction_prompts/` and validated JSON results go to `data/local_system/extraction_results/`. Override them with:
+
+```bash
+.venv/bin/python scripts/extract_method.py \
+  --prompts-dir data/local_system/extraction_prompts \
+  --results-dir data/local_system/extraction_results
+```
+
+The older `--output-dir` option still works as a compatibility alias when you want prompts and results in the same directory.
+
+## Synthesize Method Method JSON
+
+After extraction, synthesize the final method method artifact:
+
+```bash
+.venv/bin/python scripts/synthesize_method.py
+```
+
+By default, synthesis reads per-note JSON from `data/local_system/extraction_results/` and writes final artifacts to `data/local_system/synthesis/`:
+
+```text
+data/local_system/synthesis/method.v1.json
+data/local_system/synthesis/method_review.md
+```
+
+Override the locations when needed:
+
+```bash
+.venv/bin/python scripts/synthesize_method.py \
+  --extractions-dir data/local_system/extraction_results \
+  --output data/local_system/synthesis/method.v1.json \
+  --review-output data/local_system/synthesis/method_review.md
+```
+
+You can also keep using a provider-agnostic command that reads the prompt from stdin and writes strict JSON to stdout:
+
+```bash
+.venv/bin/python scripts/extract_method.py \
+  --llm-command 'your-llm-command'
+```
+
+### Synthesis taxonomy
+
+`scripts/synthesize_method.py` is deterministic. It reads LLM extraction results from `data/local_system/extraction_results`, maps extracted items and `proposed_nodes` into a compact canonical workflow graph, and writes synthesized artifacts to `data/local_system/synthesis`.
+
+The LLM does not directly create final workflow nodes during synthesis. Its `proposed_nodes` and `dependencies` are treated as evidence. The final node IDs, node templates, and default graph edges are controlled by `app/method_synthesizer.py`.
+
+Review `data/local_system/synthesis/method_review.md` after synthesis. The report lists proposed-node mappings, fallback decision areas, and dependency edge suggestions so taxonomy gaps can be fixed explicitly.
