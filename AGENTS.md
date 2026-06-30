@@ -4,6 +4,59 @@
 
 Meowstreet is a local-first method-based trade workflow system. Python 3.13, FastAPI, vanilla HTML/CSS/JS, pytest.
 
+The project is based on:
+
+- `2026-06-26-method-workflow-decision-system-design.md`
+- `2026-06-26-method-workflow-graph.md`
+- `2026-06-29-meowstreet-migration.md`
+
+Use these design docs for product intent, but follow the current standalone `app/`, `static/`, `method_notes/`, and `data/local_system/` structure in this repo when implementing changes.
+
+## Method Workflow Model
+
+Meowstreet is not a learning site and should not behave like raw RAG over method notes. It is a ticker-first workflow console that evaluates a ticker through a deterministic method-method graph.
+
+Runtime evaluation must:
+
+- Load the versioned artifact at `data/local_system/method.v1.json`
+- Normalize ticker and observation payloads
+- Run all available workflow nodes in parallel where data exists
+- Produce side-specific long/short node results
+- Return missing inputs and next actions when data is absent
+- Classify process readiness, not direct buy/sell instructions
+
+Allowed final classifications include:
+
+- `qualified_long_candidate`
+- `qualified_short_candidate`
+- `long_watchlist`
+- `short_watchlist`
+- `wait_for_timing`
+- `insufficient_data`
+- `conflicting_evidence`
+- `reject`
+
+The same inputs and the same method method version should produce the same classification. Do not add runtime logic that silently asks an LLM to decide whether a ticker is good or bad. LLMs may only be used offline to extract or organize method methodology before validating a structured artifact.
+
+Method concepts become executable workflow nodes only when they affect trading decisions: continue, wait, reject, downgrade, support long/short bias, require input, affect timing, position sizing, portfolio fit, risk, or final synthesis. Concepts that are only mindset or background should remain supporting documentation attached to relevant nodes.
+
+## Method Data Sources
+
+The source material for the method graph lives in `method_notes/*.md`. These markdown files use repeated sections:
+
+- `Key Points`
+- `Learning Path / Reasoning Chain`
+- `Concepts & Definitions`
+- `Methodology / Workflow`
+- `Examples & Applications`
+- `Cautions / Common Mistakes`
+- `Transcript Gaps / Incomplete Segments`
+- `Actionable Checklist`
+
+Use `Methodology / Workflow` and `Actionable Checklist` as the primary source for workflow steps, required inputs, checks, and next actions. Use `Concepts & Definitions` for vocabulary, `Cautions / Common Mistakes` for blockers and warnings, and `Transcript Gaps / Incomplete Segments` only for extraction warnings.
+
+Regenerate the method artifact with `python3 scripts/build_method.py` after changing method-note parsing, graph node definitions, checks, or method notes.
+
 ## Build / Run / Test Commands
 
 ### Setup
@@ -126,6 +179,8 @@ except ValueError as exc:
 ### Data Modeling
 
 All data is nested dicts with string keys. No dataclasses, namedtuples, or ORM models. Observation payloads use dotted-path keys (e.g., `"signals.trend"`, `"metrics.price"`). Access dict paths with a custom `_get_path()` resolver (see `workflow_engine.py`).
+
+The method artifact should include `version`, `generated_at`, `source_documents`, `concepts`, `workflow_nodes`, `node_checks`, `decision_rules`, and `extraction_warnings`. Workflow nodes should include decision questions, required inputs, criteria, tool hooks, source refs, incoming edges, and outgoing edges. Node checks should remain structured and deterministic.
 
 ### Filesystem
 

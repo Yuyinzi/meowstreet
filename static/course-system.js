@@ -2,18 +2,17 @@
   const LOCAL_STORAGE_KEY = "methodWorkflowRuns.v1";
   const EDGE_COLOR = "rgba(56, 63, 55, 0.28)";
   const NODE_LAYOUT = {
-    instrument_identity: { row: 1, col: 2, span: 1 },
-    liquidity_tradability: { row: 2, col: 1, span: 1 },
-    time_horizon_fit: { row: 2, col: 2, span: 1 },
-    macro_regime: { row: 2, col: 3, span: 1 },
-    sector_theme_context: { row: 3, col: 1, span: 1 },
-    bottom_up_fundamental_bias: { row: 3, col: 2, span: 1 },
-    catalyst_window: { row: 3, col: 3, span: 1 },
-    technical_timing: { row: 4, col: 1, span: 1 },
-    portfolio_fit: { row: 4, col: 2, span: 1 },
-    risk_position_sizing: { row: 4, col: 3, span: 1 },
-    process_discipline: { row: 5, col: 1, span: 1 },
-    final_synthesis: { row: 5, col: 2, span: 2 },
+    data_readiness: { row: 1, col: 2, span: 1 },
+    macro_regime: { row: 2, col: 1, span: 1 },
+    international_adr_workflow: { row: 2, col: 3, span: 1 },
+    sector_theme_context: { row: 3, col: 2, span: 1 },
+    portfolio_construction: { row: 4, col: 1, span: 1 },
+    fundamental_quantitative_bias: { row: 4, col: 3, span: 1 },
+    fundamental_qualitative_bias: { row: 5, col: 1, span: 1 },
+    catalyst_window: { row: 5, col: 3, span: 1 },
+    technical_timing: { row: 6, col: 1, span: 1 },
+    trade_risk_management: { row: 6, col: 3, span: 1 },
+    process_discipline: { row: 7, col: 2, span: 1 },
   };
 
   const state = {

@@ -216,12 +216,18 @@ def _normalize_graph_review(normalized):
     dependency_edge_suggestions = graph_review.get("dependency_edge_suggestions", [])
     if not isinstance(dependency_edge_suggestions, list):
         raise ValueError("graph_review dependency_edge_suggestions must be a list")
+    routing_audit_moves = graph_review.get("routing_audit_moves", [])
+    if not isinstance(routing_audit_moves, list):
+        raise ValueError("graph_review routing_audit_moves must be a list")
+    routing_audit_run_id = _text(graph_review.get("routing_audit_run_id"))
     normalized["graph_review"] = {
         "previous_nodes": previous_nodes,
         "actions": actions,
         "proposed_node_mappings": proposed_node_mappings,
         "fallback_decision_areas": fallback_decision_areas,
         "dependency_edge_suggestions": dependency_edge_suggestions,
+        "routing_audit_run_id": routing_audit_run_id,
+        "routing_audit_moves": routing_audit_moves,
     }
 
 

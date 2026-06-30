@@ -125,11 +125,41 @@ You can also keep using a provider-agnostic command that reads the prompt from s
 
 ### Synthesis taxonomy
 
-`scripts/synthesize_method.py` is deterministic. It reads LLM extraction results from `data/local_system/extraction_results`, maps extracted items and `proposed_nodes` into a compact canonical workflow graph, and writes synthesized artifacts to `data/local_system/synthesis`.
+Synthesis is a two-stage loop:
 
-The LLM does not directly create final workflow nodes during synthesis. Its `proposed_nodes` and `dependencies` are treated as evidence. The final node IDs, node templates, and default graph edges are controlled by `app/method_synthesizer.py`.
+1. **Deterministic synthesis** routes items by code aliases into canonical workflow nodes.
+2. **LLM routing audit** reviews the draft node assignments and applies schema-validated routing moves.
 
-Review `data/local_system/synthesis/method_review.md` after synthesis. The report lists proposed-node mappings, fallback decision areas, and dependency edge suggestions so taxonomy gaps can be fixed explicitly.
+Run:
+
+```bash
+.venv/bin/python scripts/synthesize_method.py \
+  --extractions-dir data/local_system/extraction_refined \
+  --omit-empty-seed-nodes \
+  --max-routing-audit-rounds 2
+```
+
+This writes final artifacts to:
+
+- `data/local_system/synthesis/method.v1.json`
+- `data/local_system/synthesis/method_review.md`
+
+Routing audit artifacts are written to:
+
+- `data/local_system/synthesis_routing_audits/`
+
+To inspect routing audit prompts without calling the LLM:
+
+```bash
+.venv/bin/python scripts/synthesize_method.py \
+  --extractions-dir data/local_system/extraction_refined \
+  --omit-empty-seed-nodes \
+  --write-routing-prompts-only
+```
+
+The LLM does not directly create final workflow nodes during synthesis. Its `proposed_nodes` and `dependencies` are treated as evidence. The final node IDs, node templates, default graph edges, and routing audit moves are controlled by `app/method_synthesizer.py`.
+
+Review `data/local_system/synthesis/method_review.md` after synthesis. The report lists proposed-node mappings, fallback decision areas, dependency edge suggestions, and routing audit moves so taxonomy gaps can be fixed explicitly.
 
 Use `--omit-empty-seed-nodes` when you want the synthesized graph to include only nodes with extracted method content. Without this flag, synthesis preserves seed workflow nodes from the base method method for compatibility.
 
@@ -157,6 +187,7 @@ data/local_system/
 ├── refinement_audits/             # Audit findings + final reports
 │   ├── *.audit_round_*.json       #   Per-round audit results
 │   └── *.audit.md                 #   Final audit reports
+├── synthesis_routing_audits/         # Routing audit prompts and patches
 └── synthesis/                     # Final synthesized artifacts
     ├── method.v1.json      #   Full workflow graph
     └── method_review.md    #   Review report

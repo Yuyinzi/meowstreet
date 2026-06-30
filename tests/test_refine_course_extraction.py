@@ -102,6 +102,106 @@ def test_normalize_patch_generates_source_refs_from_source_sections():
     assert "source_sections" not in normalized["items"][0]
 
 
+def test_normalize_patch_allows_empty_patch_payload():
+    module = load_refine_module()
+
+    normalized = module._normalize_patch(
+        {"items": [], "proposed_nodes": [], "dependencies": []},
+        baseline_extraction(),
+        "method_notes/P10 Leading Indicators 6_method_notes.md",
+    )
+
+    assert normalized == {
+        "document": "",
+        "title": "",
+        "items": [],
+        "proposed_nodes": [],
+        "dependencies": [],
+    }
+
+
+def test_normalize_patch_drops_dependency_missing_from():
+    module = load_refine_module()
+    patch = {
+        "items": [],
+        "proposed_nodes": [],
+        "dependencies": [
+            {
+                "to": "macro_regime",
+                "rationale": "Missing source node should not fail indicator repair.",
+                "source_sections": ["Methodology / Workflow"],
+            }
+        ],
+    }
+
+    normalized = module._normalize_patch(
+        patch,
+        baseline_extraction(),
+        "method_notes/P13 Leading Indicators 9_method_notes.md",
+    )
+
+    assert normalized["dependencies"] == []
+
+
+def test_normalize_patch_drops_dependency_missing_rationale():
+    module = load_refine_module()
+    patch = {
+        "items": [],
+        "proposed_nodes": [],
+        "dependencies": [
+            {
+                "from": "portfolio_bias_determination",
+                "to": "portfolio_construction",
+                "source_sections": ["Methodology / Workflow"],
+            }
+        ],
+    }
+
+    normalized = module._normalize_patch(
+        patch,
+        baseline_extraction(),
+        "method_notes/P16 Foundations of Long Short Portfolio Management 1a_method_notes.md",
+    )
+
+    assert normalized["dependencies"] == []
+
+
+def test_normalize_patch_keeps_valid_dependency():
+    module = load_refine_module()
+    patch = {
+        "items": [],
+        "proposed_nodes": [],
+        "dependencies": [
+            {
+                "from": "market_breadth_check",
+                "to": "macro_regime",
+                "rationale": "Breadth check informs macro regime.",
+                "source_sections": ["Methodology / Workflow"],
+            }
+        ],
+    }
+
+    normalized = module._normalize_patch(
+        patch,
+        baseline_extraction(),
+        "method_notes/P13 Leading Indicators 9_method_notes.md",
+    )
+
+    assert normalized["dependencies"] == [
+        {
+            "from": "market_breadth_check",
+            "to": "macro_regime",
+            "rationale": "Breadth check informs macro regime.",
+            "source_refs": [
+                {
+                    "document": "",
+                    "section": "Methodology / Workflow",
+                }
+            ],
+        }
+    ]
+
+
 def test_write_json_atomic_replaces_target_without_tmp_file(tmp_path):
     module = load_refine_module()
     target = tmp_path / "refined.json"
@@ -153,8 +253,47 @@ def test_indicator_refinement_prompt_is_patch_only_and_mentions_existing_ids():
     assert "Do not rewrite the full extraction" in prompt
     assert "building_permits_sa_annual_rate" in prompt
     assert "month-on-month" in prompt
+    assert "Always return dependencies as an empty list" in prompt
     assert "source_sections" in prompt
     assert "source_refs" not in prompt
+
+
+def test_indicator_refinement_prompt_defines_general_standalone_item_rules():
+    module = load_refine_module()
+    doc = {
+        "path": "",
+        "title": "",
+        "sections": {
+            "Methodology / Workflow": "Compute month-on-month and year-on-year changes.",
+            "Actionable Checklist": "Calculate a 12-month moving average.",
+        },
+    }
+
+    prompt = module._indicator_refinement_prompt(doc, baseline_extraction())
+
+    assert "compute, calculate, compare, smooth, rank, threshold, filter" in prompt
+    assert "add it as a standalone indicator, formula, or check" in prompt
+    assert "percentage change" in prompt
+    assert "rolling/moving average" in prompt
+    assert "standard deviation" in prompt
+    assert "Do not add implementation tooling unless the note explicitly names it" in prompt
+
+
+def test_audit_prompt_defines_general_missing_method_rules():
+    module = load_refine_module()
+    doc = {
+        "path": "",
+        "title": "",
+        "sections": {
+            "Methodology / Workflow": "Compute month-on-month and year-on-year changes.",
+        },
+    }
+
+    prompt = module._audit_prompt(doc, baseline_extraction())
+
+    assert "compute, calculate, compare, smooth, rank, threshold, filter" in prompt
+    assert "not already represented as a standalone extracted item" in prompt
+    assert "Do not flag missing implementation tooling" in prompt
 
 
 def test_merge_patch_adds_new_items_and_keeps_existing_items():
@@ -394,6 +533,55 @@ def test_refine_doc_merges_patch_and_writes_prompt_and_output(tmp_path):
     assert list(repairs_dir.glob("*.patch.json"))
 
 
+def test_refine_doc_accepts_empty_initial_patch(tmp_path):
+    module = load_refine_module()
+    doc = {
+        "path": "",
+        "title": "",
+        "sections": {
+            "Methodology / Workflow": "Compute month-on-month changes.",
+        },
+    }
+    baseline = baseline_extraction()
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    prompts_dir = tmp_path / "prompts"
+    repairs_dir = tmp_path / "repairs"
+    audits_dir = tmp_path / "audits"
+    input_path = module._extraction_path_for(input_dir, doc)
+    module._write_json_atomic(input_path, baseline)
+
+    async def fake_call(prompt, label):
+        return {"items": [], "proposed_nodes": [], "dependencies": []}
+
+    result_path = asyncio.run(
+        module._refine_doc(
+            doc,
+            input_dir,
+            output_dir,
+            prompts_dir,
+            repairs_dir,
+            audits_dir,
+            type(
+                "Args",
+                (),
+                {
+                    "allow_repair_overwrite": False,
+                    "write_prompts_only": False,
+                    "max_audit_repair_rounds": 0,
+                },
+            )(),
+            fake_call,
+        )
+    )
+
+    refined = json.loads(Path(result_path).read_text(encoding="utf-8"))
+
+    assert [item["id"] for item in refined["items"]] == [
+        "building_permits_sa_annual_rate"
+    ]
+
+
 def test_should_skip_existing_refined_output(tmp_path):
     module = load_refine_module()
     doc = {"path": ""}
@@ -451,6 +639,7 @@ def test_repair_prompt_is_patch_only_and_uses_audit_findings():
     assert "patch-only repair" in prompt
     assert "Permits Month-on-Month Percentage Change" in prompt
     assert "Do not rewrite the full extraction" in prompt
+    assert "Always return dependencies as an empty list" in prompt
     assert "source_sections" in prompt
 
 
@@ -521,3 +710,45 @@ def test_apply_audit_repair_round_adds_patch_when_findings_exist(tmp_path):
         "permits_mom_pct_change",
     ]
     assert len(calls) == 2
+
+
+def test_audit_report_counts_all_added_items_after_repair_rounds():
+    module = load_refine_module()
+    baseline = baseline_extraction()
+    patch = {
+        "items": [],
+        "proposed_nodes": [],
+        "dependencies": [],
+    }
+    refined = baseline_extraction()
+    refined["items"].append(
+        {
+            "id": "permits_mom_pct_change",
+            "type": "formula",
+            "title": "Permits Month-on-Month Percentage Change",
+            "summary": "Computes month-on-month percentage change in building permits.",
+            "decision_area": "macro regime",
+            "formula": "(permits_t - permits_t_minus_1) / permits_t_minus_1 * 100",
+            "required_inputs": ["macro.permits_sa", "macro.permits_sa_lag_1"],
+            "long_side_usage": "",
+            "short_side_usage": "",
+            "compute_status": "future_tool_hook",
+            "future_tool_hooks": ["census_housing_permits"],
+            "source_refs": [
+                {
+                    "document": baseline["document"],
+                    "section": "Methodology / Workflow",
+                }
+            ],
+        }
+    )
+
+    report = module._audit_report(
+        {"path": ""},
+        baseline,
+        patch,
+        refined,
+    )
+
+    assert "Added items: 1" in report
+    assert "`permits_mom_pct_change`" in report

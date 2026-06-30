@@ -4,3 +4,13 @@ __pycache__/
 .venv/
 data/*.sqlite
 .DS_Store
+.env
+.idea/
+data/local_system/extraction_prompts/
+data/local_system/extraction_results/
+data/local_system/extraction_refined/
+data/local_system/refinement_audits/
+data/local_system/refinement_prompts/
+data/local_system/refinement_repairs/
+data/local_system/synthesis_routing_audits/
+docs/superpowers/plans/
