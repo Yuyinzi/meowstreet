@@ -155,3 +155,61 @@ def test_indicator_refinement_prompt_is_patch_only_and_mentions_existing_ids():
     assert "month-on-month" in prompt
     assert "source_sections" in prompt
     assert "source_refs" not in prompt
+
+
+def test_merge_patch_adds_new_items_and_keeps_existing_items():
+    module = load_refine_module()
+    baseline = baseline_extraction()
+    patch = {
+        "document": baseline["document"],
+        "title": baseline["title"],
+        "items": [
+            {
+                "id": "permits_mom_pct_change",
+                "type": "formula",
+                "title": "Permits Month-on-Month Percentage Change",
+                "summary": "Computes month-on-month percentage change in building permits.",
+                "decision_area": "macro regime",
+                "formula": "(permits_t - permits_t_minus_1) / permits_t_minus_1 * 100",
+                "required_inputs": ["macro.permits_sa", "macro.permits_sa_lag_1"],
+                "long_side_usage": "",
+                "short_side_usage": "",
+                "compute_status": "future_tool_hook",
+                "future_tool_hooks": ["census_housing_permits"],
+                "source_refs": [
+                    {
+                        "document": baseline["document"],
+                        "section": "Methodology / Workflow",
+                    }
+                ],
+            }
+        ],
+        "proposed_nodes": [],
+        "dependencies": [],
+    }
+
+    merged = module._merge_patch(baseline, patch, allow_overwrite=False)
+
+    assert [item["id"] for item in merged["items"]] == [
+        "building_permits_sa_annual_rate",
+        "permits_mom_pct_change",
+    ]
+
+
+def test_merge_patch_rejects_duplicate_item_ids_by_default():
+    module = load_refine_module()
+    baseline = baseline_extraction()
+    patch = {
+        "document": baseline["document"],
+        "title": baseline["title"],
+        "items": [dict(baseline["items"][0])],
+        "proposed_nodes": [],
+        "dependencies": [],
+    }
+
+    try:
+        module._merge_patch(baseline, patch, allow_overwrite=False)
+    except ValueError as exc:
+        assert str(exc) == "repair item building_permits_sa_annual_rate already exists"
+    else:
+        raise AssertionError("expected duplicate item rejection")
