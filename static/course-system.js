@@ -1,7 +1,5 @@
 (function () {
   const LOCAL_STORAGE_KEY = "methodWorkflowRuns.v1";
-  const EDGE_COLOR = "#94A3B8";
-  const EDGE_COLOR_MAIN = "#334155";
 
   const MAIN_PIPELINE = [
     "data_readiness",
@@ -358,7 +356,11 @@
         const r = nodeRect(entryEl);
         const c1y = sy + (r.top - sy) * 0.55;
         const c2y = r.top - (r.top - sy) * 0.15;
-        paths.push([`M ${sx} ${sy} C ${sx} ${c1y}, ${r.cx} ${c2y}, ${r.cx} ${r.top}`, false]);
+        paths.push({
+          d: `M ${sx} ${sy} C ${sx} ${c1y}, ${r.cx} ${c2y}, ${r.cx} ${r.top}`,
+          role: "start",
+          state: "",
+        });
       });
     }
 
@@ -408,24 +410,34 @@
         c2y = y2 - dy * 0.15;
       }
 
-      const isMain = MAIN_PIPELINE_EDGES.has(`${from}\u2192${to}`);
-      paths.push([`M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`, isMain]);
+      const role = edgeRole(from, to);
+      paths.push({
+        d: `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`,
+        role,
+        state: selectedEdgeState(from, to),
+      });
     });
 
     svg.setAttribute("viewBox", `0 0 ${frame.clientWidth} ${frame.clientHeight}`);
     svg.innerHTML = `
       <defs>
-        <marker id="arrowHead" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
-          <path d="M0,1 L0,9 L12,5 z" fill="${EDGE_COLOR}" opacity="0.45" />
+        <marker id="arrowHeadStart" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
+          <path d="M0,1 L0,9 L12,5 z" />
         </marker>
         <marker id="arrowHeadMain" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
-          <path d="M0,1 L0,9 L12,5 z" fill="${EDGE_COLOR_MAIN}" opacity="0.65" />
+          <path d="M0,1 L0,9 L12,5 z" />
+        </marker>
+        <marker id="arrowHeadSupport" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
+          <path d="M0,1 L0,9 L12,5 z" />
+        </marker>
+        <marker id="arrowHeadCross" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
+          <path d="M0,1 L0,9 L12,5 z" />
         </marker>
       </defs>
-      ${paths.map(([path, isMain]) => {
-        const marker = isMain ? "url(#arrowHeadMain)" : "url(#arrowHead)";
-        const cls = isMain ? "graph-edge graph-edge-main" : "graph-edge";
-        return `<path class="${cls}" d="${path}" marker-end="${marker}"></path>`;
+      ${paths.map((path) => {
+        const marker = `url(#arrowHead${path.role.charAt(0).toUpperCase()}${path.role.slice(1)})`;
+        const stateClass = path.state ? ` graph-edge-${path.state}` : "";
+        return `<path class="graph-edge graph-edge-${path.role}${stateClass}" d="${path.d}" marker-end="${marker}"></path>`;
       }).join("")}
     `;
   }
