@@ -388,3 +388,14 @@ def test_refine_doc_merges_patch_and_writes_prompt_and_output(tmp_path):
     ]
     assert list(prompts_dir.glob("*.prompt.md"))
     assert list(repairs_dir.glob("*.patch.json"))
+
+
+def test_should_skip_existing_refined_output(tmp_path):
+    module = load_refine_module()
+    doc = {"path": ""}
+    args = type("Args", (), {"skip_existing": True})()
+
+    assert module._should_skip_existing(tmp_path, doc, args) is False
+    module._write_json_atomic(module._extraction_path_for(tmp_path, doc), {"ok": True})
+
+    assert module._should_skip_existing(tmp_path, doc, args) is True
