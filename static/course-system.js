@@ -395,13 +395,14 @@
         c2y = y2 - Math.max(30, Math.abs(dy) * 0.35);
       } else if (sameCol && rowDiff > 1) {
         const routeRight = fromLayout.col === 2;
-        const offset = routeRight ? s.right + gap * 2 : s.left - gap * 2;
-        x1 = offset; y1 = s.bottom + gap * 0.4;
-        x2 = offset; y2 = t.top - gap * 0.4;
-        c1x = x1;
-        c1y = s.cy + dy * 0.4;
-        c2x = x2;
-        c2y = t.cy - dy * 0.4;
+        const offset = routeRight ? s.right + gap : s.left - gap;
+        const arcOut = routeRight ? s.right + gap * 5 : s.left - gap * 5;
+        x1 = offset; y1 = s.cy;
+        x2 = routeRight ? t.right + gap : t.left - gap; y2 = t.cy;
+        c1x = arcOut;
+        c1y = y1;
+        c2x = arcOut;
+        c2y = y2;
       } else if (!sameCol && rowDiff === 0) {
         if (dx > 0) {
           x1 = s.right + gap * 0.3; y1 = s.cy;
