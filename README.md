@@ -101,3 +101,5 @@ You can also keep using a provider-agnostic command that reads the prompt from s
 The LLM does not directly create final workflow nodes during synthesis. Its `proposed_nodes` and `dependencies` are treated as evidence. The final node IDs, node templates, and default graph edges are controlled by `app/method_synthesizer.py`.
 
 Review `data/local_system/synthesis/method_review.md` after synthesis. The report lists proposed-node mappings, fallback decision areas, and dependency edge suggestions so taxonomy gaps can be fixed explicitly.
+
+Use `--omit-empty-seed-nodes` when you want the synthesized graph to include only nodes with extracted method content. Without this flag, synthesis preserves seed workflow nodes from the base method method for compatibility.
