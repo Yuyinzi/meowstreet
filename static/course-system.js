@@ -279,14 +279,11 @@
               type="button"
               class="graph-node graph-node-${escapeHtml(node.role)} status-${escapeHtml(node.status)}${selected}${focusClass}"
               data-node-id="${escapeHtml(node.node_id)}"
+              title="${escapeHtml(node.title)} — ${escapeHtml(node.decision_question)}"
               style="grid-row:${layout.row}; grid-column:${layout.col} / span ${layout.span};"
             >
-              <span class="node-kicker">
-                <span>${escapeHtml(node.role === "main" ? "Workflow" : node.role === "support" ? "Input Check" : "Discipline")}</span>
-                <span>${escapeHtml(fmtStatus(node.status))}</span>
-              </span>
-              <span class="node-title">${escapeHtml(node.title)}</span>
-              <span class="node-question">${escapeHtml(node.decision_question)}</span>
+              <span class="node-label">${escapeHtml(node.title)}</span>
+              <span class="node-status-dot" aria-hidden="true"></span>
             </button>
           `;
         })
@@ -421,17 +418,17 @@
     svg.setAttribute("viewBox", `0 0 ${frame.clientWidth} ${frame.clientHeight}`);
     svg.innerHTML = `
       <defs>
-        <marker id="arrowHeadStart" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
-          <path d="M0,1 L0,9 L12,5 z" />
+        <marker id="arrowHeadStart" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,1 L0,7 L7,4 z" />
         </marker>
-        <marker id="arrowHeadMain" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
-          <path d="M0,1 L0,9 L12,5 z" />
+        <marker id="arrowHeadMain" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,1 L0,7 L7,4 z" />
         </marker>
-        <marker id="arrowHeadSupport" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
-          <path d="M0,1 L0,9 L12,5 z" />
+        <marker id="arrowHeadSupport" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,1 L0,7 L7,4 z" />
         </marker>
-        <marker id="arrowHeadCross" markerWidth="14" markerHeight="14" refX="12" refY="5" orient="auto">
-          <path d="M0,1 L0,9 L12,5 z" />
+        <marker id="arrowHeadCross" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,1 L0,7 L7,4 z" />
         </marker>
       </defs>
       ${paths.map((path) => {
@@ -457,7 +454,6 @@
       return;
     }
 
-    if (hint) hint.classList.add("hidden");
     section.classList.add("visible");
 
     const longChecks = (node.long.checks || [])
