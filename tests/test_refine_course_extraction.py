@@ -110,3 +110,48 @@ def test_write_json_atomic_replaces_target_without_tmp_file(tmp_path):
 
     assert json.loads(target.read_text(encoding="utf-8")) == {"value": 1}
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_high_signal_sections_keep_methodology_and_checklist_but_drop_transcript_gaps():
+    module = load_refine_module()
+    doc = {
+        "path": "",
+        "title": "",
+        "sections": {
+            "Key Points": "Building permits have thresholds.",
+            "Methodology / Workflow": "Compute month-on-month and year-on-year changes.",
+            "Examples & Applications": "Long historical example.",
+            "Actionable Checklist": "Calculate a 12-month moving average.",
+            "Transcript Gaps / Incomplete Segments": "None flagged.",
+        },
+    }
+
+    sections = module._high_signal_sections(doc)
+
+    assert "Key Points" in sections
+    assert "Methodology / Workflow" in sections
+    assert "Actionable Checklist" in sections
+    assert "Transcript Gaps / Incomplete Segments" not in sections
+
+
+def test_indicator_refinement_prompt_is_patch_only_and_mentions_existing_ids():
+    module = load_refine_module()
+    doc = {
+        "path": "",
+        "title": "",
+        "sections": {
+            "Methodology / Workflow": "Compute month-on-month and year-on-year changes.",
+            "Actionable Checklist": "Calculate a 12-month moving average.",
+        },
+    }
+    baseline = baseline_extraction()
+
+    prompt = module._indicator_refinement_prompt(doc, baseline)
+
+    assert "Return strict JSON" in prompt
+    assert "patch-only refinement" in prompt
+    assert "Do not rewrite the full extraction" in prompt
+    assert "building_permits_sa_annual_rate" in prompt
+    assert "month-on-month" in prompt
+    assert "source_sections" in prompt
+    assert "source_refs" not in prompt
