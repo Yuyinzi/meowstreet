@@ -207,9 +207,21 @@ def _normalize_graph_review(normalized):
         if action_name not in _VALID_GRAPH_REVIEW_ACTIONS:
             raise ValueError(f"graph_review action {index} action is invalid")
         _required_text(action, "rationale", f"graph_review action {index}")
+    proposed_node_mappings = graph_review.get("proposed_node_mappings", [])
+    if not isinstance(proposed_node_mappings, list):
+        raise ValueError("graph_review proposed_node_mappings must be a list")
+    fallback_decision_areas = graph_review.get("fallback_decision_areas", [])
+    if not isinstance(fallback_decision_areas, list):
+        raise ValueError("graph_review fallback_decision_areas must be a list")
+    dependency_edge_suggestions = graph_review.get("dependency_edge_suggestions", [])
+    if not isinstance(dependency_edge_suggestions, list):
+        raise ValueError("graph_review dependency_edge_suggestions must be a list")
     normalized["graph_review"] = {
         "previous_nodes": previous_nodes,
         "actions": actions,
+        "proposed_node_mappings": proposed_node_mappings,
+        "fallback_decision_areas": fallback_decision_areas,
+        "dependency_edge_suggestions": dependency_edge_suggestions,
     }
 
 
