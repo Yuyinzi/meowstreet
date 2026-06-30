@@ -271,14 +271,22 @@
         .map((node) => {
           const layout = node.layout || nodeLayout(node.node_id);
           const selected = state.selectedNodeId === node.node_id ? " selected" : "";
+          const connected = !state.selectedNodeId
+            || node.node_id === state.selectedNodeId
+            || (node.incoming_edges || []).includes(state.selectedNodeId)
+            || (node.outgoing_edges || []).includes(state.selectedNodeId);
+          const focusClass = state.selectedNodeId && !connected ? " dimmed" : "";
           return `
             <button
               type="button"
-              class="graph-node status-${escapeHtml(node.status)}${selected}"
+              class="graph-node graph-node-${escapeHtml(node.role)} status-${escapeHtml(node.status)}${selected}${focusClass}"
               data-node-id="${escapeHtml(node.node_id)}"
               style="grid-row:${layout.row}; grid-column:${layout.col} / span ${layout.span};"
             >
-              <span class="node-kicker">${escapeHtml(fmtStatus(node.status))}</span>
+              <span class="node-kicker">
+                <span>${escapeHtml(node.role === "main" ? "Workflow" : node.role === "support" ? "Input Check" : "Discipline")}</span>
+                <span>${escapeHtml(fmtStatus(node.status))}</span>
+              </span>
               <span class="node-title">${escapeHtml(node.title)}</span>
               <span class="node-question">${escapeHtml(node.decision_question)}</span>
             </button>
