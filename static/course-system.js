@@ -162,7 +162,8 @@
 
   function selectedEdgeState(from, to) {
     if (!state.selectedNodeId) return "";
-    if (from === state.selectedNodeId || to === state.selectedNodeId) return "selected";
+    if (from === state.selectedNodeId) return "outgoing";
+    if (to === state.selectedNodeId) return "incoming";
     return "muted";
   }
 
@@ -430,9 +431,18 @@
         <marker id="arrowHeadCross" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
           <path d="M0,1 L0,7 L7,4 z" />
         </marker>
+        <marker id="arrowHeadOutgoing" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,1 L0,7 L7,4 z" />
+        </marker>
+        <marker id="arrowHeadIncoming" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,1 L0,7 L7,4 z" />
+        </marker>
       </defs>
       ${paths.map((path) => {
-        const marker = `url(#arrowHead${path.role.charAt(0).toUpperCase()}${path.role.slice(1)})`;
+        const stateMarker = path.state === "outgoing" ? "Outgoing" : path.state === "incoming" ? "Incoming" : "";
+        const marker = stateMarker
+          ? `url(#arrowHead${stateMarker})`
+          : `url(#arrowHead${path.role.charAt(0).toUpperCase()}${path.role.slice(1)})`;
         const stateClass = path.state ? ` graph-edge-${path.state}` : "";
         return `<path class="graph-edge graph-edge-${path.role}${stateClass}" d="${path.d}" marker-end="${marker}"></path>`;
       }).join("")}

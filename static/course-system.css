@@ -240,28 +240,34 @@ button {
 
 .graph-edge-main {
   stroke: #4A7C8C;
-  stroke-width: 2;
-  stroke-opacity: 0.62;
+  stroke-width: 2.5;
+  stroke-opacity: 0.72;
 }
 
 .graph-edge-support {
   stroke: #8B7E74;
-  stroke-width: 1.5;
-  stroke-dasharray: 5 5;
-  stroke-opacity: 0.46;
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+  stroke-opacity: 0.55;
 }
 
 .graph-edge-cross,
 .graph-edge-start {
   stroke: #B5A89A;
-  stroke-width: 1.2;
-  stroke-opacity: 0.32;
+  stroke-width: 1.8;
+  stroke-opacity: 0.4;
 }
 
-.graph-edge-selected {
-  stroke-width: 3;
-  stroke-opacity: 0.85;
+.graph-edge-outgoing {
   stroke: #D9848C;
+  stroke-width: 3;
+  stroke-opacity: 0.88;
+}
+
+.graph-edge-incoming {
+  stroke: #4A7C8C;
+  stroke-width: 2.5;
+  stroke-opacity: 0.8;
 }
 
 .graph-edge-muted {
@@ -271,31 +277,36 @@ button {
 #arrowHeadStart path,
 #arrowHeadCross path {
   fill: #B5A89A;
-  opacity: 0.36;
+  opacity: 0.44;
 }
 
 #arrowHeadMain path {
   fill: #4A7C8C;
-  opacity: 0.66;
+  opacity: 0.76;
 }
 
 #arrowHeadSupport path {
   fill: #8B7E74;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
-#arrowHeadSelected path {
+#arrowHeadOutgoing path {
   fill: #D9848C;
-  opacity: 0.85;
+  opacity: 0.88;
+}
+
+#arrowHeadIncoming path {
+  fill: #4A7C8C;
+  opacity: 0.82;
 }
 
 .workflow-graph {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(170px, 0.65fr) minmax(260px, 1fr) minmax(170px, 0.65fr);
-  grid-auto-rows: 52px;
-  gap: 16px 20px;
+  grid-template-columns: minmax(130px, 0.45fr) minmax(170px, 1fr) minmax(130px, 0.45fr);
+  grid-auto-rows: 50px;
+  gap: 16px 24px;
   min-height: 100%;
 }
 
@@ -303,12 +314,14 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
+  justify-self: center;
+  min-height: 40px;
   border: 1px solid #E0D6C8;
   border-radius: 10px;
-  padding: 8px 10px 8px 13px;
+  padding: 7px 10px 7px 12px;
   background: #FFFFFF;
   text-align: left;
   box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
