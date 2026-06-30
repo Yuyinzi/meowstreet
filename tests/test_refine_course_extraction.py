@@ -374,7 +374,11 @@ def test_refine_doc_merges_patch_and_writes_prompt_and_output(tmp_path):
             type(
                 "Args",
                 (),
-                {"allow_repair_overwrite": False, "write_prompts_only": False},
+                {
+                    "allow_repair_overwrite": False,
+                    "write_prompts_only": False,
+                    "max_audit_repair_rounds": 0,
+                },
             )(),
             fake_call,
         )
@@ -399,3 +403,121 @@ def test_should_skip_existing_refined_output(tmp_path):
     module._write_json_atomic(module._extraction_path_for(tmp_path, doc), {"ok": True})
 
     assert module._should_skip_existing(tmp_path, doc, args) is True
+
+
+def test_audit_prompt_compares_note_to_refined_extraction():
+    module = load_refine_module()
+    doc = {
+        "path": "",
+        "title": "",
+        "sections": {
+            "Methodology / Workflow": "Compute month-on-month and year-on-year changes.",
+        },
+    }
+    refined = baseline_extraction()
+
+    prompt = module._audit_prompt(doc, refined)
+
+    assert "semantic audit" in prompt
+    assert "missing or under-specified" in prompt
+    assert "building_permits_sa_annual_rate" in prompt
+    assert "month-on-month" in prompt
+
+
+def test_repair_prompt_is_patch_only_and_uses_audit_findings():
+    module = load_refine_module()
+    doc = {
+        "path": "",
+        "title": "",
+        "sections": {
+            "Methodology / Workflow": "Compute month-on-month and year-on-year changes.",
+        },
+    }
+    refined = baseline_extraction()
+    audit = {
+        "findings": [
+            {
+                "kind": "formula",
+                "title_hint": "Permits Month-on-Month Percentage Change",
+                "evidence": "Compute month-on-month changes.",
+                "source_section": "Methodology / Workflow",
+                "reason": "Missing standalone formula.",
+            }
+        ]
+    }
+
+    prompt = module._repair_prompt(doc, refined, audit)
+
+    assert "patch-only repair" in prompt
+    assert "Permits Month-on-Month Percentage Change" in prompt
+    assert "Do not rewrite the full extraction" in prompt
+    assert "source_sections" in prompt
+
+
+def test_apply_audit_repair_round_adds_patch_when_findings_exist(tmp_path):
+    module = load_refine_module()
+    doc = {
+        "path": "",
+        "title": "",
+        "sections": {
+            "Methodology / Workflow": "Compute month-on-month changes.",
+        },
+    }
+    refined = baseline_extraction()
+    calls = []
+
+    async def fake_call(prompt, label):
+        calls.append((prompt, label))
+        if "semantic audit" in prompt:
+            return {
+                "findings": [
+                    {
+                        "kind": "formula",
+                        "title_hint": "Permits Month-on-Month Percentage Change",
+                        "evidence": "Compute month-on-month changes.",
+                        "source_section": "Methodology / Workflow",
+                        "reason": "Missing standalone formula.",
+                    }
+                ]
+            }
+        return {
+            "items": [
+                {
+                    "id": "permits_mom_pct_change",
+                    "type": "formula",
+                    "title": "Permits Month-on-Month Percentage Change",
+                    "summary": "Computes month-on-month percentage change in building permits.",
+                    "decision_area": "macro regime",
+                    "formula": "(permits_t - permits_t_minus_1) / permits_t_minus_1 * 100",
+                    "required_inputs": ["macro.permits_sa", "macro.permits_sa_lag_1"],
+                    "long_side_usage": "",
+                    "short_side_usage": "",
+                    "compute_status": "future_tool_hook",
+                    "future_tool_hooks": ["census_housing_permits"],
+                    "source_sections": ["Methodology / Workflow"],
+                }
+            ],
+            "proposed_nodes": [],
+            "dependencies": [],
+        }
+
+    repaired = asyncio.run(
+        module._apply_audit_repair_rounds(
+            doc,
+            refined,
+            tmp_path,
+            tmp_path,
+            type(
+                "Args",
+                (),
+                {"max_audit_repair_rounds": 1, "allow_repair_overwrite": False},
+            )(),
+            fake_call,
+        )
+    )
+
+    assert [item["id"] for item in repaired["items"]] == [
+        "building_permits_sa_annual_rate",
+        "permits_mom_pct_change",
+    ]
+    assert len(calls) == 2
