@@ -141,3 +141,34 @@ python3 -c 'import json, pathlib; payload=json.loads(pathlib.Path("data/local_sy
 ```
 
 Check `catalyst_window`, `trade_risk_management`, and `fundamental_quantitative_bias` after alias changes because broad words such as `measurement`, `target`, and `process` can misroute unrelated methods.
+
+## Data Directory Layout
+
+```
+data/local_system/
+├── method.v1.json          # Runtime artifact (loaded by api.py)
+├── extraction_prompts/            # Baseline LLM extraction prompts
+├── extraction_results/            # Baseline extraction JSON per note
+├── extraction_refined/            # Refined extraction JSON per note
+├── refinement_prompts/            # Refinement prompt files
+├── refinement_repairs/            # Initial patches + per-round repair JSON
+│   ├── *.indicator.patch.json     #   Initial refinement patches
+│   └── *.repair_round_*.json      #   Per-round repair output
+├── refinement_audits/             # Audit findings + final reports
+│   ├── *.audit_round_*.json       #   Per-round audit results
+│   └── *.audit.md                 #   Final audit reports
+└── synthesis/                     # Final synthesized artifacts
+    ├── method.v1.json      #   Full workflow graph
+    └── method_review.md    #   Review report
+```
+
+**Pipeline flow:**
+
+```
+method_notes/*.md
+  → extract_method.py → extraction_results/              (baseline)
+  → refine_method_extraction.py → extraction_refined/           (refinement)
+  → synthesize_method.py → synthesis/method.v1.json  (final)
+```
+
+`method.v1.json` at the root of `data/local_system/` is the server's runtime artifact — keep it in sync with `synthesis/method.v1.json` after synthesis.
