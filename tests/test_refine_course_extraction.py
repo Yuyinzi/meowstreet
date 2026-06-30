@@ -213,3 +213,109 @@ def test_merge_patch_rejects_duplicate_item_ids_by_default():
         assert str(exc) == "repair item building_permits_sa_annual_rate already exists"
     else:
         raise AssertionError("expected duplicate item rejection")
+
+
+import asyncio
+
+
+class FakeDelta:
+    def __init__(self, content):
+        self.content = content
+
+
+class FakeStreamChoice:
+    def __init__(self, content="", finish_reason=None):
+        self.delta = FakeDelta(content)
+        self.finish_reason = finish_reason
+
+
+class FakeStreamChunk:
+    def __init__(self, content="", finish_reason=None):
+        self.choices = [FakeStreamChoice(content, finish_reason=finish_reason)]
+
+
+class FakeStream:
+    def __init__(self, chunks):
+        self.chunks = chunks
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            yield chunk
+
+
+class FakeAsyncCompletions:
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)
+        self.calls = 0
+
+    async def create(self, **kwargs):
+        self.calls += 1
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class FakeAsyncClient:
+    def __init__(self, outcomes):
+        completions = FakeAsyncCompletions(outcomes)
+        self.chat = type("Chat", (), {"completions": completions})()
+        self.completions = completions
+
+
+def test_call_openai_json_retries_transient_refinement_failure():
+    module = load_refine_module()
+    client = FakeAsyncClient(
+        [
+            RuntimeError("temporary"),
+            FakeStream(
+                [
+                    FakeStreamChunk(
+                        '{"items":[],"proposed_nodes":[],"dependencies":[]}',
+                        finish_reason="stop",
+                    )
+                ]
+            ),
+        ]
+    )
+
+    result = asyncio.run(
+        module._call_openai_json(
+            client,
+            model="gpt-test",
+            prompt="prompt",
+            max_output_tokens=12000,
+            max_retries=2,
+            retry_base_delay=0,
+            label="P10 refinement",
+        )
+    )
+
+    assert result == {"items": [], "proposed_nodes": [], "dependencies": []}
+    assert client.completions.calls == 2
+
+
+def test_call_openai_json_does_not_retry_length_refinement_failure():
+    module = load_refine_module()
+    client = FakeAsyncClient(
+        [FakeStream([FakeStreamChunk('{"items":[]}', finish_reason="length")])]
+    )
+
+    try:
+        asyncio.run(
+            module._call_openai_json(
+                client,
+                model="gpt-test",
+                prompt="prompt",
+                max_output_tokens=12000,
+                max_retries=3,
+                retry_base_delay=0,
+                label="P10 refinement",
+            )
+        )
+    except RuntimeError as exc:
+        assert "finish_reason=length" in str(exc)
+    else:
+        raise AssertionError("expected length failure")
+
+    assert client.completions.calls == 1
