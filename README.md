@@ -63,6 +63,35 @@ By default, prompts go to `data/local_system/extraction_prompts/` and validated 
 
 The older `--output-dir` option still works as a compatibility alias when you want prompts and results in the same directory.
 
+### Refine extracted method methods
+
+The baseline extractor writes broad per-note JSON to `data/local_system/extraction_results`. Run the refinement stage when you want an additional LLM pass focused on missing indicators, formulas, thresholds, checks, required inputs, and dashboard metrics:
+
+```bash
+.venv/bin/python scripts/refine_method_extraction.py \
+  --input-dir data/local_system/extraction_results \
+  --output-dir data/local_system/extraction_refined \
+  --max-audit-repair-rounds 2
+```
+
+Refinement is additive. It reads the original note plus the existing extraction, asks for patch-only additions, runs semantic audit/repair rounds, rejects duplicate item IDs by default, and writes final refined JSON to `data/local_system/extraction_refined`.
+
+Use refined output for synthesis after review:
+
+```bash
+.venv/bin/python scripts/synthesize_method.py \
+  --extractions-dir data/local_system/extraction_refined \
+  --omit-empty-seed-nodes
+```
+
+Prompts and repair logs are written to:
+
+```text
+data/local_system/refinement_prompts
+data/local_system/refinement_repairs
+data/local_system/refinement_audits
+```
+
 ## Synthesize Method Method JSON
 
 After extraction, synthesize the final method method artifact:
