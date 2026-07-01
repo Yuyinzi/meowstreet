@@ -265,10 +265,13 @@ def _final_status(node_results):
     return "insufficient_data"
 
 
-def evaluate_workflow_method(method_payload, observation_payload):
+def evaluate_workflow_method(method_payload, observation_payload, tool_runner=None):
     method = normalize_method_payload(method_payload)
     observation = normalize_graph_observation_payload(observation_payload)
-    graph_observation = apply_computed_indicators(dict(observation["observations"]))
+    observations = observation["observations"]
+    if tool_runner:
+        observations = tool_runner(method, observation)
+    graph_observation = apply_computed_indicators(dict(observations))
     graph_observation["symbol"] = observation["symbol"]
 
     checks_by_node = {}

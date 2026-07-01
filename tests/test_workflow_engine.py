@@ -177,3 +177,66 @@ def test_evaluate_workflow_method_uses_computed_indicator_values():
     assert estimate_check["actual"] == 0.25
     assert estimate_check["status"] == "pass"
     assert technical_node["indicators"][0]["id"] == "estimate_skew"
+
+
+def test_evaluate_workflow_method_uses_tool_runner_observations():
+    payload = method_payload()
+    payload["workflow_nodes"].insert(
+        1,
+        {
+            "id": "data_readiness",
+            "title": "Data Readiness",
+            "decision_question": "Is data ready?",
+            "description": "Checks fetched market data.",
+            "required_inputs": ["metrics.price"],
+            "criteria": ["Price exists."],
+            "tool_hooks": ["market_data"],
+            "incoming_edges": [],
+            "outgoing_edges": ["technical_timing"],
+            "source_refs": [],
+        },
+    )
+    payload["node_checks"].append(
+        {
+            "id": "market_price_available",
+            "node_id": "data_readiness",
+            "title": "Market price available",
+            "field": "metrics.price",
+            "operator": "exists",
+            "side": "both",
+            "required": True,
+            "missing_message": "Market price missing.",
+            "fail_effect": "insufficient_data",
+            "source_refs": [],
+        }
+    )
+
+    def tool_runner(method, observation_payload):
+        assert observation_payload["symbol"] == "AAPL"
+        return {
+            "signals": {
+                "trend": "up",
+            },
+            "metrics": {
+                "price": 123.45,
+            },
+        }
+
+    result = workflow_engine.evaluate_workflow_method(
+        payload,
+        {"symbol": "AAPL", "observations": {}},
+        tool_runner=tool_runner,
+    )
+
+    readiness_node = next(
+        node for node in result["nodes"] if node["node_id"] == "data_readiness"
+    )
+    price_check = next(
+        check
+        for check in readiness_node["checks"]
+        if check["check_id"] == "market_price_available"
+    )
+
+    assert price_check["status"] == "pass"
+    assert price_check["actual"] == 123.45
+    assert result["final_status"] == "long_watchlist"
