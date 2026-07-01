@@ -16,7 +16,15 @@ def test_method_endpoint_returns_graph():
     assert payload["node_checks"]
 
 
-def test_workflow_evaluate_endpoint_accepts_sparse_ticker_payload():
+def test_workflow_evaluate_endpoint_accepts_sparse_ticker_payload(monkeypatch):
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
     response = client.post(
         "/api/method-system/workflow/evaluate",
         json={"symbol": "XYZ", "observations": {}},
