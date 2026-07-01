@@ -5,7 +5,7 @@ from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import workflow_engine
+from app import tool_runner, workflow_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
@@ -55,6 +55,10 @@ def method():
 @app.post("/api/method-system/workflow/evaluate")
 def workflow_evaluate(body: dict = Body(default={})):
     try:
-        return workflow_engine.evaluate_workflow_method(load_workflow_method(), body)
+        return workflow_engine.evaluate_workflow_method(
+            load_workflow_method(),
+            body,
+            tool_runner=tool_runner.apply_tools,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
