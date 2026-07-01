@@ -84,6 +84,13 @@
     return String(status || "").replace(/_/g, " ");
   }
 
+  function fmtSourceDocument(document) {
+    return String(document || "")
+      .replace(/^method_notes\//, "")
+      .replace(/_method_notes\.md$/, "")
+      .replace(/\.md$/, "");
+  }
+
   function fmtDate(value) {
     if (!value) return "";
     return value.replace("T", " ").replace("+00:00", " UTC");
@@ -191,7 +198,8 @@
       tool_hooks: node.tool_hooks || [],
       incoming_edges: node.incoming_edges || [],
       outgoing_edges: node.outgoing_edges || [],
-      method_basis: node.method_basis || [],
+      source_refs: node.source_refs || [],
+      evaluation_basis: node.evaluation_basis || node.method_basis || [],
       role: node.role || nodeRole(node.id || node.node_id),
       layout: node.layout || nodeLayout(node.id || node.node_id),
     };
@@ -221,7 +229,8 @@
         tool_hooks: result.tool_hooks || node.tool_hooks || [],
         incoming_edges: result.incoming_edges || node.incoming_edges || [],
         outgoing_edges: result.outgoing_edges || node.outgoing_edges || [],
-        method_basis: result.method_basis || node.source_refs || [],
+        source_refs: node.source_refs || [],
+        evaluation_basis: result.method_basis || {},
         role: nodeRole(node.id),
         layout: nodeLayout(node.id),
       };
@@ -231,7 +240,7 @@
   function rendermethodBasisItems(methodBasis) {
     if (Array.isArray(methodBasis)) {
       return methodBasis
-        .map((ref) => `<li>${escapeHtml(ref.document || ref.title || ref.check_id || "")} <span class="muted">${escapeHtml(ref.section || ref.status || "")}</span></li>`)
+        .map((ref) => `<li>${escapeHtml(fmtSourceDocument(ref.document) || ref.title || ref.check_id || "")} <span class="muted">${escapeHtml(ref.section || ref.status || "")}</span></li>`)
         .join("");
     }
     if (methodBasis && typeof methodBasis === "object") {
@@ -306,6 +315,11 @@
         renderNodeDetail();
       });
     });
+
+    const workspace = $("graphWorkspace");
+    if (workspace) {
+      workspace.classList.toggle("has-detail", Boolean(state.selectedNodeId));
+    }
 
     requestAnimationFrame(drawGraphEdges);
   }
@@ -508,7 +522,8 @@
     const shortChecks = (node.short.checks || [])
       .map((check) => `<li><strong>${escapeHtml(check.status)}</strong> ${escapeHtml(check.title)}: ${escapeHtml(check.message)}</li>`)
       .join("");
-    const basis = rendermethodBasisItems(node.method_basis);
+    const sourceRefs = rendermethodBasisItems(node.source_refs);
+    const evaluationBasis = rendermethodBasisItems(node.evaluation_basis);
     const nextActions = [...(node.long.next_actions || []), ...(node.short.next_actions || [])]
       .map((action) => `<li>${escapeHtml(action)}</li>`)
       .join("");
@@ -566,7 +581,13 @@
         <div class="side-head">
           <h4>Method Basis</h4>
         </div>
-        <ul class="plain-list">${basis || "<li>No source refs</li>"}</ul>
+        <ul class="plain-list">${sourceRefs || "<li>No source refs</li>"}</ul>
+      </section>
+      <section class="side-block">
+        <div class="side-head">
+          <h4>Evaluation Basis</h4>
+        </div>
+        <ul class="plain-list">${evaluationBasis || "<li>No checks yet</li>"}</ul>
       </section>
     `;
 
