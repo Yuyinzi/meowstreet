@@ -98,3 +98,38 @@ def test_latest_price_date_and_load_price_rows(tmp_path):
     assert latest == "2026-06-02"
     assert [row["date"] for row in rows] == ["2026-06-01", "2026-06-02"]
     assert [row["date"] for row in rows_since] == ["2026-06-02"]
+
+
+def test_fetch_start_date_uses_full_history_when_cache_empty():
+    start_date = market_data.fetch_start_date(
+        latest_date=None,
+        today_date="2026-07-01",
+        overlap_days=5,
+        days_back=420,
+    )
+
+    assert start_date == "1920-01-01"
+
+
+def test_fetch_start_date_uses_overlap_when_cache_exists():
+    start_date = market_data.fetch_start_date(
+        latest_date="2026-06-30",
+        today_date="2026-07-01",
+        overlap_days=5,
+        days_back=420,
+    )
+
+    assert start_date == "2026-06-25"
+
+
+def test_should_refresh_prices_skips_recent_cache():
+    assert market_data.should_refresh_prices(
+        latest_date="2026-06-30",
+        today_date="2026-07-01",
+        refresh_days=1,
+    ) is False
+    assert market_data.should_refresh_prices(
+        latest_date="2026-06-29",
+        today_date="2026-07-01",
+        refresh_days=1,
+    ) is True

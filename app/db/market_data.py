@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import date, timedelta
 from pathlib import Path
 
 
@@ -99,3 +100,20 @@ def load_price_rows(con, symbol, interval, start_date=None):
             (normalized_symbol, interval),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def _parse_date(value):
+    return date.fromisoformat(value)
+
+
+def should_refresh_prices(latest_date, today_date, refresh_days=1):
+    if latest_date is None:
+        return True
+    return (_parse_date(today_date) - _parse_date(latest_date)).days > refresh_days
+
+
+def fetch_start_date(latest_date, today_date, overlap_days=5, days_back=420):
+    if latest_date is None:
+        return "1920-01-01"
+    start = _parse_date(latest_date) - timedelta(days=overlap_days)
+    return start.isoformat()
