@@ -47,3 +47,29 @@ def test_normalize_ism_manufacturing_maps_components_to_growth_cycle_fields():
             }
         }
     }
+
+
+def test_normalize_ism_services_maps_components_to_growth_cycle_fields():
+    payload = {
+        "period": "2026-06",
+        "pmi": "53.0",
+        "business_activity": "54.1",
+        "new_orders": "52.7",
+        "employment": "50.6",
+        "supplier_deliveries": "49.9",
+        "backlog_orders": "51.3",
+    }
+
+    assert macro_growth_cycle.normalize_ism_services(payload) == {
+        "macro": {
+            "growth_cycle": {
+                "services_period": "2026-06",
+                "services_pmi": 53.0,
+                "services_business_activity": 54.1,
+                "services_new_orders": 52.7,
+                "services_employment": 50.6,
+                "services_supplier_deliveries": 49.9,
+                "services_backlog_orders": 51.3,
+            }
+        }
+    }

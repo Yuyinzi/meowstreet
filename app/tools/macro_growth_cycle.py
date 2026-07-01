@@ -71,3 +71,19 @@ def normalize_ism_manufacturing(payload):
             }
         }
     }
+
+
+def normalize_ism_services(payload):
+    return {
+        "macro": {
+            "growth_cycle": {
+                "services_period": payload.get("period"),
+                "services_pmi": _float_value(payload, "pmi"),
+                "services_business_activity": _float_value(payload, "business_activity"),
+                "services_new_orders": _float_value(payload, "new_orders"),
+                "services_employment": _float_value(payload, "employment"),
+                "services_supplier_deliveries": _float_value(payload, "supplier_deliveries"),
+                "services_backlog_orders": _float_value(payload, "backlog_orders"),
+            }
+        }
+    }
