@@ -87,3 +87,48 @@ def normalize_ism_services(payload):
             }
         }
     }
+
+
+def _pct_change(current, previous):
+    if current is None or previous in (None, 0):
+        return None
+    return current / previous - 1
+
+
+def _percent_rank(values, latest):
+    clean_values = [value for value in values if value is not None]
+    if latest is None or not clean_values:
+        return None
+    below_or_equal = len([value for value in clean_values if value <= latest])
+    return below_or_equal / len(clean_values)
+
+
+def normalize_m2_money_stock(payload):
+    rows = payload.get("series", [])
+    values = [float(row["value"]) for row in rows]
+    latest_value = values[-1] if values else None
+    previous_value = values[-2] if len(values) >= 2 else None
+    year_ago_value = values[-13] if len(values) >= 13 else values[0] if values else None
+    mom_changes = [
+        _pct_change(values[index], values[index - 1])
+        for index in range(1, len(values))
+    ]
+    yoy_changes = [
+        _pct_change(values[index], values[index - 12])
+        for index in range(12, len(values))
+    ]
+    latest_mom = _pct_change(latest_value, previous_value)
+    latest_yoy = _pct_change(latest_value, year_ago_value)
+    latest_period = rows[-1]["date"] if rows else None
+    return {
+        "macro": {
+            "growth_cycle": {
+                "m2_period": latest_period,
+                "m2_money_stock": latest_value,
+                "m2_mom_pct_change": latest_mom,
+                "m2_yoy_pct_change": latest_yoy,
+                "m2_mom_percent_rank": _percent_rank(values, latest_value),
+                "m2_yoy_percent_rank": _percent_rank(values, latest_value),
+            }
+        }
+    }

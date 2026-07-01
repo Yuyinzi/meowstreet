@@ -73,3 +73,24 @@ def test_normalize_ism_services_maps_components_to_growth_cycle_fields():
             }
         }
     }
+
+
+def test_normalize_m2_computes_latest_growth_rates_and_percent_ranks():
+    payload = {
+        "series": [
+            {"date": "2025-06-01", "value": 20000},
+            {"date": "2026-04-01", "value": 20900},
+            {"date": "2026-05-01", "value": 21000},
+            {"date": "2026-06-01", "value": 21210},
+        ]
+    }
+
+    result = macro_growth_cycle.normalize_m2_money_stock(payload)
+
+    growth_cycle = result["macro"]["growth_cycle"]
+    assert growth_cycle["m2_period"] == "2026-06-01"
+    assert growth_cycle["m2_money_stock"] == 21210
+    assert round(growth_cycle["m2_mom_pct_change"], 4) == 0.01
+    assert round(growth_cycle["m2_yoy_pct_change"], 4) == 0.0605
+    assert growth_cycle["m2_mom_percent_rank"] == 1.0
+    assert growth_cycle["m2_yoy_percent_rank"] == 1.0
