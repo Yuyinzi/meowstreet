@@ -48,3 +48,26 @@ GROWTH_CYCLE_SOURCES = [
         ],
     },
 ]
+
+
+def _float_value(payload, key):
+    value = payload.get(key)
+    if value in (None, ""):
+        return None
+    return float(value)
+
+
+def normalize_ism_manufacturing(payload):
+    return {
+        "macro": {
+            "growth_cycle": {
+                "ism_period": payload.get("period"),
+                "ism_pmi": _float_value(payload, "pmi"),
+                "ism_new_orders": _float_value(payload, "new_orders"),
+                "ism_production": _float_value(payload, "production"),
+                "ism_employment": _float_value(payload, "employment"),
+                "ism_supplier_deliveries": _float_value(payload, "supplier_deliveries"),
+                "ism_inventories": _float_value(payload, "inventories"),
+            }
+        }
+    }

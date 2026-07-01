@@ -21,3 +21,29 @@ def test_growth_cycle_source_fields_are_grouped_by_source():
     assert "macro.growth_cycle.services_business_activity" in fields
     assert "macro.growth_cycle.m2_money_stock" in fields
     assert "macro.growth_cycle.initial_jobless_claims" in fields
+
+
+def test_normalize_ism_manufacturing_maps_components_to_growth_cycle_fields():
+    payload = {
+        "period": "2026-06",
+        "pmi": "51.2",
+        "new_orders": "52.0",
+        "production": "50.4",
+        "employment": "49.8",
+        "supplier_deliveries": "50.1",
+        "inventories": "48.6",
+    }
+
+    assert macro_growth_cycle.normalize_ism_manufacturing(payload) == {
+        "macro": {
+            "growth_cycle": {
+                "ism_period": "2026-06",
+                "ism_pmi": 51.2,
+                "ism_new_orders": 52.0,
+                "ism_production": 50.4,
+                "ism_employment": 49.8,
+                "ism_supplier_deliveries": 50.1,
+                "ism_inventories": 48.6,
+            }
+        }
+    }
