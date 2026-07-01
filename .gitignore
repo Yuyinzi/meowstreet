@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 data/*.sqlite
+data/**/*.sqlite
 .DS_Store
 .env
 .idea/
