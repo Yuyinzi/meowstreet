@@ -103,3 +103,37 @@ def test_normalize_m2_computes_latest_growth_rates_and_percent_ranks():
     assert round(growth_cycle["m2_yoy_pct_change"], 4) == 0.2
     assert growth_cycle["m2_mom_percent_rank"] == 1.0
     assert growth_cycle["m2_yoy_percent_rank"] == 1.0
+
+
+def test_normalize_jobless_claims_classifies_labor_trend_from_four_week_average():
+    payload = {
+        "initial_claims": [
+            {"date": "2026-06-01", "value": 220000},
+            {"date": "2026-06-06", "value": 222000},
+            {"date": "2026-06-13", "value": 223000},
+            {"date": "2026-06-20", "value": 225000},
+            {"date": "2026-06-27", "value": 230000},
+            {"date": "2026-07-04", "value": 235000},
+            {"date": "2026-07-11", "value": 240000},
+            {"date": "2026-07-18", "value": 245000},
+        ],
+        "continuing_claims": [
+            {"date": "2026-06-01", "value": 1800000},
+            {"date": "2026-06-06", "value": 1810000},
+            {"date": "2026-06-13", "value": 1820000},
+            {"date": "2026-06-20", "value": 1830000},
+            {"date": "2026-06-27", "value": 1840000},
+            {"date": "2026-07-04", "value": 1850000},
+            {"date": "2026-07-11", "value": 1860000},
+            {"date": "2026-07-18", "value": 1880000},
+        ],
+    }
+
+    result = macro_growth_cycle.normalize_jobless_claims(payload)
+
+    growth_cycle = result["macro"]["growth_cycle"]
+    assert growth_cycle["jobless_claims_period"] == "2026-07-18"
+    assert growth_cycle["initial_jobless_claims"] == 245000
+    assert growth_cycle["continuing_jobless_claims"] == 1880000
+    assert growth_cycle["initial_claims_4w_avg"] == 237500
+    assert growth_cycle["labor_trend"] == "weakening"

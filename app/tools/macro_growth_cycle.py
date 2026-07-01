@@ -132,3 +132,51 @@ def normalize_m2_money_stock(payload):
             }
         }
     }
+
+
+def _latest_numeric(rows):
+    if not rows:
+        return None
+    return int(rows[-1]["value"])
+
+
+def _latest_date(rows):
+    if not rows:
+        return None
+    return rows[-1]["date"]
+
+
+def _average(values):
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _labor_trend(initial_claims):
+    if len(initial_claims) < 4:
+        return "unknown"
+    values = [int(row["value"]) for row in initial_claims]
+    latest_average = _average(values[-4:])
+    previous_average = _average(values[:4])
+    if latest_average > previous_average * 1.03:
+        return "weakening"
+    if latest_average < previous_average * 0.97:
+        return "strengthening"
+    return "stable"
+
+
+def normalize_jobless_claims(payload):
+    initial_claims = payload.get("initial_claims", [])
+    continuing_claims = payload.get("continuing_claims", [])
+    initial_values = [int(row["value"]) for row in initial_claims[-4:]]
+    return {
+        "macro": {
+            "growth_cycle": {
+                "jobless_claims_period": _latest_date(initial_claims),
+                "initial_jobless_claims": _latest_numeric(initial_claims),
+                "continuing_jobless_claims": _latest_numeric(continuing_claims),
+                "initial_claims_4w_avg": _average(initial_values),
+                "labor_trend": _labor_trend(initial_claims),
+            }
+        }
+    }
