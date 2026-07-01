@@ -1,7 +1,9 @@
 import argparse
 import json
 import sys
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
+
+from app.db import market_data as market_data_db
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -74,29 +76,20 @@ def _has_required_market_data(price, dates, adjusted_close):
     return price is not None and bool(dates) and bool(adjusted_close)
 
 
-def fetch_market_data(symbol, period="1y", interval="1d", fetch_json=None):
-    normalized_symbol = _normalize_symbol(symbol)
-    fetcher = fetch_json or _fetch_yahoo_chart_json
-    try:
-        payload = fetcher(normalized_symbol, period, interval)
-    except HTTPError as exc:
-        raise ValueError(
-            f"market data fetch failed for {normalized_symbol}: HTTP {exc.code} {exc.reason}"
-        ) from exc
-    except URLError as exc:
-        raise ValueError(
-            f"market data fetch failed for {normalized_symbol}: {exc.reason}"
-        ) from exc
-    result = _chart_result(payload, normalized_symbol)
-    meta = result.get("meta", {})
-    price = meta.get("regularMarketPrice")
-    timestamps = result.get("timestamp") or []
-    adjusted_close = _adjusted_close_values(result, normalized_symbol)
-    dates = _dates_from_timestamps(timestamps)
-    if len(dates) != len(adjusted_close):
-        raise ValueError(f"price dates and adjusted close lengths differ for {normalized_symbol}")
+def _today_iso():
+    return datetime.now(UTC).date().isoformat()
+
+
+def _tomorrow_iso(today_date):
+    return (date.fromisoformat(today_date) + timedelta(days=1)).isoformat()
+
+
+def _payload_from_cached_rows(symbol, rows):
+    adjusted_close = [row["adjusted_close"] for row in rows]
+    dates = [row["date"] for row in rows]
+    price = adjusted_close[-1] if adjusted_close else None
     return {
-        "symbol": normalized_symbol,
+        "symbol": symbol,
         "metrics": {
             "price": price,
         },
@@ -114,6 +107,59 @@ def fetch_market_data(symbol, period="1y", interval="1d", fetch_json=None):
             ),
         },
     }
+
+
+def fetch_market_data(
+    symbol,
+    period="max",
+    interval="1d",
+    fetch_json=None,
+    db_path=market_data_db.DEFAULT_DB_PATH,
+    today_date=None,
+    refresh_days=1,
+    overlap_days=5,
+):
+    normalized_symbol = _normalize_symbol(symbol)
+    effective_today = today_date or _today_iso()
+    con = market_data_db.connect(db_path)
+    try:
+        latest_date = market_data_db.latest_price_date(con, normalized_symbol, interval)
+        if market_data_db.should_refresh_prices(
+            latest_date,
+            effective_today,
+            refresh_days=refresh_days,
+        ):
+            if fetch_json:
+                try:
+                    payload = fetch_json(normalized_symbol, period, interval)
+                except HTTPError as exc:
+                    raise ValueError(
+                        f"market data fetch failed for {normalized_symbol}: HTTP {exc.code} {exc.reason}"
+                    ) from exc
+                except URLError as exc:
+                    raise ValueError(
+                        f"market data fetch failed for {normalized_symbol}: {exc.reason}"
+                    ) from exc
+            else:
+                start_date = market_data_db.fetch_start_date(
+                    latest_date,
+                    effective_today,
+                    overlap_days=overlap_days,
+                )
+                payload = fetch_yahoo_chart_json_for_dates(
+                    normalized_symbol,
+                    start_date=start_date,
+                    end_date=_tomorrow_iso(effective_today),
+                    interval=interval,
+                )
+            rows = chart_payload_to_price_rows(payload, normalized_symbol)
+            market_data_db.save_price_rows(con, normalized_symbol, interval, rows)
+        rows = market_data_db.load_price_rows(con, normalized_symbol, interval)
+    finally:
+        con.close()
+    if not rows:
+        raise ValueError(f"market data is missing for {normalized_symbol}")
+    return _payload_from_cached_rows(normalized_symbol, rows)
 
 
 def _quote_values(result, key):

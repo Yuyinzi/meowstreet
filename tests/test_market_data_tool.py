@@ -29,16 +29,18 @@ def chart_payload():
     }
 
 
-def test_fetch_market_data_returns_observation_fields_from_chart_payload():
+def test_fetch_market_data_returns_observation_fields_from_chart_payload(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
     payload = market_data.fetch_market_data(
         " xyz ",
+        db_path=db_path,
         fetch_json=lambda symbol, period, interval: chart_payload(),
     )
 
     assert payload == {
         "symbol": "XYZ",
         "metrics": {
-            "price": 12.34,
+            "price": 11.0,
         },
         "prices": {
             "dates": ["2024-07-01", "2024-07-02", "2024-07-03"],
@@ -177,3 +179,51 @@ def test_fetch_yahoo_chart_json_for_dates_passes_period_timestamps(monkeypatch):
     assert "interval=1d" in captured["url"]
     assert "events=history" in captured["url"]
     assert captured["timeout"] == 20
+
+
+def test_fetch_market_data_saves_and_returns_cached_price_rows(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+
+    payload = market_data.fetch_market_data(
+        "xyz",
+        period="max",
+        interval="1d",
+        db_path=db_path,
+        fetch_json=lambda symbol, period, interval: chart_payload(),
+    )
+
+    assert payload["symbol"] == "XYZ"
+    assert payload["metrics"]["price"] == 11.0
+    assert payload["prices"]["dates"] == ["2024-07-01", "2024-07-02", "2024-07-03"]
+    assert payload["prices"]["adjusted_close"] == [10.0, 10.5, 11.0]
+    assert payload["data"] == {
+        "price_series_current": True,
+        "uses_adjusted_close": True,
+        "no_missing_required_fields": True,
+    }
+
+
+def test_fetch_market_data_uses_cache_when_recent(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    market_data.fetch_market_data(
+        "XYZ",
+        period="max",
+        interval="1d",
+        db_path=db_path,
+        fetch_json=lambda symbol, period, interval: chart_payload(),
+    )
+
+    def fail_fetch(symbol, period, interval):
+        raise AssertionError("fetch_json should not be called for recent cache")
+
+    payload = market_data.fetch_market_data(
+        "XYZ",
+        period="max",
+        interval="1d",
+        db_path=db_path,
+        today_date="2024-07-04",
+        refresh_days=1,
+        fetch_json=fail_fetch,
+    )
+
+    assert payload["prices"]["dates"] == ["2024-07-01", "2024-07-02", "2024-07-03"]
