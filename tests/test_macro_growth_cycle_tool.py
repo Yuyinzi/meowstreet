@@ -137,3 +137,51 @@ def test_normalize_jobless_claims_classifies_labor_trend_from_four_week_average(
     assert growth_cycle["continuing_jobless_claims"] == 1880000
     assert growth_cycle["initial_claims_4w_avg"] == 237500
     assert growth_cycle["labor_trend"] == "weakening"
+
+
+def test_build_growth_cycle_dashboard_merges_normalized_sources():
+    result = macro_growth_cycle.build_growth_cycle_dashboard(
+        ism_manufacturing={
+            "period": "2026-06",
+            "pmi": 51.2,
+            "new_orders": 52.0,
+            "production": 50.4,
+            "employment": 49.8,
+            "supplier_deliveries": 50.1,
+            "inventories": 48.6,
+        },
+        ism_services={
+            "period": "2026-06",
+            "pmi": 53.0,
+            "business_activity": 54.1,
+            "new_orders": 52.7,
+            "employment": 50.6,
+            "supplier_deliveries": 49.9,
+            "backlog_orders": 51.3,
+        },
+        m2_money_stock={
+            "series": [
+                {"date": "2025-06-01", "value": 20000},
+                {"date": "2026-04-01", "value": 20900},
+                {"date": "2026-05-01", "value": 21000},
+                {"date": "2026-06-01", "value": 21210},
+            ]
+        },
+        jobless_claims={
+            "initial_claims": [
+                {"date": "2026-06-06", "value": 220000},
+                {"date": "2026-06-13", "value": 225000},
+                {"date": "2026-06-20", "value": 235000},
+                {"date": "2026-06-27", "value": 245000},
+            ],
+            "continuing_claims": [
+                {"date": "2026-06-27", "value": 1880000},
+            ],
+        },
+    )
+
+    growth_cycle = result["macro"]["growth_cycle"]
+    assert growth_cycle["ism_pmi"] == 51.2
+    assert growth_cycle["services_pmi"] == 53.0
+    assert growth_cycle["m2_money_stock"] == 21210
+    assert growth_cycle["initial_jobless_claims"] == 245000

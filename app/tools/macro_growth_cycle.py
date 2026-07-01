@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 GROWTH_CYCLE_SOURCES = [
     {
         "id": "ism_manufacturing",
@@ -180,3 +182,31 @@ def normalize_jobless_claims(payload):
             }
         }
     }
+
+
+def _deep_merge(base, incoming):
+    merged = deepcopy(base)
+    for key, value in incoming.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
+
+
+def build_growth_cycle_dashboard(
+    ism_manufacturing=None,
+    ism_services=None,
+    m2_money_stock=None,
+    jobless_claims=None,
+):
+    result = {"macro": {"growth_cycle": {}}}
+    if ism_manufacturing:
+        result = _deep_merge(result, normalize_ism_manufacturing(ism_manufacturing))
+    if ism_services:
+        result = _deep_merge(result, normalize_ism_services(ism_services))
+    if m2_money_stock:
+        result = _deep_merge(result, normalize_m2_money_stock(m2_money_stock))
+    if jobless_claims:
+        result = _deep_merge(result, normalize_jobless_claims(jobless_claims))
+    return result
