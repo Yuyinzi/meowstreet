@@ -157,6 +157,10 @@
     const key = edgeKey(from, to);
     if (MAIN_PIPELINE_EDGES.has(key)) return "main";
     if (SUPPORT_EDGES.has(key)) return "support";
+    const fromMain = MAIN_PIPELINE.includes(from);
+    const toMain = MAIN_PIPELINE.includes(to);
+    if (fromMain && toMain) return "main";
+    if (SUPPORT_NODES.has(from) || SUPPORT_NODES.has(to)) return "support";
     return "cross";
   }
 
@@ -395,10 +399,11 @@
         c2y = y2 - Math.max(30, Math.abs(dy) * 0.35);
       } else if (sameCol && rowDiff > 1) {
         const routeRight = fromLayout.col === 2;
-        const offset = routeRight ? s.right + gap : s.left - gap;
-        const arcOut = routeRight ? s.right + gap * 5 : s.left - gap * 5;
-        x1 = offset; y1 = s.cy;
-        x2 = routeRight ? t.right + gap : t.left - gap; y2 = t.cy;
+        const startX = routeRight ? s.right + gap : s.left - gap;
+        const endX = routeRight ? t.right : t.left;
+        const arcOut = routeRight ? Math.max(s.right, t.right) + gap * 5 : Math.min(s.left, t.left) - gap * 5;
+        x1 = startX; y1 = s.cy;
+        x2 = endX; y2 = t.cy;
         c1x = arcOut;
         c1y = y1;
         c2x = arcOut;
