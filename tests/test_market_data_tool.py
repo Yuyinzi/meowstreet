@@ -142,3 +142,38 @@ def test_chart_payload_to_price_rows_includes_ohlcv_and_adjusted_close():
             "volume": None,
         },
     ]
+
+
+def test_fetch_yahoo_chart_json_for_dates_passes_period_timestamps(monkeypatch):
+    captured = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return None
+
+        def read(self):
+            return b'{"chart": {"result": [], "error": null}}'
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(market_data, "urlopen", fake_urlopen)
+
+    payload = market_data.fetch_yahoo_chart_json_for_dates(
+        "AAPL",
+        start_date="2026-06-25",
+        end_date="2026-07-02",
+        interval="1d",
+    )
+
+    assert payload == {"chart": {"result": [], "error": None}}
+    assert "period1=1782345600" in captured["url"]
+    assert "period2=1782950400" in captured["url"]
+    assert "interval=1d" in captured["url"]
+    assert "events=history" in captured["url"]
+    assert captured["timeout"] == 20

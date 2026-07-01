@@ -1,7 +1,7 @@
 import argparse
 import json
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -155,6 +155,42 @@ def chart_payload_to_price_rows(payload, symbol):
         for index, date_value in enumerate(dates)
         if adjusted_close[index] is not None
     ]
+
+
+def _date_to_timestamp(date_value):
+    parsed = date.fromisoformat(date_value)
+    return int(datetime.combine(parsed, time.min, tzinfo=UTC).timestamp())
+
+
+def fetch_yahoo_chart_json_for_dates(symbol, start_date, end_date, interval):
+    normalized_symbol = _normalize_symbol(symbol)
+    query = urlencode(
+        {
+            "period1": _date_to_timestamp(start_date),
+            "period2": _date_to_timestamp(end_date),
+            "interval": interval,
+            "events": "history",
+        }
+    )
+    url = f"{_YAHOO_CHART_URL.format(symbol=normalized_symbol)}?{query}"
+    request = Request(
+        url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0",
+        },
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise ValueError(
+            f"market data fetch failed for {normalized_symbol}: HTTP {exc.code} {exc.reason}"
+        ) from exc
+    except URLError as exc:
+        raise ValueError(
+            f"market data fetch failed for {normalized_symbol}: {exc.reason}"
+        ) from exc
 
 
 def main(argv=None, fetch_json=None):
