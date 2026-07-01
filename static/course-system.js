@@ -578,10 +578,13 @@
         <ul class="plain-list">${nextActions || "<li>None</li>"}</ul>
       </section>
       <section class="side-block">
-        <div class="side-head">
-          <h4>Method Basis</h4>
-        </div>
-        <ul class="plain-list">${sourceRefs || "<li>No source refs</li>"}</ul>
+        <details class="basis-details">
+          <summary class="side-head basis-summary">
+            <h4>Method Basis</h4>
+            <span class="basis-toggle" aria-hidden="true"></span>
+          </summary>
+          <ul class="plain-list">${sourceRefs || "<li>No source refs</li>"}</ul>
+        </details>
       </section>
       <section class="side-block">
         <div class="side-head">
