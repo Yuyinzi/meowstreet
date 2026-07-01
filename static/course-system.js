@@ -359,11 +359,11 @@
         const targetLayout = NODE_LAYOUT[entryId];
         const isOffAxis = targetLayout && targetLayout.col !== 2;
         if (isOffAxis) {
-          const dir = r.cx < sx ? -1 : 1;
-          const startX = dir > 0 ? barRect.right - frameRect.left : barRect.left - frameRect.left;
-          const corridorX = dir > 0 ? (barRect.right - frameRect.left + r.left) / 2 : (barRect.left - frameRect.left + r.right) / 2;
+          const c1x = (sx + r.cx) / 2;
+          const c1y = sy + 10;
+          const c2y = r.top - 30;
           paths.push({
-            d: `M ${startX} ${sy} C ${corridorX} ${sy}, ${corridorX} ${r.top - 20}, ${r.cx} ${r.top}`,
+            d: `M ${sx} ${sy} C ${c1x} ${c1y}, ${c1x} ${c2y}, ${r.cx} ${r.top}`,
             role: "start",
             state: "",
           });
