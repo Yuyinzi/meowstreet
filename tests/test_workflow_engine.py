@@ -181,21 +181,13 @@ def test_evaluate_workflow_method_uses_computed_indicator_values():
 
 def test_evaluate_workflow_method_uses_tool_runner_observations():
     payload = method_payload()
-    payload["workflow_nodes"].insert(
-        1,
-        {
-            "id": "data_readiness",
-            "title": "Data Readiness",
-            "decision_question": "Is data ready?",
-            "description": "Checks fetched market data.",
-            "required_inputs": ["metrics.price"],
-            "criteria": ["Price exists."],
-            "tool_hooks": ["market_data"],
-            "incoming_edges": [],
-            "outgoing_edges": ["technical_timing"],
-            "source_refs": [],
-        },
-    )
+    payload["workflow_nodes"][0]["id"] = "data_readiness"
+    payload["workflow_nodes"][0]["title"] = "Data Readiness"
+    payload["workflow_nodes"][0]["tool_hooks"] = ["market_data"]
+    payload["workflow_nodes"][0]["required_inputs"] = ["symbol", "metrics.price"]
+    payload["node_checks"][0]["node_id"] = "data_readiness"
+    payload["node_checks"][0]["group"] = "instrument_identity"
+    payload["workflow_nodes"][1]["incoming_edges"] = ["data_readiness"]
     payload["node_checks"].append(
         {
             "id": "market_price_available",
@@ -208,6 +200,7 @@ def test_evaluate_workflow_method_uses_tool_runner_observations():
             "missing_message": "Market price missing.",
             "fail_effect": "insufficient_data",
             "source_refs": [],
+            "group": "market_data",
         }
     )
 
@@ -239,4 +232,6 @@ def test_evaluate_workflow_method_uses_tool_runner_observations():
 
     assert price_check["status"] == "pass"
     assert price_check["actual"] == 123.45
+    assert price_check["group"] == "market_data"
+    assert result["final_status"] == "long_watchlist"
     assert result["final_status"] == "long_watchlist"
