@@ -721,16 +721,13 @@
 
   async function runWorkflow(event) {
     event.preventDefault();
-    const status = $("workflowStatus");
     const form = event.currentTarget;
     const payload = buildPayload(form);
     state.running = true;
-    status.textContent = "Queuing graph...";
 
     state.graphNodes = state.graphNodes.map((node) => ({ ...node, status: "queued" }));
     renderGraph();
     await delay(120);
-    status.textContent = "Running graph...";
     state.graphNodes = state.graphNodes.map((node) => ({ ...node, status: "running" }));
     renderGraph();
     await delay(180);
@@ -759,11 +756,10 @@
       renderNodeDetail();
       renderLatest();
       saveRun(state.latest, state.latest.context_summary);
-      status.textContent = "Complete.";
     } catch (error) {
       state.graphNodes = state.graphNodes.map((node) => ({ ...node, status: "error" }));
       renderGraph();
-      status.textContent = error.message;
+      console.error(error);
     } finally {
       state.running = false;
     }
@@ -778,7 +774,7 @@
   }
 
   init().catch((error) => {
-    $("workflowStatus").textContent = error.message;
+    console.error(error);
     $("methodMeta").textContent = "Failed to load method graph.";
   });
 })();
