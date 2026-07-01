@@ -31,3 +31,71 @@ def connect(db_path=DEFAULT_DB_PATH):
         """
     )
     return con
+
+
+def normalize_symbol(symbol):
+    normalized = str(symbol or "").strip().upper()
+    if not normalized:
+        raise ValueError("symbol is required")
+    return normalized
+
+
+def save_price_rows(con, symbol, interval, rows):
+    normalized_symbol = normalize_symbol(symbol)
+    inserted = 0
+    for row in rows:
+        con.execute(
+            """
+            insert or replace into prices(
+                symbol, interval, date, open, high, low, close, adjusted_close, volume
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                normalized_symbol,
+                interval,
+                row["date"],
+                row.get("open"),
+                row.get("high"),
+                row.get("low"),
+                row.get("close"),
+                row["adjusted_close"],
+                row.get("volume"),
+            ),
+        )
+        inserted += 1
+    con.commit()
+    return inserted
+
+
+def latest_price_date(con, symbol, interval):
+    normalized_symbol = normalize_symbol(symbol)
+    row = con.execute(
+        "select max(date) from prices where symbol = ? and interval = ?",
+        (normalized_symbol, interval),
+    ).fetchone()
+    return row[0] if row else None
+
+
+def load_price_rows(con, symbol, interval, start_date=None):
+    normalized_symbol = normalize_symbol(symbol)
+    if start_date:
+        rows = con.execute(
+            """
+            select date, open, high, low, close, adjusted_close, volume
+            from prices
+            where symbol = ? and interval = ? and date >= ?
+            order by date
+            """,
+            (normalized_symbol, interval, start_date),
+        ).fetchall()
+    else:
+        rows = con.execute(
+            """
+            select date, open, high, low, close, adjusted_close, volume
+            from prices
+            where symbol = ? and interval = ?
+            order by date
+            """,
+            (normalized_symbol, interval),
+        ).fetchall()
+    return [dict(row) for row in rows]
