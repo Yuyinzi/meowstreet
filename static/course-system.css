@@ -387,23 +387,23 @@ button {
 }
 
 .graph-node.graph-node-main {
-  background: #F5F0EB;
+  background: #F3EEE6;
   border-left: 3px solid #3B3530;
 }
 
 .graph-node.graph-node-support {
-  background: #EDE8E0;
+  background: #E6E3E0;
   border-left: 3px solid #8B7E74;
 }
 
 .graph-node.graph-node-detached {
-  background: #F5EDE0;
+  background: #F7EDD8;
   border-left: 3px solid #B8862E;
 }
 
-.graph-node.status-idle.graph-node-main { background: #F5F0EB; }
-.graph-node.status-idle.graph-node-support { background: #EDE8E0; }
-.graph-node.status-idle.graph-node-detached { background: #F5EDE0; }
+.graph-node.status-idle.graph-node-main { background: #F3EEE6; }
+.graph-node.status-idle.graph-node-support { background: #E6E3E0; }
+.graph-node.status-idle.graph-node-detached { background: #F7EDD8; }
 .graph-node.selected.status-idle { background: #FDF4F5; }
 
 .graph-node.dimmed {
@@ -687,29 +687,33 @@ button {
   margin-top: 10px;
 }
 
-.legend-main {
-  background: #F5F0EB;
-  border-left: 3px solid #3B3530;
-}
-
-.legend-support {
-  background: #EDE8E0;
-  border-left: 3px solid #8B7E74;
-}
-
-.legend-detached {
-  background: #F5EDE0;
-  border-left: 3px solid #B8862E;
-}
-
 .legend-item {
-  border-radius: 8px;
-  padding: 4px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  border-radius: 10px;
+  padding: 5px 9px 5px 10px;
   font-size: 11px;
   font-weight: 600;
   border: 1px solid #E0D6C8;
   background: #FDFAF7;
   color: #5C534A;
+}
+
+.legend-main {
+  background: #F3EEE6;
+  border-left: 3px solid #3B3530;
+}
+
+.legend-support {
+  background: #E6E3E0;
+  border-left: 3px solid #8B7E74;
+}
+
+.legend-detached {
+  background: #F7EDD8;
+  border-left: 3px solid #B8862E;
 }
 
 .legend-idle { color: #A89B91; }
