@@ -3,18 +3,20 @@
 
   const MAIN_PIPELINE = [
     "data_readiness",
-    "macro_regime",
-    "sector_theme_context",
-    "fundamental_quantitative_bias",
-    "fundamental_qualitative_bias",
+    "liquidity_tradability",
+    "bottom_up_fundamental_bias",
     "catalyst_window",
     "technical_timing",
-    "trade_risk_management",
+    "risk_position_sizing",
+    "final_synthesis",
   ];
 
   const SUPPORT_NODES = new Set([
-    "international_adr_workflow",
-    "portfolio_construction",
+    "instrument_identity",
+    "macro_regime",
+    "sector_theme_context",
+    "time_horizon_fit",
+    "portfolio_fit",
   ]);
 
   const DETACHED_NODES = new Set([
@@ -26,25 +28,30 @@
   );
 
   const SUPPORT_EDGES = new Set([
-    "international_adr_workflow->sector_theme_context",
-    "international_adr_workflow->fundamental_quantitative_bias",
-    "macro_regime->portfolio_construction",
-    "data_readiness->portfolio_construction",
-    "portfolio_construction->trade_risk_management",
+    "instrument_identity->data_readiness",
+    "macro_regime->sector_theme_context",
+    "macro_regime->portfolio_fit",
+    "sector_theme_context->bottom_up_fundamental_bias",
+    "time_horizon_fit->catalyst_window",
+    "liquidity_tradability->portfolio_fit",
+    "portfolio_fit->risk_position_sizing",
+    "portfolio_fit->final_synthesis",
   ]);
 
   const NODE_LAYOUT = {
+    instrument_identity: { row: 2, col: 1, span: 1, role: "support" },
     data_readiness: { row: 2, col: 2, span: 1, role: "main" },
-    macro_regime: { row: 3, col: 2, span: 1, role: "main" },
-    sector_theme_context: { row: 4, col: 2, span: 1, role: "main" },
-    fundamental_quantitative_bias: { row: 5, col: 2, span: 1, role: "main" },
-    fundamental_qualitative_bias: { row: 6, col: 2, span: 1, role: "main" },
-    catalyst_window: { row: 7, col: 2, span: 1, role: "main" },
-    technical_timing: { row: 8, col: 2, span: 1, role: "main" },
-    trade_risk_management: { row: 9, col: 2, span: 1, role: "main" },
-    international_adr_workflow: { row: 4, col: 1, span: 1, role: "support" },
-    portfolio_construction: { row: 8, col: 1, span: 1, role: "support" },
+    macro_regime: { row: 3, col: 1, span: 1, role: "support" },
+    liquidity_tradability: { row: 3, col: 2, span: 1, role: "main" },
+    sector_theme_context: { row: 4, col: 1, span: 1, role: "support" },
+    bottom_up_fundamental_bias: { row: 4, col: 2, span: 1, role: "main" },
+    time_horizon_fit: { row: 5, col: 1, span: 1, role: "support" },
+    catalyst_window: { row: 5, col: 2, span: 1, role: "main" },
+    technical_timing: { row: 6, col: 2, span: 1, role: "main" },
+    portfolio_fit: { row: 6, col: 3, span: 1, role: "support" },
+    risk_position_sizing: { row: 7, col: 2, span: 1, role: "main" },
     process_discipline: { row: 2, col: 3, span: 1, role: "detached" },
+    final_synthesis: { row: 8, col: 2, span: 1, role: "main" },
   };
 
   const state = {
