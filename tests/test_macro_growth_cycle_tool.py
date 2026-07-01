@@ -230,6 +230,11 @@ def test_fetch_ism_manufacturing_source_not_configured():
         macro_growth_cycle.fetch_ism_manufacturing_from_source()
 
 
+def test_fetch_ism_services_source_not_configured():
+    with pytest.raises(ValueError, match="ism services source is not configured"):
+        macro_growth_cycle.fetch_ism_services_from_source()
+
+
 def test_fetch_growth_cycle_dashboard_uses_injected_fetchers():
     calls = []
 

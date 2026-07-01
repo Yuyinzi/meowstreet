@@ -256,6 +256,10 @@ def fetch_ism_manufacturing_from_source():
     raise ValueError("ism manufacturing source is not configured")
 
 
+def fetch_ism_services_from_source():
+    raise ValueError("ism services source is not configured")
+
+
 def fetch_growth_cycle_dashboard(
     fetch_ism_manufacturing,
     fetch_ism_services,
