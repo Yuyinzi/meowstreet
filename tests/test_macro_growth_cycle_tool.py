@@ -78,10 +78,19 @@ def test_normalize_ism_services_maps_components_to_growth_cycle_fields():
 def test_normalize_m2_computes_latest_growth_rates_and_percent_ranks():
     payload = {
         "series": [
-            {"date": "2025-06-01", "value": 20000},
-            {"date": "2026-04-01", "value": 20900},
-            {"date": "2026-05-01", "value": 21000},
-            {"date": "2026-06-01", "value": 21210},
+            {"date": "2025-06-01", "value": 100},
+            {"date": "2025-07-01", "value": 100},
+            {"date": "2025-08-01", "value": 100},
+            {"date": "2025-09-01", "value": 100},
+            {"date": "2025-10-01", "value": 100},
+            {"date": "2025-11-01", "value": 100},
+            {"date": "2025-12-01", "value": 100},
+            {"date": "2026-01-01", "value": 100},
+            {"date": "2026-02-01", "value": 100},
+            {"date": "2026-03-01", "value": 100},
+            {"date": "2026-04-01", "value": 100},
+            {"date": "2026-05-01", "value": 100},
+            {"date": "2026-06-01", "value": 120},
         ]
     }
 
@@ -89,8 +98,8 @@ def test_normalize_m2_computes_latest_growth_rates_and_percent_ranks():
 
     growth_cycle = result["macro"]["growth_cycle"]
     assert growth_cycle["m2_period"] == "2026-06-01"
-    assert growth_cycle["m2_money_stock"] == 21210
-    assert round(growth_cycle["m2_mom_pct_change"], 4) == 0.01
-    assert round(growth_cycle["m2_yoy_pct_change"], 4) == 0.0605
+    assert growth_cycle["m2_money_stock"] == 120
+    assert round(growth_cycle["m2_mom_pct_change"], 4) == 0.2
+    assert round(growth_cycle["m2_yoy_pct_change"], 4) == 0.2
     assert growth_cycle["m2_mom_percent_rank"] == 1.0
     assert growth_cycle["m2_yoy_percent_rank"] == 1.0

@@ -127,8 +127,8 @@ def normalize_m2_money_stock(payload):
                 "m2_money_stock": latest_value,
                 "m2_mom_pct_change": latest_mom,
                 "m2_yoy_pct_change": latest_yoy,
-                "m2_mom_percent_rank": _percent_rank(values, latest_value),
-                "m2_yoy_percent_rank": _percent_rank(values, latest_value),
+                "m2_mom_percent_rank": _percent_rank(mom_changes, latest_mom),
+                "m2_yoy_percent_rank": _percent_rank(yoy_changes, latest_yoy),
             }
         }
     }
