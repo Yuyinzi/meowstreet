@@ -93,7 +93,7 @@ def test_main_reports_errors(capsys):
     assert captured.err == "symbol is required\n"
 
 
-def test_main_reports_provider_http_errors_without_traceback(capsys):
+def test_main_reports_provider_http_errors_without_traceback(tmp_path, capsys):
     def fetch_json(symbol, period, interval):
         raise HTTPError(
             url="https://example.test",
@@ -103,7 +103,10 @@ def test_main_reports_provider_http_errors_without_traceback(capsys):
             fp=None,
         )
 
-    exit_code = market_data.main(["AAPL"], fetch_json=fetch_json)
+    exit_code = market_data.main(
+        ["AAPL", "--db-path", str(tmp_path / "market_data.sqlite")],
+        fetch_json=fetch_json,
+    )
 
     captured = capsys.readouterr()
 
