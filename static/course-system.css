@@ -386,24 +386,29 @@ button {
   background: #FDF4F5;
 }
 
-.graph-node-main {
+.graph-node.graph-node-main {
+  background: #F5F0EB;
   border-left: 3px solid #3B3530;
 }
 
-.graph-node-support {
-  border-left: 3px dashed #8B7E74;
+.graph-node.graph-node-support {
+  background: #EDE8E0;
+  border-left: 3px solid #8B7E74;
 }
 
-.graph-node-detached {
-  border-left: 3px dotted #B8862E;
+.graph-node.graph-node-detached {
+  background: #F5EDE0;
+  border-left: 3px solid #B8862E;
 }
+
+.graph-node.status-idle.graph-node-main { background: #F5F0EB; }
+.graph-node.status-idle.graph-node-support { background: #EDE8E0; }
+.graph-node.status-idle.graph-node-detached { background: #F5EDE0; }
+.graph-node.selected.status-idle { background: #FDF4F5; }
 
 .graph-node.dimmed {
   opacity: 0.32;
 }
-
-.graph-node.status-idle { background: #FFFFFF; }
-.graph-node.selected.status-idle { background: #FDF4F5; }
 
 .graph-node.status-queued {
   background: #FEFBEF;
@@ -683,15 +688,18 @@ button {
 }
 
 .legend-main {
+  background: #F5F0EB;
   border-left: 3px solid #3B3530;
 }
 
 .legend-support {
-  border-left: 3px dashed #8B7E74;
+  background: #EDE8E0;
+  border-left: 3px solid #8B7E74;
 }
 
 .legend-detached {
-  border-left: 3px dotted #B8862E;
+  background: #F5EDE0;
+  border-left: 3px solid #B8862E;
 }
 
 .legend-item {
