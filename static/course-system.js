@@ -270,24 +270,49 @@
     return groups;
   }
 
-  function renderCheckList(checks) {
+  function renderCheckList(checks, options) {
+    const { isMethod } = options || {};
     return checks
       .map((check) => {
+        const title = escapeHtml(check.title);
+        const msg = check.message || check.missing_message;
+        if (isMethod) {
+          const requiredBadge = check.required
+            ? `<span class="check-badge check-required">required</span>`
+            : `<span class="check-badge check-optional">optional</span>`;
+          const effect = check.fail_effect
+            ? `<span class="check-badge check-effect">${escapeHtml(fmtStatus(check.fail_effect))}</span>`
+            : "";
+          return `<li class="check-row check-method">
+            <span class="check-title">${title}</span>
+            <span class="check-badges">${requiredBadge}${effect}</span>
+            ${msg ? `<span class="check-message">${escapeHtml(msg)}</span>` : ""}
+          </li>`;
+        }
         const status = check.status || "missing";
-        const msg = check.message ? `: ${escapeHtml(check.message)}` : "";
-        return `<li><strong>${escapeHtml(status)}</strong> ${escapeHtml(check.title)}${msg}</li>`;
+        return `<li class="check-row">
+          <span class="status-chip status-${escapeHtml(status)}">${escapeHtml(fmtStatus(status))}</span>
+          <span class="check-title">${title}</span>
+          ${msg ? `<span class="check-message">${escapeHtml(msg)}</span>` : ""}
+        </li>`;
       })
       .join("");
   }
 
-  function renderGroupedChecks(checks) {
+  function renderGroupedChecks(checks, options) {
     const groups = groupChecksByGroup(checks);
-    return Object.entries(groups)
+    const groupEntries = Object.entries(groups);
+    if (groupEntries.length === 0) return "";
+    if (groupEntries.length === 1) {
+      const [, groupChecks] = groupEntries[0];
+      return `<ul class="check-list">${renderCheckList(groupChecks, options)}</ul>`;
+    }
+    return groupEntries
       .map(([group, groupChecks]) => {
         const label = CHECK_GROUP_LABELS[group] || group;
         return `<details class="check-group"${group === "_ungrouped" ? " open" : ""}>
           <summary class="check-group-summary">${escapeHtml(label)}</summary>
-          <ul class="plain-list">${renderCheckList(groupChecks)}</ul>
+          <ul class="check-list">${renderCheckList(groupChecks, options)}</ul>
         </details>`;
       })
       .join("");
@@ -564,7 +589,7 @@
 
     const longChecks = renderGroupedChecks(node.long.checks || []);
     const shortChecks = renderGroupedChecks(node.short.checks || []);
-    const methodChecks = renderGroupedChecks(methodChecksForNode(state.selectedNodeId));
+    const methodChecks = renderGroupedChecks(methodChecksForNode(state.selectedNodeId), { isMethod: true });
     const sourceRefs = rendermethodBasisItems(node.source_refs);
     const evaluationBasis = rendermethodBasisItems(node.evaluation_basis);
     const nextActions = [...(node.long.next_actions || []), ...(node.short.next_actions || [])]
