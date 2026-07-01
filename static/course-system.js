@@ -488,6 +488,7 @@
         }
         renderGraph();
         renderNodeDetail();
+        renderMacroDashboard();
       });
     });
 
@@ -886,6 +887,7 @@
         mergeResultNodes(entry.nodes || []);
         renderGraph();
         renderNodeDetail();
+        renderMacroDashboard();
         renderLatest();
       });
     });
@@ -898,6 +900,7 @@
     renderMethodMeta();
     renderGraph();
     renderNodeDetail();
+    renderMacroDashboard();
   }
 
   async function runWorkflow(event) {
@@ -935,6 +938,7 @@
       }
       renderGraph();
       renderNodeDetail();
+      renderMacroDashboard();
       renderLatest();
       saveRun(state.latest, state.latest.context_summary);
     } catch (error) {
