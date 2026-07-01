@@ -27,6 +27,7 @@ def test_method_endpoint_uses_stable_top_level_graph():
         "sector_theme_context",
         "fundamental_quantitative_bias",
         "fundamental_qualitative_bias",
+        "international_adr_workflow",
         "catalyst_window",
         "technical_timing",
         "portfolio_construction",
