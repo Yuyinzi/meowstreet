@@ -360,12 +360,10 @@
         const isOffAxis = targetLayout && targetLayout.col !== 2;
         if (isOffAxis) {
           const dir = r.cx < sx ? -1 : 1;
-          const startX = sx + dir * barRect.width * 0.3;
-          const approachX = dir > 0 ? r.left - 15 : r.right + 15;
-          const c1y = sy + 20;
-          const c2y = r.cy - 30;
+          const startX = dir > 0 ? barRect.right - frameRect.left : barRect.left - frameRect.left;
+          const corridorX = dir > 0 ? (barRect.right - frameRect.left + r.left) / 2 : (barRect.left - frameRect.left + r.right) / 2;
           paths.push({
-            d: `M ${startX} ${sy} C ${approachX} ${c1y}, ${approachX} ${c2y}, ${approachX} ${r.cy}`,
+            d: `M ${startX} ${sy} C ${corridorX} ${sy}, ${corridorX} ${r.top - 20}, ${r.cx} ${r.top}`,
             role: "start",
             state: "",
           });
