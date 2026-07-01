@@ -356,13 +356,28 @@
         const entryEl = nodeEls.get(entryId);
         if (!entryEl) return;
         const r = nodeRect(entryEl);
-        const c1y = sy + (r.top - sy) * 0.55;
-        const c2y = r.top - (r.top - sy) * 0.15;
-        paths.push({
-          d: `M ${sx} ${sy} C ${sx} ${c1y}, ${r.cx} ${c2y}, ${r.cx} ${r.top}`,
-          role: "start",
-          state: "",
-        });
+        const targetLayout = NODE_LAYOUT[entryId];
+        const isOffAxis = targetLayout && targetLayout.col !== 2;
+        if (isOffAxis) {
+          const dir = r.cx < sx ? -1 : 1;
+          const startX = sx + dir * barRect.width * 0.3;
+          const approachX = dir > 0 ? r.left - 15 : r.right + 15;
+          const c1y = sy + 20;
+          const c2y = r.cy - 30;
+          paths.push({
+            d: `M ${startX} ${sy} C ${approachX} ${c1y}, ${approachX} ${c2y}, ${approachX} ${r.cy}`,
+            role: "start",
+            state: "",
+          });
+        } else {
+          const c1y = sy + (r.top - sy) * 0.55;
+          const c2y = r.top - (r.top - sy) * 0.15;
+          paths.push({
+            d: `M ${sx} ${sy} C ${sx} ${c1y}, ${r.cx} ${c2y}, ${r.cx} ${r.top}`,
+            role: "start",
+            state: "",
+          });
+        }
       });
     }
 
