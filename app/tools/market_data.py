@@ -242,8 +242,12 @@ def fetch_yahoo_chart_json_for_dates(symbol, start_date, end_date, interval):
 def main(argv=None, fetch_json=None):
     parser = argparse.ArgumentParser(description="Fetch market data for a ticker")
     parser.add_argument("symbol")
-    parser.add_argument("--period", default="1y")
+    parser.add_argument("--period", default="max")
     parser.add_argument("--interval", default="1d")
+    parser.add_argument("--db-path", default=str(market_data_db.DEFAULT_DB_PATH))
+    parser.add_argument("--today-date")
+    parser.add_argument("--refresh-days", type=int, default=1)
+    parser.add_argument("--overlap-days", type=int, default=5)
     args = parser.parse_args(argv)
     try:
         payload = fetch_market_data(
@@ -251,6 +255,10 @@ def main(argv=None, fetch_json=None):
             period=args.period,
             interval=args.interval,
             fetch_json=fetch_json,
+            db_path=args.db_path,
+            today_date=args.today_date,
+            refresh_days=args.refresh_days,
+            overlap_days=args.overlap_days,
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)

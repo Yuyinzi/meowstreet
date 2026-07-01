@@ -227,3 +227,33 @@ def test_fetch_market_data_uses_cache_when_recent(tmp_path):
     )
 
     assert payload["prices"]["dates"] == ["2024-07-01", "2024-07-02", "2024-07-03"]
+
+
+def test_main_accepts_db_path_and_refresh_options(tmp_path, capsys):
+    db_path = tmp_path / "market_data.sqlite"
+
+    exit_code = market_data.main(
+        [
+            "xyz",
+            "--period",
+            "max",
+            "--interval",
+            "1d",
+            "--db-path",
+            str(db_path),
+            "--today-date",
+            "2024-07-04",
+            "--refresh-days",
+            "1",
+            "--overlap-days",
+            "5",
+        ],
+        fetch_json=lambda symbol, period, interval: chart_payload(),
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert '"symbol": "XYZ"' in captured.out
+    assert db_path.exists()
+    assert captured.err == ""
