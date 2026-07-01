@@ -184,6 +184,36 @@ def normalize_jobless_claims(payload):
     }
 
 
+def _above_50(value):
+    return value is not None and value > 50
+
+
+def _below_50(value):
+    return value is not None and value < 50
+
+
+def compute_growth_cycle_bias(growth_cycle):
+    manufacturing_expanding = _above_50(growth_cycle.get("ism_pmi")) and _above_50(
+        growth_cycle.get("ism_new_orders")
+    )
+    services_expanding = _above_50(growth_cycle.get("services_pmi")) and (
+        _above_50(growth_cycle.get("services_business_activity"))
+        or _above_50(growth_cycle.get("services_new_orders"))
+    )
+    manufacturing_contracting = _below_50(growth_cycle.get("ism_pmi")) and _below_50(
+        growth_cycle.get("ism_new_orders")
+    )
+    services_contracting = _below_50(growth_cycle.get("services_pmi")) and (
+        _below_50(growth_cycle.get("services_business_activity"))
+        or _below_50(growth_cycle.get("services_new_orders"))
+    )
+    if manufacturing_expanding and services_expanding:
+        return "long"
+    if manufacturing_contracting and services_contracting and growth_cycle.get("labor_trend") == "weakening":
+        return "short"
+    return "neutral"
+
+
 def _deep_merge(base, incoming):
     merged = deepcopy(base)
     for key, value in incoming.items():
@@ -209,4 +239,6 @@ def build_growth_cycle_dashboard(
         result = _deep_merge(result, normalize_m2_money_stock(m2_money_stock))
     if jobless_claims:
         result = _deep_merge(result, normalize_jobless_claims(jobless_claims))
+    growth_cycle = result["macro"]["growth_cycle"]
+    growth_cycle["growth_cycle_bias"] = compute_growth_cycle_bias(growth_cycle)
     return result

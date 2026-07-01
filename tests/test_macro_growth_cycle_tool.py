@@ -185,3 +185,29 @@ def test_build_growth_cycle_dashboard_merges_normalized_sources():
     assert growth_cycle["services_pmi"] == 53.0
     assert growth_cycle["m2_money_stock"] == 21210
     assert growth_cycle["initial_jobless_claims"] == 245000
+
+
+def test_growth_cycle_bias_is_long_when_manufacturing_and_services_expand():
+    growth_cycle = {
+        "ism_pmi": 51.2,
+        "ism_new_orders": 52.0,
+        "services_pmi": 53.0,
+        "services_business_activity": 54.1,
+        "services_new_orders": 52.7,
+        "labor_trend": "stable",
+    }
+
+    assert macro_growth_cycle.compute_growth_cycle_bias(growth_cycle) == "long"
+
+
+def test_growth_cycle_bias_is_short_when_both_surveys_contract_and_labor_weakens():
+    growth_cycle = {
+        "ism_pmi": 48.0,
+        "ism_new_orders": 47.0,
+        "services_pmi": 49.0,
+        "services_business_activity": 48.5,
+        "services_new_orders": 48.0,
+        "labor_trend": "weakening",
+    }
+
+    assert macro_growth_cycle.compute_growth_cycle_bias(growth_cycle) == "short"
