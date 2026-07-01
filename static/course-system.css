@@ -245,17 +245,17 @@ button {
 }
 
 .graph-edge-support {
-  stroke: #8B7E74;
+  stroke: #6B9A9C;
   stroke-width: 2;
   stroke-dasharray: 6 5;
-  stroke-opacity: 0.55;
+  stroke-opacity: 0.65;
 }
 
 .graph-edge-cross,
 .graph-edge-start {
-  stroke: #B5A89A;
+  stroke: #A68FA6;
   stroke-width: 1.8;
-  stroke-opacity: 0.4;
+  stroke-opacity: 0.55;
 }
 
 .graph-edge-outgoing {
@@ -274,8 +274,8 @@ button {
 
 #arrowHeadStart path,
 #arrowHeadCross path {
-  fill: #B5A89A;
-  opacity: 0.44;
+  fill: #A68FA6;
+  opacity: 0.55;
 }
 
 #arrowHeadMain path {
@@ -284,8 +284,8 @@ button {
 }
 
 #arrowHeadSupport path {
-  fill: #8B7E74;
-  opacity: 0.6;
+  fill: #6B9A9C;
+  opacity: 0.7;
 }
 
 #arrowHeadOutgoing path {
@@ -334,26 +334,13 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 24px;
-}
-
-.graph-start-bar span {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: #A89B91;
-  padding: 3px 10px;
-  border: 1px solid #D8CCBE;
-  border-radius: 999px;
-  background: #FDFAF7;
+  height: 28px;
 }
 
 .graph-paw {
-  font-size: 13px;
+  font-size: 18px;
   line-height: 1;
-  opacity: 0.55;
+  opacity: 0.72;
 }
 
 .graph-node:nth-of-type(1)  { animation-delay: 20ms; }
@@ -714,6 +701,30 @@ button {
 .legend-detached {
   background: #F7EDD8;
   border-left: 3px solid #B8862E;
+}
+
+.legend-edge {
+  padding-left: 8px;
+}
+
+.legend-edge::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  flex-shrink: 0;
+  border-radius: 1px;
+}
+
+.legend-edge-main::before {
+  border-top: 2px solid #3B3530;
+}
+
+.legend-edge-support::before {
+  border-top: 2px dashed #6B9A9C;
+}
+
+.legend-edge-cross::before {
+  border-top: 2px solid #A68FA6;
 }
 
 .legend-idle { color: #A89B91; }
