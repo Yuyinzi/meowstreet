@@ -111,3 +111,33 @@ def test_apply_tools_preserves_user_observation_over_tool_value():
 
     assert enriched["metrics"]["price"] == 999.0
     assert enriched["prices"]["adjusted_close"] == [123.45]
+
+
+def method_with_macro_dashboard_hook():
+    return {
+        "workflow_nodes": [
+            {
+                "id": "macro_regime",
+                "tool_hooks": ["macro_dashboard"],
+            }
+        ]
+    }
+
+
+def test_apply_tools_merges_macro_dashboard_observations():
+    def fetch_macro_dashboard():
+        return {
+            "macro": {
+                "growth_cycle": {
+                    "growth_cycle_bias": "long",
+                }
+            }
+        }
+
+    enriched = tool_runner.apply_tools(
+        method_with_macro_dashboard_hook(),
+        {"symbol": "AAPL", "observations": {}},
+        macro_dashboard_fetcher=fetch_macro_dashboard,
+    )
+
+    assert enriched["macro"]["growth_cycle"]["growth_cycle_bias"] == "long"
