@@ -242,3 +242,17 @@ def build_growth_cycle_dashboard(
     growth_cycle = result["macro"]["growth_cycle"]
     growth_cycle["growth_cycle_bias"] = compute_growth_cycle_bias(growth_cycle)
     return result
+
+
+def fetch_growth_cycle_dashboard(
+    fetch_ism_manufacturing,
+    fetch_ism_services,
+    fetch_m2_money_stock,
+    fetch_jobless_claims,
+):
+    return build_growth_cycle_dashboard(
+        ism_manufacturing=fetch_ism_manufacturing(),
+        ism_services=fetch_ism_services(),
+        m2_money_stock=fetch_m2_money_stock(),
+        jobless_claims=fetch_jobless_claims(),
+    )

@@ -211,3 +211,46 @@ def test_growth_cycle_bias_is_short_when_both_surveys_contract_and_labor_weakens
     }
 
     assert macro_growth_cycle.compute_growth_cycle_bias(growth_cycle) == "short"
+
+
+def test_fetch_growth_cycle_dashboard_uses_injected_fetchers():
+    calls = []
+
+    def fetch_ism_manufacturing():
+        calls.append("ism_manufacturing")
+        return {
+            "period": "2026-06",
+            "pmi": 51.2,
+            "new_orders": 52.0,
+            "production": 50.4,
+            "employment": 49.8,
+            "supplier_deliveries": 50.1,
+            "inventories": 48.6,
+        }
+
+    def fetch_ism_services():
+        calls.append("ism_services")
+        return {"period": "2026-06", "pmi": 53.0}
+
+    def fetch_m2_money_stock():
+        calls.append("m2_money_stock")
+        return {"series": [{"date": "2026-06-01", "value": 21210}]}
+
+    def fetch_jobless_claims():
+        calls.append("jobless_claims")
+        return {"initial_claims": [], "continuing_claims": []}
+
+    result = macro_growth_cycle.fetch_growth_cycle_dashboard(
+        fetch_ism_manufacturing=fetch_ism_manufacturing,
+        fetch_ism_services=fetch_ism_services,
+        fetch_m2_money_stock=fetch_m2_money_stock,
+        fetch_jobless_claims=fetch_jobless_claims,
+    )
+
+    assert calls == [
+        "ism_manufacturing",
+        "ism_services",
+        "m2_money_stock",
+        "jobless_claims",
+    ]
+    assert result["macro"]["growth_cycle"]["ism_pmi"] == 51.2
