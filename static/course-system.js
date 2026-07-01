@@ -446,20 +446,20 @@
     svg.setAttribute("viewBox", `0 0 ${frame.clientWidth} ${frame.clientHeight}`);
     svg.innerHTML = `
       <defs>
-        <marker id="arrowHeadStart" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
-          <path d="M0,0.5 L0,5.5 L5.5,3 z" />
+        <marker id="arrowHeadStart" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto">
+          <path d="M0,0.5 L0,4.5 L4.5,2.5 z" />
         </marker>
-        <marker id="arrowHeadMain" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
-          <path d="M0,0.5 L0,5.5 L5.5,3 z" />
+        <marker id="arrowHeadMain" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto">
+          <path d="M0,0.5 L0,4.5 L4.5,2.5 z" />
         </marker>
-        <marker id="arrowHeadSupport" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
-          <path d="M0,0.5 L0,5.5 L5.5,3 z" />
+        <marker id="arrowHeadSupport" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto">
+          <path d="M0,0.5 L0,4.5 L4.5,2.5 z" />
         </marker>
-        <marker id="arrowHeadCross" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
-          <path d="M0,0.5 L0,5.5 L5.5,3 z" />
+        <marker id="arrowHeadCross" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto">
+          <path d="M0,0.5 L0,4.5 L4.5,2.5 z" />
         </marker>
-        <marker id="arrowHeadOutgoing" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
-          <path d="M0,0.5 L0,5.5 L5.5,3 z" />
+        <marker id="arrowHeadOutgoing" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto">
+          <path d="M0,0.5 L0,4.5 L4.5,2.5 z" />
         </marker>
       </defs>
       ${paths.map((path) => {
