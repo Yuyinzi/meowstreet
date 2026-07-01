@@ -20,3 +20,12 @@ def test_method_basis_renderer_shortens_method_note_paths():
     assert '.replace(/^method_notes\\//, "")' in script
     assert '.replace(/_method_notes\\.md$/, "")' in script
     assert "fmtSourceDocument(ref.document)" in script
+
+
+def test_local_system_js_supports_grouped_checks():
+    content = method_SYSTEM_JS.read_text(encoding="utf-8")
+
+    assert "groupChecksByGroup" in content
+    assert "Instrument Identity" in content
+    assert "Market Data" in content
+    assert "Liquidity / Tradability" in content

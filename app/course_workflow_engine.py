@@ -94,6 +94,7 @@ def _evaluate_check(check, observation):
         "required": check.get("required") is True,
         "fail_effect": check.get("fail_effect"),
         "source_refs": check.get("source_refs", []),
+        "group": check.get("group"),
         "status": status,
         "message": check.get("missing_message") if status == "missing" else None,
     }

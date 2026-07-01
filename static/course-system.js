@@ -259,6 +259,45 @@
     return "";
   }
 
+  const CHECK_GROUP_LABELS = {
+    instrument_identity: "Instrument Identity",
+    market_data: "Market Data",
+    liquidity_tradability: "Liquidity / Tradability",
+  };
+
+  function groupChecksByGroup(checks) {
+    const groups = {};
+    for (const check of checks) {
+      const group = check.group || "_ungrouped";
+      if (!groups[group]) groups[group] = [];
+      groups[group].push(check);
+    }
+    return groups;
+  }
+
+  function renderCheckList(checks) {
+    return checks
+      .map((check) => {
+        const status = check.status || "missing";
+        const msg = check.message ? `: ${escapeHtml(check.message)}` : "";
+        return `<li><strong>${escapeHtml(status)}</strong> ${escapeHtml(check.title)}${msg}</li>`;
+      })
+      .join("");
+  }
+
+  function renderGroupedChecks(checks) {
+    const groups = groupChecksByGroup(checks);
+    return Object.entries(groups)
+      .map(([group, groupChecks]) => {
+        const label = CHECK_GROUP_LABELS[group] || group;
+        return `<details class="check-group"${group === "_ungrouped" ? " open" : ""}>
+          <summary class="check-group-summary">${escapeHtml(label)}</summary>
+          <ul class="plain-list">${renderCheckList(groupChecks)}</ul>
+        </details>`;
+      })
+      .join("");
+  }
+
   function renderMethodMeta() {
     const target = $("methodMeta");
     if (!state.method) {
@@ -523,12 +562,8 @@
 
     section.classList.add("visible");
 
-    const longChecks = (node.long.checks || [])
-      .map((check) => `<li><strong>${escapeHtml(check.status)}</strong> ${escapeHtml(check.title)}: ${escapeHtml(check.message)}</li>`)
-      .join("");
-    const shortChecks = (node.short.checks || [])
-      .map((check) => `<li><strong>${escapeHtml(check.status)}</strong> ${escapeHtml(check.title)}: ${escapeHtml(check.message)}</li>`)
-      .join("");
+    const longChecks = renderGroupedChecks(node.long.checks || []);
+    const shortChecks = renderGroupedChecks(node.short.checks || []);
     const sourceRefs = rendermethodBasisItems(node.source_refs);
     const evaluationBasis = rendermethodBasisItems(node.evaluation_basis);
     const nextActions = [...(node.long.next_actions || []), ...(node.short.next_actions || [])]
@@ -562,14 +597,14 @@
             <h4>Long</h4>
             <span class="status-chip status-${escapeHtml(node.long.status)}">${escapeHtml(fmtStatus(node.long.status))}</span>
           </div>
-          <ul class="plain-list">${longChecks || "<li>No checks for this side.</li>"}</ul>
+          <div class="grouped-checks">${longChecks || '<p class="muted">No checks for this side.</p>'}</div>
         </section>
         <section class="side-block">
           <div class="side-head">
             <h4>Short</h4>
             <span class="status-chip status-${escapeHtml(node.short.status)}">${escapeHtml(fmtStatus(node.short.status))}</span>
           </div>
-          <ul class="plain-list">${shortChecks || "<li>No checks for this side.</li>"}</ul>
+          <div class="grouped-checks">${shortChecks || '<p class="muted">No checks for this side.</p>'}</div>
         </section>
       </div>
       <section class="side-block">
