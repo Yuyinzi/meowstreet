@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/method-system.css?v=19" />
+  <link rel="stylesheet" href="/method-system.css?v=20" />
 </head>
 <body>
   <nav class="topnav">
@@ -74,29 +74,33 @@
         </form>
       </div>
 
-      <div class="graph-frame" id="graphFrame">
-        <svg class="graph-links" id="graphLinks" aria-hidden="true"></svg>
-        <div id="workflowGraph" class="workflow-graph" aria-label="Method workflow graph"></div>
-      </div>
+      <div class="graph-workspace">
+        <div class="graph-stage">
+          <div class="graph-frame" id="graphFrame">
+            <svg class="graph-links" id="graphLinks" aria-hidden="true"></svg>
+            <div id="workflowGraph" class="workflow-graph" aria-label="Method workflow graph"></div>
+          </div>
 
-      <div class="graph-legend" aria-label="Graph legend">
-        <span class="legend-item legend-main">Main workflow</span>
-        <span class="legend-item legend-support">Supporting input</span>
-        <span class="legend-item legend-detached">Discipline check</span>
-        <span class="legend-item legend-edge legend-edge-main">Main flow</span>
-        <span class="legend-item legend-edge legend-edge-support">Supporting flow</span>
-        <span class="legend-item legend-edge legend-edge-cross">Entry &amp; discipline</span>
-        <span class="legend-item legend-idle">Idle</span>
-        <span class="legend-item legend-running">Running</span>
-        <span class="legend-item legend-pass">Pass</span>
-        <span class="legend-item legend-fail">Fail</span>
-        <span class="legend-item legend-missing">Missing</span>
-        <span class="legend-item legend-mixed">Mixed</span>
-      </div>
-    </section>
+          <div class="graph-legend" aria-label="Graph legend">
+            <span class="legend-item legend-main">Main workflow</span>
+            <span class="legend-item legend-support">Supporting input</span>
+            <span class="legend-item legend-detached">Discipline check</span>
+            <span class="legend-item legend-edge legend-edge-main">Main flow</span>
+            <span class="legend-item legend-edge legend-edge-support">Supporting flow</span>
+            <span class="legend-item legend-edge legend-edge-cross">Entry &amp; discipline</span>
+            <span class="legend-item legend-idle">Idle</span>
+            <span class="legend-item legend-running">Running</span>
+            <span class="legend-item legend-pass">Pass</span>
+            <span class="legend-item legend-fail">Fail</span>
+            <span class="legend-item legend-missing">Missing</span>
+            <span class="legend-item legend-mixed">Mixed</span>
+          </div>
+        </div>
 
-    <section class="node-detail" id="nodeDetailSection">
-      <div class="node-detail-panel" id="nodeDetailPanel"></div>
+        <section class="node-detail" id="nodeDetailSection">
+          <div class="node-detail-panel" id="nodeDetailPanel"></div>
+        </section>
+      </div>
     </section>
 
     <section class="inspector-band">

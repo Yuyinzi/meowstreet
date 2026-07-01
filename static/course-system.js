@@ -522,7 +522,10 @@
           <div class="node-detail-kicker">Node</div>
           <h3>${escapeHtml(node.title)}</h3>
         </div>
-        <div class="status-chip status-${escapeHtml(node.status)}">${escapeHtml(fmtStatus(node.status))}</div>
+        <div class="node-detail-actions">
+          <div class="status-chip status-${escapeHtml(node.status)}">${escapeHtml(fmtStatus(node.status))}</div>
+          <button type="button" class="node-detail-close" id="nodeDetailClose" aria-label="Close details">&times;</button>
+        </div>
       </div>
       <p class="node-question">${escapeHtml(node.decision_question)}</p>
       <p class="node-description">${escapeHtml(node.description)}</p>
@@ -566,6 +569,15 @@
         <ul class="plain-list">${basis || "<li>No source refs</li>"}</ul>
       </section>
     `;
+
+    const closeBtn = $("nodeDetailClose");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        state.selectedNodeId = null;
+        renderGraph();
+        renderNodeDetail();
+      });
+    }
   }
 
   function countStatuses(nodes) {

@@ -501,8 +501,23 @@ button {
   font-size: 14px;
 }
 
+.graph-workspace {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  align-items: start;
+}
+
+.graph-stage {
+  min-width: 0;
+}
+
 .node-detail {
   display: none;
+  position: sticky;
+  top: 70px;
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
 }
 
 .node-detail.visible {
@@ -514,15 +529,41 @@ button {
   border: 1px solid #E8E0D6;
   border-radius: 12px;
   padding: 20px;
-  margin-bottom: 20px;
   box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
 }
 
 .node-detail-head {
   display: flex;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
   align-items: flex-start;
+}
+
+.node-detail-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.node-detail-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #A89B91;
+  font-size: 18px;
+  line-height: 1;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.node-detail-close:hover {
+  background: #F3EEE6;
+  color: #3B3530;
 }
 
 .node-detail-kicker {
@@ -909,6 +950,16 @@ button {
 
   .graph-legend {
     justify-content: flex-start;
+  }
+
+  .graph-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .node-detail {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .workflow-graph {
