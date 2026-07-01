@@ -159,7 +159,9 @@ def _labor_trend(initial_claims):
         return "unknown"
     values = [int(row["value"]) for row in initial_claims]
     latest_average = _average(values[-4:])
-    previous_average = _average(values[:4])
+    previous_average = _average(values[-8:-4]) if len(values) >= 8 else _average(values[:-4])
+    if previous_average is None:
+        return "stable"
     if latest_average > previous_average * 1.03:
         return "weakening"
     if latest_average < previous_average * 0.97:

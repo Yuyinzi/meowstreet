@@ -1,3 +1,6 @@
+from app.tools.macro_growth_cycle import build_growth_cycle_dashboard
+
+
 MACRO_DASHBOARD_GROUPS = [
     {
         "id": "growth_cycle",
@@ -112,9 +115,21 @@ MACRO_DASHBOARD_GROUPS = [
                 "kind": "compute",
             },
             {
-                "id": "m2_percent_rank",
-                "title": "M2 Percent Rank",
-                "field": "macro.growth_cycle.m2_percent_rank",
+                "id": "m2_money_stock",
+                "title": "M2 Money Stock",
+                "field": "macro.growth_cycle.m2_money_stock",
+                "kind": "query",
+            },
+            {
+                "id": "m2_mom_percent_rank",
+                "title": "M2 MoM Percent Rank",
+                "field": "macro.growth_cycle.m2_mom_percent_rank",
+                "kind": "compute",
+            },
+            {
+                "id": "m2_yoy_percent_rank",
+                "title": "M2 YoY Percent Rank",
+                "field": "macro.growth_cycle.m2_yoy_percent_rank",
                 "kind": "compute",
             },
         ],
@@ -456,9 +471,6 @@ MACRO_DASHBOARD_GROUPS = [
         ],
     },
 ]
-
-
-from app.tools.macro_growth_cycle import build_growth_cycle_dashboard
 
 
 def fetch_macro_dashboard(growth_cycle_inputs=None):

@@ -276,3 +276,49 @@ def test_fetch_growth_cycle_dashboard_uses_injected_fetchers():
         "jobless_claims",
     ]
     assert result["macro"]["growth_cycle"]["ism_pmi"] == 51.2
+
+
+def test_growth_cycle_bias_is_neutral_when_only_one_survey_expands():
+    growth_cycle = {
+        "ism_pmi": 51.0, "ism_new_orders": 52.0,
+        "services_pmi": 49.0, "services_business_activity": 48.0,
+        "labor_trend": "stable",
+    }
+    result = macro_growth_cycle.compute_growth_cycle_bias(growth_cycle)
+    assert result == "neutral"
+
+
+def test_normalize_jobless_claims_classifies_strengthening_labor_trend():
+    payload = {
+        "initial_claims": [
+            {"date": "2026-05-06", "value": "250"},
+            {"date": "2026-05-13", "value": "248"},
+            {"date": "2026-05-20", "value": "245"},
+            {"date": "2026-05-27", "value": "242"},
+            {"date": "2026-06-03", "value": "230"},
+            {"date": "2026-06-10", "value": "225"},
+            {"date": "2026-06-17", "value": "222"},
+            {"date": "2026-06-24", "value": "220"},
+        ],
+        "continuing_claims": [{"date": "2026-06-17", "value": "1800000"}],
+    }
+    result = macro_growth_cycle.normalize_jobless_claims(payload)
+    assert result["macro"]["growth_cycle"]["labor_trend"] == "strengthening"
+
+
+def test_normalize_jobless_claims_classifies_stable_labor_trend():
+    payload = {
+        "initial_claims": [
+            {"date": "2026-05-06", "value": "250"},
+            {"date": "2026-05-13", "value": "248"},
+            {"date": "2026-05-20", "value": "252"},
+            {"date": "2026-05-27", "value": "249"},
+            {"date": "2026-06-03", "value": "251"},
+            {"date": "2026-06-10", "value": "247"},
+            {"date": "2026-06-17", "value": "253"},
+            {"date": "2026-06-24", "value": "248"},
+        ],
+        "continuing_claims": [{"date": "2026-06-17", "value": "1800000"}],
+    }
+    result = macro_growth_cycle.normalize_jobless_claims(payload)
+    assert result["macro"]["growth_cycle"]["labor_trend"] == "stable"
