@@ -114,6 +114,15 @@ def test_normalize_method_payload_validates_contract(mutation, message):
         method_schema.normalize_method_payload(payload)
 
 
+def test_normalize_method_preserves_node_check_group():
+    payload = valid_method()
+    payload["node_checks"][0]["group"] = "instrument_identity"
+
+    normalized = method_schema.normalize_method_payload(payload)
+
+    assert normalized["node_checks"][0]["group"] == "instrument_identity"
+
+
 def test_normalize_graph_observation_payload_requires_symbol_and_observations():
     normalized = method_schema.normalize_graph_observation_payload(
         {"symbol": " nvda ", "observations": {"metrics": {"price": 100}}}
