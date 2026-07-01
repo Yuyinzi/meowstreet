@@ -1,3 +1,5 @@
+import pytest
+
 from app.tools import macro_growth_cycle
 
 
@@ -211,6 +213,11 @@ def test_growth_cycle_bias_is_short_when_both_surveys_contract_and_labor_weakens
     }
 
     assert macro_growth_cycle.compute_growth_cycle_bias(growth_cycle) == "short"
+
+
+def test_fetch_m2_money_stock_source_not_configured():
+    with pytest.raises(ValueError, match="m2 money stock source is not configured"):
+        macro_growth_cycle.fetch_m2_money_stock_from_source()
 
 
 def test_fetch_growth_cycle_dashboard_uses_injected_fetchers():
