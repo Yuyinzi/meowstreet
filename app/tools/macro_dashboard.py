@@ -1,138 +1,14 @@
-from app.tools.macro_growth_cycle import build_growth_cycle_dashboard
+from app.tools.macro_growth_cycle import (
+    GROWTH_CYCLE_DASHBOARD_FIELDS,
+    build_growth_cycle_dashboard,
+)
 
 
 MACRO_DASHBOARD_GROUPS = [
     {
         "id": "growth_cycle",
         "title": "Growth Cycle",
-        "fields": [
-            {
-                "id": "gdp_indicator",
-                "title": "Gross Domestic Product",
-                "field": "macro.growth_cycle.gdp",
-                "kind": "query",
-            },
-            {
-                "id": "gdp_direction",
-                "title": "GDP Direction",
-                "field": "macro.growth_cycle.gdp_direction",
-                "kind": "compute",
-            },
-            {
-                "id": "industrial_production",
-                "title": "Industrial Production",
-                "field": "macro.growth_cycle.industrial_production",
-                "kind": "query",
-            },
-            {
-                "id": "corporate_earnings",
-                "title": "Corporate Earnings",
-                "field": "macro.growth_cycle.corporate_earnings",
-                "kind": "query",
-            },
-            {
-                "id": "weekly_jobless_claims",
-                "title": "Weekly Jobless Claims",
-                "field": "macro.growth_cycle.weekly_jobless_claims",
-                "kind": "query",
-            },
-            {
-                "id": "employment_situation_report",
-                "title": "Employment Situation Report",
-                "field": "macro.growth_cycle.employment_situation_report",
-                "kind": "query",
-            },
-            {
-                "id": "ism_pmi",
-                "title": "ISM Manufacturing PMI",
-                "field": "macro.growth_cycle.ism_pmi",
-                "kind": "query",
-            },
-            {
-                "id": "ism_new_orders",
-                "title": "ISM New Orders",
-                "field": "macro.growth_cycle.ism_new_orders",
-                "kind": "query",
-            },
-            {
-                "id": "ism_production",
-                "title": "ISM Production",
-                "field": "macro.growth_cycle.ism_production",
-                "kind": "query",
-            },
-            {
-                "id": "ism_employment",
-                "title": "ISM Employment",
-                "field": "macro.growth_cycle.ism_employment",
-                "kind": "query",
-            },
-            {
-                "id": "ism_inventories",
-                "title": "ISM Inventories",
-                "field": "macro.growth_cycle.ism_inventories",
-                "kind": "query",
-            },
-            {
-                "id": "ism_sector_growth_ranking",
-                "title": "ISM Sector Growth Ranking",
-                "field": "macro.growth_cycle.ism_sector_growth_ranking",
-                "kind": "query",
-            },
-            {
-                "id": "services_pmi",
-                "title": "ISM Services PMI",
-                "field": "macro.growth_cycle.services_pmi",
-                "kind": "query",
-            },
-            {
-                "id": "services_business_activity",
-                "title": "Services Business Activity",
-                "field": "macro.growth_cycle.services_business_activity",
-                "kind": "query",
-            },
-            {
-                "id": "services_new_orders",
-                "title": "Services New Orders",
-                "field": "macro.growth_cycle.services_new_orders",
-                "kind": "query",
-            },
-            {
-                "id": "services_employment",
-                "title": "Services Employment",
-                "field": "macro.growth_cycle.services_employment",
-                "kind": "query",
-            },
-            {
-                "id": "m2_mom_pct_change",
-                "title": "M2 Month-on-Month Change",
-                "field": "macro.growth_cycle.m2_mom_pct_change",
-                "kind": "compute",
-            },
-            {
-                "id": "m2_yoy_pct_change",
-                "title": "M2 Year-on-Year Change",
-                "field": "macro.growth_cycle.m2_yoy_pct_change",
-                "kind": "compute",
-            },
-            {
-                "id": "m2_money_stock",
-                "title": "M2 Money Stock",
-                "field": "macro.growth_cycle.m2_money_stock",
-                "kind": "query",
-            },
-            {
-                "id": "m2_mom_percent_rank",
-                "title": "M2 MoM Percent Rank",
-                "field": "macro.growth_cycle.m2_mom_percent_rank",
-                "kind": "compute",
-            },
-            {
-                "id": "m2_yoy_percent_rank",
-                "title": "M2 YoY Percent Rank",
-                "field": "macro.growth_cycle.m2_yoy_percent_rank",
-                "kind": "compute",
-            },
-        ],
+        "fields": GROWTH_CYCLE_DASHBOARD_FIELDS,
     },
     {
         "id": "rates_liquidity",

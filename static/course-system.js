@@ -49,6 +49,55 @@
     process_discipline: { row: 2, col: 3, span: 1, role: "detached" },
   };
 
+  const MOCK_MACRO_DASHBOARD_GROUPS = [
+    {
+      id: "growth_cycle",
+      title: "Growth Cycle",
+      subtitle: "ISM, services, money supply, and labor direction",
+      metrics: [
+        { label: "ISM PMI", value: "51.2", date: "Jun 2026", source: "ISM", kind: "query", status: "supportive", note: "Expansion, modest" },
+        { label: "ISM New Orders", value: "52.0", date: "Jun 2026", source: "ISM", kind: "query", status: "supportive", note: "Forward demand above 50" },
+        { label: "ISM Employment", value: "49.8", date: "Jun 2026", source: "ISM", kind: "query", status: "warning", note: "Slight contraction" },
+        { label: "Services PMI", value: "53.0", date: "Jun 2026", source: "ISM Services", kind: "query", status: "supportive", note: "Services expanding" },
+        { label: "Services New Orders", value: "52.7", date: "Jun 2026", source: "ISM Services", kind: "query", status: "supportive", note: "Demand still positive" },
+        { label: "M2 MoM", value: "+0.42%", date: "May 2026", source: "FRED", kind: "compute", status: "neutral", note: "Liquidity confirmation" },
+        { label: "Initial Claims", value: "235K", date: "Jun 27", source: "FRED", kind: "query", status: "neutral", note: "Stable 4-week trend" },
+        { label: "Growth Bias", value: "Long", date: "Current", source: "Computed", kind: "compute", status: "supportive", note: "Manufacturing and services agree" },
+      ],
+    },
+    {
+      id: "rates_liquidity",
+      title: "Rates / Liquidity",
+      subtitle: "Rates, curve shape, and central-bank backdrop",
+      metrics: [
+        { label: "Real 10Y Rate", value: "1.8%", date: "Mock", source: "FRED", kind: "compute", status: "warning", note: "Restrictive but stable" },
+        { label: "10Y Yield", value: "4.28%", date: "Mock", source: "FRED", kind: "query", status: "neutral", note: "Raw rate level" },
+        { label: "10Y - 2Y", value: "+38bp", date: "Mock", source: "FRED", kind: "compute", status: "supportive", note: "Positive curve" },
+        { label: "Fed Funds", value: "4.75%", date: "Mock", source: "FRED", kind: "query", status: "neutral", note: "Policy anchor" },
+      ],
+    },
+    {
+      id: "risk_sentiment",
+      title: "Risk / Sentiment",
+      subtitle: "Volatility, credit, and consumer survey pressure",
+      metrics: [
+        { label: "VIX", value: "16.8", date: "Mock", source: "CBOE/FRED", kind: "query", status: "supportive", note: "Risk calm" },
+        { label: "Credit Spread", value: "Missing", date: "Not fetched", source: "FRED", kind: "query", status: "missing", note: "Needs source wiring" },
+        { label: "UMCSI", value: "72.4", date: "Mock", source: "Michigan", kind: "query", status: "neutral", note: "Consumer sentiment mid-range" },
+      ],
+    },
+    {
+      id: "macro_bias",
+      title: "Macro Bias",
+      subtitle: "Final synthesis fields for the workflow node",
+      metrics: [
+        { label: "Macro Regime", value: "Expansion", date: "Mock", source: "Computed", kind: "compute", status: "supportive", note: "Growth cycle positive" },
+        { label: "Portfolio Bias", value: "Net Long", date: "Mock", source: "Computed", kind: "compute", status: "supportive", note: "Subject to sector and risk checks" },
+        { label: "Confidence", value: "Medium", date: "Mock", source: "Computed", kind: "compute", status: "warning", note: "Rates still restrictive" },
+      ],
+    },
+  ];
+
   const state = {
     method: null,
     graphNodes: [],
@@ -316,6 +365,61 @@
         </details>`;
       })
       .join("");
+  }
+
+  function renderMetricTile(metric) {
+    const status = metric.status || "neutral";
+    return `<article class="metric-tile metric-tile-${escapeHtml(status)}">
+      <div class="metric-topline">
+        <span class="metric-label">${escapeHtml(metric.label)}</span>
+        <span class="metric-kind">${escapeHtml(metric.kind)}</span>
+      </div>
+      <div class="metric-value">${escapeHtml(metric.value)}</div>
+      <div class="metric-note">${escapeHtml(metric.note)}</div>
+      <div class="metric-meta">
+        <span>${escapeHtml(metric.source)}</span>
+        <span>${escapeHtml(metric.date)}</span>
+      </div>
+    </article>`;
+  }
+
+  function renderMacroDashboard() {
+    const section = $("macroDashboardSection");
+    if (!section) return;
+    if (state.selectedNodeId !== "macro_regime") {
+      section.classList.remove("visible");
+      section.innerHTML = "";
+      return;
+    }
+
+    section.classList.add("visible");
+    section.innerHTML = `
+      <div class="macro-dashboard-head">
+        <div>
+          <div class="node-detail-kicker">Mock Dashboard</div>
+          <h2>Macro Dashboard</h2>
+          <p>Wide grid mock for scanning macro metrics. Values are static until source fetchers and API observations are wired.</p>
+        </div>
+        <div class="macro-dashboard-summary">
+          <span class="status-chip status-pass">Growth supportive</span>
+          <span class="status-chip status-mixed">Rates mixed</span>
+          <span class="status-chip status-missing">2 missing</span>
+        </div>
+      </div>
+      <div class="macro-group-stack">
+        ${MOCK_MACRO_DASHBOARD_GROUPS.map((group) => `
+          <section class="macro-metric-group" aria-label="${escapeHtml(group.title)}">
+            <div class="macro-group-head">
+              <h3>${escapeHtml(group.title)}</h3>
+              <p>${escapeHtml(group.subtitle)}</p>
+            </div>
+            <div class="macro-metric-grid">
+              ${group.metrics.map(renderMetricTile).join("")}
+            </div>
+          </section>
+        `).join("")}
+      </div>
+    `;
   }
 
   function methodChecksForNode(nodeId) {

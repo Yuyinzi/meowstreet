@@ -29,3 +29,12 @@ def test_local_system_js_supports_grouped_checks():
     assert "Instrument Identity" in content
     assert "Market Data" in content
     assert "Liquidity / Tradability" in content
+
+
+def test_local_system_js_supports_macro_dashboard_grid_mock():
+    content = method_SYSTEM_JS.read_text(encoding="utf-8")
+
+    assert "MOCK_MACRO_DASHBOARD_GROUPS" in content
+    assert "renderMacroDashboard" in content
+    assert "macroDashboardSection" in content
+    assert "metric-tile-supportive" in content

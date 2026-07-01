@@ -107,6 +107,22 @@ def test_normalize_m2_computes_latest_growth_rates_and_percent_ranks():
     assert growth_cycle["m2_yoy_percent_rank"] == 1.0
 
 
+def test_normalize_m2_requires_thirteen_rows_for_yoy_fields():
+    payload = {
+        "series": [
+            {"date": "2026-05-01", "value": 100},
+            {"date": "2026-06-01", "value": 120},
+        ]
+    }
+
+    result = macro_growth_cycle.normalize_m2_money_stock(payload)
+
+    growth_cycle = result["macro"]["growth_cycle"]
+    assert growth_cycle["m2_mom_pct_change"] == 0.19999999999999996
+    assert growth_cycle["m2_yoy_pct_change"] is None
+    assert growth_cycle["m2_yoy_percent_rank"] is None
+
+
 def test_normalize_jobless_claims_classifies_labor_trend_from_four_week_average():
     payload = {
         "initial_claims": [
@@ -139,6 +155,25 @@ def test_normalize_jobless_claims_classifies_labor_trend_from_four_week_average(
     assert growth_cycle["continuing_jobless_claims"] == 1880000
     assert growth_cycle["initial_claims_4w_avg"] == 237500
     assert growth_cycle["labor_trend"] == "weakening"
+
+
+def test_normalize_jobless_claims_requires_previous_window_for_labor_trend():
+    payload = {
+        "initial_claims": [
+            {"date": "2026-06-06", "value": 220000},
+            {"date": "2026-06-13", "value": 225000},
+            {"date": "2026-06-20", "value": 235000},
+            {"date": "2026-06-27", "value": 245000},
+        ],
+        "continuing_claims": [
+            {"date": "2026-06-27", "value": 1880000},
+        ],
+    }
+
+    result = macro_growth_cycle.normalize_jobless_claims(payload)
+
+    assert result["macro"]["growth_cycle"]["initial_claims_4w_avg"] == 231250
+    assert result["macro"]["growth_cycle"]["labor_trend"] == "unknown"
 
 
 def test_build_growth_cycle_dashboard_merges_normalized_sources():
