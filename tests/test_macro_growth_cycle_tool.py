@@ -220,6 +220,11 @@ def test_fetch_m2_money_stock_source_not_configured():
         macro_growth_cycle.fetch_m2_money_stock_from_source()
 
 
+def test_fetch_jobless_claims_source_not_configured():
+    with pytest.raises(ValueError, match="jobless claims source is not configured"):
+        macro_growth_cycle.fetch_jobless_claims_from_source()
+
+
 def test_fetch_growth_cycle_dashboard_uses_injected_fetchers():
     calls = []
 
