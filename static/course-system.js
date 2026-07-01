@@ -14,6 +14,7 @@
   ];
 
   const SUPPORT_NODES = new Set([
+    "international_adr_workflow",
     "portfolio_construction",
   ]);
 
@@ -26,6 +27,8 @@
   );
 
   const SUPPORT_EDGES = new Set([
+    "international_adr_workflow->sector_theme_context",
+    "international_adr_workflow->fundamental_quantitative_bias",
     "data_readiness->portfolio_construction",
     "macro_regime->portfolio_construction",
     "portfolio_construction->trade_risk_management",
@@ -41,6 +44,7 @@
     technical_timing: { row: 8, col: 2, span: 1, role: "main" },
     trade_risk_management: { row: 9, col: 2, span: 1, role: "main" },
     final_synthesis: { row: 10, col: 2, span: 1, role: "main" },
+    international_adr_workflow: { row: 4, col: 1, span: 1, role: "support" },
     portfolio_construction: { row: 7, col: 1, span: 1, role: "support" },
     process_discipline: { row: 2, col: 3, span: 1, role: "detached" },
   };
@@ -287,6 +291,11 @@
         </details>`;
       })
       .join("");
+  }
+
+  function methodChecksForNode(nodeId) {
+    if (!state.method || !Array.isArray(state.method.node_checks)) return [];
+    return state.method.node_checks.filter((check) => check.node_id === nodeId);
   }
 
   function renderMethodMeta() {
@@ -555,6 +564,7 @@
 
     const longChecks = renderGroupedChecks(node.long.checks || []);
     const shortChecks = renderGroupedChecks(node.short.checks || []);
+    const methodChecks = renderGroupedChecks(methodChecksForNode(state.selectedNodeId));
     const sourceRefs = rendermethodBasisItems(node.source_refs);
     const evaluationBasis = rendermethodBasisItems(node.evaluation_basis);
     const nextActions = [...(node.long.next_actions || []), ...(node.short.next_actions || [])]
@@ -582,6 +592,12 @@
         <div><span>Incoming</span><strong>${(node.incoming_edges || []).map(escapeHtml).join(", ") || "none"}</strong></div>
         <div><span>Outgoing</span><strong>${(node.outgoing_edges || []).map(escapeHtml).join(", ") || "none"}</strong></div>
       </div>
+      ${methodChecks ? `<section class="side-block">
+        <div class="side-head">
+          <h4>Checks</h4>
+        </div>
+        <div class="grouped-checks">${methodChecks}</div>
+      </section>` : ""}
       <div class="side-blocks">
         <section class="side-block">
           <div class="side-head">
