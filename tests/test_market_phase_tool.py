@@ -36,3 +36,34 @@ def test_build_market_phase_payload_returns_latest_and_chart_series():
     assert payload["latest"]["market_phase_status"] == "bear_market"
     assert payload["latest"]["drawdown_pct"] == -21.0
     assert len(payload["series"]) == 2
+
+
+def test_build_market_phase_summary_payload_excludes_chart_series():
+    rows = [
+        {"date": "2020-01-01", "open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0},
+        {"date": "2020-01-02", "open": 79.0, "high": 79.0, "low": 79.0, "close": 79.0},
+    ]
+
+    payload = market_phase.build_market_phase_summary_payload("us_sp500", rows)
+
+    assert payload["benchmark_id"] == "us_sp500"
+    assert payload["title"] == "S&P 500"
+    assert payload["region"] == "US"
+    assert payload["data_through"] == "2020-01-02"
+    assert payload["latest"]["market_phase_status"] == "bear_market"
+    assert "series" not in payload
+
+
+def test_build_dashboard_payload_excludes_chart_series():
+    rows_by_id = {
+        "us_sp500": [
+            {"date": "2020-01-01", "open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0},
+            {"date": "2020-01-02", "open": 79.0, "high": 79.0, "low": 79.0, "close": 79.0},
+        ]
+    }
+
+    payload = market_phase.build_dashboard_payload(lambda benchmark_id: rows_by_id.get(benchmark_id, []))
+
+    assert payload["markets"][0]["benchmark_id"] == "us_sp500"
+    assert payload["markets"][0]["latest"]["market_phase_status"] == "bear_market"
+    assert "series" not in payload["markets"][0]

@@ -61,10 +61,21 @@ def build_market_phase_payload(benchmark_id, rows):
     }
 
 
+def build_market_phase_summary_payload(benchmark_id, rows):
+    payload = build_market_phase_payload(benchmark_id, rows)
+    return {
+        "benchmark_id": payload["benchmark_id"],
+        "title": payload["title"],
+        "region": payload["region"],
+        "data_through": payload["data_through"],
+        "latest": payload["latest"],
+    }
+
+
 def build_dashboard_payload(load_rows):
     markets = []
     for benchmark in BENCHMARKS:
         rows = load_rows(benchmark["id"])
         if rows:
-            markets.append(build_market_phase_payload(benchmark["id"], rows))
+            markets.append(build_market_phase_summary_payload(benchmark["id"], rows))
     return {"markets": markets}
