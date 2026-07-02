@@ -188,7 +188,7 @@ sys.path.insert(0, str(ROOT))
 | All variables | `snake_case` | `notes_dir`, `node_ids`, `checks_by_node` |
 
 ### Patterns
-- **No classes.** Purely functional codebase.
+- **Classes are allowed for services and integrations.** Use classes when they model stateful services, provider clients, fetchers, adapters, or immutable configuration that would otherwise be passed through many function calls. Prefer plain functions for simple transformations and DB operations.
 - **No docstrings, no inline comments.** Rely entirely on descriptive function/variable names.
 - **Guard clauses** — validate at the top, raise early.
 - **List comprehensions** — use liberally for transformation/filtering.
@@ -199,7 +199,7 @@ sys.path.insert(0, str(ROOT))
 - **Private helpers do the real work** — public functions are thin wrappers.
 
 ### Data Modeling
-All data is nested dicts with string keys. No dataclasses, namedtuples, or ORM models. Observation payloads use dotted-path keys. Access with the `_get_path()` resolver in `workflow_engine.py`.
+Runtime payloads, API responses, DB rows, and method-method artifacts remain plain nested dicts with string keys. Observation payloads use dotted-path keys. Access with the `_get_path()` resolver in `workflow_engine.py`. Dataclasses may be used for configuration and internal value objects, but not as the public API payload format. Do not introduce ORM models for stored rows unless the project explicitly adopts one later.
 
 ### Error Handling
 Raise `ValueError` for validation failures — lowercase, f-string, descriptive, no trailing punctuation:

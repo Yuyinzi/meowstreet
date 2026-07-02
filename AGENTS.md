@@ -158,7 +158,7 @@ from app import method_builder
 | Test functions | `test_<description>` | `test_parse_method_note_sections_extracts_known_sections` |
 | Test helpers | `snake_case` | `valid_method()`, `method_payload()` |
 
-No classes are used anywhere. The codebase is purely functional.
+Classes are allowed when they model stateful services, provider clients, fetchers, adapters, or immutable configuration that would otherwise be passed through many function calls. Prefer plain functions for simple transformations and DB operations.
 
 ### Error Handling
 
@@ -178,7 +178,7 @@ except ValueError as exc:
 
 ### Data Modeling
 
-All data is nested dicts with string keys. No dataclasses, namedtuples, or ORM models. Observation payloads use dotted-path keys (e.g., `"signals.trend"`, `"metrics.price"`). Access dict paths with a custom `_get_path()` resolver (see `workflow_engine.py`).
+Runtime payloads, API responses, DB rows, and method-method artifacts remain plain nested dicts with string keys. Observation payloads use dotted-path keys (e.g., `"signals.trend"`, `"metrics.price"`). Access dict paths with a custom `_get_path()` resolver (see `workflow_engine.py`). Dataclasses may be used for configuration and internal value objects, but not as the public API payload format. Do not introduce ORM models for stored rows unless the project explicitly adopts one later.
 
 The method artifact should include `version`, `generated_at`, `source_documents`, `concepts`, `workflow_nodes`, `node_checks`, `decision_rules`, and `extraction_warnings`. Workflow nodes should include decision questions, required inputs, criteria, tool hooks, source refs, incoming edges, and outgoing edges. Node checks should remain structured and deterministic.
 
