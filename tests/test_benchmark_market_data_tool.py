@@ -39,6 +39,30 @@ def test_benchmark_registry_maps_sp500_to_yahoo_symbol():
     }
 
 
+def test_benchmark_registry_maps_all_dashboard_benchmarks_to_yahoo_symbols():
+    configs = {
+        config["benchmark_id"]: config["symbol"]
+        for config in benchmark_market_data_tool.BENCHMARK_YAHOO_SYMBOLS
+    }
+
+    assert configs == {
+        "us_sp500": "^GSPC",
+        "us_nasdaq_100": "^NDX",
+        "us_nasdaq_composite": "^IXIC",
+        "us_djia": "^DJI",
+        "europe_stoxx_50": "^STOXX50E",
+        "europe_stoxx_600": "^STOXX",
+        "uk_ftse_100": "^FTSE",
+        "uk_ftse_250": "^FTMC",
+        "uk_ftse_350": "^FTLC",
+        "germany_dax_40": "^GDAXI",
+        "hong_kong_hsi": "^HSI",
+        "hong_kong_hscei": "^HSCE",
+        "japan_nikkei_225": "^N225",
+        "australia_asx_200": "^AXJO",
+    }
+
+
 def test_benchmark_config_rejects_unknown_id():
     with pytest.raises(ValueError, match="benchmark refresh is unknown: unknown"):
         benchmark_market_data_tool.benchmark_config("unknown")

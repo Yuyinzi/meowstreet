@@ -64,7 +64,22 @@ def test_main_refreshes_all_configured_benchmarks(capsys):
     def fake_refresh_benchmarks(
         benchmark_ids, benchmark_db_path, market_db_path, today_date
     ):
-        assert benchmark_ids == ["us_sp500"]
+        assert benchmark_ids == [
+            "us_sp500",
+            "us_nasdaq_100",
+            "us_nasdaq_composite",
+            "us_djia",
+            "europe_stoxx_50",
+            "europe_stoxx_600",
+            "uk_ftse_100",
+            "uk_ftse_250",
+            "uk_ftse_350",
+            "germany_dax_40",
+            "hong_kong_hsi",
+            "hong_kong_hscei",
+            "japan_nikkei_225",
+            "australia_asx_200",
+        ]
         return [
             {
                 "benchmark_id": "us_sp500",

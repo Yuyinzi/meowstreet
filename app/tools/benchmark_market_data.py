@@ -9,6 +9,71 @@ BENCHMARK_YAHOO_SYMBOLS = [
         "symbol": "^GSPC",
         "interval": "1d",
     },
+    {
+        "benchmark_id": "us_nasdaq_100",
+        "symbol": "^NDX",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "us_nasdaq_composite",
+        "symbol": "^IXIC",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "us_djia",
+        "symbol": "^DJI",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "europe_stoxx_50",
+        "symbol": "^STOXX50E",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "europe_stoxx_600",
+        "symbol": "^STOXX",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "uk_ftse_100",
+        "symbol": "^FTSE",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "uk_ftse_250",
+        "symbol": "^FTMC",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "uk_ftse_350",
+        "symbol": "^FTLC",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "germany_dax_40",
+        "symbol": "^GDAXI",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "hong_kong_hsi",
+        "symbol": "^HSI",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "hong_kong_hscei",
+        "symbol": "^HSCE",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "japan_nikkei_225",
+        "symbol": "^N225",
+        "interval": "1d",
+    },
+    {
+        "benchmark_id": "australia_asx_200",
+        "symbol": "^AXJO",
+        "interval": "1d",
+    },
 ]
 
 BENCHMARK_YAHOO_SYMBOLS_BY_ID = {
