@@ -175,7 +175,8 @@
         const x = xAt(index, series.length).toFixed(2);
         const y = yAt(point.close, scale).toFixed(2);
         const statusClass = point.market_phase_status === "bear_market" ? "chart-dot-bear" : "chart-dot-bull";
-        return `<circle class="chart-dot ${statusClass}" cx="${x}" cy="${y}" r="2.5" tabindex="0" role="button" data-index="${index}" aria-label="${escapeHtml(point.date)} close ${fmtNumber(point.close)}"></circle>`;
+        const label = `${point.date}: close ${fmtNumber(point.close)}, ${fmtStatus(point.market_phase_status)}, drawdown ${fmtNumber(point.drawdown_pct)}%, level ${fmtNumber(point.bear_market_level)}`;
+        return `<circle class="chart-dot ${statusClass}" cx="${x}" cy="${y}" r="2.5" tabindex="0" role="button" data-index="${index}" aria-label="${escapeHtml(label)}"></circle>`;
       })
       .join("");
   }
@@ -187,8 +188,8 @@
     let tooltipRect = null;
 
     function show(index, clientX, clientY) {
+      const point = series[index];
       if (index !== lastIndex) {
-        const point = series[index];
         tooltip.innerHTML = `
           <div><strong>${escapeHtml(point.date)}</strong></div>
           <div>Close: ${escapeHtml(fmtNumber(point.close))}</div>
@@ -197,11 +198,11 @@
           <div>Bear/Bull Level: ${escapeHtml(fmtNumber(point.bear_market_level))}</div>
         `;
         lastIndex = index;
+        tooltip.style.left = "-9999px";
+        tooltip.style.top = "-9999px";
+        tooltip.classList.add("visible");
         tooltipRect = tooltip.getBoundingClientRect();
       }
-      tooltip.style.left = "0px";
-      tooltip.style.top = "0px";
-      tooltip.classList.add("visible");
       const wrapRect = wrap.getBoundingClientRect();
       let left = clientX - wrapRect.left + 12;
       let top = clientY - wrapRect.top - tooltipRect.height - 12;
@@ -250,6 +251,16 @@
     });
 
     svg.addEventListener("focusout", hide);
+
+    svg.addEventListener("keydown", (event) => {
+      const dot = event.target.closest(".chart-dot");
+      if (!dot) return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      const index = Number(dot.dataset.index);
+      const rect = dot.getBoundingClientRect();
+      show(index, rect.left + rect.width / 2, rect.top);
+    });
   }
 
   function xAxisTicks(series) {
