@@ -159,3 +159,28 @@ def test_macro_dashboard_chart_css_stays_before_mobile_media_query():
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 
     assert css.index(".chart-axis") < css.index("@media (max-width: 820px)")
+
+
+def test_macro_dashboard_js_has_per_market_refresh_action():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert 'class="market-refresh"' in js
+    assert 'aria-label="Refresh ${escapeHtml(market.title)}"' in js
+    assert 'data-refresh-benchmark-id="${escapeHtml(market.benchmark_id)}"' in js
+    assert "\u21bb" in js
+    assert "event.stopPropagation()" in js
+    assert "refreshMarket(button.dataset.refreshBenchmarkId, button)" in js
+    assert "function refreshMarket(" in js
+    assert "state.marketDetailsById[benchmarkId]" in js
+    assert "delete state.marketDetailsById[benchmarkId]" in js
+    assert "renderOverview();" in js
+    assert "renderDetail();" in js
+    assert "rows_upserted" in js
+    assert "latest_date" in js
+
+
+def test_macro_dashboard_css_has_refresh_button_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".market-refresh" in css
+    assert ".market-refresh:disabled" in css

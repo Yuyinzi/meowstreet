@@ -69,6 +69,9 @@
             <span class="market-status">${escapeHtml(fmtStatus(market.latest.market_phase_status))}</span>
             <span class="market-meta">Drawdown ${escapeHtml(fmtNumber(market.latest.drawdown_pct))}%</span>
             <span class="market-meta">Through ${escapeHtml(market.data_through)}</span>
+            <span class="market-card-actions">
+              <span class="market-refresh" role="button" tabindex="0" data-refresh-benchmark-id="${escapeHtml(market.benchmark_id)}" aria-label="Refresh ${escapeHtml(market.title)}" title="Refresh ${escapeHtml(market.title)}">↻</span>
+            </span>
           </button>
         `;
       })
@@ -79,6 +82,19 @@
         state.selectedBenchmarkId = button.dataset.benchmarkId;
         renderOverview();
         renderDetail();
+      });
+    });
+
+    grid.querySelectorAll(".market-refresh").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        refreshMarket(button.dataset.refreshBenchmarkId, button);
+      });
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        event.stopPropagation();
+        refreshMarket(button.dataset.refreshBenchmarkId, button);
       });
     });
   }
@@ -306,6 +322,46 @@
         <span><i class="legend-level"></i>Bear/Bull level</span>
       </div>
     `;
+  }
+
+  async function refreshMarket(benchmarkId, button) {
+    if (!benchmarkId || button?.dataset.refreshing === "true") return;
+    const previousText = button?.textContent;
+    if (button) {
+      button.dataset.refreshing = "true";
+      button.setAttribute("aria-disabled", "true");
+      button.textContent = "⟳";
+    }
+    $("dashboardStatus").textContent = `Refreshing ${benchmarkId}...`;
+    try {
+      const response = await fetch(`/api/macro-dashboard/market-phase/${encodeURIComponent(benchmarkId)}/refresh`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.detail || `HTTP ${response.status}`);
+      }
+      const result = await response.json();
+      delete state.marketDetailsById[benchmarkId];
+      const overview = await fetch("/api/macro-dashboard/market-phase");
+      if (!overview.ok) throw new Error(`HTTP ${overview.status}`);
+      const payload = await overview.json();
+      state.markets = payload.markets || [];
+      $("dashboardStatus").textContent = `${result.benchmark_id} refreshed from ${result.symbol}: ${result.rows_upserted} rows through ${result.latest_date}.`;
+      renderOverview();
+      if (state.selectedBenchmarkId === benchmarkId) {
+        renderDetail();
+      }
+    } catch (error) {
+      $("dashboardStatus").textContent = `Refresh failed: ${error.message}`;
+      console.error(error);
+    } finally {
+      if (button) {
+        button.dataset.refreshing = "false";
+        button.setAttribute("aria-disabled", "false");
+        button.textContent = previousText || "↻";
+      }
+    }
   }
 
   async function loadMarketDetail(benchmarkId) {
