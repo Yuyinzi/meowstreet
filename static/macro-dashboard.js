@@ -2,6 +2,7 @@
   const state = {
     markets: [],
     selectedBenchmarkId: null,
+    marketDetailsById: {},
   };
 
   function $(id) {
@@ -159,6 +160,17 @@
     `;
   }
 
+  async function loadMarketDetail(benchmarkId) {
+    if (state.marketDetailsById[benchmarkId]) {
+      return state.marketDetailsById[benchmarkId];
+    }
+    const response = await fetch(`/api/macro-dashboard/market-phase/${encodeURIComponent(benchmarkId)}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    state.marketDetailsById[benchmarkId] = payload;
+    return payload;
+  }
+
   function renderDetail() {
     const detail = $("marketDetail");
     const market = selectedMarket();
@@ -166,24 +178,45 @@
       detail.innerHTML = "";
       return;
     }
-    const latest = market.latest;
+
     detail.innerHTML = `
       <div class="detail-head">
         <div>
           <p class="eyebrow">${escapeHtml(market.region)}</p>
           <h2>${escapeHtml(market.title)}</h2>
         </div>
-        <span class="phase-pill phase-${statusClass(market)}">${escapeHtml(fmtStatus(latest.market_phase_status))}</span>
+        <span class="phase-pill phase-${statusClass(market)}">${escapeHtml(fmtStatus(market.latest.market_phase_status))}</span>
       </div>
-      <div class="metric-strip">
-        <div><span>Close</span><strong>${escapeHtml(fmtNumber(latest.close))}</strong></div>
-        <div><span>Rolling High</span><strong>${escapeHtml(fmtNumber(latest.rolling_high))}</strong></div>
-        <div><span>Bear/Bull Level</span><strong>${escapeHtml(fmtNumber(latest.bear_market_level))}</strong></div>
-        <div><span>Drawdown</span><strong>${escapeHtml(fmtNumber(latest.drawdown_pct))}%</strong></div>
-        <div><span>Data Through</span><strong>${escapeHtml(market.data_through)}</strong></div>
-      </div>
-      ${renderMarketChart(market)}
+      <p class="status">Loading chart data...</p>
     `;
+
+    loadMarketDetail(market.benchmark_id)
+      .then((detailMarket) => {
+        if (state.selectedBenchmarkId !== detailMarket.benchmark_id) return;
+        const latest = detailMarket.latest;
+        detail.innerHTML = `
+          <div class="detail-head">
+            <div>
+              <p class="eyebrow">${escapeHtml(detailMarket.region)}</p>
+              <h2>${escapeHtml(detailMarket.title)}</h2>
+            </div>
+            <span class="phase-pill phase-${statusClass(detailMarket)}">${escapeHtml(fmtStatus(latest.market_phase_status))}</span>
+          </div>
+          <div class="metric-strip">
+            <div><span>Close</span><strong>${escapeHtml(fmtNumber(latest.close))}</strong></div>
+            <div><span>Rolling High</span><strong>${escapeHtml(fmtNumber(latest.rolling_high))}</strong></div>
+            <div><span>Bear/Bull Level</span><strong>${escapeHtml(fmtNumber(latest.bear_market_level))}</strong></div>
+            <div><span>Drawdown</span><strong>${escapeHtml(fmtNumber(latest.drawdown_pct))}%</strong></div>
+            <div><span>Data Through</span><strong>${escapeHtml(detailMarket.data_through)}</strong></div>
+          </div>
+          ${renderMarketChart(detailMarket)}
+        `;
+      })
+      .catch((error) => {
+        if (state.selectedBenchmarkId !== market.benchmark_id) return;
+        detail.innerHTML = `<p class="status">Failed to load chart data.</p>`;
+        console.error(error);
+      });
   }
 
   async function loadDashboard() {

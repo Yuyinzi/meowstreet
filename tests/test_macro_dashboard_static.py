@@ -12,10 +12,13 @@ def test_macro_dashboard_html_links_assets_and_app_root():
     assert 'src="/macro-dashboard.js"' in html
 
 
-def test_macro_dashboard_js_fetches_market_phase_api_and_renders_chart():
+def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 
     assert 'fetch("/api/macro-dashboard/market-phase")' in js
+    assert 'fetch(`/api/macro-dashboard/market-phase/${encodeURIComponent(benchmarkId)}`)' in js
+    assert "marketDetailsById" in js
+    assert "loadMarketDetail" in js
     assert "renderOverview" in js
     assert "renderMarketChart" in js
     assert "chartSegments" in js
