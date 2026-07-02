@@ -160,6 +160,27 @@ def test_macro_dashboard_chart_css_stays_before_mobile_media_query():
     assert css.index(".chart-axis") < css.index("@media (max-width: 820px)")
 
 
+def test_macro_dashboard_js_explains_market_phase_method():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "function renderMarketPhaseMethod(" in js
+    assert "Rolling High = highest high seen so far in the series." in js
+    assert "Bear/Bull Level = Rolling High x 80%." in js
+    assert "Drawdown = Close / Rolling High - 1." in js
+    assert "Bull market: Close is above the Bear/Bull Level." in js
+    assert "Bear market: Close is at or below the Bear/Bull Level." in js
+    assert "Green line shows bull-market close segments" in js
+    assert "${renderMarketPhaseMethod()}" in js
+
+
+def test_macro_dashboard_css_has_market_phase_method_note_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".method-note" in css
+    assert ".method-formula-list" in css
+    assert ".method-chart-key" in css
+
+
 def test_macro_dashboard_js_has_per_market_refresh_action():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 

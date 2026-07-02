@@ -328,6 +328,43 @@ h2 {
   color: #3B3530;
 }
 
+.method-note {
+  margin: 0 0 18px;
+  border: 1px solid #E8E0D6;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #FDFAF7;
+  color: #6B6258;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.method-note h3 {
+  margin: 0 0 8px;
+  color: #3B3530;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.method-note p {
+  margin: 4px 0;
+}
+
+.method-formula-list {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.method-formula-list strong {
+  color: #3B3530;
+}
+
+.method-chart-key {
+  color: #8B7E74;
+}
+
 .market-chart {
   display: block;
   width: 100%;

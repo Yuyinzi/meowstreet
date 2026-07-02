@@ -324,6 +324,22 @@
     `;
   }
 
+  function renderMarketPhaseMethod() {
+    return `
+      <section class="method-note" aria-label="Market phase method">
+        <h3>Method</h3>
+        <ul class="method-formula-list">
+          <li>Rolling High = highest high seen so far in the series.</li>
+          <li>Bear/Bull Level = Rolling High x 80%.</li>
+          <li>Drawdown = Close / Rolling High - 1.</li>
+        </ul>
+        <p>Bull market: Close is above the Bear/Bull Level.</p>
+        <p>Bear market: Close is at or below the Bear/Bull Level.</p>
+        <p class="method-chart-key">Green line shows bull-market close segments; red line shows bear-market close segments; dashed line is the Bear/Bull Level.</p>
+      </section>
+    `;
+  }
+
   async function refreshMarket(benchmarkId, button) {
     if (!benchmarkId || button?.dataset.refreshing === "true") return;
     const previousText = button?.textContent;
@@ -413,6 +429,7 @@
             <div><span>Drawdown</span><strong>${escapeHtml(fmtNumber(latest.drawdown_pct))}%</strong></div>
             <div><span>Data Through</span><strong>${escapeHtml(detailMarket.data_through)}</strong></div>
           </div>
+          ${renderMarketPhaseMethod()}
           ${renderMarketChart(detailMarket)}
         `;
         const svg = detail.querySelector(".market-chart");
