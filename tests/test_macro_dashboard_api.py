@@ -17,7 +17,10 @@ def test_market_phase_api_returns_markets(monkeypatch):
     from app import api
 
     def fake_connect():
-        return object()
+        class FakeConnection:
+            def close(self):
+                pass
+        return FakeConnection()
 
     def fake_load_price_rows(con, benchmark_id):
         assert con is not None

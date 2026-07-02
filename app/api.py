@@ -86,6 +86,9 @@ def macro_dashboard_js():
 @app.get("/api/macro-dashboard/market-phase")
 def macro_dashboard_market_phase():
     con = benchmark_market_data.connect()
-    return market_phase.build_dashboard_payload(
-        lambda benchmark_id: benchmark_market_data.load_price_rows(con, benchmark_id)
-    )
+    try:
+        return market_phase.build_dashboard_payload(
+            lambda benchmark_id: benchmark_market_data.load_price_rows(con, benchmark_id)
+        )
+    finally:
+        con.close()

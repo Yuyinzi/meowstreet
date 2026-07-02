@@ -132,6 +132,10 @@
 
   async function loadDashboard() {
     const response = await fetch("/api/macro-dashboard/market-phase");
+    if (response.status === 500) {
+      $("dashboardStatus").textContent = "Server error loading market data. Ensure scripts/import_benchmark_market_data.py has been run.";
+      return;
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     state.markets = payload.markets || [];

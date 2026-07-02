@@ -4,3 +4,4 @@ pytest>=8,<9
 httpx>=0.27,<1
 openai>=1.0,<2
 python-dotenv>=1.0,<2
+openpyxl>=3.1,<4

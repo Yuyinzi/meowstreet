@@ -1,21 +1,4 @@
-BENCHMARKS = [
-    {"id": "us_sp500", "title": "S&P 500", "region": "US"},
-    {"id": "us_nasdaq_100", "title": "Nasdaq 100", "region": "US"},
-    {"id": "us_nasdaq_composite", "title": "Nasdaq Composite", "region": "US"},
-    {"id": "us_djia", "title": "Dow Jones Industrial Average", "region": "US"},
-    {"id": "europe_stoxx_50", "title": "Eurostoxx 50", "region": "Europe"},
-    {"id": "europe_stoxx_600", "title": "Eurostoxx 600", "region": "Europe"},
-    {"id": "uk_ftse_100", "title": "FTSE 100", "region": "UK"},
-    {"id": "uk_ftse_250", "title": "FTSE 250", "region": "UK"},
-    {"id": "uk_ftse_350", "title": "FTSE 350", "region": "UK"},
-    {"id": "germany_dax_40", "title": "DAX 40", "region": "Germany"},
-    {"id": "hong_kong_hsi", "title": "Hang Seng Index", "region": "Hong Kong"},
-    {"id": "hong_kong_hscei", "title": "Hang Seng China Enterprises", "region": "Hong Kong"},
-    {"id": "japan_nikkei_225", "title": "Nikkei 225", "region": "Japan"},
-    {"id": "australia_asx_200", "title": "ASX 200", "region": "Australia"},
-]
-
-BENCHMARKS_BY_ID = {benchmark["id"]: benchmark for benchmark in BENCHMARKS}
+from app.db.benchmark_market_data import BENCHMARKS, BENCHMARKS_BY_ID
 
 
 def compute_market_phase_series(rows):
