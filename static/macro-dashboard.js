@@ -88,6 +88,54 @@
     return { min, range: max - min || 1, height: PLOT_HEIGHT };
   }
 
+  function niceTicks(min, max, count) {
+    const range = max - min || Math.abs(max) || 1;
+    const rawStep = range / (count - 1);
+    const exponent = Math.floor(Math.log10(rawStep));
+    const fraction = rawStep / Math.pow(10, exponent);
+    let niceFraction;
+    if (fraction <= 1) niceFraction = 1;
+    else if (fraction <= 2) niceFraction = 2;
+    else if (fraction <= 5) niceFraction = 5;
+    else niceFraction = 10;
+    const step = niceFraction * Math.pow(10, exponent);
+    const niceMin = Math.floor(min / step) * step;
+    const niceMax = Math.ceil(max / step) * step;
+    const ticks = [];
+    for (let value = niceMin; value <= niceMax + step * 1e-9; value += step) {
+      ticks.push(value);
+    }
+    return ticks;
+  }
+
+  function yAxisTicks(series, count) {
+    const values = series.flatMap((point) => [point.close, point.bear_market_level]);
+    return niceTicks(Math.min(...values), Math.max(...values), count);
+  }
+
+  function renderYAxisAndGrid(ticks, scale) {
+    const gridAndTicks = ticks.map((value) => {
+      const y = yAt(value, scale).toFixed(2);
+      return `
+        <g class="chart-grid">
+          <line x1="${MARGIN_LEFT}" y1="${y}" x2="${CHART_WIDTH}" y2="${y}"></line>
+        </g>
+        <g class="chart-y-tick" transform="translate(${MARGIN_LEFT} ${y})">
+          <line x1="-6" y1="0" x2="0" y2="0"></line>
+          <text x="-10" y="4">${escapeHtml(fmtNumber(value))}</text>
+        </g>
+      `;
+    }).join("");
+
+    return `
+      <g class="chart-axis">
+        <line x1="${MARGIN_LEFT}" y1="0" x2="${MARGIN_LEFT}" y2="${PLOT_HEIGHT}"></line>
+        <line x1="${MARGIN_LEFT}" y1="${PLOT_HEIGHT}" x2="${CHART_WIDTH}" y2="${PLOT_HEIGHT}"></line>
+      </g>
+      ${gridAndTicks}
+    `;
+  }
+
   function chartSegments(series, key, scale) {
     const values = series
       .map((point) => point[key])
@@ -122,13 +170,12 @@
 
   function xAxisTicks(series) {
     if (!series.length) return [];
-    const desiredTicks = 8;
+    const desiredTicks = 6;
     const step = Math.max(1, Math.floor((series.length - 1) / (desiredTicks - 1)));
     const ticks = [];
     for (let index = 0; index < series.length; index += step) {
-      const point = series[index];
       ticks.push({
-        date: point.date,
+        date: series[index].date,
         x: xAt(index, series.length),
       });
     }
@@ -139,17 +186,18 @@
     return ticks;
   }
 
-  function fmtTickDate(value) {
-    const [year, month, day] = String(value).split("-");
-    return `${day}-${month}-${year.slice(2)}`;
+  function fmtMonthYear(value) {
+    const date = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
   }
 
-  function renderXAxisTicks(series, chartHeight) {
+  function renderXAxisTicks(series) {
     return xAxisTicks(series)
       .map((tick) => `
-        <g class="chart-tick" transform="translate(${tick.x.toFixed(2)} ${chartHeight})">
+        <g class="chart-tick" transform="translate(${tick.x.toFixed(2)} ${PLOT_HEIGHT})">
           <line y2="8"></line>
-          <text y="24">${escapeHtml(fmtTickDate(tick.date))}</text>
+          <text y="24">${escapeHtml(fmtMonthYear(tick.date))}</text>
         </g>
       `)
       .join("");
@@ -160,16 +208,13 @@
     const scale = chartScale(fullSeries);
     return `
       <svg class="market-chart" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${escapeHtml(market.title)} market phase chart">
+        ${renderYAxisAndGrid(yAxisTicks(fullSeries, 5), scale)}
         ${renderChartPolylines(fullSeries, "bear_market_level", "chart-level", scale)}
         ${renderChartPolylines(fullSeries, "bull_market_index", "chart-bull", scale)}
         ${renderChartPolylines(fullSeries, "bear_market_index", "chart-bear", scale)}
-        ${renderXAxisTicks(fullSeries, PLOT_HEIGHT)}
+        ${renderXAxisTicks(fullSeries)}
       </svg>
-      <div class="chart-legend">
-        <span><i class="legend-bull"></i>Bull segment</span>
-        <span><i class="legend-bear"></i>Bear segment</span>
-        <span><i class="legend-level"></i>Bear/Bull level</span>
-      </div>
+      <div class="chart-tooltip" aria-hidden="true"></div>
     `;
   }
 

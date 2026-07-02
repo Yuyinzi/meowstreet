@@ -237,3 +237,33 @@ h2 {
     flex-direction: column;
   }
 }
+
+.chart-axis line {
+  stroke: var(--text);
+  stroke-width: 1;
+}
+
+.chart-grid line {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.chart-y-tick text {
+  fill: var(--muted);
+  font-size: 11px;
+  text-anchor: end;
+}
+
+.chart-y-tick line {
+  stroke: var(--text);
+}
+
+.chart-tick line {
+  stroke: var(--text);
+}
+
+.chart-tick text {
+  fill: var(--muted);
+  font-size: 11px;
+  text-anchor: middle;
+}

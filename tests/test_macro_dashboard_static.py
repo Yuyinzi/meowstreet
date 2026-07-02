@@ -37,6 +37,13 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "PLOT_HEIGHT" in js
     assert "function xAt(" in js
     assert "function yAt(" in js
+    assert "function niceTicks(" in js
+    assert "function yAxisTicks(" in js
+    assert "function renderYAxisAndGrid(" in js
+    assert "function fmtMonthYear(" in js
+    assert "chart-axis" in js
+    assert "chart-grid" in js
+    assert "chart-y-tick" in js
 
 
 def test_macro_dashboard_css_has_overview_and_chart_classes():
@@ -46,3 +53,6 @@ def test_macro_dashboard_css_has_overview_and_chart_classes():
     assert ".market-card" in css
     assert ".market-detail" in css
     assert ".market-chart" in css
+    assert ".chart-axis" in css
+    assert ".chart-grid" in css
+    assert ".chart-y-tick" in css
