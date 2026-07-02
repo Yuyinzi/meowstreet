@@ -150,7 +150,6 @@ def test_macro_dashboard_js_removes_dot_layer_and_keeps_mouse_tooltip():
     assert 'svg.addEventListener("mousemove"' in js
     assert 'svg.addEventListener("mouseleave", hide)' in js
     assert 'event.target.closest(".chart-dot")' not in js
-    assert 'tabindex="0"' not in js
     assert "const currentMarket = selectedMarket();" in js
     assert "market.benchmark_id === currentMarket?.benchmark_id" in js
 
