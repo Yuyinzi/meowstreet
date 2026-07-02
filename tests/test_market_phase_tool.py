@@ -1,0 +1,38 @@
+from app.tools import market_phase
+
+
+def test_compute_market_phase_series_marks_bear_and_bull_segments():
+    rows = [
+        {"date": "2020-01-01", "open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0},
+        {"date": "2020-01-02", "open": 90.0, "high": 90.0, "low": 90.0, "close": 90.0},
+        {"date": "2020-01-03", "open": 79.0, "high": 79.0, "low": 79.0, "close": 79.0},
+        {"date": "2020-01-04", "open": 82.0, "high": 82.0, "low": 82.0, "close": 82.0},
+    ]
+
+    result = market_phase.compute_market_phase_series(rows)
+
+    assert result[-1]["rolling_high"] == 100.0
+    assert result[-1]["bear_market_level"] == 80.0
+    assert result[2]["market_phase_status"] == "bear_market"
+    assert result[2]["bear_market_index"] == 79.0
+    assert result[2]["bull_market_index"] is None
+    assert result[3]["market_phase_status"] == "bull_market"
+    assert result[3]["bear_market_index"] is None
+    assert result[3]["bull_market_index"] == 82.0
+
+
+def test_build_market_phase_payload_returns_latest_and_chart_series():
+    rows = [
+        {"date": "2020-01-01", "open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0},
+        {"date": "2020-01-02", "open": 79.0, "high": 79.0, "low": 79.0, "close": 79.0},
+    ]
+
+    payload = market_phase.build_market_phase_payload("us_sp500", rows)
+
+    assert payload["benchmark_id"] == "us_sp500"
+    assert payload["title"] == "S&P 500"
+    assert payload["region"] == "US"
+    assert payload["data_through"] == "2020-01-02"
+    assert payload["latest"]["market_phase_status"] == "bear_market"
+    assert payload["latest"]["drawdown_pct"] == -21.0
+    assert len(payload["series"]) == 2
