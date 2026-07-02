@@ -194,8 +194,14 @@
       `;
       tooltip.classList.add("visible");
       const rect = wrap.getBoundingClientRect();
-      tooltip.style.left = `${clientX - rect.left + 12}px`;
-      tooltip.style.top = `${clientY - rect.top - 12}px`;
+      const tooltipRect = tooltip.getBoundingClientRect();
+      let left = clientX - rect.left + 12;
+      let top = clientY - rect.top - 12;
+      if (left + tooltipRect.width > rect.width) left = rect.width - tooltipRect.width - 8;
+      if (left < 0) left = 8;
+      if (top - tooltipRect.height < 0) top = clientY - rect.top + 16;
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
     }
 
     function hide() {
@@ -204,7 +210,8 @@
 
     svg.addEventListener("mousemove", (event) => {
       const rect = svg.getBoundingClientRect();
-      const x = event.clientX - rect.left - MARGIN_LEFT;
+      const scaleX = CHART_WIDTH / rect.width;
+      const x = (event.clientX - rect.left) * scaleX - MARGIN_LEFT;
       const ratio = Math.max(0, Math.min(1, x / PLOT_WIDTH));
       const index = Math.min(
         series.length - 1,
@@ -252,6 +259,9 @@
   }
 
   function renderMarketChart(market) {
+    if (!market.series || !market.series.length) {
+      return `<p class="status">No chart data available.</p>`;
+    }
     const fullSeries = market.series;
     const scale = chartScale(fullSeries);
     return `
