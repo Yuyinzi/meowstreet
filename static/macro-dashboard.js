@@ -61,39 +61,58 @@
     });
   }
 
-  function chartPoints(series, width, height, key) {
-    const values = series
-      .map((point) => point[key])
-      .filter((value) => value !== null && value !== undefined);
-    if (!values.length) return "";
+  function chartScale(series) {
     const allValues = series.flatMap((point) => [
       point.close,
       point.bear_market_level,
     ]);
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
-    const range = max - min || 1;
-    return series
-      .map((point, index) => {
+    return { min, range: max - min || 1 };
+  }
+
+  function chartSegments(series, width, height, key, scale) {
+    const values = series
+      .map((point) => point[key])
+      .filter((value) => value !== null && value !== undefined);
+    if (!values.length) return [];
+    const segments = [];
+    let current = [];
+
+    series.forEach((point, index) => {
         const value = point[key];
-        if (value === null || value === undefined) return null;
+        if (value === null || value === undefined) {
+          if (current.length) {
+            segments.push(current);
+            current = [];
+          }
+          return;
+        }
         const x = series.length === 1 ? width / 2 : (index / (series.length - 1)) * width;
-        const y = height - ((value - min) / range) * height;
-        return `${x.toFixed(2)},${y.toFixed(2)}`;
-      })
-      .filter(Boolean)
-      .join(" ");
+        const y = height - ((value - scale.min) / scale.range) * height;
+        current.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+    });
+
+    if (current.length) segments.push(current);
+    return segments.map((segment) => segment.join(" "));
+  }
+
+  function renderChartPolylines(series, width, height, key, className, scale) {
+    return chartSegments(series, width, height, key, scale)
+      .map((points) => `<polyline class="chart-line ${className}" points="${escapeHtml(points)}"></polyline>`)
+      .join("");
   }
 
   function renderMarketChart(market) {
     const recentSeries = market.series.slice(-900);
     const width = 960;
     const height = 320;
+    const scale = chartScale(recentSeries);
     return `
       <svg class="market-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(market.title)} market phase chart">
-        <polyline class="chart-line chart-level" points="${escapeHtml(chartPoints(recentSeries, width, height, "bear_market_level"))}"></polyline>
-        <polyline class="chart-line chart-bull" points="${escapeHtml(chartPoints(recentSeries, width, height, "bull_market_index"))}"></polyline>
-        <polyline class="chart-line chart-bear" points="${escapeHtml(chartPoints(recentSeries, width, height, "bear_market_index"))}"></polyline>
+        ${renderChartPolylines(recentSeries, width, height, "bear_market_level", "chart-level", scale)}
+        ${renderChartPolylines(recentSeries, width, height, "bull_market_index", "chart-bull", scale)}
+        ${renderChartPolylines(recentSeries, width, height, "bear_market_index", "chart-bear", scale)}
       </svg>
       <div class="chart-legend">
         <span><i class="legend-bull"></i>Bull segment</span>

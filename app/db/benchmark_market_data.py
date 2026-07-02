@@ -39,17 +39,13 @@ def normalize_benchmark_id(benchmark_id):
     return normalized
 
 
-def save_benchmark_prices(con, benchmark_id, rows, source):
+def upsert_benchmark_prices(con, benchmark_id, rows, source):
     normalized_id = normalize_benchmark_id(benchmark_id)
-    con.execute(
-        "delete from benchmark_prices where benchmark_id = ?",
-        (normalized_id,),
-    )
     inserted = 0
     for row in rows:
         con.execute(
             """
-            insert into benchmark_prices(
+            insert or replace into benchmark_prices(
                 benchmark_id, date, open, high, low, close, source
             ) values (?, ?, ?, ?, ?, ?, ?)
             """,
@@ -66,6 +62,15 @@ def save_benchmark_prices(con, benchmark_id, rows, source):
         inserted += 1
     con.commit()
     return inserted
+
+
+def replace_benchmark_prices(con, benchmark_id, rows, source):
+    normalized_id = normalize_benchmark_id(benchmark_id)
+    con.execute(
+        "delete from benchmark_prices where benchmark_id = ?",
+        (normalized_id,),
+    )
+    return upsert_benchmark_prices(con, normalized_id, rows, source)
 
 
 def latest_price_date(con, benchmark_id):
@@ -89,23 +94,3 @@ def load_price_rows(con, benchmark_id):
         (normalized_id,),
     ).fetchall()
     return [dict(row) for row in rows]
-
-
-BENCHMARKS = [
-    {"id": "us_sp500", "title": "S&P 500", "region": "US", "sheet": "S&P 500"},
-    {"id": "us_nasdaq_100", "title": "Nasdaq 100", "region": "US", "sheet": "Nasdaq 100"},
-    {"id": "us_nasdaq_composite", "title": "Nasdaq Composite", "region": "US", "sheet": "Nasdaq Composite"},
-    {"id": "us_djia", "title": "Dow Jones Industrial Average", "region": "US", "sheet": "DJIA"},
-    {"id": "europe_stoxx_50", "title": "Eurostoxx 50", "region": "Europe", "sheet": "Eurostoxx 50"},
-    {"id": "europe_stoxx_600", "title": "Eurostoxx 600", "region": "Europe", "sheet": "Eurostoxx 600"},
-    {"id": "uk_ftse_100", "title": "FTSE 100", "region": "UK", "sheet": "FTSE 100"},
-    {"id": "uk_ftse_250", "title": "FTSE 250", "region": "UK", "sheet": "FTSE 250"},
-    {"id": "uk_ftse_350", "title": "FTSE 350", "region": "UK", "sheet": "FTSE 350"},
-    {"id": "germany_dax_40", "title": "DAX 40", "region": "Germany", "sheet": "DAX 40"},
-    {"id": "hong_kong_hsi", "title": "Hang Seng Index", "region": "Hong Kong", "sheet": "HSI"},
-    {"id": "hong_kong_hscei", "title": "Hang Seng China Enterprises", "region": "Hong Kong", "sheet": "HSCEI"},
-    {"id": "japan_nikkei_225", "title": "Nikkei 225", "region": "Japan", "sheet": "Nikkei 225"},
-    {"id": "australia_asx_200", "title": "ASX 200", "region": "Australia", "sheet": "ASX 200"},
-]
-
-BENCHMARKS_BY_ID = {benchmark["id"]: benchmark for benchmark in BENCHMARKS}

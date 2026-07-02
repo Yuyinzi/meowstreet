@@ -7,10 +7,25 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import benchmark_market_data
-from app.db.benchmark_market_data import BENCHMARKS
 
 
 DEFAULT_WORKBOOK_PATH = ROOT / "data" / "materials" / "Video 02" / "Bull_Bear_Markets.xlsx"
+WORKBOOK_BENCHMARK_SHEETS = [
+    {"benchmark_id": "us_sp500", "sheet": "S&P 500"},
+    {"benchmark_id": "us_nasdaq_100", "sheet": "Nasdaq 100"},
+    {"benchmark_id": "us_nasdaq_composite", "sheet": "Nasdaq Composite"},
+    {"benchmark_id": "us_djia", "sheet": "DJIA"},
+    {"benchmark_id": "europe_stoxx_50", "sheet": "Eurostoxx 50"},
+    {"benchmark_id": "europe_stoxx_600", "sheet": "Eurostoxx 600"},
+    {"benchmark_id": "uk_ftse_100", "sheet": "FTSE 100"},
+    {"benchmark_id": "uk_ftse_250", "sheet": "FTSE 250"},
+    {"benchmark_id": "uk_ftse_350", "sheet": "FTSE 350"},
+    {"benchmark_id": "germany_dax_40", "sheet": "DAX 40"},
+    {"benchmark_id": "hong_kong_hsi", "sheet": "HSI"},
+    {"benchmark_id": "hong_kong_hscei", "sheet": "HSCEI"},
+    {"benchmark_id": "japan_nikkei_225", "sheet": "Nikkei 225"},
+    {"benchmark_id": "australia_asx_200", "sheet": "ASX 200"},
+]
 
 
 def _float_or_none(value):
@@ -66,7 +81,7 @@ def parse_workbook_sheet(workbook_path, sheet_name):
 
 
 def import_price_rows(con, benchmark_id, rows, source):
-    return benchmark_market_data.save_benchmark_prices(
+    return benchmark_market_data.replace_benchmark_prices(
         con,
         benchmark_id,
         rows,
@@ -78,17 +93,17 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
     inserted = {}
     errors = {}
     source = Path(workbook_path).name
-    for config in BENCHMARKS:
+    for config in WORKBOOK_BENCHMARK_SHEETS:
         try:
             rows = parse_workbook_sheet(workbook_path, config["sheet"])
-            inserted[config["id"]] = import_price_rows(
+            inserted[config["benchmark_id"]] = import_price_rows(
                 con,
-                config["id"],
+                config["benchmark_id"],
                 rows,
                 source=source,
             )
         except ValueError as exc:
-            errors[config["id"]] = str(exc)
+            errors[config["benchmark_id"]] = str(exc)
     return inserted, errors
 
 

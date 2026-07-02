@@ -87,3 +87,9 @@ def test_import_workbook_saves_configured_benchmarks(tmp_path):
     assert inserted["us_nasdaq_100"] == 2
     assert benchmark_market_data.latest_price_date(con, "us_sp500") == "2020-01-03"
     assert "us_nasdaq_composite" in errors
+
+
+def test_import_script_owns_workbook_sheet_mapping():
+    config = import_benchmark_market_data.WORKBOOK_BENCHMARK_SHEETS[0]
+
+    assert config == {"benchmark_id": "us_sp500", "sheet": "S&P 500"}

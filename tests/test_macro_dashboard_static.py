@@ -18,6 +18,8 @@ def test_macro_dashboard_js_fetches_market_phase_api_and_renders_chart():
     assert 'fetch("/api/macro-dashboard/market-phase")' in js
     assert "renderOverview" in js
     assert "renderMarketChart" in js
+    assert "chartSegments" in js
+    assert "renderChartPolylines" in js
     assert "bear_market_level" in js
     assert "bull_market_index" in js
     assert "bear_market_index" in js

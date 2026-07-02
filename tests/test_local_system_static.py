@@ -37,4 +37,4 @@ def test_local_system_js_supports_macro_dashboard_grid_mock():
     assert "MOCK_MACRO_DASHBOARD_GROUPS" in content
     assert "renderMacroDashboard" in content
     assert "macroDashboardSection" in content
-    assert "metric-tile-supportive" in content
+    assert "metric-tile-${escapeHtml(status)}" in content
