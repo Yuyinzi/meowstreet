@@ -192,14 +192,25 @@
         <div>Drawdown: ${escapeHtml(fmtNumber(point.drawdown_pct))}%</div>
         <div>Bear/Bull Level: ${escapeHtml(fmtNumber(point.bear_market_level))}</div>
       `;
+      tooltip.style.left = "0px";
+      tooltip.style.top = "0px";
       tooltip.classList.add("visible");
-      const rect = wrap.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
       const tooltipRect = tooltip.getBoundingClientRect();
-      let left = clientX - rect.left + 12;
-      let top = clientY - rect.top - 12;
-      if (left + tooltipRect.width > rect.width) left = rect.width - tooltipRect.width - 8;
-      if (left < 0) left = 8;
-      if (top - tooltipRect.height < 0) top = clientY - rect.top + 16;
+      let left = clientX - wrapRect.left + 12;
+      let top = clientY - wrapRect.top - tooltipRect.height - 12;
+      if (left + tooltipRect.width > wrapRect.width) {
+        left = wrapRect.width - tooltipRect.width - 8;
+      }
+      if (left < 0) {
+        left = 8;
+      }
+      if (top < 0) {
+        top = clientY - wrapRect.top + 16;
+      }
+      if (top + tooltipRect.height > wrapRect.height) {
+        top = wrapRect.height - tooltipRect.height - 8;
+      }
       tooltip.style.left = `${left}px`;
       tooltip.style.top = `${top}px`;
     }
