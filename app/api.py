@@ -92,3 +92,17 @@ def macro_dashboard_market_phase():
         )
     finally:
         con.close()
+
+
+@app.get("/api/macro-dashboard/market-phase/{benchmark_id}")
+def macro_dashboard_market_phase_detail(benchmark_id):
+    con = benchmark_market_data.connect()
+    try:
+        return market_phase.build_market_phase_payload(
+            benchmark_id,
+            benchmark_market_data.load_price_rows(con, benchmark_id),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        con.close()
