@@ -175,7 +175,7 @@
         const x = xAt(index, series.length).toFixed(2);
         const y = yAt(point.close, scale).toFixed(2);
         const statusClass = point.market_phase_status === "bear_market" ? "chart-dot-bear" : "chart-dot-bull";
-        return `<circle class="chart-dot ${statusClass}" cx="${x}" cy="${y}" r="2.5"></circle>`;
+        return `<circle class="chart-dot ${statusClass}" cx="${x}" cy="${y}" r="2.5" tabindex="0" role="button" data-index="${index}" aria-label="${escapeHtml(point.date)} close ${fmtNumber(point.close)}"></circle>`;
       })
       .join("");
   }
@@ -183,21 +183,26 @@
   function attachChartTooltip(svg, tooltip, series) {
     if (!svg || !tooltip || !series.length) return;
     const wrap = svg.parentElement;
+    let lastIndex = -1;
+    let tooltipRect = null;
 
     function show(index, clientX, clientY) {
-      const point = series[index];
-      tooltip.innerHTML = `
-        <div><strong>${escapeHtml(point.date)}</strong></div>
-        <div>Close: ${escapeHtml(fmtNumber(point.close))}</div>
-        <div>Status: ${escapeHtml(fmtStatus(point.market_phase_status))}</div>
-        <div>Drawdown: ${escapeHtml(fmtNumber(point.drawdown_pct))}%</div>
-        <div>Bear/Bull Level: ${escapeHtml(fmtNumber(point.bear_market_level))}</div>
-      `;
+      if (index !== lastIndex) {
+        const point = series[index];
+        tooltip.innerHTML = `
+          <div><strong>${escapeHtml(point.date)}</strong></div>
+          <div>Close: ${escapeHtml(fmtNumber(point.close))}</div>
+          <div>Status: ${escapeHtml(fmtStatus(point.market_phase_status))}</div>
+          <div>Drawdown: ${escapeHtml(fmtNumber(point.drawdown_pct))}%</div>
+          <div>Bear/Bull Level: ${escapeHtml(fmtNumber(point.bear_market_level))}</div>
+        `;
+        lastIndex = index;
+        tooltipRect = tooltip.getBoundingClientRect();
+      }
       tooltip.style.left = "0px";
       tooltip.style.top = "0px";
       tooltip.classList.add("visible");
       const wrapRect = wrap.getBoundingClientRect();
-      const tooltipRect = tooltip.getBoundingClientRect();
       let left = clientX - wrapRect.left + 12;
       let top = clientY - wrapRect.top - tooltipRect.height - 12;
       if (left + tooltipRect.width > wrapRect.width) {
@@ -218,6 +223,8 @@
 
     function hide() {
       tooltip.classList.remove("visible");
+      lastIndex = -1;
+      tooltipRect = null;
     }
 
     svg.addEventListener("mousemove", (event) => {
@@ -233,6 +240,16 @@
     });
 
     svg.addEventListener("mouseleave", hide);
+
+    svg.addEventListener("focusin", (event) => {
+      const dot = event.target.closest(".chart-dot");
+      if (!dot) return;
+      const index = Number(dot.dataset.index);
+      const rect = dot.getBoundingClientRect();
+      show(index, rect.left + rect.width / 2, rect.top);
+    });
+
+    svg.addEventListener("focusout", hide);
   }
 
   function xAxisTicks(series) {
