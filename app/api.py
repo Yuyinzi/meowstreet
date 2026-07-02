@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import tool_runner, workflow_engine
 from app.db import benchmark_market_data
+from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.tools import market_phase
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,7 +89,9 @@ def macro_dashboard_market_phase():
     con = benchmark_market_data.connect()
     try:
         return market_phase.build_dashboard_payload(
-            lambda benchmark_id: benchmark_market_data.load_price_rows(con, benchmark_id)
+            lambda benchmark_id: benchmark_market_data.load_price_rows(
+                con, benchmark_id
+            )
         )
     finally:
         con.close()
@@ -106,3 +109,12 @@ def macro_dashboard_market_phase_detail(benchmark_id):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         con.close()
+
+
+@app.post("/api/macro-dashboard/market-phase/{benchmark_id}/refresh")
+def macro_dashboard_market_phase_refresh(benchmark_id):
+    try:
+        results = benchmark_market_data_tool.refresh_benchmarks([benchmark_id])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return results[0]
