@@ -8,9 +8,13 @@
   const CHART_WIDTH = 960;
   const CHART_HEIGHT = 360;
   const MARGIN_LEFT = 50;
-  const MARGIN_BOTTOM = 40;
-  const PLOT_WIDTH = CHART_WIDTH - MARGIN_LEFT;
+  const MARGIN_RIGHT = 50;
+  const MARGIN_BOTTOM = 58;
+  const PLOT_RIGHT = CHART_WIDTH - MARGIN_RIGHT;
+  const PLOT_WIDTH = PLOT_RIGHT - MARGIN_LEFT;
   const PLOT_HEIGHT = CHART_HEIGHT - MARGIN_BOTTOM;
+  const Y_AXIS_TICK_COUNT = 9;
+  const X_AXIS_TICK_COUNT = 10;
 
   function $(id) {
     return document.getElementById(id);
@@ -25,7 +29,7 @@
   }
 
   function fmtStatus(value) {
-    return String(value || "").replace(/_/g, " ");
+    return String(value ?? "").replace(/_/g, " ");
   }
 
   function fmtNumber(value) {
@@ -54,9 +58,10 @@
 
   function renderOverview() {
     const grid = $("marketGrid");
+    const currentMarket = selectedMarket();
     grid.innerHTML = state.markets
       .map((market) => {
-        const selected = market.benchmark_id === selectedMarket()?.benchmark_id ? " selected" : "";
+        const selected = market.benchmark_id === currentMarket?.benchmark_id ? " selected" : "";
         return `
           <button class="market-card market-card-${statusClass(market)}${selected}" type="button" data-benchmark-id="${escapeHtml(market.benchmark_id)}">
             <span class="market-region">${escapeHtml(market.region)}</span>
@@ -119,7 +124,7 @@
       const y = yAt(value, scale).toFixed(2);
       return `
         <g class="chart-grid">
-          <line x1="${MARGIN_LEFT}" y1="${y}" x2="${CHART_WIDTH}" y2="${y}"></line>
+          <line x1="${MARGIN_LEFT}" y1="${y}" x2="${PLOT_RIGHT}" y2="${y}"></line>
         </g>
         <g class="chart-y-tick" transform="translate(${MARGIN_LEFT} ${y})">
           <line x1="-6" y1="0" x2="0" y2="0"></line>
@@ -131,7 +136,7 @@
     return `
       <g class="chart-axis">
         <line x1="${MARGIN_LEFT}" y1="0" x2="${MARGIN_LEFT}" y2="${PLOT_HEIGHT}"></line>
-        <line x1="${MARGIN_LEFT}" y1="${PLOT_HEIGHT}" x2="${CHART_WIDTH}" y2="${PLOT_HEIGHT}"></line>
+        <line x1="${MARGIN_LEFT}" y1="${PLOT_HEIGHT}" x2="${PLOT_RIGHT}" y2="${PLOT_HEIGHT}"></line>
       </g>
       ${gridAndTicks}
     `;
@@ -166,18 +171,6 @@
   function renderChartPolylines(series, key, className, scale) {
     return chartSegments(series, key, scale)
       .map((points) => `<polyline class="chart-line ${className}" points="${escapeHtml(points)}"></polyline>`)
-      .join("");
-  }
-
-  function renderChartDots(series, scale) {
-    return series
-      .map((point, index) => {
-        const x = xAt(index, series.length).toFixed(2);
-        const y = yAt(point.close, scale).toFixed(2);
-        const statusClass = point.market_phase_status === "bear_market" ? "chart-dot-bear" : "chart-dot-bull";
-        const label = `${point.date}: close ${fmtNumber(point.close)}, ${fmtStatus(point.market_phase_status)}, drawdown ${fmtNumber(point.drawdown_pct)}%, level ${fmtNumber(point.bear_market_level)}`;
-        return `<circle class="chart-dot ${statusClass}" cx="${x}" cy="${y}" r="2.5" tabindex="0" role="button" data-index="${index}" aria-label="${escapeHtml(label)}"></circle>`;
-      })
       .join("");
   }
 
@@ -242,62 +235,48 @@
 
     svg.addEventListener("mouseleave", hide);
 
-    svg.addEventListener("focusin", (event) => {
-      const dot = event.target.closest(".chart-dot");
-      if (!dot) return;
-      const index = Number(dot.dataset.index);
-      const rect = dot.getBoundingClientRect();
-      show(index, rect.left + rect.width / 2, rect.top);
-    });
-
-    svg.addEventListener("focusout", hide);
-
     svg.addEventListener("keydown", (event) => {
-      const dot = event.target.closest(".chart-dot");
-      if (!dot) return;
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      const index = Number(dot.dataset.index);
-      const rect = dot.getBoundingClientRect();
-      show(index, rect.left + rect.width / 2, rect.top);
+      if (event.key === "Escape") {
+        hide();
+      }
     });
   }
 
   function xAxisTicks(series) {
     if (!series.length) return [];
-    const desiredTicks = 6;
-    const step = Math.max(1, Math.floor((series.length - 1) / (desiredTicks - 1)));
-    const ticks = [];
-    for (let index = 0; index < series.length; index += step) {
-      ticks.push({
-        date: series[index].date,
-        x: xAt(index, series.length),
-      });
+    const desiredTicks = Math.min(X_AXIS_TICK_COUNT, series.length);
+    if (desiredTicks === 1) {
+      return [{ date: series[0].date, x: xAt(0, series.length) }];
     }
-    const last = series[series.length - 1];
-    if (ticks[ticks.length - 1]?.date !== last.date) {
-      ticks.push({ date: last.date, x: xAt(series.length - 1, series.length) });
-    }
-    return ticks;
+    const lastIndex = series.length - 1;
+    const indexes = Array.from({ length: desiredTicks }, (_, index) => (
+      Math.round((index / (desiredTicks - 1)) * lastIndex)
+    ));
+    return [...new Set(indexes)].map((index) => ({
+      date: series[index].date,
+      x: xAt(index, series.length),
+    }));
   }
 
   function fmtMonthYear(value) {
-    const date = new Date(`${value}T00:00:00`);
+    const [year, month, day] = String(value).split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day || 1));
     if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    });
   }
 
   function renderXAxisTicks(series) {
     const ticks = xAxisTicks(series);
     return ticks
       .map((tick, index) => {
-        const isLast = index === ticks.length - 1;
-        const anchor = isLast ? "end" : "middle";
-        const xOffset = isLast ? -6 : 0;
         return `
           <g class="chart-tick" transform="translate(${tick.x.toFixed(2)} ${PLOT_HEIGHT})">
             <line y2="8"></line>
-            <text y="24" text-anchor="${anchor}" x="${xOffset}">${escapeHtml(fmtMonthYear(tick.date))}</text>
+            <text class="chart-x-label" y="22" text-anchor="middle" x="0" transform="rotate(-35 0 22)">${escapeHtml(fmtMonthYear(tick.date))}</text>
           </g>
         `;
       })
@@ -313,11 +292,10 @@
     return `
       <div class="chart-wrap">
         <svg class="market-chart" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${escapeHtml(market.title)} market phase chart">
-          ${renderYAxisAndGrid(yAxisTicks(fullSeries, 5), scale)}
+          ${renderYAxisAndGrid(yAxisTicks(fullSeries, Y_AXIS_TICK_COUNT), scale)}
           ${renderChartPolylines(fullSeries, "bear_market_level", "chart-level", scale)}
           ${renderChartPolylines(fullSeries, "bull_market_index", "chart-bull", scale)}
           ${renderChartPolylines(fullSeries, "bear_market_index", "chart-bear", scale)}
-          ${renderChartDots(fullSeries, scale)}
           ${renderXAxisTicks(fullSeries)}
         </svg>
         <div class="chart-tooltip" aria-hidden="true"></div>
@@ -407,6 +385,20 @@
       : "No benchmark market data found. Run scripts/import_benchmark_market_data.py.";
     renderOverview();
     renderDetail();
+  }
+
+  if (typeof window !== "undefined" && window.__MEOWSTREET_TEST__) {
+    window.__macroDashboardTestHooks = {
+      X_AXIS_TICK_COUNT,
+      Y_AXIS_TICK_COUNT,
+      fmtMonthYear,
+      niceTicks,
+      xAt,
+      xAxisTicks,
+      renderXAxisTicks,
+      yAt,
+      yAxisTicks,
+    };
   }
 
   loadDashboard().catch((error) => {

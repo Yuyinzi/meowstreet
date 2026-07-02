@@ -221,13 +221,6 @@ h2 {
   background: var(--level);
 }
 
-@media (max-width: 720px) {
-  .macro-header,
-  .detail-head {
-    flex-direction: column;
-  }
-}
-
 .chart-axis line {
   stroke: var(--text);
   stroke-width: 1;
@@ -255,30 +248,14 @@ h2 {
 .chart-tick text {
   fill: var(--muted);
   font-size: 11px;
-  text-anchor: middle;
+}
+
+.chart-x-label {
+  dominant-baseline: hanging;
 }
 
 .chart-wrap {
   position: relative;
-}
-
-.chart-dot {
-  fill: var(--text);
-  stroke: var(--panel);
-  stroke-width: 1;
-  transition: r 0.1s ease;
-}
-
-.chart-dot-bull {
-  fill: var(--bull);
-}
-
-.chart-dot-bear {
-  fill: var(--bear);
-}
-
-.chart-dot:hover {
-  r: 4;
 }
 
 .chart-tooltip {
@@ -309,4 +286,11 @@ h2 {
 
 .chart-tooltip div {
   color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .macro-header,
+  .detail-head {
+    flex-direction: column;
+  }
 }
