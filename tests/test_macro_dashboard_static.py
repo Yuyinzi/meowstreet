@@ -16,7 +16,10 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 
     assert 'fetch("/api/macro-dashboard/market-phase")' in js
-    assert 'fetch(`/api/macro-dashboard/market-phase/${encodeURIComponent(benchmarkId)}`)' in js
+    assert (
+        "fetch(`/api/macro-dashboard/market-phase/${encodeURIComponent(benchmarkId)}`)"
+        in js
+    )
     assert "marketDetailsById" in js
     assert "loadMarketDetail" in js
     assert "renderOverview" in js
@@ -29,6 +32,11 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "bear_market_level" in js
     assert "bull_market_index" in js
     assert "bear_market_index" in js
+    assert "CHART_WIDTH" in js
+    assert "PLOT_WIDTH" in js
+    assert "PLOT_HEIGHT" in js
+    assert "function xAt(" in js
+    assert "function yAt(" in js
 
 
 def test_macro_dashboard_css_has_overview_and_chart_classes():

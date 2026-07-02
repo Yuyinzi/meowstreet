@@ -5,6 +5,13 @@
     marketDetailsById: {},
   };
 
+  const CHART_WIDTH = 960;
+  const CHART_HEIGHT = 360;
+  const MARGIN_LEFT = 50;
+  const MARGIN_BOTTOM = 40;
+  const PLOT_WIDTH = CHART_WIDTH - MARGIN_LEFT;
+  const PLOT_HEIGHT = CHART_HEIGHT - MARGIN_BOTTOM;
+
   function $(id) {
     return document.getElementById(id);
   }
@@ -36,6 +43,15 @@
       || null;
   }
 
+  function xAt(index, count) {
+    if (count <= 1) return MARGIN_LEFT + PLOT_WIDTH / 2;
+    return MARGIN_LEFT + (index / (count - 1)) * PLOT_WIDTH;
+  }
+
+  function yAt(value, scale) {
+    return scale.height - ((value - scale.min) / scale.range) * scale.height;
+  }
+
   function renderOverview() {
     const grid = $("marketGrid");
     grid.innerHTML = state.markets
@@ -62,17 +78,17 @@
     });
   }
 
-  function chartScale(series, height) {
+  function chartScale(series) {
     const allValues = series.flatMap((point) => [
       point.close,
       point.bear_market_level,
     ]);
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
-    return { min, range: max - min || 1, height };
+    return { min, range: max - min || 1, height: PLOT_HEIGHT };
   }
 
-  function chartSegments(series, width, height, key, scale) {
+  function chartSegments(series, key, scale) {
     const values = series
       .map((point) => point[key])
       .filter((value) => value !== null && value !== undefined);
@@ -81,25 +97,25 @@
     let current = [];
 
     series.forEach((point, index) => {
-        const value = point[key];
-        if (value === null || value === undefined) {
-          if (current.length) {
-            segments.push(current);
-            current = [];
-          }
-          return;
+      const value = point[key];
+      if (value === null || value === undefined) {
+        if (current.length) {
+          segments.push(current);
+          current = [];
         }
-        const x = series.length === 1 ? width / 2 : (index / (series.length - 1)) * width;
-        const y = scale.height - ((value - scale.min) / scale.range) * scale.height;
-        current.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+        return;
+      }
+      const x = xAt(index, series.length);
+      const y = yAt(value, scale);
+      current.push(`${x.toFixed(2)},${y.toFixed(2)}`);
     });
 
     if (current.length) segments.push(current);
     return segments.map((segment) => segment.join(" "));
   }
 
-  function renderChartPolylines(series, width, height, key, className, scale) {
-    return chartSegments(series, width, height, key, scale)
+  function renderChartPolylines(series, key, className, scale) {
+    return chartSegments(series, key, scale)
       .map((points) => `<polyline class="chart-line ${className}" points="${escapeHtml(points)}"></polyline>`)
       .join("");
   }
@@ -141,16 +157,13 @@
 
   function renderMarketChart(market) {
     const fullSeries = market.series;
-    const width = 960;
-    const chartHeight = 300;
-    const height = 350;
-    const scale = chartScale(fullSeries, chartHeight);
+    const scale = chartScale(fullSeries);
     return `
-      <svg class="market-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(market.title)} market phase chart">
-        ${renderChartPolylines(fullSeries, width, chartHeight, "bear_market_level", "chart-level", scale)}
-        ${renderChartPolylines(fullSeries, width, chartHeight, "bull_market_index", "chart-bull", scale)}
-        ${renderChartPolylines(fullSeries, width, chartHeight, "bear_market_index", "chart-bear", scale)}
-        ${renderXAxisTicks(fullSeries, width, chartHeight)}
+      <svg class="market-chart" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${escapeHtml(market.title)} market phase chart">
+        ${renderChartPolylines(fullSeries, "bear_market_level", "chart-level", scale)}
+        ${renderChartPolylines(fullSeries, "bull_market_index", "chart-bull", scale)}
+        ${renderChartPolylines(fullSeries, "bear_market_index", "chart-bear", scale)}
+        ${renderXAxisTicks(fullSeries, CHART_WIDTH, PLOT_HEIGHT)}
       </svg>
       <div class="chart-legend">
         <span><i class="legend-bull"></i>Bull segment</span>
