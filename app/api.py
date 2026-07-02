@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import tool_runner, workflow_engine
+from app.db import benchmark_market_data
+from app.tools import market_phase
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
@@ -62,3 +64,28 @@ def workflow_evaluate(body: dict = Body(default={})):
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/macro-dashboard.html")
+def macro_dashboard_html():
+    return FileResponse(STATIC_DIR / "macro-dashboard.html")
+
+
+@app.get("/macro-dashboard.css")
+def macro_dashboard_css():
+    return FileResponse(STATIC_DIR / "macro-dashboard.css", media_type="text/css")
+
+
+@app.get("/macro-dashboard.js")
+def macro_dashboard_js():
+    return FileResponse(
+        STATIC_DIR / "macro-dashboard.js", media_type="application/javascript"
+    )
+
+
+@app.get("/api/macro-dashboard/market-phase")
+def macro_dashboard_market_phase():
+    con = benchmark_market_data.connect()
+    return market_phase.build_dashboard_payload(
+        lambda benchmark_id: benchmark_market_data.load_price_rows(con, benchmark_id)
+    )
