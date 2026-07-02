@@ -120,7 +120,7 @@
       .join("");
   }
 
-  function xAxisTicks(series, width) {
+  function xAxisTicks(series) {
     if (!series.length) return [];
     const desiredTicks = 8;
     const step = Math.max(1, Math.floor((series.length - 1) / (desiredTicks - 1)));
@@ -129,12 +129,12 @@
       const point = series[index];
       ticks.push({
         date: point.date,
-        x: series.length === 1 ? width / 2 : (index / (series.length - 1)) * width,
+        x: xAt(index, series.length),
       });
     }
     const last = series[series.length - 1];
     if (ticks[ticks.length - 1]?.date !== last.date) {
-      ticks.push({ date: last.date, x: width });
+      ticks.push({ date: last.date, x: xAt(series.length - 1, series.length) });
     }
     return ticks;
   }
@@ -144,8 +144,8 @@
     return `${day}-${month}-${year.slice(2)}`;
   }
 
-  function renderXAxisTicks(series, width, chartHeight) {
-    return xAxisTicks(series, width)
+  function renderXAxisTicks(series, chartHeight) {
+    return xAxisTicks(series)
       .map((tick) => `
         <g class="chart-tick" transform="translate(${tick.x.toFixed(2)} ${chartHeight})">
           <line y2="8"></line>
@@ -163,7 +163,7 @@
         ${renderChartPolylines(fullSeries, "bear_market_level", "chart-level", scale)}
         ${renderChartPolylines(fullSeries, "bull_market_index", "chart-bull", scale)}
         ${renderChartPolylines(fullSeries, "bear_market_index", "chart-bear", scale)}
-        ${renderXAxisTicks(fullSeries, CHART_WIDTH, PLOT_HEIGHT)}
+        ${renderXAxisTicks(fullSeries, PLOT_HEIGHT)}
       </svg>
       <div class="chart-legend">
         <span><i class="legend-bull"></i>Bull segment</span>
