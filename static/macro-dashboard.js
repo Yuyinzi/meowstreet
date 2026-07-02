@@ -102,8 +102,9 @@
     const niceMin = Math.floor(min / step) * step;
     const niceMax = Math.ceil(max / step) * step;
     const ticks = [];
-    for (let value = niceMin; value <= niceMax + step * 1e-9; value += step) {
-      ticks.push(value);
+    const steps = Math.round((niceMax - niceMin) / step);
+    for (let i = 0; i <= steps; i++) {
+      ticks.push(niceMin + i * step);
     }
     return ticks;
   }
@@ -259,13 +260,19 @@
   }
 
   function renderXAxisTicks(series) {
-    return xAxisTicks(series)
-      .map((tick) => `
-        <g class="chart-tick" transform="translate(${tick.x.toFixed(2)} ${PLOT_HEIGHT})">
-          <line y2="8"></line>
-          <text y="24">${escapeHtml(fmtMonthYear(tick.date))}</text>
-        </g>
-      `)
+    const ticks = xAxisTicks(series);
+    return ticks
+      .map((tick, index) => {
+        const isLast = index === ticks.length - 1;
+        const anchor = isLast ? "end" : "middle";
+        const xOffset = isLast ? -6 : 0;
+        return `
+          <g class="chart-tick" transform="translate(${tick.x.toFixed(2)} ${PLOT_HEIGHT})">
+            <line y2="8"></line>
+            <text y="24" text-anchor="${anchor}" x="${xOffset}">${escapeHtml(fmtMonthYear(tick.date))}</text>
+          </g>
+        `;
+      })
       .join("");
   }
 
