@@ -158,4 +158,4 @@ def test_macro_dashboard_js_removes_dot_layer_and_keeps_mouse_tooltip():
 def test_macro_dashboard_chart_css_stays_before_mobile_media_query():
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 
-    assert css.index(".chart-axis") < css.index("@media (max-width: 720px)")
+    assert css.index(".chart-axis") < css.index("@media (max-width: 820px)")
