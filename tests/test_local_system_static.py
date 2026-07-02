@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 method_SYSTEM_JS = ROOT / "static" / "method-system.js"
+method_SYSTEM_HTML = ROOT / "static" / "method-system.html"
 
 
 def test_graph_node_mapping_preserves_source_refs_separately_from_method_basis():
@@ -38,3 +39,10 @@ def test_local_system_js_supports_macro_dashboard_grid_mock():
     assert "renderMacroDashboard" in content
     assert "macroDashboardSection" in content
     assert "metric-tile-${escapeHtml(status)}" in content
+
+
+def test_local_system_html_links_to_macro_dashboard():
+    html = method_SYSTEM_HTML.read_text(encoding="utf-8")
+
+    assert 'href="/macro-dashboard.html"' in html
+    assert "Macro Dashboard" in html
