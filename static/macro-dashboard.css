@@ -192,6 +192,16 @@ h2 {
   stroke-dasharray: 6 5;
 }
 
+.chart-tick line {
+  stroke: var(--line);
+}
+
+.chart-tick text {
+  fill: var(--muted);
+  font-size: 12px;
+  text-anchor: middle;
+}
+
 .chart-legend {
   display: flex;
   flex-wrap: wrap;

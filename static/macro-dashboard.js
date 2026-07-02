@@ -61,14 +61,14 @@
     });
   }
 
-  function chartScale(series) {
+  function chartScale(series, height) {
     const allValues = series.flatMap((point) => [
       point.close,
       point.bear_market_level,
     ]);
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
-    return { min, range: max - min || 1 };
+    return { min, range: max - min || 1, height };
   }
 
   function chartSegments(series, width, height, key, scale) {
@@ -89,7 +89,7 @@
           return;
         }
         const x = series.length === 1 ? width / 2 : (index / (series.length - 1)) * width;
-        const y = height - ((value - scale.min) / scale.range) * height;
+        const y = scale.height - ((value - scale.min) / scale.range) * scale.height;
         current.push(`${x.toFixed(2)},${y.toFixed(2)}`);
     });
 
@@ -103,16 +103,53 @@
       .join("");
   }
 
+  function xAxisTicks(series, width) {
+    if (!series.length) return [];
+    const desiredTicks = 8;
+    const step = Math.max(1, Math.floor((series.length - 1) / (desiredTicks - 1)));
+    const ticks = [];
+    for (let index = 0; index < series.length; index += step) {
+      const point = series[index];
+      ticks.push({
+        date: point.date,
+        x: series.length === 1 ? width / 2 : (index / (series.length - 1)) * width,
+      });
+    }
+    const last = series[series.length - 1];
+    if (ticks[ticks.length - 1]?.date !== last.date) {
+      ticks.push({ date: last.date, x: width });
+    }
+    return ticks;
+  }
+
+  function fmtTickDate(value) {
+    const [year, month, day] = String(value).split("-");
+    return `${day}-${month}-${year.slice(2)}`;
+  }
+
+  function renderXAxisTicks(series, width, chartHeight) {
+    return xAxisTicks(series, width)
+      .map((tick) => `
+        <g class="chart-tick" transform="translate(${tick.x.toFixed(2)} ${chartHeight})">
+          <line y2="8"></line>
+          <text y="24">${escapeHtml(fmtTickDate(tick.date))}</text>
+        </g>
+      `)
+      .join("");
+  }
+
   function renderMarketChart(market) {
-    const recentSeries = market.series.slice(-900);
+    const fullSeries = market.series;
     const width = 960;
-    const height = 320;
-    const scale = chartScale(recentSeries);
+    const chartHeight = 300;
+    const height = 350;
+    const scale = chartScale(fullSeries, chartHeight);
     return `
       <svg class="market-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(market.title)} market phase chart">
-        ${renderChartPolylines(recentSeries, width, height, "bear_market_level", "chart-level", scale)}
-        ${renderChartPolylines(recentSeries, width, height, "bull_market_index", "chart-bull", scale)}
-        ${renderChartPolylines(recentSeries, width, height, "bear_market_index", "chart-bear", scale)}
+        ${renderChartPolylines(fullSeries, width, chartHeight, "bear_market_level", "chart-level", scale)}
+        ${renderChartPolylines(fullSeries, width, chartHeight, "bull_market_index", "chart-bull", scale)}
+        ${renderChartPolylines(fullSeries, width, chartHeight, "bear_market_index", "chart-bear", scale)}
+        ${renderXAxisTicks(fullSeries, width, chartHeight)}
       </svg>
       <div class="chart-legend">
         <span><i class="legend-bull"></i>Bull segment</span>
