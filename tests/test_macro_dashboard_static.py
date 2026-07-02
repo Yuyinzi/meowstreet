@@ -44,6 +44,11 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "chart-axis" in js
     assert "chart-grid" in js
     assert "chart-y-tick" in js
+    assert "function renderChartDots(" in js
+    assert "function attachChartTooltip(" in js
+    assert "chart-wrap" in js
+    assert "chart-dot" in js
+    assert "chart-tooltip" in js
 
 
 def test_macro_dashboard_css_has_overview_and_chart_classes():
@@ -56,3 +61,6 @@ def test_macro_dashboard_css_has_overview_and_chart_classes():
     assert ".chart-axis" in css
     assert ".chart-grid" in css
     assert ".chart-y-tick" in css
+    assert ".chart-wrap" in css
+    assert ".chart-dot" in css
+    assert ".chart-tooltip" in css

@@ -168,6 +168,54 @@
       .join("");
   }
 
+  function renderChartDots(series, scale) {
+    return series
+      .map((point, index) => {
+        const x = xAt(index, series.length).toFixed(2);
+        const y = yAt(point.close, scale).toFixed(2);
+        const statusClass = point.market_phase_status === "bear_market" ? "chart-dot-bear" : "chart-dot-bull";
+        return `<circle class="chart-dot ${statusClass}" cx="${x}" cy="${y}" r="2.5"></circle>`;
+      })
+      .join("");
+  }
+
+  function attachChartTooltip(svg, tooltip, series) {
+    if (!svg || !tooltip || !series.length) return;
+    const wrap = svg.parentElement;
+
+    function show(index, clientX, clientY) {
+      const point = series[index];
+      tooltip.innerHTML = `
+        <div><strong>${escapeHtml(point.date)}</strong></div>
+        <div>Close: ${escapeHtml(fmtNumber(point.close))}</div>
+        <div>Status: ${escapeHtml(fmtStatus(point.market_phase_status))}</div>
+        <div>Drawdown: ${escapeHtml(fmtNumber(point.drawdown_pct))}%</div>
+        <div>Bear/Bull Level: ${escapeHtml(fmtNumber(point.bear_market_level))}</div>
+      `;
+      tooltip.classList.add("visible");
+      const rect = wrap.getBoundingClientRect();
+      tooltip.style.left = `${clientX - rect.left + 12}px`;
+      tooltip.style.top = `${clientY - rect.top - 12}px`;
+    }
+
+    function hide() {
+      tooltip.classList.remove("visible");
+    }
+
+    svg.addEventListener("mousemove", (event) => {
+      const rect = svg.getBoundingClientRect();
+      const x = event.clientX - rect.left - MARGIN_LEFT;
+      const ratio = Math.max(0, Math.min(1, x / PLOT_WIDTH));
+      const index = Math.min(
+        series.length - 1,
+        Math.max(0, Math.round(ratio * (series.length - 1)))
+      );
+      show(index, event.clientX, event.clientY);
+    });
+
+    svg.addEventListener("mouseleave", hide);
+  }
+
   function xAxisTicks(series) {
     if (!series.length) return [];
     const desiredTicks = 6;
@@ -207,14 +255,22 @@
     const fullSeries = market.series;
     const scale = chartScale(fullSeries);
     return `
-      <svg class="market-chart" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${escapeHtml(market.title)} market phase chart">
-        ${renderYAxisAndGrid(yAxisTicks(fullSeries, 5), scale)}
-        ${renderChartPolylines(fullSeries, "bear_market_level", "chart-level", scale)}
-        ${renderChartPolylines(fullSeries, "bull_market_index", "chart-bull", scale)}
-        ${renderChartPolylines(fullSeries, "bear_market_index", "chart-bear", scale)}
-        ${renderXAxisTicks(fullSeries)}
-      </svg>
-      <div class="chart-tooltip" aria-hidden="true"></div>
+      <div class="chart-wrap">
+        <svg class="market-chart" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${escapeHtml(market.title)} market phase chart">
+          ${renderYAxisAndGrid(yAxisTicks(fullSeries, 5), scale)}
+          ${renderChartPolylines(fullSeries, "bear_market_level", "chart-level", scale)}
+          ${renderChartPolylines(fullSeries, "bull_market_index", "chart-bull", scale)}
+          ${renderChartPolylines(fullSeries, "bear_market_index", "chart-bear", scale)}
+          ${renderChartDots(fullSeries, scale)}
+          ${renderXAxisTicks(fullSeries)}
+        </svg>
+        <div class="chart-tooltip" aria-hidden="true"></div>
+      </div>
+      <div class="chart-legend">
+        <span><i class="legend-bull"></i>Bull segment</span>
+        <span><i class="legend-bear"></i>Bear segment</span>
+        <span><i class="legend-level"></i>Bear/Bull level</span>
+      </div>
     `;
   }
 
@@ -269,6 +325,9 @@
           </div>
           ${renderMarketChart(detailMarket)}
         `;
+        const svg = detail.querySelector(".market-chart");
+        const tooltip = detail.querySelector(".chart-tooltip");
+        attachChartTooltip(svg, tooltip, detailMarket.series);
       })
       .catch((error) => {
         if (state.selectedBenchmarkId !== market.benchmark_id) return;

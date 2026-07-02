@@ -267,3 +267,56 @@ h2 {
   font-size: 11px;
   text-anchor: middle;
 }
+
+.chart-wrap {
+  position: relative;
+}
+
+.chart-dot {
+  fill: var(--text);
+  stroke: #ffffff;
+  stroke-width: 1;
+  transition: r 0.1s ease;
+}
+
+.chart-dot-bull {
+  fill: var(--bull);
+}
+
+.chart-dot-bear {
+  fill: var(--bear);
+}
+
+.chart-dot:hover {
+  r: 4;
+}
+
+.chart-tooltip {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  z-index: 10;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  white-space: nowrap;
+}
+
+.chart-tooltip.visible {
+  display: block;
+}
+
+.chart-tooltip strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.chart-tooltip div {
+  color: var(--muted);
+}
