@@ -2,7 +2,10 @@
   const state = {
     markets: [],
     selectedBenchmarkId: null,
+    selectedRelationshipId: null,
     marketDetailsById: {},
+    gdpRelationships: [],
+    gdpRelationshipDetailsById: {},
   };
 
   const CHART_WIDTH = 960;
@@ -15,6 +18,27 @@
   const PLOT_HEIGHT = CHART_HEIGHT - MARGIN_BOTTOM;
   const Y_AXIS_TICK_COUNT = 9;
   const X_AXIS_TICK_COUNT = 10;
+
+  async function loadGdpRelationshipOverview() {
+    const response = await fetch("/api/macro-dashboard/gdp-relationships");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    state.gdpRelationships = payload.relationships || [];
+    state.selectedRelationshipId = state.gdpRelationships[0]?.relationship_id || null;
+    renderGdpRelationshipOverview();
+  }
+
+
+  async function loadGdpRelationshipDetail(relationshipId) {
+    if (state.gdpRelationshipDetailsById[relationshipId]) {
+      return state.gdpRelationshipDetailsById[relationshipId];
+    }
+    const response = await fetch(`/api/macro-dashboard/gdp-relationships/${encodeURIComponent(relationshipId)}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    state.gdpRelationshipDetailsById[relationshipId] = payload;
+    return payload;
+  }
 
   function $(id) {
     return document.getElementById(id);
@@ -37,6 +61,11 @@
     return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
 
+  function fmtPercent(value) {
+    if (value === null || value === undefined) return "n/a";
+    return `${fmtNumber(value)}%`;
+  }
+
   function statusClass(market) {
     return market.latest.market_phase_status === "bear_market" ? "bear" : "bull";
   }
@@ -44,6 +73,12 @@
   function selectedMarket() {
     return state.markets.find((market) => market.benchmark_id === state.selectedBenchmarkId)
       || state.markets[0]
+      || null;
+  }
+
+  function selectedRelationship() {
+    return state.gdpRelationships.find((card) => card.relationship_id === state.selectedRelationshipId)
+      || state.gdpRelationships[0]
       || null;
   }
 
@@ -97,6 +132,199 @@
         refreshMarket(button.dataset.refreshBenchmarkId, button);
       });
     });
+  }
+
+  function confidenceClass(relationship) {
+    return `confidence-${relationship.macro_relationship_confidence}`;
+  }
+
+  function ensureGdpRelationshipRoot() {
+    const existing = $("gdpRelationshipSection");
+    if (existing) return existing;
+    const shell = $("macroDashboardApp");
+    if (!shell) return null;
+    shell.insertAdjacentHTML(
+      "beforeend",
+      `<section class="gdp-relationship" id="gdpRelationshipSection" aria-label="GDP market relationship"></section>`
+    );
+    return $("gdpRelationshipSection");
+  }
+
+  function renderGdpRelationshipOverview() {
+    const section = ensureGdpRelationshipRoot();
+    if (!section) return;
+    const current = selectedRelationship();
+    if (!state.gdpRelationships.length) {
+      section.innerHTML = `
+        <div class="relationship-head">
+          <div>
+            <h2>GDP / Market Relationship</h2>
+            <p class="subtitle">Loading GDP relationship data...</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    section.innerHTML = `
+      <div class="relationship-head">
+        <div>
+          <p class="eyebrow">Method Video 03 workflow data</p>
+          <h2>GDP / Market Relationship</h2>
+          <p class="subtitle">GDP, index correlation, and quadnomial context.</p>
+        </div>
+      </div>
+      <div class="gdp-grid">
+        ${state.gdpRelationships.map((card) => {
+          const selected = card.relationship_id === current?.relationship_id ? " selected" : "";
+          return `
+            <button class="gdp-card ${confidenceClass(card)}${selected}" type="button" data-relationship-id="${escapeHtml(card.relationship_id)}">
+              <span class="market-region">${escapeHtml(card.region)}</span>
+              <strong>${escapeHtml(card.title)}</strong>
+              <span class="market-meta">${escapeHtml(card.economy)} | ${escapeHtml(card.primary_lag_months)} months lag</span>
+              <span class="relationship-case">${escapeHtml(card.latest?.quadnomial_current_case)}</span>
+              <span class="market-meta">Primary lag ${escapeHtml(card.primary_lag_months)} months</span>
+              <span class="market-meta">Correlation ${escapeHtml(fmtNumber(card.latest?.rolling_index_gdp_correlation))}</span>
+              <span class="market-meta">Same direction ${escapeHtml(fmtPercent(card.same_direction_pct))}</span>
+              <span class="relationship-bias">${escapeHtml(card.relationship_signal_usability)}</span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+      <div class="gdp-detail" id="gdpRelationshipDetail"></div>
+    `;
+
+    section.querySelectorAll(".gdp-card").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.selectedRelationshipId = button.dataset.relationshipId;
+        renderGdpRelationshipOverview();
+      });
+    });
+
+    renderGdpRelationshipDetail();
+  }
+
+  function chartPoints(series, key, min, max, width, height) {
+    const range = max - min || 1;
+    return series.map((point, index) => {
+      const x = series.length <= 1 ? width / 2 : (index / (series.length - 1)) * width;
+      const y = height - ((point[key] - min) / range) * height;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(" ");
+  }
+
+  function renderMiniLineChart(title, series, keys) {
+    const values = series.flatMap((point) => keys.map((key) => point[key]));
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const width = 360;
+    const height = 150;
+    return `
+      <div class="relationship-chart">
+        <div class="relationship-chart-head">
+          <h3>${escapeHtml(title)}</h3>
+          <span>${escapeHtml(series[0].label)}-${escapeHtml(series[series.length - 1].label)}</span>
+        </div>
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
+          <line class="relationship-zero" x1="0" y1="${(height - ((0 - min) / ((max - min) || 1)) * height).toFixed(2)}" x2="${width}" y2="${(height - ((0 - min) / ((max - min) || 1)) * height).toFixed(2)}"></line>
+          ${keys.map((key, index) => `
+            <polyline class="relationship-line relationship-line-${index}" points="${escapeHtml(chartPoints(series, key, min, max, width, height))}"></polyline>
+          `).join("")}
+        </svg>
+      </div>
+    `;
+  }
+
+  function renderQuadBars(relationship) {
+    return `
+      <div class="relationship-chart">
+        <div class="relationship-chart-head">
+          <h3>Quadnomial distribution</h3>
+          <span>Historical data</span>
+        </div>
+        <div class="quad-bars">
+          ${relationship.quadnomial_distribution.map((item) => `
+            <div class="quad-bar-row">
+              <span>${escapeHtml(item.label)}</span>
+              <strong>${escapeHtml(fmtPercent(item.value))}</strong>
+              <i style="width: ${Math.max(4, item.value).toFixed(2)}%"></i>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderLagComparison(relationship) {
+    return `
+      <div class="relationship-chart">
+        <div class="relationship-chart-head">
+          <h3>Lag comparison</h3>
+          <span>Method primary lag</span>
+        </div>
+        <div class="lag-table">
+          ${relationship.lag_correlations.map((lag) => `
+            <div class="lag-row ${lag.method_primary ? "lag-row-primary" : ""}">
+              <span>${escapeHtml(lag.label)}</span>
+              <strong>${escapeHtml(fmtNumber(lag.value))}</strong>
+              ${lag.method_primary ? '<em class="lag-primary-pill">Method primary</em>' : "<em></em>"}
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderGdpRelationshipDetail() {
+    const detail = $("gdpRelationshipDetail");
+    const card = selectedRelationship();
+    if (!detail || !card) return;
+    detail.innerHTML = `<p class="status">Loading GDP relationship detail...</p>`;
+
+    loadGdpRelationshipDetail(card.relationship_id)
+      .then((payload) => {
+        if (state.selectedRelationshipId !== card.relationship_id) return;
+        const latest = payload.latest || {};
+        const indexYoy = latest.index_yoy !== null && latest.index_yoy !== undefined
+          ? (latest.index_yoy * 100) : null;
+        const gdpYoy = latest.gdp_yoy !== null && latest.gdp_yoy !== undefined
+          ? (latest.gdp_yoy * 100) : null;
+        detail.innerHTML = `
+          <div class="detail-head">
+            <div>
+              <p class="eyebrow">${escapeHtml(card.economy)}</p>
+              <h2>${escapeHtml(card.title)}</h2>
+            </div>
+            <span class="phase-pill ${confidenceClass(card)}">${escapeHtml(card.macro_relationship_confidence)} confidence</span>
+          </div>
+          <div class="metric-strip">
+            <div><span>Index YoY</span><strong>${escapeHtml(fmtPercent(indexYoy))}</strong></div>
+            <div><span>GDP YoY</span><strong>${escapeHtml(fmtPercent(gdpYoy))}</strong></div>
+            <div><span>Rolling Correlation</span><strong>${escapeHtml(fmtNumber(latest.rolling_index_gdp_correlation))}</strong></div>
+            <div><span>Same Direction</span><strong>${escapeHtml(fmtPercent(payload.same_direction_pct))}</strong></div>
+            <div><span>Signal usability</span><strong>${escapeHtml(payload.relationship_signal_usability)}</strong></div>
+            <div><span>Portfolio Bias</span><strong>${escapeHtml(payload.portfolio_bias_status)}</strong></div>
+          </div>
+          <section class="method-note" aria-label="GDP relationship method">
+            <h3>Method</h3>
+            <ul class="method-formula-list">
+              <li>Index YoY vs GDP YoY compares market direction with economic growth direction.</li>
+              <li>Rolling correlation checks whether the historical relationship is stable or breaking down.</li>
+              <li>Quadnomial distribution buckets both-up, both-down, and opposite-direction cases.</li>
+            </ul>
+          </section>
+          <div class="relationship-chart-grid">
+            ${renderMiniLineChart("Index YoY vs GDP YoY", payload.yoy_series, ["index", "gdp"])}
+            ${renderMiniLineChart("Rolling correlation", payload.correlation_series, ["value"])}
+            ${renderLagComparison(payload)}
+            ${renderQuadBars(payload)}
+          </div>
+        `;
+      })
+      .catch((error) => {
+        if (state.selectedRelationshipId !== card.relationship_id) return;
+        detail.innerHTML = `<p class="status">Failed to load GDP relationship detail.</p>`;
+        console.error(error);
+      });
   }
 
   function chartScale(series) {
@@ -458,6 +686,13 @@
       : "No benchmark market data found. Run scripts/import_benchmark_market_data.py.";
     renderOverview();
     renderDetail();
+    loadGdpRelationshipOverview().catch((error) => {
+      const section = ensureGdpRelationshipRoot();
+      if (section) {
+        section.innerHTML = `<p class="status">Failed to load GDP relationship data.</p>`;
+      }
+      console.error(error);
+    });
   }
 
   if (typeof window !== "undefined" && window.__MEOWSTREET_TEST__) {

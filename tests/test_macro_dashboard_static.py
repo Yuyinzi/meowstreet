@@ -55,6 +55,53 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "chart-tooltip" in js
 
 
+def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert 'fetch("/api/macro-dashboard/gdp-relationships")' in js
+    assert (
+        "fetch(`/api/macro-dashboard/gdp-relationships/${encodeURIComponent(relationshipId)}`)"
+        in js
+    )
+    assert "gdpRelationshipDetailsById" in js
+    assert "loadGdpRelationshipDetail" in js
+    assert "MOCK_GDP_RELATIONSHIPS" not in js
+    assert "Portfolio bias requires GDP forecast" not in js
+    assert "GDP / Market Relationship" in js
+    assert "renderGdpRelationshipOverview" in js
+    assert "renderGdpRelationshipDetail" in js
+    assert "rolling_index_gdp_correlation" in js
+    assert "same_direction_pct" in js
+    assert "macro_relationship_confidence" in js
+    assert "relationship_signal_usability" in js
+    assert "portfolio_bias_status" in js
+    assert "Index YoY vs GDP YoY" in js
+    assert "Rolling correlation" in js
+    assert "Quadnomial distribution" in js
+    assert "Signal usability" in js
+    assert "Mock data" not in js
+    assert "Fake data" not in js
+    assert "Mock data based on" not in js
+    assert "portfolio_bias_status" in js
+    assert "Index YoY vs GDP YoY" in js
+    assert "Rolling correlation" in js
+    assert "Quadnomial distribution" in js
+    assert "Signal usability" in js
+    assert "Mock data" not in js
+    assert "Fake data" not in js
+    assert "Mock data based on" not in js
+    assert "portfolio_bias_status" in js
+
+
+def test_macro_dashboard_js_has_mock_lag_comparison_metrics():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "lag_correlations" in js
+    assert "renderLagComparison" in js
+    assert "Lag comparison" in js
+    assert "method_primary" in js
+
+
 def test_macro_dashboard_css_has_overview_and_chart_classes():
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 
@@ -68,6 +115,29 @@ def test_macro_dashboard_css_has_overview_and_chart_classes():
     assert ".chart-wrap" in css
     assert ".chart-dot" not in css
     assert ".chart-tooltip" in css
+
+
+def test_macro_dashboard_css_has_mock_gdp_relationship_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".gdp-relationship" in css
+    assert ".gdp-card" in css
+    assert ".gdp-card.selected" in css
+    assert ".gdp-detail" in css
+    assert ".relationship-chart" in css
+    assert ".quad-bars" in css
+    assert ".confidence-high" in css
+    assert ".confidence-medium" in css
+    assert ".confidence-low" in css
+
+
+def test_macro_dashboard_css_has_lag_comparison_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".lag-table" in css
+    assert ".lag-row" in css
+    assert ".lag-row-primary" in css
+    assert ".lag-primary-pill" in css
 
 
 def test_macro_dashboard_chart_helpers_are_exercised_with_node():
