@@ -173,7 +173,9 @@
 
     grid.querySelectorAll(".market-card").forEach((button) => {
       button.addEventListener("click", () => {
-        state.selectedBenchmarkId = button.dataset.benchmarkId;
+        state.selectedBenchmarkId = state.selectedBenchmarkId === button.dataset.benchmarkId
+          ? null
+          : button.dataset.benchmarkId;
         renderOverview();
         renderDetail();
       });
@@ -262,7 +264,9 @@
 
     section.querySelectorAll(".gdp-card").forEach((button) => {
       button.addEventListener("click", () => {
-        state.selectedRelationshipId = button.dataset.relationshipId;
+        state.selectedRelationshipId = state.selectedRelationshipId === button.dataset.relationshipId
+          ? null
+          : button.dataset.relationshipId;
         renderGdpRelationshipOverview();
       });
     });

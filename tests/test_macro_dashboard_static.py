@@ -66,8 +66,7 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "chart-wrap" in js
     assert "chart-dot" not in js
     assert "chart-tooltip" in js
-    assert "state.selectedBenchmarkId = state.markets[0]?.benchmark_id || null" not in js
-    assert "|| state.markets[0]" not in js
+    assert "state.selectedBenchmarkId === button.dataset.benchmarkId" in js
     assert "detail.hidden = true" in js
     assert "detail.hidden = false" in js
 
@@ -90,6 +89,7 @@ def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
     assert "renderGdpRelationshipDetail" in js
     assert "state.selectedRelationshipId = state.gdpRelationships[0]?.relationship_id || null" not in js
     assert "|| state.gdpRelationships[0]" not in js
+    assert "state.selectedRelationshipId === button.dataset.relationshipId" in js
     assert '${state.selectedRelationshipId ? `<div class="gdp-detail" id="gdpRelationshipDetail"></div>` : ""}' in js
     assert "rolling_index_gdp_correlation" not in js
     assert "function fmtCorrelationPercent(" in js
