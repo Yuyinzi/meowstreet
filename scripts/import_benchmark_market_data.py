@@ -28,19 +28,35 @@ WORKBOOK_BENCHMARK_SHEETS = [
 ]
 
 
-def _float_or_none(value):
+def float_or_none(value):
     if value in (None, ""):
         return None
     return float(value)
+
+
+def cell_date_iso(value):
+    if hasattr(value, "date"):
+        return value.date().isoformat()
+    return str(value)
+
+
+def load_workbook_sheet(workbook_path, sheet_name, data_only=True):
+    path = Path(workbook_path)
+    if not path.exists():
+        raise ValueError(f"workbook does not exist: {path}")
+    workbook = openpyxl.load_workbook(path, data_only=data_only, read_only=True)
+    if sheet_name not in workbook.sheetnames:
+        raise ValueError(f"workbook sheet is missing: {sheet_name}")
+    return workbook[sheet_name]
 
 
 def normalize_price_rows(raw_rows):
     return [
         {
             "date": str(row["date"]),
-            "open": _float_or_none(row.get("open")),
-            "high": _float_or_none(row.get("high")),
-            "low": _float_or_none(row.get("low")),
+            "open": float_or_none(row.get("open")),
+            "high": float_or_none(row.get("high")),
+            "low": float_or_none(row.get("low")),
             "close": float(row["close"]),
         }
         for row in raw_rows
@@ -49,13 +65,7 @@ def normalize_price_rows(raw_rows):
 
 
 def parse_workbook_sheet(workbook_path, sheet_name):
-    path = Path(workbook_path)
-    if not path.exists():
-        raise ValueError(f"workbook does not exist: {path}")
-    workbook = openpyxl.load_workbook(path, data_only=False, read_only=True)
-    if sheet_name not in workbook.sheetnames:
-        raise ValueError(f"workbook sheet is missing: {sheet_name}")
-    sheet = workbook[sheet_name]
+    sheet = load_workbook_sheet(workbook_path, sheet_name, data_only=False)
     raw_rows = []
     for values in sheet.iter_rows(min_row=2, values_only=True):
         if values[0] is None:
@@ -70,7 +80,7 @@ def parse_workbook_sheet(workbook_path, sheet_name):
             close_value = values[1]
         raw_rows.append(
             {
-                "date": date_value.date().isoformat(),
+                "date": cell_date_iso(date_value),
                 "open": open_value,
                 "high": high_value if high_value is not None else close_value,
                 "low": low_value,

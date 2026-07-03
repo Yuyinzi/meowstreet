@@ -24,13 +24,19 @@ def _make_workbook(path, sheets_config):
 
 def test_parse_workbook_sheet_extracts_sp500_rows(tmp_path):
     workbook_path = tmp_path / "test.xlsx"
-    _make_workbook(workbook_path, [
-        ("S&P 500", [
-            (datetime.date(2019, 12, 31), 99.0, 100.0, 98.5, 99.5),
-            (datetime.date(2020, 1, 2), 100.0, 101.0, 99.0, 100.5),
-            (datetime.date(2020, 1, 3), 100.5, 102.0, 100.0, 101.5),
-        ]),
-    ])
+    _make_workbook(
+        workbook_path,
+        [
+            (
+                "S&P 500",
+                [
+                    (datetime.date(2019, 12, 31), 99.0, 100.0, 98.5, 99.5),
+                    (datetime.date(2020, 1, 2), 100.0, 101.0, 99.0, 100.5),
+                    (datetime.date(2020, 1, 3), 100.5, 102.0, 100.0, 101.5),
+                ],
+            ),
+        ],
+    )
 
     rows = import_benchmark_market_data.parse_workbook_sheet(workbook_path, "S&P 500")
 
@@ -68,18 +74,27 @@ def test_normalize_import_rows_supports_future_source_adapters():
 def test_import_workbook_saves_configured_benchmarks(tmp_path):
     con = benchmark_market_data.connect(tmp_path / "benchmark_market_data.sqlite")
     workbook_path = tmp_path / "test.xlsx"
-    _make_workbook(workbook_path, [
-        ("S&P 500", [
-            (datetime.date(2019, 12, 31), 99.0, 100.0, 98.5, 99.5),
-            (datetime.date(2020, 1, 2), 100.0, 101.0, 99.0, 100.5),
-            (datetime.date(2020, 1, 3), 100.5, 102.0, 100.0, 101.5),
-        ]),
-        ("Nasdaq 100", [
-            (datetime.date(2019, 12, 31), 199.0),
-            (datetime.date(2020, 1, 2), 200.0),
-            (datetime.date(2020, 1, 3), 201.0),
-        ]),
-    ])
+    _make_workbook(
+        workbook_path,
+        [
+            (
+                "S&P 500",
+                [
+                    (datetime.date(2019, 12, 31), 99.0, 100.0, 98.5, 99.5),
+                    (datetime.date(2020, 1, 2), 100.0, 101.0, 99.0, 100.5),
+                    (datetime.date(2020, 1, 3), 100.5, 102.0, 100.0, 101.5),
+                ],
+            ),
+            (
+                "Nasdaq 100",
+                [
+                    (datetime.date(2019, 12, 31), 199.0),
+                    (datetime.date(2020, 1, 2), 200.0),
+                    (datetime.date(2020, 1, 3), 201.0),
+                ],
+            ),
+        ],
+    )
 
     inserted, errors = import_benchmark_market_data.import_workbook(con, workbook_path)
 
@@ -93,3 +108,28 @@ def test_import_script_owns_workbook_sheet_mapping():
     config = import_benchmark_market_data.WORKBOOK_BENCHMARK_SHEETS[0]
 
     assert config == {"benchmark_id": "us_sp500", "sheet": "S&P 500"}
+
+
+def test_workbook_helpers_normalize_excel_dates_and_numbers(tmp_path):
+    workbook_path = tmp_path / "test.xlsx"
+    _make_workbook(
+        workbook_path,
+        [
+            (
+                "Sheet1",
+                [
+                    ("Date", "Value"),
+                    (datetime.datetime(2020, 1, 2, 0, 0), "10.5"),
+                ],
+            ),
+        ],
+    )
+
+    sheet = import_benchmark_market_data.load_workbook_sheet(workbook_path, "Sheet1")
+
+    assert (
+        import_benchmark_market_data.cell_date_iso(sheet.cell(2, 1).value)
+        == "2020-01-02"
+    )
+    assert import_benchmark_market_data.float_or_none(sheet.cell(2, 2).value) == 10.5
+    assert import_benchmark_market_data.float_or_none("") is None
