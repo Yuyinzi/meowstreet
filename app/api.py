@@ -6,9 +6,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import tool_runner, workflow_engine
-from app.db import benchmark_market_data
+from app.db import benchmark_market_data, gdp_market_relationships
 from app.tools import benchmark_market_data as benchmark_market_data_tool
-from app.tools import market_phase
+from app.tools import gdp_market_relationship, market_phase
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
@@ -118,3 +118,46 @@ def macro_dashboard_market_phase_refresh(benchmark_id):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return results[0]
+
+
+@app.get("/api/macro-dashboard/gdp-relationships")
+def macro_dashboard_gdp_relationships():
+    con = gdp_market_relationships.connect()
+    try:
+        return gdp_market_relationship.build_overview_payload(
+            gdp_market_relationships.load_relationships(con),
+            lambda relationship_id: gdp_market_relationships.load_lag_rows(
+                con, relationship_id
+            ),
+            lambda relationship_id: gdp_market_relationships.load_quad_rows(
+                con, relationship_id
+            ),
+        )
+    finally:
+        con.close()
+
+
+@app.get("/api/macro-dashboard/gdp-relationships/{relationship_id}")
+def macro_dashboard_gdp_relationship_detail(relationship_id):
+    con = gdp_market_relationships.connect()
+    try:
+        relationships = gdp_market_relationships.load_relationships(con)
+        relationship = next(
+            (
+                item
+                for item in relationships
+                if item["relationship_id"] == relationship_id
+            ),
+            None,
+        )
+        if not relationship:
+            raise ValueError(f"relationship is unknown: {relationship_id}")
+        return gdp_market_relationship.build_detail_payload(
+            relationship,
+            gdp_market_relationships.load_lag_rows(con, relationship_id),
+            gdp_market_relationships.load_quad_rows(con, relationship_id),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        con.close()
