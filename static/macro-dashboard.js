@@ -9,13 +9,17 @@
   };
 
   const CHART_WIDTH = 960;
-  const CHART_HEIGHT = 360;
+  const CHART_HEIGHT = 400;
   const MARGIN_LEFT = 50;
   const MARGIN_RIGHT = 50;
-  const MARGIN_BOTTOM = 58;
+  const MARGIN_TOP = 18;
+  const MARGIN_BOTTOM = 84;
+  const MARKET_X_LABEL_Y = 32;
+  const RELATIONSHIP_X_LABEL_Y = 36;
   const PLOT_RIGHT = CHART_WIDTH - MARGIN_RIGHT;
   const PLOT_WIDTH = PLOT_RIGHT - MARGIN_LEFT;
-  const PLOT_HEIGHT = CHART_HEIGHT - MARGIN_BOTTOM;
+  const PLOT_BOTTOM = CHART_HEIGHT - MARGIN_BOTTOM;
+  const PLOT_HEIGHT = PLOT_BOTTOM - MARGIN_TOP;
   const Y_AXIS_TICK_COUNT = 9;
   const X_AXIS_TICK_COUNT = 10;
 
@@ -24,10 +28,9 @@
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     state.gdpRelationships = payload.relationships || [];
-    state.selectedRelationshipId = state.gdpRelationships[0]?.relationship_id || null;
+    state.selectedRelationshipId = null;
     renderGdpRelationshipOverview();
   }
-
 
   async function loadGdpRelationshipDetail(relationshipId) {
     if (state.gdpRelationshipDetailsById[relationshipId]) {
@@ -66,19 +69,65 @@
     return `${fmtNumber(value)}%`;
   }
 
+  function fmtCorrelationPercent(value) {
+    if (value === null || value === undefined) return "n/a";
+    return fmtPercent(value * 100);
+  }
+
+  function fmtDate(value) {
+    return value || "n/a";
+  }
+
+  function lineLabel(labels, key) {
+    return labels?.[key] || key;
+  }
+
+  function signalUsabilityMeta(value) {
+    const text = String(value ?? "");
+    if (text.includes("usable with caution")) {
+      return { label: "caution", className: "signal-caution" };
+    }
+    if (text.includes("usable")) {
+      return { label: "usable", className: "signal-usable" };
+    }
+    if (text.includes("weak")) {
+      return { label: "weak", className: "signal-weak" };
+    }
+    if (!text) {
+      return { label: "n/a", className: "signal-neutral" };
+    }
+    return { label: "not usable", className: "signal-neutral" };
+  }
+
+  function portfolioBiasMeta(value) {
+    const text = String(value ?? "");
+    const normalized = text.toLowerCase();
+    if (normalized.includes("long")) {
+      return { label: "long bias", className: "signal-usable" };
+    }
+    if (normalized.includes("short") || normalized.includes("defensive")) {
+      return { label: "defensive", className: "signal-weak" };
+    }
+    if (normalized.includes("forecast")) {
+      return { label: "requires GDP forecast", className: "signal-caution" };
+    }
+    if (!text) {
+      return { label: "n/a", className: "signal-neutral" };
+    }
+    return { label: text, className: "signal-caution" };
+  }
+
   function statusClass(market) {
     return market.latest.market_phase_status === "bear_market" ? "bear" : "bull";
   }
 
   function selectedMarket() {
     return state.markets.find((market) => market.benchmark_id === state.selectedBenchmarkId)
-      || state.markets[0]
       || null;
   }
 
   function selectedRelationship() {
     return state.gdpRelationships.find((card) => card.relationship_id === state.selectedRelationshipId)
-      || state.gdpRelationships[0]
       || null;
   }
 
@@ -88,7 +137,17 @@
   }
 
   function yAt(value, scale) {
-    return scale.height - ((value - scale.min) / scale.range) * scale.height;
+    return MARGIN_TOP + scale.height - ((value - scale.min) / scale.range) * scale.height;
+  }
+
+  function yTickLabelY(y) {
+    if (y >= PLOT_BOTTOM - 1) return -8;
+    if (y <= MARGIN_TOP + 1) return 12;
+    return 4;
+  }
+
+  function visibleYAxisTicks(ticks, scale) {
+    return ticks.filter((value) => yAt(value, scale) < PLOT_BOTTOM - 1);
   }
 
   function renderOverview() {
@@ -168,7 +227,6 @@
     section.innerHTML = `
       <div class="relationship-head">
         <div>
-          <p class="eyebrow">Method Video 03 workflow data</p>
           <h2>GDP / Market Relationship</h2>
           <p class="subtitle">GDP, index correlation, and quadnomial context.</p>
         </div>
@@ -176,21 +234,30 @@
       <div class="gdp-grid">
         ${state.gdpRelationships.map((card) => {
           const selected = card.relationship_id === current?.relationship_id ? " selected" : "";
+          const signal = signalUsabilityMeta(card.relationship_signal_usability);
           return `
-            <button class="gdp-card ${confidenceClass(card)}${selected}" type="button" data-relationship-id="${escapeHtml(card.relationship_id)}">
-              <span class="market-region">${escapeHtml(card.region)}</span>
-              <strong>${escapeHtml(card.title)}</strong>
-              <span class="market-meta">${escapeHtml(card.economy)} | ${escapeHtml(card.primary_lag_months)} months lag</span>
-              <span class="relationship-case">${escapeHtml(card.latest?.quadnomial_current_case)}</span>
-              <span class="market-meta">Primary lag ${escapeHtml(card.primary_lag_months)} months</span>
-              <span class="market-meta">Correlation ${escapeHtml(fmtNumber(card.latest?.rolling_index_gdp_correlation))}</span>
-              <span class="market-meta">Same direction ${escapeHtml(fmtPercent(card.same_direction_pct))}</span>
-              <span class="relationship-bias">${escapeHtml(card.relationship_signal_usability)}</span>
+            <button class="gdp-card${selected}" type="button" data-relationship-id="${escapeHtml(card.relationship_id)}">
+              <div class="gdp-card-topline">
+                <span class="market-region">${escapeHtml(card.region)}</span>
+                <span class="gdp-card-confidence ${confidenceClass(card)}">${escapeHtml(card.macro_relationship_confidence)} confidence</span>
+              </div>
+              <strong class="gdp-card-title">${escapeHtml(card.title)}</strong>
+              <span class="gdp-card-subtitle">${escapeHtml(card.economy)} · primary lag ${escapeHtml(card.primary_lag_months)}M</span>
+              <div class="gdp-card-summary">
+                <span>
+                  <small>Signal</small>
+                  <strong class="signal-status ${signal.className}" title="${escapeHtml(card.relationship_signal_usability)}">${escapeHtml(signal.label)}</strong>
+                </span>
+                <span>
+                  <small>Avg 10Y corr</small>
+                  <strong>${escapeHtml(fmtCorrelationPercent(card.latest?.average_10y_correlation))}</strong>
+                </span>
+              </div>
             </button>
           `;
         }).join("")}
       </div>
-      <div class="gdp-detail" id="gdpRelationshipDetail"></div>
+      ${state.selectedRelationshipId ? `<div class="gdp-detail" id="gdpRelationshipDetail"></div>` : ""}
     `;
 
     section.querySelectorAll(".gdp-card").forEach((button) => {
@@ -203,35 +270,193 @@
     renderGdpRelationshipDetail();
   }
 
-  function chartPoints(series, key, min, max, width, height) {
-    const range = max - min || 1;
-    return series.map((point, index) => {
-      const x = series.length <= 1 ? width / 2 : (index / (series.length - 1)) * width;
-      const y = height - ((point[key] - min) / range) * height;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    }).join(" ");
+  function relationshipValues(series, keys) {
+    return series.flatMap((point) => keys.map((key) => point[key])).filter((value) => value !== null && value !== undefined);
   }
 
-  function renderMiniLineChart(title, series, keys) {
-    const values = series.flatMap((point) => keys.map((key) => point[key]));
+  function relationshipScale(series, keys) {
+    const values = relationshipValues(series, keys);
+    if (!values.length) return null;
     const min = Math.min(...values);
     const max = Math.max(...values);
-    const width = 360;
-    const height = 150;
+    return { min, max, range: max - min || 1, height: PLOT_HEIGHT };
+  }
+
+  function relationshipYAxisTicks(series, keys, count) {
+    const values = relationshipValues(series, keys);
+    if (!values.length) return [];
+    return niceTicks(Math.min(...values), Math.max(...values), count);
+  }
+
+  function relationshipXAxisTicks(series) {
+    return xAxisTicks(series);
+  }
+
+  function renderRelationshipXAxisTicks(series) {
+    const ticks = xAxisTicks(series);
+    return ticks
+      .map((tick) => `
+        <g class="chart-tick relationship-chart-tick" transform="translate(${tick.x.toFixed(2)} ${PLOT_BOTTOM})">
+          <line y2="8"></line>
+          <text class="chart-x-label" y="${RELATIONSHIP_X_LABEL_Y}" text-anchor="middle" x="0" transform="rotate(-35 0 ${RELATIONSHIP_X_LABEL_Y})">${escapeHtml(fmtMonthYear(tick.date))}</text>
+        </g>
+      `)
+      .join("");
+  }
+
+  function renderRelationshipYAxisAndGrid(ticks, scale, formatValue = fmtNumber) {
+    const gridAndTicks = visibleYAxisTicks(ticks, scale).map((value) => {
+      const yValue = yAt(value, scale);
+      const y = yValue.toFixed(2);
+      return `
+        <g class="chart-grid">
+          <line x1="${MARGIN_LEFT}" y1="${y}" x2="${PLOT_RIGHT}" y2="${y}"></line>
+        </g>
+        <g class="chart-y-tick" transform="translate(${MARGIN_LEFT} ${y})">
+          <line x1="-6" y1="0" x2="0" y2="0"></line>
+          <text x="-10" y="${yTickLabelY(yValue)}">${escapeHtml(formatValue(value))}</text>
+        </g>
+      `;
+    }).join("");
+
     return `
-      <div class="relationship-chart">
+      <g class="chart-axis">
+        <line x1="${MARGIN_LEFT}" y1="${MARGIN_TOP}" x2="${MARGIN_LEFT}" y2="${PLOT_BOTTOM}"></line>
+        <line x1="${MARGIN_LEFT}" y1="${PLOT_BOTTOM}" x2="${PLOT_RIGHT}" y2="${PLOT_BOTTOM}"></line>
+      </g>
+      ${gridAndTicks}
+    `;
+  }
+
+  function renderRelationshipLineChart(title, series, keys, labels = {}, options = {}) {
+    const wideClass = options.wide ? " relationship-chart-wide" : "";
+    if (!series || !series.length) {
+      return `
+        <div class="relationship-chart${wideClass}">
+          <div class="relationship-chart-head">
+            <h3>${escapeHtml(title)}</h3>
+            <span>No data</span>
+          </div>
+          <p class="status">No chart data available.</p>
+        </div>
+      `;
+    }
+    const values = relationshipValues(series, keys);
+    if (!values.length) {
+      return `
+        <div class="relationship-chart${wideClass}">
+          <div class="relationship-chart-head">
+            <h3>${escapeHtml(title)}</h3>
+            <span>No data</span>
+          </div>
+          <p class="status">No chart data available.</p>
+        </div>
+      `;
+    }
+    const scale = relationshipScale(series, keys);
+    const valueFormatter = options.valueFormatter || fmtNumber;
+    const firstLabel = series[0].label || series[0].date;
+    const lastLabel = series[series.length - 1].label || series[series.length - 1].date;
+    return `
+      <div class="relationship-chart${wideClass}">
         <div class="relationship-chart-head">
           <h3>${escapeHtml(title)}</h3>
-          <span>${escapeHtml(series[0].label)}-${escapeHtml(series[series.length - 1].label)}</span>
+          <span>${escapeHtml(fmtMonthYear(firstLabel))} - ${escapeHtml(fmtMonthYear(lastLabel))}</span>
         </div>
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
-          <line class="relationship-zero" x1="0" y1="${(height - ((0 - min) / ((max - min) || 1)) * height).toFixed(2)}" x2="${width}" y2="${(height - ((0 - min) / ((max - min) || 1)) * height).toFixed(2)}"></line>
+        <div class="relationship-legend">
           ${keys.map((key, index) => `
-            <polyline class="relationship-line relationship-line-${index}" points="${escapeHtml(chartPoints(series, key, min, max, width, height))}"></polyline>
+            <span><i class="relationship-line-key relationship-line-key-${index}"></i>${escapeHtml(lineLabel(labels, key))}</span>
           `).join("")}
-        </svg>
+        </div>
+        <div class="chart-wrap relationship-chart-wrap">
+          <svg class="relationship-chart-svg" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${escapeHtml(title)}">
+            ${renderRelationshipYAxisAndGrid(relationshipYAxisTicks(series, keys, Y_AXIS_TICK_COUNT), scale, valueFormatter)}
+            ${scale.min <= 0 && scale.max >= 0 ? `<line class="relationship-zero" x1="${MARGIN_LEFT}" y1="${yAt(0, scale).toFixed(2)}" x2="${PLOT_RIGHT}" y2="${yAt(0, scale).toFixed(2)}"></line>` : ""}
+            ${keys.flatMap((key, index) => (
+              chartSegments(series, key, scale).map((points) => `<polyline class="relationship-line relationship-line-${index}" points="${escapeHtml(points)}"></polyline>`)
+            )).join("")}
+            ${renderRelationshipXAxisTicks(series)}
+          </svg>
+          <div class="chart-tooltip" aria-hidden="true"></div>
+        </div>
       </div>
     `;
+  }
+
+  function attachRelationshipChartTooltip(svg, tooltip, series, keys, labels = {}, options = {}) {
+    if (!svg || !tooltip || !series.length) return;
+    const wrap = svg.parentElement;
+    const valueFormatter = options.valueFormatter || fmtNumber;
+    let lastIndex = -1;
+    let tooltipRect = null;
+
+    function show(index, clientX, clientY) {
+      const point = series[index];
+      if (index !== lastIndex) {
+        const rows = keys.map((key) => {
+          const value = point[key];
+          const text = value === null || value === undefined ? "n/a" : valueFormatter(value);
+          return `
+            <div class="chart-tooltip-row">
+              <span>${escapeHtml(lineLabel(labels, key))}</span>
+              <strong>${escapeHtml(text)}</strong>
+            </div>
+          `;
+        }).join("");
+        tooltip.innerHTML = `
+          <div><strong>${escapeHtml(fmtMonthYear(point.date))}</strong></div>
+          ${rows}
+        `;
+        lastIndex = index;
+        tooltip.style.left = "-9999px";
+        tooltip.style.top = "-9999px";
+        tooltip.classList.add("visible");
+        tooltipRect = tooltip.getBoundingClientRect();
+      }
+      const wrapRect = wrap.getBoundingClientRect();
+      let left = clientX - wrapRect.left + 12;
+      let top = clientY - wrapRect.top - tooltipRect.height - 12;
+      if (left + tooltipRect.width > wrapRect.width) {
+        left = wrapRect.width - tooltipRect.width - 8;
+      }
+      if (left < 0) {
+        left = 8;
+      }
+      if (top < 0) {
+        top = clientY - wrapRect.top + 16;
+      }
+      if (top + tooltipRect.height > wrapRect.height) {
+        top = wrapRect.height - tooltipRect.height - 8;
+      }
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
+    }
+
+    function hide() {
+      tooltip.classList.remove("visible");
+      lastIndex = -1;
+      tooltipRect = null;
+    }
+
+    svg.addEventListener("mousemove", (event) => {
+      const rect = svg.getBoundingClientRect();
+      const scaleX = CHART_WIDTH / rect.width;
+      const x = (event.clientX - rect.left) * scaleX - MARGIN_LEFT;
+      const ratio = Math.max(0, Math.min(1, x / PLOT_WIDTH));
+      const index = Math.min(
+        series.length - 1,
+        Math.max(0, Math.round(ratio * (series.length - 1)))
+      );
+      show(index, event.clientX, event.clientY);
+    });
+
+    svg.addEventListener("mouseleave", hide);
+
+    svg.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        hide();
+      }
+    });
   }
 
   function renderQuadBars(relationship) {
@@ -239,7 +464,7 @@
       <div class="relationship-chart">
         <div class="relationship-chart-head">
           <h3>Quadnomial distribution</h3>
-          <span>Historical data</span>
+          <span>${escapeHtml(relationship.primary_lag_months)}M lag rate</span>
         </div>
         <div class="quad-bars">
           ${relationship.quadnomial_distribution.map((item) => `
@@ -265,13 +490,53 @@
           ${relationship.lag_correlations.map((lag) => `
             <div class="lag-row ${lag.method_primary ? "lag-row-primary" : ""}">
               <span>${escapeHtml(lag.label)}</span>
-              <strong>${escapeHtml(fmtNumber(lag.value))}</strong>
+              <strong>${escapeHtml(fmtCorrelationPercent(lag.value))}</strong>
               ${lag.method_primary ? '<em class="lag-primary-pill">Method primary</em>' : "<em></em>"}
             </div>
           `).join("")}
         </div>
       </div>
     `;
+  }
+
+  function renderLagCorrelationComparison(payload) {
+    const keys = Object.keys(payload.lag_correlation_labels || {});
+    return renderRelationshipLineChart(
+      "Rolling 10Y correlations by lag",
+      payload.lag_correlation_series,
+      keys,
+      payload.lag_correlation_labels || {},
+      {
+        wide: true,
+        valueFormatter: fmtCorrelationPercent,
+      }
+    );
+  }
+
+  function renderYoyComparison(payload) {
+    return renderRelationshipLineChart(
+      "Index YoY vs GDP YoY",
+      payload.yoy_series,
+      ["index", "gdp"],
+      { index: "Index YoY", gdp: "GDP YoY" },
+      {
+        wide: true,
+        valueFormatter: (value) => `${fmtNumber(value)}%`,
+      }
+    );
+  }
+
+  function renderPrimaryCorrelationComparison(payload) {
+    return renderRelationshipLineChart(
+      "Rolling correlation",
+      payload.correlation_series,
+      ["value"],
+      { value: `${payload.primary_lag_months}M lag rolling correlation` },
+      {
+        wide: true,
+        valueFormatter: fmtCorrelationPercent,
+      }
+    );
   }
 
   function renderGdpRelationshipDetail() {
@@ -284,6 +549,8 @@
       .then((payload) => {
         if (state.selectedRelationshipId !== card.relationship_id) return;
         const latest = payload.latest || {};
+        const signal = signalUsabilityMeta(payload.relationship_signal_usability);
+        const portfolioBias = portfolioBiasMeta(payload.portfolio_bias_status);
         const indexYoy = latest.index_yoy !== null && latest.index_yoy !== undefined
           ? (latest.index_yoy * 100) : null;
         const gdpYoy = latest.gdp_yoy !== null && latest.gdp_yoy !== undefined
@@ -297,28 +564,66 @@
             <span class="phase-pill ${confidenceClass(card)}">${escapeHtml(card.macro_relationship_confidence)} confidence</span>
           </div>
           <div class="metric-strip">
-            <div><span>Index YoY</span><strong>${escapeHtml(fmtPercent(indexYoy))}</strong></div>
-            <div><span>GDP YoY</span><strong>${escapeHtml(fmtPercent(gdpYoy))}</strong></div>
-            <div><span>Rolling Correlation</span><strong>${escapeHtml(fmtNumber(latest.rolling_index_gdp_correlation))}</strong></div>
-            <div><span>Same Direction</span><strong>${escapeHtml(fmtPercent(payload.same_direction_pct))}</strong></div>
-            <div><span>Signal usability</span><strong>${escapeHtml(payload.relationship_signal_usability)}</strong></div>
-            <div><span>Portfolio Bias</span><strong>${escapeHtml(payload.portfolio_bias_status)}</strong></div>
+            <div><span>Index YoY</span><strong>${escapeHtml(fmtPercent(indexYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
+            <div><span>GDP YoY</span><strong>${escapeHtml(fmtPercent(gdpYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
+            <div><span>Average 10Y Correlation</span><strong>${escapeHtml(fmtCorrelationPercent(latest.average_10y_correlation))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag average</small></div>
+            <div><span>Same Direction</span><strong>${escapeHtml(fmtPercent(payload.same_direction_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B</small></div>
+            <div><span>Method Coverage</span><strong>${escapeHtml(fmtPercent(payload.method_explainable_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B + C</small></div>
+            <div><span>Current Case</span><strong>${escapeHtml(latest.quadnomial_current_plain_label || latest.quadnomial_current_case)}</strong><small class="metric-context">Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}</small></div>
+            <div><span>Signal usability</span><strong class="signal-status ${signal.className}" title="${escapeHtml(payload.relationship_signal_usability)}">${escapeHtml(signal.label)}</strong></div>
+            <div><span>Portfolio Bias</span><strong class="signal-status ${portfolioBias.className}" title="${escapeHtml(payload.portfolio_bias_status)}">${escapeHtml(portfolioBias.label)}</strong></div>
+          </div>
+          <div class="relationship-chart-grid relationship-chart-grid-pre-method">
+            ${renderQuadBars(payload)}
           </div>
           <section class="method-note" aria-label="GDP relationship method">
             <h3>Method</h3>
             <ul class="method-formula-list">
               <li>Index YoY vs GDP YoY compares market direction with economic growth direction.</li>
-              <li>Rolling correlation checks whether the historical relationship is stable or breaking down.</li>
-              <li>Quadnomial distribution buckets both-up, both-down, and opposite-direction cases.</li>
+              <li>Rolling correlation checks whether the current relationship is stable or breaking down.</li>
+              <li>Usability is strong when the primary-lag average 10Y correlation is at least 40% and the same-direction rate is at least 60%. It is caution when correlation is at least 25% and same-direction rate is at least 55%; below those levels, the GDP relationship is weak.</li>
+              <li>The confidence badge uses the same evidence: high when both strong thresholds are met, medium when only the caution thresholds are met, and low when the relationship is below those levels or lacks enough data.</li>
+              <li>Quadnomial distribution defines A as index down/GDP down, B as index up/GDP up, C as index down/GDP up, and D as index up/GDP down.</li>
+              <li>Method coverage combines A, B, and C for the primary 6M lag: same-direction GDP confirmation plus the profit-taking case where GDP rises but the index falls. It is not used as relationship confidence.</li>
             </ul>
           </section>
           <div class="relationship-chart-grid">
-            ${renderMiniLineChart("Index YoY vs GDP YoY", payload.yoy_series, ["index", "gdp"])}
-            ${renderMiniLineChart("Rolling correlation", payload.correlation_series, ["value"])}
-            ${renderLagComparison(payload)}
-            ${renderQuadBars(payload)}
+            ${renderYoyComparison(payload)}
+            ${renderPrimaryCorrelationComparison(payload)}
+            ${renderLagCorrelationComparison(payload)}
           </div>
         `;
+        const charts = detail.querySelectorAll(".relationship-chart-wrap");
+        const chartSeries = [
+          {
+            series: payload.yoy_series,
+            keys: ["index", "gdp"],
+            labels: { index: "Index YoY", gdp: "GDP YoY" },
+            valueFormatter: (value) => `${fmtNumber(value)}%`,
+          },
+          {
+            series: payload.correlation_series,
+            keys: ["value"],
+            labels: { value: `${payload.primary_lag_months}M lag rolling correlation` },
+            valueFormatter: fmtCorrelationPercent,
+          },
+          {
+            series: payload.lag_correlation_series,
+            keys: Object.keys(payload.lag_correlation_labels || {}),
+            labels: payload.lag_correlation_labels || {},
+            valueFormatter: fmtCorrelationPercent,
+          },
+        ];
+        charts.forEach((wrap, index) => {
+          attachRelationshipChartTooltip(
+            wrap.querySelector(".relationship-chart-svg"),
+            wrap.querySelector(".chart-tooltip"),
+            chartSeries[index].series,
+            chartSeries[index].keys,
+            chartSeries[index].labels,
+            { valueFormatter: chartSeries[index].valueFormatter }
+          );
+        });
       })
       .catch((error) => {
         if (state.selectedRelationshipId !== card.relationship_id) return;
@@ -364,23 +669,24 @@
   }
 
   function renderYAxisAndGrid(ticks, scale) {
-    const gridAndTicks = ticks.map((value) => {
-      const y = yAt(value, scale).toFixed(2);
+    const gridAndTicks = visibleYAxisTicks(ticks, scale).map((value) => {
+      const yValue = yAt(value, scale);
+      const y = yValue.toFixed(2);
       return `
         <g class="chart-grid">
           <line x1="${MARGIN_LEFT}" y1="${y}" x2="${PLOT_RIGHT}" y2="${y}"></line>
         </g>
         <g class="chart-y-tick" transform="translate(${MARGIN_LEFT} ${y})">
           <line x1="-6" y1="0" x2="0" y2="0"></line>
-          <text x="-10" y="4">${escapeHtml(fmtNumber(value))}</text>
+          <text x="-10" y="${yTickLabelY(yValue)}">${escapeHtml(fmtNumber(value))}</text>
         </g>
       `;
     }).join("");
 
     return `
       <g class="chart-axis">
-        <line x1="${MARGIN_LEFT}" y1="0" x2="${MARGIN_LEFT}" y2="${PLOT_HEIGHT}"></line>
-        <line x1="${MARGIN_LEFT}" y1="${PLOT_HEIGHT}" x2="${PLOT_RIGHT}" y2="${PLOT_HEIGHT}"></line>
+        <line x1="${MARGIN_LEFT}" y1="${MARGIN_TOP}" x2="${MARGIN_LEFT}" y2="${PLOT_BOTTOM}"></line>
+        <line x1="${MARGIN_LEFT}" y1="${PLOT_BOTTOM}" x2="${PLOT_RIGHT}" y2="${PLOT_BOTTOM}"></line>
       </g>
       ${gridAndTicks}
     `;
@@ -518,9 +824,9 @@
     return ticks
       .map((tick, index) => {
         return `
-          <g class="chart-tick" transform="translate(${tick.x.toFixed(2)} ${PLOT_HEIGHT})">
+          <g class="chart-tick" transform="translate(${tick.x.toFixed(2)} ${PLOT_BOTTOM})">
             <line y2="8"></line>
-            <text class="chart-x-label" y="22" text-anchor="middle" x="0" transform="rotate(-35 0 22)">${escapeHtml(fmtMonthYear(tick.date))}</text>
+            <text class="chart-x-label" y="${MARKET_X_LABEL_Y}" text-anchor="middle" x="0" transform="rotate(-35 0 ${MARKET_X_LABEL_Y})">${escapeHtml(fmtMonthYear(tick.date))}</text>
           </g>
         `;
       })
@@ -624,8 +930,10 @@
     const market = selectedMarket();
     if (!market) {
       detail.innerHTML = "";
+      detail.hidden = true;
       return;
     }
+    detail.hidden = false;
 
     detail.innerHTML = `
       <div class="detail-head">
@@ -680,7 +988,7 @@
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     state.markets = payload.markets || [];
-    state.selectedBenchmarkId = state.markets[0]?.benchmark_id || null;
+    state.selectedBenchmarkId = null;
     $("dashboardStatus").textContent = state.markets.length
       ? `${state.markets.length} benchmark markets loaded. Workbook-seeded data may be stale until refresh is added.`
       : "No benchmark market data found. Run scripts/import_benchmark_market_data.py.";
@@ -699,8 +1007,14 @@
     window.__macroDashboardTestHooks = {
       X_AXIS_TICK_COUNT,
       Y_AXIS_TICK_COUNT,
+      attachRelationshipChartTooltip,
       fmtMonthYear,
       niceTicks,
+      relationshipXAxisTicks,
+      relationshipYAxisTicks,
+      renderRelationshipLineChart,
+      renderRelationshipXAxisTicks,
+      renderRelationshipYAxisAndGrid,
       xAt,
       xAxisTicks,
       renderXAxisTicks,

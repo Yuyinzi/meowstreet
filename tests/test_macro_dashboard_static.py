@@ -36,6 +36,14 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "bull_market_index" in js
     assert "bear_market_index" in js
     assert "CHART_WIDTH" in js
+    assert "const CHART_HEIGHT = 400;" in js
+    assert "const MARGIN_TOP = 18;" in js
+    assert "const MARGIN_BOTTOM = 84;" in js
+    assert "const MARKET_X_LABEL_Y = 32;" in js
+    assert "const RELATIONSHIP_X_LABEL_Y = 36;" in js
+    assert "const PLOT_BOTTOM = CHART_HEIGHT - MARGIN_BOTTOM;" in js
+    assert "function yTickLabelY(" in js
+    assert "function visibleYAxisTicks(" in js
     assert "PLOT_WIDTH" in js
     assert "PLOT_HEIGHT" in js
     assert "function xAt(" in js
@@ -43,6 +51,11 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "function niceTicks(" in js
     assert "function yAxisTicks(" in js
     assert "function renderYAxisAndGrid(" in js
+    assert "function relationshipYAxisTicks(" in js
+    assert "function relationshipXAxisTicks(" in js
+    assert "function renderRelationshipYAxisAndGrid(" in js
+    assert "function renderRelationshipLineChart(" in js
+    assert "function attachRelationshipChartTooltip(" in js
     assert "function fmtMonthYear(" in js
     assert "chart-axis" in js
     assert "chart-grid" in js
@@ -53,6 +66,10 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "chart-wrap" in js
     assert "chart-dot" not in js
     assert "chart-tooltip" in js
+    assert "state.selectedBenchmarkId = state.markets[0]?.benchmark_id || null" not in js
+    assert "|| state.markets[0]" not in js
+    assert "detail.hidden = true" in js
+    assert "detail.hidden = false" in js
 
 
 def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
@@ -67,26 +84,88 @@ def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
     assert "loadGdpRelationshipDetail" in js
     assert "MOCK_GDP_RELATIONSHIPS" not in js
     assert "Portfolio bias requires GDP forecast" not in js
+    assert "Method Video 03 workflow data" not in js
     assert "GDP / Market Relationship" in js
     assert "renderGdpRelationshipOverview" in js
     assert "renderGdpRelationshipDetail" in js
-    assert "rolling_index_gdp_correlation" in js
+    assert "state.selectedRelationshipId = state.gdpRelationships[0]?.relationship_id || null" not in js
+    assert "|| state.gdpRelationships[0]" not in js
+    assert '${state.selectedRelationshipId ? `<div class="gdp-detail" id="gdpRelationshipDetail"></div>` : ""}' in js
+    assert "rolling_index_gdp_correlation" not in js
+    assert "function fmtCorrelationPercent(" in js
+    assert "fmtCorrelationPercent(card.latest?.rolling_index_gdp_correlation)" not in js
+    assert "fmtCorrelationPercent(card.latest?.average_10y_correlation)" in js
+    assert "fmtCorrelationPercent(latest.rolling_index_gdp_correlation)" not in js
+    assert "fmtCorrelationPercent(latest.average_10y_correlation)" in js
+    assert "valueFormatter: fmtCorrelationPercent" in js
     assert "same_direction_pct" in js
+    assert "method_explainable_pct" in js
     assert "macro_relationship_confidence" in js
     assert "relationship_signal_usability" in js
     assert "portfolio_bias_status" in js
+    assert "quadnomial_current_plain_label || latest.quadnomial_current_case" in js
+    assert "quadnomial_current_label || card.latest?.quadnomial_current_case" not in js
+    assert "gdp-card-topline" in js
+    assert "gdp-card-confidence" in js
+    assert "gdp-card-summary" in js
+    assert "gdp-card-metrics" not in js
+    assert "gdp-card-row" not in js
+    assert "signalUsabilityMeta" in js
+    assert "portfolioBiasMeta" in js
+    assert "signal-status" in js
+    assert "signal-usable" in js
+    assert "signal-caution" in js
+    assert "signal-weak" in js
+    assert 'return { label: "requires GDP forecast", className: "signal-caution" };' in js
+    assert "relationship-case" not in js
+    assert "relationship-bias" not in js
+    assert 'class="gdp-card${selected}"' in js
     assert "Index YoY vs GDP YoY" in js
+    assert "<span>Rolling Correlation</span>" not in js
     assert "Rolling correlation" in js
+    assert "Average 10Y Correlation" in js
+    assert "requires GDP forecast" in js
+    assert "requires GDP forcast" not in js
+    assert "Usability is strong when the primary-lag average 10Y correlation is at least 40%" in js
+    assert "The confidence badge uses the same evidence: high when both strong thresholds are met" in js
+    assert "If corr >= 0.4" not in js
+    assert "Rolling 10Y correlations by lag" in js
+    assert "lag_correlation_series" in js
+    assert "Object.keys(payload.lag_correlation_labels || {})" in js
+    assert "relationship-chart-wide" in js
+    assert "Y-axis: value" not in js
+    assert "X-axis: period" not in js
+    assert "Source:" not in js
+    assert "M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}" in js
+    assert "Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}" in js
+    assert "Derived from correlation and same-direction rate" not in js
+    assert "Requires future GDP forecast input" not in js
+    assert "relationship-legend" in js
+    assert "chart-axis" in js
+    assert "relationship-axis-labels" not in js
+    assert "Index YoY" in js
+    assert "GDP YoY" in js
+    assert "series[0].label || series[0].date" in js
     assert "Quadnomial distribution" in js
+    assert "Method Coverage" in js
+    assert "M lag A + B + C" in js
+    assert "M lag A + B" in js
+    assert "M lag rate" in js
+    assert "Quadnomial distribution defines A as index down/GDP down" in js
+    assert "Method coverage combines A, B, and C" in js
+    assert js.index("${renderQuadBars(payload)}") < js.index("${renderYoyComparison(payload)}")
+    assert js.index("relationship-chart-grid-pre-method") < js.index("method-note")
     assert "Signal usability" in js
     assert "Mock data" not in js
     assert "Fake data" not in js
     assert "Mock data based on" not in js
     assert "portfolio_bias_status" in js
     assert "Index YoY vs GDP YoY" in js
+    assert "<span>Rolling Correlation</span>" not in js
     assert "Rolling correlation" in js
     assert "Quadnomial distribution" in js
     assert "Signal usability" in js
+    assert "signal-neutral" in js
     assert "Mock data" not in js
     assert "Fake data" not in js
     assert "Mock data based on" not in js
@@ -123,8 +202,41 @@ def test_macro_dashboard_css_has_mock_gdp_relationship_styles():
     assert ".gdp-relationship" in css
     assert ".gdp-card" in css
     assert ".gdp-card.selected" in css
+    assert "grid-template-columns: repeat(auto-fit, minmax(220px, 280px));" in css
+    assert ".gdp-card-topline" in css
+    assert ".gdp-card-confidence" in css
+    assert ".gdp-card-summary" in css
+    assert ".gdp-card-summary strong.signal-usable" in css
+    assert ".gdp-card-summary strong.signal-caution" in css
+    assert ".gdp-card-summary strong.signal-weak" in css
+    assert ".gdp-card-metrics" not in css
+    assert ".gdp-card-row" not in css
+    assert ".relationship-case" not in css
+    assert ".relationship-bias" not in css
     assert ".gdp-detail" in css
     assert ".relationship-chart" in css
+    assert ".relationship-chart-grid-pre-method" in css
+    assert ".relationship-legend" in css
+    assert ".relationship-chart-wide" in css
+    assert ".chart-axis" in css
+    assert ".chart-grid" in css
+    assert ".chart-y-tick" in css
+    assert ".signal-status" in css
+    assert ".signal-status::before" not in css
+    assert "background: transparent;" in css
+    assert "text-transform: uppercase;" in css
+    assert ".metric-strip strong.signal-usable" in css
+    assert ".metric-strip strong.signal-caution" in css
+    assert ".metric-strip strong.signal-weak" in css
+    assert ".signal-usable" in css
+    assert ".signal-caution" in css
+    assert ".signal-weak" in css
+    assert ".signal-neutral" in css
+    assert ".relationship-line-4" in css
+    assert ".relationship-line-key-4" in css
+    assert ".metric-context" in css
+    assert "grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));" in css
+    assert ".metric-source" not in css
     assert ".quad-bars" in css
     assert ".confidence-high" in css
     assert ".confidence-medium" in css
@@ -170,6 +282,11 @@ def test_macro_dashboard_chart_helpers_are_exercised_with_node():
           { date: "2020-01-02", close: 90, bear_market_level: 80 },
           { date: "2020-01-03", close: 79, bear_market_level: 80 },
         ];
+        const relationshipSeries = [
+          { date: "2020-01-01", index: 4.5, gdp: -1.5, value: 0.17, lag_0: 0.17, lag_3: 0.16 },
+          { date: "2020-04-01", index: 5.0, gdp: null, value: 0.11, lag_0: 0.11, lag_3: null },
+          { date: "2020-07-01", index: 5.4, gdp: 2.3, value: -0.05, lag_0: -0.05, lag_3: -0.02 },
+        ];
         const longSeries = Array.from({ length: 60 }, (_, index) => ({
           date: `2020-${String(Math.floor(index / 28) + 1).padStart(2, "0")}-${String((index % 28) + 1).padStart(2, "0")}`,
           close: 100 + index,
@@ -186,6 +303,10 @@ def test_macro_dashboard_chart_helpers_are_exercised_with_node():
           longTickCount: hooks.xAxisTicks(longSeries).length,
           xAxisMarkup: hooks.renderXAxisTicks(series),
           yTicks: hooks.yAxisTicks(series, 9),
+          relationshipYTicks: hooks.relationshipYAxisTicks(relationshipSeries, ["index", "gdp"], 7),
+          relationshipXTicks: hooks.relationshipXAxisTicks(relationshipSeries),
+          relationshipMarkup: hooks.renderRelationshipLineChart("GDP / Market Relationship", relationshipSeries, ["index", "gdp"], { index: "Index YoY", gdp: "GDP YoY" }, { wide: true, valueFormatter: (value) => `${value}%` }),
+          lagMarkup: hooks.renderRelationshipLineChart("Rolling 10Y correlations by lag", relationshipSeries, ["lag_0", "lag_3"], { lag_0: "No lag", lag_3: "3M lag" }, { wide: true }),
         }));
         """
     )
@@ -209,8 +330,27 @@ def test_macro_dashboard_chart_helpers_are_exercised_with_node():
     assert 'class="chart-x-label chart-x-label-last"' not in payload["xAxisMarkup"]
     assert 'text-anchor="middle"' in payload["xAxisMarkup"]
     assert 'x="-18"' not in payload["xAxisMarkup"]
+    assert "translate(50.00 316)" in payload["xAxisMarkup"]
     assert payload["yTicks"][0] <= 79
     assert payload["yTicks"][-1] >= 100
+    assert payload["relationshipYTicks"][0] <= -1.5
+    assert payload["relationshipYTicks"][-1] >= 5.4
+    assert [tick["date"] for tick in payload["relationshipXTicks"]] == [
+        "2020-01-01",
+        "2020-04-01",
+        "2020-07-01",
+    ]
+    assert "relationship-chart-wide" in payload["relationshipMarkup"]
+    assert "chart-wrap" in payload["relationshipMarkup"]
+    assert "chart-tooltip" in payload["relationshipMarkup"]
+    assert 'y1="322.00"' not in payload["relationshipMarkup"]
+    assert payload["relationshipMarkup"].count('class="relationship-line relationship-line-0"') == 1
+    assert payload["relationshipMarkup"].count('class="relationship-line relationship-line-1"') == 2
+    assert "Index YoY" in payload["relationshipMarkup"]
+    assert "GDP YoY" in payload["relationshipMarkup"]
+    assert payload["lagMarkup"].count('class="relationship-line relationship-line-0"') == 1
+    assert payload["lagMarkup"].count('class="relationship-line relationship-line-1"') == 2
+    assert 'y="36"' in payload["relationshipMarkup"]
 
 
 def test_macro_dashboard_js_removes_dot_layer_and_keeps_mouse_tooltip():

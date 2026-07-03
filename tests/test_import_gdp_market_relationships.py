@@ -25,6 +25,12 @@ def make_workbook(path):
             "S&P500 YoY",
             "GDP YoY",
             "Rolling 10yr-Correlation: 6-MO LAG",
+            "S&P500 YoY",
+            "GDP YoY",
+            "Rolling 10yr-Correlation: 9-MO LAG",
+            "S&P500 YoY",
+            "GDP YoY",
+            "Rolling 10yr-Correlation: 12-MO LAG",
         ]
     )
     corr.append(
@@ -40,6 +46,12 @@ def make_workbook(path):
             None,
             None,
             "S&P 500 6-Month Lag",
+            None,
+            None,
+            "S&P 500 9-Month Lag",
+            None,
+            None,
+            "S&P 500 12-Month Lag",
             None,
         ]
     )
@@ -57,6 +69,12 @@ def make_workbook(path):
             0.2887,
             -0.0903,
             -0.0944,
+            0.3188,
+            -0.0903,
+            -0.1211,
+            0.3499,
+            -0.0903,
+            -0.1512,
         ]
     )
 
@@ -108,8 +126,8 @@ def test_parse_configured_relationship_extracts_lags_and_quad_rows(tmp_path):
 
     assert relationship["relationship_id"] == "us_sp500_gdp"
     assert relationship["primary_lag_months"] == 6
-    assert [row["lag_months"] for row in lag_rows] == [0, 3, 6]
-    assert lag_rows[-1]["rolling_correlation"] == -0.0944
+    assert [row["lag_months"] for row in lag_rows] == [0, 3, 6, 9, 12]
+    assert lag_rows[-1]["rolling_correlation"] == -0.1512
     assert quad_rows[0]["quad_case"] == "0,1"
 
 
@@ -125,7 +143,7 @@ def test_import_workbook_saves_relationship_data(tmp_path):
         configs=[import_gdp_market_relationships.GDP_RELATIONSHIP_SHEETS[0]],
     )
 
-    assert inserted["us_sp500_gdp"] == {"lag_rows": 3, "quad_rows": 1}
+    assert inserted["us_sp500_gdp"] == {"lag_rows": 5, "quad_rows": 1}
     assert errors == {}
     assert (
         gdp_market_relationships.load_relationships(con)[0]["relationship_id"]

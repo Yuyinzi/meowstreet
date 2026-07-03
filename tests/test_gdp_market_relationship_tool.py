@@ -42,6 +42,20 @@ def lag_rows():
             "gdp_yoy": -0.09,
             "rolling_correlation": -0.09,
         },
+        {
+            "date": "2020-06-30",
+            "lag_months": 9,
+            "index_yoy": 0.32,
+            "gdp_yoy": -0.09,
+            "rolling_correlation": -0.12,
+        },
+        {
+            "date": "2020-06-30",
+            "lag_months": 12,
+            "index_yoy": 0.35,
+            "gdp_yoy": -0.09,
+            "rolling_correlation": -0.15,
+        },
     ]
 
 
@@ -89,8 +103,12 @@ def test_build_relationship_overview_excludes_series():
     assert card["relationship_id"] == "us_sp500_gdp"
     assert card["latest"]["primary_lag_months"] == 6
     assert card["latest"]["rolling_index_gdp_correlation"] == -0.09
+    assert card["latest"]["average_10y_correlation"] == -0.09
     assert card["latest"]["quadnomial_current_case"] == "1,0"
+    assert card["latest"]["quadnomial_current_label"] == "D (INDEX UP / GDP DOWN)"
+    assert card["latest"]["quadnomial_current_plain_label"] == "INDEX UP / GDP DOWN"
     assert card["same_direction_pct"] == 50.0
+    assert card["method_explainable_pct"] == 75.0
     assert card["portfolio_bias_status"] == "Portfolio bias requires GDP forecast"
     assert "lag_series" not in card
     assert "quad_rows" not in card
@@ -104,10 +122,44 @@ def test_build_relationship_detail_includes_series():
     )
 
     assert payload["relationship_id"] == "us_sp500_gdp"
-    assert len(payload["lag_correlations"]) == 3
-    assert payload["lag_correlations"][-1]["method_primary"] is True
-    assert len(payload["lag_series"]) == 3
+    assert len(payload["lag_correlations"]) == 5
+    assert payload["lag_correlations"][2]["method_primary"] is True
+    assert payload["lag_correlations"][2]["label"] == "6M lag"
+    assert payload["lag_correlations"][2]["value"] == -0.09
+    assert len(payload["lag_series"]) == 5
+    assert payload["lag_correlation_series"][0]["lag_0"] == 0.17
+    assert payload["lag_correlation_series"][0]["lag_12"] == -0.15
+    assert payload["lag_correlation_labels"]["lag_12"] == "12M lag"
+    assert len(payload["average_lag_correlations"]) == 5
+    assert payload["average_lag_correlations"][2]["label"] == "6M lag"
+    assert payload["average_lag_correlations"][2]["value"] == -0.09
+    assert payload["average_lag_correlations"][2]["method_primary"] is True
     assert payload["quadnomial_distribution"][0]["case"] == "0,0"
+
+
+def test_build_relationship_detail_includes_frontend_summary_fields():
+    payload = gdp_market_relationship.build_detail_payload(
+        relationships()[0],
+        lag_rows(),
+        quad_rows(),
+    )
+
+    assert payload["latest"]["primary_lag_months"] == 6
+    assert payload["latest"]["rolling_index_gdp_correlation"] == -0.09
+    assert payload["latest"]["average_10y_correlation"] == -0.09
+    assert payload["latest"]["quadnomial_current_case"] == "1,0"
+    assert payload["latest"]["quadnomial_current_plain_label"] == "INDEX UP / GDP DOWN"
+    assert payload["latest"]["index_yoy"] == 0.29
+    assert payload["latest"]["gdp_yoy"] == -0.09
+    assert payload["latest"]["primary_lag_date"] == "2020-06-30"
+    assert payload["latest"]["quadnomial_date"] == "2020-12-31"
+    assert payload["latest"]["quadnomial_period_label"] == "2020 Q4"
+    assert payload["same_direction_pct"] == 50.0
+    assert payload["method_explainable_pct"] == 75.0
+    assert payload["opposite_direction_pct"] == 50.0
+    assert payload["relationship_signal_usability"] == "GDP relationship weak"
+    assert payload["portfolio_bias_status"] == "Portfolio bias requires GDP forecast"
+    assert payload["macro_relationship_confidence"] == "low"
 
 
 def test_overview_includes_frontend_fields():
@@ -174,6 +226,69 @@ def test_overview_macro_relationship_confidence_high():
     assert card["relationship_signal_usability"] == "GDP relationship usable"
 
 
+def test_overview_signal_uses_average_10y_correlation():
+    high_quad_rows = [
+        {
+            "date": "2020-03-31",
+            "period_label": "2020 Q1",
+            "quad_case": "1,1",
+            "index_direction": 1,
+            "gdp_direction": 1,
+        },
+        {
+            "date": "2020-06-30",
+            "period_label": "2020 Q2",
+            "quad_case": "1,1",
+            "index_direction": 1,
+            "gdp_direction": 1,
+        },
+        {
+            "date": "2020-09-30",
+            "period_label": "2020 Q3",
+            "quad_case": "0,0",
+            "index_direction": 0,
+            "gdp_direction": 0,
+        },
+    ]
+    lag_rows_with_weak_latest = [
+        {
+            "date": "2020-03-31",
+            "lag_months": 6,
+            "index_yoy": 0.05,
+            "gdp_yoy": 0.03,
+            "rolling_correlation": 0.70,
+        },
+        {
+            "date": "2020-06-30",
+            "lag_months": 6,
+            "index_yoy": 0.06,
+            "gdp_yoy": 0.02,
+            "rolling_correlation": 0.68,
+        },
+        {
+            "date": "2020-09-30",
+            "lag_months": 6,
+            "index_yoy": 0.04,
+            "gdp_yoy": 0.01,
+            "rolling_correlation": 0.02,
+        },
+    ]
+
+    payload = gdp_market_relationship.build_overview_payload(
+        relationships(),
+        lambda relationship_id: lag_rows_with_weak_latest,
+        lambda relationship_id: high_quad_rows,
+    )
+
+    card = payload["relationships"][0]
+    assert card["latest"]["rolling_index_gdp_correlation"] == 0.02
+    assert card["latest"]["average_10y_correlation"] == pytest.approx(
+        0.4666666666666666
+    )
+    assert card["macro_relationship_confidence"] == "high"
+    assert card["relationship_signal_usability"] == "GDP relationship usable"
+
+
 def test_overview_macro_relationship_confidence_medium():
     medium_quad_rows = [
         {
@@ -223,7 +338,7 @@ def test_overview_macro_relationship_confidence_medium():
 
 def test_overview_china_always_low_confidence():
     china_rel = [
-        dict(relationships()[0], region="China", relationship_id="china_sse_gdp")
+        dict(relationships()[0], region="china", relationship_id="china_sse_gdp")
     ]
     high_quad_rows = [
         {
@@ -263,9 +378,18 @@ def test_overview_china_always_low_confidence():
 
 
 def test_detail_includes_correlation_series():
+    rows = lag_rows() + [
+        {
+            "date": "2020-09-30",
+            "lag_months": 6,
+            "index_yoy": 0.31,
+            "gdp_yoy": -0.04,
+            "rolling_correlation": None,
+        }
+    ]
     payload = gdp_market_relationship.build_detail_payload(
         relationships()[0],
-        lag_rows(),
+        rows,
         quad_rows(),
     )
 
@@ -281,7 +405,7 @@ def test_detail_includes_yoy_series():
     )
 
     assert len(payload["yoy_series"]) == 1
-    assert payload["yoy_series"][0] == {"label": 2020, "index": 29.0, "gdp": -9.0}
+    assert payload["yoy_series"][0] == {"date": "2020-06-30", "index": 5.0, "gdp": -9.0}
 
 
 def test_detail_quadnomial_distribution_has_labels():
@@ -293,10 +417,21 @@ def test_detail_quadnomial_distribution_has_labels():
 
     distribution = payload["quadnomial_distribution"]
     labels = {item["case"]: item["label"] for item in distribution}
-    assert labels["0,0"] == "both down"
-    assert labels["1,1"] == "both up"
-    assert labels["0,1"] == "index down / GDP up"
-    assert labels["1,0"] == "index up / GDP down"
+    interpretations = {item["case"]: item["interpretation"] for item in distribution}
+    assert labels["0,0"] == "A (INDEX DOWN / GDP DOWN)"
+    assert labels["1,1"] == "B (INDEX UP / GDP UP)"
+    assert labels["0,1"] == "C (INDEX DOWN / GDP UP)"
+    assert labels["1,0"] == "D (INDEX UP / GDP DOWN)"
+    assert interpretations["0,0"] == "Same direction; bearish macro confirmation"
+    assert interpretations["1,1"] == "Same direction; bullish macro confirmation"
+    assert (
+        interpretations["0,1"]
+        == "Opposite direction; possible profit-taking/correction"
+    )
+    assert (
+        interpretations["1,0"]
+        == "Opposite direction; lower-confidence/unpredictable case"
+    )
 
 
 def test_detail_quadnomial_distribution_counts():
@@ -323,6 +458,7 @@ def test_overview_missing_lag_data():
     card = payload["relationships"][0]
     assert card["latest"]["rolling_index_gdp_correlation"] is None
     assert card["same_direction_pct"] is None
+    assert card["method_explainable_pct"] is None
     assert card["relationship_signal_usability"] is None
 
 

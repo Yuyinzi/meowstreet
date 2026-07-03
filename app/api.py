@@ -20,6 +20,14 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+def _us_gdp_relationships(relationships):
+    return [
+        relationship
+        for relationship in relationships
+        if str(relationship.get("region", "")).lower() == "us"
+    ]
+
+
 def load_workflow_method():
     if not METHOD_PATH.exists():
         raise HTTPException(
@@ -124,8 +132,9 @@ def macro_dashboard_market_phase_refresh(benchmark_id):
 def macro_dashboard_gdp_relationships():
     con = gdp_market_relationships.connect()
     try:
+        relationships = gdp_market_relationships.load_relationships(con)
         return gdp_market_relationship.build_overview_payload(
-            gdp_market_relationships.load_relationships(con),
+            _us_gdp_relationships(relationships),
             lambda relationship_id: gdp_market_relationships.load_lag_rows(
                 con, relationship_id
             ),

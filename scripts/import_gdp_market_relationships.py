@@ -60,6 +60,8 @@ _LAG_GROUPS = [
     {"lag_months": 0, "index_yoy_col": 4, "gdp_yoy_col": 5, "rolling_corr_col": 6},
     {"lag_months": 3, "index_yoy_col": 7, "gdp_yoy_col": 8, "rolling_corr_col": 9},
     {"lag_months": 6, "index_yoy_col": 10, "gdp_yoy_col": 11, "rolling_corr_col": 12},
+    {"lag_months": 9, "index_yoy_col": 13, "gdp_yoy_col": 14, "rolling_corr_col": 15},
+    {"lag_months": 12, "index_yoy_col": 16, "gdp_yoy_col": 17, "rolling_corr_col": 18},
 ]
 
 

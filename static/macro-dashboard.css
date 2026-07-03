@@ -265,6 +265,176 @@ h2 {
   box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
 }
 
+.gdp-relationship {
+  margin-top: 26px;
+}
+
+.relationship-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.mock-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #E0D6C8;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #FFFFFF;
+  color: #8B7E74;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.gdp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 280px));
+  gap: 12px;
+}
+
+.gdp-card {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 9px;
+  border: 1px solid #E0D6C8;
+  border-radius: 10px;
+  padding: 14px 15px;
+  background: #FFFFFF;
+  color: #3B3530;
+  text-align: left;
+  box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.gdp-card:hover {
+  border-color: #3B3530;
+  box-shadow: 0 2px 8px rgba(59, 53, 48, 0.08);
+}
+
+.gdp-card.selected {
+  border-color: #5D7FA8;
+  box-shadow: 0 0 0 2px rgba(93, 127, 168, 0.18), 0 2px 8px rgba(93, 127, 168, 0.08);
+}
+
+.gdp-card strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.gdp-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.gdp-card-confidence {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.gdp-card-title {
+  line-height: 1.25;
+}
+
+.gdp-card-subtitle {
+  color: #8B7E74;
+  font-size: 12px;
+}
+
+.gdp-card-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.gdp-card-summary > span {
+  border: 1px solid #E8E0D6;
+  border-radius: 8px;
+  padding: 8px;
+  background: #FDFAF7;
+}
+
+.gdp-card-summary small {
+  display: block;
+  margin-bottom: 4px;
+  color: #A89B91;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gdp-card-summary strong {
+  display: block;
+  color: #3B3530;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.gdp-card-summary .signal-status {
+  display: inline-flex;
+  font-size: 13px;
+}
+
+.gdp-card-summary strong.signal-usable {
+  color: #2D7A4A;
+}
+
+.gdp-card-summary strong.signal-caution {
+  color: #7A5D21;
+}
+
+.gdp-card-summary strong.signal-weak {
+  color: #A04040;
+}
+
+.gdp-card-summary strong.signal-neutral {
+  color: #6B6258;
+}
+
+.gdp-detail {
+  margin-top: 18px;
+  border: 1px solid #E8E0D6;
+  border-radius: 12px;
+  padding: 18px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
+}
+
+.confidence-high {
+  background: #F2FAF4;
+  border-color: #BBDCC6;
+  color: #2D7A4A;
+}
+
+.confidence-medium {
+  background: #F8F4EA;
+  border-color: #E3D0A6;
+  color: #7A5D21;
+}
+
+.confidence-low {
+  background: #FDF2F2;
+  border-color: #E0BCBC;
+  color: #A04040;
+}
+
 .detail-head {
   display: flex;
   align-items: flex-start;
@@ -298,7 +468,7 @@ h2 {
 
 .metric-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
   margin: 18px 0;
 }
@@ -326,6 +496,258 @@ h2 {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: #3B3530;
+}
+
+.relationship-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.relationship-chart-grid-pre-method {
+  margin: 0 0 18px;
+}
+
+.relationship-chart {
+  border: 1px solid #E8E0D6;
+  border-radius: 10px;
+  padding: 12px;
+  background: #FDFAF7;
+}
+
+.relationship-chart-wide {
+  grid-column: 1 / -1;
+}
+
+.relationship-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.relationship-chart h3 {
+  margin: 0;
+  color: #3B3530;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.relationship-chart-head span {
+  color: #A89B91;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.relationship-chart svg {
+  display: block;
+  width: 100%;
+  min-height: 260px;
+}
+
+.relationship-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+  color: #6B6258;
+  font-size: 12px;
+}
+
+.relationship-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.relationship-line-key {
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+  background: #5D7FA8;
+}
+
+.relationship-line-key-1 {
+  background: #D9848C;
+}
+
+.relationship-line-key-2 {
+  background: #6AAE75;
+}
+
+.relationship-line-key-3 {
+  background: #B889D8;
+}
+
+.relationship-line-key-4 {
+  background: #D9A441;
+}
+
+.relationship-axis {
+  stroke: #BEB2A7;
+  stroke-width: 1;
+}
+
+.relationship-axis-label {
+  fill: #8B7E74;
+  font-size: 10px;
+}
+
+.relationship-axis-label-end {
+  text-anchor: end;
+}
+
+.metric-context {
+  display: block;
+  margin-top: 4px;
+  color: #8B7E74;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.signal-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.metric-strip strong.signal-status {
+  display: inline-flex;
+  font-size: 15px;
+}
+
+.signal-usable,
+.metric-strip strong.signal-usable {
+  color: #2D7A4A;
+}
+
+.signal-caution,
+.metric-strip strong.signal-caution {
+  color: #7A5D21;
+}
+
+.signal-weak,
+.metric-strip strong.signal-weak {
+  color: #A04040;
+}
+
+.signal-neutral,
+.metric-strip strong.signal-neutral {
+  color: #6B6258;
+}
+
+.relationship-zero {
+  stroke: #E0D6C8;
+  stroke-dasharray: 4 4;
+}
+
+.relationship-line {
+  fill: none;
+  stroke-width: 2.4;
+}
+
+.relationship-line-0 {
+  stroke: #5D7FA8;
+}
+
+.relationship-line-1 {
+  stroke: #D9848C;
+}
+
+.relationship-line-2 {
+  stroke: #6AAE75;
+}
+
+.relationship-line-3 {
+  stroke: #B889D8;
+}
+
+.relationship-line-4 {
+  stroke: #D9A441;
+}
+
+.quad-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.lag-table {
+  display: grid;
+  gap: 8px;
+}
+
+.lag-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #E8E0D6;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #FFFFFF;
+  color: #6B6258;
+  font-size: 13px;
+}
+
+.lag-row strong {
+  color: #3B3530;
+  font-variant-numeric: tabular-nums;
+}
+
+.lag-row em {
+  min-width: 82px;
+  font-style: normal;
+  text-align: right;
+}
+
+.lag-row-primary {
+  border-color: #5D7FA8;
+  background: #F3F7FB;
+}
+
+.lag-primary-pill {
+  display: inline-flex;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: #E2ECF7;
+  color: #315E8C;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.quad-bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  color: #6B6258;
+  font-size: 12px;
+}
+
+.quad-bar-row strong {
+  color: #3B3530;
+  font-variant-numeric: tabular-nums;
+}
+
+.quad-bar-row i {
+  display: block;
+  grid-column: 1 / -1;
+  height: 8px;
+  border-radius: 999px;
+  background: #5D7FA8;
 }
 
 .method-note {
@@ -472,7 +894,9 @@ h2 {
   line-height: 1.45;
   color: #3B3530;
   box-shadow: 0 2px 8px rgba(59, 53, 48, 0.08);
-  white-space: nowrap;
+  min-width: 260px;
+  max-width: 420px;
+  white-space: normal;
 }
 
 .chart-tooltip.visible {
@@ -489,6 +913,18 @@ h2 {
 .chart-tooltip div {
   color: #6B6258;
   font-size: 12px;
+}
+
+.chart-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.chart-tooltip-row span,
+.chart-tooltip-row strong {
+  white-space: nowrap;
 }
 
 .status {
@@ -512,7 +948,8 @@ h2 {
   }
 
   .macro-header,
-  .detail-head {
+  .detail-head,
+  .relationship-head {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;

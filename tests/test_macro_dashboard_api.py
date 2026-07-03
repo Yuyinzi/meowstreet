@@ -198,6 +198,28 @@ def test_gdp_relationship_overview_api_is_lightweight(monkeypatch):
                 "correlation_window_years": 10,
                 "source_workbook": "GDP_Correlations.xlsx",
                 "source_sheet": "S&P500_USGDP Correlation",
+            },
+            {
+                "relationship_id": "china_sse_gdp",
+                "title": "SSE Composite vs China GDP",
+                "region": "China",
+                "economy": "China GDP",
+                "index_name": "SSE Composite",
+                "primary_lag_months": 6,
+                "correlation_window_years": 10,
+                "source_workbook": "GDP_Correlations.xlsx",
+                "source_sheet": "China GDP Correlation",
+            },
+            {
+                "relationship_id": "europe_stoxx_gdp",
+                "title": "STOXX Europe vs Europe GDP",
+                "region": "Europe",
+                "economy": "Europe GDP",
+                "index_name": "STOXX Europe",
+                "primary_lag_months": 6,
+                "correlation_window_years": 10,
+                "source_workbook": "GDP_Correlations.xlsx",
+                "source_sheet": "Europe GDP Correlation",
             }
         ]
 
@@ -238,6 +260,9 @@ def test_gdp_relationship_overview_api_is_lightweight(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
+    assert [r["relationship_id"] for r in payload["relationships"]] == [
+        "us_sp500_gdp"
+    ]
     assert payload["relationships"][0]["relationship_id"] == "us_sp500_gdp"
     assert "lag_series" not in payload["relationships"][0]
 
