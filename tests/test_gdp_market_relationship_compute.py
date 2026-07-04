@@ -250,3 +250,49 @@ def test_computed_lag_rows_match_expected_derived_rows_loaded_from_db(tmp_path):
     assert computed_latest["rolling_correlation"] == pytest.approx(
         expected_lag_rows[0]["rolling_correlation"]
     )
+
+
+def test_recompute_rolling_correlations_uses_merged_history_for_affected_dates():
+    lag_rows = [
+        {
+            "date": f"{year}-{month_day}",
+            "lag_months": 0,
+            "index_yoy": 0.01 + index / 1000,
+            "gdp_yoy": 0.02 + index / 1000,
+            "rolling_correlation": None,
+            "source_workbook": "seed",
+            "source_sheet": "seed",
+        }
+        for index, (year, month_day) in enumerate(
+            [
+                (year, month_day)
+                for year in range(2014, 2024)
+                for month_day in ["03-31", "06-30", "09-30", "12-31"]
+            ]
+        )
+    ] + [
+        {
+            "date": "2024-03-31",
+            "lag_months": 0,
+            "index_yoy": 0.15,
+            "gdp_yoy": 0.10,
+            "rolling_correlation": None,
+            "source_workbook": "GDPC1.csv+SP500.csv",
+            "source_sheet": "computed",
+        }
+    ]
+
+    rows = gdp_market_relationship_compute.recompute_rolling_correlations(
+        lag_rows,
+        ["2024-03-31"],
+        "GDPC1.csv+SP500.csv",
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["date"] == "2024-03-31"
+    assert rows[0]["lag_months"] == 0
+    assert rows[0]["index_yoy"] == 0.15
+    assert rows[0]["gdp_yoy"] == 0.10
+    assert rows[0]["rolling_correlation"] is not None
+    assert rows[0]["source_workbook"] == "GDPC1.csv+SP500.csv"
+    assert rows[0]["source_sheet"] == "computed"

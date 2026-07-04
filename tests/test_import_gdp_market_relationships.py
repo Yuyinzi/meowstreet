@@ -1,5 +1,6 @@
 import datetime
 
+import pytest
 from openpyxl import Workbook
 
 from app.db import gdp_market_relationships
@@ -173,3 +174,108 @@ def test_video_03_china_quadnomial_sheet_uses_non_china_gdp_series():
     assert china_quad_rows[0]["gdp_level"] != china_first_gdp_level
     assert china_quad_rows[0]["gdp_level"] == europe_quad_rows[0]["gdp_level"]
     assert china_quad_rows[1]["gdp_level"] == europe_quad_rows[1]["gdp_level"]
+
+
+def test_parse_fred_gdp_csv_converts_quarter_start_to_quarter_end(tmp_path):
+    csv_path = tmp_path / "GDPC1.csv"
+    csv_path.write_text(
+        "observation_date,GDPC1\n"
+        "2025-01-01,23548.210\n"
+        "2025-04-01,23770.976\n",
+        encoding="utf-8",
+    )
+
+    rows = import_gdp_market_relationships.parse_fred_gdp_csv(csv_path)
+
+    assert rows == {
+        "2025-03-31": 23548.210,
+        "2025-06-30": 23770.976,
+    }
+
+
+def test_parse_fred_sp500_csv_uses_last_non_empty_close_per_quarter(tmp_path):
+    csv_path = tmp_path / "SP500.csv"
+    csv_path.write_text(
+        "observation_date,SP500\n"
+        "2025-03-28,5600.00\n"
+        "2025-03-31,\n"
+        "2025-04-01,5625.00\n"
+        "2025-06-30,5900.00\n",
+        encoding="utf-8",
+    )
+
+    rows = import_gdp_market_relationships.parse_fred_sp500_csv(csv_path)
+
+    assert rows == {
+        "2025-03-31": 5600.00,
+        "2025-06-30": 5900.00,
+    }
+
+
+def test_import_us_csv_merge_uses_existing_db_history_for_rolling_correlation(tmp_path):
+    db_path = tmp_path / "gdp.sqlite"
+    gdp_csv = tmp_path / "GDPC1.csv"
+    sp500_csv = tmp_path / "SP500.csv"
+    con = gdp_market_relationships.connect(db_path)
+    relationship = {
+        "relationship_id": "us_sp500_gdp",
+        "title": "S&P 500 vs US GDP",
+        "region": "US",
+        "economy": "US GDP",
+        "index_name": "S&P 500",
+        "primary_lag_months": 6,
+        "correlation_window_years": 10,
+        "source_workbook": "seed",
+        "source_sheet": "seed",
+    }
+    seed_lag_rows = [
+        {
+            "date": f"{year}-{month_day}",
+            "lag_months": 0,
+            "index_yoy": 0.01 + index / 1000,
+            "gdp_yoy": 0.02 + index / 1000,
+            "rolling_correlation": None,
+            "source_workbook": "seed",
+            "source_sheet": "seed",
+        }
+        for index, (year, month_day) in enumerate(
+            [
+                (year, month_day)
+                for year in range(2014, 2024)
+                for month_day in ["03-31", "06-30", "09-30", "12-31"]
+            ]
+        )
+    ]
+    gdp_market_relationships.replace_relationship_data(
+        con,
+        relationship,
+        seed_lag_rows,
+        [],
+    )
+    gdp_csv.write_text(
+        "observation_date,GDPC1\n"
+        "2023-01-01,100\n"
+        "2024-01-01,110\n",
+        encoding="utf-8",
+    )
+    sp500_csv.write_text(
+        "observation_date,SP500\n"
+        "2023-03-31,200\n"
+        "2024-03-31,230\n",
+        encoding="utf-8",
+    )
+
+    saved = import_gdp_market_relationships.import_us_csv_merge(con, gdp_csv, sp500_csv)
+
+    rows = gdp_market_relationships.load_lag_rows(con, "us_sp500_gdp")
+    latest = [
+        row
+        for row in rows
+        if row["date"] == "2024-03-31" and row["lag_months"] == 0
+    ][0]
+
+    assert saved["lag_rows"] > 0
+    assert latest["index_yoy"] == pytest.approx(0.15)
+    assert latest["gdp_yoy"] == pytest.approx(0.10)
+    assert latest["rolling_correlation"] is not None
+    assert latest["source_sheet"] == "computed"

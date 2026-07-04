@@ -172,3 +172,54 @@ def compute_quad_rows(raw_rows, source):
             }
         )
     return quad_rows
+
+
+def recompute_rolling_correlations(
+    lag_rows,
+    affected_dates,
+    source,
+    correlation_window_years=10,
+):
+    rolling_correlation_quarters = _rolling_correlation_quarters(
+        correlation_window_years
+    )
+    rows_by_quarter_lag = {
+        (_quarter_index(row["date"]), row["lag_months"]): row
+        for row in lag_rows
+    }
+    affected_date_set = {str(date_value) for date_value in affected_dates}
+    recomputed_rows = []
+    for row in sorted(lag_rows, key=lambda value: (value["date"], value["lag_months"])):
+        if row["date"] not in affected_date_set:
+            continue
+        quarter_index = _quarter_index(row["date"])
+        window_indexes = list(
+            range(
+                quarter_index - rolling_correlation_quarters + 1,
+                quarter_index + 1,
+            )
+        )
+        window_rows = [
+            rows_by_quarter_lag.get((window_index, row["lag_months"]))
+            for window_index in window_indexes
+        ]
+        has_full_window = all(
+            window_row is not None
+            and window_row.get("index_yoy") is not None
+            and window_row.get("gdp_yoy") is not None
+            for window_row in window_rows
+        )
+        recomputed_rows.append(
+            {
+                **row,
+                "rolling_correlation": _correlation(
+                    [window_row["index_yoy"] for window_row in window_rows],
+                    [window_row["gdp_yoy"] for window_row in window_rows],
+                )
+                if has_full_window
+                else None,
+                "source_workbook": source,
+                "source_sheet": "computed",
+            }
+        )
+    return recomputed_rows

@@ -192,6 +192,66 @@ def replace_raw_source_rows(con, relationship_id, raw_rows):
     return {"raw_rows": len(raw_rows)}
 
 
+def replace_relationship_rows_for_dates(con, relationship_id, dates, lag_rows, quad_rows):
+    rid = normalize_relationship_id(relationship_id)
+    unique_dates = sorted({str(date_value) for date_value in dates})
+    for date_iso in unique_dates:
+        con.execute(
+            "delete from gdp_lag_rows where relationship_id = ? and date = ?",
+            (rid, date_iso),
+        )
+        con.execute(
+            "delete from gdp_quad_rows where relationship_id = ? and date = ?",
+            (rid, date_iso),
+        )
+    for row in lag_rows:
+        con.execute(
+            """
+            insert into gdp_lag_rows(
+                relationship_id, date, lag_months,
+                index_yoy, gdp_yoy, rolling_correlation,
+                source_workbook, source_sheet
+            ) values (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                rid,
+                row["date"],
+                row["lag_months"],
+                row.get("index_yoy"),
+                row.get("gdp_yoy"),
+                row.get("rolling_correlation"),
+                row.get("source_workbook"),
+                row.get("source_sheet"),
+            ),
+        )
+    for row in quad_rows:
+        con.execute(
+            """
+            insert into gdp_quad_rows(
+                relationship_id, date, period_label,
+                primary_lag_months, index_level, gdp_level,
+                index_direction, gdp_direction, quad_case,
+                source_workbook, source_sheet
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                rid,
+                row["date"],
+                row.get("period_label"),
+                row.get("primary_lag_months"),
+                row.get("index_level"),
+                row.get("gdp_level"),
+                row.get("index_direction"),
+                row.get("gdp_direction"),
+                row.get("quad_case"),
+                row.get("source_workbook"),
+                row.get("source_sheet"),
+            ),
+        )
+    con.commit()
+    return {"lag_rows": len(lag_rows), "quad_rows": len(quad_rows)}
+
+
 def load_relationships(con):
     rows = con.execute(
         """
