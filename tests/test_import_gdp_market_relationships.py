@@ -279,3 +279,87 @@ def test_import_us_csv_merge_uses_existing_db_history_for_rolling_correlation(tm
     assert latest["gdp_yoy"] == pytest.approx(0.10)
     assert latest["rolling_correlation"] is not None
     assert latest["source_sheet"] == "computed"
+
+
+def test_main_us_csv_merge_prints_before_after_summary(monkeypatch, capsys):
+    class FakeConnection:
+        def close(self):
+            pass
+
+    detail_by_call = [
+        {
+            "latest": {
+                "primary_lag_date": "2020-09-30",
+                "quadnomial_date": "2020-09-30",
+                "rolling_index_gdp_correlation": 0.02,
+                "average_10y_correlation": 0.56,
+                "index_yoy": -0.08,
+                "gdp_yoy": -0.02,
+                "quadnomial_current_case": "0,1",
+            },
+            "same_direction_pct": 69.04,
+            "method_explainable_pct": 94.66,
+            "relationship_signal_usability": "GDP relationship usable",
+            "macro_relationship_confidence": "high",
+        },
+        {
+            "latest": {
+                "primary_lag_date": "2026-03-31",
+                "quadnomial_date": "2026-03-31",
+                "rolling_index_gdp_correlation": 0.18,
+                "average_10y_correlation": 0.53,
+                "index_yoy": 0.16,
+                "gdp_yoy": 0.03,
+                "quadnomial_current_case": "1,1",
+            },
+            "same_direction_pct": 68.98,
+            "method_explainable_pct": 94.39,
+            "relationship_signal_usability": "GDP relationship usable",
+            "macro_relationship_confidence": "high",
+        },
+    ]
+    detail_calls = []
+
+    def fake_connect():
+        return FakeConnection()
+
+    def fake_import_us_csv_merge(con):
+        assert con is not None
+        return {"lag_rows": 175, "quad_rows": 37}
+
+    def fake_load_relationship(con, relationship_id):
+        assert con is not None
+        assert relationship_id == "us_sp500_gdp"
+        return {
+            "relationship_id": "us_sp500_gdp",
+            "title": "S&P 500 vs US GDP",
+            "region": "US",
+            "economy": "US GDP",
+            "index_name": "S&P 500",
+            "primary_lag_months": 6,
+            "correlation_window_years": 10,
+        }
+
+    def fake_build_summary(con, relationship_id):
+        assert con is not None
+        assert relationship_id == "us_sp500_gdp"
+        detail = detail_by_call[len(detail_calls)]
+        detail_calls.append(detail)
+        return detail
+
+    monkeypatch.setattr(import_gdp_market_relationships.gdp_market_relationships, "connect", fake_connect)
+    monkeypatch.setattr(import_gdp_market_relationships, "import_us_csv_merge", fake_import_us_csv_merge)
+    monkeypatch.setattr(import_gdp_market_relationships, "_load_relationship", fake_load_relationship)
+    monkeypatch.setattr(import_gdp_market_relationships, "_build_relationship_summary", fake_build_summary)
+    monkeypatch.setattr(import_gdp_market_relationships.sys, "argv", ["import_gdp_market_relationships.py", "--us-csv-merge"])
+
+    import_gdp_market_relationships.main()
+
+    output = capsys.readouterr().out
+
+    assert "us_sp500_gdp: 175 csv lag rows, 37 csv quad rows merged" in output
+    assert "latest metric comparison for us_sp500_gdp" in output
+    assert "primary_lag_date: 2020-09-30 -> 2026-03-31" in output
+    assert "quadnomial_current_case: 0,1 -> 1,1" in output
+    assert "rolling_index_gdp_correlation: 0.02 -> 0.18" in output
+    assert "same_direction_pct: 69.04 -> 68.98" in output

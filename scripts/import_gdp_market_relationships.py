@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import gdp_market_relationships
+from app.tools import gdp_market_relationship
 from app.tools import gdp_market_relationship_compute
 from scripts import import_benchmark_market_data
 
@@ -156,6 +157,89 @@ def _affected_rolling_dates(computed_rows):
             if row.get("index_yoy") is not None or row.get("gdp_yoy") is not None
         }
     )
+
+
+def _build_relationship_summary(con, relationship_id):
+    relationship = _load_relationship(con, relationship_id)
+    return gdp_market_relationship.build_detail_payload(
+        relationship,
+        gdp_market_relationships.load_lag_rows(con, relationship_id),
+        gdp_market_relationships.load_quad_rows(con, relationship_id),
+    )
+
+
+def _format_summary_value(value):
+    return "None" if value is None else str(value)
+
+
+def _print_relationship_summary_comparison(
+    relationship_id,
+    before_summary,
+    after_summary,
+):
+    print(f"latest metric comparison for {relationship_id}")
+    comparisons = [
+        (
+            "primary_lag_date",
+            before_summary["latest"].get("primary_lag_date"),
+            after_summary["latest"].get("primary_lag_date"),
+        ),
+        (
+            "quadnomial_date",
+            before_summary["latest"].get("quadnomial_date"),
+            after_summary["latest"].get("quadnomial_date"),
+        ),
+        (
+            "rolling_index_gdp_correlation",
+            before_summary["latest"].get("rolling_index_gdp_correlation"),
+            after_summary["latest"].get("rolling_index_gdp_correlation"),
+        ),
+        (
+            "average_10y_correlation",
+            before_summary["latest"].get("average_10y_correlation"),
+            after_summary["latest"].get("average_10y_correlation"),
+        ),
+        (
+            "index_yoy",
+            before_summary["latest"].get("index_yoy"),
+            after_summary["latest"].get("index_yoy"),
+        ),
+        (
+            "gdp_yoy",
+            before_summary["latest"].get("gdp_yoy"),
+            after_summary["latest"].get("gdp_yoy"),
+        ),
+        (
+            "quadnomial_current_case",
+            before_summary["latest"].get("quadnomial_current_case"),
+            after_summary["latest"].get("quadnomial_current_case"),
+        ),
+        (
+            "same_direction_pct",
+            before_summary.get("same_direction_pct"),
+            after_summary.get("same_direction_pct"),
+        ),
+        (
+            "method_explainable_pct",
+            before_summary.get("method_explainable_pct"),
+            after_summary.get("method_explainable_pct"),
+        ),
+        (
+            "relationship_signal_usability",
+            before_summary.get("relationship_signal_usability"),
+            after_summary.get("relationship_signal_usability"),
+        ),
+        (
+            "macro_relationship_confidence",
+            before_summary.get("macro_relationship_confidence"),
+            after_summary.get("macro_relationship_confidence"),
+        ),
+    ]
+    for label, before_value, after_value in comparisons:
+        print(
+            f"{label}: {_format_summary_value(before_value)} -> "
+            f"{_format_summary_value(after_value)}"
+        )
 
 
 def fetch_fred_csvs(
@@ -386,25 +470,35 @@ def import_us_csv_merge(
 
 def main():
     con = gdp_market_relationships.connect()
-    if "--fetch-fred-csv" in sys.argv:
-        result = fetch_fred_csvs()
-        print(f"downloaded {result['gdp_csv']}")
-        print(f"downloaded {result['sp500_csv']}")
-        return
-    if "--us-csv-merge" in sys.argv:
-        counts = import_us_csv_merge(con)
-        print(
-            f"us_sp500_gdp: {counts['lag_rows']} csv lag rows, "
-            f"{counts['quad_rows']} csv quad rows merged"
-        )
-        return
-    inserted, errors = import_workbook(con)
-    for relationship_id, counts in inserted.items():
-        print(
-            f"{relationship_id}: {counts['lag_rows']} lag rows, {counts['quad_rows']} quad rows"
-        )
-    for relationship_id, message in errors.items():
-        print(f"ERROR {relationship_id}: {message}", file=sys.stderr)
+    try:
+        if "--fetch-fred-csv" in sys.argv:
+            result = fetch_fred_csvs()
+            print(f"downloaded {result['gdp_csv']}")
+            print(f"downloaded {result['sp500_csv']}")
+            return
+        if "--us-csv-merge" in sys.argv:
+            before_summary = _build_relationship_summary(con, US_GDP_RELATIONSHIP_ID)
+            counts = import_us_csv_merge(con)
+            after_summary = _build_relationship_summary(con, US_GDP_RELATIONSHIP_ID)
+            print(
+                f"us_sp500_gdp: {counts['lag_rows']} csv lag rows, "
+                f"{counts['quad_rows']} csv quad rows merged"
+            )
+            _print_relationship_summary_comparison(
+                US_GDP_RELATIONSHIP_ID,
+                before_summary,
+                after_summary,
+            )
+            return
+        inserted, errors = import_workbook(con)
+        for relationship_id, counts in inserted.items():
+            print(
+                f"{relationship_id}: {counts['lag_rows']} lag rows, {counts['quad_rows']} quad rows"
+            )
+        for relationship_id, message in errors.items():
+            print(f"ERROR {relationship_id}: {message}", file=sys.stderr)
+    finally:
+        con.close()
 
 
 if __name__ == "__main__":

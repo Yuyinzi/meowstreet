@@ -2,6 +2,7 @@ import pytest
 
 from app.db import gdp_market_relationships
 from app.tools import gdp_market_relationship_compute
+from scripts import import_gdp_market_relationships
 
 
 def raw_rows():
@@ -296,3 +297,44 @@ def test_recompute_rolling_correlations_uses_merged_history_for_affected_dates()
     assert rows[0]["rolling_correlation"] is not None
     assert rows[0]["source_workbook"] == "GDPC1.csv+SP500.csv"
     assert rows[0]["source_sheet"] == "computed"
+
+
+def test_recomputed_rolling_correlations_match_workbook_imported_lag_rows(tmp_path):
+    con = gdp_market_relationships.connect(tmp_path / "gdp.sqlite")
+    import_gdp_market_relationships.import_workbook(
+        con,
+        import_gdp_market_relationships.DEFAULT_WORKBOOK_PATH,
+    )
+    for relationship in gdp_market_relationships.load_relationships(con):
+        lag_rows = gdp_market_relationships.load_lag_rows(
+            con,
+            relationship["relationship_id"],
+        )
+        affected_dates = sorted(
+            {
+                row["date"]
+                for row in lag_rows
+                if row.get("index_yoy") is not None or row.get("gdp_yoy") is not None
+            }
+        )
+
+        recomputed_rows = gdp_market_relationship_compute.recompute_rolling_correlations(
+            lag_rows,
+            affected_dates,
+            "verification",
+            correlation_window_years=relationship["correlation_window_years"],
+        )
+        recomputed_by_key = {
+            (row["date"], row["lag_months"]): row["rolling_correlation"]
+            for row in recomputed_rows
+        }
+
+        for lag_row in lag_rows:
+            if lag_row.get("index_yoy") is None and lag_row.get("gdp_yoy") is None:
+                continue
+            recomputed_value = recomputed_by_key[(lag_row["date"], lag_row["lag_months"])]
+            workbook_value = lag_row["rolling_correlation"]
+            if workbook_value is None:
+                assert recomputed_value is None
+                continue
+            assert recomputed_value == pytest.approx(workbook_value)
