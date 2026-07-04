@@ -1,5 +1,4 @@
 import datetime
-from pathlib import Path
 
 from openpyxl import Workbook
 
@@ -154,13 +153,7 @@ def test_import_workbook_saves_relationship_data(tmp_path):
 
 
 def test_video_03_china_quadnomial_sheet_uses_non_china_gdp_series():
-    workbook_path = (
-        Path(__file__).resolve().parents[3]
-        / "data"
-        / "materials"
-        / "Video 03"
-        / "GDP_Correlations.xlsx"
-    )
+    workbook_path = import_gdp_market_relationships.DEFAULT_WORKBOOK_PATH
 
     _, _, europe_quad_rows = import_gdp_market_relationships.parse_relationship(
         workbook_path,
