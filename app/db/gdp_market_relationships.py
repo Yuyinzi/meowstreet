@@ -56,6 +56,17 @@ def connect(db_path=DEFAULT_DB_PATH):
         );
         create index if not exists idx_gdp_quad_rows_relationship_date
         on gdp_quad_rows(relationship_id, date);
+        create table if not exists gdp_raw_source_rows (
+            relationship_id text not null,
+            date text not null,
+            gdp_level real,
+            index_level real,
+            gdp_source text,
+            index_source text,
+            primary key(relationship_id, date)
+        );
+        create index if not exists idx_gdp_raw_source_rows_relationship_date
+        on gdp_raw_source_rows(relationship_id, date);
         """
     )
     return con
@@ -154,6 +165,33 @@ def replace_relationship_data(con, relationship, lag_rows, quad_rows):
     }
 
 
+def replace_raw_source_rows(con, relationship_id, raw_rows):
+    rid = normalize_relationship_id(relationship_id)
+    con.execute(
+        "delete from gdp_raw_source_rows where relationship_id = ?",
+        (rid,),
+    )
+    for row in raw_rows:
+        con.execute(
+            """
+            insert into gdp_raw_source_rows(
+                relationship_id, date, gdp_level, index_level,
+                gdp_source, index_source
+            ) values (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                rid,
+                row["date"],
+                row.get("gdp_level"),
+                row.get("index_level"),
+                row.get("gdp_source"),
+                row.get("index_source"),
+            ),
+        )
+    con.commit()
+    return {"raw_rows": len(raw_rows)}
+
+
 def load_relationships(con):
     rows = con.execute(
         """
@@ -192,6 +230,21 @@ def load_quad_rows(con, relationship_id):
                index_direction, gdp_direction, quad_case,
                source_workbook, source_sheet
         from gdp_quad_rows
+        where relationship_id = ?
+        order by date
+        """,
+        (rid,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def load_raw_source_rows(con, relationship_id):
+    rid = normalize_relationship_id(relationship_id)
+    rows = con.execute(
+        """
+        select relationship_id, date, gdp_level, index_level,
+               gdp_source, index_source
+        from gdp_raw_source_rows
         where relationship_id = ?
         order by date
         """,

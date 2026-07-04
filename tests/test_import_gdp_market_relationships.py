@@ -1,8 +1,10 @@
 import datetime
+from pathlib import Path
 
 from openpyxl import Workbook
 
 from app.db import gdp_market_relationships
+from scripts import import_benchmark_market_data
 from scripts import import_gdp_market_relationships
 
 
@@ -149,3 +151,32 @@ def test_import_workbook_saves_relationship_data(tmp_path):
         gdp_market_relationships.load_relationships(con)[0]["relationship_id"]
         == "us_sp500_gdp"
     )
+
+
+def test_video_03_china_quadnomial_sheet_uses_non_china_gdp_series():
+    workbook_path = (
+        Path(__file__).resolve().parents[3]
+        / "data"
+        / "materials"
+        / "Video 03"
+        / "GDP_Correlations.xlsx"
+    )
+
+    _, _, europe_quad_rows = import_gdp_market_relationships.parse_relationship(
+        workbook_path,
+        import_gdp_market_relationships.GDP_RELATIONSHIP_SHEETS[1],
+    )
+    _, _, china_quad_rows = import_gdp_market_relationships.parse_relationship(
+        workbook_path,
+        import_gdp_market_relationships.GDP_RELATIONSHIP_SHEETS[3],
+    )
+    china_correlation_sheet = import_benchmark_market_data.load_workbook_sheet(
+        workbook_path,
+        import_gdp_market_relationships.GDP_RELATIONSHIP_SHEETS[3]["correlation_sheet"],
+        data_only=True,
+    )
+    china_first_gdp_level = china_correlation_sheet.cell(5, 3).value
+
+    assert china_quad_rows[0]["gdp_level"] != china_first_gdp_level
+    assert china_quad_rows[0]["gdp_level"] == europe_quad_rows[0]["gdp_level"]
+    assert china_quad_rows[1]["gdp_level"] == europe_quad_rows[1]["gdp_level"]

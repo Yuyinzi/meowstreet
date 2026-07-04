@@ -25,6 +25,14 @@ http://127.0.0.1:8797
 .venv/bin/pytest -q
 ```
 
+## GDP Relationship Workbook Caveat
+
+- `data/source_material/Video 03/GDP_Correlations.xlsx` is the source of truth for the current GDP relationship dashboard import.
+- Recomputed lag metrics match the workbook for all configured relationships when the same raw quarter rows are used.
+- Recomputed quad metrics match the workbook for US and Europe.
+- The China quad workbook sheet `SZSC_CN_Quadnomial` is internally inconsistent with the China correlation sheet. Its GDP level series matches the Europe quad GDP series rather than the China correlation-sheet GDP values.
+- Until that source data issue is resolved, do not treat China quad recomputation as a supported parity target. Skip China quad-derived recomputation work and keep China workbook quad rows as imported source data if display parity is required.
+
 ## Extract Method Method JSON
 
 Generate reviewable prompts only:

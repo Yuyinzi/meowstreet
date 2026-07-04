@@ -57,6 +57,16 @@ Use `Methodology / Workflow` and `Actionable Checklist` as the primary source fo
 
 Regenerate the method artifact with `python3 scripts/build_method.py` after changing method-note parsing, graph node definitions, checks, or method notes.
 
+## GDP Relationship Source Caveat
+
+For `data/source_material/Video 03/GDP_Correlations.xlsx`:
+
+- Treat workbook-imported GDP relationship rows as the current dashboard source of truth.
+- Recomputed lag metrics are verified against the workbook for all configured relationships.
+- Recomputed quad metrics are verified against the workbook for US and Europe only.
+- Do not treat China quad recomputation as supported. The workbook sheet `SZSC_CN_Quadnomial` is internally inconsistent with the China correlation sheet and reuses the Europe quad GDP level series.
+- If future work needs China quad-derived metrics, resolve or replace the workbook source first rather than forcing parity logic into runtime code.
+
 ## Build / Run / Test Commands
 
 ### Setup
