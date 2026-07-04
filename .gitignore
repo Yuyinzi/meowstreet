@@ -15,3 +15,4 @@ data/local_system/refinement_prompts/
 data/local_system/refinement_repairs/
 data/local_system/synthesis_routing_audits/
 docs/superpowers/plans/
+.worktrees/
