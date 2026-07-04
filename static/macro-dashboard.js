@@ -126,6 +126,10 @@
       || null;
   }
 
+  function visibleMarketPhaseMarkets(markets) {
+    return (markets || []).filter((market) => String(market.region ?? "").toUpperCase() === "US");
+  }
+
   function selectedRelationship() {
     return state.gdpRelationships.find((card) => card.relationship_id === state.selectedRelationshipId)
       || null;
@@ -152,8 +156,10 @@
 
   function renderOverview() {
     const grid = $("marketGrid");
-    const currentMarket = selectedMarket();
-    grid.innerHTML = state.markets
+    const markets = visibleMarketPhaseMarkets(state.markets);
+    const currentMarket = markets.find((market) => market.benchmark_id === state.selectedBenchmarkId)
+      || null;
+    grid.innerHTML = markets
       .map((market) => {
         const selected = market.benchmark_id === currentMarket?.benchmark_id ? " selected" : "";
         return `
@@ -900,7 +906,7 @@
       const overview = await fetch("/api/macro-dashboard/market-phase");
       if (!overview.ok) throw new Error(`HTTP ${overview.status}`);
       const payload = await overview.json();
-      state.markets = payload.markets || [];
+      state.markets = visibleMarketPhaseMarkets(payload.markets || []);
       $("dashboardStatus").textContent = `${result.benchmark_id} refreshed from ${result.symbol}: ${result.rows_upserted} rows through ${result.latest_date}.`;
       renderOverview();
       if (state.selectedBenchmarkId === benchmarkId) {
@@ -991,7 +997,7 @@
     }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
-    state.markets = payload.markets || [];
+    state.markets = visibleMarketPhaseMarkets(payload.markets || []);
     state.selectedBenchmarkId = null;
     $("dashboardStatus").textContent = state.markets.length
       ? `${state.markets.length} benchmark markets loaded. Workbook-seeded data may be stale until refresh is added.`
