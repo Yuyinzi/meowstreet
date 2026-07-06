@@ -206,8 +206,39 @@ h2 {
 }
 
 .market-meta {
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.market-meta-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.market-meta-label .meta-en {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: #8B7E74;
+}
+
+.market-meta-label .meta-zh {
+  font-size: 10px;
+  font-weight: 500;
+  color: #A89B91;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.market-meta-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #3B3530;
+  white-space: nowrap;
 }
 
 .market-status {

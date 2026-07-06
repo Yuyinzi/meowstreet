@@ -179,8 +179,14 @@
             <span class="market-region">${escapeHtml(market.region)}</span>
             <strong>${escapeHtml(market.title)}</strong>
             <span class="market-status">${escapeHtml(fmtStatus(market.latest.market_phase_status))}</span>
-            <span class="market-meta">${bilingualLabel("Drawdown")} ${escapeHtml(fmtNumber(market.latest.drawdown_pct))}%</span>
-            <span class="market-meta">${bilingualLabel("Through")} ${escapeHtml(market.data_through)}</span>
+            <span class="market-meta">
+              <span class="market-meta-label"><span class="meta-en">Drawdown</span><span class="meta-zh">回撤</span></span>
+              <strong class="market-meta-value">${escapeHtml(fmtNumber(market.latest.drawdown_pct))}%</strong>
+            </span>
+            <span class="market-meta">
+              <span class="market-meta-label"><span class="meta-en">Through</span><span class="meta-zh">截至</span></span>
+              <strong class="market-meta-value">${escapeHtml(market.data_through)}</strong>
+            </span>
             <span class="market-card-actions">
               <span class="market-refresh" role="button" tabindex="0" data-refresh-benchmark-id="${escapeHtml(market.benchmark_id)}" aria-label="Refresh ${escapeHtml(market.title)}" title="Refresh ${escapeHtml(market.title)}">↻</span>
             </span>
