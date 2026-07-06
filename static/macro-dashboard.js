@@ -850,7 +850,6 @@
       <div class="relationship-head">
         <div>
           <h2>US Rates / Liquidity</h2>
-          <p class="subtitle">Nominal curve, real rates, Fed Funds, CPI Real Rate, and curve-steepness signals from the imported US benchmark-yields workbook. / 名义曲线、实际利率、联邦基金利率、CPI实际利率及曲线陡峭度信号。</p>
         </div>
         <span class="mock-pill">${escapeHtml(payload.as_of ? `As of ${fmtDate(payload.as_of)}` : "Import needed")}</span>
       </div>
