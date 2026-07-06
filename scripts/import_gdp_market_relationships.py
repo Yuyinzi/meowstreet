@@ -1,20 +1,17 @@
-import csv
 import sys
-from datetime import date
-from datetime import datetime
 from pathlib import Path
-from urllib.request import urlretrieve
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.data_sources.fred import FredClient
+from app.data_sources.fred import parse_fred_csv
+from app.data_sources.fred import quarter_end_for_date
 from app.db import gdp_market_relationships
 from app.tools import gdp_market_relationship
 from app.tools import gdp_market_relationship_compute
 from scripts import import_benchmark_market_data
 
-FRED_GDPC1_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GDPC1"
-FRED_SP500_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=SP500"
 US_GDP_RELATIONSHIP_ID = "us_sp500_gdp"
 
 GDP_RELATIONSHIP_SHEETS = [
@@ -72,13 +69,6 @@ _LAG_GROUPS = [
     {"lag_months": 12, "index_yoy_col": 16, "gdp_yoy_col": 17, "rolling_corr_col": 18},
 ]
 
-_QUARTER_END_MONTH_DAY = {
-    1: (3, 31),
-    4: (6, 30),
-    7: (9, 30),
-    10: (12, 31),
-}
-
 
 def _default_materials_path(*parts):
     path = ROOT / "data" / "materials" / Path(*parts)
@@ -94,21 +84,11 @@ def _default_materials_path(*parts):
 DEFAULT_WORKBOOK_PATH = _default_materials_path("Video 03", "GDP_Correlations.xlsx")
 DEFAULT_GDPC1_CSV_PATH = _default_materials_path("Video 03", "GDPC1.csv")
 DEFAULT_SP500_CSV_PATH = _default_materials_path("Video 03", "SP500.csv")
+DEFAULT_FRED_DIR = DEFAULT_GDPC1_CSV_PATH.parent
 
 
 def _source_name(workbook_path):
     return Path(workbook_path).name
-
-
-def _parse_iso_date(value):
-    return datetime.strptime(str(value), "%Y-%m-%d").date()
-
-
-def _quarter_end_for_date(value):
-    parsed = _parse_iso_date(value)
-    quarter_month = ((parsed.month - 1) // 3) * 3 + 1
-    end_month, end_day = _QUARTER_END_MONTH_DAY[quarter_month]
-    return date(parsed.year, end_month, end_day).isoformat()
 
 
 def _load_relationship(con, relationship_id):
@@ -131,10 +111,7 @@ def _raw_rows_from_csv_levels(gdp_levels, sp500_levels):
 
 
 def _merge_existing_and_computed_lag_rows(existing_rows, computed_rows):
-    merged_rows = {
-        (row["date"], row["lag_months"]): dict(row)
-        for row in existing_rows
-    }
+    merged_rows = {(row["date"], row["lag_months"]): dict(row) for row in existing_rows}
     for row in computed_rows:
         key = (row["date"], row["lag_months"])
         existing_row = merged_rows.get(key)
@@ -242,43 +219,21 @@ def _print_relationship_summary_comparison(
         )
 
 
-def fetch_fred_csvs(
-    gdp_path=DEFAULT_GDPC1_CSV_PATH,
-    sp500_path=DEFAULT_SP500_CSV_PATH,
-):
-    gdp_csv_path = Path(gdp_path)
-    sp500_csv_path = Path(sp500_path)
-    gdp_csv_path.parent.mkdir(parents=True, exist_ok=True)
-    sp500_csv_path.parent.mkdir(parents=True, exist_ok=True)
-    urlretrieve(FRED_GDPC1_CSV_URL, gdp_csv_path)
-    urlretrieve(FRED_SP500_CSV_URL, sp500_csv_path)
+def fetch_fred_csvs(fred_dir=DEFAULT_FRED_DIR):
+    client = FredClient(fred_dir)
+    gdp_csv_path = client.fetch_csv("GDPC1")
+    sp500_csv_path = client.fetch_csv("SP500")
     return {"gdp_csv": str(gdp_csv_path), "sp500_csv": str(sp500_csv_path)}
 
 
 def parse_fred_gdp_csv(csv_path):
-    path = Path(csv_path)
-    if not path.exists():
-        raise ValueError(f"gdp csv does not exist: {path}")
-    rows = {}
-    with path.open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            value = import_benchmark_market_data.float_or_none(row.get("GDPC1"))
-            if row.get("observation_date") and value is not None:
-                rows[_quarter_end_for_date(row["observation_date"])] = value
-    return dict(sorted(rows.items()))
+    rows = parse_fred_csv(csv_path, "GDPC1")
+    return {quarter_end_for_date(date_iso): value for date_iso, value in rows.items()}
 
 
 def parse_fred_sp500_csv(csv_path):
-    path = Path(csv_path)
-    if not path.exists():
-        raise ValueError(f"s&p 500 csv does not exist: {path}")
-    rows = {}
-    with path.open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            value = import_benchmark_market_data.float_or_none(row.get("SP500"))
-            if row.get("observation_date") and value is not None:
-                rows[_quarter_end_for_date(row["observation_date"])] = value
-    return dict(sorted(rows.items()))
+    rows = parse_fred_csv(csv_path, "SP500")
+    return {quarter_end_for_date(date_iso): value for date_iso, value in rows.items()}
 
 
 def _quad_case(index_direction, gdp_direction):
@@ -449,11 +404,13 @@ def import_us_csv_merge(
         existing_lag_rows,
         computed_lag_rows,
     )
-    recomputed_lag_rows = gdp_market_relationship_compute.recompute_rolling_correlations(
-        merged_lag_rows,
-        _affected_rolling_dates(computed_lag_rows),
-        source,
-        correlation_window_years=relationship["correlation_window_years"],
+    recomputed_lag_rows = (
+        gdp_market_relationship_compute.recompute_rolling_correlations(
+            merged_lag_rows,
+            _affected_rolling_dates(computed_lag_rows),
+            source,
+            correlation_window_years=relationship["correlation_window_years"],
+        )
     )
     affected_dates = sorted(
         {row["date"] for row in recomputed_lag_rows}

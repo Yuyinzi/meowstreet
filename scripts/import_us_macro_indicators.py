@@ -5,15 +5,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.data_sources.fred import FredClient
+from app.data_sources.fred import compute_yoy
+from app.data_sources.fred import parse_fred_csv
+from app.data_sources.fred import resample_to_weekly_sundays
 from app.db import us_rates_liquidity
 from scripts import import_benchmark_market_data
 
 
 DEFAULT_CSV_PATH = ROOT / "data" / "materials" / "Video 04" / "US_P4_Macro_Indicators.csv"
+DEFAULT_FRED_DIR = DEFAULT_CSV_PATH.parent / "fred"
+FRED_SOURCE = "FRED weekly Sunday resample"
 SERIES_CONFIG = {
     "cpi_yoy": {"title": "CPI YoY", "units": "percent"},
     "vix": {"title": "VIX", "units": "index"},
     "sp500_pe": {"title": "S&P 500 PE Ratio", "units": "multiple"},
+}
+
+FRED_MACRO_SERIES_CONFIG = {
+    "CPIAUCSL": "cpi_yoy",
+    "VIXCLS": "vix",
 }
 
 
@@ -33,6 +44,72 @@ def _point_payload(row, series_id, csv_path):
         "value": import_benchmark_market_data.float_or_none(row.get(series_id)),
         "source": Path(csv_path).name,
     }
+
+
+def _fred_series_payload(series_id):
+    config = SERIES_CONFIG[series_id]
+    return {
+        "series_id": series_id,
+        "title": config["title"],
+        "units": config["units"],
+        "source": FRED_SOURCE,
+    }
+
+
+def _fred_points_payload(points):
+    return [
+        {
+            "date": point["date"],
+            "value": point["value"],
+            "source": FRED_SOURCE,
+        }
+        for point in points
+    ]
+
+
+def fetch_fred_csvs(fred_dir=DEFAULT_FRED_DIR, fred_series_ids=None):
+    series_ids = fred_series_ids or sorted(FRED_MACRO_SERIES_CONFIG)
+    for fred_series_id in series_ids:
+        if fred_series_id not in FRED_MACRO_SERIES_CONFIG:
+            raise ValueError(f"fred macro series is unsupported: {fred_series_id}")
+    client = FredClient(fred_dir)
+    return client.fetch_csvs(series_ids)
+
+
+def import_fred_macro_csvs(
+    con,
+    fred_dir=DEFAULT_FRED_DIR,
+    start_date=None,
+    end_date=None,
+):
+    cpi_rows = parse_fred_csv(Path(fred_dir) / "CPIAUCSL.csv", "CPIAUCSL")
+    cpi_yoy = compute_yoy(cpi_rows)
+    vix_rows = parse_fred_csv(Path(fred_dir) / "VIXCLS.csv", "VIXCLS")
+    payloads = {
+        "cpi_yoy": _fred_points_payload(
+            resample_to_weekly_sundays(
+                cpi_yoy,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        ),
+        "vix": _fred_points_payload(
+            resample_to_weekly_sundays(
+                vix_rows,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        ),
+    }
+    inserted = {}
+    for series_id, points in payloads.items():
+        saved = us_rates_liquidity.replace_macro_indicator_points(
+            con,
+            _fred_series_payload(series_id),
+            points,
+        )
+        inserted[series_id] = saved["points"]
+    return inserted
 
 
 def parse_csv(csv_path=DEFAULT_CSV_PATH):
@@ -71,9 +148,18 @@ def import_csv(con, csv_path=DEFAULT_CSV_PATH):
 
 
 def main():
+    args = set(sys.argv[1:])
     con = us_rates_liquidity.connect()
     try:
-        inserted = import_csv(con)
+        if "--fetch-fred-csv" in args:
+            fetched = fetch_fred_csvs()
+            for series_id, path in fetched.items():
+                print(f"{series_id}: {path}")
+            return
+        if "--fred-csv-merge" in args:
+            inserted = import_fred_macro_csvs(con)
+        else:
+            inserted = import_csv(con)
         for series_id, count in inserted.items():
             print(f"{series_id}: {count}")
     finally:

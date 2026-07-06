@@ -179,9 +179,7 @@ def test_video_03_china_quadnomial_sheet_uses_non_china_gdp_series():
 def test_parse_fred_gdp_csv_converts_quarter_start_to_quarter_end(tmp_path):
     csv_path = tmp_path / "GDPC1.csv"
     csv_path.write_text(
-        "observation_date,GDPC1\n"
-        "2025-01-01,23548.210\n"
-        "2025-04-01,23770.976\n",
+        "observation_date,GDPC1\n2025-01-01,23548.210\n2025-04-01,23770.976\n",
         encoding="utf-8",
     )
 
@@ -253,15 +251,11 @@ def test_import_us_csv_merge_uses_existing_db_history_for_rolling_correlation(tm
         [],
     )
     gdp_csv.write_text(
-        "observation_date,GDPC1\n"
-        "2023-01-01,100\n"
-        "2024-01-01,110\n",
+        "observation_date,GDPC1\n2023-01-01,100\n2024-01-01,110\n",
         encoding="utf-8",
     )
     sp500_csv.write_text(
-        "observation_date,SP500\n"
-        "2023-03-31,200\n"
-        "2024-03-31,230\n",
+        "observation_date,SP500\n2023-03-31,200\n2024-03-31,230\n",
         encoding="utf-8",
     )
 
@@ -269,9 +263,7 @@ def test_import_us_csv_merge_uses_existing_db_history_for_rolling_correlation(tm
 
     rows = gdp_market_relationships.load_lag_rows(con, "us_sp500_gdp")
     latest = [
-        row
-        for row in rows
-        if row["date"] == "2024-03-31" and row["lag_months"] == 0
+        row for row in rows if row["date"] == "2024-03-31" and row["lag_months"] == 0
     ][0]
 
     assert saved["lag_rows"] > 0
@@ -347,11 +339,27 @@ def test_main_us_csv_merge_prints_before_after_summary(monkeypatch, capsys):
         detail_calls.append(detail)
         return detail
 
-    monkeypatch.setattr(import_gdp_market_relationships.gdp_market_relationships, "connect", fake_connect)
-    monkeypatch.setattr(import_gdp_market_relationships, "import_us_csv_merge", fake_import_us_csv_merge)
-    monkeypatch.setattr(import_gdp_market_relationships, "_load_relationship", fake_load_relationship)
-    monkeypatch.setattr(import_gdp_market_relationships, "_build_relationship_summary", fake_build_summary)
-    monkeypatch.setattr(import_gdp_market_relationships.sys, "argv", ["import_gdp_market_relationships.py", "--us-csv-merge"])
+    monkeypatch.setattr(
+        import_gdp_market_relationships.gdp_market_relationships,
+        "connect",
+        fake_connect,
+    )
+    monkeypatch.setattr(
+        import_gdp_market_relationships, "import_us_csv_merge", fake_import_us_csv_merge
+    )
+    monkeypatch.setattr(
+        import_gdp_market_relationships, "_load_relationship", fake_load_relationship
+    )
+    monkeypatch.setattr(
+        import_gdp_market_relationships,
+        "_build_relationship_summary",
+        fake_build_summary,
+    )
+    monkeypatch.setattr(
+        import_gdp_market_relationships.sys,
+        "argv",
+        ["import_gdp_market_relationships.py", "--us-csv-merge"],
+    )
 
     import_gdp_market_relationships.main()
 
@@ -363,3 +371,27 @@ def test_main_us_csv_merge_prints_before_after_summary(monkeypatch, capsys):
     assert "quadnomial_current_case: 0,1 -> 1,1" in output
     assert "rolling_index_gdp_correlation: 0.02 -> 0.18" in output
     assert "same_direction_pct: 69.04 -> 68.98" in output
+
+
+def test_fetch_fred_csvs_uses_shared_fred_client(tmp_path, monkeypatch):
+    fetched = []
+
+    class FakeFredClient:
+        def __init__(self, cache_dir):
+            assert cache_dir == tmp_path
+
+        def fetch_csv(self, series_id):
+            fetched.append(series_id)
+            return tmp_path / f"{series_id}.csv"
+
+    monkeypatch.setattr(import_gdp_market_relationships, "FredClient", FakeFredClient)
+
+    result = import_gdp_market_relationships.fetch_fred_csvs(
+        fred_dir=tmp_path,
+    )
+
+    assert fetched == ["GDPC1", "SP500"]
+    assert result == {
+        "gdp_csv": str(tmp_path / "GDPC1.csv"),
+        "sp500_csv": str(tmp_path / "SP500.csv"),
+    }
