@@ -382,6 +382,16 @@ h2 {
   text-transform: uppercase;
 }
 
+.rates-signal-card span small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #8B7D74;
+}
+
 .rates-signal-card strong {
   display: block;
   margin: 10px 0 0;

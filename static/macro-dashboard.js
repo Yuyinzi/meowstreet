@@ -87,7 +87,9 @@
   }
 
   function lineLabel(labels, key) {
-    return labels?.[key] || key;
+    const label = labels?.[key] || key;
+    const zh = zhLabel(label);
+    return zh ? `${label} (${zh})` : label;
   }
 
   function signalUsabilityMeta(value) {
@@ -694,11 +696,43 @@
     return Number(value).toFixed(2);
   }
 
+  const ZH_LABELS = {
+    "10-Year Treasury": "10年期国债",
+    "2-Year Treasury": "2年期国债",
+    "10Y - 2Y Spread": "10Y-2Y利差",
+    "10Y Real Rate": "10年期实际利率",
+    "CPI Real Rate": "CPI实际利率",
+    "Fed Funds": "联邦基金利率",
+    "Breakeven": "盈亏平衡通胀率",
+    "VIX": "VIX波动率指数",
+    "S&P PE": "标普500市盈率",
+    "S&P 500 PE": "标普500市盈率",
+    "10Y Treasury Minus CPI YoY": "10年期国债减CPI同比",
+    "CPI Real Rate vs VIX": "CPI实际利率 vs VIX",
+    "CPI Real Rate vs S&P 500 PE": "CPI实际利率 vs 标普500市盈率",
+    "Index YoY": "指数同比",
+    "GDP YoY": "GDP同比",
+    "Index YoY vs GDP YoY": "指数同比 vs GDP同比",
+    "No lag": "无滞后",
+    "3M lag": "3个月滞后",
+    "Real Rate": "实际利率",
+    "Comparison": "对比",
+  };
+
+  function zhLabel(label) {
+    return ZH_LABELS[label] || null;
+  }
+
+  function bilingualLabel(label) {
+    const zh = zhLabel(label);
+    return zh ? `${escapeHtml(label)}<small>${escapeHtml(zh)}</small>` : escapeHtml(label);
+  }
+
   function renderRateCard(card) {
     const selected = state.selectedRatesDetailId === card.id ? " selected" : "";
     return `
       <button class="rates-signal-card${selected}" type="button" data-rates-detail-id="${escapeHtml(card.id)}">
-        <span>${escapeHtml(card.label)}</span>
+        <span>${bilingualLabel(card.label)}</span>
         <strong>${escapeHtml(fmtRate(card.value))}</strong>
       </button>
     `;
@@ -707,7 +741,7 @@
   function renderSupportCard(label, value) {
     return `
       <span class="rates-signal-card">
-        <span>${escapeHtml(label)}</span>
+        <span>${bilingualLabel(label)}</span>
         <strong>${escapeHtml(value)}</strong>
       </span>
     `;
@@ -796,9 +830,14 @@
     renderYieldCurveDetail();
   }
 
+  function bilingualTitle(title) {
+    const zh = zhLabel(title);
+    return zh ? `${title} · ${zh}` : title;
+  }
+
   function renderRatesTimeSeriesChart(chart) {
     return renderRelationshipLineChart(
-      chart.title,
+      bilingualTitle(chart.title),
       chart.series || [],
       chart.keys || ["value"],
       chart.labels || { value: "Value" },
@@ -864,7 +903,7 @@
       }))
       .filter((point) => point.secondary !== undefined);
     return renderRelationshipLineChart(
-      chart.title,
+      bilingualTitle(chart.title),
       merged,
       ["real_rate", "secondary"],
       {
