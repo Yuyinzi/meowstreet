@@ -94,6 +94,12 @@
     return zh ? `${label} (${zh})` : label;
   }
 
+  function bilingualLineLabel(labels, key) {
+    const label = labels?.[key] || key;
+    const zh = zhLabel(label);
+    return zh ? `${escapeHtml(label)}<br><small>${escapeHtml(zh)}</small>` : escapeHtml(label);
+  }
+
   function signalUsabilityMeta(value) {
     const text = String(value ?? "");
     if (text.includes("usable with caution")) {
@@ -265,10 +271,16 @@
             <button class="gdp-card${selected}" type="button" data-relationship-id="${escapeHtml(card.relationship_id)}">
               <div class="gdp-card-topline">
                 <span class="market-region">${escapeHtml(card.region)}</span>
-                <span class="gdp-card-confidence ${confidenceClass(card)}">${escapeHtml(card.macro_relationship_confidence)} ${bilingualLabel("confidence")}</span>
               </div>
+              <span class="gdp-card-confidence ${confidenceClass(card)}">
+                <span class="confidence-level">${escapeHtml(card.macro_relationship_confidence)} ${escapeHtml("confidence")}</span>
+                <span>${escapeHtml(zhLabel("confidence"))} ${escapeHtml(zhLabel(card.macro_relationship_confidence))}</span>
+              </span>
               <strong class="gdp-card-title">${escapeHtml(card.title)}</strong>
-              <span class="gdp-card-subtitle">${escapeHtml(card.economy)} · ${bilingualLabel("primary lag")} ${escapeHtml(card.primary_lag_months)}M</span>
+              <span class="gdp-card-subtitle">
+                <span class="subtitle-en">${escapeHtml(card.economy)} · primary lag ${escapeHtml(card.primary_lag_months)}M</span>
+                <span class="subtitle-zh">${escapeHtml(zhLabel("primary lag"))} ${escapeHtml(card.primary_lag_months)}M</span>
+              </span>
               <div class="gdp-card-summary">
                 <span>
                   <small>${bilingualLabel("Signal")}</small>
@@ -371,11 +383,12 @@
 
   function renderRelationshipLineChart(title, series, keys, labels = {}, options = {}) {
     const wideClass = options.wide ? " relationship-chart-wide" : "";
+    const titleHtml = options.rawTitle ? title : escapeHtml(title);
     if (!series || !series.length) {
       return `
         <div class="relationship-chart${wideClass}">
           <div class="relationship-chart-head">
-            <h3>${escapeHtml(title)}</h3>
+            <h3>${titleHtml}</h3>
             <span>No data</span>
           </div>
           <p class="status">No chart data available.</p>
@@ -387,7 +400,7 @@
       return `
         <div class="relationship-chart${wideClass}">
           <div class="relationship-chart-head">
-            <h3>${escapeHtml(title)}</h3>
+            <h3>${titleHtml}</h3>
             <span>No data</span>
           </div>
           <p class="status">No chart data available.</p>
@@ -401,16 +414,16 @@
     return `
       <div class="relationship-chart${wideClass}">
         <div class="relationship-chart-head">
-          <h3>${escapeHtml(title)}</h3>
+          <h3>${titleHtml}</h3>
           <span>${escapeHtml(fmtMonthYear(firstLabel))} - ${escapeHtml(fmtMonthYear(lastLabel))}</span>
         </div>
         <div class="relationship-legend">
           ${keys.map((key, index) => `
-            <span><i class="relationship-line-key relationship-line-key-${index}"></i>${escapeHtml(lineLabel(labels, key))}</span>
+            <span><i class="relationship-line-key relationship-line-key-${index}"></i>${options.rawLabels ? bilingualLineLabel(labels, key) : escapeHtml(lineLabel(labels, key))}</span>
           `).join("")}
         </div>
         <div class="chart-wrap relationship-chart-wrap">
-          <svg class="relationship-chart-svg" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${escapeHtml(title)}">
+          <svg class="relationship-chart-svg" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${titleHtml}">
             ${renderRelationshipYAxisAndGrid(relationshipYAxisTicks(series, keys, Y_AXIS_TICK_COUNT, options.yDomain), scale, valueFormatter)}
             ${scale.min <= 0 && scale.max >= 0 ? `<line class="relationship-zero" x1="${MARGIN_LEFT}" y1="${yAt(0, scale).toFixed(2)}" x2="${PLOT_RIGHT}" y2="${yAt(0, scale).toFixed(2)}"></line>` : ""}
             ${keys.flatMap((key, index) => (
@@ -447,7 +460,7 @@
           const text = value === null || value === undefined ? "n/a" : valueFormatter(value);
           return `
             <div class="chart-tooltip-row">
-              <span>${escapeHtml(lineLabel(labels, key))}</span>
+              <span>${options.rawLabels ? bilingualLineLabel(labels, key) : escapeHtml(lineLabel(labels, key))}</span>
               <strong>${escapeHtml(text)}</strong>
             </div>
           `;
@@ -557,6 +570,8 @@
       payload.lag_correlation_labels || {},
       {
         wide: true,
+        rawTitle: true,
+        rawLabels: true,
         valueFormatter: fmtCorrelationPercent,
       }
     );
@@ -570,6 +585,8 @@
       { index: "Index YoY", gdp: "GDP YoY" },
       {
         wide: true,
+        rawTitle: true,
+        rawLabels: true,
         valueFormatter: (value) => `${fmtNumber(value)}%`,
       }
     );
@@ -583,6 +600,8 @@
       { value: `${payload.primary_lag_months}M lag rolling correlation` },
       {
         wide: true,
+        rawTitle: true,
+        rawLabels: true,
         valueFormatter: fmtCorrelationPercent,
       }
     );
@@ -610,17 +629,20 @@
               <p class="eyebrow">${escapeHtml(card.economy)}</p>
               <h2>${escapeHtml(card.title)}</h2>
             </div>
-            <span class="phase-pill ${confidenceClass(card)}">${escapeHtml(card.macro_relationship_confidence)} ${bilingualLabel("confidence")}</span>
+            <span class="phase-pill ${confidenceClass(card)}">
+              <span class="confidence-level">${escapeHtml(card.macro_relationship_confidence)} ${escapeHtml("confidence")}</span>
+              <span>${escapeHtml(zhLabel("confidence"))} ${escapeHtml(zhLabel(card.macro_relationship_confidence))}</span>
+            </span>
           </div>
           <div class="metric-strip">
-            <div><span>${bilingualLabel("Index YoY")}</span><strong>${escapeHtml(fmtPercent(indexYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
-            <div><span>${bilingualLabel("GDP YoY")}</span><strong>${escapeHtml(fmtPercent(gdpYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
-            <div><span>${bilingualLabel("Average 10Y Correlation")}</span><strong>${escapeHtml(fmtCorrelationPercent(latest.average_10y_correlation))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag average</small></div>
-            <div><span>${bilingualLabel("Same Direction")}</span><strong>${escapeHtml(fmtPercent(payload.same_direction_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B</small></div>
-            <div><span>${bilingualLabel("Method Coverage")}</span><strong>${escapeHtml(fmtPercent(payload.method_explainable_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B + C</small></div>
-            <div><span>${bilingualLabel("Current Case")}</span><strong>${escapeHtml(latest.quadnomial_current_plain_label || latest.quadnomial_current_case)}</strong><small class="metric-context">Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}</small></div>
-            <div><span>${bilingualLabel("Signal usability")}</span><strong class="signal-status ${signal.className}" title="${escapeHtml(payload.relationship_signal_usability)}">${escapeHtml(signal.label)}</strong></div>
-            <div><span>${bilingualLabel("Portfolio Bias")}</span><strong class="signal-status ${portfolioBias.className}" title="${escapeHtml(payload.portfolio_bias_status)}">${escapeHtml(portfolioBias.label)}</strong></div>
+            <div><span>${bilingualTitle("Index YoY")}</span><strong>${escapeHtml(fmtPercent(indexYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
+            <div><span>${bilingualTitle("GDP YoY")}</span><strong>${escapeHtml(fmtPercent(gdpYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
+            <div><span>${bilingualTitle("Average 10Y Correlation")}</span><strong>${escapeHtml(fmtCorrelationPercent(latest.average_10y_correlation))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag average</small></div>
+            <div><span>${bilingualTitle("Same Direction")}</span><strong>${escapeHtml(fmtPercent(payload.same_direction_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B</small></div>
+            <div><span>${bilingualTitle("Method Coverage")}</span><strong>${escapeHtml(fmtPercent(payload.method_explainable_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B + C</small></div>
+            <div><span>${bilingualTitle("Current Case")}</span><strong>${escapeHtml(latest.quadnomial_current_plain_label || latest.quadnomial_current_case)}</strong><small class="metric-context">Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}</small></div>
+            <div><span>${bilingualTitle("Signal usability")}</span><strong class="signal-status ${signal.className}" title="${escapeHtml(payload.relationship_signal_usability)}">${escapeHtml(signal.label)}</strong></div>
+            <div><span>${bilingualTitle("Portfolio Bias")}</span><strong class="signal-status ${portfolioBias.className}" title="${escapeHtml(payload.portfolio_bias_status)}">${escapeHtml(portfolioBias.label)}</strong></div>
           </div>
           <div class="relationship-chart-grid relationship-chart-grid-pre-method">
             ${renderQuadBars(payload)}
@@ -723,7 +745,8 @@
     "Comparison": "对比",
     "Interpretation": "解读",
     "Yield Curve Analysis": "收益率曲线分析",
-    "Nominal & Real Curve Comparison": "名义与实际曲线对比",
+    "US Yield Curve - Comparative Analysis": "美国名义收益率曲线对比",
+    "US Real Yield Curve (TIPS) - Comparative Analysis": "美国实际收益率曲线(TIPS)对比",
     // GDP Relationships
     "Index YoY": "指数同比",
     "GDP YoY": "GDP同比",
@@ -743,7 +766,13 @@
     "Method Coverage": "课程覆盖",
     "Current Case": "当前案例",
     "confidence": "置信度",
-    "primary lag": "主滞后",
+    "High": "高",
+    "Medium": "中",
+    "Low": "低",
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+    "primary lag": "滞后期",
     "usable": "可用",
     "caution": "谨慎",
     "weak": "弱",
@@ -751,8 +780,8 @@
     "long bias": "多头偏向",
     "defensive": "防御性",
     "requires GDP forecast": "需要GDP预测",
-    "Method primary lag": "课程主滞后",
-    "Method primary": "课程主滞后",
+    "Method primary lag": "课程主要滞后",
+    "Method primary": "课程主要滞后",
     // Market Phase
     "Drawdown": "回撤",
     "Through": "截至",
@@ -882,7 +911,7 @@
 
   function bilingualTitle(title) {
     const zh = zhLabel(title);
-    return zh ? `${title} · ${zh}` : title;
+    return zh ? `${escapeHtml(title)}<br><small>${escapeHtml(zh)}</small>` : escapeHtml(title);
   }
 
   function renderRatesTimeSeriesChart(chart) {
@@ -926,12 +955,13 @@
     return `<div class="rates-curve-combo relationship-chart-wide">
       ${dateControls}
       ${renderRelationshipLineChart(
-        chart.title,
+        bilingualTitle(chart.title),
         series.map((point) => ({ date: point.label, ...point })),
         keys,
         labels,
         {
           wide: false,
+          rawTitle: true,
           valueFormatter: fmtRate,
           yDomain: chart.y_domain,
           categoricalXAxis: true,
@@ -960,7 +990,7 @@
         real_rate: chart.labels?.real_rate || "Real Rate",
         secondary: chart.labels?.vix || chart.labels?.sp500_pe || "Comparison",
       },
-      { wide: true },
+      { wide: true, rawTitle: true },
     );
   }
 
@@ -1046,7 +1076,6 @@
     const heading = context === "yield_curve" ? `
       <div class="rates-interpretation-panel">
         <p class="eyebrow">${bilingualLabel("Yield Curve Analysis")}</p>
-        <h3>${bilingualTitle("Nominal & Real Curve Comparison")}</h3>
         <p>Compare yield curve shape across selected dates for nominal Treasuries and real TIPS rates.</p>
       </div>
     ` : `
