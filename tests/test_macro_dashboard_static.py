@@ -33,7 +33,6 @@ def test_macro_dashboard_js_fetches_us_rates_liquidity_api():
     assert "card.date" not in js
     assert "card.context" not in js
     assert "CPI Real Rate" in js
-    assert "payload.derived?.cpi_based_real_rate" in js
     assert "payload.derived?.vix" in js
     assert "payload.derived?.sp500_pe" in js
 

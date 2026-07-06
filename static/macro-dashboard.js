@@ -704,6 +704,15 @@
     `;
   }
 
+  function renderSupportCard(label, value) {
+    return `
+      <span class="rates-signal-card">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </span>
+    `;
+  }
+
   function ratesDetailCacheKey(detailId) {
     if (detailId === "yield_curve_shape") {
       return `yield_curve_shape|${state.selectedNominalCurrentDate || ""}|${state.selectedNominalComparisonDate || ""}|${state.selectedRealCurrentDate || ""}|${state.selectedRealComparisonDate || ""}`;
@@ -760,15 +769,7 @@
         </div>
         <span class="mock-pill">${escapeHtml(payload.as_of ? `As of ${fmtDate(payload.as_of)}` : "Import needed")}</span>
       </div>
-      ${headline.length ? `<div class="rates-signal-grid">${headline.map(renderRateCard).join("")}</div>` : ""}
-      <div class="rates-support-grid">
-        <span><strong>10Y - 2Y</strong>${escapeHtml(fmtRate(payload.derived?.tens_twos_spread))}</span>
-        <span><strong>10Y Real</strong>${escapeHtml(fmtRate(payload.derived?.ten_year_real_rate))}</span>
-        <span><strong>Breakeven</strong>${escapeHtml(fmtRate(payload.derived?.ten_year_breakeven_inflation))}</span>
-        <span><strong>CPI Real</strong>${escapeHtml(fmtRate(payload.derived?.cpi_based_real_rate))}</span>
-        <span><strong>VIX</strong>${escapeHtml(fmtNumber(payload.derived?.vix))}</span>
-        <span><strong>S&P PE</strong>${escapeHtml(fmtNumber(payload.derived?.sp500_pe))}</span>
-      </div>
+      ${headline.length ? `<div class="rates-signal-grid">${headline.map(renderRateCard).join("")}${renderSupportCard("Breakeven", fmtRate(payload.derived?.ten_year_breakeven_inflation))}${renderSupportCard("VIX", fmtNumber(payload.derived?.vix))}${renderSupportCard("S&P PE", fmtNumber(payload.derived?.sp500_pe))}</div>` : ""}
       ${state.selectedRatesDetailId ? '<div class="rates-detail gdp-detail" id="usRatesLiquidityDetail"></div>' : ""}
       <div class="rates-interpretation-panel">
         <p class="eyebrow">Interpretation</p>
