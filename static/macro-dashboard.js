@@ -6,6 +6,14 @@
     marketDetailsById: {},
     gdpRelationships: [],
     gdpRelationshipDetailsById: {},
+    usRatesLiquidity: null,
+    usRatesLiquidityError: null,
+    selectedRatesDetailId: null,
+    usRatesDetailsById: {},
+    selectedNominalCurrentDate: null,
+    selectedNominalComparisonDate: null,
+    selectedRealCurrentDate: null,
+    selectedRealComparisonDate: null,
   };
 
   const CHART_WIDTH = 960;
@@ -21,7 +29,7 @@
   const PLOT_BOTTOM = CHART_HEIGHT - MARGIN_BOTTOM;
   const PLOT_HEIGHT = PLOT_BOTTOM - MARGIN_TOP;
   const Y_AXIS_TICK_COUNT = 9;
-  const X_AXIS_TICK_COUNT = 10;
+  const X_AXIS_TICK_COUNT = 12;
 
   async function loadGdpRelationshipOverview() {
     const response = await fetch("/api/macro-dashboard/gdp-relationships");
@@ -284,7 +292,12 @@
     return series.flatMap((point) => keys.map((key) => point[key])).filter((value) => value !== null && value !== undefined);
   }
 
-  function relationshipScale(series, keys) {
+  function relationshipScale(series, keys, yDomain = null) {
+    if (yDomain && yDomain.min !== null && yDomain.min !== undefined && yDomain.max !== null && yDomain.max !== undefined) {
+      const min = yDomain.min;
+      const max = yDomain.max;
+      return { min, max, range: max - min || 1, height: PLOT_HEIGHT };
+    }
     const values = relationshipValues(series, keys);
     if (!values.length) return null;
     const min = Math.min(...values);
@@ -292,7 +305,10 @@
     return { min, max, range: max - min || 1, height: PLOT_HEIGHT };
   }
 
-  function relationshipYAxisTicks(series, keys, count) {
+  function relationshipYAxisTicks(series, keys, count, yDomain = null) {
+    if (yDomain && yDomain.min !== null && yDomain.min !== undefined && yDomain.max !== null && yDomain.max !== undefined) {
+      return niceTicks(yDomain.min, yDomain.max, count);
+    }
     const values = relationshipValues(series, keys);
     if (!values.length) return [];
     return niceTicks(Math.min(...values), Math.max(...values), count);
@@ -302,13 +318,18 @@
     return xAxisTicks(series);
   }
 
-  function renderRelationshipXAxisTicks(series) {
-    const ticks = xAxisTicks(series);
+  function renderRelationshipXAxisTicks(series, options = {}) {
+    const ticks = options.categoricalXAxis
+      ? series.map((point, index) => ({
+        date: point.label || point.date,
+        x: xAt(index, series.length),
+      }))
+      : xAxisTicks(series);
     return ticks
       .map((tick) => `
         <g class="chart-tick relationship-chart-tick" transform="translate(${tick.x.toFixed(2)} ${PLOT_BOTTOM})">
           <line y2="8"></line>
-          <text class="chart-x-label" y="${RELATIONSHIP_X_LABEL_Y}" text-anchor="middle" x="0" transform="rotate(-35 0 ${RELATIONSHIP_X_LABEL_Y})">${escapeHtml(fmtMonthYear(tick.date))}</text>
+          <text class="chart-x-label" y="${RELATIONSHIP_X_LABEL_Y}" text-anchor="middle" x="0" transform="rotate(-35 0 ${RELATIONSHIP_X_LABEL_Y})">${escapeHtml(options.categoricalXAxis ? tick.date : fmtMonthYear(tick.date))}</text>
         </g>
       `)
       .join("");
@@ -363,7 +384,7 @@
         </div>
       `;
     }
-    const scale = relationshipScale(series, keys);
+    const scale = relationshipScale(series, keys, options.yDomain);
     const valueFormatter = options.valueFormatter || fmtNumber;
     const firstLabel = series[0].label || series[0].date;
     const lastLabel = series[series.length - 1].label || series[series.length - 1].date;
@@ -380,12 +401,20 @@
         </div>
         <div class="chart-wrap relationship-chart-wrap">
           <svg class="relationship-chart-svg" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${escapeHtml(title)}">
-            ${renderRelationshipYAxisAndGrid(relationshipYAxisTicks(series, keys, Y_AXIS_TICK_COUNT), scale, valueFormatter)}
+            ${renderRelationshipYAxisAndGrid(relationshipYAxisTicks(series, keys, Y_AXIS_TICK_COUNT, options.yDomain), scale, valueFormatter)}
             ${scale.min <= 0 && scale.max >= 0 ? `<line class="relationship-zero" x1="${MARGIN_LEFT}" y1="${yAt(0, scale).toFixed(2)}" x2="${PLOT_RIGHT}" y2="${yAt(0, scale).toFixed(2)}"></line>` : ""}
             ${keys.flatMap((key, index) => (
               chartSegments(series, key, scale).map((points) => `<polyline class="relationship-line relationship-line-${index}" points="${escapeHtml(points)}"></polyline>`)
             )).join("")}
-            ${renderRelationshipXAxisTicks(series)}
+            ${options.showDots ? keys.flatMap((key, index) => (
+              series
+                .filter((point) => point[key] !== null && point[key] !== undefined)
+                .map((point) => {
+                  const i = series.indexOf(point);
+                  return `<circle class="relationship-dot relationship-dot-${index}" cx="${xAt(i, series.length).toFixed(2)}" cy="${yAt(point[key], scale).toFixed(2)}" r="3.5"></circle>`;
+                })
+            )).join("") : ""}
+            ${renderRelationshipXAxisTicks(series, options)}
           </svg>
           <div class="chart-tooltip" aria-hidden="true"></div>
         </div>
@@ -638,6 +667,373 @@
       .catch((error) => {
         if (state.selectedRelationshipId !== card.relationship_id) return;
         detail.innerHTML = `<p class="status">Failed to load GDP relationship detail.</p>`;
+        console.error(error);
+      });
+  }
+
+  async function loadUsRatesLiquidity() {
+    try {
+      const response = await fetch("/api/macro-dashboard/us-rates-liquidity");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      state.usRatesLiquidity = await response.json();
+      state.usRatesLiquidityError = null;
+    } catch (error) {
+      state.usRatesLiquidity = null;
+      state.usRatesLiquidityError = error.message;
+    }
+    renderUsRatesLiquidity();
+  }
+
+  function fmtRate(value) {
+    if (value === null || value === undefined) return "n/a";
+    return `${Number(value).toFixed(2)}%`;
+  }
+
+  function fmtNumber(value) {
+    if (value === null || value === undefined) return "n/a";
+    return Number(value).toFixed(2);
+  }
+
+  function renderRateCard(card) {
+    const selected = state.selectedRatesDetailId === card.id ? " selected" : "";
+    return `
+      <button class="rates-signal-card${selected}" type="button" data-rates-detail-id="${escapeHtml(card.id)}">
+        <span>${escapeHtml(card.label)}</span>
+        <strong>${escapeHtml(fmtRate(card.value))}</strong>
+      </button>
+    `;
+  }
+
+  function ratesDetailCacheKey(detailId) {
+    if (detailId === "yield_curve_shape") {
+      return `yield_curve_shape|${state.selectedNominalCurrentDate || ""}|${state.selectedNominalComparisonDate || ""}|${state.selectedRealCurrentDate || ""}|${state.selectedRealComparisonDate || ""}`;
+    }
+    return detailId;
+  }
+
+  async function loadUsRatesLiquidityDetail(detailId) {
+    const cacheKey = ratesDetailCacheKey(detailId);
+    if (state.usRatesDetailsById[cacheKey]) {
+      return state.usRatesDetailsById[cacheKey];
+    }
+    const url = new URL(`/api/macro-dashboard/us-rates-liquidity/${encodeURIComponent(detailId)}`, window.location.origin);
+    if (detailId === "yield_curve_shape") {
+      if (state.selectedNominalCurrentDate) {
+        url.searchParams.set("nominalCurrentDate", state.selectedNominalCurrentDate);
+      }
+      if (state.selectedNominalComparisonDate) {
+        url.searchParams.set("nominalComparisonDate", state.selectedNominalComparisonDate);
+      }
+      if (state.selectedRealCurrentDate) {
+        url.searchParams.set("realCurrentDate", state.selectedRealCurrentDate);
+      }
+      if (state.selectedRealComparisonDate) {
+        url.searchParams.set("realComparisonDate", state.selectedRealComparisonDate);
+      }
+    }
+    const response = await fetch(url.toString());
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    state.usRatesDetailsById[cacheKey] = payload;
+    return payload;
+  }
+
+  function renderUsRatesLiquidity() {
+    const section = $("usRatesLiquidity");
+    if (!section) return;
+    const payload = state.usRatesLiquidity;
+    if (state.usRatesLiquidityError) {
+      section.querySelector(".rates-loading")?.remove();
+      section.insertAdjacentHTML(
+        "beforeend",
+        `<div class="rates-empty">Unable to load US rates data: ${escapeHtml(state.usRatesLiquidityError)}</div>`,
+      );
+      return;
+    }
+    if (!payload) return;
+    const headline = payload.headline || [];
+    section.innerHTML = `
+      <div class="relationship-head">
+        <div>
+          <h2>US Rates / Liquidity</h2>
+          <p class="subtitle">Nominal curve, real rates, Fed Funds, CPI Real Rate, and curve-steepness signals from the imported US benchmark-yields workbook.</p>
+        </div>
+        <span class="mock-pill">${escapeHtml(payload.as_of ? `As of ${fmtDate(payload.as_of)}` : "Import needed")}</span>
+      </div>
+      ${headline.length ? `<div class="rates-signal-grid">${headline.map(renderRateCard).join("")}</div>` : ""}
+      ${state.selectedRatesDetailId ? '<div class="rates-detail gdp-detail" id="usRatesLiquidityDetail"></div>' : ""}
+      <div class="rates-interpretation-panel">
+        <p class="eyebrow">Interpretation</p>
+        <h3>${escapeHtml(fmtStatus(payload.derived?.curve_status || "missing"))}</h3>
+        <p>${escapeHtml(payload.derived?.method_interpretation || "")}</p>
+        <div class="rates-support-grid">
+          <span><strong>10Y - 2Y</strong>${escapeHtml(fmtRate(payload.derived?.tens_twos_spread))}</span>
+          <span><strong>10Y Real</strong>${escapeHtml(fmtRate(payload.derived?.ten_year_real_rate))}</span>
+          <span><strong>Breakeven</strong>${escapeHtml(fmtRate(payload.derived?.ten_year_breakeven_inflation))}</span>
+          <span><strong>CPI Real</strong>${escapeHtml(fmtRate(payload.derived?.cpi_based_real_rate))}</span>
+          <span><strong>VIX</strong>${escapeHtml(fmtNumber(payload.derived?.vix))}</span>
+          <span><strong>S&P PE</strong>${escapeHtml(fmtNumber(payload.derived?.sp500_pe))}</span>
+        </div>
+      </div>
+      <div class="rates-detail gdp-detail" id="usRatesCurveDetail"></div>
+    `;
+    section.querySelectorAll("[data-rates-detail-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.selectedRatesDetailId = state.selectedRatesDetailId === button.dataset.ratesDetailId
+          ? null
+          : button.dataset.ratesDetailId;
+        if (state.selectedRatesDetailId !== "yield_curve_shape") {
+          state.selectedNominalCurrentDate = null;
+          state.selectedNominalComparisonDate = null;
+          state.selectedRealCurrentDate = null;
+          state.selectedRealComparisonDate = null;
+        }
+        renderUsRatesLiquidity();
+      });
+    });
+    renderUsRatesLiquidityDetail();
+    renderYieldCurveDetail();
+  }
+
+  function renderRatesTimeSeriesChart(chart) {
+    return renderRelationshipLineChart(
+      chart.title,
+      chart.series || [],
+      chart.keys || ["value"],
+      chart.labels || { value: "Value" },
+      {
+        wide: true,
+        valueFormatter: fmtRate,
+        yDomain: chart.y_domain,
+      }
+    );
+  }
+
+  function renderRatesCurveComparisonChart(chart, chartIndex) {
+    const kind = chartIndex === 0 ? "nominal" : "real";
+    const dates = chart.date_options || [];
+    const dateControls = dates.length ? `
+      <div class="rates-curve-date-controls">
+        <label>BLUE LINE
+          <select data-curve-date-kind="${kind}" data-curve-date-role="current">
+            ${dates.map((date) => `
+              <option value="${escapeHtml(date)}" ${date === chart.selected_current_date ? "selected" : ""}>${escapeHtml(date)}</option>
+            `).join("")}
+          </select>
+        </label>
+        <label>RED LINE
+          <select data-curve-date-kind="${kind}" data-curve-date-role="comparison">
+            ${dates.map((date) => `
+              <option value="${escapeHtml(date)}" ${date === chart.selected_comparison_date ? "selected" : ""}>${escapeHtml(date)}</option>
+            `).join("")}
+          </select>
+        </label>
+      </div>
+    ` : "";
+    const series = chart.series || [];
+    const keys = chart.keys || ["current", "comparison"];
+    const labels = chart.labels || { current: "Latest", comparison: "Comparison" };
+    return `<div class="rates-curve-combo relationship-chart-wide">
+      ${dateControls}
+      ${renderRelationshipLineChart(
+        chart.title,
+        series.map((point) => ({ date: point.label, ...point })),
+        keys,
+        labels,
+        {
+          wide: false,
+          valueFormatter: fmtRate,
+          yDomain: chart.y_domain,
+          categoricalXAxis: true,
+          showDots: true,
+        }
+      )}
+    </div>`;
+  }
+
+  function renderRatesMultiSeriesChart(chart) {
+    const primary = chart.series || [];
+    const secondary = chart.secondary_series || [];
+    const secondaryByDate = new Map(secondary.map((point) => [point.date, point.value]));
+    const merged = primary
+      .map((point) => ({
+        date: point.date,
+        real_rate: point.real_rate ?? point.value,
+        secondary: secondaryByDate.get(point.date),
+      }))
+      .filter((point) => point.secondary !== undefined);
+    return renderRelationshipLineChart(
+      chart.title,
+      merged,
+      ["real_rate", "secondary"],
+      {
+        real_rate: chart.labels?.real_rate || "Real Rate",
+        secondary: chart.labels?.vix || chart.labels?.sp500_pe || "Comparison",
+      },
+      { wide: true },
+    );
+  }
+
+  function renderRatesDetailChart(chart, chartIndex) {
+    if (chart.kind === "curve_comparison") {
+      return renderRatesCurveComparisonChart(chart, chartIndex);
+    }
+    if (chart.kind === "multi_series") {
+      return renderRatesMultiSeriesChart(chart);
+    }
+    return renderRatesTimeSeriesChart(chart);
+  }
+
+  function bindRatesCurveControls(detail, context) {
+    detail.querySelectorAll("[data-curve-date-kind]").forEach((select) => {
+      select.addEventListener("change", (event) => {
+        event.preventDefault();
+        const kind = select.dataset.curveDateKind;
+        const role = select.dataset.curveDateRole;
+        const date = select.value;
+        if (kind === "nominal") {
+          if (role === "current") state.selectedNominalCurrentDate = date;
+          else state.selectedNominalComparisonDate = date;
+        } else {
+          if (role === "current") state.selectedRealCurrentDate = date;
+          else state.selectedRealComparisonDate = date;
+        }
+        const chartContainer = detail.querySelector(".relationship-chart-grid");
+        if (chartContainer) {
+          chartContainer.innerHTML = '<p class="status">Loading charts...</p>';
+        }
+        Object.keys(state.usRatesDetailsById).forEach((key) => {
+          if (key.startsWith("yield_curve_shape")) {
+            delete state.usRatesDetailsById[key];
+          }
+        });
+        const detailId = context === "yield_curve" ? "yield_curve_shape" : state.selectedRatesDetailId;
+        loadUsRatesLiquidityDetail(detailId)
+          .then((payload) => {
+            if (chartContainer) {
+              chartContainer.innerHTML = payload.charts.map(renderRatesDetailChart).join("");
+              const charts = chartContainer.querySelectorAll(".relationship-chart-wrap");
+              charts.forEach((wrap, index) => {
+                const chart = payload.charts[index];
+                attachRelationshipChartTooltip(
+                  wrap.querySelector(".relationship-chart-svg"),
+                  wrap.querySelector(".chart-tooltip"),
+                  chart.kind === "curve_comparison"
+                    ? (chart.series || []).map((point) => ({ date: point.label, ...point }))
+                    : chart.series || [],
+                  chart.keys || ["value"],
+                  chart.labels || { value: "Value" },
+                  { valueFormatter: fmtRate }
+                );
+              });
+            }
+          })
+          .catch((error) => {
+            console.error(error);
+          });
+      });
+    });
+  }
+
+  function attachRatesChartTooltips(detail, chartsPayload) {
+    const charts = detail.querySelectorAll(".relationship-chart-wrap");
+    charts.forEach((wrap, index) => {
+      const chart = chartsPayload[index];
+      attachRelationshipChartTooltip(
+        wrap.querySelector(".relationship-chart-svg"),
+        wrap.querySelector(".chart-tooltip"),
+        chart.kind === "curve_comparison"
+          ? (chart.series || []).map((point) => ({ date: point.label, ...point }))
+          : chart.series || [],
+        chart.keys || ["value"],
+        chart.labels || { value: "Value" },
+        { valueFormatter: fmtRate }
+      );
+    });
+  }
+
+  function renderRatesDetailPayload(detail, payload, context) {
+    const heading = context === "yield_curve" ? `
+      <div class="rates-interpretation-panel">
+        <p class="eyebrow">Yield Curve Analysis</p>
+        <h3>Nominal & Real Curve Comparison</h3>
+        <p>Compare yield curve shape across selected dates for nominal Treasuries and real TIPS rates.</p>
+      </div>
+    ` : `
+      <div class="detail-head">
+        <div>
+          <h2>${escapeHtml(payload.title)}</h2>
+        </div>
+      </div>
+    `;
+    detail.innerHTML = `
+      ${heading}
+      <div class="relationship-chart-grid">
+        ${payload.charts.map((chart, index) => renderRatesDetailChart(chart, index)).join("")}
+      </div>
+    `;
+    bindRatesCurveControls(detail, context);
+    attachRatesChartTooltips(detail, payload.charts);
+  }
+
+  function bindRatesCurveControls(detail, context) {
+    detail.querySelectorAll("[data-curve-date-kind]").forEach((select) => {
+      select.addEventListener("change", (event) => {
+        event.preventDefault();
+        const kind = select.dataset.curveDateKind;
+        const role = select.dataset.curveDateRole;
+        const date = select.value;
+        if (kind === "nominal") {
+          if (role === "current") state.selectedNominalCurrentDate = date;
+          else state.selectedNominalComparisonDate = date;
+        } else {
+          if (role === "current") state.selectedRealCurrentDate = date;
+          else state.selectedRealComparisonDate = date;
+        }
+        Object.keys(state.usRatesDetailsById).forEach((key) => {
+          if (key.startsWith("yield_curve_shape")) {
+            delete state.usRatesDetailsById[key];
+          }
+        });
+        const detailId = context === "yield_curve" ? "yield_curve_shape" : state.selectedRatesDetailId;
+        loadUsRatesLiquidityDetail(detailId)
+          .then((payload) => {
+            renderRatesDetailPayload(detail, payload, context);
+          })
+          .catch((error) => {
+            console.error(error);
+          });
+      });
+    });
+  }
+
+  function renderUsRatesLiquidityDetail() {
+    const detail = $("usRatesLiquidityDetail");
+    const detailId = state.selectedRatesDetailId;
+    if (!detail || !detailId) return;
+    detail.innerHTML = '<p class="status">Loading US rates detail...</p>';
+    loadUsRatesLiquidityDetail(detailId)
+      .then((payload) => {
+        if (state.selectedRatesDetailId !== payload.detail_id) return;
+        renderRatesDetailPayload(detail, payload, "card");
+      })
+      .catch((error) => {
+        if (state.selectedRatesDetailId !== detailId) return;
+        detail.innerHTML = '<p class="status">Failed to load US rates detail.</p>';
+        console.error(error);
+      });
+  }
+
+  function renderYieldCurveDetail() {
+    const detail = $("usRatesCurveDetail");
+    if (!detail) return;
+    detail.innerHTML = '<p class="status">Loading yield curve comparison...</p>';
+    loadUsRatesLiquidityDetail("yield_curve_shape")
+      .then((payload) => {
+        renderRatesDetailPayload(detail, payload, "yield_curve");
+      })
+      .catch((error) => {
+        detail.innerHTML = '<p class="status">Failed to load yield curve comparison.</p>';
         console.error(error);
       });
   }
@@ -1004,6 +1400,17 @@
       : "No benchmark market data found. Run scripts/import_benchmark_market_data.py.";
     renderOverview();
     renderDetail();
+    loadUsRatesLiquidity().catch((error) => {
+      const section = $("usRatesLiquidity");
+      if (section) {
+        section.querySelector(".rates-loading")?.remove();
+        section.insertAdjacentHTML(
+          "beforeend",
+          `<div class="rates-empty">Failed to load US rates data.</div>`,
+        );
+      }
+      console.error(error);
+    });
     loadGdpRelationshipOverview().catch((error) => {
       const section = ensureGdpRelationshipRoot();
       if (section) {

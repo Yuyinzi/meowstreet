@@ -265,6 +265,270 @@ h2 {
   box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
 }
 
+.rates-liquidity {
+  margin: 22px 0 24px;
+}
+
+.rates-loading,
+.rates-empty {
+  border: 1px dashed rgba(54, 42, 29, 0.25);
+  border-radius: 18px;
+  color: #8B7E74;
+  padding: 18px;
+}
+
+.real-rates {
+  margin-top: 12px;
+}
+
+.rates-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.rates-signal-card {
+  min-height: 88px;
+  border: 1px solid #E0D6C8;
+  border-radius: 10px;
+  padding: 12px 15px;
+  background: #FFFFFF;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.rates-signal-card:hover {
+  border-color: #3B3530;
+  box-shadow: 0 2px 8px rgba(59, 53, 48, 0.08);
+}
+
+.rates-signal-card.selected,
+.rates-panel-button.selected {
+  border-color: #5D7FA8;
+  box-shadow: 0 0 0 2px rgba(93, 127, 168, 0.18), 0 2px 8px rgba(93, 127, 168, 0.08);
+}
+
+.rates-panel-button {
+  appearance: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.rates-detail {
+  margin-top: 22px;
+}
+
+.rates-curve-controls {
+  display: none;
+}
+
+.rates-curve-combo {
+  border: 1px solid #E8E0D6;
+  border-radius: 10px;
+  background: #FDFAF7;
+  overflow: hidden;
+}
+
+.rates-curve-combo .relationship-chart {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.rates-curve-date-controls {
+  display: flex;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #E8E0D6;
+}
+
+.rates-curve-date-controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5a4e42;
+}
+
+.rates-curve-date-controls select {
+  background: #fffaf1;
+  border: 1px solid rgba(54, 42, 29, 0.18);
+  border-radius: 8px;
+  color: #362a1d;
+  padding: 6px 10px;
+  font-size: 13px;
+  min-width: 0;
+  max-width: 140px;
+}
+
+.rates-signal-primary {
+  border-color: #BBDCC6;
+  background: #F2FAF4;
+}
+
+.rates-signal-card span {
+  display: block;
+  color: #A89B91;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rates-signal-card strong {
+  display: block;
+  margin: 10px 0 0;
+  color: #3B3530;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.rates-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(290px, 0.55fr);
+  gap: 14px;
+}
+
+.rates-panel {
+  border: 1px solid #E8E0D6;
+  border-radius: 12px;
+  padding: 14px;
+  background: #FDFAF7;
+}
+
+.rates-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.rates-panel h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.rates-panel p {
+  margin: 6px 0 0;
+  color: #8B7E74;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.yield-curve-card {
+  border: 1px solid #E8E0D6;
+  border-radius: 10px;
+  padding: 10px;
+  background: #FFFFFF;
+}
+
+.yield-curve-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.yield-axis {
+  stroke: #E0D6C8;
+  stroke-width: 1;
+}
+
+.yield-line {
+  fill: none;
+  stroke: #5D7FA8;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.yield-points {
+  fill: #5D7FA8;
+}
+
+.yield-labels {
+  fill: #8B7E74;
+  font-size: 11px;
+}
+
+.maturity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.maturity-grid span,
+.rates-support-grid span {
+  border: 1px solid #E8E0D6;
+  border-radius: 9px;
+  padding: 8px;
+  background: #FFFFFF;
+  color: #8B7E74;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.maturity-grid strong,
+.rates-support-grid strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #3B3530;
+  font-size: 12px;
+}
+
+.rates-interpretation {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rates-interpretation-panel {
+  margin-top: 16px;
+  border: 1px solid #E8E0D6;
+  border-radius: 12px;
+  padding: 14px;
+  background: #FDFAF7;
+}
+
+.rates-interpretation-panel h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.rates-interpretation-panel p {
+  margin: 6px 0 0;
+  color: #8B7E74;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.rates-interpretation .method-note {
+  margin: 0;
+}
+
+.rates-interpretation .method-note p {
+  margin: 5px 0 0;
+}
+
+.rates-support-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: auto;
+}
+
 .gdp-relationship {
   margin-top: 26px;
 }
@@ -440,6 +704,7 @@ h2 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  margin-bottom: 16px;
 }
 
 .phase-pill {
@@ -676,6 +941,12 @@ h2 {
 .relationship-line-4 {
   stroke: #D9A441;
 }
+
+.relationship-dot-0 { fill: #5D7FA8; }
+.relationship-dot-1 { fill: #D9848C; }
+.relationship-dot-2 { fill: #6AAE75; }
+.relationship-dot-3 { fill: #B889D8; }
+.relationship-dot-4 { fill: #D9A441; }
 
 .quad-bars {
   display: grid;
@@ -949,10 +1220,19 @@ h2 {
 
   .macro-header,
   .detail-head,
-  .relationship-head {
+  .relationship-head,
+  .rates-panel-head {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+  }
+
+  .rates-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .rates-support-grid {
+    grid-template-columns: 1fr;
   }
 
   h1 {

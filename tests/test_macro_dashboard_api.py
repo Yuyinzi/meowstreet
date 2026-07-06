@@ -220,7 +220,7 @@ def test_gdp_relationship_overview_api_is_lightweight(monkeypatch):
                 "correlation_window_years": 10,
                 "source_workbook": "GDP_Correlations.xlsx",
                 "source_sheet": "Europe GDP Correlation",
-            }
+            },
         ]
 
     def fake_load_lag_rows(con, relationship_id):
@@ -260,9 +260,7 @@ def test_gdp_relationship_overview_api_is_lightweight(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    assert [r["relationship_id"] for r in payload["relationships"]] == [
-        "us_sp500_gdp"
-    ]
+    assert [r["relationship_id"] for r in payload["relationships"]] == ["us_sp500_gdp"]
     assert payload["relationships"][0]["relationship_id"] == "us_sp500_gdp"
     assert "lag_series" not in payload["relationships"][0]
 
@@ -351,3 +349,199 @@ def test_gdp_relationship_detail_api_returns_400_for_unknown_relationship(monkey
 
     assert response.status_code == 400
     assert response.json()["detail"] == "relationship is unknown: unknown"
+
+
+def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
+    from app import api
+
+    class FakeConnection:
+        def close(self):
+            pass
+
+    def fake_connect():
+        return FakeConnection()
+
+    def fake_load_rate_series(con):
+        return [
+            {
+                "series_id": "treasury_10y",
+                "title": "10-Year Treasury",
+                "instrument_type": "nominal_treasury",
+                "maturity_months": 120,
+                "units": "percent",
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "series_id": "treasury_2y",
+                "title": "2-Year Treasury",
+                "instrument_type": "nominal_treasury",
+                "maturity_months": 24,
+                "units": "percent",
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+        ]
+
+    def fake_load_latest_points(con):
+        return [
+            {
+                "series_id": "treasury_10y",
+                "date": "2021-01-03",
+                "value": 0.93,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "series_id": "treasury_2y",
+                "date": "2021-01-03",
+                "value": 0.12,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+        ]
+
+    def fake_load_latest_macro_indicator_points(con):
+        return [
+            {
+                "series_id": "cpi_yoy",
+                "date": "2021-01-03",
+                "value": 1.40,
+                "source": "US_P4_Macro_Indicators.csv",
+            }
+        ]
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db, "load_rate_series", fake_load_rate_series
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db, "load_latest_points", fake_load_latest_points
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_macro_indicator_points",
+        fake_load_latest_macro_indicator_points,
+    )
+
+    response = client.get("/api/macro-dashboard/us-rates-liquidity")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["as_of"] == "2021-01-03"
+    assert payload["derived"]["tens_twos_spread"] == 0.81
+    assert payload["derived"]["cpi_based_real_rate"] == -0.47
+
+
+def test_us_rates_liquidity_detail_api_returns_two_charts(monkeypatch):
+    from app import api
+
+    class FakeConnection:
+        def close(self):
+            pass
+
+    def fake_connect():
+        return FakeConnection()
+
+    def fake_load_rate_series(con):
+        return [
+            {
+                "series_id": "treasury_10y",
+                "title": "10-Year Treasury",
+                "instrument_type": "nominal_treasury",
+                "maturity_months": 120,
+                "units": "percent",
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            }
+        ]
+
+    def fake_load_rate_points_for_series(con, series_ids):
+        assert series_ids == ["treasury_10y"]
+        return {
+            "treasury_10y": [
+                {
+                    "date": "2021-01-03",
+                    "value": 0.93,
+                    "source_workbook": "Benchmark_Yields_US.xlsm",
+                    "source_sheet": "Data",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db, "load_rate_series", fake_load_rate_series
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_rate_points_for_series",
+        fake_load_rate_points_for_series,
+    )
+
+    response = client.get("/api/macro-dashboard/us-rates-liquidity/treasury_10y")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["detail_id"] == "treasury_10y"
+    assert len(payload["charts"]) == 2
+
+
+def test_us_rates_liquidity_detail_api_returns_400_for_unknown_detail():
+    response = client.get("/api/macro-dashboard/us-rates-liquidity/unknown")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "us rates detail is unknown: unknown"
+
+
+def test_us_rates_liquidity_curve_detail_api_passes_selected_dates(monkeypatch):
+    from app import api
+
+    class FakeConnection:
+        def close(self):
+            pass
+
+    captured = {}
+
+    def fake_connect():
+        return FakeConnection()
+
+    def fake_detail_series_ids(detail_id):
+        assert detail_id == "yield_curve_shape"
+        return ["treasury_10y"]
+
+    def fake_build_detail_payload(detail_id, series_rows, points_by_id, options=None):
+        captured["options"] = options
+        return {
+            "detail_id": detail_id,
+            "title": "Yield Curve Shape",
+            "source": "Benchmark_Yields_US.xlsm",
+            "charts": [],
+        }
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
+    monkeypatch.setattr(api.us_rates_liquidity_db, "load_rate_series", lambda con: [])
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_rate_points_for_series",
+        lambda con, series_ids: {},
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity, "detail_series_ids", fake_detail_series_ids
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity, "build_detail_payload", fake_build_detail_payload
+    )
+
+    response = client.get(
+        "/api/macro-dashboard/us-rates-liquidity/yield_curve_shape"
+        "?nominalCurrentDate=2021-01-03&nominalComparisonDate=2020-08-16&realCurrentDate=2021-01-03&realComparisonDate=2020-08-16"
+    )
+
+    assert response.status_code == 200
+    assert captured["options"] == {
+        "nominal_current_date": "2021-01-03",
+        "nominal_comparison_date": "2020-08-16",
+        "real_current_date": "2021-01-03",
+        "real_comparison_date": "2020-08-16",
+    }

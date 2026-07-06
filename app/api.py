@@ -7,8 +7,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app import tool_runner, workflow_engine
 from app.db import benchmark_market_data, gdp_market_relationships
+from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
-from app.tools import gdp_market_relationship, market_phase
+from app.tools import gdp_market_relationship, market_phase, us_rates_liquidity
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
@@ -165,6 +166,67 @@ def macro_dashboard_gdp_relationship_detail(relationship_id):
             relationship,
             gdp_market_relationships.load_lag_rows(con, relationship_id),
             gdp_market_relationships.load_quad_rows(con, relationship_id),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        con.close()
+
+
+@app.get("/api/macro-dashboard/us-rates-liquidity")
+def macro_dashboard_us_rates_liquidity():
+    con = us_rates_liquidity_db.connect()
+    try:
+        return us_rates_liquidity.build_dashboard_payload(
+            us_rates_liquidity_db.load_rate_series(con),
+            us_rates_liquidity_db.load_latest_points(con),
+            us_rates_liquidity_db.load_latest_macro_indicator_points(con),
+        )
+    finally:
+        con.close()
+
+
+@app.get("/api/macro-dashboard/us-rates-liquidity/{detail_id}")
+def macro_dashboard_us_rates_liquidity_detail(
+    detail_id,
+    nominalCurrentDate=None,
+    nominalComparisonDate=None,
+    realCurrentDate=None,
+    realComparisonDate=None,
+):
+    con = us_rates_liquidity_db.connect()
+    try:
+        series_ids = us_rates_liquidity.detail_series_ids(detail_id)
+        rate_series_ids = [
+            series_id
+            for series_id in series_ids
+            if not series_id.startswith(("cpi_", "vix", "sp500_pe"))
+        ]
+        macro_series_ids = [
+            series_id
+            for series_id in series_ids
+            if series_id.startswith(("cpi_", "vix", "sp500_pe"))
+        ]
+        points_by_id = us_rates_liquidity_db.load_rate_points_for_series(
+            con,
+            rate_series_ids,
+        )
+        points_by_id.update(
+            us_rates_liquidity_db.load_macro_indicator_points_for_series(
+                con,
+                macro_series_ids,
+            )
+        )
+        return us_rates_liquidity.build_detail_payload(
+            detail_id,
+            us_rates_liquidity_db.load_rate_series(con),
+            points_by_id,
+            {
+                "nominal_current_date": nominalCurrentDate,
+                "nominal_comparison_date": nominalComparisonDate,
+                "real_current_date": realCurrentDate,
+                "real_comparison_date": realComparisonDate,
+            },
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

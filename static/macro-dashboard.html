@@ -20,14 +20,24 @@
     <header class="macro-header">
       <div>
         <p class="eyebrow">Macro Dashboard</p>
-        <h1>Market Phase</h1>
-        <p class="subtitle">Bull and bear market status across method benchmark indices.</p>
+        <h1>Benchmark Indices</h1>
+        <p class="subtitle">Market phase status and drawdown across major indices.</p>
       </div>
       <a class="workflow-link" href="/method-system.html">Ticker Workflow</a>
     </header>
     <section class="dashboard-status" id="dashboardStatus">Loading market phase data...</section>
     <section class="market-grid" id="marketGrid" aria-label="Benchmark market phase overview"></section>
     <section class="market-detail" id="marketDetail" aria-label="Selected benchmark detail"></section>
+    <section class="rates-liquidity" id="usRatesLiquidity" aria-label="US rates and liquidity indicators">
+      <div class="relationship-head">
+        <div>
+          <h2>US Rates / Liquidity</h2>
+          <p class="subtitle">Nominal curve, real rates, Fed Funds, and curve-steepness signals from the imported US benchmark-yields workbook.</p>
+        </div>
+        <span class="mock-pill">Import-backed</span>
+      </div>
+      <div class="rates-loading">Loading US rates data...</div>
+    </section>
   </main>
   <script src="/macro-dashboard.js"></script>
 </body>

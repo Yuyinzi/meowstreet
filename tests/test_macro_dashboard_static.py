@@ -15,6 +15,39 @@ def test_macro_dashboard_html_links_assets_and_app_root():
     assert 'src="/macro-dashboard.js"' in html
 
 
+def test_macro_dashboard_html_embeds_us_rates_liquidity_section():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+
+    assert 'id="usRatesLiquidity"' in html
+    assert "US Rates / Liquidity" in html
+    assert "Import-backed" in html
+
+
+def test_macro_dashboard_js_fetches_us_rates_liquidity_api():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert 'fetch("/api/macro-dashboard/us-rates-liquidity")' in js
+    assert "renderUsRatesLiquidity" in js
+    assert "state.usRatesLiquidity" in js
+    assert "As of ${escapeHtml(fmtDate(card.date))}" not in js
+    assert "card.date" not in js
+    assert "card.context" not in js
+    assert "CPI Real Rate" in js
+    assert "payload.derived?.cpi_based_real_rate" in js
+    assert "payload.derived?.vix" in js
+    assert "payload.derived?.sp500_pe" in js
+
+
+def test_macro_dashboard_html_keeps_rates_liquidity_mount_without_mock_values():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+
+    assert 'id="usRatesLiquidity"' in html
+    assert "US Rates / Liquidity" in html
+    assert "0.93%" not in html
+    assert "-1.03%" not in html
+    assert "10Y - 2Y Spread" not in html
+
+
 def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 
@@ -24,6 +57,8 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
         in js
     )
     assert "marketDetailsById" in js
+    assert "visibleMarketPhaseMarkets" in js
+    assert 'String(market.region ?? "").toUpperCase() === "US"' in js
     assert "loadMarketDetail" in js
     assert "renderOverview" in js
     assert "renderMarketChart" in js
@@ -87,10 +122,16 @@ def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
     assert "GDP / Market Relationship" in js
     assert "renderGdpRelationshipOverview" in js
     assert "renderGdpRelationshipDetail" in js
-    assert "state.selectedRelationshipId = state.gdpRelationships[0]?.relationship_id || null" not in js
+    assert (
+        "state.selectedRelationshipId = state.gdpRelationships[0]?.relationship_id || null"
+        not in js
+    )
     assert "|| state.gdpRelationships[0]" not in js
     assert "state.selectedRelationshipId === button.dataset.relationshipId" in js
-    assert '${state.selectedRelationshipId ? `<div class="gdp-detail" id="gdpRelationshipDetail"></div>` : ""}' in js
+    assert (
+        '${state.selectedRelationshipId ? `<div class="gdp-detail" id="gdpRelationshipDetail"></div>` : ""}'
+        in js
+    )
     assert "rolling_index_gdp_correlation" not in js
     assert "function fmtCorrelationPercent(" in js
     assert "fmtCorrelationPercent(card.latest?.rolling_index_gdp_correlation)" not in js
@@ -116,7 +157,9 @@ def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
     assert "signal-usable" in js
     assert "signal-caution" in js
     assert "signal-weak" in js
-    assert 'return { label: "requires GDP forecast", className: "signal-caution" };' in js
+    assert (
+        'return { label: "requires GDP forecast", className: "signal-caution" };' in js
+    )
     assert "relationship-case" not in js
     assert "relationship-bias" not in js
     assert 'class="gdp-card${selected}"' in js
@@ -126,8 +169,14 @@ def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
     assert "Average 10Y Correlation" in js
     assert "requires GDP forecast" in js
     assert "requires GDP forcast" not in js
-    assert "Usability is strong when the primary-lag average 10Y correlation is at least 40%" in js
-    assert "The confidence badge uses the same evidence: high when both strong thresholds are met" in js
+    assert (
+        "Usability is strong when the primary-lag average 10Y correlation is at least 40%"
+        in js
+    )
+    assert (
+        "The confidence badge uses the same evidence: high when both strong thresholds are met"
+        in js
+    )
     assert "If corr >= 0.4" not in js
     assert "Rolling 10Y correlations by lag" in js
     assert "lag_correlation_series" in js
@@ -137,7 +186,10 @@ def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
     assert "X-axis: period" not in js
     assert "Source:" not in js
     assert "M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}" in js
-    assert "Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}" in js
+    assert (
+        "Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}"
+        in js
+    )
     assert "Derived from correlation and same-direction rate" not in js
     assert "Requires future GDP forecast input" not in js
     assert "relationship-legend" in js
@@ -153,7 +205,9 @@ def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
     assert "M lag rate" in js
     assert "Quadnomial distribution defines A as index down/GDP down" in js
     assert "Method coverage combines A, B, and C" in js
-    assert js.index("${renderQuadBars(payload)}") < js.index("${renderYoyComparison(payload)}")
+    assert js.index("${renderQuadBars(payload)}") < js.index(
+        "${renderYoyComparison(payload)}"
+    )
     assert js.index("relationship-chart-grid-pre-method") < js.index("method-note")
     assert "Signal usability" in js
     assert "Mock data" not in js
@@ -321,7 +375,7 @@ def test_macro_dashboard_chart_helpers_are_exercised_with_node():
     payload = json.loads(result.stdout)
 
     assert payload["formattedDate"] == "Oct 2021"
-    assert payload["xAxisTickCount"] == 10
+    assert payload["xAxisTickCount"] == 12
     assert payload["yAxisTickCount"] == 9
     assert payload["firstX"] == 50
     assert payload["lastX"] == 910
@@ -344,12 +398,26 @@ def test_macro_dashboard_chart_helpers_are_exercised_with_node():
     assert "chart-wrap" in payload["relationshipMarkup"]
     assert "chart-tooltip" in payload["relationshipMarkup"]
     assert 'y1="322.00"' not in payload["relationshipMarkup"]
-    assert payload["relationshipMarkup"].count('class="relationship-line relationship-line-0"') == 1
-    assert payload["relationshipMarkup"].count('class="relationship-line relationship-line-1"') == 2
+    assert (
+        payload["relationshipMarkup"].count(
+            'class="relationship-line relationship-line-0"'
+        )
+        == 1
+    )
+    assert (
+        payload["relationshipMarkup"].count(
+            'class="relationship-line relationship-line-1"'
+        )
+        == 2
+    )
     assert "Index YoY" in payload["relationshipMarkup"]
     assert "GDP YoY" in payload["relationshipMarkup"]
-    assert payload["lagMarkup"].count('class="relationship-line relationship-line-0"') == 1
-    assert payload["lagMarkup"].count('class="relationship-line relationship-line-1"') == 2
+    assert (
+        payload["lagMarkup"].count('class="relationship-line relationship-line-0"') == 1
+    )
+    assert (
+        payload["lagMarkup"].count('class="relationship-line relationship-line-1"') == 2
+    )
     assert 'y="36"' in payload["relationshipMarkup"]
 
 
@@ -360,7 +428,12 @@ def test_macro_dashboard_js_removes_dot_layer_and_keeps_mouse_tooltip():
     assert 'svg.addEventListener("mousemove"' in js
     assert 'svg.addEventListener("mouseleave", hide)' in js
     assert 'event.target.closest(".chart-dot")' not in js
-    assert "const currentMarket = selectedMarket();" in js
+    assert "const markets = visibleMarketPhaseMarkets(state.markets);" in js
+    assert (
+        "const currentMarket = markets.find((market) => market.benchmark_id === state.selectedBenchmarkId)"
+        in js
+    )
+    assert "state.markets = visibleMarketPhaseMarkets(payload.markets || []);" in js
     assert "market.benchmark_id === currentMarket?.benchmark_id" in js
 
 
@@ -414,3 +487,68 @@ def test_macro_dashboard_css_has_refresh_button_styles():
 
     assert ".market-refresh" in css
     assert ".market-refresh:disabled" in css
+
+
+def test_macro_dashboard_js_lazy_loads_us_rates_detail_charts():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "selectedRatesDetailId" in js
+    assert "usRatesDetailsById" in js
+    assert "loadUsRatesLiquidityDetail" in js
+    assert "renderUsRatesLiquidityDetail" in js
+    assert "fetch(url.toString())" in js
+    assert "selectedNominalCurrentDate" in js
+    assert "selectedNominalComparisonDate" in js
+    assert "selectedRealCurrentDate" in js
+    assert "selectedRealComparisonDate" in js
+    assert "nominalCurrentDate" in js
+    assert "nominalComparisonDate" in js
+    assert "realCurrentDate" in js
+    assert "realComparisonDate" in js
+    assert 'class="rates-signal-card${selected}"' in js
+    assert "data-rates-detail-id" in js
+    assert "state.selectedRatesDetailId === button.dataset.ratesDetailId" in js
+    assert 'id="usRatesLiquidityDetail"' in js
+    assert "renderRatesDetailChart" in js
+    assert "attachRelationshipChartTooltip" in js
+
+
+def test_macro_dashboard_js_renders_rates_detail_with_dashboard_chart_pattern():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "renderRatesTimeSeriesChart" in js
+    assert "renderRatesCurveComparisonChart" in js
+    assert "renderRatesDetailPayload" in js
+    assert "bindRatesCurveControls" in js
+    assert "data-curve-date-kind" in js
+    assert "data-curve-date-role" in js
+    assert "rates-curve-date-controls" in js
+    assert "categoricalXAxis: true" in js
+    assert "renderRelationshipXAxisTicks(series, options)" in js
+    assert "options.categoricalXAxis" in js
+    assert "relationship-chart" in js
+    assert "relationship-legend" in js
+    assert "chart-axis" in js
+    assert "chart-grid" in js
+    assert "chart-y-tick" in js
+    assert "chart-tick" in js
+    assert "chart-tooltip" in js
+    assert "US Yield Curve - Comparative Analysis" not in js
+    assert (
+        "payload.charts.map((chart, index) => renderRatesDetailChart(chart, index)).join"
+        in js
+    )
+    assert "multi_series" in js
+    assert "renderRatesMultiSeriesChart" in js
+    assert "secondary_series" in js
+
+
+def test_macro_dashboard_css_has_rates_detail_clickable_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".rates-signal-card.selected" in css
+    assert "min-height: 88px;" in css
+    assert ".rates-panel-button" in css
+    assert ".rates-panel-button.selected" in css
+    assert ".rates-detail" in css
+    assert ".rates-curve-date-controls" in css
