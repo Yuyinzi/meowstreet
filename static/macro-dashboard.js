@@ -64,7 +64,9 @@
   }
 
   function fmtStatus(value) {
-    return String(value ?? "").replace(/_/g, " ");
+    const label = String(value ?? "").replace(/_/g, " ");
+    const zh = zhLabel(label);
+    return zh ? `${label} / ${zh}` : label;
   }
 
   function fmtNumber(value) {
@@ -177,8 +179,8 @@
             <span class="market-region">${escapeHtml(market.region)}</span>
             <strong>${escapeHtml(market.title)}</strong>
             <span class="market-status">${escapeHtml(fmtStatus(market.latest.market_phase_status))}</span>
-            <span class="market-meta">Drawdown ${escapeHtml(fmtNumber(market.latest.drawdown_pct))}%</span>
-            <span class="market-meta">Through ${escapeHtml(market.data_through)}</span>
+            <span class="market-meta">${bilingualLabel("Drawdown")} ${escapeHtml(fmtNumber(market.latest.drawdown_pct))}%</span>
+            <span class="market-meta">${bilingualLabel("Through")} ${escapeHtml(market.data_through)}</span>
             <span class="market-card-actions">
               <span class="market-refresh" role="button" tabindex="0" data-refresh-benchmark-id="${escapeHtml(market.benchmark_id)}" aria-label="Refresh ${escapeHtml(market.title)}" title="Refresh ${escapeHtml(market.title)}">↻</span>
             </span>
@@ -257,17 +259,17 @@
             <button class="gdp-card${selected}" type="button" data-relationship-id="${escapeHtml(card.relationship_id)}">
               <div class="gdp-card-topline">
                 <span class="market-region">${escapeHtml(card.region)}</span>
-                <span class="gdp-card-confidence ${confidenceClass(card)}">${escapeHtml(card.macro_relationship_confidence)} confidence</span>
+                <span class="gdp-card-confidence ${confidenceClass(card)}">${escapeHtml(card.macro_relationship_confidence)} ${bilingualLabel("confidence")}</span>
               </div>
               <strong class="gdp-card-title">${escapeHtml(card.title)}</strong>
-              <span class="gdp-card-subtitle">${escapeHtml(card.economy)} · primary lag ${escapeHtml(card.primary_lag_months)}M</span>
+              <span class="gdp-card-subtitle">${escapeHtml(card.economy)} · ${bilingualLabel("primary lag")} ${escapeHtml(card.primary_lag_months)}M</span>
               <div class="gdp-card-summary">
                 <span>
-                  <small>Signal</small>
+                  <small>${bilingualLabel("Signal")}</small>
                   <strong class="signal-status ${signal.className}" title="${escapeHtml(card.relationship_signal_usability)}">${escapeHtml(signal.label)}</strong>
                 </span>
                 <span>
-                  <small>Avg 10Y corr</small>
+                  <small>${bilingualLabel("Avg 10Y corr")}</small>
                   <strong>${escapeHtml(fmtCorrelationPercent(card.latest?.average_10y_correlation))}</strong>
                 </span>
               </div>
@@ -504,7 +506,7 @@
     return `
       <div class="relationship-chart">
         <div class="relationship-chart-head">
-          <h3>Quadnomial distribution</h3>
+          <h3>${bilingualTitle("Quadnomial distribution")}</h3>
           <span>${escapeHtml(relationship.primary_lag_months)}M lag rate</span>
         </div>
         <div class="quad-bars">
@@ -524,8 +526,8 @@
     return `
       <div class="relationship-chart">
         <div class="relationship-chart-head">
-          <h3>Lag comparison</h3>
-          <span>Method primary lag</span>
+          <h3>${bilingualTitle("Lag comparison")}</h3>
+          <span>${bilingualLabel("Method primary")} lag</span>
         </div>
         <div class="lag-table">
           ${relationship.lag_correlations.map((lag) => `
@@ -543,7 +545,7 @@
   function renderLagCorrelationComparison(payload) {
     const keys = Object.keys(payload.lag_correlation_labels || {});
     return renderRelationshipLineChart(
-      "Rolling 10Y correlations by lag",
+      bilingualTitle("Rolling 10Y correlations by lag"),
       payload.lag_correlation_series,
       keys,
       payload.lag_correlation_labels || {},
@@ -556,7 +558,7 @@
 
   function renderYoyComparison(payload) {
     return renderRelationshipLineChart(
-      "Index YoY vs GDP YoY",
+      bilingualTitle("Index YoY vs GDP YoY"),
       payload.yoy_series,
       ["index", "gdp"],
       { index: "Index YoY", gdp: "GDP YoY" },
@@ -569,7 +571,7 @@
 
   function renderPrimaryCorrelationComparison(payload) {
     return renderRelationshipLineChart(
-      "Rolling correlation",
+      bilingualTitle("Rolling correlation"),
       payload.correlation_series,
       ["value"],
       { value: `${payload.primary_lag_months}M lag rolling correlation` },
@@ -602,17 +604,17 @@
               <p class="eyebrow">${escapeHtml(card.economy)}</p>
               <h2>${escapeHtml(card.title)}</h2>
             </div>
-            <span class="phase-pill ${confidenceClass(card)}">${escapeHtml(card.macro_relationship_confidence)} confidence</span>
+            <span class="phase-pill ${confidenceClass(card)}">${escapeHtml(card.macro_relationship_confidence)} ${bilingualLabel("confidence")}</span>
           </div>
           <div class="metric-strip">
-            <div><span>Index YoY</span><strong>${escapeHtml(fmtPercent(indexYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
-            <div><span>GDP YoY</span><strong>${escapeHtml(fmtPercent(gdpYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
-            <div><span>Average 10Y Correlation</span><strong>${escapeHtml(fmtCorrelationPercent(latest.average_10y_correlation))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag average</small></div>
-            <div><span>Same Direction</span><strong>${escapeHtml(fmtPercent(payload.same_direction_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B</small></div>
-            <div><span>Method Coverage</span><strong>${escapeHtml(fmtPercent(payload.method_explainable_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B + C</small></div>
-            <div><span>Current Case</span><strong>${escapeHtml(latest.quadnomial_current_plain_label || latest.quadnomial_current_case)}</strong><small class="metric-context">Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}</small></div>
-            <div><span>Signal usability</span><strong class="signal-status ${signal.className}" title="${escapeHtml(payload.relationship_signal_usability)}">${escapeHtml(signal.label)}</strong></div>
-            <div><span>Portfolio Bias</span><strong class="signal-status ${portfolioBias.className}" title="${escapeHtml(payload.portfolio_bias_status)}">${escapeHtml(portfolioBias.label)}</strong></div>
+            <div><span>${bilingualLabel("Index YoY")}</span><strong>${escapeHtml(fmtPercent(indexYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
+            <div><span>${bilingualLabel("GDP YoY")}</span><strong>${escapeHtml(fmtPercent(gdpYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
+            <div><span>${bilingualLabel("Average 10Y Correlation")}</span><strong>${escapeHtml(fmtCorrelationPercent(latest.average_10y_correlation))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag average</small></div>
+            <div><span>${bilingualLabel("Same Direction")}</span><strong>${escapeHtml(fmtPercent(payload.same_direction_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B</small></div>
+            <div><span>${bilingualLabel("Method Coverage")}</span><strong>${escapeHtml(fmtPercent(payload.method_explainable_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B + C</small></div>
+            <div><span>${bilingualLabel("Current Case")}</span><strong>${escapeHtml(latest.quadnomial_current_plain_label || latest.quadnomial_current_case)}</strong><small class="metric-context">Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}</small></div>
+            <div><span>${bilingualLabel("Signal usability")}</span><strong class="signal-status ${signal.className}" title="${escapeHtml(payload.relationship_signal_usability)}">${escapeHtml(signal.label)}</strong></div>
+            <div><span>${bilingualLabel("Portfolio Bias")}</span><strong class="signal-status ${portfolioBias.className}" title="${escapeHtml(payload.portfolio_bias_status)}">${escapeHtml(portfolioBias.label)}</strong></div>
           </div>
           <div class="relationship-chart-grid relationship-chart-grid-pre-method">
             ${renderQuadBars(payload)}
@@ -697,6 +699,7 @@
   }
 
   const ZH_LABELS = {
+    // US Rates
     "10-Year Treasury": "10年期国债",
     "2-Year Treasury": "2年期国债",
     "10Y - 2Y Spread": "10Y-2Y利差",
@@ -710,13 +713,55 @@
     "10Y Treasury Minus CPI YoY": "10年期国债减CPI同比",
     "CPI Real Rate vs VIX": "CPI实际利率 vs VIX",
     "CPI Real Rate vs S&P 500 PE": "CPI实际利率 vs 标普500市盈率",
+    "Real Rate": "实际利率",
+    "Comparison": "对比",
+    "Interpretation": "解读",
+    "Yield Curve Analysis": "收益率曲线分析",
+    "Nominal & Real Curve Comparison": "名义与实际曲线对比",
+    // GDP Relationships
     "Index YoY": "指数同比",
     "GDP YoY": "GDP同比",
     "Index YoY vs GDP YoY": "指数同比 vs GDP同比",
     "No lag": "无滞后",
     "3M lag": "3个月滞后",
-    "Real Rate": "实际利率",
-    "Comparison": "对比",
+    "Rolling 10Y correlations by lag": "按滞后期的10年滚动相关性",
+    "Lag comparison": "滞后比较",
+    "Quadnomial distribution": "四分区分布",
+    "Rolling correlation": "滚动相关性",
+    "Signal": "信号",
+    "Signal usability": "信号可用性",
+    "Portfolio Bias": "组合偏向",
+    "Avg 10Y corr": "10年平均相关性",
+    "Average 10Y Correlation": "10年平均相关性",
+    "Same Direction": "同向率",
+    "Method Coverage": "课程覆盖",
+    "Current Case": "当前案例",
+    "confidence": "置信度",
+    "primary lag": "主滞后",
+    "usable": "可用",
+    "caution": "谨慎",
+    "weak": "弱",
+    "not usable": "不可用",
+    "long bias": "多头偏向",
+    "defensive": "防御性",
+    "requires GDP forecast": "需要GDP预测",
+    "Method primary lag": "课程主滞后",
+    "Method primary": "课程主滞后",
+    // Market Phase
+    "Drawdown": "回撤",
+    "Through": "截至",
+    "Close": "收盘价",
+    "Rolling High": "滚动高点",
+    "Bear/Bull Level": "熊/牛市分界线",
+    "Data Through": "数据截至",
+    "Bull segment": "牛市区间",
+    "Bear segment": "熊市区间",
+    "Bear/Bull level": "熊/牛市分界线",
+    "bear market": "熊市",
+    "bull market": "牛市",
+    // Chart defaults
+    "Value": "数值",
+    "Latest": "最新",
   };
 
   function zhLabel(label) {
@@ -799,14 +844,14 @@
       <div class="relationship-head">
         <div>
           <h2>US Rates / Liquidity</h2>
-          <p class="subtitle">Nominal curve, real rates, Fed Funds, CPI Real Rate, and curve-steepness signals from the imported US benchmark-yields workbook.</p>
+          <p class="subtitle">Nominal curve, real rates, Fed Funds, CPI Real Rate, and curve-steepness signals from the imported US benchmark-yields workbook. / 名义曲线、实际利率、联邦基金利率、CPI实际利率及曲线陡峭度信号。</p>
         </div>
         <span class="mock-pill">${escapeHtml(payload.as_of ? `As of ${fmtDate(payload.as_of)}` : "Import needed")}</span>
       </div>
       ${headline.length ? `<div class="rates-signal-grid">${headline.map(renderRateCard).join("")}${renderSupportCard("Breakeven", fmtRate(payload.derived?.ten_year_breakeven_inflation))}${renderSupportCard("VIX", fmtNumber(payload.derived?.vix))}${renderSupportCard("S&P PE", fmtNumber(payload.derived?.sp500_pe))}</div>` : ""}
       ${state.selectedRatesDetailId ? '<div class="rates-detail gdp-detail" id="usRatesLiquidityDetail"></div>' : ""}
       <div class="rates-interpretation-panel">
-        <p class="eyebrow">Interpretation</p>
+        <p class="eyebrow">${bilingualLabel("Interpretation")}</p>
         <h3>${escapeHtml(fmtStatus(payload.derived?.curve_status || "missing"))}</h3>
         <p>${escapeHtml(payload.derived?.method_interpretation || "")}</p>
       </div>
@@ -995,8 +1040,8 @@
   function renderRatesDetailPayload(detail, payload, context) {
     const heading = context === "yield_curve" ? `
       <div class="rates-interpretation-panel">
-        <p class="eyebrow">Yield Curve Analysis</p>
-        <h3>Nominal & Real Curve Comparison</h3>
+        <p class="eyebrow">${bilingualLabel("Yield Curve Analysis")}</p>
+        <h3>${bilingualTitle("Nominal & Real Curve Comparison")}</h3>
         <p>Compare yield curve shape across selected dates for nominal Treasuries and real TIPS rates.</p>
       </div>
     ` : `
@@ -1181,10 +1226,9 @@
       if (index !== lastIndex) {
         tooltip.innerHTML = `
           <div><strong>${escapeHtml(point.date)}</strong></div>
-          <div>Close: ${escapeHtml(fmtNumber(point.close))}</div>
-          <div>Status: ${escapeHtml(fmtStatus(point.market_phase_status))}</div>
-          <div>Drawdown: ${escapeHtml(fmtNumber(point.drawdown_pct))}%</div>
-          <div>Bear/Bull Level: ${escapeHtml(fmtNumber(point.bear_market_level))}</div>
+          <div>${bilingualLabel("Close")}: ${escapeHtml(fmtNumber(point.close))}</div>
+          <div>${bilingualLabel("Drawdown")}: ${escapeHtml(fmtNumber(point.drawdown_pct))}%</div>
+          <div>${bilingualLabel("Bear/Bull Level")}: ${escapeHtml(fmtNumber(point.bear_market_level))}</div>
         `;
         lastIndex = index;
         tooltip.style.left = "-9999px";
@@ -1297,9 +1341,9 @@
         <div class="chart-tooltip" aria-hidden="true"></div>
       </div>
       <div class="chart-legend">
-        <span><i class="legend-bull"></i>Bull segment</span>
-        <span><i class="legend-bear"></i>Bear segment</span>
-        <span><i class="legend-level"></i>Bear/Bull level</span>
+        <span><i class="legend-bull"></i>${bilingualLabel("Bull segment")}</span>
+        <span><i class="legend-bear"></i>${bilingualLabel("Bear segment")}</span>
+        <span><i class="legend-level"></i>${bilingualLabel("Bear/Bull level")}</span>
       </div>
     `;
   }
@@ -1405,11 +1449,11 @@
             <span class="phase-pill phase-${statusClass(detailMarket)}">${escapeHtml(fmtStatus(latest.market_phase_status))}</span>
           </div>
           <div class="metric-strip">
-            <div><span>Close</span><strong>${escapeHtml(fmtNumber(latest.close))}</strong></div>
-            <div><span>Rolling High</span><strong>${escapeHtml(fmtNumber(latest.rolling_high))}</strong></div>
-            <div><span>Bear/Bull Level</span><strong>${escapeHtml(fmtNumber(latest.bear_market_level))}</strong></div>
-            <div><span>Drawdown</span><strong>${escapeHtml(fmtNumber(latest.drawdown_pct))}%</strong></div>
-            <div><span>Data Through</span><strong>${escapeHtml(detailMarket.data_through)}</strong></div>
+            <div><span>${bilingualLabel("Close")}</span><strong>${escapeHtml(fmtNumber(latest.close))}</strong></div>
+            <div><span>${bilingualLabel("Rolling High")}</span><strong>${escapeHtml(fmtNumber(latest.rolling_high))}</strong></div>
+            <div><span>${bilingualLabel("Bear/Bull Level")}</span><strong>${escapeHtml(fmtNumber(latest.bear_market_level))}</strong></div>
+            <div><span>${bilingualLabel("Drawdown")}</span><strong>${escapeHtml(fmtNumber(latest.drawdown_pct))}%</strong></div>
+            <div><span>${bilingualLabel("Data Through")}</span><strong>${escapeHtml(detailMarket.data_through)}</strong></div>
           </div>
           ${renderMarketPhaseMethod()}
           ${renderMarketChart(detailMarket)}
