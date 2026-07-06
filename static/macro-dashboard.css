@@ -210,6 +210,7 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding-right: 0;
 }
 
 .market-meta-label {
@@ -236,9 +237,11 @@ h2 {
 
 .market-meta-value {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 400;
   color: #3B3530;
   white-space: nowrap;
+  margin-left: auto;
+  text-align: right;
 }
 
 .market-status {
