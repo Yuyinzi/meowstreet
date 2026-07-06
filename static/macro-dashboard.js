@@ -827,6 +827,18 @@
     `;
   }
 
+  function renderCurveStatusCard(curveStatus, interpretation) {
+    const colorClass = `rates-signal-card-${curveStatus || "missing"}`;
+    const label = (curveStatus || "missing").toUpperCase();
+    return `
+      <span class="rates-signal-card rates-signal-card-wide ${colorClass}">
+        <span>${bilingualLabel("Curve Status")}</span>
+        <strong>${escapeHtml(fmtStatus(label))}</strong>
+        <span class="rates-interpretation-text">${escapeHtml(interpretation || "")}</span>
+      </span>
+    `;
+  }
+
   function ratesDetailCacheKey(detailId) {
     if (detailId === "yield_curve_shape") {
       return `yield_curve_shape|${state.selectedNominalCurrentDate || ""}|${state.selectedNominalComparisonDate || ""}|${state.selectedRealCurrentDate || ""}|${state.selectedRealComparisonDate || ""}`;
@@ -875,6 +887,8 @@
     }
     if (!payload) return;
     const headline = payload.headline || [];
+    const curveStatus = payload.derived?.curve_status || "missing";
+    const interpretation = payload.derived?.method_interpretation || "";
     section.innerHTML = `
       <div class="relationship-head">
         <div>
@@ -882,13 +896,8 @@
         </div>
         <span class="mock-pill">${escapeHtml(payload.as_of ? `As of ${fmtDate(payload.as_of)}` : "Import needed")}</span>
       </div>
-      ${headline.length ? `<div class="rates-signal-grid">${headline.map(renderRateCard).join("")}${renderSupportCard("Breakeven", fmtRate(payload.derived?.ten_year_breakeven_inflation))}${renderSupportCard("VIX", fmtNumber(payload.derived?.vix))}${renderSupportCard("S&P PE", fmtNumber(payload.derived?.sp500_pe))}</div>` : ""}
+      ${headline.length ? `<div class="rates-signal-grid">${headline.map(renderRateCard).join("")}${renderSupportCard("Breakeven", fmtRate(payload.derived?.ten_year_breakeven_inflation))}${renderSupportCard("VIX", fmtNumber(payload.derived?.vix))}${renderSupportCard("S&P PE", fmtNumber(payload.derived?.sp500_pe))}${renderCurveStatusCard(curveStatus, interpretation)}</div>` : ""}
       ${state.selectedRatesDetailId ? '<div class="rates-detail gdp-detail" id="usRatesLiquidityDetail"></div>' : ""}
-      <div class="rates-interpretation-panel">
-        <p class="eyebrow">${bilingualLabel("Interpretation")}</p>
-        <h3>${escapeHtml(fmtStatus(payload.derived?.curve_status || "missing"))}</h3>
-        <p>${escapeHtml(payload.derived?.method_interpretation || "")}</p>
-      </div>
       <div class="rates-detail gdp-detail" id="usRatesCurveDetail"></div>
     `;
     section.querySelectorAll("[data-rates-detail-id]").forEach((button) => {
@@ -1074,7 +1083,7 @@
 
   function renderRatesDetailPayload(detail, payload, context) {
     const heading = context === "yield_curve" ? `
-      <div class="rates-interpretation-panel">
+      <div class="rates-chart-subtitle">
         <p class="eyebrow">${bilingualLabel("Yield Curve Analysis")}</p>
         <p>Compare yield curve shape across selected dates for nominal Treasuries and real TIPS rates.</p>
       </div>

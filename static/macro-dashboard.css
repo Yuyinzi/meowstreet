@@ -418,6 +418,41 @@ h2 {
   background: #F2FAF4;
 }
 
+.rates-signal-card-steep {
+  border-color: #BBDCC6;
+  background: #F2FAF4;
+}
+
+.rates-signal-card-flat {
+  border-color: #E3D0A6;
+  background: #F8F4EA;
+}
+
+.rates-signal-card-inverted {
+  border-color: #E0BCBC;
+  background: #FDF2F2;
+}
+
+.rates-signal-card-missing {
+  border-color: #E0D6C8;
+  background: #FFFFFF;
+}
+
+.rates-signal-card-wide {
+  grid-column: span 2;
+}
+
+.rates-signal-card-wide .rates-interpretation-text {
+  display: block;
+  margin-top: 8px;
+  color: #6B6258;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .rates-signal-card span {
   display: block;
   color: #A89B91;
@@ -574,6 +609,21 @@ h2 {
 
 .rates-interpretation-panel p {
   margin: 6px 0 0;
+  color: #8B7E74;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.rates-chart-subtitle {
+  margin-bottom: 16px;
+}
+
+.rates-chart-subtitle .eyebrow {
+  margin-bottom: 4px;
+}
+
+.rates-chart-subtitle p {
+  margin: 0;
   color: #8B7E74;
   font-size: 13px;
   line-height: 1.45;
