@@ -7,6 +7,42 @@ HEADLINE_CONFIG = [
     ("fed_funds", "Fed Funds"),
 ]
 
+CREDIT_HEADLINE_CONFIG = [
+    ("bbb_credit_spread", "BBB Credit Spread"),
+    ("ccc_credit_spread", "CCC Credit Spread"),
+    ("ccc_bbb_quality_spread", "CCC vs BBB Quality Spread"),
+    ("credit_conditions", "Credit Conditions"),
+]
+
+BBB_CREDIT_ZONES = [
+    (1.5, "very_low"),
+    (2.5, "normal"),
+    (4.0, "tightening"),
+    (6.0, "stressed"),
+]
+
+CCC_BBB_QUALITY_ZONES = [
+    (3.0, "low_dispersion"),
+    (5.0, "normal"),
+    (8.0, "weak_credit_pressure"),
+    (12.0, "serious_deterioration"),
+]
+
+CCC_CREDIT_ZONES = [
+    (5.0, "calm"),
+    (8.0, "elevated"),
+    (12.0, "stressed"),
+]
+
+PERCENTILE_LABELS = [
+    (25, "low"),
+    (75, "normal"),
+    (90, "elevated"),
+]
+
+CREDIT_RISK_THRESHOLD = 2.0
+CREDIT_DISPERSION_THRESHOLD = 4.0
+
 CURVE_SERIES_IDS = [
     "treasury_1m",
     "treasury_3m",
@@ -66,6 +102,223 @@ def _round(value):
     if value is None:
         return None
     return round(value, 2)
+
+
+def _classify_zone(value, zones):
+    if value is None:
+        return "missing"
+    for threshold, label in zones:
+        if value < threshold:
+            return label
+    return "crisis"
+
+
+def _bbb_credit_zone(value):
+    return _classify_zone(value, BBB_CREDIT_ZONES)
+
+
+def _ccc_bbb_quality_zone(value):
+    return _classify_zone(value, CCC_BBB_QUALITY_ZONES)
+
+
+def _ccc_credit_zone(value):
+    return _classify_zone(value, CCC_CREDIT_ZONES)
+
+
+def _percentile_rank(values, value):
+    clean_values = sorted(v for v in values if v is not None)
+    if value is None or not clean_values:
+        return None
+    count = len([v for v in clean_values if v <= value])
+    return round((count / len(clean_values)) * 100)
+
+
+def _percentile_label(percentile):
+    if percentile is None:
+        return "missing"
+    for threshold, label in PERCENTILE_LABELS:
+        if percentile < threshold:
+            return label
+    return "extreme"
+
+
+def _trend_label(change, threshold):
+    if change is None:
+        return "missing"
+    if change >= threshold:
+        return "rising"
+    if change <= -threshold:
+        return "falling"
+    return "stable"
+
+
+def _trend_summary(series):
+    values = [row["value"] for row in series if row.get("value") is not None]
+    if not values:
+        return {
+            "change_1m": None,
+            "change_3m": None,
+            "trend_1m": "missing",
+            "trend_3m": "missing",
+            "acceleration": "none",
+        }
+    latest = values[-1]
+    one_month_value = values[-5] if len(values) >= 5 else None
+    three_month_value = values[-14] if len(values) >= 14 else None
+    change_1m = (
+        _round(latest - one_month_value) if one_month_value is not None else None
+    )
+    change_3m = (
+        _round(latest - three_month_value) if three_month_value is not None else None
+    )
+    trend_1m = _trend_label(change_1m, 0.25)
+    trend_3m = _trend_label(change_3m, 0.50)
+    acceleration = "none"
+    if change_1m is not None and change_3m is not None:
+        monthly_three_month_rate = abs(change_3m / 3)
+        if change_1m >= 0.50 and change_1m > monthly_three_month_rate:
+            acceleration = "accelerating_up"
+        elif change_1m <= -0.50 and abs(change_1m) > monthly_three_month_rate:
+            acceleration = "accelerating_down"
+    return {
+        "change_1m": change_1m,
+        "change_3m": change_3m,
+        "trend_1m": trend_1m,
+        "trend_3m": trend_3m,
+        "acceleration": acceleration,
+    }
+
+
+def _series_values_for_key(series, key):
+    return [
+        {"date": row["date"], "value": row[key]}
+        for row in series
+        if row.get(key) is not None
+    ]
+
+
+def _credit_metric_diagnostic(series, key, zone_func):
+    value_series = _series_values_for_key(series, key)
+    values = [row["value"] for row in value_series]
+    latest = values[-1] if values else None
+    percentile = _percentile_rank(values, latest)
+    return {
+        "value": latest,
+        "zone": zone_func(latest),
+        "percentile": percentile,
+        "percentile_label": _percentile_label(percentile),
+        **_trend_summary(value_series),
+    }
+
+
+def _credit_diagnostics_from_series(points_by_id):
+    bbb_series = _bbb_credit_spread_series(points_by_id)
+    ccc_series = _ccc_credit_spread_series(points_by_id)
+    ccc_bbb_series = _ccc_bbb_quality_spread_series(points_by_id)
+    return {
+        "bbb_credit_spread": _credit_metric_diagnostic(
+            bbb_series, "bbb_credit_spread", _bbb_credit_zone
+        ),
+        "ccc_credit_spread": _credit_metric_diagnostic(
+            ccc_series, "ccc_credit_spread", _ccc_credit_zone
+        ),
+        "ccc_bbb_quality_spread": _credit_metric_diagnostic(
+            ccc_bbb_series, "ccc_bbb_quality_spread", _ccc_bbb_quality_zone
+        ),
+    }
+
+
+def _credit_conditions_status_from_diagnostics(diagnostics):
+    bbb = diagnostics.get("bbb_credit_spread", {})
+    quality = diagnostics.get("ccc_bbb_quality_spread", {})
+    if bbb.get("zone") in (None, "missing") or quality.get("zone") in (None, "missing"):
+        return "missing"
+    if (
+        bbb.get("zone") == "crisis"
+        or quality.get("zone") == "crisis"
+        or (
+            bbb.get("acceleration") == "accelerating_up"
+            and quality.get("acceleration") == "accelerating_up"
+            and bbb.get("trend_3m") == "rising"
+            and quality.get("trend_3m") == "rising"
+        )
+    ):
+        return "crisis_stress"
+    if (
+        (bbb.get("trend_1m") == "rising" and quality.get("trend_1m") == "rising")
+        or bbb.get("zone") == "stressed"
+        or quality.get("zone") == "serious_deterioration"
+    ):
+        return "risk_rising"
+    if (
+        bbb.get("trend_1m") in ("stable", "falling")
+        and quality.get("trend_1m") == "rising"
+    ) or (
+        bbb.get("zone") in ("very_low", "normal")
+        and quality.get("zone") == "weak_credit_pressure"
+    ):
+        return "weak_credit_warning"
+    if (
+        bbb.get("trend_1m") in ("stable", "falling")
+        and quality.get("trend_1m") in ("stable", "falling")
+        and bbb.get("zone") in ("very_low", "normal")
+        and quality.get("zone") in ("low_dispersion", "normal")
+    ):
+        return "healthy"
+    return "mixed"
+
+
+def _credit_conditions_diagnostics_series(points_by_id):
+    bbb_by_date = {
+        row["date"]: row["bbb_credit_spread"]
+        for row in _bbb_credit_spread_series(points_by_id)
+    }
+    ccc_by_date = {
+        row["date"]: row["ccc_credit_spread"]
+        for row in _ccc_credit_spread_series(points_by_id)
+    }
+    quality_by_date = {
+        row["date"]: row["ccc_bbb_quality_spread"]
+        for row in _ccc_bbb_quality_spread_series(points_by_id)
+    }
+    rows = []
+    for date in sorted(set(bbb_by_date) & set(ccc_by_date) & set(quality_by_date)):
+        rows.append(
+            {
+                "date": date,
+                "bbb_credit_spread": bbb_by_date[date],
+                "ccc_credit_spread": ccc_by_date[date],
+                "ccc_bbb_quality_spread": quality_by_date[date],
+            }
+        )
+    return rows
+
+
+def _credit_conditions_diagnostics_detail(points_by_id):
+    series = _credit_conditions_diagnostics_series(points_by_id)
+    diagnostics = _credit_diagnostics_from_series(points_by_id)
+    return [
+        {
+            "kind": "credit_diagnostics",
+            "title": "Credit Conditions",
+            "status": _credit_conditions_status_from_diagnostics(diagnostics),
+            "metrics": {
+                "bbb_credit_spread": {
+                    "label": "BBB - 10Y",
+                    **diagnostics["bbb_credit_spread"],
+                },
+                "ccc_credit_spread": {
+                    "label": "CCC - 10Y",
+                    **diagnostics["ccc_credit_spread"],
+                },
+                "ccc_bbb_quality_spread": {
+                    "label": "CCC - BBB",
+                    **diagnostics["ccc_bbb_quality_spread"],
+                },
+            },
+            "series": series,
+        }
+    ]
 
 
 def _series_by_id(series_rows):
@@ -164,7 +417,123 @@ def _headline_payload(points, derived):
     ]
 
 
-def build_dashboard_payload(series_rows, latest_points, latest_macro_points=None):
+def _corporate_credit_values(points, macro_points):
+    ten_year_data = points.get("treasury_10y", [])
+    aaa_data = macro_points.get("aaa_corporate_yield", [])
+    bbb_data = macro_points.get("bbb_corporate_yield", [])
+    ccc_data = macro_points.get("ccc_corporate_yield", [])
+    if not ten_year_data or not aaa_data:
+        return {}
+    if isinstance(ten_year_data, dict):
+        ten_year = ten_year_data.get("value")
+        aaa = aaa_data.get("value") if isinstance(aaa_data, dict) else None
+        bbb = bbb_data.get("value") if isinstance(bbb_data, dict) else None
+        ccc = ccc_data.get("value") if isinstance(ccc_data, dict) else None
+        result = {}
+        if aaa is not None and ten_year is not None:
+            result["aaa_credit_spread"] = _round(aaa - ten_year)
+        if bbb is not None and ten_year is not None:
+            result["bbb_credit_spread"] = _round(bbb - ten_year)
+        if ccc is not None and ten_year is not None:
+            result["ccc_credit_spread"] = _round(ccc - ten_year)
+        if bbb is not None and aaa is not None:
+            result["bbb_aaa_quality_spread"] = _round(bbb - aaa)
+        if ccc is not None and bbb is not None:
+            result["ccc_bbb_quality_spread"] = _round(ccc - bbb)
+        if ccc is not None and aaa is not None:
+            result["ccc_aaa_quality_spread"] = _round(ccc - aaa)
+        return result
+    ten_year_by_date = {p["date"]: p["value"] for p in ten_year_data}
+    ten_year_dates = sorted(ten_year_by_date.keys())
+    aaa_by_date = {p["date"]: p["value"] for p in aaa_data}
+    bbb_by_date = {p["date"]: p["value"] for p in bbb_data}
+    ccc_by_date = {p["date"]: p["value"] for p in ccc_data}
+    latest_common = None
+    for date in sorted(aaa_by_date.keys(), reverse=True):
+        closest = None
+        for td in reversed(ten_year_dates):
+            if td <= date:
+                closest = td
+                break
+        if closest is not None:
+            latest_common = (date, closest)
+            break
+    if latest_common is None:
+        return {}
+    corp_date, ten_date = latest_common
+    ten_year = ten_year_by_date[ten_date]
+    aaa = aaa_by_date.get(corp_date)
+    bbb = bbb_by_date.get(corp_date)
+    ccc = ccc_by_date.get(corp_date)
+    result = {"credit_as_of": corp_date}
+    if aaa is not None:
+        result["aaa_credit_spread"] = _round(aaa - ten_year)
+    if bbb is not None:
+        result["bbb_credit_spread"] = _round(bbb - ten_year)
+    if ccc is not None:
+        result["ccc_credit_spread"] = _round(ccc - ten_year)
+    if bbb is not None and aaa is not None:
+        result["bbb_aaa_quality_spread"] = _round(bbb - aaa)
+    if ccc is not None and bbb is not None:
+        result["ccc_bbb_quality_spread"] = _round(ccc - bbb)
+    if ccc is not None and aaa is not None:
+        result["ccc_aaa_quality_spread"] = _round(ccc - aaa)
+    return result
+
+
+def _credit_regime(derived):
+    bbb_spread = derived.get("bbb_credit_spread")
+    ccc_bbb_spread = derived.get("ccc_bbb_quality_spread")
+    if bbb_spread is None or ccc_bbb_spread is None:
+        return "missing"
+    high_risk = bbb_spread >= CREDIT_RISK_THRESHOLD
+    high_dispersion = ccc_bbb_spread >= CREDIT_DISPERSION_THRESHOLD
+    if high_risk and high_dispersion:
+        return "high_risk_high_dispersion"
+    if high_risk:
+        return "high_risk_low_dispersion"
+    if high_dispersion:
+        return "low_risk_high_dispersion"
+    return "low_risk_low_dispersion"
+
+
+def _credit_conditions_status(derived):
+    regime = _credit_regime(derived)
+    return {
+        "low_risk_low_dispersion": "supportive",
+        "low_risk_high_dispersion": "selective",
+        "high_risk_high_dispersion": "risk_off",
+        "high_risk_low_dispersion": "stress",
+        "missing": "missing",
+    }[regime]
+
+
+def _credit_headline_payload(derived):
+    values = {
+        "bbb_credit_spread": derived.get("bbb_credit_spread"),
+        "ccc_credit_spread": derived.get("ccc_credit_spread"),
+        "ccc_bbb_quality_spread": derived.get("ccc_bbb_quality_spread"),
+        "credit_conditions": derived.get("credit_conditions_status"),
+    }
+    return [
+        {
+            "id": item_id,
+            "label": label,
+            "value": values[item_id],
+            "unit": "%" if item_id != "credit_conditions" else "",
+        }
+        for item_id, label in CREDIT_HEADLINE_CONFIG
+        if values[item_id] is not None
+    ]
+
+
+def build_dashboard_payload(
+    series_rows,
+    latest_points,
+    latest_macro_points=None,
+    credit_rate_points=None,
+    credit_macro_points=None,
+):
     if not series_rows or not latest_points:
         curve_status = "missing"
         return {
@@ -181,6 +550,13 @@ def build_dashboard_payload(series_rows, latest_points, latest_macro_points=None
                 "vix": None,
                 "curve_status": curve_status,
                 "method_interpretation": _method_interpretation(curve_status),
+                "aaa_credit_spread": None,
+                "bbb_credit_spread": None,
+                "ccc_credit_spread": None,
+                "bbb_aaa_quality_spread": None,
+                "ccc_bbb_quality_spread": None,
+                "ccc_aaa_quality_spread": None,
+                "credit_conditions_status": "missing",
             },
         }
     series = _series_by_id(series_rows)
@@ -216,10 +592,28 @@ def build_dashboard_payload(series_rows, latest_points, latest_macro_points=None
         "curve_status": curve_status,
         "method_interpretation": _method_interpretation(curve_status),
     }
+    credit_pts = credit_rate_points if credit_rate_points is not None else points
+    credit_macro = (
+        credit_macro_points if credit_macro_points is not None else macro_points
+    )
+    derived.update(_corporate_credit_values(credit_pts, credit_macro))
+    if credit_rate_points is not None and credit_macro_points is not None:
+        credit_points_by_id = {}
+        credit_points_by_id.update(credit_rate_points)
+        credit_points_by_id.update(credit_macro_points)
+        credit_diagnostics = _credit_diagnostics_from_series(credit_points_by_id)
+        derived["credit_diagnostics"] = credit_diagnostics
+        derived["credit_conditions_status"] = (
+            _credit_conditions_status_from_diagnostics(credit_diagnostics)
+        )
+    else:
+        derived["credit_conditions_status"] = _credit_conditions_status(derived)
     return {
         "as_of": _as_of(latest_points),
+        "credit_as_of": derived.get("credit_as_of"),
         "source": _source(latest_points),
-        "headline": _headline_payload(points, derived),
+        "headline": _headline_payload(points, derived)
+        + _credit_headline_payload(derived),
         "curve": _curve_payload(series, points),
         "real_rates": _real_rate_payload(series, points),
         "derived": derived,
@@ -281,6 +675,51 @@ DETAIL_CONFIG = {
     "cpi_based_real_rate": {
         "title": "CPI Real Rate",
         "series_ids": ["treasury_10y", "cpi_yoy", "vix"],
+    },
+    "corporate_yields": {
+        "title": "Corporate Yields",
+        "series_ids": [
+            "aaa_corporate_yield",
+            "bbb_corporate_yield",
+            "ccc_corporate_yield",
+        ],
+    },
+    "treasury_credit_spreads": {
+        "title": "Treasury Credit Spreads",
+        "series_ids": [
+            "treasury_10y",
+            "aaa_corporate_yield",
+            "bbb_corporate_yield",
+            "ccc_corporate_yield",
+        ],
+    },
+    "quality_spreads": {
+        "title": "Quality Spreads",
+        "series_ids": [
+            "aaa_corporate_yield",
+            "bbb_corporate_yield",
+            "ccc_corporate_yield",
+        ],
+    },
+    "bbb_credit_spread": {
+        "title": "BBB Credit Spread",
+        "series_ids": ["treasury_10y", "bbb_corporate_yield"],
+    },
+    "ccc_credit_spread": {
+        "title": "CCC Credit Spread",
+        "series_ids": ["treasury_10y", "ccc_corporate_yield"],
+    },
+    "ccc_bbb_quality_spread": {
+        "title": "CCC vs BBB Quality Spread",
+        "series_ids": ["bbb_corporate_yield", "ccc_corporate_yield"],
+    },
+    "credit_risk_regime": {
+        "title": "Credit Risk Regime",
+        "series_ids": ["treasury_10y", "bbb_corporate_yield", "ccc_corporate_yield"],
+    },
+    "credit_conditions_diagnostics": {
+        "title": "Credit Conditions",
+        "series_ids": ["treasury_10y", "bbb_corporate_yield", "ccc_corporate_yield"],
     },
 }
 
@@ -345,6 +784,323 @@ def _time_series_detail(detail_id, points_by_id):
             "labels": config["labels"],
             "series": _recent(series),
         },
+    ]
+
+
+def _corporate_yields_series(points_by_id):
+    aaa = {
+        row["date"]: row["value"]
+        for row in _series_points(points_by_id, "aaa_corporate_yield")
+    }
+    bbb = {
+        row["date"]: row["value"]
+        for row in _series_points(points_by_id, "bbb_corporate_yield")
+    }
+    ccc = {
+        row["date"]: row["value"]
+        for row in _series_points(points_by_id, "ccc_corporate_yield")
+    }
+    dates = sorted(set(aaa) & set(bbb) & set(ccc))
+    return [
+        {"date": date, "aaa": aaa[date], "bbb": bbb[date], "ccc": ccc[date]}
+        for date in dates
+    ]
+
+
+def _credit_spread_series(points_by_id):
+    ten_year_points = _series_points(points_by_id, "treasury_10y")
+    ten_year_by_date = {row["date"]: row["value"] for row in ten_year_points}
+    ten_year_dates = sorted(ten_year_by_date.keys())
+    aaa = {
+        row["date"]: row["value"]
+        for row in _series_points(points_by_id, "aaa_corporate_yield")
+    }
+    bbb = {
+        row["date"]: row["value"]
+        for row in _series_points(points_by_id, "bbb_corporate_yield")
+    }
+    ccc = {
+        row["date"]: row["value"]
+        for row in _series_points(points_by_id, "ccc_corporate_yield")
+    }
+    common_dates = sorted(set(aaa) & set(bbb) & set(ccc))
+    result = []
+    for date in common_dates:
+        closest = None
+        for td in reversed(ten_year_dates):
+            if td <= date:
+                closest = td
+                break
+        if closest is None:
+            continue
+        ten_val = ten_year_by_date[closest]
+        result.append(
+            {
+                "date": date,
+                "aaa_spread": _round(aaa[date] - ten_val),
+                "bbb_spread": _round(bbb[date] - ten_val),
+                "ccc_spread": _round(ccc[date] - ten_val),
+            }
+        )
+    return result
+
+
+def _quality_spread_series(points_by_id):
+    aaa = {
+        row["date"]: row["value"]
+        for row in _series_points(points_by_id, "aaa_corporate_yield")
+    }
+    bbb = {
+        row["date"]: row["value"]
+        for row in _series_points(points_by_id, "bbb_corporate_yield")
+    }
+    ccc = {
+        row["date"]: row["value"]
+        for row in _series_points(points_by_id, "ccc_corporate_yield")
+    }
+    dates = sorted(set(aaa) & set(bbb) & set(ccc))
+    return [
+        {
+            "date": date,
+            "bbb_aaa": _round(bbb[date] - aaa[date]),
+            "ccc_bbb": _round(ccc[date] - bbb[date]),
+            "ccc_aaa": _round(ccc[date] - aaa[date]),
+        }
+        for date in dates
+    ]
+
+
+def _corporate_yields_detail(points_by_id):
+    series = _corporate_yields_series(points_by_id)
+    return [
+        {
+            "kind": "time_series",
+            "title": "Corporate Yields (Historical)",
+            "keys": ["aaa", "bbb", "ccc"],
+            "labels": {"aaa": "AAA", "bbb": "BBB", "ccc": "CCC"},
+            "series": series,
+        },
+    ]
+
+
+def _treasury_credit_spreads_detail(points_by_id):
+    series = _credit_spread_series(points_by_id)
+    return [
+        {
+            "kind": "time_series",
+            "title": "Treasury Credit Spreads (Historical)",
+            "keys": ["aaa_spread", "bbb_spread", "ccc_spread"],
+            "labels": {
+                "aaa_spread": "AAA - 10Y",
+                "bbb_spread": "BBB - 10Y",
+                "ccc_spread": "CCC - 10Y",
+            },
+            "series": series,
+        },
+    ]
+
+
+def _quality_spreads_detail(points_by_id):
+    series = _quality_spread_series(points_by_id)
+    return [
+        {
+            "kind": "time_series",
+            "title": "Quality Spreads (Historical)",
+            "keys": ["bbb_aaa", "ccc_bbb", "ccc_aaa"],
+            "labels": {
+                "bbb_aaa": "BBB - AAA",
+                "ccc_bbb": "CCC - BBB",
+                "ccc_aaa": "CCC - AAA",
+            },
+            "series": series,
+        },
+    ]
+
+
+def _single_credit_spread_series(points_by_id, corporate_series_id):
+    ten_year_points = _series_points(points_by_id, "treasury_10y")
+    ten_year_by_date = {row["date"]: row["value"] for row in ten_year_points}
+    ten_year_dates = sorted(ten_year_by_date.keys())
+    corporate = {
+        row["date"]: row["value"]
+        for row in _series_points(points_by_id, corporate_series_id)
+    }
+    result = []
+    for date in sorted(corporate.keys()):
+        closest = None
+        for td in reversed(ten_year_dates):
+            if td <= date:
+                closest = td
+                break
+        if closest is None:
+            continue
+        result.append(
+            {
+                "date": date,
+                "yield": corporate[date],
+                "spread": _round(corporate[date] - ten_year_by_date[closest]),
+            }
+        )
+    return result
+
+
+def _single_credit_spread_detail(detail_id, points_by_id):
+    config = DETAIL_CONFIG[detail_id]
+    rating = detail_id.replace("_credit_spread", "").upper()
+    corporate_series_id = f"{rating.lower()}_corporate_yield"
+    series = _single_credit_spread_series(points_by_id, corporate_series_id)
+    return [
+        {
+            "kind": "time_series",
+            "title": f"{rating} Yield & Credit Spread",
+            "keys": ["yield", "spread"],
+            "labels": {
+                "yield": f"{rating} Yield",
+                "spread": f"{rating} - 10Y Credit Spread",
+            },
+            "series": series,
+        },
+    ]
+
+
+def _date_value_map(points):
+    return {row["date"]: row["value"] for row in points}
+
+
+def _latest_on_or_before(sorted_dates, target):
+    result = None
+    for d in sorted_dates:
+        if d <= target:
+            result = d
+        else:
+            break
+    return result
+
+
+def _bbb_credit_spread_series(points_by_id):
+    treasury = _date_value_map(_series_points(points_by_id, "treasury_10y"))
+    bbb = _date_value_map(_series_points(points_by_id, "bbb_corporate_yield"))
+    treasury_dates = sorted(treasury.keys())
+    rows = []
+    for date in sorted(bbb):
+        closest = _latest_on_or_before(treasury_dates, date)
+        if closest is not None:
+            rows.append(
+                {
+                    "date": date,
+                    "bbb_credit_spread": _round(bbb[date] - treasury[closest]),
+                }
+            )
+    return rows
+
+
+def _ccc_bbb_quality_spread_series(points_by_id):
+    bbb = _date_value_map(_series_points(points_by_id, "bbb_corporate_yield"))
+    ccc = _date_value_map(_series_points(points_by_id, "ccc_corporate_yield"))
+    rows = []
+    for date in sorted(set(bbb) & set(ccc)):
+        rows.append(
+            {
+                "date": date,
+                "ccc_bbb_quality_spread": _round(ccc[date] - bbb[date]),
+            }
+        )
+    return rows
+
+
+def _bbb_credit_spread_detail(points_by_id):
+    return [
+        {
+            "kind": "time_series",
+            "title": "BBB Credit Spread",
+            "keys": ["bbb_credit_spread"],
+            "labels": {"bbb_credit_spread": "BBB - 10Y"},
+            "series": _bbb_credit_spread_series(points_by_id),
+        }
+    ]
+
+
+def _ccc_bbb_quality_spread_detail(points_by_id):
+    return [
+        {
+            "kind": "time_series",
+            "title": "CCC vs BBB Quality Spread",
+            "keys": ["ccc_bbb_quality_spread"],
+            "labels": {"ccc_bbb_quality_spread": "CCC - BBB"},
+            "series": _ccc_bbb_quality_spread_series(points_by_id),
+        }
+    ]
+
+
+def _ccc_credit_spread_series(points_by_id):
+    treasury = _date_value_map(_series_points(points_by_id, "treasury_10y"))
+    ccc = _date_value_map(_series_points(points_by_id, "ccc_corporate_yield"))
+    treasury_dates = sorted(treasury.keys())
+    rows = []
+    for date in sorted(ccc):
+        closest = _latest_on_or_before(treasury_dates, date)
+        if closest is not None:
+            rows.append(
+                {
+                    "date": date,
+                    "ccc_credit_spread": _round(ccc[date] - treasury[closest]),
+                }
+            )
+    return rows
+
+
+def _ccc_credit_spread_detail(points_by_id):
+    return [
+        {
+            "kind": "time_series",
+            "title": "CCC Credit Spread",
+            "keys": ["ccc_credit_spread"],
+            "labels": {"ccc_credit_spread": "CCC - 10Y"},
+            "series": _ccc_credit_spread_series(points_by_id),
+        }
+    ]
+
+
+def _credit_risk_regime_series(points_by_id):
+    bbb_series = _bbb_credit_spread_series(points_by_id)
+    ccc_bbb_series = _ccc_bbb_quality_spread_series(points_by_id)
+    bbb_by_date = {row["date"]: row["bbb_credit_spread"] for row in bbb_series}
+    ccc_bbb_by_date = {
+        row["date"]: row["ccc_bbb_quality_spread"] for row in ccc_bbb_series
+    }
+    rows = []
+    for date in sorted(set(bbb_by_date) & set(ccc_bbb_by_date)):
+        derived = {
+            "bbb_credit_spread": bbb_by_date[date],
+            "ccc_bbb_quality_spread": ccc_bbb_by_date[date],
+        }
+        rows.append(
+            {
+                "date": date,
+                **derived,
+                "regime": _credit_regime(derived),
+            }
+        )
+    return rows
+
+
+def _credit_risk_regime_detail(points_by_id):
+    series = _credit_risk_regime_series(points_by_id)
+    return [
+        {
+            "kind": "credit_regime",
+            "title": "Credit Risk Regime",
+            "x_key": "bbb_credit_spread",
+            "y_key": "ccc_bbb_quality_spread",
+            "x_label": "BBB - 10Y",
+            "y_label": "CCC - BBB",
+            "thresholds": {
+                "bbb_credit_spread": CREDIT_RISK_THRESHOLD,
+                "ccc_bbb_quality_spread": CREDIT_DISPERSION_THRESHOLD,
+            },
+            "current": series[-1] if series else None,
+            "series": series,
+        }
     ]
 
 
@@ -520,6 +1276,20 @@ def build_detail_payload(detail_id, series_rows, points_by_id, options=None):
         charts = _cpi_real_rate_detail_payload(points_by_id)
     elif detail_id == "yield_curve_shape":
         charts = _curve_detail(points_by_id, options)
+    elif detail_id == "corporate_yields":
+        charts = _corporate_yields_detail(points_by_id)
+    elif detail_id == "treasury_credit_spreads":
+        charts = _treasury_credit_spreads_detail(points_by_id)
+    elif detail_id == "quality_spreads":
+        charts = _quality_spreads_detail(points_by_id)
+    elif detail_id == "bbb_credit_spread":
+        charts = _bbb_credit_spread_detail(points_by_id)
+    elif detail_id == "ccc_credit_spread":
+        charts = _ccc_credit_spread_detail(points_by_id)
+    elif detail_id == "ccc_bbb_quality_spread":
+        charts = _ccc_bbb_quality_spread_detail(points_by_id)
+    elif detail_id in ("credit_conditions_diagnostics", "credit_risk_regime"):
+        charts = _credit_conditions_diagnostics_detail(points_by_id)
     else:
         charts = _time_series_detail(detail_id, points_by_id)
     return {

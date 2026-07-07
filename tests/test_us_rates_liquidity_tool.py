@@ -329,3 +329,686 @@ def test_build_cpi_real_rate_detail_payload_compares_with_vix_only():
         "real_rate": "CPI Real Rate",
         "vix": "VIX",
     }
+
+
+def _credit_macro_points():
+    return [
+        {
+            "series_id": "aaa_corporate_yield",
+            "date": "2021-01-03",
+            "value": 4.60,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+        {
+            "series_id": "bbb_corporate_yield",
+            "date": "2021-01-03",
+            "value": 5.20,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+        {
+            "series_id": "ccc_corporate_yield",
+            "date": "2021-01-03",
+            "value": 7.80,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+    ]
+
+
+def test_build_dashboard_payload_computes_credit_spreads():
+    payload = us_rates_liquidity.build_dashboard_payload(
+        series_rows(),
+        latest_points(),
+        _credit_macro_points(),
+    )
+
+    assert payload["derived"]["aaa_credit_spread"] == 3.67
+    assert payload["derived"]["bbb_credit_spread"] == 4.27
+    assert payload["derived"]["ccc_credit_spread"] == 6.87
+    assert payload["derived"]["bbb_aaa_quality_spread"] == 0.60
+    assert payload["derived"]["ccc_bbb_quality_spread"] == 2.60
+    assert payload["derived"]["ccc_aaa_quality_spread"] == 3.20
+
+
+def test_build_dashboard_payload_credit_status_supportive():
+    points = [
+        {
+            "series_id": "treasury_10y",
+            "date": "2021-01-03",
+            "value": 4.00,
+            "source_workbook": "Benchmark_Yields_US.xlsm",
+            "source_sheet": "Data",
+        },
+    ]
+    macro = [
+        {
+            "series_id": "aaa_corporate_yield",
+            "date": "2021-01-03",
+            "value": 4.60,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+        {
+            "series_id": "bbb_corporate_yield",
+            "date": "2021-01-03",
+            "value": 5.20,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+        {
+            "series_id": "ccc_corporate_yield",
+            "date": "2021-01-03",
+            "value": 7.00,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+    ]
+    payload = us_rates_liquidity.build_dashboard_payload(series_rows(), points, macro)
+
+    assert payload["derived"]["credit_conditions_status"] == "supportive"
+
+
+def test_build_dashboard_payload_credit_status_caution():
+    points = [
+        {
+            "series_id": "treasury_10y",
+            "date": "2021-01-03",
+            "value": 4.00,
+            "source_workbook": "Benchmark_Yields_US.xlsm",
+            "source_sheet": "Data",
+        },
+    ]
+    macro = [
+        {
+            "series_id": "aaa_corporate_yield",
+            "date": "2021-01-03",
+            "value": 4.60,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+        {
+            "series_id": "bbb_corporate_yield",
+            "date": "2021-01-03",
+            "value": 5.20,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+        {
+            "series_id": "ccc_corporate_yield",
+            "date": "2021-01-03",
+            "value": 9.80,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+    ]
+    payload = us_rates_liquidity.build_dashboard_payload(series_rows(), points, macro)
+
+    assert payload["derived"]["credit_conditions_status"] == "selective"
+
+
+def test_build_dashboard_payload_credit_status_risk_off():
+    points = [
+        {
+            "series_id": "treasury_10y",
+            "date": "2021-01-03",
+            "value": 4.00,
+            "source_workbook": "Benchmark_Yields_US.xlsm",
+            "source_sheet": "Data",
+        },
+    ]
+    macro = [
+        {
+            "series_id": "aaa_corporate_yield",
+            "date": "2021-01-03",
+            "value": 4.60,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+        {
+            "series_id": "bbb_corporate_yield",
+            "date": "2021-01-03",
+            "value": 7.00,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+        {
+            "series_id": "ccc_corporate_yield",
+            "date": "2021-01-03",
+            "value": 13.00,
+            "source": "Corporate_Bond_Indices.xlsm",
+        },
+    ]
+    payload = us_rates_liquidity.build_dashboard_payload(series_rows(), points, macro)
+
+    assert payload["derived"]["credit_conditions_status"] == "risk_off"
+
+
+def test_build_dashboard_payload_credit_status_missing_when_no_corporate_data():
+    payload = us_rates_liquidity.build_dashboard_payload(
+        series_rows(),
+        latest_points(),
+        [],
+    )
+
+    assert payload["derived"]["credit_conditions_status"] == "missing"
+
+
+def test_build_dashboard_payload_credit_cards_in_headline():
+    payload = us_rates_liquidity.build_dashboard_payload(
+        series_rows(),
+        latest_points(),
+        _credit_macro_points(),
+    )
+
+    credit_ids = [card["id"] for card in payload["headline"]]
+    assert "bbb_credit_spread" in credit_ids
+    assert "ccc_credit_spread" in credit_ids
+    assert "ccc_bbb_quality_spread" in credit_ids
+    assert "credit_conditions" in credit_ids
+    assert "aaa_credit_spread" not in credit_ids
+    assert "bbb_aaa_quality_spread" not in credit_ids
+    assert "ccc_aaa_quality_spread" not in credit_ids
+
+    bbb_card = next(c for c in payload["headline"] if c["id"] == "bbb_credit_spread")
+    assert bbb_card["value"] == 4.27
+    assert bbb_card["unit"] == "%"
+
+    ccc_card = next(c for c in payload["headline"] if c["id"] == "ccc_credit_spread")
+    assert ccc_card["value"] == 6.87
+    assert ccc_card["unit"] == "%"
+
+    status_card = next(c for c in payload["headline"] if c["id"] == "credit_conditions")
+    assert status_card["value"] == "stress"
+
+
+def _credit_time_series():
+    return {
+        "aaa_corporate_yield": [
+            {
+                "date": "2020-12-27",
+                "value": 1.56,
+                "source": "Corporate_Bond_Indices.xlsm",
+            },
+            {
+                "date": "2021-01-03",
+                "value": 1.58,
+                "source": "Corporate_Bond_Indices.xlsm",
+            },
+        ],
+        "bbb_corporate_yield": [
+            {
+                "date": "2020-12-27",
+                "value": 2.30,
+                "source": "Corporate_Bond_Indices.xlsm",
+            },
+            {
+                "date": "2021-01-03",
+                "value": 2.32,
+                "source": "Corporate_Bond_Indices.xlsm",
+            },
+        ],
+        "ccc_corporate_yield": [
+            {
+                "date": "2020-12-27",
+                "value": 8.10,
+                "source": "Corporate_Bond_Indices.xlsm",
+            },
+            {
+                "date": "2021-01-03",
+                "value": 8.15,
+                "source": "Corporate_Bond_Indices.xlsm",
+            },
+        ],
+        "treasury_10y": [
+            {
+                "date": "2020-12-27",
+                "value": 0.94,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2021-01-03",
+                "value": 0.93,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+        ],
+    }
+
+
+def test_build_corporate_yields_detail_payload_returns_three_series():
+    payload = us_rates_liquidity.build_detail_payload(
+        "corporate_yields",
+        series_rows(),
+        _credit_time_series(),
+    )
+
+    assert payload["detail_id"] == "corporate_yields"
+    assert payload["title"] == "Corporate Yields"
+    assert len(payload["charts"]) == 1
+    assert payload["charts"][0]["kind"] == "time_series"
+    assert payload["charts"][0]["title"] == "Corporate Yields (Historical)"
+    assert len(payload["charts"][0]["series"]) == 2
+    assert payload["charts"][0]["labels"]["aaa"] == "AAA"
+    assert payload["charts"][0]["labels"]["bbb"] == "BBB"
+    assert payload["charts"][0]["labels"]["ccc"] == "CCC"
+    assert payload["charts"][0]["series"][0]["aaa"] == 1.56
+    assert payload["charts"][0]["series"][0]["bbb"] == 2.30
+    assert payload["charts"][0]["series"][0]["ccc"] == 8.10
+
+
+def test_build_treasury_credit_spreads_detail_payload_computes_spreads():
+    payload = us_rates_liquidity.build_detail_payload(
+        "treasury_credit_spreads",
+        series_rows(),
+        _credit_time_series(),
+    )
+
+    assert payload["detail_id"] == "treasury_credit_spreads"
+    assert payload["title"] == "Treasury Credit Spreads"
+    assert len(payload["charts"]) == 1
+    assert payload["charts"][0]["kind"] == "time_series"
+    assert payload["charts"][0]["title"] == "Treasury Credit Spreads (Historical)"
+    assert payload["charts"][0]["labels"]["aaa_spread"] == "AAA - 10Y"
+    assert payload["charts"][0]["labels"]["bbb_spread"] == "BBB - 10Y"
+    assert payload["charts"][0]["labels"]["ccc_spread"] == "CCC - 10Y"
+    last = payload["charts"][0]["series"][-1]
+    assert last["aaa_spread"] == 0.65
+    assert last["bbb_spread"] == 1.39
+    assert last["ccc_spread"] == 7.22
+
+
+def test_build_quality_spreads_detail_payload_computes_quality_spreads():
+    payload = us_rates_liquidity.build_detail_payload(
+        "quality_spreads",
+        series_rows(),
+        _credit_time_series(),
+    )
+
+    assert payload["detail_id"] == "quality_spreads"
+    assert payload["title"] == "Quality Spreads"
+    assert len(payload["charts"]) == 1
+    assert payload["charts"][0]["kind"] == "time_series"
+    assert payload["charts"][0]["title"] == "Quality Spreads (Historical)"
+    assert payload["charts"][0]["labels"]["bbb_aaa"] == "BBB - AAA"
+    assert payload["charts"][0]["labels"]["ccc_bbb"] == "CCC - BBB"
+    assert payload["charts"][0]["labels"]["ccc_aaa"] == "CCC - AAA"
+    last = payload["charts"][0]["series"][-1]
+    assert last["bbb_aaa"] == 0.74
+    assert last["ccc_bbb"] == 5.83
+    assert last["ccc_aaa"] == 6.57
+
+
+def test_detail_series_ids_returns_corporate_credit_ids():
+    assert us_rates_liquidity.detail_series_ids("corporate_yields") == [
+        "aaa_corporate_yield",
+        "bbb_corporate_yield",
+        "ccc_corporate_yield",
+    ]
+    assert "treasury_10y" in us_rates_liquidity.detail_series_ids(
+        "treasury_credit_spreads"
+    )
+    assert "aaa_corporate_yield" in us_rates_liquidity.detail_series_ids(
+        "treasury_credit_spreads"
+    )
+
+
+def test_bbb_credit_spread_detail_returns_single_line_series():
+    payload = us_rates_liquidity.build_detail_payload(
+        "bbb_credit_spread",
+        [],
+        {
+            "treasury_10y": [{"date": "2021-01-03", "value": 0.93}],
+            "bbb_corporate_yield": [{"date": "2021-01-07", "value": 2.16}],
+        },
+    )
+
+    chart = payload["charts"][0]
+    assert payload["detail_id"] == "bbb_credit_spread"
+    assert chart["kind"] == "time_series"
+    assert chart["title"] == "BBB Credit Spread"
+    assert chart["keys"] == ["bbb_credit_spread"]
+    assert chart["labels"] == {"bbb_credit_spread": "BBB - 10Y"}
+    assert chart["series"] == [{"date": "2021-01-07", "bbb_credit_spread": 1.23}]
+
+
+def test_ccc_credit_spread_detail_returns_single_line_series():
+    payload = us_rates_liquidity.build_detail_payload(
+        "ccc_credit_spread",
+        [],
+        {
+            "treasury_10y": [{"date": "2021-01-03", "value": 0.93}],
+            "ccc_corporate_yield": [{"date": "2021-01-07", "value": 8.34}],
+        },
+    )
+
+    chart = payload["charts"][0]
+    assert payload["detail_id"] == "ccc_credit_spread"
+    assert chart["kind"] == "time_series"
+    assert chart["title"] == "CCC Credit Spread"
+    assert chart["keys"] == ["ccc_credit_spread"]
+    assert chart["labels"] == {"ccc_credit_spread": "CCC - 10Y"}
+    assert chart["series"] == [{"date": "2021-01-07", "ccc_credit_spread": 7.41}]
+
+
+def test_ccc_bbb_quality_spread_detail_returns_single_line_series():
+    payload = us_rates_liquidity.build_detail_payload(
+        "ccc_bbb_quality_spread",
+        [],
+        {
+            "bbb_corporate_yield": [{"date": "2021-01-07", "value": 2.16}],
+            "ccc_corporate_yield": [{"date": "2021-01-07", "value": 8.34}],
+        },
+    )
+
+    chart = payload["charts"][0]
+    assert payload["detail_id"] == "ccc_bbb_quality_spread"
+    assert chart["kind"] == "time_series"
+    assert chart["title"] == "CCC vs BBB Quality Spread"
+    assert chart["keys"] == ["ccc_bbb_quality_spread"]
+    assert chart["labels"] == {"ccc_bbb_quality_spread": "CCC - BBB"}
+    assert chart["series"] == [{"date": "2021-01-07", "ccc_bbb_quality_spread": 6.18}]
+
+
+def test_credit_risk_regime_detail_returns_diagnostics_as_compat_alias():
+    payload = us_rates_liquidity.build_detail_payload(
+        "credit_risk_regime",
+        [],
+        {
+            "treasury_10y": [{"date": "2021-01-03", "value": 0.93}],
+            "bbb_corporate_yield": [{"date": "2021-01-07", "value": 2.16}],
+            "ccc_corporate_yield": [{"date": "2021-01-07", "value": 8.34}],
+        },
+    )
+
+    chart = payload["charts"][0]
+    assert chart["kind"] == "credit_diagnostics"
+    assert set(chart["metrics"]) == {
+        "bbb_credit_spread",
+        "ccc_credit_spread",
+        "ccc_bbb_quality_spread",
+    }
+
+
+def test_credit_level_zone_classifies_bbb_spread():
+    assert us_rates_liquidity._bbb_credit_zone(1.49) == "very_low"
+    assert us_rates_liquidity._bbb_credit_zone(1.50) == "normal"
+    assert us_rates_liquidity._bbb_credit_zone(2.50) == "tightening"
+    assert us_rates_liquidity._bbb_credit_zone(4.00) == "stressed"
+    assert us_rates_liquidity._bbb_credit_zone(6.00) == "crisis"
+
+
+def test_credit_level_zone_classifies_quality_spread():
+    assert us_rates_liquidity._ccc_bbb_quality_zone(2.99) == "low_dispersion"
+    assert us_rates_liquidity._ccc_bbb_quality_zone(3.00) == "normal"
+    assert us_rates_liquidity._ccc_bbb_quality_zone(5.00) == "weak_credit_pressure"
+    assert us_rates_liquidity._ccc_bbb_quality_zone(8.00) == "serious_deterioration"
+    assert us_rates_liquidity._ccc_bbb_quality_zone(12.00) == "crisis"
+
+
+def test_credit_level_zone_classifies_ccc_spread():
+    assert us_rates_liquidity._ccc_credit_zone(4.99) == "calm"
+    assert us_rates_liquidity._ccc_credit_zone(5.00) == "elevated"
+    assert us_rates_liquidity._ccc_credit_zone(8.00) == "stressed"
+    assert us_rates_liquidity._ccc_credit_zone(12.00) == "crisis"
+
+
+def test_credit_percentile_and_label():
+    values = [1, 2, 3, 4]
+
+    assert us_rates_liquidity._percentile_rank(values, 3) == 75
+    assert us_rates_liquidity._percentile_label(24) == "low"
+    assert us_rates_liquidity._percentile_label(25) == "normal"
+    assert us_rates_liquidity._percentile_label(75) == "elevated"
+    assert us_rates_liquidity._percentile_label(90) == "extreme"
+
+
+def test_credit_trend_summary_computes_changes_and_acceleration():
+    series = [
+        {"date": "2021-01-01", "value": 1.0},
+        {"date": "2021-01-08", "value": 1.1},
+        {"date": "2021-01-15", "value": 1.2},
+        {"date": "2021-01-22", "value": 1.3},
+        {"date": "2021-01-29", "value": 1.9},
+    ]
+
+    summary = us_rates_liquidity._trend_summary(series)
+
+    assert summary["change_1m"] == 0.90
+    assert summary["change_3m"] is None
+    assert summary["trend_1m"] == "rising"
+    assert summary["trend_3m"] == "missing"
+    assert summary["acceleration"] == "none"
+
+
+def test_credit_trend_summary_detects_accelerating_up():
+    series = [
+        {"date": f"2021-01-{day:02d}", "value": value}
+        for day, value in [
+            (1, 1.00),
+            (2, 1.05),
+            (3, 1.10),
+            (4, 1.15),
+            (5, 1.20),
+            (6, 1.25),
+            (7, 1.30),
+            (8, 1.35),
+            (9, 1.40),
+            (10, 1.45),
+            (11, 1.50),
+            (12, 1.55),
+            (13, 1.60),
+            (14, 2.20),
+        ]
+    ]
+
+    summary = us_rates_liquidity._trend_summary(series)
+
+    assert summary["change_1m"] == 0.75
+    assert summary["change_3m"] == 1.20
+    assert summary["trend_1m"] == "rising"
+    assert summary["trend_3m"] == "rising"
+    assert summary["acceleration"] == "accelerating_up"
+
+
+def test_credit_metric_diagnostic_combines_level_percentile_and_trend():
+    series = [
+        {"date": "2021-01-01", "bbb_credit_spread": 1.0},
+        {"date": "2021-01-08", "bbb_credit_spread": 1.1},
+        {"date": "2021-01-15", "bbb_credit_spread": 1.2},
+        {"date": "2021-01-22", "bbb_credit_spread": 1.3},
+        {"date": "2021-01-29", "bbb_credit_spread": 1.6},
+    ]
+
+    diagnostic = us_rates_liquidity._credit_metric_diagnostic(
+        series,
+        "bbb_credit_spread",
+        us_rates_liquidity._bbb_credit_zone,
+    )
+
+    assert diagnostic == {
+        "value": 1.6,
+        "zone": "normal",
+        "percentile": 100,
+        "percentile_label": "extreme",
+        "change_1m": 0.60,
+        "change_3m": None,
+        "trend_1m": "rising",
+        "trend_3m": "missing",
+        "acceleration": "none",
+    }
+
+
+def test_credit_diagnostics_status_identifies_weak_credit_warning():
+    diagnostics = {
+        "bbb_credit_spread": {
+            "zone": "very_low",
+            "trend_1m": "stable",
+            "trend_3m": "stable",
+            "acceleration": "none",
+        },
+        "ccc_bbb_quality_spread": {
+            "zone": "weak_credit_pressure",
+            "trend_1m": "rising",
+            "trend_3m": "rising",
+            "acceleration": "none",
+        },
+    }
+
+    assert (
+        us_rates_liquidity._credit_conditions_status_from_diagnostics(diagnostics)
+        == "weak_credit_warning"
+    )
+
+
+def test_credit_diagnostics_status_identifies_healthy():
+    diagnostics = {
+        "bbb_credit_spread": {
+            "zone": "very_low",
+            "trend_1m": "stable",
+            "trend_3m": "stable",
+            "acceleration": "none",
+        },
+        "ccc_bbb_quality_spread": {
+            "zone": "normal",
+            "trend_1m": "stable",
+            "trend_3m": "stable",
+            "acceleration": "none",
+        },
+    }
+
+    assert (
+        us_rates_liquidity._credit_conditions_status_from_diagnostics(diagnostics)
+        == "healthy"
+    )
+
+
+def test_credit_diagnostics_status_identifies_risk_rising():
+    diagnostics = {
+        "bbb_credit_spread": {
+            "zone": "tightening",
+            "trend_1m": "rising",
+            "trend_3m": "rising",
+            "acceleration": "none",
+        },
+        "ccc_bbb_quality_spread": {
+            "zone": "weak_credit_pressure",
+            "trend_1m": "rising",
+            "trend_3m": "rising",
+            "acceleration": "none",
+        },
+    }
+
+    assert (
+        us_rates_liquidity._credit_conditions_status_from_diagnostics(diagnostics)
+        == "risk_rising"
+    )
+
+
+def test_credit_diagnostics_status_identifies_crisis_stress():
+    diagnostics = {
+        "bbb_credit_spread": {
+            "zone": "crisis",
+            "trend_1m": "rising",
+            "trend_3m": "rising",
+            "acceleration": "accelerating_up",
+        },
+        "ccc_bbb_quality_spread": {
+            "zone": "serious_deterioration",
+            "trend_1m": "rising",
+            "trend_3m": "rising",
+            "acceleration": "none",
+        },
+    }
+
+    assert (
+        us_rates_liquidity._credit_conditions_status_from_diagnostics(diagnostics)
+        == "crisis_stress"
+    )
+
+
+def test_credit_diagnostics_status_returns_mixed_for_unclear():
+    diagnostics = {
+        "bbb_credit_spread": {
+            "zone": "tightening",
+            "trend_1m": "falling",
+            "trend_3m": "stable",
+            "acceleration": "none",
+        },
+        "ccc_bbb_quality_spread": {
+            "zone": "normal",
+            "trend_1m": "stable",
+            "trend_3m": "stable",
+            "acceleration": "none",
+        },
+    }
+
+    assert (
+        us_rates_liquidity._credit_conditions_status_from_diagnostics(diagnostics)
+        == "mixed"
+    )
+
+
+def test_credit_diagnostics_status_returns_missing_when_data_absent():
+    diagnostics = {
+        "bbb_credit_spread": {
+            "zone": "missing",
+            "trend_1m": "missing",
+            "trend_3m": "missing",
+            "acceleration": "none",
+        },
+        "ccc_bbb_quality_spread": {
+            "zone": "missing",
+            "trend_1m": "missing",
+            "trend_3m": "missing",
+            "acceleration": "none",
+        },
+    }
+
+    assert (
+        us_rates_liquidity._credit_conditions_status_from_diagnostics(diagnostics)
+        == "missing"
+    )
+
+
+def test_credit_conditions_diagnostics_detail_returns_metrics_and_series():
+    payload = us_rates_liquidity.build_detail_payload(
+        "credit_conditions_diagnostics",
+        [],
+        {
+            "treasury_10y": [
+                {"date": "2021-01-01", "value": 1.0},
+                {"date": "2021-01-08", "value": 1.0},
+                {"date": "2021-01-15", "value": 1.0},
+                {"date": "2021-01-22", "value": 1.0},
+                {"date": "2021-01-29", "value": 1.0},
+            ],
+            "bbb_corporate_yield": [
+                {"date": "2021-01-01", "value": 2.0},
+                {"date": "2021-01-08", "value": 2.1},
+                {"date": "2021-01-15", "value": 2.2},
+                {"date": "2021-01-22", "value": 2.3},
+                {"date": "2021-01-29", "value": 2.6},
+            ],
+            "ccc_corporate_yield": [
+                {"date": "2021-01-01", "value": 6.0},
+                {"date": "2021-01-08", "value": 6.4},
+                {"date": "2021-01-15", "value": 6.8},
+                {"date": "2021-01-22", "value": 7.2},
+                {"date": "2021-01-29", "value": 8.6},
+            ],
+        },
+    )
+
+    chart = payload["charts"][0]
+    assert payload["detail_id"] == "credit_conditions_diagnostics"
+    assert chart["kind"] == "credit_diagnostics"
+    assert chart["status"] in {
+        "healthy",
+        "weak_credit_warning",
+        "risk_rising",
+        "crisis_stress",
+        "mixed",
+    }
+    assert set(chart["metrics"]) == {
+        "bbb_credit_spread",
+        "ccc_credit_spread",
+        "ccc_bbb_quality_spread",
+    }
+    assert chart["series"][-1] == {
+        "date": "2021-01-29",
+        "bbb_credit_spread": 1.6,
+        "ccc_credit_spread": 7.6,
+        "ccc_bbb_quality_spread": 6.0,
+    }

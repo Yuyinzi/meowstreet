@@ -177,10 +177,23 @@ def macro_dashboard_gdp_relationship_detail(relationship_id):
 def macro_dashboard_us_rates_liquidity():
     con = us_rates_liquidity_db.connect()
     try:
+        latest_points = us_rates_liquidity_db.load_latest_points(con)
+        latest_macro = us_rates_liquidity_db.load_latest_macro_indicator_points(con)
+        credit_rate_points = us_rates_liquidity_db.load_rate_points_for_series(
+            con, ["treasury_10y"]
+        )
+        credit_macro_points = (
+            us_rates_liquidity_db.load_macro_indicator_points_for_series(
+                con,
+                ["aaa_corporate_yield", "bbb_corporate_yield", "ccc_corporate_yield"],
+            )
+        )
         return us_rates_liquidity.build_dashboard_payload(
             us_rates_liquidity_db.load_rate_series(con),
-            us_rates_liquidity_db.load_latest_points(con),
-            us_rates_liquidity_db.load_latest_macro_indicator_points(con),
+            latest_points,
+            latest_macro,
+            credit_rate_points=credit_rate_points,
+            credit_macro_points=credit_macro_points,
         )
     finally:
         con.close()
@@ -200,12 +213,12 @@ def macro_dashboard_us_rates_liquidity_detail(
         rate_series_ids = [
             series_id
             for series_id in series_ids
-            if not series_id.startswith(("cpi_", "vix"))
+            if not series_id.startswith(("cpi_", "vix", "aaa_", "bbb_", "ccc_"))
         ]
         macro_series_ids = [
             series_id
             for series_id in series_ids
-            if series_id.startswith(("cpi_", "vix"))
+            if series_id.startswith(("cpi_", "vix", "aaa_", "bbb_", "ccc_"))
         ]
         points_by_id = us_rates_liquidity_db.load_rate_points_for_series(
             con,

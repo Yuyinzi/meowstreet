@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import us_rates_liquidity
+from scripts import import_us_corporate_credit
 from scripts import import_us_macro_indicators
 from scripts import import_us_rates_liquidity
 
@@ -33,6 +34,7 @@ def refresh(
     fetch_macro=import_us_macro_indicators.fetch_fred_csvs,
     import_rates=import_us_rates_liquidity.import_fred_csvs,
     import_macro=import_us_macro_indicators.import_fred_macro_csvs,
+    import_credit=import_us_corporate_credit.import_workbook,
 ):
     con = connect(db_path)
     try:
@@ -40,11 +42,13 @@ def refresh(
         macro_fetched = None if skip_fetch else fetch_macro()
         rates_imported = import_rates(con)
         macro_imported = import_macro(con)
+        credit_imported = import_credit(con)
         return {
             "rates_fetched": rates_fetched,
             "macro_fetched": macro_fetched,
             "rates_imported": rates_imported,
             "macro_imported": macro_imported,
+            "credit_imported": credit_imported,
         }
     finally:
         con.close()
@@ -57,6 +61,7 @@ def main(
     fetch_macro=import_us_macro_indicators.fetch_fred_csvs,
     import_rates=import_us_rates_liquidity.import_fred_csvs,
     import_macro=import_us_macro_indicators.import_fred_macro_csvs,
+    import_credit=import_us_corporate_credit.import_workbook,
 ):
     parser = argparse.ArgumentParser(
         description="Refresh US Rates / Liquidity dashboard data from FRED"
@@ -81,6 +86,7 @@ def main(
             fetch_macro=fetch_macro,
             import_rates=import_rates,
             import_macro=import_macro,
+            import_credit=import_credit,
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
@@ -89,6 +95,7 @@ def main(
     _print_fetched("macro", result["macro_fetched"])
     _print_imported("rates", result["rates_imported"])
     _print_imported("macro", result["macro_imported"])
+    _print_imported("corporate credit", result["credit_imported"])
     return 0
 
 

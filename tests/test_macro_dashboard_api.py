@@ -411,6 +411,12 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
             }
         ]
 
+    def fake_load_rate_points_for_series(con, series_ids):
+        return {}
+
+    def fake_load_macro_indicator_points_for_series(con, series_ids):
+        return {}
+
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
     monkeypatch.setattr(
         api.us_rates_liquidity_db, "load_rate_series", fake_load_rate_series
@@ -422,6 +428,16 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
         api.us_rates_liquidity_db,
         "load_latest_macro_indicator_points",
         fake_load_latest_macro_indicator_points,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_rate_points_for_series",
+        fake_load_rate_points_for_series,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points_for_series",
+        fake_load_macro_indicator_points_for_series,
     )
 
     response = client.get("/api/macro-dashboard/us-rates-liquidity")
@@ -545,3 +561,86 @@ def test_us_rates_liquidity_curve_detail_api_passes_selected_dates(monkeypatch):
         "real_current_date": "2021-01-03",
         "real_comparison_date": "2020-08-16",
     }
+
+
+def test_credit_detail_endpoints_return_active_credit_charts(monkeypatch):
+    from app import api
+
+    def fake_detail_series_ids(detail_id):
+        return {
+            "bbb_credit_spread": ["treasury_10y", "bbb_corporate_yield"],
+            "ccc_credit_spread": ["treasury_10y", "ccc_corporate_yield"],
+            "ccc_bbb_quality_spread": ["bbb_corporate_yield", "ccc_corporate_yield"],
+            "credit_conditions_diagnostics": [
+                "treasury_10y",
+                "bbb_corporate_yield",
+                "ccc_corporate_yield",
+            ],
+            "credit_risk_regime": [
+                "treasury_10y",
+                "bbb_corporate_yield",
+                "ccc_corporate_yield",
+            ],
+        }[detail_id]
+
+    def fake_build_detail_payload(detail_id, series_rows, points_by_id, options=None):
+        if detail_id in ("credit_conditions_diagnostics", "credit_risk_regime"):
+            return {
+                "detail_id": detail_id,
+                "title": "Credit Conditions",
+                "charts": [
+                    {
+                        "kind": "credit_diagnostics",
+                        "title": "Credit Conditions",
+                        "status": "weak_credit_warning",
+                        "metrics": {},
+                        "series": [],
+                    }
+                ],
+            }
+        return {
+            "detail_id": detail_id,
+            "title": detail_id,
+            "charts": [
+                {
+                    "kind": "time_series",
+                    "title": detail_id,
+                    "keys": [detail_id],
+                    "labels": {detail_id: detail_id},
+                    "series": [{"date": "2021-01-07", detail_id: 1.23}],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "connect",
+        lambda: type("C", (), {"close": lambda self: None})(),
+    )
+    monkeypatch.setattr(api.us_rates_liquidity_db, "load_rate_series", lambda con: [])
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db, "load_rate_points_for_series", lambda con, sids: {}
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points_for_series",
+        lambda con, sids: {},
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity, "detail_series_ids", fake_detail_series_ids
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity, "build_detail_payload", fake_build_detail_payload
+    )
+
+    for detail_id in [
+        "bbb_credit_spread",
+        "ccc_credit_spread",
+        "ccc_bbb_quality_spread",
+        "credit_conditions_diagnostics",
+        "credit_risk_regime",
+    ]:
+        response = client.get(f"/api/macro-dashboard/us-rates-liquidity/{detail_id}")
+        assert response.status_code == 200, f"Failed for {detail_id}"
+        payload = response.json()
+        assert payload["charts"][0]["kind"] in {"time_series", "credit_diagnostics"}

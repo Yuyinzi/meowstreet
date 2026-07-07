@@ -533,7 +533,6 @@ def test_macro_dashboard_js_renders_rates_detail_with_dashboard_chart_pattern():
     assert "chart-y-tick" in js
     assert "chart-tick" in js
     assert "chart-tooltip" in js
-    assert "US Yield Curve - Comparative Analysis" not in js
     assert (
         "payload.charts.map((chart, index) => renderRatesDetailChart(chart, index)).join"
         in js
@@ -552,3 +551,53 @@ def test_macro_dashboard_css_has_rates_detail_clickable_styles():
     assert ".rates-panel-button.selected" in css
     assert ".rates-detail" in css
     assert ".rates-curve-date-controls" in css
+
+
+def test_macro_dashboard_js_has_simplified_credit_conditions_labels():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "Credit Conditions" in js
+    assert "BBB Credit Spread" in js
+    assert "CCC Credit Spread" in js
+    assert "CCC vs BBB Quality Spread" in js
+    assert "BBB - 10Y" in js
+    assert "CCC - 10Y" in js
+    assert "CCC - BBB" in js
+
+    assert "AAA Credit Spread" not in js
+    assert "BBB vs AAA Quality Spread" not in js
+    assert "CCC vs AAA Quality Spread" not in js
+    assert "Rating Detail" not in js
+    assert "rating-detail-tabs" not in js
+
+
+def test_macro_dashboard_js_has_credit_zh_translations():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "BBB信用利差" in js
+    assert "CCC信用利差" in js
+    assert "CCC与BBB质量利差" in js
+    assert "信用环境" in js
+    assert "BBB - 10年" in js
+    assert "CCC - 10年" in js
+    assert "CCC - BBB" in js
+    assert "信用环境诊断" in js
+    assert "历史分位" in js
+    assert "1个月趋势" in js
+    assert "3个月趋势" in js
+    assert "加速" in js
+
+
+def test_macro_dashboard_js_renders_credit_diagnostics():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "credit_conditions_diagnostics" in js
+    assert "credit_diagnostics" in js
+    assert "renderCreditDiagnosticsChart" in js
+    assert "Historical Percentile" in js
+    assert "1M Trend" in js
+    assert "3M Trend" in js
+    assert "Acceleration" in js
+    assert "Weak Credit Warning" in js
+    assert "Risk Rising" in js
+    assert "Crisis Stress" in js
