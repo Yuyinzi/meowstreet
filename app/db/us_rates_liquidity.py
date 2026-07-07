@@ -176,6 +176,34 @@ def replace_macro_indicator_points(con, series, points):
     return {"series": 1, "points": len(points)}
 
 
+def merge_macro_indicator_points(con, series, points):
+    sid = normalize_series_id(series["series_id"])
+    con.execute(
+        """
+        insert into macro_indicator_series(series_id, title, units, source)
+        values (?, ?, ?, ?)
+        on conflict(series_id) do update set
+            title = excluded.title,
+            units = excluded.units,
+            source = excluded.source
+        """,
+        (sid, series["title"], series["units"], series["source"]),
+    )
+    for point in points:
+        con.execute(
+            """
+            insert into macro_indicator_points(series_id, date, value, source)
+            values (?, ?, ?, ?)
+            on conflict(series_id, date) do update set
+                value = excluded.value,
+                source = excluded.source
+            """,
+            (sid, point["date"], point["value"], point["source"]),
+        )
+    con.commit()
+    return {"series": 1, "points": len(points)}
+
+
 def load_macro_indicator_series(con):
     rows = con.execute(
         """
