@@ -604,6 +604,15 @@ def test_macro_dashboard_js_renders_credit_diagnostics():
     assert "Overall credit risk is low" in js
     assert "Risk Rising" in js
     assert "Crisis Stress" in js
+    assert "renderCreditCoverageNote" in js
+    assert "credit-data-gap-note" in js
+    assert "P05 workbook history is merged with latest FRED ICE/BofA observations" in js
+
+
+def test_macro_dashboard_css_contains_credit_gap_note_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".credit-data-gap-note" in css
 
 
 def test_macro_dashboard_css_contains_credit_interpretation_styles():

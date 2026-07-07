@@ -800,6 +800,9 @@
     "BBB Credit Spread": "BBB信用利差",
     "CCC Credit Spread": "CCC信用利差",
     "CCC vs BBB Quality Spread": "CCC与BBB质量利差",
+    "Data Coverage": "数据覆盖",
+    "Data Gap": "数据缺口",
+    "No Interpolation": "不插值",
     "BBB - 10Y": "BBB - 10年",
     "CCC - 10Y": "CCC - 10年",
     "CCC - BBB": "CCC - BBB",
@@ -1176,6 +1179,24 @@
     `;
   }
 
+  function renderCreditCoverageNote(coverage) {
+    if (!coverage) return "";
+    const hasGap = coverage.has_gap && coverage.gap_start && coverage.gap_end;
+    const gapText = hasGap
+      ? `Data Gap: ${coverage.gap_start} - ${coverage.gap_end}`
+      : "No detected data gap";
+    const gapZh = hasGap
+      ? `数据缺口：${coverage.gap_start} - ${coverage.gap_end}`
+      : "未检测到数据缺口";
+    const sourceNote = coverage.source_note || "P05 workbook history is merged with latest FRED ICE/BofA observations. Missing dates are shown as a data gap and are not interpolated.";
+    return `
+      <div class="credit-data-gap-note ${hasGap ? "has-gap" : ""}">
+        <strong>${escapeHtml(gapText)}<small>${escapeHtml(gapZh)}</small></strong>
+        <p>${escapeHtml(sourceNote)}<small>P05工作簿历史数据与最新FRED ICE/BofA观测值合并；缺失区间显示为数据缺口，不进行插值。</small></p>
+      </div>
+    `;
+  }
+
   function renderCreditDiagnosticsChart(chart) {
     const metrics = chart.metrics || {};
     const status = chart.status || "missing";
@@ -1195,6 +1216,7 @@
           <strong>${escapeHtml(meta.label)}<small>${escapeHtml(meta.zh)}</small></strong>
           <p>${escapeHtml(message.text)}<small>${escapeHtml(message.zh)}</small></p>
         </div>
+        ${renderCreditCoverageNote(state.usRatesLiquidity?.credit_coverage)}
       </div>
     `;
   }
