@@ -736,17 +736,14 @@
     "Fed Funds": "联邦基金利率",
     "Breakeven": "盈亏平衡通胀率",
     "VIX": "VIX波动率指数",
-    "S&P PE": "标普500市盈率",
-    "S&P 500 PE": "标普500市盈率",
     "10Y Treasury Minus CPI YoY": "10年期国债减CPI同比",
     "CPI Real Rate vs VIX": "CPI实际利率 vs VIX",
-    "CPI Real Rate vs S&P 500 PE": "CPI实际利率 vs 标普500市盈率",
     "Real Rate": "实际利率",
     "Comparison": "对比",
     "Interpretation": "解读",
     "Yield Curve Analysis": "收益率曲线分析",
-    "US Yield Curve - Comparative Analysis": "美国名义收益率曲线对比",
-    "US Real Yield Curve (TIPS) - Comparative Analysis": "美国实际收益率曲线(TIPS)对比",
+    "US Yield Curve - Comparative Analysis": "美国收益率曲线对比分析",
+    "US Real Yield Curve (TIPS) - Comparative Analysis": "美国实际收益率曲线(TIPS)对比分析",
     // GDP Relationships
     "Index YoY": "指数同比",
     "GDP YoY": "GDP同比",
@@ -896,7 +893,7 @@
         </div>
         <span class="mock-pill">${escapeHtml(payload.as_of ? `As of ${fmtDate(payload.as_of)}` : "Import needed")}</span>
       </div>
-      ${headline.length ? `<div class="rates-signal-grid">${headline.map(renderRateCard).join("")}${renderSupportCard("Breakeven", fmtRate(payload.derived?.ten_year_breakeven_inflation))}${renderSupportCard("VIX", fmtNumber(payload.derived?.vix))}${renderSupportCard("S&P PE", fmtNumber(payload.derived?.sp500_pe))}${renderCurveStatusCard(curveStatus, interpretation)}</div>` : ""}
+      ${headline.length ? `<div class="rates-signal-grid">${headline.map(renderRateCard).join("")}${renderSupportCard("Breakeven", fmtRate(payload.derived?.ten_year_breakeven_inflation))}${renderSupportCard("VIX", fmtNumber(payload.derived?.vix))}${renderCurveStatusCard(curveStatus, interpretation)}</div>` : ""}
       ${state.selectedRatesDetailId ? '<div class="rates-detail gdp-detail" id="usRatesLiquidityDetail"></div>' : ""}
       <div class="rates-detail gdp-detail" id="usRatesCurveDetail"></div>
     `;
@@ -997,7 +994,7 @@
       ["real_rate", "secondary"],
       {
         real_rate: chart.labels?.real_rate || "Real Rate",
-        secondary: chart.labels?.vix || chart.labels?.sp500_pe || "Comparison",
+        secondary: chart.labels?.vix || "Comparison",
       },
       { wide: true, rawTitle: true },
     );
