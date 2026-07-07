@@ -1,3 +1,6 @@
+from calendar import monthrange
+from datetime import date, timedelta
+
 HEADLINE_CONFIG = [
     ("treasury_10y", "10-Year Treasury"),
     ("treasury_2y", "2-Year Treasury"),
@@ -152,9 +155,62 @@ def _trend_label(change, threshold):
     return "stable"
 
 
+def _parse_series_date(value):
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _subtract_months(value, months):
+    month_index = value.year * 12 + value.month - 1 - months
+    year = month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _lookback_value(series, latest_date, months):
+    target_date = _subtract_months(latest_date, months)
+    dated_values = [
+        (_parse_series_date(row.get("date")), row["value"])
+        for row in series
+        if row.get("value") is not None
+    ]
+    dated_values = [
+        (row_date, value)
+        for row_date, value in dated_values
+        if row_date is not None and row_date < latest_date
+    ]
+    if not dated_values:
+        return None
+    previous_values = [
+        (row_date, value) for row_date, value in dated_values if row_date <= target_date
+    ]
+    if previous_values:
+        return previous_values[-1][1]
+    next_values = [
+        (row_date, value) for row_date, value in dated_values if row_date > target_date
+    ]
+    if next_values and next_values[0][0] <= target_date + timedelta(days=7):
+        return next_values[0][1]
+    return None
+
+
 def _trend_summary(series):
-    values = [row["value"] for row in series if row.get("value") is not None]
-    if not values:
+    dated_series = [
+        {
+            "date": _parse_series_date(row.get("date")),
+            "value": row["value"],
+        }
+        for row in series
+        if row.get("value") is not None
+    ]
+    dated_series = [row for row in dated_series if row["date"] is not None]
+    dated_series.sort(key=lambda row: row["date"])
+    if not dated_series:
         return {
             "change_1m": None,
             "change_3m": None,
@@ -162,9 +218,10 @@ def _trend_summary(series):
             "trend_3m": "missing",
             "acceleration": "none",
         }
-    latest = values[-1]
-    one_month_value = values[-5] if len(values) >= 5 else None
-    three_month_value = values[-14] if len(values) >= 14 else None
+    latest = dated_series[-1]["value"]
+    latest_date = dated_series[-1]["date"]
+    one_month_value = _lookback_value(dated_series, latest_date, 1)
+    three_month_value = _lookback_value(dated_series, latest_date, 3)
     change_1m = (
         _round(latest - one_month_value) if one_month_value is not None else None
     )

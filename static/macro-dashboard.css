@@ -1562,7 +1562,70 @@ h2 {
   color: #8B7E74;
 }
 
+.credit-interpretation-strip {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.32fr) 1fr;
+  gap: 14px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #E3D9CF;
+  border-radius: 8px;
+  background: #FAF8F5;
+}
+
+.credit-interpretation-strip strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.credit-interpretation-strip strong small,
+.credit-interpretation-strip p small {
+  display: block;
+  margin-top: 2px;
+  color: #8B7E74;
+  font-weight: 500;
+}
+
+.credit-interpretation-strip p {
+  margin: 0;
+  color: #4D4640;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.credit-interpretation-healthy {
+  border-color: #BFD8C7;
+  background: #F3FAF5;
+}
+
+.credit-interpretation-weak-credit-warning {
+  border-color: #E3C889;
+  background: #FFF9E8;
+}
+
+.credit-interpretation-risk-rising {
+  border-color: #DFA27C;
+  background: #FFF1E9;
+}
+
+.credit-interpretation-crisis-stress {
+  border-color: #D48787;
+  background: #FFF0F0;
+}
+
+.credit-interpretation-mixed,
+.credit-interpretation-missing {
+  border-color: #D7D1CA;
+  background: #F7F5F2;
+}
+
 @media (max-width: 820px) {
+  .credit-interpretation-strip {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
   .macro-shell {
     padding: 16px 12px 36px;
   }

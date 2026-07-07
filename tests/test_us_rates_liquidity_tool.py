@@ -772,25 +772,57 @@ def test_credit_trend_summary_computes_changes_and_acceleration():
     assert summary["acceleration"] == "none"
 
 
-def test_credit_trend_summary_detects_accelerating_up():
+def test_credit_trend_summary_uses_calendar_lookback_for_daily_series():
     series = [
         {"date": f"2021-01-{day:02d}", "value": value}
         for day, value in [
             (1, 1.00),
-            (2, 1.05),
-            (3, 1.10),
-            (4, 1.15),
-            (5, 1.20),
-            (6, 1.25),
-            (7, 1.30),
-            (8, 1.35),
-            (9, 1.40),
-            (10, 1.45),
-            (11, 1.50),
-            (12, 1.55),
-            (13, 1.60),
-            (14, 2.20),
+            (2, 1.00),
+            (3, 1.00),
+            (4, 1.00),
+            (5, 1.00),
+            (6, 1.00),
+            (7, 1.00),
+            (8, 1.20),
+            (9, 1.20),
+            (10, 1.20),
+            (11, 1.20),
+            (12, 1.20),
+            (13, 1.20),
+            (14, 1.20),
+            (15, 1.20),
+            (16, 1.20),
+            (17, 1.20),
+            (18, 1.20),
+            (19, 1.20),
+            (20, 1.20),
+            (21, 1.20),
+            (22, 1.20),
+            (23, 1.20),
+            (24, 1.20),
+            (25, 1.20),
+            (26, 1.20),
+            (27, 1.20),
+            (28, 1.20),
+            (29, 1.20),
+            (30, 1.80),
+            (31, 1.80),
         ]
+    ]
+
+    summary = us_rates_liquidity._trend_summary(series)
+
+    assert summary["change_1m"] == 0.80
+    assert summary["trend_1m"] == "rising"
+
+
+def test_credit_trend_summary_detects_accelerating_up():
+    series = [
+        {"date": "2020-10-14", "value": 1.00},
+        {"date": "2020-11-14", "value": 1.20},
+        {"date": "2020-12-14", "value": 1.45},
+        {"date": "2021-01-07", "value": 1.60},
+        {"date": "2021-01-14", "value": 2.20},
     ]
 
     summary = us_rates_liquidity._trend_summary(series)

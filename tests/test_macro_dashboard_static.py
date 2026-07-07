@@ -594,10 +594,23 @@ def test_macro_dashboard_js_renders_credit_diagnostics():
     assert "credit_conditions_diagnostics" in js
     assert "credit_diagnostics" in js
     assert "renderCreditDiagnosticsChart" in js
-    assert "Historical Percentile" in js
+    assert "creditDiagnosticInterpretation" in js
+    assert "credit-interpretation-strip" in js
+    assert "Full-History Percentile" in js
     assert "1M Trend" in js
     assert "3M Trend" in js
     assert "Acceleration" in js
     assert "Weak Credit Warning" in js
+    assert "Overall credit risk is low" in js
     assert "Risk Rising" in js
     assert "Crisis Stress" in js
+
+
+def test_macro_dashboard_css_contains_credit_interpretation_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".credit-interpretation-strip" in css
+    assert ".credit-interpretation-healthy" in css
+    assert ".credit-interpretation-weak-credit-warning" in css
+    assert ".credit-interpretation-risk-rising" in css
+    assert ".credit-interpretation-crisis-stress" in css

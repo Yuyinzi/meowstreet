@@ -814,7 +814,7 @@
     "Overall": "整体",
     "Weak Credit": "弱信用",
     "Level Zone": "水平区间",
-    "Historical Percentile": "历史分位",
+    "Full-History Percentile": "全样本历史分位",
     "1M Trend": "1个月趋势",
     "3M Trend": "3个月趋势",
     "Acceleration": "加速",
@@ -832,7 +832,7 @@
     "Stable": "稳定",
     "Accelerating Up": "加速上升",
     "Accelerating Down": "加速下降",
-    "None": "无",
+    "No Acceleration": "未加速",
   };
 
   function zhLabel(label) {
@@ -859,6 +859,36 @@
 
   function creditStatusMeta(status) {
     return CREDIT_STATUS_META[status] || CREDIT_STATUS_META.missing;
+  }
+
+  function creditDiagnosticInterpretation(status) {
+    const messages = {
+      healthy: {
+        text: "Overall credit risk is low and quality dispersion is contained. Credit conditions are supportive for risk appetite.",
+        zh: "整体信用风险较低，信用质量分化受控。信用环境对风险偏好较友好。",
+      },
+      weak_credit_warning: {
+        text: "Overall credit risk is low, but CCC-BBB quality dispersion is elevated. The market is not broadly stressed, but weak borrowers are still under pressure.",
+        zh: "整体信用风险不高，但CCC-BBB质量利差偏高。市场并非全面承压，但弱信用主体仍被要求更高风险补偿。",
+      },
+      risk_rising: {
+        text: "Credit spreads are rising or moving into stressed zones. Risk is being repriced across credit markets.",
+        zh: "信用利差正在上升，或已进入承压区间。信用市场正在重新定价风险。",
+      },
+      crisis_stress: {
+        text: "Credit stress is broad and severe. Treat this as a high-risk credit regime until spreads stop accelerating.",
+        zh: "信用压力广泛且严重。在利差停止加速前，应视为高风险信用环境。",
+      },
+      mixed: {
+        text: "Credit signals are mixed. Read level, percentile, and trend together before drawing a directional conclusion.",
+        zh: "信用信号不一致。需要结合水平、历史分位和趋势一起判断。",
+      },
+      missing: {
+        text: "Credit condition data is incomplete. Refresh the credit series before interpreting this section.",
+        zh: "信用环境数据不完整。解读前需要先刷新信用数据。",
+      },
+    };
+    return messages[status] || messages.missing;
   }
 
   function renderRateCard(card) {
@@ -1022,7 +1052,15 @@
   }
 
   function accelerationGlyph(value) {
-    return { accelerating_up: "↑↑", accelerating_down: "↓↓", none: "→" }[value] || "";
+    return { accelerating_up: "↑↑", accelerating_down: "↓↓" }[value] || "";
+  }
+
+  function accelerationLabel(value) {
+    return value === "none" ? "No Acceleration" : titleCaseToken(value);
+  }
+
+  function formatPercentile(value) {
+    return value === null || value === undefined ? "n/a" : `${value}%`;
   }
 
   function renderRatesTimeSeriesChart(chart) {
@@ -1129,10 +1167,10 @@
         <strong>${escapeHtml(fmtRate(metric.value))}</strong>
         <dl>
           <div><dt>${bilingualLabel("Level Zone")}</dt><dd>${bilingualLabel(titleCaseToken(metric.zone))}</dd></div>
-          <div><dt>${bilingualLabel("Historical Percentile")}</dt><dd>${escapeHtml(metric.percentile ?? "n/a")}</dd></div>
+          <div><dt>${bilingualLabel("Full-History Percentile")}</dt><dd>${escapeHtml(formatPercentile(metric.percentile))}</dd></div>
           <div><dt>${bilingualLabel("1M Trend")}</dt><dd>${trendGlyph(metric.trend_1m)} ${bilingualLabel(titleCaseToken(metric.trend_1m))}</dd></div>
           <div><dt>${bilingualLabel("3M Trend")}</dt><dd>${trendGlyph(metric.trend_3m)} ${bilingualLabel(titleCaseToken(metric.trend_3m))}</dd></div>
-          <div><dt>${bilingualLabel("Acceleration")}</dt><dd>${accelerationGlyph(metric.acceleration)} ${bilingualLabel(titleCaseToken(metric.acceleration))}</dd></div>
+          <div><dt>${bilingualLabel("Acceleration")}</dt><dd>${accelerationGlyph(metric.acceleration)} ${bilingualLabel(accelerationLabel(metric.acceleration))}</dd></div>
         </dl>
       </div>
     `;
@@ -1140,6 +1178,9 @@
 
   function renderCreditDiagnosticsChart(chart) {
     const metrics = chart.metrics || {};
+    const status = chart.status || "missing";
+    const meta = creditStatusMeta(status);
+    const message = creditDiagnosticInterpretation(status);
     const rows = [
       ["bbb_credit_spread", "Overall Credit Risk"],
       ["ccc_credit_spread", "CCC Credit Spread"],
@@ -1149,6 +1190,10 @@
       <div class="relationship-chart relationship-chart-wide credit-diagnostics-chart">
         <div class="credit-diagnostics-grid">
           ${rows.map(([key, title]) => renderCreditDiagnosticMetric(title, metrics[key])).join("")}
+        </div>
+        <div class="credit-interpretation-strip credit-interpretation-${escapeHtml(status.replaceAll("_", "-"))}">
+          <strong>${escapeHtml(meta.label)}<small>${escapeHtml(meta.zh)}</small></strong>
+          <p>${escapeHtml(message.text)}<small>${escapeHtml(message.zh)}</small></p>
         </div>
       </div>
     `;
