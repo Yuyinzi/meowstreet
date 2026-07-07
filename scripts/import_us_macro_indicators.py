@@ -19,7 +19,6 @@ FRED_SOURCE = "FRED weekly Sunday resample"
 SERIES_CONFIG = {
     "cpi_yoy": {"title": "CPI YoY", "units": "percent"},
     "vix": {"title": "VIX", "units": "index"},
-    "sp500_pe": {"title": "S&P 500 PE Ratio", "units": "multiple"},
 }
 
 FRED_MACRO_SERIES_CONFIG = {

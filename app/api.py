@@ -200,12 +200,12 @@ def macro_dashboard_us_rates_liquidity_detail(
         rate_series_ids = [
             series_id
             for series_id in series_ids
-            if not series_id.startswith(("cpi_", "vix", "sp500_pe"))
+            if not series_id.startswith(("cpi_", "vix"))
         ]
         macro_series_ids = [
             series_id
             for series_id in series_ids
-            if series_id.startswith(("cpi_", "vix", "sp500_pe"))
+            if series_id.startswith(("cpi_", "vix"))
         ]
         points_by_id = us_rates_liquidity_db.load_rate_points_for_series(
             con,

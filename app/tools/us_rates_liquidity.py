@@ -179,7 +179,6 @@ def build_dashboard_payload(series_rows, latest_points, latest_macro_points=None
                 "ten_year_breakeven_inflation": None,
                 "cpi_based_real_rate": None,
                 "vix": None,
-                "sp500_pe": None,
                 "curve_status": curve_status,
                 "method_interpretation": _method_interpretation(curve_status),
             },
@@ -192,7 +191,6 @@ def build_dashboard_payload(series_rows, latest_points, latest_macro_points=None
     ten_year_real = _value(points, "tips_10y")
     cpi_yoy = _value(macro_points, "cpi_yoy")
     vix = _value(macro_points, "vix")
-    sp500_pe = _value(macro_points, "sp500_pe")
     cpi_based_real_rate = (
         _round(ten_year - cpi_yoy)
         if ten_year is not None and cpi_yoy is not None
@@ -215,7 +213,6 @@ def build_dashboard_payload(series_rows, latest_points, latest_macro_points=None
         "ten_year_breakeven_inflation": breakeven,
         "cpi_based_real_rate": cpi_based_real_rate,
         "vix": vix,
-        "sp500_pe": sp500_pe,
         "curve_status": curve_status,
         "method_interpretation": _method_interpretation(curve_status),
     }
@@ -283,7 +280,7 @@ DETAIL_CONFIG = {
     },
     "cpi_based_real_rate": {
         "title": "CPI Real Rate",
-        "series_ids": ["treasury_10y", "cpi_yoy", "vix", "sp500_pe"],
+        "series_ids": ["treasury_10y", "cpi_yoy", "vix"],
     },
 }
 
@@ -558,7 +555,6 @@ def _computed_cpi_real_rate_series(points_by_id):
 def _cpi_real_rate_detail_payload(points_by_id):
     real_rate = _computed_cpi_real_rate_series(points_by_id)
     vix = _time_series(_series_points(points_by_id, "vix"))
-    pe = _time_series(_series_points(points_by_id, "sp500_pe"))
     return [
         {
             "kind": "time_series",
@@ -575,13 +571,5 @@ def _cpi_real_rate_detail_payload(points_by_id):
             "secondary_series": vix,
             "keys": ["real_rate", "vix"],
             "labels": {"real_rate": "CPI Real Rate", "vix": "VIX"},
-        },
-        {
-            "kind": "multi_series",
-            "title": "CPI Real Rate vs S&P 500 PE",
-            "series": [{**point, "real_rate": point["value"]} for point in real_rate],
-            "secondary_series": pe,
-            "keys": ["real_rate", "sp500_pe"],
-            "labels": {"real_rate": "CPI Real Rate", "sp500_pe": "S&P 500 PE"},
         },
     ]

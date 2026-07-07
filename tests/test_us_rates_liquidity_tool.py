@@ -92,12 +92,6 @@ def test_build_dashboard_payload_computes_key_method_indicators():
                 "value": 22.90,
                 "source": "US_P4_Macro_Indicators.csv",
             },
-            {
-                "series_id": "sp500_pe",
-                "date": "2021-01-03",
-                "value": 30.20,
-                "source": "US_P4_Macro_Indicators.csv",
-            },
         ],
     )
 
@@ -112,7 +106,7 @@ def test_build_dashboard_payload_computes_key_method_indicators():
     assert "context" not in payload["headline"][0]
     assert payload["derived"]["cpi_based_real_rate"] == -0.47
     assert payload["derived"]["vix"] == 22.90
-    assert payload["derived"]["sp500_pe"] == 30.20
+    assert "sp500_pe" not in payload["derived"]
     cpi_headline = next(
         item for item in payload["headline"] if item["id"] == "cpi_based_real_rate"
     )
@@ -293,7 +287,7 @@ def test_build_yield_curve_detail_payload_matches_workbook_nominal_maturities():
     assert "30Y" not in labels
 
 
-def test_build_cpi_real_rate_detail_payload_compares_with_vix_and_pe():
+def test_build_cpi_real_rate_detail_payload_compares_with_vix_only():
     payload = us_rates_liquidity.build_detail_payload(
         "cpi_based_real_rate",
         series_rows(),
@@ -323,22 +317,11 @@ def test_build_cpi_real_rate_detail_payload_compares_with_vix_and_pe():
                     "source": "US_P4_Macro_Indicators.csv",
                 },
             ],
-            "sp500_pe": [
-                {
-                    "date": "2020-12-27",
-                    "value": 30.00,
-                    "source": "US_P4_Macro_Indicators.csv",
-                },
-                {
-                    "date": "2021-01-03",
-                    "value": 30.20,
-                    "source": "US_P4_Macro_Indicators.csv",
-                },
-            ],
         },
     )
 
     assert payload["detail_id"] == "cpi_based_real_rate"
+    assert len(payload["charts"]) == 2
     assert payload["charts"][0]["title"] == "10Y Treasury Minus CPI YoY"
     assert payload["charts"][0]["series"][-1]["value"] == -0.47
     assert payload["charts"][1]["title"] == "CPI Real Rate vs VIX"
@@ -346,4 +329,3 @@ def test_build_cpi_real_rate_detail_payload_compares_with_vix_and_pe():
         "real_rate": "CPI Real Rate",
         "vix": "VIX",
     }
-    assert payload["charts"][2]["title"] == "CPI Real Rate vs S&P 500 PE"

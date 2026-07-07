@@ -57,17 +57,15 @@ def test_parse_macro_indicator_csv_groups_points_by_series(tmp_path):
     csv_path.write_text(
         "date,cpi_yoy,vix,sp500_pe\n"
         "2020-12-31,1.36,22.75,30.10\n"
-        "2021-01-03,1.40,22.90,\n"
+        "2021-01-03,1.40,22.90,30.20\n",
     )
 
     parsed = import_us_macro_indicators.parse_csv(csv_path)
 
+    assert sorted(parsed) == ["cpi_yoy", "vix"]
     assert parsed["cpi_yoy"]["series"]["title"] == "CPI YoY"
     assert parsed["cpi_yoy"]["points"][-1]["value"] == 1.40
     assert parsed["vix"]["points"][-1]["value"] == 22.90
-    assert parsed["sp500_pe"]["points"] == [
-        {"date": "2020-12-31", "value": 30.10, "source": "US_P4_Macro_Indicators.csv"}
-    ]
 
 
 def test_import_macro_indicator_csv_saves_all_parsed_series(tmp_path):
@@ -81,11 +79,12 @@ def test_import_macro_indicator_csv_saves_all_parsed_series(tmp_path):
 
     inserted = import_us_macro_indicators.import_csv(con, csv_path)
 
-    assert inserted == {"cpi_yoy": 2, "sp500_pe": 2, "vix": 2}
+    assert inserted == {"cpi_yoy": 2, "vix": 2}
     assert (
         us_rates_liquidity.load_macro_indicator_points(con, "cpi_yoy")[-1]["value"]
         == 1.40
     )
+    assert us_rates_liquidity.load_macro_indicator_points(con, "sp500_pe") == []
 
 
 def test_import_fred_macro_csvs_saves_cpi_yoy_and_vix(tmp_path):
