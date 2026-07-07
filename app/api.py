@@ -194,6 +194,7 @@ def macro_dashboard_us_rates_liquidity():
             latest_macro,
             credit_rate_points=credit_rate_points,
             credit_macro_points=credit_macro_points,
+            credit_macro_series_points=credit_macro_points,
         )
     finally:
         con.close()

@@ -415,6 +415,26 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
         return {}
 
     def fake_load_macro_indicator_points_for_series(con, series_ids):
+        if series_ids == [
+            "aaa_corporate_yield",
+            "bbb_corporate_yield",
+            "ccc_corporate_yield",
+        ]:
+            return {
+                series_id: [
+                    {
+                        "date": "2021-01-07",
+                        "value": 2.00,
+                        "source": "Corporate_Bond_Indices.xlsm",
+                    },
+                    {
+                        "date": "2023-07-10",
+                        "value": 6.00,
+                        "source": "BAMLC0A4CBBBEY.csv",
+                    },
+                ]
+                for series_id in series_ids
+            }
         return {}
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
@@ -447,6 +467,9 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
     assert payload["as_of"] == "2021-01-03"
     assert payload["derived"]["tens_twos_spread"] == 0.81
     assert payload["derived"]["cpi_based_real_rate"] == -0.47
+    assert payload["credit_coverage"]["has_gap"] is True
+    assert payload["credit_coverage"]["gap_start"] == "2021-01-08"
+    assert payload["credit_coverage"]["gap_end"] == "2023-07-09"
 
 
 def test_us_rates_liquidity_detail_api_returns_two_charts(monkeypatch):
