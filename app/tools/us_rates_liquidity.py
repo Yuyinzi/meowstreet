@@ -46,6 +46,18 @@ PERCENTILE_LABELS = [
 CREDIT_RISK_THRESHOLD = 2.0
 CREDIT_DISPERSION_THRESHOLD = 4.0
 
+CREDIT_SERIES_IDS = [
+    "aaa_corporate_yield",
+    "bbb_corporate_yield",
+    "ccc_corporate_yield",
+]
+
+CREDIT_GAP_THRESHOLD_DAYS = 14
+CREDIT_SOURCE_NOTE = (
+    "P05 workbook history is merged with latest FRED ICE/BofA observations. "
+    "Missing dates are shown as a data gap and are not interpolated."
+)
+
 CURVE_SERIES_IDS = [
     "treasury_1m",
     "treasury_3m",
@@ -584,12 +596,54 @@ def _credit_headline_payload(derived):
     ]
 
 
+def _credit_coverage(points_by_id):
+    common_dates = None
+    for series_id in CREDIT_SERIES_IDS:
+        dates = {
+            row["date"]
+            for row in _series_points(points_by_id, series_id)
+            if row.get("value") is not None
+        }
+        common_dates = dates if common_dates is None else common_dates & dates
+    if not common_dates:
+        return {
+            "series_ids": CREDIT_SERIES_IDS,
+            "start_date": None,
+            "latest_date": None,
+            "gap_start": None,
+            "gap_end": None,
+            "has_gap": False,
+            "source_note": CREDIT_SOURCE_NOTE,
+        }
+    sorted_dates = sorted(common_dates)
+    gap_start = None
+    gap_end = None
+    for previous, current in zip(sorted_dates, sorted_dates[1:]):
+        previous_date = _parse_series_date(previous)
+        current_date = _parse_series_date(current)
+        if previous_date is None or current_date is None:
+            continue
+        if (current_date - previous_date).days > CREDIT_GAP_THRESHOLD_DAYS:
+            gap_start = (previous_date + timedelta(days=1)).isoformat()
+            gap_end = (current_date - timedelta(days=1)).isoformat()
+    return {
+        "series_ids": CREDIT_SERIES_IDS,
+        "start_date": sorted_dates[0],
+        "latest_date": sorted_dates[-1],
+        "gap_start": gap_start,
+        "gap_end": gap_end,
+        "has_gap": gap_start is not None,
+        "source_note": CREDIT_SOURCE_NOTE,
+    }
+
+
 def build_dashboard_payload(
     series_rows,
     latest_points,
     latest_macro_points=None,
     credit_rate_points=None,
     credit_macro_points=None,
+    credit_macro_series_points=None,
 ):
     if not series_rows or not latest_points:
         curve_status = "missing"
@@ -674,6 +728,7 @@ def build_dashboard_payload(
         "curve": _curve_payload(series, points),
         "real_rates": _real_rate_payload(series, points),
         "derived": derived,
+        "credit_coverage": _credit_coverage(credit_macro_series_points or {}),
     }
 
 

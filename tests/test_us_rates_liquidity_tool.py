@@ -1044,3 +1044,51 @@ def test_credit_conditions_diagnostics_detail_returns_metrics_and_series():
         "ccc_credit_spread": 7.6,
         "ccc_bbb_quality_spread": 6.0,
     }
+
+
+def test_build_dashboard_payload_reports_credit_data_gap():
+    credit_series_points = {
+        "aaa_corporate_yield": [
+            {
+                "date": "2021-01-07",
+                "value": 2.00,
+                "source": "Corporate_Bond_Indices.xlsm",
+            },
+            {"date": "2023-10-01", "value": 6.00, "source": "BAMLC0A4CBBBEY.csv"},
+        ],
+        "bbb_corporate_yield": [
+            {
+                "date": "2021-01-07",
+                "value": 2.00,
+                "source": "Corporate_Bond_Indices.xlsm",
+            },
+            {"date": "2023-10-01", "value": 6.00, "source": "BAMLC0A4CBBBEY.csv"},
+        ],
+        "ccc_corporate_yield": [
+            {
+                "date": "2021-01-07",
+                "value": 2.00,
+                "source": "Corporate_Bond_Indices.xlsm",
+            },
+            {"date": "2023-10-01", "value": 6.00, "source": "BAMLC0A4CBBBEY.csv"},
+        ],
+    }
+    payload = us_rates_liquidity.build_dashboard_payload(
+        series_rows(),
+        latest_points(),
+        credit_macro_series_points=credit_series_points,
+    )
+
+    assert payload["credit_coverage"] == {
+        "series_ids": [
+            "aaa_corporate_yield",
+            "bbb_corporate_yield",
+            "ccc_corporate_yield",
+        ],
+        "start_date": "2021-01-07",
+        "latest_date": "2023-10-01",
+        "gap_start": "2021-01-08",
+        "gap_end": "2023-09-30",
+        "has_gap": True,
+        "source_note": "P05 workbook history is merged with latest FRED ICE/BofA observations. Missing dates are shown as a data gap and are not interpolated.",
+    }
