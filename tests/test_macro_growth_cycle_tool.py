@@ -357,3 +357,55 @@ def test_normalize_jobless_claims_classifies_stable_labor_trend():
     }
     result = macro_growth_cycle.normalize_jobless_claims(payload)
     assert result["macro"]["growth_cycle"]["labor_trend"] == "stable"
+
+
+def test_normalize_m2_computes_three_month_momentum():
+    payload = {
+        "series": [
+            {"date": "2026-01-01", "value": 100},
+            {"date": "2026-02-01", "value": 104},
+            {"date": "2026-03-01", "value": 108},
+            {"date": "2026-04-01", "value": 110},
+            {"date": "2026-05-01", "value": 112},
+            {"date": "2026-06-01", "value": 121},
+        ]
+    }
+
+    result = macro_growth_cycle.normalize_m2_money_stock(payload)
+
+    growth_cycle = result["macro"]["growth_cycle"]
+    assert round(growth_cycle["m2_3m_momentum"], 4) == 0.1204
+
+
+def test_build_m2_money_supply_headline_groups_state_change_and_shock():
+    growth_cycle = {
+        "m2_period": "2026-06-01",
+        "m2_money_stock": 21210.0,
+        "m2_yoy_pct_change": 0.042,
+        "m2_yoy_percent_rank": 0.72,
+        "m2_3m_momentum": 0.011,
+        "m2_mom_pct_change": 0.004,
+        "m2_mom_percent_rank": 0.63,
+    }
+
+    headline = macro_growth_cycle.build_m2_money_supply_headline(growth_cycle)
+
+    assert headline == {
+        "id": "m2_money_supply",
+        "label": "M2 Money Supply",
+        "period": "2026-06-01",
+        "status": "expanding",
+        "status_label": "Expanding",
+        "state": {
+            "m2_yoy_pct_change": 0.042,
+            "m2_yoy_percent_rank": 0.72,
+            "m2_money_stock": 21210.0,
+        },
+        "change": {
+            "m2_3m_momentum": 0.011,
+        },
+        "shock": {
+            "m2_mom_pct_change": 0.004,
+            "m2_mom_percent_rank": 0.63,
+        },
+    }

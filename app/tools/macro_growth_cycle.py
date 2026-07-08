@@ -128,6 +128,12 @@ GROWTH_CYCLE_DASHBOARD_FIELDS = [
         "kind": "compute",
     },
     {
+        "id": "m2_3m_momentum",
+        "title": "M2 3M Momentum",
+        "field": "macro.growth_cycle.m2_3m_momentum",
+        "kind": "compute",
+    },
+    {
         "id": "m2_mom_percent_rank",
         "title": "M2 MoM Percent Rank",
         "field": "macro.growth_cycle.m2_mom_percent_rank",
@@ -215,6 +221,7 @@ GROWTH_CYCLE_SOURCES = [
             "m2_money_stock",
             "m2_mom_pct_change",
             "m2_yoy_pct_change",
+            "m2_3m_momentum",
             "m2_mom_percent_rank",
             "m2_yoy_percent_rank",
         ),
@@ -291,6 +298,7 @@ def normalize_m2_money_stock(payload):
     values = [float(row["value"]) for row in rows]
     latest_value = values[-1] if values else None
     previous_value = values[-2] if len(values) >= 2 else None
+    three_month_ago_value = values[-4] if len(values) >= 4 else None
     year_ago_value = values[-13] if len(values) >= 13 else None
     mom_changes = [
         _pct_change(values[index], values[index - 1])
@@ -310,10 +318,68 @@ def normalize_m2_money_stock(payload):
                 "m2_money_stock": latest_value,
                 "m2_mom_pct_change": latest_mom,
                 "m2_yoy_pct_change": latest_yoy,
+                "m2_3m_momentum": _pct_change(latest_value, three_month_ago_value),
                 "m2_mom_percent_rank": _percent_rank(mom_changes, latest_mom),
                 "m2_yoy_percent_rank": _percent_rank(yoy_changes, latest_yoy),
             }
         }
+    }
+
+
+def _m2_status(growth_cycle):
+    yoy = growth_cycle.get("m2_yoy_pct_change")
+    momentum = growth_cycle.get("m2_3m_momentum")
+    mom_rank = growth_cycle.get("m2_mom_percent_rank")
+    if yoy is None or momentum is None or mom_rank is None:
+        return "missing"
+    if mom_rank >= 0.95 or mom_rank <= 0.05:
+        return "shock"
+    if yoy > 0 and momentum > 0:
+        return "expanding"
+    if yoy < 0 or momentum < 0:
+        return "contracting"
+    return "mixed"
+
+
+def _m2_status_label(status):
+    labels = {
+        "expanding": "Expanding",
+        "contracting": "Contracting",
+        "shock": "Shock",
+        "mixed": "Mixed",
+        "missing": "Missing",
+    }
+    return labels.get(status, "Mixed")
+
+
+def build_m2_money_supply_headline(growth_cycle):
+    status = _m2_status(growth_cycle)
+    return {
+        "id": "m2_money_supply",
+        "label": "M2 Money Supply",
+        "period": growth_cycle.get("m2_period"),
+        "status": status,
+        "status_label": _m2_status_label(status),
+        "state": {
+            "m2_yoy_pct_change": growth_cycle.get("m2_yoy_pct_change"),
+            "m2_yoy_percent_rank": growth_cycle.get("m2_yoy_percent_rank"),
+            "m2_money_stock": growth_cycle.get("m2_money_stock"),
+        },
+        "change": {
+            "m2_3m_momentum": growth_cycle.get("m2_3m_momentum"),
+        },
+        "shock": {
+            "m2_mom_pct_change": growth_cycle.get("m2_mom_pct_change"),
+            "m2_mom_percent_rank": growth_cycle.get("m2_mom_percent_rank"),
+        },
+    }
+
+
+def build_growth_cycle_dashboard_payload(growth_cycle_dashboard):
+    growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
+    return {
+        "headline": [build_m2_money_supply_headline(growth_cycle)],
+        "missing": None,
     }
 
 
