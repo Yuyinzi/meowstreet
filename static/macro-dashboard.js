@@ -96,6 +96,10 @@
         if (state.selectedBenchmarkId !== detailMarket.benchmark_id) return;
         const latest = detailMarket.latest;
         body.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <span class="phase-pill phase-${statusClass(detailMarket)}">${escapeHtml(fmtStatus(latest.market_phase_status))}</span>
+            <small style="color: #8B7E74; font-size: 12px;">${escapeHtml(detailMarket.region)}</small>
+          </div>
           <div class="metric-strip">
             <div><span>${bilingualLabel("Close")}</span><strong>${escapeHtml(fmtNumber(latest.close))}</strong></div>
             <div><span>${bilingualLabel("Rolling High")}</span><strong>${escapeHtml(fmtNumber(latest.rolling_high))}</strong></div>

@@ -492,11 +492,6 @@
       });
     });
 
-    const workspace = $("graphWorkspace");
-    if (workspace) {
-      workspace.classList.toggle("has-detail", Boolean(state.selectedNodeId));
-    }
-
     requestAnimationFrame(drawGraphEdges);
   }
 
@@ -675,6 +670,13 @@
     `;
   }
 
+  function closeDetail() {
+    state.selectedNodeId = null;
+    renderGraph();
+    renderNodeDetail();
+    renderMacroDashboard();
+  }
+
   function renderNodeDetail() {
     const section = $("nodeDetailSection");
     const panel = $("nodeDetailPanel");
@@ -775,11 +777,7 @@
 
     const closeBtn = $("nodeDetailClose");
     if (closeBtn) {
-      closeBtn.addEventListener("click", () => {
-        state.selectedNodeId = null;
-        renderGraph();
-        renderNodeDetail();
-      });
+      closeBtn.addEventListener("click", closeDetail);
     }
   }
 
