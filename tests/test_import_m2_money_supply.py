@@ -95,3 +95,45 @@ def test_build_fred_m2_payload_parses_m2sl_csv(tmp_path):
             {"date": "2026-05-01", "value": 23052.3, "source": "M2SL.csv"},
         ],
     }
+
+
+def test_import_fred_csvs_merges_m2sl_with_existing_workbook_history(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    fred_dir = tmp_path / "fred"
+    fred_dir.mkdir()
+    csv_path = fred_dir / "M2SL.csv"
+    csv_path.write_text(
+        "observation_date,M2SL\n2026-02-01,102.5\n2026-05-01,105.5\n",
+        encoding="utf-8",
+    )
+    con = us_rates_liquidity.connect(db_path)
+    us_rates_liquidity.replace_macro_indicator_points(
+        con,
+        {
+            "series_id": "m2_money_stock",
+            "title": "M2 Money Stock",
+            "units": "billions_usd",
+            "source": "m2.xlsx",
+        },
+        [
+            {"date": "2026-01-01", "value": 100.0, "source": "m2.xlsx"},
+            {"date": "2026-02-01", "value": 101.5, "source": "m2.xlsx"},
+        ],
+    )
+
+    inserted = import_m2_money_supply.import_fred_csvs(con, fred_dir)
+
+    assert inserted == {"m2_money_stock": 2}
+    assert us_rates_liquidity.load_macro_indicator_series(con) == [
+        {
+            "series_id": "m2_money_stock",
+            "title": "M2 Money Stock",
+            "units": "billions_usd",
+            "source": "P06 workbook + FRED",
+        }
+    ]
+    assert us_rates_liquidity.load_macro_indicator_points(con, "m2_money_stock") == [
+        {"date": "2026-01-01", "value": 100.0, "source": "m2.xlsx"},
+        {"date": "2026-02-01", "value": 102.5, "source": "M2SL.csv"},
+        {"date": "2026-05-01", "value": 105.5, "source": "M2SL.csv"},
+    ]

@@ -106,6 +106,16 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
     return {payload["series"]["series_id"]: saved["points"]}
 
 
+def import_fred_csvs(con, fred_dir=DEFAULT_FRED_DIR):
+    payload = build_fred_m2_payload(Path(fred_dir) / f"{FRED_M2_SERIES_ID}.csv")
+    saved = us_rates_liquidity.merge_macro_indicator_points(
+        con,
+        payload["series"],
+        payload["points"],
+    )
+    return {payload["series"]["series_id"]: saved["points"]}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
