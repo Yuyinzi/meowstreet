@@ -409,3 +409,35 @@ def test_build_m2_money_supply_headline_groups_state_change_and_shock():
             "m2_mom_percent_rank": 0.63,
         },
     }
+
+
+def test_build_growth_cycle_dashboard_payload_wraps_headline():
+    growth_cycle = {
+        "m2_period": "2026-06-01",
+        "m2_money_stock": 21210.0,
+        "m2_yoy_pct_change": 0.042,
+        "m2_yoy_percent_rank": 0.72,
+        "m2_3m_momentum": 0.011,
+        "m2_mom_pct_change": 0.004,
+        "m2_mom_percent_rank": 0.63,
+    }
+    result = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        {"macro": {"growth_cycle": growth_cycle}}
+    )
+    assert result["headline"][0]["id"] == "m2_money_supply"
+    assert result["headline"][0]["state"]["m2_money_stock"] == 21210.0
+    assert result["missing"] is None
+
+
+@pytest.mark.parametrize("growth_cycle,expected", [
+    ({"m2_yoy_pct_change": 0.05, "m2_3m_momentum": 0.02, "m2_mom_percent_rank": 0.50}, "expanding"),
+    ({"m2_yoy_pct_change": -0.02, "m2_3m_momentum": -0.01, "m2_mom_percent_rank": 0.50}, "contracting"),
+    ({"m2_yoy_pct_change": 0.05, "m2_3m_momentum": -0.01, "m2_mom_percent_rank": 0.50}, "contracting"),
+    ({"m2_yoy_pct_change": 0.05, "m2_3m_momentum": 0.02, "m2_mom_percent_rank": 0.96}, "shock"),
+    ({"m2_yoy_pct_change": 0.05, "m2_3m_momentum": 0.02, "m2_mom_percent_rank": 0.04}, "shock"),
+    ({"m2_yoy_pct_change": 0.05, "m2_3m_momentum": 0.00, "m2_mom_percent_rank": 0.50}, "mixed"),
+    ({"m2_yoy_pct_change": None, "m2_3m_momentum": 0.02, "m2_mom_percent_rank": 0.50}, "missing"),
+    ({}, "missing"),
+])
+def test_m2_status_classification(growth_cycle, expected):
+    assert macro_growth_cycle._m2_status(growth_cycle) == expected
