@@ -1092,3 +1092,57 @@ def test_build_dashboard_payload_reports_credit_data_gap():
         "has_gap": True,
         "source_note": "P05 workbook history is merged with latest FRED ICE/BofA observations. Missing dates are shown as a data gap and are not interpolated.",
     }
+
+
+def test_credit_interpretation_snapshot_is_stable_and_hashable():
+    derived = {
+        "credit_as_of": "2026-07-06",
+        "bbb_credit_spread": 0.98,
+        "ccc_credit_spread": 9.42,
+        "ccc_bbb_quality_spread": 8.44,
+        "credit_conditions_status": "risk_rising",
+        "credit_diagnostics": {
+            "bbb_credit_spread": {
+                "value": 0.98,
+                "zone": "very_low",
+                "percentile": 21,
+                "trend_1m": "stable",
+                "trend_3m": "falling",
+                "acceleration": "none",
+            },
+            "ccc_credit_spread": {
+                "value": 9.42,
+                "zone": "serious_deterioration",
+                "percentile": 43,
+                "trend_1m": "rising",
+                "trend_3m": "rising",
+                "acceleration": "none",
+            },
+            "ccc_bbb_quality_spread": {
+                "value": 8.44,
+                "zone": "serious_deterioration",
+                "percentile": 41,
+                "trend_1m": "rising",
+                "trend_3m": "rising",
+                "acceleration": "none",
+            },
+        },
+    }
+    coverage = {
+        "has_gap": True,
+        "gap_start": "2021-01-08",
+        "gap_end": "2023-07-09",
+    }
+
+    snapshot = us_rates_liquidity.credit_interpretation_snapshot(derived, coverage)
+    same_snapshot = us_rates_liquidity.credit_interpretation_snapshot(
+        dict(reversed(list(derived.items()))),
+        coverage,
+    )
+
+    assert snapshot["scope"] == "us_credit_conditions"
+    assert snapshot["as_of"] == "2026-07-06"
+    assert snapshot["status"] == "risk_rising"
+    assert snapshot["metrics"]["bbb_credit_spread"]["value"] == 0.98
+    assert snapshot["coverage"]["gap_start"] == "2021-01-08"
+    assert snapshot["hash"] == same_snapshot["hash"]

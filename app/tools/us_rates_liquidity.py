@@ -1,3 +1,5 @@
+import hashlib
+import json
 from calendar import monthrange
 from datetime import date, timedelta
 
@@ -53,6 +55,8 @@ CREDIT_SERIES_IDS = [
 ]
 
 CREDIT_GAP_THRESHOLD_DAYS = 14
+CREDIT_INTERPRETATION_SCOPE = "us_credit_conditions"
+CREDIT_INTERPRETATION_PROMPT_VERSION = "credit-cat-v1"
 CREDIT_SOURCE_NOTE = (
     "P05 workbook history is merged with latest FRED ICE/BofA observations. "
     "Missing dates are shown as a data gap and are not interpolated."
@@ -637,6 +641,30 @@ def _credit_coverage(points_by_id):
     }
 
 
+def credit_interpretation_snapshot(derived, coverage):
+    metrics = {
+        "bbb_credit_spread": derived.get("credit_diagnostics", {}).get(
+            "bbb_credit_spread"
+        ),
+        "ccc_credit_spread": derived.get("credit_diagnostics", {}).get(
+            "ccc_credit_spread"
+        ),
+        "ccc_bbb_quality_spread": derived.get("credit_diagnostics", {}).get(
+            "ccc_bbb_quality_spread"
+        ),
+    }
+    payload = {
+        "scope": CREDIT_INTERPRETATION_SCOPE,
+        "prompt_version": CREDIT_INTERPRETATION_PROMPT_VERSION,
+        "as_of": derived.get("credit_as_of"),
+        "status": derived.get("credit_conditions_status", "missing"),
+        "metrics": metrics,
+        "coverage": coverage or {},
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return {**payload, "hash": hashlib.sha256(encoded.encode("utf-8")).hexdigest()}
+
+
 def build_dashboard_payload(
     series_rows,
     latest_points,
@@ -719,6 +747,8 @@ def build_dashboard_payload(
         )
     else:
         derived["credit_conditions_status"] = _credit_conditions_status(derived)
+    credit_coverage = _credit_coverage(credit_macro_series_points or {})
+    credit_snapshot = credit_interpretation_snapshot(derived, credit_coverage)
     return {
         "as_of": _as_of(latest_points),
         "credit_as_of": derived.get("credit_as_of"),
@@ -728,7 +758,8 @@ def build_dashboard_payload(
         "curve": _curve_payload(series, points),
         "real_rates": _real_rate_payload(series, points),
         "derived": derived,
-        "credit_coverage": _credit_coverage(credit_macro_series_points or {}),
+        "credit_coverage": credit_coverage,
+        "credit_interpretation_snapshot": credit_snapshot,
     }
 
 
