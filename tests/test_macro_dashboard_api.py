@@ -690,3 +690,72 @@ def test_credit_detail_endpoints_return_active_credit_charts(monkeypatch):
         assert response.status_code == 200, f"Failed for {detail_id}"
         payload = response.json()
         assert payload["charts"][0]["kind"] in {"time_series", "credit_diagnostics"}
+
+
+def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
+    from app import api
+
+    def fake_load_macro_indicator_points(con, series_id):
+        assert hasattr(con, "close")
+        assert series_id == "m2_money_stock"
+        return [
+            {"date": "2025-06-01", "value": 100, "source": "m2.xlsx"},
+            {"date": "2025-07-01", "value": 101, "source": "m2.xlsx"},
+            {"date": "2025-08-01", "value": 102, "source": "m2.xlsx"},
+            {"date": "2025-09-01", "value": 103, "source": "m2.xlsx"},
+            {"date": "2025-10-01", "value": 104, "source": "m2.xlsx"},
+            {"date": "2025-11-01", "value": 105, "source": "m2.xlsx"},
+            {"date": "2025-12-01", "value": 106, "source": "m2.xlsx"},
+            {"date": "2026-01-01", "value": 107, "source": "m2.xlsx"},
+            {"date": "2026-02-01", "value": 108, "source": "m2.xlsx"},
+            {"date": "2026-03-01", "value": 109, "source": "m2.xlsx"},
+            {"date": "2026-04-01", "value": 110, "source": "m2.xlsx"},
+            {"date": "2026-05-01", "value": 111, "source": "m2.xlsx"},
+            {"date": "2026-06-01", "value": 112, "source": "m2.xlsx"},
+        ]
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    payload = response.json()
+    card = payload["headline"][0]
+    assert card["id"] == "m2_money_supply"
+    assert card["label"] == "M2 Money Supply"
+    assert card["period"] == "2026-06-01"
+    assert card["state"]["m2_money_stock"] == 112.0
+    assert card["change"]["m2_3m_momentum"] is not None
+    assert payload["missing"] is None
+
+
+def test_growth_cycle_api_returns_missing_payload_when_m2_db_rows_are_missing(monkeypatch):
+    from app import api
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "headline": [],
+        "missing": "No M2 money supply data found. Run scripts/import_m2_money_supply.py.",
+    }
