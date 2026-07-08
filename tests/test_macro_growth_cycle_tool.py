@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.tools import macro_growth_cycle
@@ -616,9 +618,53 @@ def test_m2_interpretation_snapshot_is_stable_and_hashable():
     assert snapshot["metrics"]["change"]["three_month_change"] == 0.034
     assert snapshot["metrics"]["shock"]["mom_growth"] == 0.016
     assert snapshot["metrics"]["shock"]["mom_percent_rank"] == 0.9866
+    assert (
+        snapshot["metric_context"]["state"]["label"] == "historically_extreme_expansion"
+    )
+    assert snapshot["metric_context"]["state"]["meaning"] == (
+        "M2 growth is near the top of its own history, so liquidity is unusually abundant."
+    )
+    assert snapshot["metric_context"]["change"]["label"] == "positive_momentum"
+    assert snapshot["metric_context"]["shock"]["label"] == "unusual_monthly_injection"
+    assert snapshot["interpretation_constraints"] == {
+        "cause_policy": "do_not_name_causes_without_sourced_event_context",
+        "signal_role": "liquidity_confirmation_not_standalone_timing",
+        "number_style": "interpret_numbers_before_repeating_them",
+    }
     assert snapshot["latest_shock_event"]["signal"] == "strong_injection"
     assert snapshot["coverage"]["source"] == "US_M2_Money_Supply_Template.xlsx"
     assert len(snapshot["hash"]) == 64
+
+
+def test_m2_metric_context_does_not_hardcode_event_causes():
+    headline = {
+        "period": "2021-01-01",
+        "status": "shock",
+        "state": {
+            "m2_yoy_pct_change": 0.258,
+            "m2_yoy_percent_rank": 1.0,
+            "m2_money_stock": 19394.6,
+        },
+        "change": {
+            "m2_3m_momentum": 0.034,
+        },
+        "shock": {
+            "m2_mom_pct_change": 0.016,
+            "m2_mom_percent_rank": 0.9866,
+        },
+    }
+
+    snapshot = macro_growth_cycle.m2_interpretation_snapshot(
+        headline,
+        {"source": "m2.xlsx", "charts": []},
+    )
+    encoded = json.dumps(snapshot, sort_keys=True).lower()
+
+    assert "covid" not in encoded
+    assert "fiscal" not in encoded
+    assert "stimulus" not in encoded
+    assert "federal reserve" not in encoded
+    assert "policy response" not in encoded
 
 
 def test_m2_fallback_interpretation_returns_bilingual_text_by_status():

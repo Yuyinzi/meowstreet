@@ -607,6 +607,88 @@ def build_m2_money_supply_detail_payload(rows):
     }
 
 
+def _metric_context_label_for_state(yoy_growth, yoy_percent_rank):
+    if yoy_growth is None or yoy_percent_rank is None:
+        return {
+            "label": "missing_state",
+            "meaning": "The M2 state cannot be read because YoY growth or percentile is missing.",
+        }
+    if yoy_percent_rank >= 0.95:
+        return {
+            "label": "historically_extreme_expansion",
+            "meaning": "M2 growth is near the top of its own history, so liquidity is unusually abundant.",
+        }
+    if yoy_growth > 0:
+        return {
+            "label": "positive_expansion",
+            "meaning": "M2 is expanding versus a year ago, so the liquidity backdrop is not contracting.",
+        }
+    return {
+        "label": "contraction",
+        "meaning": "M2 is below its year-ago level, which points to a tighter liquidity backdrop.",
+    }
+
+
+def _metric_context_label_for_change(three_month_change):
+    if three_month_change is None:
+        return {
+            "label": "missing_change",
+            "meaning": "The 3-month change cannot be read because there is not enough recent history.",
+        }
+    if three_month_change > 0:
+        return {
+            "label": "positive_momentum",
+            "meaning": "M2 is still rising over the last 3 months, so liquidity momentum is positive.",
+        }
+    if three_month_change < 0:
+        return {
+            "label": "negative_momentum",
+            "meaning": "M2 has fallen over the last 3 months, so liquidity momentum is deteriorating.",
+        }
+    return {
+        "label": "flat_momentum",
+        "meaning": "M2 is roughly flat over the last 3 months, so liquidity momentum is neutral.",
+    }
+
+
+def _metric_context_label_for_shock(mom_growth, mom_percent_rank):
+    if mom_growth is None or mom_percent_rank is None:
+        return {
+            "label": "missing_shock",
+            "meaning": "The monthly shock signal cannot be read because MoM growth or percentile is missing.",
+        }
+    if mom_percent_rank >= 0.95:
+        return {
+            "label": "unusual_monthly_injection",
+            "meaning": "The latest monthly M2 increase is unusually large versus history, so this is an event signal.",
+        }
+    if mom_percent_rank <= 0.05:
+        return {
+            "label": "unusual_monthly_contraction",
+            "meaning": "The latest monthly M2 move is unusually weak versus history, so this is a contraction event signal.",
+        }
+    return {
+        "label": "normal_monthly_move",
+        "meaning": "The latest monthly M2 move is not extreme versus history.",
+    }
+
+
+def _m2_metric_context(state, change, shock):
+    return {
+        "state": _metric_context_label_for_state(
+            state.get("m2_yoy_pct_change"),
+            state.get("m2_yoy_percent_rank"),
+        ),
+        "change": _metric_context_label_for_change(
+            change.get("m2_3m_momentum"),
+        ),
+        "shock": _metric_context_label_for_shock(
+            shock.get("m2_mom_pct_change"),
+            shock.get("m2_mom_percent_rank"),
+        ),
+    }
+
+
 def _latest_chart_point(detail_payload, chart_title):
     for chart in detail_payload.get("charts", []):
         if chart.get("title") == chart_title and chart.get("series"):
@@ -639,6 +721,12 @@ def m2_interpretation_snapshot(headline, detail_payload):
             },
         },
         "latest_shock_event": latest_shock_event or {},
+        "metric_context": _m2_metric_context(state, change, shock),
+        "interpretation_constraints": {
+            "cause_policy": "do_not_name_causes_without_sourced_event_context",
+            "signal_role": "liquidity_confirmation_not_standalone_timing",
+            "number_style": "interpret_numbers_before_repeating_them",
+        },
         "coverage": {
             "source": detail_payload.get("source"),
         },

@@ -39,6 +39,11 @@ def test_build_prompt_explains_state_change_shock_and_cat_voice():
     assert "Change" in prompt
     assert "Shock" in prompt
     assert "liquidity confirmation" in prompt
+    assert "Interpret the metric_context first" in prompt
+    assert "Do not merely read the numbers back" in prompt
+    assert "Do not name historical causes" in prompt
+    assert "unless the snapshot contains a sourced event context" in prompt
+    assert "dashboard does not attach a named cause" in prompt
     assert "Do not give buy or sell instructions" in prompt
     assert "Do not mention P06" in prompt
     assert "25.8" in prompt or "0.258" in prompt
