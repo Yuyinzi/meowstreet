@@ -62,9 +62,145 @@ button {
 }
 
 .macro-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  transition: grid-template-columns 180ms ease;
   max-width: 1080px;
   margin: 0 auto;
   padding: 28px 24px 48px;
+}
+
+.macro-shell.panel-open {
+  grid-template-columns: 1fr 420px;
+}
+
+.macro-main {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detail-panel {
+  display: none;
+  border-left: 1px solid #E8E0D6;
+  background: #FFFFFF;
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 300px;
+  max-height: calc(100vh - 80px);
+  position: sticky;
+  top: 72px;
+}
+
+.panel-open .detail-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid #F0EAE4;
+}
+
+.detail-panel-head h2 {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.detail-panel-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #E0D6C8;
+  border-radius: 999px;
+  background: #FAF7F4;
+  color: #3B3530;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.detail-panel-close:hover {
+  border-color: #3B3530;
+  background: #FFFFFF;
+}
+
+.detail-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.detail-panel-body .detail-head {
+  display: none;
+}
+
+.detail-panel-body .method-note {
+  margin: 0 0 16px;
+}
+
+.detail-panel-body .metric-strip {
+  grid-template-columns: 1fr 1fr;
+  margin: 0 0 16px;
+}
+
+.detail-panel-body .relationship-chart-grid {
+  grid-template-columns: 1fr;
+}
+
+.detail-panel-body .relationship-chart-wide {
+  grid-column: 1;
+}
+
+.detail-panel-body .relationship-chart-grid-pre-method {
+  margin: 0 0 16px;
+}
+
+.detail-panel-body .relationship-chart {
+  padding: 10px;
+}
+
+.detail-panel-body .relationship-chart svg {
+  min-height: 180px;
+}
+
+.detail-panel-body .relationship-chart-head {
+  margin-bottom: 6px;
+}
+
+.detail-panel-body .relationship-chart-head h3 {
+  font-size: 13px;
+}
+
+.detail-panel-body .market-chart {
+  min-height: 180px;
+}
+
+.detail-panel-body .rates-curve-combo {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.detail-panel-body .credit-diagnostics-chart {
+  padding: 0;
+}
+
+.detail-panel-body .rates-signal-card-wide {
+  grid-column: 1;
+}
+
+.detail-panel-body .credit-interpretation-strip {
+  grid-template-columns: 1fr;
 }
 
 .macro-header {
@@ -1721,5 +1857,17 @@ h2 {
 
   h1 {
     font-size: 30px;
+  }
+
+  .macro-shell.panel-open {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-open .detail-panel {
+    border-left: none;
+    border-top: 1px solid #E8E0D6;
+    border-radius: 12px 12px 0 0;
+    max-height: none;
+    position: static;
   }
 }
