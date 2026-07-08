@@ -1,3 +1,5 @@
+import hashlib
+import json
 from copy import deepcopy
 
 GROWTH_CYCLE_DASHBOARD_FIELDS = [
@@ -236,6 +238,10 @@ GROWTH_CYCLE_SOURCES = [
         ),
     },
 ]
+
+
+M2_INTERPRETATION_SCOPE = "m2_money_supply"
+M2_INTERPRETATION_PROMPT_VERSION = "m2-cat-v1"
 
 
 def _float_value(payload, key):
@@ -599,6 +605,46 @@ def build_m2_money_supply_detail_payload(rows):
             },
         ],
     }
+
+
+def _latest_chart_point(detail_payload, chart_title):
+    for chart in detail_payload.get("charts", []):
+        if chart.get("title") == chart_title and chart.get("series"):
+            return chart["series"][-1]
+    return None
+
+
+def m2_interpretation_snapshot(headline, detail_payload):
+    state = headline.get("state", {})
+    change = headline.get("change", {})
+    shock = headline.get("shock", {})
+    latest_shock_event = _latest_chart_point(detail_payload, "M2 MoM Shock Events")
+    payload = {
+        "scope": M2_INTERPRETATION_SCOPE,
+        "prompt_version": M2_INTERPRETATION_PROMPT_VERSION,
+        "as_of": headline.get("period"),
+        "status": headline.get("status", "missing"),
+        "metrics": {
+            "state": {
+                "yoy_growth": state.get("m2_yoy_pct_change"),
+                "yoy_percent_rank": state.get("m2_yoy_percent_rank"),
+                "level_billions_usd": state.get("m2_money_stock"),
+            },
+            "change": {
+                "three_month_change": change.get("m2_3m_momentum"),
+            },
+            "shock": {
+                "mom_growth": shock.get("m2_mom_pct_change"),
+                "mom_percent_rank": shock.get("m2_mom_percent_rank"),
+            },
+        },
+        "latest_shock_event": latest_shock_event or {},
+        "coverage": {
+            "source": detail_payload.get("source"),
+        },
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return {**payload, "hash": hashlib.sha256(encoded.encode("utf-8")).hexdigest()}
 
 
 def fetch_m2_money_stock_from_source():

@@ -556,3 +556,61 @@ def test_build_growth_cycle_dashboard_payload_wraps_headline():
 )
 def test_m2_status_classification(growth_cycle, expected):
     assert macro_growth_cycle._m2_status(growth_cycle) == expected
+
+
+def test_m2_interpretation_snapshot_is_stable_and_hashable():
+    headline = {
+        "id": "m2_money_supply",
+        "period": "2021-01-01",
+        "status": "shock",
+        "status_label": "Shock",
+        "state": {
+            "m2_yoy_pct_change": 0.258,
+            "m2_yoy_percent_rank": 1.0,
+            "m2_money_stock": 19394.6,
+        },
+        "change": {
+            "m2_3m_momentum": 0.034,
+        },
+        "shock": {
+            "m2_mom_pct_change": 0.016,
+            "m2_mom_percent_rank": 0.9866,
+        },
+    }
+    detail_payload = {
+        "source": "US_M2_Money_Supply_Template.xlsx",
+        "charts": [
+            {"title": "M2 YoY Growth", "series": [{"date": "2021-01-01", "value": 25.8}]},
+            {"title": "M2 3M Change", "series": [{"date": "2021-01-01", "value": 3.4}]},
+            {
+                "title": "M2 MoM Shock Events",
+                "series": [
+                    {
+                        "date": "2021-01-01",
+                        "value": 1,
+                        "mom_growth": 1.6,
+                        "percentile": 98.66,
+                        "signal": "strong_injection",
+                    }
+                ],
+            },
+        ],
+    }
+
+    snapshot = macro_growth_cycle.m2_interpretation_snapshot(headline, detail_payload)
+    same_snapshot = macro_growth_cycle.m2_interpretation_snapshot(headline, detail_payload)
+
+    assert snapshot == same_snapshot
+    assert snapshot["scope"] == "m2_money_supply"
+    assert snapshot["prompt_version"] == "m2-cat-v1"
+    assert snapshot["as_of"] == "2021-01-01"
+    assert snapshot["status"] == "shock"
+    assert snapshot["metrics"]["state"]["yoy_growth"] == 0.258
+    assert snapshot["metrics"]["state"]["yoy_percent_rank"] == 1.0
+    assert snapshot["metrics"]["state"]["level_billions_usd"] == 19394.6
+    assert snapshot["metrics"]["change"]["three_month_change"] == 0.034
+    assert snapshot["metrics"]["shock"]["mom_growth"] == 0.016
+    assert snapshot["metrics"]["shock"]["mom_percent_rank"] == 0.9866
+    assert snapshot["latest_shock_event"]["signal"] == "strong_injection"
+    assert snapshot["coverage"]["source"] == "US_M2_Money_Supply_Template.xlsx"
+    assert len(snapshot["hash"]) == 64
