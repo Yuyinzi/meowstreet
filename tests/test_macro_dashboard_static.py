@@ -102,8 +102,8 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "chart-dot" not in js
     assert "chart-tooltip" in js
     assert "state.selectedBenchmarkId === button.dataset.benchmarkId" in js
-    assert "detail.hidden = true" in js
-    assert "detail.hidden = false" in js
+    assert "closeDetailPanel()" in js
+    assert "detail-panel-head" in js
 
 
 def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
@@ -121,17 +121,14 @@ def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
     assert "Method Video 03 workflow data" not in js
     assert "GDP / Market Relationship" in js
     assert "renderGdpRelationshipOverview" in js
-    assert "renderGdpRelationshipDetail" in js
+    assert "renderGdpDetailInPanel" in js
     assert (
         "state.selectedRelationshipId = state.gdpRelationships[0]?.relationship_id || null"
         not in js
     )
     assert "|| state.gdpRelationships[0]" not in js
     assert "state.selectedRelationshipId === button.dataset.relationshipId" in js
-    assert (
-        '${state.selectedRelationshipId ? `<div class="gdp-detail" id="gdpRelationshipDetail"></div>` : ""}'
-        in js
-    )
+
     assert "rolling_index_gdp_correlation" not in js
     assert "function fmtCorrelationPercent(" in js
     assert "fmtCorrelationPercent(card.latest?.rolling_index_gdp_correlation)" not in js
@@ -477,7 +474,7 @@ def test_macro_dashboard_js_has_per_market_refresh_action():
     assert "state.marketDetailsById[benchmarkId]" in js
     assert "delete state.marketDetailsById[benchmarkId]" in js
     assert "renderOverview();" in js
-    assert "renderDetail();" in js
+    assert "renderDetailPanel();" in js
     assert "rows_upserted" in js
     assert "latest_date" in js
 
@@ -495,7 +492,7 @@ def test_macro_dashboard_js_lazy_loads_us_rates_detail_charts():
     assert "selectedRatesDetailId" in js
     assert "usRatesDetailsById" in js
     assert "loadUsRatesLiquidityDetail" in js
-    assert "renderUsRatesLiquidityDetail" in js
+    assert "renderRatesDetailInPanel" in js
     assert "fetch(url.toString())" in js
     assert "selectedNominalCurrentDate" in js
     assert "selectedNominalComparisonDate" in js
@@ -508,7 +505,7 @@ def test_macro_dashboard_js_lazy_loads_us_rates_detail_charts():
     assert 'class="rates-signal-card${selected}"' in js
     assert "data-rates-detail-id" in js
     assert "state.selectedRatesDetailId === button.dataset.ratesDetailId" in js
-    assert 'id="usRatesLiquidityDetail"' in js
+    assert '$("detailPanel")' in js
     assert "renderRatesDetailChart" in js
     assert "attachRelationshipChartTooltip" in js
 
