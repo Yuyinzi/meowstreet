@@ -71,7 +71,8 @@ button {
 }
 
 .macro-shell.panel-open {
-  grid-template-columns: 1fr 420px;
+  max-width: none;
+  grid-template-columns: 1fr 45%;
 }
 
 .macro-main {
