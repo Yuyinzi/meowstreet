@@ -767,6 +767,11 @@ def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):
         "load_macro_indicator_points",
         lambda con, series_id: rows,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_ai_interpretation",
+        lambda con, scope, snapshot_hash: None,
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle/m2_money_supply")
 
@@ -783,6 +788,69 @@ def test_growth_cycle_detail_api_rejects_unknown_detail():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "growth cycle detail is unknown: unknown"
+
+
+def test_growth_cycle_m2_detail_api_attaches_stored_ai_interpretation(monkeypatch):
+    from app import api
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    rows = [
+        {"date": "2020-01-01", "value": 100.0, "source": "m2.xlsx"},
+        {"date": "2020-02-01", "value": 101.0, "source": "m2.xlsx"},
+        {"date": "2020-03-01", "value": 102.0, "source": "m2.xlsx"},
+        {"date": "2020-04-01", "value": 103.0, "source": "m2.xlsx"},
+        {"date": "2020-05-01", "value": 104.0, "source": "m2.xlsx"},
+        {"date": "2020-06-01", "value": 105.0, "source": "m2.xlsx"},
+        {"date": "2020-07-01", "value": 106.0, "source": "m2.xlsx"},
+        {"date": "2020-08-01", "value": 107.0, "source": "m2.xlsx"},
+        {"date": "2020-09-01", "value": 108.0, "source": "m2.xlsx"},
+        {"date": "2020-10-01", "value": 109.0, "source": "m2.xlsx"},
+        {"date": "2020-11-01", "value": 110.0, "source": "m2.xlsx"},
+        {"date": "2020-12-01", "value": 111.0, "source": "m2.xlsx"},
+        {"date": "2021-01-01", "value": 125.0, "source": "m2.xlsx"},
+    ]
+    calls = []
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: rows,
+    )
+
+    def fake_load_ai_interpretation(con, scope, snapshot_hash):
+        calls.append((scope, snapshot_hash))
+        return {
+            "scope": scope,
+            "snapshot_hash": snapshot_hash,
+            "text_en": "M2 is expanding quickly, so liquidity is a confirmation tailwind.",
+            "text_zh": "M2快速扩张，因此流动性是确认性的顺风。",
+            "tone": "trader_cat",
+            "prompt_version": "m2-cat-v1",
+            "model": "gpt-4.1-mini",
+            "as_of": "2021-01-01",
+        }
+
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_ai_interpretation",
+        fake_load_ai_interpretation,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle/m2_money_supply")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["m2_ai_interpretation"]["tone"] == "trader_cat"
+    assert (
+        "liquidity is a confirmation tailwind"
+        in payload["m2_ai_interpretation"]["text_en"]
+    )
+    assert calls[0][0] == "m2_money_supply"
+    assert len(calls[0][1]) == 64
 
 
 def test_growth_cycle_api_returns_missing_payload_when_m2_db_rows_are_missing(

@@ -209,7 +209,24 @@ def macro_dashboard_growth_cycle_detail(detail_id):
     con = us_rates_liquidity_db.connect()
     try:
         rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
-        return macro_growth_cycle.build_m2_money_supply_detail_payload(rows)
+        detail_payload = macro_growth_cycle.build_m2_money_supply_detail_payload(rows)
+        dashboard_payload = macro_growth_cycle.build_growth_cycle_dashboard(
+            m2_money_stock={"series": rows}
+        )
+        headline = dashboard_payload["macro"]["growth_cycle"]
+        m2_headline = macro_growth_cycle.build_m2_money_supply_headline(headline)
+        snapshot = macro_growth_cycle.m2_interpretation_snapshot(
+            m2_headline, detail_payload
+        )
+        detail_payload["m2_interpretation_snapshot"] = snapshot
+        detail_payload["m2_ai_interpretation"] = (
+            us_rates_liquidity_db.load_ai_interpretation(
+                con,
+                snapshot["scope"],
+                snapshot["hash"],
+            )
+        )
+        return detail_payload
     finally:
         con.close()
 
