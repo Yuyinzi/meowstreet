@@ -1,0 +1,90 @@
+import argparse
+import sys
+from datetime import datetime
+from pathlib import Path
+
+from openpyxl import load_workbook
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from app.db import us_rates_liquidity
+
+DEFAULT_WORKBOOK_PATH = ROOT / "data" / "materials" / "Video 06" / "US_M2_Money_Supply_Template.xlsx"
+M2_SHEET_NAME = "Nominal M2 - Monthly"
+M2_SERIES_ID = "m2_money_stock"
+
+
+def _iso_date(value):
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _series_payload(workbook_path):
+    return {
+        "series_id": M2_SERIES_ID,
+        "title": "M2 Money Stock",
+        "units": "billions_usd",
+        "source": Path(workbook_path).name,
+    }
+
+
+def _point_payload(date_value, level_value, workbook_path):
+    return {
+        "date": _iso_date(date_value),
+        "value": float(level_value),
+        "source": Path(workbook_path).name,
+    }
+
+
+def parse_workbook(workbook_path=DEFAULT_WORKBOOK_PATH):
+    workbook_path = Path(workbook_path)
+    if not workbook_path.exists():
+        raise ValueError(f"m2 money supply workbook is missing: {workbook_path}")
+    workbook = load_workbook(workbook_path, read_only=True, data_only=True)
+    if M2_SHEET_NAME not in workbook.sheetnames:
+        raise ValueError(f"m2 money supply sheet is missing: {M2_SHEET_NAME}")
+    sheet = workbook[M2_SHEET_NAME]
+    points = [
+        _point_payload(date_value, level_value, workbook_path)
+        for date_value, level_value in sheet.iter_rows(
+            min_row=2,
+            min_col=1,
+            max_col=2,
+            values_only=True,
+        )
+        if date_value is not None and level_value not in (None, "")
+    ]
+    return {"series": _series_payload(workbook_path), "points": points}
+
+
+def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
+    payload = parse_workbook(workbook_path)
+    saved = us_rates_liquidity.replace_macro_indicator_points(
+        con,
+        payload["series"],
+        payload["points"],
+    )
+    return {payload["series"]["series_id"]: saved["points"]}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--db-path", type=Path, default=us_rates_liquidity.DEFAULT_DB_PATH)
+    parser.add_argument("--workbook-path", type=Path, default=DEFAULT_WORKBOOK_PATH)
+    args = parser.parse_args(argv)
+    con = us_rates_liquidity.connect(args.db_path)
+    try:
+        inserted = import_workbook(con, args.workbook_path)
+    finally:
+        con.close()
+    for series_id, count in inserted.items():
+        print(f"{series_id}: {count}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
