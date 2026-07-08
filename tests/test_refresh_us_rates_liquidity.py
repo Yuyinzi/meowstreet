@@ -269,3 +269,34 @@ def test_main_imports_corporate_credit_after_rates_and_macro(capsys):
     assert "corporate credit workbook imported:" in captured.out
     assert "corporate credit fred imported:" in captured.out
     assert "aaa_corporate_yield: 6269" in captured.out
+
+
+def test_main_can_generate_credit_interpretation_after_refresh(capsys):
+    calls = []
+
+    def fake_connect(db_path):
+        calls.append(("connect", db_path))
+        return FakeConnection()
+
+    def fake_generate_credit_interpretation(db_path):
+        calls.append(("generate_credit_interpretation", db_path))
+        return 0
+
+    exit_code = refresh_us_rates_liquidity.main(
+        ["--skip-fetch", "--generate-credit-interpretation"],
+        connect=fake_connect,
+        fetch_rates=lambda: {},
+        fetch_macro=lambda: {},
+        fetch_credit=lambda: {},
+        import_rates=lambda con: {},
+        import_macro=lambda con: {},
+        import_credit_workbook=lambda con: {},
+        import_credit_fred=lambda con: {},
+        generate_credit_interpretation=fake_generate_credit_interpretation,
+    )
+
+    assert exit_code == 0
+    assert calls[-1] == (
+        "generate_credit_interpretation",
+        refresh_us_rates_liquidity.us_rates_liquidity.DEFAULT_DB_PATH,
+    )

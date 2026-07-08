@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import us_rates_liquidity
+from scripts import generate_credit_ai_interpretation
 from scripts import import_us_corporate_credit
 from scripts import import_us_macro_indicators
 from scripts import import_us_rates_liquidity
@@ -24,6 +25,10 @@ def _print_imported(label, inserted):
     print(f"{label} imported:")
     for series_id, count in inserted.items():
         print(f"  {series_id}: {count}")
+
+
+def _generate_credit_interpretation(db_path):
+    return generate_credit_ai_interpretation.main(["--db-path", str(db_path)])
 
 
 def refresh(
@@ -70,6 +75,7 @@ def main(
     import_macro=import_us_macro_indicators.import_fred_macro_csvs,
     import_credit_workbook=import_us_corporate_credit.import_workbook,
     import_credit_fred=import_us_corporate_credit.import_fred_csvs,
+    generate_credit_interpretation=_generate_credit_interpretation,
 ):
     parser = argparse.ArgumentParser(
         description="Refresh US Rates / Liquidity dashboard data from FRED"
@@ -83,6 +89,11 @@ def main(
         "--skip-fetch",
         action="store_true",
         help="import from already downloaded FRED CSVs without network fetch",
+    )
+    parser.add_argument(
+        "--generate-credit-interpretation",
+        action="store_true",
+        help="generate stored AI interpretation after data refresh",
     )
     args = parser.parse_args(argv)
     try:
@@ -108,6 +119,10 @@ def main(
     _print_imported("macro", result["macro_imported"])
     _print_imported("corporate credit workbook", result["credit_workbook_imported"])
     _print_imported("corporate credit fred", result["credit_fred_imported"])
+    if args.generate_credit_interpretation:
+        generated_exit = generate_credit_interpretation(args.db_path)
+        if generated_exit != 0:
+            return generated_exit
     return 0
 
 
