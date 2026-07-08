@@ -116,16 +116,32 @@ def import_fred_csvs(con, fred_dir=DEFAULT_FRED_DIR):
     return {payload["series"]["series_id"]: saved["points"]}
 
 
+def fetch_fred_csvs(fred_dir=DEFAULT_FRED_DIR):
+    client = FredClient(fred_dir)
+    return client.fetch_csvs([FRED_M2_SERIES_ID])
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--db-path", type=Path, default=us_rates_liquidity.DEFAULT_DB_PATH
     )
     parser.add_argument("--workbook-path", type=Path, default=DEFAULT_WORKBOOK_PATH)
+    parser.add_argument("--fred-dir", type=Path, default=DEFAULT_FRED_DIR)
+    parser.add_argument("--fetch-fred-csv", action="store_true")
+    parser.add_argument("--fred-csv-merge", action="store_true")
     args = parser.parse_args(argv)
+    if args.fetch_fred_csv:
+        fetched = fetch_fred_csvs(args.fred_dir)
+        for series_id, path in fetched.items():
+            print(f"{series_id}: {path}")
+        return 0
     con = us_rates_liquidity.connect(args.db_path)
     try:
-        inserted = import_workbook(con, args.workbook_path)
+        if args.fred_csv_merge:
+            inserted = import_fred_csvs(con, args.fred_dir)
+        else:
+            inserted = import_workbook(con, args.workbook_path)
     finally:
         con.close()
     for series_id, count in inserted.items():

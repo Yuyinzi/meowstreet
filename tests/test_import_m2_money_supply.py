@@ -137,3 +137,70 @@ def test_import_fred_csvs_merges_m2sl_with_existing_workbook_history(tmp_path):
         {"date": "2026-02-01", "value": 102.5, "source": "M2SL.csv"},
         {"date": "2026-05-01", "value": 105.5, "source": "M2SL.csv"},
     ]
+
+
+def test_fetch_fred_csvs_fetches_m2sl(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeFredClient:
+        def __init__(self, cache_dir):
+            calls.append(("init", cache_dir))
+
+        def fetch_csvs(self, series_ids):
+            calls.append(("fetch", series_ids))
+            return {"M2SL": tmp_path / "fred" / "M2SL.csv"}
+
+    monkeypatch.setattr(import_m2_money_supply, "FredClient", FakeFredClient)
+
+    fetched = import_m2_money_supply.fetch_fred_csvs(tmp_path / "fred")
+
+    assert fetched == {"M2SL": tmp_path / "fred" / "M2SL.csv"}
+    assert calls == [
+        ("init", tmp_path / "fred"),
+        ("fetch", ["M2SL"]),
+    ]
+
+
+def test_main_can_fetch_fred_csv(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(
+        import_m2_money_supply,
+        "fetch_fred_csvs",
+        lambda fred_dir: {"M2SL": fred_dir / "M2SL.csv"},
+    )
+
+    exit_code = import_m2_money_supply.main(
+        ["--fred-dir", str(tmp_path / "fred"), "--fetch-fred-csv"]
+    )
+
+    assert exit_code == 0
+    assert "M2SL:" in capsys.readouterr().out
+
+
+def test_main_can_merge_fred_csv(monkeypatch, tmp_path, capsys):
+    class FakeCon:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        import_m2_money_supply.us_rates_liquidity,
+        "connect",
+        lambda db_path: FakeCon(),
+    )
+    monkeypatch.setattr(
+        import_m2_money_supply,
+        "import_fred_csvs",
+        lambda con, fred_dir: {"m2_money_stock": 2},
+    )
+
+    exit_code = import_m2_money_supply.main(
+        [
+            "--db-path",
+            str(tmp_path / "market_data.sqlite"),
+            "--fred-dir",
+            str(tmp_path / "fred"),
+            "--fred-csv-merge",
+        ]
+    )
+
+    assert exit_code == 0
+    assert "m2_money_stock: 2" in capsys.readouterr().out
