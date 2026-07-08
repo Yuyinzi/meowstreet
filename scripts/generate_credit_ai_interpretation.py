@@ -2,7 +2,7 @@ import argparse
 import asyncio
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,7 +88,10 @@ def interpretation_row(snapshot, generated, model):
         "text_en": generated["text_en"],
         "text_zh": generated["text_zh"],
         "metrics_json": json.dumps(snapshot, sort_keys=True, ensure_ascii=False),
-        "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
     }
 
 
@@ -125,7 +128,7 @@ async def async_main(argv=None):
         print(f"credit interpretation generated: {saved['interpretations']}")
         print(f"snapshot_hash: {snapshot['hash']}")
         return 0
-    except (RuntimeError, ValueError) as exc:
+    except Exception as exc:
         print(str(exc), file=sys.stderr)
         return 1
     finally:
