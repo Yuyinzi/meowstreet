@@ -33,7 +33,12 @@ def test_build_prompt_includes_metrics_gap_and_cat_voice():
     assert "0.98" in prompt
     assert "8.44" in prompt
     assert "2021-01-08" in prompt
-    assert "disciplined trader cat" in prompt
+    assert "CaiCai" in prompt
+    assert "财财" in prompt
+    assert "ginger cat" in prompt
+    assert "fish" in prompt
+    assert "easy for a non-specialist" in prompt
+    assert "Do not call the narrator credit cat" in prompt
     assert "Do not change the regime" in prompt
 
 

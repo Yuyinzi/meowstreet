@@ -1183,7 +1183,7 @@
     if (!ai) return "";
     return `
       <div class="credit-ai-interpretation">
-        <strong>Trader Cat<small>交易猫解读</small></strong>
+        <strong>CaiCai<small>财财解读</small></strong>
         <p>${escapeHtml(ai.text_en)}<small>${escapeHtml(ai.text_zh)}</small></p>
         <span>${escapeHtml(ai.as_of || "")} · ${escapeHtml(ai.prompt_version || "")} · ${escapeHtml(ai.model || "")}</span>
       </div>

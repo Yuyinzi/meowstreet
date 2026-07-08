@@ -609,7 +609,8 @@ def test_macro_dashboard_js_renders_credit_diagnostics():
     assert "P05 workbook history is merged with latest FRED ICE/BofA observations" in js
     assert "renderCreditAiInterpretation" in js
     assert "credit-ai-interpretation" in js
-    assert "Trader Cat" in js
+    assert "CaiCai" in js
+    assert "财财" in js
 
 
 def test_macro_dashboard_css_contains_credit_gap_note_styles():
