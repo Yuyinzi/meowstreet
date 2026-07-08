@@ -15,12 +15,21 @@ def test_macro_dashboard_html_links_assets_and_app_root():
     assert 'src="/macro-dashboard.js"' in html
 
 
-def test_macro_dashboard_html_embeds_us_rates_liquidity_section():
+def test_macro_dashboard_html_embeds_us_rates_credit_section():
     html = (ROOT / "static" / "macro-dashboard.html").read_text()
 
     assert 'id="usRatesLiquidity"' in html
-    assert "US Rates / Liquidity" in html
+    assert "US Rates & Credit" in html
+    assert "US Rates / Liquidity" not in html
     assert "Import-backed" in html
+
+
+def test_macro_dashboard_html_embeds_growth_cycle_section():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+
+    assert 'id="growthCycle"' in html
+    assert "Growth Cycle" in html
+    assert "M2 Money Supply" not in html
 
 
 def test_macro_dashboard_js_fetches_us_rates_liquidity_api():
@@ -38,11 +47,11 @@ def test_macro_dashboard_js_fetches_us_rates_liquidity_api():
     assert "S&P PE" not in js
 
 
-def test_macro_dashboard_html_keeps_rates_liquidity_mount_without_mock_values():
+def test_macro_dashboard_html_keeps_rates_credit_mount_without_mock_values():
     html = (ROOT / "static" / "macro-dashboard.html").read_text()
 
     assert 'id="usRatesLiquidity"' in html
-    assert "US Rates / Liquidity" in html
+    assert "US Rates & Credit" in html
     assert "0.93%" not in html
     assert "-1.03%" not in html
     assert "10Y - 2Y Spread" not in html
