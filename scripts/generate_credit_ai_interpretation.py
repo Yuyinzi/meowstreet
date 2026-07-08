@@ -102,7 +102,7 @@ async def async_main(argv=None):
     parser.add_argument(
         "--db-path", type=Path, default=us_rates_liquidity.DEFAULT_DB_PATH
     )
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=None)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--openai-api-key", default="")
     parser.add_argument("--openai-base-url", default="")
