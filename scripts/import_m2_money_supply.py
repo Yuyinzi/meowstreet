@@ -8,11 +8,18 @@ from openpyxl import load_workbook
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.data_sources.fred import FredClient
+from app.data_sources.fred import parse_fred_csv
 from app.db import us_rates_liquidity
 
-DEFAULT_WORKBOOK_PATH = ROOT / "data" / "materials" / "Video 06" / "US_M2_Money_Supply_Template.xlsx"
+DEFAULT_WORKBOOK_PATH = (
+    ROOT / "data" / "materials" / "Video 06" / "US_M2_Money_Supply_Template.xlsx"
+)
 M2_SHEET_NAME = "Nominal M2 - Monthly"
 M2_SERIES_ID = "m2_money_stock"
+FRED_M2_SERIES_ID = "M2SL"
+DEFAULT_FRED_DIR = DEFAULT_WORKBOOK_PATH.parent / "fred"
+COMBINED_SOURCE = "P06 workbook + FRED"
 
 
 def _iso_date(value):
@@ -37,6 +44,34 @@ def _point_payload(date_value, level_value, workbook_path):
         "date": _iso_date(date_value),
         "value": float(level_value),
         "source": Path(workbook_path).name,
+    }
+
+
+def _fred_series_payload():
+    return {
+        "series_id": M2_SERIES_ID,
+        "title": "M2 Money Stock",
+        "units": "billions_usd",
+        "source": COMBINED_SOURCE,
+    }
+
+
+def _fred_points_payload(rows, csv_path):
+    return [
+        {
+            "date": date_key,
+            "value": value,
+            "source": Path(csv_path).name,
+        }
+        for date_key, value in rows.items()
+    ]
+
+
+def build_fred_m2_payload(csv_path):
+    rows = parse_fred_csv(csv_path, FRED_M2_SERIES_ID)
+    return {
+        "series": _fred_series_payload(),
+        "points": _fred_points_payload(rows, csv_path),
     }
 
 
@@ -73,7 +108,9 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db-path", type=Path, default=us_rates_liquidity.DEFAULT_DB_PATH)
+    parser.add_argument(
+        "--db-path", type=Path, default=us_rates_liquidity.DEFAULT_DB_PATH
+    )
     parser.add_argument("--workbook-path", type=Path, default=DEFAULT_WORKBOOK_PATH)
     args = parser.parse_args(argv)
     con = us_rates_liquidity.connect(args.db_path)
