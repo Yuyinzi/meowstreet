@@ -208,11 +208,12 @@
       loadUsRatesLiquidityDetail(detailId)
         .then((payload) => {
           if (state.selectedRatesDetailId !== "yield_curve_shape") return;
-          body.innerHTML = `
-            <div class="relationship-chart-grid">
-              ${payload.charts.map((chart, index) => renderRatesDetailChart(chart, index)).join("")}
-            </div>
-          `;
+        body.innerHTML = `
+          <div class="relationship-chart-grid">
+            ${payload.charts.map((chart, index) => renderRatesDetailChart(chart, index)).join("")}
+          </div>
+          ${renderMacroAiInterpretation(payload.m2_ai_interpretation, "M2 Liquidity Read", "M2流动性解读")}
+        `;
           bindRatesCurveControls(body, "yield_curve");
           attachRatesChartTooltips(body, payload.charts);
         })
@@ -1529,6 +1530,17 @@
     return `
       <div class="credit-ai-interpretation">
         <strong>CaiCai<small>财财解读</small></strong>
+        <p>${escapeHtml(ai.text_en)}<small>${escapeHtml(ai.text_zh)}</small></p>
+        <span>${escapeHtml(ai.as_of || "")} · ${escapeHtml(ai.prompt_version || "")} · ${escapeHtml(ai.model || "")}</span>
+      </div>
+    `;
+  }
+
+  function renderMacroAiInterpretation(ai, title, titleZh) {
+    if (!ai) return "";
+    return `
+      <div class="macro-ai-interpretation">
+        <strong>${escapeHtml(title)}<small>${escapeHtml(titleZh)}</small></strong>
         <p>${escapeHtml(ai.text_en)}<small>${escapeHtml(ai.text_zh)}</small></p>
         <span>${escapeHtml(ai.as_of || "")} · ${escapeHtml(ai.prompt_version || "")} · ${escapeHtml(ai.model || "")}</span>
       </div>

@@ -694,3 +694,19 @@ def test_macro_dashboard_css_has_growth_cycle_card_styles():
     assert ".m2-card" in css
     assert ".m2-metric-band" in css
     assert ".m2-level-row" in css
+
+
+def test_macro_dashboard_js_renders_m2_ai_interpretation():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "renderMacroAiInterpretation" in js
+    assert "m2_ai_interpretation" in js
+    assert "M2 Liquidity Read" in js
+    assert "M2流动性解读" in js
+    assert "macro-ai-interpretation" in js
+
+
+def test_macro_dashboard_css_contains_macro_ai_interpretation_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".macro-ai-interpretation" in css
