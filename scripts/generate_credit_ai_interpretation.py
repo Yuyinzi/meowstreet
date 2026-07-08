@@ -120,10 +120,11 @@ async def async_main(argv=None):
             return 0
         config = llm.load_openai_config(args, root=ROOT)
         client = llm.build_async_client(config, max_retries=0, timeout=60)
-        generated = await generate_with_openai(client, args.model, snapshot)
+        model = config["model"]
+        generated = await generate_with_openai(client, model, snapshot)
         saved = us_rates_liquidity.replace_ai_interpretation(
             con,
-            interpretation_row(snapshot, generated, args.model),
+            interpretation_row(snapshot, generated, model),
         )
         print(f"credit interpretation generated: {saved['interpretations']}")
         print(f"snapshot_hash: {snapshot['hash']}")
