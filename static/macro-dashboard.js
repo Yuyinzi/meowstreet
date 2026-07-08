@@ -1179,6 +1179,17 @@
     `;
   }
 
+  function renderCreditAiInterpretation(ai) {
+    if (!ai) return "";
+    return `
+      <div class="credit-ai-interpretation">
+        <strong>Trader Cat<small>交易猫解读</small></strong>
+        <p>${escapeHtml(ai.text_en)}<small>${escapeHtml(ai.text_zh)}</small></p>
+        <span>${escapeHtml(ai.as_of || "")} · ${escapeHtml(ai.prompt_version || "")} · ${escapeHtml(ai.model || "")}</span>
+      </div>
+    `;
+  }
+
   function renderCreditCoverageNote(coverage) {
     if (!coverage) return "";
     const hasGap = coverage.has_gap && coverage.gap_start && coverage.gap_end;
@@ -1216,6 +1227,7 @@
           <strong>${escapeHtml(meta.label)}<small>${escapeHtml(meta.zh)}</small></strong>
           <p>${escapeHtml(message.text)}<small>${escapeHtml(message.zh)}</small></p>
         </div>
+        ${renderCreditAiInterpretation(state.usRatesLiquidity?.credit_ai_interpretation)}
         ${renderCreditCoverageNote(state.usRatesLiquidity?.credit_coverage)}
       </div>
     `;

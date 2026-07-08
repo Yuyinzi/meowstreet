@@ -1620,6 +1620,40 @@ h2 {
   background: #F7F5F2;
 }
 
+.credit-ai-interpretation {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #D8C7A6;
+  border-radius: 8px;
+  background: #FFF9EA;
+  color: #3B3530;
+}
+
+.credit-ai-interpretation strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.credit-ai-interpretation p {
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.credit-ai-interpretation small {
+  display: block;
+  margin-top: 2px;
+  color: #8B7E74;
+  font-weight: 500;
+}
+
+.credit-ai-interpretation span {
+  display: block;
+  color: #9A8D82;
+  font-size: 11px;
+}
+
 .credit-data-gap-note {
   margin-top: 10px;
   padding: 10px 12px;

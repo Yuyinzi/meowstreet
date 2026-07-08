@@ -607,12 +607,21 @@ def test_macro_dashboard_js_renders_credit_diagnostics():
     assert "renderCreditCoverageNote" in js
     assert "credit-data-gap-note" in js
     assert "P05 workbook history is merged with latest FRED ICE/BofA observations" in js
+    assert "renderCreditAiInterpretation" in js
+    assert "credit-ai-interpretation" in js
+    assert "Trader Cat" in js
 
 
 def test_macro_dashboard_css_contains_credit_gap_note_styles():
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 
     assert ".credit-data-gap-note" in css
+
+
+def test_macro_dashboard_css_contains_credit_ai_interpretation_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".credit-ai-interpretation" in css
 
 
 def test_macro_dashboard_css_contains_credit_interpretation_styles():
