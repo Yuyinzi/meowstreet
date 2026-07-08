@@ -9,7 +9,12 @@ from app import tool_runner, workflow_engine
 from app.db import benchmark_market_data, gdp_market_relationships
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
-from app.tools import gdp_market_relationship, macro_growth_cycle, market_phase, us_rates_liquidity
+from app.tools import (
+    gdp_market_relationship,
+    macro_growth_cycle,
+    market_phase,
+    us_rates_liquidity,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
@@ -184,15 +189,27 @@ def macro_dashboard_growth_cycle():
                 "missing": "No M2 money supply data found. Run scripts/import_m2_money_supply.py.",
             }
         m2_money_stock = {
-            "series": [
-                {"date": row["date"], "value": row["value"]}
-                for row in rows
-            ]
+            "series": [{"date": row["date"], "value": row["value"]} for row in rows]
         }
         dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
             m2_money_stock=m2_money_stock,
         )
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+    finally:
+        con.close()
+
+
+@app.get("/api/macro-dashboard/growth-cycle/{detail_id}")
+def macro_dashboard_growth_cycle_detail(detail_id):
+    if detail_id != "m2_money_supply":
+        raise HTTPException(
+            status_code=400,
+            detail=f"growth cycle detail is unknown: {detail_id}",
+        )
+    con = us_rates_liquidity_db.connect()
+    try:
+        rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
+        return macro_growth_cycle.build_m2_money_supply_detail_payload(rows)
     finally:
         con.close()
 

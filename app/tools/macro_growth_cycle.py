@@ -180,9 +180,7 @@ GROWTH_CYCLE_DASHBOARD_FIELDS = [
 
 def _dashboard_fields_by_id(*field_ids):
     return [
-        field
-        for field in GROWTH_CYCLE_DASHBOARD_FIELDS
-        if field["id"] in field_ids
+        field for field in GROWTH_CYCLE_DASHBOARD_FIELDS if field["id"] in field_ids
     ]
 
 
@@ -269,10 +267,14 @@ def normalize_ism_services(payload):
             "growth_cycle": {
                 "services_period": payload.get("period"),
                 "services_pmi": _float_value(payload, "pmi"),
-                "services_business_activity": _float_value(payload, "business_activity"),
+                "services_business_activity": _float_value(
+                    payload, "business_activity"
+                ),
                 "services_new_orders": _float_value(payload, "new_orders"),
                 "services_employment": _float_value(payload, "employment"),
-                "services_supplier_deliveries": _float_value(payload, "supplier_deliveries"),
+                "services_supplier_deliveries": _float_value(
+                    payload, "supplier_deliveries"
+                ),
                 "services_backlog_orders": _float_value(payload, "backlog_orders"),
             }
         }
@@ -301,8 +303,7 @@ def normalize_m2_money_stock(payload):
     three_month_ago_value = values[-4] if len(values) >= 4 else None
     year_ago_value = values[-13] if len(values) >= 13 else None
     mom_changes = [
-        _pct_change(values[index], values[index - 1])
-        for index in range(1, len(values))
+        _pct_change(values[index], values[index - 1]) for index in range(1, len(values))
     ]
     yoy_changes = [
         _pct_change(values[index], values[index - 12])
@@ -406,7 +407,9 @@ def _labor_trend(initial_claims):
         return "unknown"
     values = [int(row["value"]) for row in initial_claims]
     latest_average = _average(values[-4:])
-    previous_average = _average(values[-8:-4]) if len(values) >= 8 else _average(values[:-4])
+    previous_average = (
+        _average(values[-8:-4]) if len(values) >= 8 else _average(values[:-4])
+    )
     if previous_average is None:
         return "unknown"
     if latest_average > previous_average * 1.03:
@@ -458,7 +461,11 @@ def compute_growth_cycle_bias(growth_cycle):
     )
     if manufacturing_expanding and services_expanding:
         return "long"
-    if manufacturing_contracting and services_contracting and growth_cycle.get("labor_trend") == "weakening":
+    if (
+        manufacturing_contracting
+        and services_contracting
+        and growth_cycle.get("labor_trend") == "weakening"
+    ):
         return "short"
     return "neutral"
 
@@ -491,6 +498,107 @@ def build_growth_cycle_dashboard(
     growth_cycle = result["macro"]["growth_cycle"]
     growth_cycle["growth_cycle_bias"] = compute_growth_cycle_bias(growth_cycle)
     return result
+
+
+def _m2_level_points(rows):
+    return [
+        {"date": row["date"], "value": float(row["value"]), "source": row.get("source")}
+        for row in rows
+        if row.get("value") is not None
+    ]
+
+
+def _m2_growth_series(points, lookback_months):
+    return [
+        {
+            "date": points[index]["date"],
+            "value": round(
+                _pct_change(
+                    points[index]["value"], points[index - lookback_months]["value"]
+                )
+                * 100,
+                4,
+            ),
+        }
+        for index in range(lookback_months, len(points))
+        if _pct_change(points[index]["value"], points[index - lookback_months]["value"])
+        is not None
+    ]
+
+
+def _m2_mom_shock_event_series(points):
+    mom_values = []
+    series = []
+    for index in range(1, len(points)):
+        value = _pct_change(points[index]["value"], points[index - 1]["value"])
+        if value is None:
+            continue
+        mom_values.append(value)
+        rank = _percent_rank(mom_values, value)
+        percentile = round(rank * 100, 4)
+        signal = 0
+        signal_label = "normal"
+        if percentile > 99:
+            signal = 2
+            signal_label = "extreme_injection"
+        elif percentile >= 95:
+            signal = 1
+            signal_label = "strong_injection"
+        elif percentile < 1:
+            signal = -2
+            signal_label = "extreme_contraction"
+        elif percentile <= 5:
+            signal = -1
+            signal_label = "strong_contraction"
+        series.append(
+            {
+                "date": points[index]["date"],
+                "value": signal,
+                "mom_growth": round(value * 100, 4),
+                "percentile": percentile,
+                "signal": signal_label,
+            }
+        )
+    return series
+
+
+def build_m2_money_supply_detail_payload(rows):
+    points = _m2_level_points(rows)
+    source = points[-1].get("source") if points else None
+    return {
+        "detail_id": "m2_money_supply",
+        "title": "M2 Money Supply",
+        "source": source,
+        "charts": [
+            {
+                "kind": "time_series",
+                "title": "M2 YoY Growth",
+                "keys": ["value"],
+                "labels": {"value": "YoY Growth"},
+                "series": _m2_growth_series(points, 12),
+            },
+            {
+                "kind": "time_series",
+                "title": "M2 3M Change",
+                "keys": ["value"],
+                "labels": {"value": "3M Change"},
+                "series": _m2_growth_series(points, 3),
+            },
+            {
+                "kind": "time_series",
+                "title": "M2 MoM Shock Events",
+                "keys": ["value"],
+                "labels": {"value": "Shock Signal"},
+                "series": _m2_mom_shock_event_series(points),
+                "y_domain": [-2, 2],
+                "unit": "raw",
+                "tooltip_extra": [
+                    {"key": "mom_growth", "label": "MoM Growth", "format": "percent"},
+                    {"key": "percentile", "label": "Percentile", "format": "number"},
+                ],
+            },
+        ],
+    }
 
 
 def fetch_m2_money_stock_from_source():

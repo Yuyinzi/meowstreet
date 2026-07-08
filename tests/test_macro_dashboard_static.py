@@ -664,6 +664,29 @@ def test_macro_dashboard_js_fetches_and_renders_growth_cycle_m2_card():
     assert "P06" not in js
 
 
+def test_macro_dashboard_js_wires_growth_cycle_detail_panel():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "selectedGrowthCycleDetailId" in js
+    assert "growthCycleDetailsById" in js
+    assert "loadGrowthCycleDetail" in js
+    assert "renderGrowthCycleDetailInPanel" in js
+    assert "data-growth-cycle-detail-id" in js
+    assert (
+        "fetch(`/api/macro-dashboard/growth-cycle/${encodeURIComponent(detailId)}`)"
+        in js
+    )
+    assert "renderRatesDetailChart(chart, index)" in js
+    assert "attachRatesChartTooltips(body, payload.charts)" in js
+
+
+def test_macro_dashboard_css_has_clickable_m2_card_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".m2-card-button" in css
+    assert ".m2-card.selected" in css
+
+
 def test_macro_dashboard_css_has_growth_cycle_card_styles():
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 

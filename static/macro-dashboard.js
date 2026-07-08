@@ -12,6 +12,8 @@
     usRatesDetailsById: {},
     growthCycle: null,
     growthCycleError: null,
+    selectedGrowthCycleDetailId: null,
+    growthCycleDetailsById: {},
     selectedNominalCurrentDate: null,
     selectedNominalComparisonDate: null,
     selectedRealCurrentDate: null,
@@ -22,6 +24,7 @@
     state.selectedBenchmarkId = null;
     state.selectedRelationshipId = null;
     state.selectedRatesDetailId = null;
+    state.selectedGrowthCycleDetailId = null;
     state.selectedNominalCurrentDate = null;
     state.selectedNominalComparisonDate = null;
     state.selectedRealCurrentDate = null;
@@ -35,7 +38,7 @@
     const panel = $("detailPanel");
     if (!panel) return;
 
-    const anySelected = state.selectedBenchmarkId || state.selectedRelationshipId || state.selectedRatesDetailId;
+    const anySelected = state.selectedBenchmarkId || state.selectedRelationshipId || state.selectedRatesDetailId || state.selectedGrowthCycleDetailId;
     if (!anySelected) {
       shell.classList.remove("panel-open");
       panel.innerHTML = "";
@@ -58,6 +61,8 @@
       if (state.selectedRatesDetailId === "yield_curve_shape") {
         title = "Yield Curve Analysis";
       }
+    } else if (state.selectedGrowthCycleDetailId) {
+      title = "M2 Money Supply";
     }
 
     panel.innerHTML = `
@@ -86,6 +91,8 @@
       renderRatesDetailInPanel(body);
     } else if (state.selectedRelationshipId) {
       renderGdpDetailInPanel(body);
+    } else if (state.selectedGrowthCycleDetailId) {
+      renderGrowthCycleDetailInPanel(body);
     }
   }
 
@@ -677,6 +684,12 @@
     let lastIndex = -1;
     let tooltipRect = null;
 
+    function _extraFormatter(value, fmt) {
+      if (value === null || value === undefined) return "n/a";
+      if (fmt === "percent") return fmtRate(value);
+      return fmtNumber(value);
+    }
+
     function show(index, clientX, clientY) {
       const point = series[index];
       if (index !== lastIndex) {
@@ -690,9 +703,19 @@
             </div>
           `;
         }).join("");
+        const extraRows = (options.tooltipExtra || []).map((extra) => {
+          const value = point[extra.key];
+          return `
+            <div class="chart-tooltip-row">
+              <span>${escapeHtml(lineLabel({ [extra.key]: extra.label }, extra.key))}</span>
+              <strong>${escapeHtml(_extraFormatter(value, extra.format))}</strong>
+            </div>
+          `;
+        }).join("");
         tooltip.innerHTML = `
           <div><strong>${escapeHtml(fmtMonthYear(point.date))}</strong></div>
           ${rows}
+          ${extraRows}
         `;
         lastIndex = index;
         tooltip.style.left = "-9999px";
@@ -1018,6 +1041,14 @@
     "MoM Shock": "月度冲击",
     "M2 Level": "M2总量",
     "M2 Money Supply": "M2货币供应",
+    "M2 YoY Growth": "M2同比增长",
+    "M2 3M Change": "M2三个月变化",
+    "M2 MoM Shock Events": "M2月度冲击事件",
+    "Shock Signal": "冲击信号",
+    "Extreme Injection": "极端注入",
+    "Strong Injection": "较强注入",
+    "Strong Contraction": "较强收缩",
+    "Extreme Contraction": "极端收缩",
   };
 
   function zhLabel(label) {
@@ -1271,11 +1302,58 @@
         </div>
       ` : ""}
     `;
+    section.querySelectorAll("[data-growth-cycle-detail-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.selectedGrowthCycleDetailId = state.selectedGrowthCycleDetailId === button.dataset.growthCycleDetailId
+          ? null
+          : button.dataset.growthCycleDetailId;
+        state.selectedBenchmarkId = null;
+        state.selectedRelationshipId = null;
+        state.selectedRatesDetailId = null;
+        renderOverview();
+        renderGdpRelationshipOverview();
+        renderUsRatesLiquidity();
+        renderGrowthCycle();
+        renderDetailPanel();
+      });
+    });
+  }
+
+  async function loadGrowthCycleDetail(detailId) {
+    if (state.growthCycleDetailsById[detailId]) {
+      return state.growthCycleDetailsById[detailId];
+    }
+    const response = await fetch(`/api/macro-dashboard/growth-cycle/${encodeURIComponent(detailId)}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    state.growthCycleDetailsById[detailId] = payload;
+    return payload;
+  }
+
+  function renderGrowthCycleDetailInPanel(body) {
+    const detailId = state.selectedGrowthCycleDetailId;
+    if (!detailId) return;
+    body.innerHTML = `<p class="status">Loading growth cycle detail...</p>`;
+    loadGrowthCycleDetail(detailId)
+      .then((payload) => {
+        if (state.selectedGrowthCycleDetailId !== payload.detail_id) return;
+        body.innerHTML = `
+          <div class="relationship-chart-grid">
+            ${payload.charts.map((chart, index) => renderRatesDetailChart(chart, index)).join("")}
+          </div>
+        `;
+        attachRatesChartTooltips(body, payload.charts);
+      })
+      .catch((error) => {
+        if (state.selectedGrowthCycleDetailId !== detailId) return;
+        body.innerHTML = `<p class="status">Failed to load growth cycle detail.</p>`;
+        console.error(error);
+      });
   }
 
   function renderM2MoneySupplyCard(card) {
     return `
-      <article class="m2-card m2-card-${escapeHtml(card.status || "missing")}">
+      <button class="m2-card m2-card-button m2-card-${escapeHtml(card.status || "missing")}${state.selectedGrowthCycleDetailId === card.id ? " selected" : ""}" type="button" data-growth-cycle-detail-id="${escapeHtml(card.id)}">
         <div class="m2-card-head">
           <strong>${escapeHtml(card.status_label || "Missing")}</strong>
         </div>
@@ -1300,7 +1378,7 @@
           <span>${bilingualLabel("M2 Level")}</span>
           <strong>$${escapeHtml(fmtNumber(card.state?.m2_money_stock))}B</strong>
         </div>
-      </article>
+      </button>
     `;
   }
 
@@ -1333,6 +1411,7 @@
   }
 
   function renderRatesTimeSeriesChart(chart) {
+    const valueFormatter = chart.unit === "raw" ? fmtNumber : fmtRate;
     return renderRelationshipLineChart(
       bilingualTitle(chart.title),
       chart.series || [],
@@ -1341,7 +1420,7 @@
       {
         wide: true,
         rawTitle: true,
-        valueFormatter: fmtRate,
+        valueFormatter,
         yDomain: chart.y_domain,
       }
     );
@@ -1759,6 +1838,7 @@
         );
         return;
       }
+      const valueFormatter = chart.unit === "raw" ? fmtNumber : fmtRate;
       attachRelationshipChartTooltip(
         wrap.querySelector(".relationship-chart-svg"),
         wrap.querySelector(".chart-tooltip"),
@@ -1767,7 +1847,7 @@
           : chart.series || [],
         chart.keys || ["value"],
         chart.labels || { value: "Value" },
-        { valueFormatter: fmtRate }
+        { valueFormatter, tooltipExtra: chart.tooltip_extra }
       );
     });
   }

@@ -477,6 +477,24 @@ h2 {
   box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
 }
 
+.m2-card-button {
+  appearance: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.m2-card-button:hover {
+  border-color: #3B3530;
+  box-shadow: 0 2px 8px rgba(59, 53, 48, 0.08);
+}
+
+.m2-card.selected {
+  border-color: #5D7FA8;
+  box-shadow: 0 0 0 2px rgba(93, 127, 168, 0.18), 0 2px 8px rgba(93, 127, 168, 0.08);
+}
+
 .m2-card-head {
   align-items: flex-start;
   display: flex;

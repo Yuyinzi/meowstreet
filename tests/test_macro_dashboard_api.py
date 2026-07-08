@@ -738,7 +738,56 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
     assert payload["missing"] is None
 
 
-def test_growth_cycle_api_returns_missing_payload_when_m2_db_rows_are_missing(monkeypatch):
+def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):
+    from app import api
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    rows = [
+        {"date": "2025-01-01", "value": 100.0, "source": "m2.xlsx"},
+        {"date": "2025-02-01", "value": 101.0, "source": "m2.xlsx"},
+        {"date": "2025-03-01", "value": 102.0, "source": "m2.xlsx"},
+        {"date": "2025-04-01", "value": 103.0, "source": "m2.xlsx"},
+        {"date": "2025-05-01", "value": 104.0, "source": "m2.xlsx"},
+        {"date": "2025-06-01", "value": 105.0, "source": "m2.xlsx"},
+        {"date": "2025-07-01", "value": 106.0, "source": "m2.xlsx"},
+        {"date": "2025-08-01", "value": 107.0, "source": "m2.xlsx"},
+        {"date": "2025-09-01", "value": 108.0, "source": "m2.xlsx"},
+        {"date": "2025-10-01", "value": 109.0, "source": "m2.xlsx"},
+        {"date": "2025-11-01", "value": 110.0, "source": "m2.xlsx"},
+        {"date": "2025-12-01", "value": 111.0, "source": "m2.xlsx"},
+        {"date": "2026-01-01", "value": 125.0, "source": "m2.xlsx"},
+    ]
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: rows,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle/m2_money_supply")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["detail_id"] == "m2_money_supply"
+    assert payload["title"] == "M2 Money Supply"
+    assert len(payload["charts"]) == 3
+    assert payload["charts"][0]["kind"] == "time_series"
+
+
+def test_growth_cycle_detail_api_rejects_unknown_detail():
+    response = client.get("/api/macro-dashboard/growth-cycle/unknown")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "growth cycle detail is unknown: unknown"
+
+
+def test_growth_cycle_api_returns_missing_payload_when_m2_db_rows_are_missing(
+    monkeypatch,
+):
     from app import api
 
     class FakeCon:

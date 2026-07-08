@@ -315,8 +315,10 @@ def test_fetch_growth_cycle_dashboard_uses_injected_fetchers():
 
 def test_growth_cycle_bias_is_neutral_when_only_one_survey_expands():
     growth_cycle = {
-        "ism_pmi": 51.0, "ism_new_orders": 52.0,
-        "services_pmi": 49.0, "services_business_activity": 48.0,
+        "ism_pmi": 51.0,
+        "ism_new_orders": 52.0,
+        "services_pmi": 49.0,
+        "services_business_activity": 48.0,
         "labor_trend": "stable",
     }
     result = macro_growth_cycle.compute_growth_cycle_bias(growth_cycle)
@@ -377,6 +379,67 @@ def test_normalize_m2_computes_three_month_momentum():
     assert round(growth_cycle["m2_3m_momentum"], 4) == 0.1204
 
 
+def test_build_m2_money_supply_detail_payload_returns_three_chart_series():
+    rows = [
+        {"date": "2025-01-01", "value": 100.0, "source": "m2.xlsx"},
+        {"date": "2025-02-01", "value": 101.0, "source": "m2.xlsx"},
+        {"date": "2025-03-01", "value": 102.0, "source": "m2.xlsx"},
+        {"date": "2025-04-01", "value": 103.0, "source": "m2.xlsx"},
+        {"date": "2025-05-01", "value": 104.0, "source": "m2.xlsx"},
+        {"date": "2025-06-01", "value": 105.0, "source": "m2.xlsx"},
+        {"date": "2025-07-01", "value": 106.0, "source": "m2.xlsx"},
+        {"date": "2025-08-01", "value": 107.0, "source": "m2.xlsx"},
+        {"date": "2025-09-01", "value": 108.0, "source": "m2.xlsx"},
+        {"date": "2025-10-01", "value": 109.0, "source": "m2.xlsx"},
+        {"date": "2025-11-01", "value": 110.0, "source": "m2.xlsx"},
+        {"date": "2025-12-01", "value": 111.0, "source": "m2.xlsx"},
+        {"date": "2026-01-01", "value": 125.0, "source": "m2.xlsx"},
+    ]
+
+    payload = macro_growth_cycle.build_m2_money_supply_detail_payload(rows)
+
+    assert payload["detail_id"] == "m2_money_supply"
+    assert payload["title"] == "M2 Money Supply"
+    assert payload["source"] == "m2.xlsx"
+    assert [chart["title"] for chart in payload["charts"]] == [
+        "M2 YoY Growth",
+        "M2 3M Change",
+        "M2 MoM Shock Events",
+    ]
+    assert payload["charts"][0]["series"] == [
+        {"date": "2026-01-01", "value": 25.0},
+    ]
+    assert round(payload["charts"][1]["series"][-1]["value"], 4) == 14.6789
+    assert payload["charts"][2]["series"][-1] == {
+        "date": "2026-01-01",
+        "value": 2,
+        "mom_growth": 12.6126,
+        "percentile": 100.0,
+        "signal": "extreme_injection",
+    }
+
+
+def test_build_m2_money_supply_detail_payload_handles_short_history():
+    rows = [
+        {"date": "2026-01-01", "value": 100.0, "source": "m2.xlsx"},
+        {"date": "2026-02-01", "value": 102.0, "source": "m2.xlsx"},
+    ]
+
+    payload = macro_growth_cycle.build_m2_money_supply_detail_payload(rows)
+
+    assert payload["charts"][0]["series"] == []
+    assert payload["charts"][1]["series"] == []
+    assert payload["charts"][2]["series"] == [
+        {
+            "date": "2026-02-01",
+            "value": 2,
+            "mom_growth": 2.0,
+            "percentile": 100.0,
+            "signal": "extreme_injection",
+        }
+    ]
+
+
 def test_build_m2_money_supply_headline_groups_state_change_and_shock():
     growth_cycle = {
         "m2_period": "2026-06-01",
@@ -429,15 +492,67 @@ def test_build_growth_cycle_dashboard_payload_wraps_headline():
     assert result["missing"] is None
 
 
-@pytest.mark.parametrize("growth_cycle,expected", [
-    ({"m2_yoy_pct_change": 0.05, "m2_3m_momentum": 0.02, "m2_mom_percent_rank": 0.50}, "expanding"),
-    ({"m2_yoy_pct_change": -0.02, "m2_3m_momentum": -0.01, "m2_mom_percent_rank": 0.50}, "contracting"),
-    ({"m2_yoy_pct_change": 0.05, "m2_3m_momentum": -0.01, "m2_mom_percent_rank": 0.50}, "contracting"),
-    ({"m2_yoy_pct_change": 0.05, "m2_3m_momentum": 0.02, "m2_mom_percent_rank": 0.96}, "shock"),
-    ({"m2_yoy_pct_change": 0.05, "m2_3m_momentum": 0.02, "m2_mom_percent_rank": 0.04}, "shock"),
-    ({"m2_yoy_pct_change": 0.05, "m2_3m_momentum": 0.00, "m2_mom_percent_rank": 0.50}, "mixed"),
-    ({"m2_yoy_pct_change": None, "m2_3m_momentum": 0.02, "m2_mom_percent_rank": 0.50}, "missing"),
-    ({}, "missing"),
-])
+@pytest.mark.parametrize(
+    "growth_cycle,expected",
+    [
+        (
+            {
+                "m2_yoy_pct_change": 0.05,
+                "m2_3m_momentum": 0.02,
+                "m2_mom_percent_rank": 0.50,
+            },
+            "expanding",
+        ),
+        (
+            {
+                "m2_yoy_pct_change": -0.02,
+                "m2_3m_momentum": -0.01,
+                "m2_mom_percent_rank": 0.50,
+            },
+            "contracting",
+        ),
+        (
+            {
+                "m2_yoy_pct_change": 0.05,
+                "m2_3m_momentum": -0.01,
+                "m2_mom_percent_rank": 0.50,
+            },
+            "contracting",
+        ),
+        (
+            {
+                "m2_yoy_pct_change": 0.05,
+                "m2_3m_momentum": 0.02,
+                "m2_mom_percent_rank": 0.96,
+            },
+            "shock",
+        ),
+        (
+            {
+                "m2_yoy_pct_change": 0.05,
+                "m2_3m_momentum": 0.02,
+                "m2_mom_percent_rank": 0.04,
+            },
+            "shock",
+        ),
+        (
+            {
+                "m2_yoy_pct_change": 0.05,
+                "m2_3m_momentum": 0.00,
+                "m2_mom_percent_rank": 0.50,
+            },
+            "mixed",
+        ),
+        (
+            {
+                "m2_yoy_pct_change": None,
+                "m2_3m_momentum": 0.02,
+                "m2_mom_percent_rank": 0.50,
+            },
+            "missing",
+        ),
+        ({}, "missing"),
+    ],
+)
 def test_m2_status_classification(growth_cycle, expected):
     assert macro_growth_cycle._m2_status(growth_cycle) == expected
