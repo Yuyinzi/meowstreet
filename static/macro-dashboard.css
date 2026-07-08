@@ -470,10 +470,11 @@ h2 {
 }
 
 .m2-card {
-  background: #fffaf5;
-  border: 1px solid #eadfd4;
-  border-radius: 8px;
+  background: #FFFFFF;
+  border: 1px solid #E0D6C8;
+  border-radius: 10px;
   padding: 16px;
+  box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
 }
 
 .m2-card-head {
@@ -528,7 +529,7 @@ h2 {
 }
 
 .m2-metric-band > div {
-  border-left: 1px solid #eadfd4;
+  border-left: 1px solid #E0D6C8;
   padding-left: 10px;
 }
 
@@ -546,6 +547,11 @@ h2 {
   text-transform: none;
 }
 
+.m2-metric-band small span {
+  display: block;
+  margin-top: 2px;
+}
+
 .m2-metric-band strong {
   display: block;
   font-size: 20px;
@@ -555,6 +561,38 @@ h2 {
 
 .m2-card-context {
   margin: 12px 0 0;
+}
+
+.m2-level-row {
+  align-items: center;
+  background: #F7F1EA;
+  border: 1px solid #E0D6C8;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+}
+
+.m2-level-row span {
+  color: #5d5148;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.m2-level-row span small {
+  display: block;
+  font-weight: 500;
+  text-transform: none;
+}
+
+.m2-level-row strong {
+  color: #2f2924;
+  font-size: 18px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .rates-loading,

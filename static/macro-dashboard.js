@@ -862,9 +862,41 @@
     return `${(Number(value) * 100).toFixed(2)}%`;
   }
 
+  function trendArrow(value) {
+    if (value === null || value === undefined) return "";
+    const numericValue = Number(value);
+    if (numericValue > 0) return "↑ ";
+    if (numericValue < 0) return "↓ ";
+    return "→ ";
+  }
+
+  function fmtSignedPctDecimal(value) {
+    if (value === null || value === undefined) return "n/a";
+    const numericValue = Number(value);
+    const sign = numericValue > 0 ? "+" : "";
+    return `${sign}${(numericValue * 100).toFixed(2)}%`;
+  }
+
+  function fmtDirectionalPct(value) {
+    if (value === null || value === undefined) return "n/a";
+    return `${trendArrow(value)}${fmtSignedPctDecimal(value)}`;
+  }
+
   function fmtPercentRank(value) {
     if (value === null || value === undefined) return "n/a";
-    return `${Math.round(Number(value) * 100)}th`;
+    const rank = Math.round(Number(value) * 100);
+    const lastTwoDigits = rank % 100;
+    if (lastTwoDigits >= 11 && lastTwoDigits <= 13) return `${rank}th`;
+    const lastDigit = rank % 10;
+    if (lastDigit === 1) return `${rank}st`;
+    if (lastDigit === 2) return `${rank}nd`;
+    if (lastDigit === 3) return `${rank}rd`;
+    return `${rank}th`;
+  }
+
+  function fmtDirectionalPercentRank(value, directionValue) {
+    if (value === null || value === undefined) return "n/a";
+    return `${trendArrow(directionValue)}${fmtPercentRank(value)}`;
   }
 
   const ZH_LABELS = {
@@ -981,6 +1013,10 @@
     "State": "状态",
     "Change": "变化",
     "Shock": "冲击",
+    "YoY Growth": "同比增长",
+    "3M Change": "3个月变化",
+    "MoM Shock": "月度冲击",
+    "M2 Level": "M2总量",
     "M2 Money Supply": "M2货币供应",
   };
 
@@ -1214,12 +1250,26 @@
       section.innerHTML = `${head.outerHTML}<p class="growth-empty">${escapeHtml(state.growthCycle.missing)}</p>`;
       return;
     }
+    const pill = head.querySelector(".mock-pill");
+    const period = state.growthCycle.headline?.[0]?.period;
+    pill.textContent = period ? `As of ${fmtDate(period)}` : "Import needed";
     const cards = state.growthCycle.headline || [];
     section.innerHTML = `
       ${head.outerHTML}
-      <div class="growth-grid">
-        ${cards.map(renderM2MoneySupplyCard).join("")}
-      </div>
+      ${cards.length ? `
+        <div class="rates-detail gdp-detail">
+          <div class="rates-chart-subtitle">
+            <div class="credit-conditions-head">
+              <p class="eyebrow">${bilingualLabel("M2 Money Supply")}</p>
+              ${period ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDate(period))}</span>` : ""}
+            </div>
+            <p>Money supply expansion and monetary base trends.<br><small>货币供应扩张和基础货币趋势</small></p>
+          </div>
+          <div class="growth-grid">
+            ${cards.map(renderM2MoneySupplyCard).join("")}
+          </div>
+        </div>
+      ` : ""}
     `;
   }
 
@@ -1227,30 +1277,29 @@
     return `
       <article class="m2-card m2-card-${escapeHtml(card.status || "missing")}">
         <div class="m2-card-head">
-          <div>
-            <h3>${escapeHtml(card.label || "M2 Money Supply")}</h3>
-            <span>${escapeHtml(card.period || "n/a")}</span>
-          </div>
           <strong>${escapeHtml(card.status_label || "Missing")}</strong>
         </div>
         <div class="m2-metric-band">
           <div>
-            <span>${bilingualLabel("State")}</span>
-            <strong>${escapeHtml(fmtPctDecimal(card.state?.m2_yoy_pct_change))}</strong>
-            <small>YoY · ${escapeHtml(fmtPercentRank(card.state?.m2_yoy_percent_rank))} percentile</small>
+            <span>${bilingualLabel("YoY Growth")}</span>
+            <strong>${escapeHtml(fmtDirectionalPct(card.state?.m2_yoy_pct_change))}</strong>
+            <small>vs same month last year · ${escapeHtml(fmtPercentRank(card.state?.m2_yoy_percent_rank))} percentile<span>较去年同月 · ${escapeHtml(fmtPercentRank(card.state?.m2_yoy_percent_rank))}分位</span></small>
           </div>
           <div>
-            <span>${bilingualLabel("Change")}</span>
-            <strong>${escapeHtml(fmtPctDecimal(card.change?.m2_3m_momentum))}</strong>
-            <small>3M momentum</small>
+            <span>${bilingualLabel("3M Change")}</span>
+            <strong>${escapeHtml(fmtDirectionalPct(card.change?.m2_3m_momentum))}</strong>
+            <small>latest level vs 3 months ago<span>最新水平较3个月前</span></small>
           </div>
           <div>
-            <span>${bilingualLabel("Shock")}</span>
-            <strong>${escapeHtml(fmtPercentRank(card.shock?.m2_mom_percent_rank))}</strong>
-            <small>MoM percentile · ${escapeHtml(fmtPctDecimal(card.shock?.m2_mom_pct_change))}</small>
+            <span>${bilingualLabel("MoM Shock")}</span>
+            <strong>${escapeHtml(fmtDirectionalPercentRank(card.shock?.m2_mom_percent_rank, card.shock?.m2_mom_pct_change))} percentile</strong>
+            <small>latest MoM growth ${escapeHtml(fmtSignedPctDecimal(card.shock?.m2_mom_pct_change))}<span>最新月环比增长 ${escapeHtml(fmtSignedPctDecimal(card.shock?.m2_mom_pct_change))}</span></small>
           </div>
         </div>
-        <p class="m2-card-context">Level: ${escapeHtml(fmtNumber(card.state?.m2_money_stock))}B</p>
+        <div class="m2-level-row">
+          <span>${bilingualLabel("M2 Level")}</span>
+          <strong>$${escapeHtml(fmtNumber(card.state?.m2_money_stock))}B</strong>
+        </div>
       </article>
     `;
   }

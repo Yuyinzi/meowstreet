@@ -648,9 +648,18 @@ def test_macro_dashboard_js_fetches_and_renders_growth_cycle_m2_card():
     assert "state.growthCycle" in js
     assert "renderGrowthCycle" in js
     assert "renderM2MoneySupplyCard" in js
-    assert "State" in js
-    assert "Change" in js
-    assert "Shock" in js
+    assert "YoY Growth" in js
+    assert "3M Change" in js
+    assert "MoM Shock" in js
+    assert "fmtDirectionalPct" in js
+    assert "fmtDirectionalPercentRank" in js
+    assert "vs same month last year" in js
+    assert "较去年同月" in js
+    assert "latest level vs 3 months ago" in js
+    assert "最新水平较3个月前" in js
+    assert "最新月环比增长" in js
+    assert "M2 Level" in js
+    assert "M2总量" in js
     assert "M2 Money Supply" in js
     assert "P06" not in js
 
@@ -661,3 +670,4 @@ def test_macro_dashboard_css_has_growth_cycle_card_styles():
     assert ".growth-cycle" in css
     assert ".m2-card" in css
     assert ".m2-metric-band" in css
+    assert ".m2-level-row" in css
