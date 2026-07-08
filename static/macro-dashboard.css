@@ -451,6 +451,112 @@ h2 {
   margin: 22px 0 24px;
 }
 
+.growth-cycle {
+  margin-top: 24px;
+}
+
+.growth-loading,
+.growth-empty {
+  color: #8B7E74;
+  font-size: 14px;
+  margin: 12px 0 0;
+}
+
+.growth-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.m2-card {
+  background: #fffaf5;
+  border: 1px solid #eadfd4;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.m2-card-head {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.m2-card-head h3 {
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.m2-card-head span,
+.m2-card-context,
+.m2-metric-band small {
+  color: #8B7E74;
+  font-size: 12px;
+}
+
+.m2-card-head strong {
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.m2-card-expanding .m2-card-head strong {
+  background: #e7f4ed;
+  color: #217044;
+}
+
+.m2-card-contracting .m2-card-head strong,
+.m2-card-shock .m2-card-head strong {
+  background: #fae8e5;
+  color: #a13d2d;
+}
+
+.m2-card-mixed .m2-card-head strong,
+.m2-card-missing .m2-card-head strong {
+  background: #f3eee8;
+  color: #6f6258;
+}
+
+.m2-metric-band {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.m2-metric-band > div {
+  border-left: 1px solid #eadfd4;
+  padding-left: 10px;
+}
+
+.m2-metric-band span {
+  color: #5d5148;
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.m2-metric-band span small {
+  display: block;
+  font-weight: 500;
+  text-transform: none;
+}
+
+.m2-metric-band strong {
+  display: block;
+  font-size: 20px;
+  line-height: 1.2;
+  margin-top: 5px;
+}
+
+.m2-card-context {
+  margin: 12px 0 0;
+}
+
 .rates-loading,
 .rates-empty {
   border: 1px dashed rgba(54, 42, 29, 0.25);
@@ -1870,5 +1976,9 @@ h2 {
     border-radius: 12px 12px 0 0;
     max-height: none;
     position: static;
+  }
+
+  .m2-metric-band {
+    grid-template-columns: 1fr;
   }
 }

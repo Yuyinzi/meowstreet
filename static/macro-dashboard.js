@@ -10,6 +10,8 @@
     usRatesLiquidityError: null,
     selectedRatesDetailId: null,
     usRatesDetailsById: {},
+    growthCycle: null,
+    growthCycleError: null,
     selectedNominalCurrentDate: null,
     selectedNominalComparisonDate: null,
     selectedRealCurrentDate: null,
@@ -855,6 +857,16 @@
     return Number(value).toFixed(2);
   }
 
+  function fmtPctDecimal(value) {
+    if (value === null || value === undefined) return "n/a";
+    return `${(Number(value) * 100).toFixed(2)}%`;
+  }
+
+  function fmtPercentRank(value) {
+    if (value === null || value === undefined) return "n/a";
+    return `${Math.round(Number(value) * 100)}th`;
+  }
+
   const ZH_LABELS = {
     // US Rates
     "10-Year Treasury": "10年期国债",
@@ -965,6 +977,11 @@
     "Accelerating Up": "加速上升",
     "Accelerating Down": "加速下降",
     "No Acceleration": "未加速",
+    // Growth Cycle
+    "State": "状态",
+    "Change": "变化",
+    "Shock": "冲击",
+    "M2 Money Supply": "M2货币供应",
   };
 
   function zhLabel(label) {
@@ -1166,6 +1183,76 @@
         renderDetailPanel();
       });
     });
+  }
+
+  async function loadGrowthCycle() {
+    try {
+      const response = await fetch("/api/macro-dashboard/growth-cycle");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      state.growthCycle = await response.json();
+      state.growthCycleError = null;
+    } catch (error) {
+      state.growthCycle = null;
+      state.growthCycleError = error.message;
+    }
+    renderGrowthCycle();
+  }
+
+  function renderGrowthCycle() {
+    const section = $("growthCycle");
+    if (!section) return;
+    const head = section.querySelector(".relationship-head");
+    if (state.growthCycleError) {
+      section.innerHTML = `${head.outerHTML}<p class="growth-empty">Failed to load growth cycle data.</p>`;
+      return;
+    }
+    if (!state.growthCycle) {
+      section.innerHTML = `${head.outerHTML}<div class="growth-loading">Loading growth cycle data...</div>`;
+      return;
+    }
+    if (state.growthCycle.missing) {
+      section.innerHTML = `${head.outerHTML}<p class="growth-empty">${escapeHtml(state.growthCycle.missing)}</p>`;
+      return;
+    }
+    const cards = state.growthCycle.headline || [];
+    section.innerHTML = `
+      ${head.outerHTML}
+      <div class="growth-grid">
+        ${cards.map(renderM2MoneySupplyCard).join("")}
+      </div>
+    `;
+  }
+
+  function renderM2MoneySupplyCard(card) {
+    return `
+      <article class="m2-card m2-card-${escapeHtml(card.status || "missing")}">
+        <div class="m2-card-head">
+          <div>
+            <h3>${escapeHtml(card.label || "M2 Money Supply")}</h3>
+            <span>${escapeHtml(card.period || "n/a")}</span>
+          </div>
+          <strong>${escapeHtml(card.status_label || "Missing")}</strong>
+        </div>
+        <div class="m2-metric-band">
+          <div>
+            <span>${bilingualLabel("State")}</span>
+            <strong>${escapeHtml(fmtPctDecimal(card.state?.m2_yoy_pct_change))}</strong>
+            <small>YoY · ${escapeHtml(fmtPercentRank(card.state?.m2_yoy_percent_rank))} percentile</small>
+          </div>
+          <div>
+            <span>${bilingualLabel("Change")}</span>
+            <strong>${escapeHtml(fmtPctDecimal(card.change?.m2_3m_momentum))}</strong>
+            <small>3M momentum</small>
+          </div>
+          <div>
+            <span>${bilingualLabel("Shock")}</span>
+            <strong>${escapeHtml(fmtPercentRank(card.shock?.m2_mom_percent_rank))}</strong>
+            <small>MoM percentile · ${escapeHtml(fmtPctDecimal(card.shock?.m2_mom_pct_change))}</small>
+          </div>
+        </div>
+        <p class="m2-card-context">Level: ${escapeHtml(fmtNumber(card.state?.m2_money_stock))}B</p>
+      </article>
+    `;
   }
 
   function bilingualTitle(title) {
@@ -2039,6 +2126,8 @@
       yAxisTicks,
     };
   }
+
+  loadGrowthCycle();
 
   loadDashboard().catch((error) => {
     $("dashboardStatus").textContent = "Failed to load market phase data.";

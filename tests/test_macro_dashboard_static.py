@@ -639,3 +639,25 @@ def test_macro_dashboard_css_contains_credit_interpretation_styles():
     assert ".credit-interpretation-weak-credit-warning" in css
     assert ".credit-interpretation-risk-rising" in css
     assert ".credit-interpretation-crisis-stress" in css
+
+
+def test_macro_dashboard_js_fetches_and_renders_growth_cycle_m2_card():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert 'fetch("/api/macro-dashboard/growth-cycle")' in js
+    assert "state.growthCycle" in js
+    assert "renderGrowthCycle" in js
+    assert "renderM2MoneySupplyCard" in js
+    assert "State" in js
+    assert "Change" in js
+    assert "Shock" in js
+    assert "M2 Money Supply" in js
+    assert "P06" not in js
+
+
+def test_macro_dashboard_css_has_growth_cycle_card_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".growth-cycle" in css
+    assert ".m2-card" in css
+    assert ".m2-metric-band" in css
