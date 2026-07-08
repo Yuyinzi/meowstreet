@@ -188,3 +188,42 @@ def test_merge_macro_indicator_points_replaces_matching_dates(tmp_path):
     assert loaded == [
         {"date": "2023-10-02", "value": 11.75, "source": "BAMLH0A3HYCEY.csv"}
     ]
+
+
+def test_replace_credit_ai_interpretation_loads_latest_by_scope(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    row = {
+        "scope": "us_credit_conditions",
+        "as_of": "2026-07-06",
+        "snapshot_hash": "abc123",
+        "prompt_version": "credit-cat-v1",
+        "model": "gpt-4.1-mini",
+        "tone": "trader_cat",
+        "status": "risk_rising",
+        "text_en": "Risk is rising. The cat keeps one paw on the exit.",
+        "text_zh": "信用风险上升。交易猫把一只爪子放在出口旁。",
+        "metrics_json": '{"status":"risk_rising"}',
+        "generated_at": "2026-07-08T10:30:00Z",
+    }
+
+    saved = us_rates_liquidity.replace_ai_interpretation(con, row)
+    loaded = us_rates_liquidity.load_ai_interpretation(
+        con,
+        "us_credit_conditions",
+        "abc123",
+    )
+
+    assert saved == {"interpretations": 1}
+    assert loaded == row
+
+
+def test_load_ai_interpretation_returns_none_for_missing_snapshot(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+
+    loaded = us_rates_liquidity.load_ai_interpretation(
+        con,
+        "us_credit_conditions",
+        "missing",
+    )
+
+    assert loaded is None

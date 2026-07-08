@@ -50,6 +50,22 @@ def connect(db_path=DEFAULT_DB_PATH):
         );
         create index if not exists idx_macro_indicator_points_series_date
         on macro_indicator_points(series_id, date);
+        create table if not exists macro_ai_interpretations (
+            scope text not null,
+            snapshot_hash text not null,
+            as_of text,
+            prompt_version text not null,
+            model text not null,
+            tone text not null,
+            status text not null,
+            text_en text not null,
+            text_zh text not null,
+            metrics_json text not null,
+            generated_at text not null,
+            primary key(scope, snapshot_hash)
+        );
+        create index if not exists idx_macro_ai_interpretations_scope_generated
+        on macro_ai_interpretations(scope, generated_at);
         """
     )
     return con
@@ -252,3 +268,52 @@ def load_macro_indicator_points_for_series(con, series_ids):
         series_id: load_macro_indicator_points(con, series_id)
         for series_id in normalized_ids
     }
+
+
+def replace_ai_interpretation(con, row):
+    con.execute(
+        """
+        insert into macro_ai_interpretations(
+            scope, snapshot_hash, as_of, prompt_version, model, tone, status,
+            text_en, text_zh, metrics_json, generated_at
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        on conflict(scope, snapshot_hash) do update set
+            as_of = excluded.as_of,
+            prompt_version = excluded.prompt_version,
+            model = excluded.model,
+            tone = excluded.tone,
+            status = excluded.status,
+            text_en = excluded.text_en,
+            text_zh = excluded.text_zh,
+            metrics_json = excluded.metrics_json,
+            generated_at = excluded.generated_at
+        """,
+        (
+            row["scope"],
+            row["snapshot_hash"],
+            row.get("as_of"),
+            row["prompt_version"],
+            row["model"],
+            row["tone"],
+            row["status"],
+            row["text_en"],
+            row["text_zh"],
+            row["metrics_json"],
+            row["generated_at"],
+        ),
+    )
+    con.commit()
+    return {"interpretations": 1}
+
+
+def load_ai_interpretation(con, scope, snapshot_hash):
+    rows = con.execute(
+        """
+        select scope, as_of, snapshot_hash, prompt_version, model, tone, status,
+               text_en, text_zh, metrics_json, generated_at
+        from macro_ai_interpretations
+        where scope = ? and snapshot_hash = ?
+        """,
+        (scope, snapshot_hash),
+    ).fetchall()
+    return dict(rows[0]) if rows else None
