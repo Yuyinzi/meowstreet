@@ -1146,7 +1146,7 @@
     section.innerHTML = `
       <div class="relationship-head">
         <div>
-          <h2>US Rates / Liquidity</h2>
+          <h2>US Rates & Credit</h2>
         </div>
         <span class="mock-pill">${escapeHtml(payload.as_of ? `As of ${fmtDate(payload.as_of)}` : "Import needed")}</span>
       </div>
