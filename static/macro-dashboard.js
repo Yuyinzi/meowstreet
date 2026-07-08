@@ -212,7 +212,6 @@
           <div class="relationship-chart-grid">
             ${payload.charts.map((chart, index) => renderRatesDetailChart(chart, index)).join("")}
           </div>
-          ${renderMacroAiInterpretation(payload.m2_ai_interpretation, "M2 Liquidity Read", "M2流动性解读")}
         `;
           bindRatesCurveControls(body, "yield_curve");
           attachRatesChartTooltips(body, payload.charts);
@@ -1342,6 +1341,7 @@
           <div class="relationship-chart-grid">
             ${payload.charts.map((chart, index) => renderRatesDetailChart(chart, index)).join("")}
           </div>
+          ${renderMacroAiInterpretation(payload.m2_ai_interpretation, "M2 Liquidity Read", "M2流动性解读")}
         `;
         attachRatesChartTooltips(body, payload.charts);
       })
