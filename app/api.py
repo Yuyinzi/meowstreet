@@ -188,7 +188,7 @@ def macro_dashboard_us_rates_liquidity():
                 ["aaa_corporate_yield", "bbb_corporate_yield", "ccc_corporate_yield"],
             )
         )
-        return us_rates_liquidity.build_dashboard_payload(
+        payload = us_rates_liquidity.build_dashboard_payload(
             us_rates_liquidity_db.load_rate_series(con),
             latest_points,
             latest_macro,
@@ -196,6 +196,17 @@ def macro_dashboard_us_rates_liquidity():
             credit_macro_points=credit_macro_points,
             credit_macro_series_points=credit_macro_points,
         )
+        snapshot = payload.get("credit_interpretation_snapshot", {})
+        payload["credit_ai_interpretation"] = (
+            us_rates_liquidity_db.load_ai_interpretation(
+                con,
+                snapshot.get("scope"),
+                snapshot.get("hash"),
+            )
+            if snapshot.get("scope") and snapshot.get("hash")
+            else None
+        )
+        return payload
     finally:
         con.close()
 

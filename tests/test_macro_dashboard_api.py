@@ -437,6 +437,22 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
             }
         return {}
 
+    def fake_load_ai_interpretation(con, scope, snapshot_hash):
+        assert scope == "us_credit_conditions"
+        return {
+            "scope": scope,
+            "snapshot_hash": snapshot_hash,
+            "as_of": "2026-07-06",
+            "prompt_version": "credit-cat-v1",
+            "model": "gpt-4.1-mini",
+            "tone": "trader_cat",
+            "status": "risk_rising",
+            "text_en": "Credit risk is rising. BBB is calm, but CCC-BBB is hissing.",
+            "text_zh": "信用风险正在上升。BBB还平静，但CCC-BBB已经在发出警告。",
+            "metrics_json": "{}",
+            "generated_at": "2026-07-08T10:30:00Z",
+        }
+
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
     monkeypatch.setattr(
         api.us_rates_liquidity_db, "load_rate_series", fake_load_rate_series
@@ -459,6 +475,11 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
         "load_macro_indicator_points_for_series",
         fake_load_macro_indicator_points_for_series,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_ai_interpretation",
+        fake_load_ai_interpretation,
+    )
 
     response = client.get("/api/macro-dashboard/us-rates-liquidity")
 
@@ -470,6 +491,8 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
     assert payload["credit_coverage"]["has_gap"] is True
     assert payload["credit_coverage"]["gap_start"] == "2021-01-08"
     assert payload["credit_coverage"]["gap_end"] == "2023-07-09"
+    assert payload["credit_ai_interpretation"]["tone"] == "trader_cat"
+    assert "BBB is calm" in payload["credit_ai_interpretation"]["text_en"]
 
 
 def test_us_rates_liquidity_detail_api_returns_two_charts(monkeypatch):
