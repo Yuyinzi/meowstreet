@@ -647,6 +647,35 @@ def m2_interpretation_snapshot(headline, detail_payload):
     return {**payload, "hash": hashlib.sha256(encoded.encode("utf-8")).hexdigest()}
 
 
+def m2_fallback_interpretation(headline):
+    status = headline.get("status", "missing")
+    fallbacks = {
+        "expanding": {
+            "text_en": "M2 liquidity state is expanding, serving as a confirmation tailwind. Run the M2 AI generator for a detailed CaiCai explanation.",
+            "text_zh": "M2流动性环境处于扩张状态，可作为确认性顺风。运行M2 AI生成器获取详细的财财解读。",
+        },
+        "contracting": {
+            "text_en": "M2 liquidity state is contracting, suggesting a cautionary liquidity environment. Run the M2 AI generator for a detailed CaiCai explanation.",
+            "text_zh": "M2流动性环境处于收缩状态，提示需谨慎对待流动性环境。运行M2 AI生成器获取详细的财财解读。",
+        },
+        "shock": {
+            "text_en": "M2 liquidity shows an abnormal monthly shock event. Run the M2 AI generator for a detailed CaiCai explanation.",
+            "text_zh": "M2流动性出现异常月度冲击事件。运行M2 AI生成器获取详细的财财解读。",
+        },
+        "mixed": {
+            "text_en": "M2 liquidity signals are mixed. Run the M2 AI generator for a detailed CaiCai explanation.",
+            "text_zh": "M2流动性信号不一致。运行M2 AI生成器获取详细的财财解读。",
+        },
+    }
+    return fallbacks.get(
+        status,
+        {
+            "text_en": "M2 liquidity interpretation is not yet available. Run scripts/generate_m2_ai_interpretation.py to generate one.",
+            "text_zh": "M2流动性解读尚未生成。运行 scripts/generate_m2_ai_interpretation.py 生成解读。",
+        },
+    )
+
+
 def fetch_m2_money_stock_from_source():
     raise ValueError("m2 money stock source is not configured")
 

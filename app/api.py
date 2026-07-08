@@ -225,6 +225,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 snapshot["scope"],
                 snapshot["hash"],
             )
+            or macro_growth_cycle.m2_fallback_interpretation(m2_headline)
         )
         return detail_payload
     finally:

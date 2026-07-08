@@ -781,6 +781,8 @@ def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):
     assert payload["title"] == "M2 Money Supply"
     assert len(payload["charts"]) == 3
     assert payload["charts"][0]["kind"] == "time_series"
+    assert payload["m2_ai_interpretation"]["text_en"] is not None
+    assert "generator" in payload["m2_ai_interpretation"]["text_en"]
 
 
 def test_growth_cycle_detail_api_rejects_unknown_detail():

@@ -580,7 +580,10 @@ def test_m2_interpretation_snapshot_is_stable_and_hashable():
     detail_payload = {
         "source": "US_M2_Money_Supply_Template.xlsx",
         "charts": [
-            {"title": "M2 YoY Growth", "series": [{"date": "2021-01-01", "value": 25.8}]},
+            {
+                "title": "M2 YoY Growth",
+                "series": [{"date": "2021-01-01", "value": 25.8}],
+            },
             {"title": "M2 3M Change", "series": [{"date": "2021-01-01", "value": 3.4}]},
             {
                 "title": "M2 MoM Shock Events",
@@ -598,7 +601,9 @@ def test_m2_interpretation_snapshot_is_stable_and_hashable():
     }
 
     snapshot = macro_growth_cycle.m2_interpretation_snapshot(headline, detail_payload)
-    same_snapshot = macro_growth_cycle.m2_interpretation_snapshot(headline, detail_payload)
+    same_snapshot = macro_growth_cycle.m2_interpretation_snapshot(
+        headline, detail_payload
+    )
 
     assert snapshot == same_snapshot
     assert snapshot["scope"] == "m2_money_supply"
@@ -614,3 +619,31 @@ def test_m2_interpretation_snapshot_is_stable_and_hashable():
     assert snapshot["latest_shock_event"]["signal"] == "strong_injection"
     assert snapshot["coverage"]["source"] == "US_M2_Money_Supply_Template.xlsx"
     assert len(snapshot["hash"]) == 64
+
+
+def test_m2_fallback_interpretation_returns_bilingual_text_by_status():
+    headline = {"status": "shock"}
+    result = macro_growth_cycle.m2_fallback_interpretation(headline)
+    assert "text_en" in result
+    assert "text_zh" in result
+    assert "shock" in result["text_en"].lower()
+
+    headline = {"status": "expanding"}
+    result = macro_growth_cycle.m2_fallback_interpretation(headline)
+    assert "expanding" in result["text_en"].lower()
+
+    headline = {"status": "contracting"}
+    result = macro_growth_cycle.m2_fallback_interpretation(headline)
+    assert "contracting" in result["text_en"].lower()
+
+    headline = {"status": "mixed"}
+    result = macro_growth_cycle.m2_fallback_interpretation(headline)
+    assert "mixed" in result["text_en"].lower()
+
+    headline = {"status": "missing"}
+    result = macro_growth_cycle.m2_fallback_interpretation(headline)
+    assert "generate" in result["text_en"]
+
+    headline = {}
+    result = macro_growth_cycle.m2_fallback_interpretation(headline)
+    assert "generate" in result["text_en"]
