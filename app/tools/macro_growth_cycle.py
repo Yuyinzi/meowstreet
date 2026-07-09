@@ -148,6 +148,30 @@ GROWTH_CYCLE_DASHBOARD_FIELDS = [
         "kind": "compute",
     },
     {
+        "id": "core_pce_price_index",
+        "title": "Core PCE Price Index",
+        "field": "macro.growth_cycle.core_pce_price_index",
+        "kind": "query",
+    },
+    {
+        "id": "core_pce_yoy",
+        "title": "Core PCE YoY",
+        "field": "macro.growth_cycle.core_pce_yoy",
+        "kind": "compute",
+    },
+    {
+        "id": "inflation_target_gap",
+        "title": "Inflation Target Gap",
+        "field": "macro.growth_cycle.inflation_target_gap",
+        "kind": "compute",
+    },
+    {
+        "id": "inflation_context_status",
+        "title": "Inflation Context",
+        "field": "macro.growth_cycle.inflation_context_status",
+        "kind": "compute",
+    },
+    {
         "id": "initial_jobless_claims",
         "title": "Initial Jobless Claims",
         "field": "macro.growth_cycle.initial_jobless_claims",
@@ -227,6 +251,17 @@ GROWTH_CYCLE_SOURCES = [
         ),
     },
     {
+        "id": "inflation_context",
+        "title": "Inflation Context",
+        "frequency": "monthly",
+        "fields": _dashboard_fields_by_id(
+            "core_pce_price_index",
+            "core_pce_yoy",
+            "inflation_target_gap",
+            "inflation_context_status",
+        ),
+    },
+    {
         "id": "jobless_claims",
         "title": "Jobless Claims",
         "frequency": "weekly",
@@ -239,6 +274,9 @@ GROWTH_CYCLE_SOURCES = [
     },
 ]
 
+
+FED_INFLATION_TARGET = 0.02
+INFLATION_TARGET_BAND = 0.005
 
 M2_INTERPRETATION_SCOPE = "m2_money_supply"
 M2_INTERPRETATION_PROMPT_VERSION = "m2-cat-v1"
@@ -333,6 +371,73 @@ def normalize_m2_money_stock(payload):
     }
 
 
+def _inflation_context_status(gap):
+    if gap is None:
+        return "missing"
+    if gap >= INFLATION_TARGET_BAND:
+        return "above_target"
+    if gap <= -INFLATION_TARGET_BAND:
+        return "below_target"
+    return "near_target"
+
+
+def _inflation_context_status_label(status):
+    labels = {
+        "above_target": "Above Target",
+        "near_target": "Near Target",
+        "below_target": "Below Target",
+        "missing": "Missing",
+    }
+    return labels.get(status, "Missing")
+
+
+def _inflation_context_description(status):
+    descriptions = {
+        "above_target": "Inflation is above the Fed target, which can constrain liquidity support.",
+        "near_target": "Inflation is near the Fed target, so liquidity support is less constrained by inflation.",
+        "below_target": "Inflation is below the Fed target, giving the Fed more room to support liquidity if growth weakens.",
+        "missing": "Core PCE inflation data is missing.",
+    }
+    return descriptions.get(status, descriptions["missing"])
+
+
+def normalize_core_pce_price_index(payload):
+    rows = payload.get("series", [])
+    values = [float(row["value"]) for row in rows]
+    latest_value = values[-1] if values else None
+    year_ago_value = values[-13] if len(values) >= 13 else None
+    latest_yoy = _pct_change(latest_value, year_ago_value)
+    gap = latest_yoy - FED_INFLATION_TARGET if latest_yoy is not None else None
+    latest_period = rows[-1]["date"] if rows else None
+    return {
+        "macro": {
+            "growth_cycle": {
+                "inflation_context_period": latest_period,
+                "core_pce_price_index": latest_value,
+                "core_pce_yoy": latest_yoy,
+                "inflation_target_gap": gap,
+                "inflation_context_status": _inflation_context_status(gap),
+            }
+        }
+    }
+
+
+def build_inflation_context_headline(growth_cycle):
+    status = growth_cycle.get("inflation_context_status", "missing")
+    return {
+        "id": "inflation_context",
+        "label": "Inflation Context",
+        "period": growth_cycle.get("inflation_context_period"),
+        "status": status,
+        "status_label": _inflation_context_status_label(status),
+        "core_pce_yoy": growth_cycle.get("core_pce_yoy"),
+        "target": FED_INFLATION_TARGET,
+        "target_label": "Fed 2% Target",
+        "gap": growth_cycle.get("inflation_target_gap"),
+        "description": _inflation_context_description(status),
+    }
+
+
 def _m2_status(growth_cycle):
     yoy = growth_cycle.get("m2_yoy_pct_change")
     momentum = growth_cycle.get("m2_3m_momentum")
@@ -384,8 +489,12 @@ def build_m2_money_supply_headline(growth_cycle):
 
 def build_growth_cycle_dashboard_payload(growth_cycle_dashboard):
     growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
+    headline = [build_m2_money_supply_headline(growth_cycle)]
+    inflation_card = build_inflation_context_headline(growth_cycle)
+    if inflation_card["status"] != "missing":
+        headline.append(inflation_card)
     return {
-        "headline": [build_m2_money_supply_headline(growth_cycle)],
+        "headline": headline,
         "missing": None,
     }
 
@@ -490,6 +599,7 @@ def build_growth_cycle_dashboard(
     ism_manufacturing=None,
     ism_services=None,
     m2_money_stock=None,
+    core_pce_price_index=None,
     jobless_claims=None,
 ):
     result = {"macro": {"growth_cycle": {}}}
@@ -499,6 +609,10 @@ def build_growth_cycle_dashboard(
         result = _deep_merge(result, normalize_ism_services(ism_services))
     if m2_money_stock:
         result = _deep_merge(result, normalize_m2_money_stock(m2_money_stock))
+    if core_pce_price_index:
+        result = _deep_merge(
+            result, normalize_core_pce_price_index(core_pce_price_index)
+        )
     if jobless_claims:
         result = _deep_merge(result, normalize_jobless_claims(jobless_claims))
     growth_cycle = result["macro"]["growth_cycle"]

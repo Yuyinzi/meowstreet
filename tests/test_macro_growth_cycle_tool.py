@@ -12,6 +12,7 @@ def test_growth_cycle_source_fields_are_grouped_by_source():
         "ism_manufacturing",
         "ism_services",
         "m2_money_stock",
+        "inflation_context",
         "jobless_claims",
     ]
 
@@ -24,6 +25,7 @@ def test_growth_cycle_source_fields_are_grouped_by_source():
     assert "macro.growth_cycle.ism_pmi" in fields
     assert "macro.growth_cycle.services_business_activity" in fields
     assert "macro.growth_cycle.m2_money_stock" in fields
+    assert "macro.growth_cycle.core_pce_yoy" in fields
     assert "macro.growth_cycle.initial_jobless_claims" in fields
 
 
@@ -693,3 +695,64 @@ def test_m2_fallback_interpretation_returns_bilingual_text_by_status():
     headline = {}
     result = macro_growth_cycle.m2_fallback_interpretation(headline)
     assert "generate" in result["text_en"]
+
+
+def test_normalize_inflation_context_computes_core_pce_yoy_and_target_gap():
+    payload = {
+        "series": [
+            {"date": "2025-01-01", "value": 130.0},
+            {"date": "2025-02-01", "value": 130.0},
+            {"date": "2025-03-01", "value": 130.0},
+            {"date": "2025-04-01", "value": 130.0},
+            {"date": "2025-05-01", "value": 130.0},
+            {"date": "2025-06-01", "value": 130.0},
+            {"date": "2025-07-01", "value": 130.0},
+            {"date": "2025-08-01", "value": 130.0},
+            {"date": "2025-09-01", "value": 130.0},
+            {"date": "2025-10-01", "value": 130.0},
+            {"date": "2025-11-01", "value": 130.0},
+            {"date": "2025-12-01", "value": 130.0},
+            {"date": "2026-01-01", "value": 134.0},
+        ]
+    }
+
+    result = macro_growth_cycle.normalize_core_pce_price_index(payload)
+    growth_cycle = result["macro"]["growth_cycle"]
+
+    assert growth_cycle["inflation_context_period"] == "2026-01-01"
+    assert growth_cycle["core_pce_price_index"] == 134.0
+    assert round(growth_cycle["core_pce_yoy"], 4) == 0.0308
+    assert round(growth_cycle["inflation_target_gap"], 4) == 0.0108
+    assert growth_cycle["inflation_context_status"] == "above_target"
+
+
+def test_inflation_context_status_thresholds():
+    assert macro_growth_cycle._inflation_context_status(0.006) == "above_target"
+    assert macro_growth_cycle._inflation_context_status(0.0049) == "near_target"
+    assert macro_growth_cycle._inflation_context_status(-0.0049) == "near_target"
+    assert macro_growth_cycle._inflation_context_status(-0.006) == "below_target"
+    assert macro_growth_cycle._inflation_context_status(None) == "missing"
+
+
+def test_build_inflation_context_headline_returns_card_shape():
+    growth_cycle = {
+        "inflation_context_period": "2026-01-01",
+        "core_pce_yoy": 0.0308,
+        "inflation_target_gap": 0.0108,
+        "inflation_context_status": "above_target",
+    }
+
+    card = macro_growth_cycle.build_inflation_context_headline(growth_cycle)
+
+    assert card == {
+        "id": "inflation_context",
+        "label": "Inflation Context",
+        "period": "2026-01-01",
+        "status": "above_target",
+        "status_label": "Above Target",
+        "core_pce_yoy": 0.0308,
+        "target": 0.02,
+        "target_label": "Fed 2% Target",
+        "gap": 0.0108,
+        "description": "Inflation is above the Fed target, which can constrain liquidity support.",
+    }
