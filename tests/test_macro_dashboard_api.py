@@ -793,7 +793,7 @@ def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):
     payload = response.json()
     assert payload["detail_id"] == "m2_money_supply"
     assert payload["title"] == "M2 Money Supply"
-    assert len(payload["charts"]) == 4
+    assert len(payload["charts"]) == 5
     assert payload["charts"][0]["kind"] == "time_series"
     assert payload["m2_ai_interpretation"]["text_en"] is not None
     assert "generator" in payload["m2_ai_interpretation"]["text_en"]
@@ -970,21 +970,21 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
     assert card_ids == [
         "m2_money_supply",
         "inflation_context",
-        "gdp_expectations",
         "fed_balance_sheet",
+        "gdp_expectations",
     ]
     inflation = payload["headline"][1]
     assert inflation["label"] == "Inflation Context"
     assert inflation["status"] == "above_target"
     assert round(inflation["core_pce_yoy"], 4) == 0.0308
     assert round(inflation["gap"], 4) == 0.0108
-    gdp_expectations = payload["headline"][2]
+    fed_card = payload["headline"][2]
+    assert fed_card["label"] == "Fed Balance Sheet"
+    assert fed_card["status"] == "context"
+    gdp_expectations = payload["headline"][3]
     assert gdp_expectations["label"] == "GDP Expectations"
     assert gdp_expectations["status"] == "pending_inputs"
     assert gdp_expectations["expected_direction"] is None
-    fed_card = payload["headline"][3]
-    assert fed_card["label"] == "Fed Balance Sheet"
-    assert fed_card["status"] == "context"
 
 
 def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch):
@@ -1080,11 +1080,11 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
     cards = response.json()["headline"]
     assert [card["id"] for card in cards] == [
         "m2_money_supply",
-        "gdp_expectations",
         "fed_balance_sheet",
+        "gdp_expectations",
     ]
-    assert cards[2]["status"] == "context"
-    assert cards[2]["total_assets"] == 6052000
+    assert cards[1]["status"] == "context"
+    assert cards[1]["total_assets"] == 6052000
 
 
 def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
@@ -1143,7 +1143,9 @@ def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
     assert chart["title"] == "M2 YoY Growth vs Inflation Constraint"
     assert chart["keys"] == [
         "m2_yoy",
-        "fed_total_assets_yoy",
         "core_pce_yoy",
         "fed_target",
     ]
+    fed_chart = response.json()["charts"][1]
+    assert fed_chart["title"] == "Fed Total Assets YoY"
+    assert fed_chart["keys"] == ["fed_total_assets_yoy"]
