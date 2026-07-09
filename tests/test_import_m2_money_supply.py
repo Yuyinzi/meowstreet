@@ -204,3 +204,46 @@ def test_main_can_merge_fred_csv(monkeypatch, tmp_path, capsys):
 
     assert exit_code == 0
     assert "m2_money_stock: 2" in capsys.readouterr().out
+
+
+def test_main_can_generate_interpretation_after_fred_merge(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeCon:
+        def close(self):
+            calls.append(("close",))
+
+    monkeypatch.setattr(
+        import_m2_money_supply.us_rates_liquidity,
+        "connect",
+        lambda db_path: FakeCon(),
+    )
+    monkeypatch.setattr(
+        import_m2_money_supply,
+        "import_fred_csvs",
+        lambda con, fred_dir: calls.append(("import_fred_csvs", fred_dir))
+        or {"m2_money_stock": 2},
+    )
+
+    def fake_generate_interpretation(db_path):
+        calls.append(("generate_interpretation", db_path))
+        return 0
+
+    exit_code = import_m2_money_supply.main(
+        [
+            "--db-path",
+            str(tmp_path / "market_data.sqlite"),
+            "--fred-dir",
+            str(tmp_path / "fred"),
+            "--fred-csv-merge",
+            "--generate-interpretation",
+        ],
+        generate_interpretation=fake_generate_interpretation,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        ("import_fred_csvs", tmp_path / "fred"),
+        ("close",),
+        ("generate_interpretation", tmp_path / "market_data.sqlite"),
+    ]

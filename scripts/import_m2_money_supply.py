@@ -121,7 +121,13 @@ def fetch_fred_csvs(fred_dir=DEFAULT_FRED_DIR):
     return client.fetch_csvs([FRED_M2_SERIES_ID])
 
 
-def main(argv=None):
+def _generate_interpretation(db_path):
+    from scripts import generate_m2_ai_interpretation
+
+    return generate_m2_ai_interpretation.main(["--db-path", str(db_path)])
+
+
+def main(argv=None, generate_interpretation=_generate_interpretation):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--db-path", type=Path, default=us_rates_liquidity.DEFAULT_DB_PATH
@@ -130,6 +136,7 @@ def main(argv=None):
     parser.add_argument("--fred-dir", type=Path, default=DEFAULT_FRED_DIR)
     parser.add_argument("--fetch-fred-csv", action="store_true")
     parser.add_argument("--fred-csv-merge", action="store_true")
+    parser.add_argument("--generate-interpretation", action="store_true")
     args = parser.parse_args(argv)
     if args.fetch_fred_csv:
         fetched = fetch_fred_csvs(args.fred_dir)
@@ -146,6 +153,8 @@ def main(argv=None):
         con.close()
     for series_id, count in inserted.items():
         print(f"{series_id}: {count}")
+    if args.generate_interpretation:
+        return generate_interpretation(args.db_path)
     return 0
 
 
