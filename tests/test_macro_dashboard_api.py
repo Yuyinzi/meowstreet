@@ -697,6 +697,8 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
 
     def fake_load_macro_indicator_points(con, series_id):
         assert hasattr(con, "close")
+        if series_id == "core_pce_price_index":
+            return []
         assert series_id == "m2_money_stock"
         return [
             {"date": "2025-06-01", "value": 100, "source": "m2.xlsx"},
@@ -762,10 +764,16 @@ def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):
     ]
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+
+    def fake_load(con, series_id):
+        if series_id == "core_pce_price_index":
+            return []
+        return rows
+
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
         "load_macro_indicator_points",
-        lambda con, series_id: rows,
+        fake_load,
     )
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
@@ -817,10 +825,16 @@ def test_growth_cycle_m2_detail_api_attaches_stored_ai_interpretation(monkeypatc
     calls = []
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+
+    def fake_load(con, series_id):
+        if series_id == "core_pce_price_index":
+            return []
+        return rows
+
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
         "load_macro_indicator_points",
-        lambda con, series_id: rows,
+        fake_load,
     )
 
     def fake_load_ai_interpretation(con, scope, snapshot_hash):
@@ -878,3 +892,157 @@ def test_growth_cycle_api_returns_missing_payload_when_m2_db_rows_are_missing(
         "headline": [],
         "missing": "No M2 money supply data found. Run scripts/import_m2_money_supply.py.",
     }
+
+
+def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
+    from app import api
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    def fake_load_macro_indicator_points(con, series_id):
+        if series_id == "m2_money_stock":
+            return [
+                {"date": "2025-06-01", "value": 100, "source": "m2.xlsx"},
+                {"date": "2025-07-01", "value": 101, "source": "m2.xlsx"},
+                {"date": "2025-08-01", "value": 102, "source": "m2.xlsx"},
+                {"date": "2025-09-01", "value": 103, "source": "m2.xlsx"},
+                {"date": "2025-10-01", "value": 104, "source": "m2.xlsx"},
+                {"date": "2025-11-01", "value": 105, "source": "m2.xlsx"},
+                {"date": "2025-12-01", "value": 106, "source": "m2.xlsx"},
+                {"date": "2026-01-01", "value": 107, "source": "m2.xlsx"},
+                {"date": "2026-02-01", "value": 108, "source": "m2.xlsx"},
+                {"date": "2026-03-01", "value": 109, "source": "m2.xlsx"},
+                {"date": "2026-04-01", "value": 110, "source": "m2.xlsx"},
+                {"date": "2026-05-01", "value": 111, "source": "m2.xlsx"},
+                {"date": "2026-06-01", "value": 112, "source": "m2.xlsx"},
+            ]
+        if series_id == "core_pce_price_index":
+            return [
+                {"date": "2025-06-01", "value": 130.0, "source": "FRED monthly"},
+                {"date": "2025-07-01", "value": 130.2, "source": "FRED monthly"},
+                {"date": "2025-08-01", "value": 130.4, "source": "FRED monthly"},
+                {"date": "2025-09-01", "value": 130.6, "source": "FRED monthly"},
+                {"date": "2025-10-01", "value": 130.8, "source": "FRED monthly"},
+                {"date": "2025-11-01", "value": 131.0, "source": "FRED monthly"},
+                {"date": "2025-12-01", "value": 131.2, "source": "FRED monthly"},
+                {"date": "2026-01-01", "value": 131.4, "source": "FRED monthly"},
+                {"date": "2026-02-01", "value": 131.6, "source": "FRED monthly"},
+                {"date": "2026-03-01", "value": 131.8, "source": "FRED monthly"},
+                {"date": "2026-04-01", "value": 132.0, "source": "FRED monthly"},
+                {"date": "2026-05-01", "value": 132.2, "source": "FRED monthly"},
+                {"date": "2026-06-01", "value": 134.0, "source": "FRED monthly"},
+            ]
+        raise AssertionError(series_id)
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    payload = response.json()
+    card_ids = [card["id"] for card in payload["headline"]]
+    assert card_ids == ["m2_money_supply", "inflation_context"]
+    inflation = payload["headline"][1]
+    assert inflation["label"] == "Inflation Context"
+    assert inflation["status"] == "above_target"
+    assert round(inflation["core_pce_yoy"], 4) == 0.0308
+    assert round(inflation["gap"], 4) == 0.0108
+
+
+def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch):
+    from app import api
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    def fake_load_macro_indicator_points(con, series_id):
+        if series_id == "m2_money_stock":
+            return [
+                {"date": "2025-06-01", "value": 100, "source": "m2.xlsx"},
+                {"date": "2025-07-01", "value": 101, "source": "m2.xlsx"},
+                {"date": "2025-08-01", "value": 102, "source": "m2.xlsx"},
+                {"date": "2025-09-01", "value": 103, "source": "m2.xlsx"},
+                {"date": "2025-10-01", "value": 104, "source": "m2.xlsx"},
+                {"date": "2025-11-01", "value": 105, "source": "m2.xlsx"},
+                {"date": "2025-12-01", "value": 106, "source": "m2.xlsx"},
+                {"date": "2026-01-01", "value": 107, "source": "m2.xlsx"},
+                {"date": "2026-02-01", "value": 108, "source": "m2.xlsx"},
+                {"date": "2026-03-01", "value": 109, "source": "m2.xlsx"},
+                {"date": "2026-04-01", "value": 110, "source": "m2.xlsx"},
+                {"date": "2026-05-01", "value": 111, "source": "m2.xlsx"},
+                {"date": "2026-06-01", "value": 112, "source": "m2.xlsx"},
+            ]
+        if series_id == "core_pce_price_index":
+            return []
+        raise AssertionError(series_id)
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    assert [card["id"] for card in response.json()["headline"]] == ["m2_money_supply"]
+
+
+def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
+    from app import api
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    def rows(start_value):
+        return [
+            {"date": "2025-01-01", "value": start_value + 0, "source": "FRED"},
+            {"date": "2025-02-01", "value": start_value + 1, "source": "FRED"},
+            {"date": "2025-03-01", "value": start_value + 2, "source": "FRED"},
+            {"date": "2025-04-01", "value": start_value + 3, "source": "FRED"},
+            {"date": "2025-05-01", "value": start_value + 4, "source": "FRED"},
+            {"date": "2025-06-01", "value": start_value + 5, "source": "FRED"},
+            {"date": "2025-07-01", "value": start_value + 6, "source": "FRED"},
+            {"date": "2025-08-01", "value": start_value + 7, "source": "FRED"},
+            {"date": "2025-09-01", "value": start_value + 8, "source": "FRED"},
+            {"date": "2025-10-01", "value": start_value + 9, "source": "FRED"},
+            {"date": "2025-11-01", "value": start_value + 10, "source": "FRED"},
+            {"date": "2025-12-01", "value": start_value + 11, "source": "FRED"},
+            {"date": "2026-01-01", "value": start_value + 25, "source": "FRED"},
+        ]
+
+    def fake_load_macro_indicator_points(con, series_id):
+        if series_id == "m2_money_stock":
+            return rows(100)
+        if series_id == "core_pce_price_index":
+            return rows(130)
+        raise AssertionError(series_id)
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_ai_interpretation",
+        lambda con, scope, snapshot_hash: None,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle/m2_money_supply")
+
+    assert response.status_code == 200
+    chart = response.json()["charts"][0]
+    assert chart["title"] == "M2 YoY Growth vs Inflation Constraint"
+    assert chart["keys"] == ["m2_yoy", "core_pce_yoy", "fed_target"]

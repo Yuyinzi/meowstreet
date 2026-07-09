@@ -188,11 +188,21 @@ def macro_dashboard_growth_cycle():
                 "headline": [],
                 "missing": "No M2 money supply data found. Run scripts/import_m2_money_supply.py.",
             }
+        core_pce_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con,
+            "core_pce_price_index",
+        )
         m2_money_stock = {
             "series": [{"date": row["date"], "value": row["value"]} for row in rows]
         }
+        core_pce_price_index = {
+            "series": [
+                {"date": row["date"], "value": row["value"]} for row in core_pce_rows
+            ]
+        }
         dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
             m2_money_stock=m2_money_stock,
+            core_pce_price_index=core_pce_price_index if core_pce_rows else None,
         )
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
     finally:
@@ -209,7 +219,14 @@ def macro_dashboard_growth_cycle_detail(detail_id):
     con = us_rates_liquidity_db.connect()
     try:
         rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
-        detail_payload = macro_growth_cycle.build_m2_money_supply_detail_payload(rows)
+        core_pce_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con,
+            "core_pce_price_index",
+        )
+        detail_payload = macro_growth_cycle.build_m2_money_supply_detail_payload(
+            rows,
+            core_pce_rows,
+        )
         dashboard_payload = macro_growth_cycle.build_growth_cycle_dashboard(
             m2_money_stock={"series": rows}
         )
