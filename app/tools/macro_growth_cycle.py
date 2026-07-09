@@ -758,6 +758,9 @@ def build_growth_cycle_dashboard(
     ism_services=None,
     m2_money_stock=None,
     core_pce_price_index=None,
+    fed_total_assets=None,
+    fed_treasury_holdings=None,
+    fed_mbs_holdings=None,
     jobless_claims=None,
 ):
     result = {"macro": {"growth_cycle": {}}}
@@ -770,6 +773,15 @@ def build_growth_cycle_dashboard(
     if core_pce_price_index:
         result = _deep_merge(
             result, normalize_core_pce_price_index(core_pce_price_index)
+        )
+    if fed_total_assets and fed_treasury_holdings and fed_mbs_holdings:
+        result = _deep_merge(
+            result,
+            normalize_fed_balance_sheet(
+                fed_total_assets,
+                fed_treasury_holdings,
+                fed_mbs_holdings,
+            ),
         )
     if jobless_claims:
         result = _deep_merge(result, normalize_jobless_claims(jobless_claims))

@@ -699,6 +699,12 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
         assert hasattr(con, "close")
         if series_id == "core_pce_price_index":
             return []
+        if series_id in (
+            "fed_total_assets",
+            "fed_treasury_holdings",
+            "fed_mbs_holdings",
+        ):
+            return []
         assert series_id == "m2_money_stock"
         return [
             {"date": "2025-06-01", "value": 100, "source": "m2.xlsx"},
@@ -934,6 +940,19 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
                 {"date": "2026-05-01", "value": 132.2, "source": "FRED monthly"},
                 {"date": "2026-06-01", "value": 134.0, "source": "FRED monthly"},
             ]
+        if series_id in (
+            "fed_total_assets",
+            "fed_treasury_holdings",
+            "fed_mbs_holdings",
+        ):
+            return [
+                {
+                    "date": f"2026-{index + 1:02d}-01",
+                    "value": 6000000.0 + index * 1000,
+                    "source": "FRED weekly",
+                }
+                for index in range(53)
+            ]
         raise AssertionError(series_id)
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
@@ -948,7 +967,12 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     card_ids = [card["id"] for card in payload["headline"]]
-    assert card_ids == ["m2_money_supply", "inflation_context", "gdp_expectations"]
+    assert card_ids == [
+        "m2_money_supply",
+        "inflation_context",
+        "gdp_expectations",
+        "fed_balance_sheet",
+    ]
     inflation = payload["headline"][1]
     assert inflation["label"] == "Inflation Context"
     assert inflation["status"] == "above_target"
@@ -958,6 +982,9 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
     assert gdp_expectations["label"] == "GDP Expectations"
     assert gdp_expectations["status"] == "pending_inputs"
     assert gdp_expectations["expected_direction"] is None
+    fed_card = payload["headline"][3]
+    assert fed_card["label"] == "Fed Balance Sheet"
+    assert fed_card["status"] == "context"
 
 
 def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch):
@@ -986,6 +1013,12 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
             ]
         if series_id == "core_pce_price_index":
             return []
+        if series_id in (
+            "fed_total_assets",
+            "fed_treasury_holdings",
+            "fed_mbs_holdings",
+        ):
+            return []
         raise AssertionError(series_id)
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
@@ -1002,6 +1035,56 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
         "m2_money_supply",
         "gdp_expectations",
     ]
+
+
+def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
+    from app import api
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    def rows(start_value, count=53):
+        return [
+            {
+                "date": f"2026-{index + 1:02d}-01",
+                "value": start_value + index * 1000,
+                "source": "FRED weekly",
+            }
+            for index in range(count)
+        ]
+
+    def fake_load_macro_indicator_points(con, series_id):
+        if series_id == "m2_money_stock":
+            return rows(100, 13)
+        if series_id == "core_pce_price_index":
+            return []
+        if series_id == "fed_total_assets":
+            return rows(6000000, 53)
+        if series_id == "fed_treasury_holdings":
+            return rows(4200000, 53)
+        if series_id == "fed_mbs_holdings":
+            return rows(2200000, 53)
+        raise AssertionError(series_id)
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    cards = response.json()["headline"]
+    assert [card["id"] for card in cards] == [
+        "m2_money_supply",
+        "gdp_expectations",
+        "fed_balance_sheet",
+    ]
+    assert cards[2]["status"] == "context"
+    assert cards[2]["total_assets"] == 6052000
 
 
 def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):

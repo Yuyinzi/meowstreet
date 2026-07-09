@@ -192,6 +192,18 @@ def macro_dashboard_growth_cycle():
             con,
             "core_pce_price_index",
         )
+        fed_total_assets_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con,
+            "fed_total_assets",
+        )
+        fed_treasury_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con,
+            "fed_treasury_holdings",
+        )
+        fed_mbs_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con,
+            "fed_mbs_holdings",
+        )
         m2_money_stock = {
             "series": [{"date": row["date"], "value": row["value"]} for row in rows]
         }
@@ -200,9 +212,29 @@ def macro_dashboard_growth_cycle():
                 {"date": row["date"], "value": row["value"]} for row in core_pce_rows
             ]
         }
+        fed_total_assets = {
+            "series": [
+                {"date": row["date"], "value": row["value"]}
+                for row in fed_total_assets_rows
+            ]
+        }
+        fed_treasury_holdings = {
+            "series": [
+                {"date": row["date"], "value": row["value"]}
+                for row in fed_treasury_rows
+            ]
+        }
+        fed_mbs_holdings = {
+            "series": [
+                {"date": row["date"], "value": row["value"]} for row in fed_mbs_rows
+            ]
+        }
         dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
             m2_money_stock=m2_money_stock,
             core_pce_price_index=core_pce_price_index if core_pce_rows else None,
+            fed_total_assets=fed_total_assets if fed_total_assets_rows else None,
+            fed_treasury_holdings=fed_treasury_holdings if fed_treasury_rows else None,
+            fed_mbs_holdings=fed_mbs_holdings if fed_mbs_rows else None,
         )
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
     finally:
