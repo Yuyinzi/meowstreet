@@ -406,6 +406,7 @@ def test_build_m2_money_supply_detail_payload_returns_four_chart_series():
     payload = macro_growth_cycle.build_m2_money_supply_detail_payload(rows)
     assert [chart["title"] for chart in payload["charts"]] == [
         "M2 YoY Growth vs Inflation Constraint",
+        "Fed Total Assets YoY",
         "M2 3M Change",
         "Fed Balance Sheet 13W Composition",
         "M2 MoM Shock Events",
@@ -414,7 +415,6 @@ def test_build_m2_money_supply_detail_payload_returns_four_chart_series():
         {
             "date": "2026-01-01",
             "m2_yoy": 25.0,
-            "fed_total_assets_yoy": None,
             "core_pce_yoy": None,
             "fed_target": 2.0,
         },
@@ -427,6 +427,7 @@ def test_build_m2_money_supply_detail_payload_returns_four_chart_series():
     assert payload["source"] == "m2.xlsx"
     assert [chart["title"] for chart in payload["charts"]] == [
         "M2 YoY Growth vs Inflation Constraint",
+        "Fed Total Assets YoY",
         "M2 3M Change",
         "Fed Balance Sheet 13W Composition",
         "M2 MoM Shock Events",
@@ -435,13 +436,12 @@ def test_build_m2_money_supply_detail_payload_returns_four_chart_series():
         {
             "date": "2026-01-01",
             "m2_yoy": 25.0,
-            "fed_total_assets_yoy": None,
             "core_pce_yoy": None,
             "fed_target": 2.0,
         },
     ]
-    assert round(payload["charts"][1]["series"][-1]["value"], 4) == 14.6789
-    assert payload["charts"][3]["series"][-1] == {
+    assert round(payload["charts"][2]["series"][-1]["value"], 4) == 14.6789
+    assert payload["charts"][4]["series"][-1] == {
         "date": "2026-01-01",
         "value": 2,
         "mom_growth": 12.6126,
@@ -461,7 +461,8 @@ def test_build_m2_money_supply_detail_payload_handles_short_history():
     assert payload["charts"][0]["series"] == []
     assert payload["charts"][1]["series"] == []
     assert payload["charts"][2]["series"] == []
-    assert payload["charts"][3]["series"] == [
+    assert payload["charts"][3]["series"] == []
+    assert payload["charts"][4]["series"] == [
         {
             "date": "2026-02-01",
             "value": 2,
@@ -764,15 +765,9 @@ def test_m2_detail_state_chart_includes_core_pce_yoy_and_fed_target():
     chart = payload["charts"][0]
 
     assert chart["title"] == "M2 YoY Growth vs Inflation Constraint"
-    assert chart["keys"] == [
-        "m2_yoy",
-        "fed_total_assets_yoy",
-        "core_pce_yoy",
-        "fed_target",
-    ]
+    assert chart["keys"] == ["m2_yoy", "core_pce_yoy", "fed_target"]
     assert chart["labels"] == {
         "m2_yoy": "M2 YoY Growth",
-        "fed_total_assets_yoy": "Fed Total Assets YoY",
         "core_pce_yoy": "Core PCE YoY",
         "fed_target": "Fed 2% Target (since 2012)",
     }
@@ -780,7 +775,6 @@ def test_m2_detail_state_chart_includes_core_pce_yoy_and_fed_target():
         {
             "date": "2026-01-01",
             "m2_yoy": 25.0,
-            "fed_total_assets_yoy": None,
             "core_pce_yoy": 4.6154,
             "fed_target": 2.0,
         }
@@ -815,7 +809,6 @@ def test_m2_detail_state_chart_starts_fed_target_in_2012():
     assert state_series[-2]["fed_target"] is None
     assert state_series[-1]["date"] == "2012-01-01"
     assert state_series[-1]["fed_target"] == 2.0
-    assert "fed_total_assets_yoy" in state_series[-1]
 
 
 def test_normalize_inflation_context_computes_core_pce_yoy_and_target_gap():
