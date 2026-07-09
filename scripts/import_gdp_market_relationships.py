@@ -425,15 +425,16 @@ def import_us_csv_merge(
     )
 
 
-def main():
+def main(argv=None):
     con = gdp_market_relationships.connect()
+    argv = sys.argv if argv is None else argv
     try:
-        if "--fetch-fred-csv" in sys.argv:
+        if "--fetch-fred-csv" in argv:
             result = fetch_fred_csvs()
             print(f"downloaded {result['gdp_csv']}")
             print(f"downloaded {result['sp500_csv']}")
             return
-        if "--us-csv-merge" in sys.argv:
+        if "--us-csv-merge" in argv:
             before_summary = _build_relationship_summary(con, US_GDP_RELATIONSHIP_ID)
             counts = import_us_csv_merge(con)
             after_summary = _build_relationship_summary(con, US_GDP_RELATIONSHIP_ID)
