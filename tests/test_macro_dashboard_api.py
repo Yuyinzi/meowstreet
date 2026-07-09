@@ -948,12 +948,16 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     card_ids = [card["id"] for card in payload["headline"]]
-    assert card_ids == ["m2_money_supply", "inflation_context"]
+    assert card_ids == ["m2_money_supply", "inflation_context", "gdp_expectations"]
     inflation = payload["headline"][1]
     assert inflation["label"] == "Inflation Context"
     assert inflation["status"] == "above_target"
     assert round(inflation["core_pce_yoy"], 4) == 0.0308
     assert round(inflation["gap"], 4) == 0.0108
+    gdp_expectations = payload["headline"][2]
+    assert gdp_expectations["label"] == "GDP Expectations"
+    assert gdp_expectations["status"] == "pending_inputs"
+    assert gdp_expectations["expected_direction"] is None
 
 
 def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch):
@@ -994,7 +998,10 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
     response = client.get("/api/macro-dashboard/growth-cycle")
 
     assert response.status_code == 200
-    assert [card["id"] for card in response.json()["headline"]] == ["m2_money_supply"]
+    assert [card["id"] for card in response.json()["headline"]] == [
+        "m2_money_supply",
+        "gdp_expectations",
+    ]
 
 
 def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
