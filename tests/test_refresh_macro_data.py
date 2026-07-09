@@ -66,3 +66,108 @@ def test_main_does_not_generate_ai_interpretations():
     flattened_args = [arg for _, argv in calls for arg in argv]
     assert "--generate-credit-interpretation" not in flattened_args
     assert "--generate-interpretation" not in flattened_args
+
+
+def test_main_continues_after_provider_failure(capsys):
+    calls = []
+
+    def failing_benchmark(argv):
+        calls.append(("benchmark", argv))
+        return 1
+
+    def ok_task(label):
+        def _ok(argv):
+            calls.append((label, argv))
+            return 0
+
+        return _ok
+
+    exit_code = refresh_macro_data.main(
+        [],
+        benchmark_main=failing_benchmark,
+        rates_main=ok_task("rates"),
+        m2_main=ok_task("m2"),
+        gdp_main=ok_task("gdp"),
+    )
+
+    assert exit_code == 1
+    assert [label for label, _ in calls] == [
+        "benchmark",
+        "rates",
+        "m2",
+        "m2",
+        "gdp",
+        "gdp",
+    ]
+    captured = capsys.readouterr()
+    assert "benchmark_yahoo: failed - exit code 1" in captured.err
+    assert "macro data refresh completed: failed" in captured.out
+
+
+def test_main_can_stop_after_first_failure():
+    calls = []
+
+    def failing_benchmark(argv):
+        calls.append(("benchmark", argv))
+        return 1
+
+    def ok_task(label):
+        def _ok(argv):
+            calls.append((label, argv))
+            return 0
+
+        return _ok
+
+    exit_code = refresh_macro_data.main(
+        ["--stop-on-error"],
+        benchmark_main=failing_benchmark,
+        rates_main=ok_task("rates"),
+        m2_main=ok_task("m2"),
+        gdp_main=ok_task("gdp"),
+    )
+
+    assert exit_code == 1
+    assert calls == [("benchmark", ["--all"])]
+
+
+def test_main_records_exceptions_as_failures(capsys):
+    def raising_benchmark(argv):
+        raise ValueError("yahoo rate limited")
+
+    exit_code = refresh_macro_data.main(
+        ["--skip-rates", "--skip-m2", "--skip-gdp"],
+        benchmark_main=raising_benchmark,
+        rates_main=lambda argv: 0,
+        m2_main=lambda argv: 0,
+        gdp_main=lambda argv: 0,
+    )
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "benchmark_yahoo: failed - yahoo rate limited" in captured.err
+
+
+def test_main_skip_flags_remove_tasks():
+    calls = []
+
+    def recorder(label):
+        def _record(argv):
+            calls.append((label, argv))
+            return 0
+
+        return _record
+
+    exit_code = refresh_macro_data.main(
+        ["--skip-yahoo", "--skip-gdp"],
+        benchmark_main=recorder("benchmark"),
+        rates_main=recorder("rates"),
+        m2_main=recorder("m2"),
+        gdp_main=recorder("gdp"),
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        ("rates", []),
+        ("m2", ["--fetch-fred-csv"]),
+        ("m2", ["--fred-csv-merge"]),
+    ]
