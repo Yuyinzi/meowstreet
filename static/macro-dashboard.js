@@ -1497,9 +1497,6 @@
   function renderM2MoneySupplyCard(card) {
     return `
       <button class="m2-card m2-card-button m2-card-${escapeHtml(card.status || "missing")}${state.selectedGrowthCycleDetailId === card.id ? " selected" : ""}" type="button" data-growth-cycle-detail-id="${escapeHtml(card.id)}">
-        <div class="m2-card-head">
-          <strong>${escapeHtml(card.status_label || "Missing")}</strong>
-        </div>
         <div class="m2-metric-band">
           <div>
             <span>${bilingualLabel("YoY Growth")}</span>
