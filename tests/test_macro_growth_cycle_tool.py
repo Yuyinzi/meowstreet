@@ -1011,13 +1011,84 @@ def test_m2_detail_includes_fed_balance_sheet_comparison_charts():
         fed_mbs_rows=mbs_rows,
     )
 
-    assert payload["charts"][0]["keys"] == [
+    state_chart = payload["charts"][0]
+    assert state_chart["title"] == "M2 YoY Growth vs Inflation Constraint"
+    assert state_chart["keys"] == [
         "m2_yoy",
-        "fed_total_assets_yoy",
         "core_pce_yoy",
         "fed_target",
     ]
-    assert "Fed Total Assets YoY" in payload["charts"][0]["labels"].values()
-    composition_chart = payload["charts"][2]
+    assert state_chart["labels"] == {
+        "m2_yoy": "M2 YoY Growth",
+        "core_pce_yoy": "Core PCE YoY",
+        "fed_target": "Fed 2% Target (since 2012)",
+    }
+
+    fed_chart = payload["charts"][1]
+    assert fed_chart["title"] == "Fed Total Assets YoY"
+    assert fed_chart["keys"] == ["fed_total_assets_yoy"]
+    assert fed_chart["labels"] == {
+        "fed_total_assets_yoy": "Fed Total Assets YoY",
+    }
+
+    composition_chart = payload["charts"][3]
     assert composition_chart["title"] == "Fed Balance Sheet 13W Composition"
     assert composition_chart["keys"] == ["treasury_13w_change", "mbs_13w_change"]
+
+
+def test_m2_detail_resamples_weekly_fed_yoy_to_monthly_state_dates():
+    m2_rows = [
+        {"date": f"2025-{month:02d}-01", "value": 100.0 + month, "source": "FRED"}
+        for month in range(1, 13)
+    ] + [
+        {"date": "2026-01-01", "value": 125.0, "source": "FRED"},
+        {"date": "2026-02-01", "value": 128.0, "source": "FRED"},
+    ]
+    fed_rows = [
+        {"date": "2025-01-08", "value": 1000.0, "source": "FRED weekly"},
+        {"date": "2025-02-05", "value": 1100.0, "source": "FRED weekly"},
+        {"date": "2025-03-05", "value": 1200.0, "source": "FRED weekly"},
+        {"date": "2025-04-09", "value": 1300.0, "source": "FRED weekly"},
+        {"date": "2025-05-07", "value": 1400.0, "source": "FRED weekly"},
+        {"date": "2025-06-04", "value": 1500.0, "source": "FRED weekly"},
+        {"date": "2025-07-09", "value": 1600.0, "source": "FRED weekly"},
+        {"date": "2025-08-06", "value": 1700.0, "source": "FRED weekly"},
+        {"date": "2025-09-10", "value": 1800.0, "source": "FRED weekly"},
+        {"date": "2025-10-08", "value": 1900.0, "source": "FRED weekly"},
+        {"date": "2025-11-05", "value": 2000.0, "source": "FRED weekly"},
+        {"date": "2025-12-10", "value": 2100.0, "source": "FRED weekly"},
+        {"date": "2026-01-07", "value": 2200.0, "source": "FRED weekly"},
+        {"date": "2026-02-04", "value": 2420.0, "source": "FRED weekly"},
+    ]
+
+    payload = macro_growth_cycle.build_m2_money_supply_detail_payload(
+        m2_rows,
+        fed_total_assets_rows=fed_rows,
+    )
+    state_series = payload["charts"][0]["series"]
+
+    assert state_series == [
+        {
+            "date": "2026-01-01",
+            "m2_yoy": 23.7624,
+            "core_pce_yoy": None,
+            "fed_target": 2.0,
+        },
+        {
+            "date": "2026-02-01",
+            "m2_yoy": 25.4902,
+            "core_pce_yoy": None,
+            "fed_target": 2.0,
+        },
+    ]
+    fed_series = payload["charts"][1]["series"]
+    assert fed_series == [
+        {
+            "date": "2026-01-01",
+            "fed_total_assets_yoy": 120.0,
+        },
+        {
+            "date": "2026-02-01",
+            "fed_total_assets_yoy": 120.0,
+        },
+    ]

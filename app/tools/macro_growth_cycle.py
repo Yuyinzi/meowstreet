@@ -647,10 +647,10 @@ def build_growth_cycle_dashboard_payload(growth_cycle_dashboard):
     inflation_card = build_inflation_context_headline(growth_cycle)
     if inflation_card["status"] != "missing":
         headline.append(inflation_card)
-    headline.append(build_gdp_expectations_headline(growth_cycle))
     balance_sheet_card = build_fed_balance_sheet_headline(growth_cycle)
     if balance_sheet_card["status"] != "missing":
         headline.append(balance_sheet_card)
+    headline.append(build_gdp_expectations_headline(growth_cycle))
     return {
         "headline": headline,
         "missing": None,
@@ -834,6 +834,18 @@ def _value_by_date(points):
     return {point["date"]: point["value"] for point in points}
 
 
+def _monthly_last_points(points):
+    monthly_points = {}
+    for point in sorted(points, key=lambda row: row["date"]):
+        month_key = f"{point['date'][:7]}-01"
+        monthly_points[month_key] = {
+            "date": month_key,
+            "value": point["value"],
+            "source": point.get("source"),
+        }
+    return [monthly_points[date_key] for date_key in sorted(monthly_points)]
+
+
 def _weekly_change_series(points, weeks):
     return [
         {
@@ -895,7 +907,9 @@ def build_m2_money_supply_detail_payload(
     source = points[-1].get("source") if points else None
     m2_yoy_series = _m2_growth_series(points, 12)
     core_pce_yoy_by_date = _value_by_date(_core_pce_yoy_series(core_pce_points))
-    fed_total_yoy_by_date = _value_by_date(_weekly_change_series(fed_total_points, 52))
+    fed_total_yoy_by_date = _value_by_date(
+        _m2_growth_series(_monthly_last_points(fed_total_points), 12)
+    )
     treasury_change_by_date = _value_by_date(
         _weekly_change_series(fed_treasury_points, 13)
     )
@@ -913,13 +927,20 @@ def build_m2_money_supply_detail_payload(
         {
             "date": point["date"],
             "m2_yoy": point["value"],
-            "fed_total_assets_yoy": fed_total_yoy_by_date.get(point["date"]),
             "core_pce_yoy": core_pce_yoy_by_date.get(point["date"]),
             "fed_target": FED_INFLATION_TARGET * 100
             if point["date"] >= FED_INFLATION_TARGET_EFFECTIVE_MONTH
             else None,
         }
         for point in m2_yoy_series
+    ]
+    fed_total_assets_yoy_series = [
+        {
+            "date": point["date"],
+            "fed_total_assets_yoy": fed_total_yoy_by_date.get(point["date"]),
+        }
+        for point in m2_yoy_series
+        if fed_total_yoy_by_date.get(point["date"]) is not None
     ]
     return {
         "detail_id": "m2_money_supply",
@@ -931,17 +952,24 @@ def build_m2_money_supply_detail_payload(
                 "title": "M2 YoY Growth vs Inflation Constraint",
                 "keys": [
                     "m2_yoy",
-                    "fed_total_assets_yoy",
                     "core_pce_yoy",
                     "fed_target",
                 ],
                 "labels": {
                     "m2_yoy": "M2 YoY Growth",
-                    "fed_total_assets_yoy": "Fed Total Assets YoY",
                     "core_pce_yoy": "Core PCE YoY",
                     "fed_target": "Fed 2% Target (since 2012)",
                 },
                 "series": state_series,
+            },
+            {
+                "kind": "time_series",
+                "title": "Fed Total Assets YoY",
+                "keys": ["fed_total_assets_yoy"],
+                "labels": {
+                    "fed_total_assets_yoy": "Fed Total Assets YoY",
+                },
+                "series": fed_total_assets_yoy_series,
             },
             {
                 "kind": "time_series",
