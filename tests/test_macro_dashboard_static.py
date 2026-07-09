@@ -714,6 +714,16 @@ def test_macro_dashboard_css_contains_macro_ai_interpretation_styles():
     assert ".macro-ai-interpretation" in css
 
 
+def test_macro_dashboard_js_renders_gdp_expectations_placeholder_card():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "renderGdpExpectationsCard" in js
+    assert "GDP Expectations" in js
+    assert "GDP预期" in js
+    assert "Pending Inputs" in js
+    assert "待输入" in js
+
+
 def test_macro_dashboard_js_renders_inflation_context_card():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 

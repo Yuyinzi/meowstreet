@@ -477,19 +477,45 @@ h2 {
   box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
 }
 
-.inflation-context-card {
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(15, 23, 42, 0.54);
-  border-radius: 8px;
-  padding: 14px;
-  min-height: 180px;
+.m2-card-footnote {
+  margin: 12px -14px -14px;
+  padding: 10px 14px;
+  color: #4D4640;
+  line-height: 1.45;
+  font-size: 0.82rem;
+  background: #FAF8F5;
+  border-top: 1px solid #E3D9CF;
+  border-radius: 0 0 8px 8px;
 }
 
-.inflation-context-copy {
-  margin: 12px 0 0;
-  color: #cbd5e1;
-  line-height: 1.45;
-  font-size: 0.84rem;
+.gdp-expectations-context {
+  margin-top: 12px;
+  color: #4D4640;
+  font-size: 0.82rem;
+}
+
+.gdp-expectations-context strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #3B3530;
+}
+
+.gdp-expectations-context ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.gdp-expectations-context li + li {
+  margin-top: 3px;
+}
+
+.gdp-expectations-support {
+  border-radius: 0;
+  margin-top: 0;
+}
+
+.inflation-status-badge {
+  white-space: normal;
 }
 
 .m2-card-button {

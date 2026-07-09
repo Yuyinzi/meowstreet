@@ -1055,6 +1055,14 @@
     "Core PCE YoY": "核心PCE同比",
     "Gap vs Fed 2% Target": "相对美联储2%目标",
     "Fed 2% Target": "美联储2%目标",
+    "Fed 2% Target (since 2012)": "美联储2%目标（2012年起）",
+    "Fed Target": "美联储目标",
+    "GDP Expectations": "GDP预期",
+    "Pending Inputs": "待输入",
+    "Expected Direction": "预期方向",
+    "Required Inputs": "所需输入",
+    "Supporting Context": "辅助背景",
+    "Not Ready": "未就绪",
     "Above Target": "高于目标",
     "Near Target": "接近目标",
     "Below Target": "低于目标",
@@ -1297,6 +1305,7 @@
     const cardHtml = cards.map((card) => {
       if (card.id === "m2_money_supply") return renderM2MoneySupplyCard(card);
       if (card.id === "inflation_context") return renderInflationContextCard(card);
+      if (card.id === "gdp_expectations") return renderGdpExpectationsCard(card);
       return "";
     }).join("");
     section.innerHTML = `
@@ -1305,10 +1314,10 @@
         <div class="rates-detail gdp-detail">
           <div class="rates-chart-subtitle">
             <div class="credit-conditions-head">
-              <p class="eyebrow">${bilingualLabel("Growth Cycle")}</p>
+              <p class="eyebrow">${bilingualLabel("M2 Money Supply")}</p>
               ${period ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDate(period))}</span>` : ""}
             </div>
-            <p>Money supply expansion, inflation context, and monetary base trends.<br><small>货币供应扩张、通胀环境和基础货币趋势</small></p>
+            <p>Money supply expansion and monetary base trends.<br><small>货币供应扩张和基础货币趋势</small></p>
           </div>
           <div class="growth-grid">
             ${cardHtml}
@@ -1368,25 +1377,57 @@
 
   function renderInflationContextCard(card) {
     return `
-      <article class="inflation-context-card inflation-context-${escapeHtml(card.status || "missing")}" aria-label="${escapeHtml(card.label || "Inflation Context")}">
+      <div class="m2-card m2-card-${escapeHtml(card.status || "missing")}">
         <div class="m2-card-head">
-          <span>${bilingualLabel("Inflation Context")}</span>
-          <strong>${bilingualLabel(card.status_label || "Missing")}</strong>
+          <span>${escapeHtml(card.label || "Inflation Context")}<br><small>${escapeHtml(zhLabel(card.label) || "通胀环境")}</small></span>
+          <strong class="inflation-status-badge">${escapeHtml(card.status_label || "Missing")}</strong>
         </div>
         <div class="m2-metric-band">
           <div>
             <span>${bilingualLabel("Core PCE YoY")}</span>
             <strong>${escapeHtml(fmtDirectionalPct(card.core_pce_yoy))}</strong>
-            <small>${escapeHtml(card.period || "")}<span>${escapeHtml(card.period || "")}</span></small>
+            <small>Core PCE year-over-year<br><span>核心PCE同比</span></small>
           </div>
           <div>
             <span>${bilingualLabel("Gap vs Fed 2% Target")}</span>
             <strong>${escapeHtml(fmtDirectionalPct(card.gap))}</strong>
-            <small>${escapeHtml(card.target_label || "Fed 2% Target")}<span>${bilingualLabel(card.target_label || "Fed 2% Target")}</span></small>
+            <small>Fed Target<span>美联储目标</span></small>
+          </div>
+          <div>
+            <span>${bilingualLabel("Fed Target")}</span>
+            <strong>${escapeHtml(fmtRate(card.target * 100))}</strong>
+            <small>FOMC longer-run goal<br><span>FOMC长期目标</span></small>
           </div>
         </div>
-        <p class="inflation-context-copy">${escapeHtml(card.description || "")}</p>
-      </article>
+        <p class="m2-card-footnote">${escapeHtml(card.description || "")}</p>
+      </div>
+    `;
+  }
+
+  function renderGdpExpectationsCard(card) {
+    const requiredInputs = (card.required_inputs || [])
+      .map((input) => `<li>${escapeHtml(input)}</li>`)
+      .join("");
+    return `
+      <div class="m2-card m2-card-${escapeHtml(card.status || "pending_inputs")} gdp-expectations-card">
+        <div class="m2-card-head">
+          <span>${escapeHtml(card.label || "GDP Expectations")}<br><small>${escapeHtml(zhLabel(card.label) || "GDP预期")}</small></span>
+          <strong class="inflation-status-badge">${bilingualLabel(card.status_label || "Pending Inputs")}</strong>
+        </div>
+        <div class="m2-metric-band">
+          <div>
+            <span>${bilingualLabel("Expected Direction")}</span>
+            <strong>${bilingualLabel("Not Ready")}</strong>
+            <small>Wait for leading indicators<br><span>等待领先指标</span></small>
+          </div>
+        </div>
+        <div class="gdp-expectations-context">
+          <strong>${bilingualLabel("Required Inputs")}</strong>
+          <ul>${requiredInputs}</ul>
+        </div>
+        <p class="m2-card-footnote">${escapeHtml(card.description || "")}</p>
+        <p class="m2-card-footnote gdp-expectations-support">${escapeHtml(card.supporting_context || "")}</p>
+      </div>
     `;
   }
 
