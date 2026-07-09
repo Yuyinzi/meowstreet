@@ -745,7 +745,7 @@ def test_m2_detail_state_chart_includes_core_pce_yoy_and_fed_target():
     assert chart["labels"] == {
         "m2_yoy": "M2 YoY Growth",
         "core_pce_yoy": "Core PCE YoY",
-        "fed_target": "Fed 2% Target",
+        "fed_target": "Fed 2% Target (since 2012)",
     }
     assert chart["series"] == [
         {
@@ -755,6 +755,36 @@ def test_m2_detail_state_chart_includes_core_pce_yoy_and_fed_target():
             "fed_target": 2.0,
         }
     ]
+
+
+def test_m2_detail_state_chart_starts_fed_target_in_2012():
+    m2_rows = [
+        {"date": f"{year}-01-01", "value": value, "source": "m2.xlsx"}
+        for year, value in [
+            (1999, 100.0),
+            (2000, 102.0),
+            (2001, 104.0),
+            (2002, 106.0),
+            (2003, 108.0),
+            (2004, 110.0),
+            (2005, 112.0),
+            (2006, 114.0),
+            (2007, 116.0),
+            (2008, 118.0),
+            (2009, 120.0),
+            (2010, 122.0),
+            (2011, 124.0),
+            (2012, 126.0),
+        ]
+    ]
+
+    payload = macro_growth_cycle.build_m2_money_supply_detail_payload(m2_rows)
+    state_series = payload["charts"][0]["series"]
+
+    assert state_series[-2]["date"] == "2011-01-01"
+    assert state_series[-2]["fed_target"] is None
+    assert state_series[-1]["date"] == "2012-01-01"
+    assert state_series[-1]["fed_target"] == 2.0
 
 
 def test_normalize_inflation_context_computes_core_pce_yoy_and_target_gap():
@@ -815,4 +845,25 @@ def test_build_inflation_context_headline_returns_card_shape():
         "target_label": "Fed 2% Target",
         "gap": 0.0108,
         "description": "Inflation is above the Fed target, which can constrain liquidity support.",
+    }
+
+
+def test_build_gdp_expectations_headline_returns_pending_inputs_card():
+    card = macro_growth_cycle.build_gdp_expectations_headline({})
+
+    assert card == {
+        "id": "gdp_expectations",
+        "label": "GDP Expectations",
+        "period": None,
+        "status": "pending_inputs",
+        "status_label": "Pending Inputs",
+        "expected_direction": None,
+        "required_inputs": [
+            "ISM Manufacturing",
+            "ISM Services",
+            "Labor trend",
+            "Consumer indicators",
+        ],
+        "supporting_context": "GDP / Market Relationship validates why GDP direction matters, but it does not replace a forward GDP expectation signal.",
+        "description": "Growth outlook context is needed to judge whether liquidity support is preemptive or defensive. Wait for leading indicators before producing a GDP direction signal.",
     }

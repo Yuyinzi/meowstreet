@@ -172,6 +172,18 @@ GROWTH_CYCLE_DASHBOARD_FIELDS = [
         "kind": "compute",
     },
     {
+        "id": "gdp_expectations",
+        "title": "GDP Expectations",
+        "field": "macro.growth_cycle.gdp_expectations",
+        "kind": "compute",
+    },
+    {
+        "id": "gdp_expectations_status",
+        "title": "GDP Expectations Status",
+        "field": "macro.growth_cycle.gdp_expectations_status",
+        "kind": "compute",
+    },
+    {
         "id": "initial_jobless_claims",
         "title": "Initial Jobless Claims",
         "field": "macro.growth_cycle.initial_jobless_claims",
@@ -262,6 +274,15 @@ GROWTH_CYCLE_SOURCES = [
         ),
     },
     {
+        "id": "gdp_expectations",
+        "title": "GDP Expectations",
+        "frequency": "mixed",
+        "fields": _dashboard_fields_by_id(
+            "gdp_expectations",
+            "gdp_expectations_status",
+        ),
+    },
+    {
         "id": "jobless_claims",
         "title": "Jobless Claims",
         "frequency": "weekly",
@@ -276,6 +297,7 @@ GROWTH_CYCLE_SOURCES = [
 
 
 FED_INFLATION_TARGET = 0.02
+FED_INFLATION_TARGET_EFFECTIVE_MONTH = "2012-01-01"
 INFLATION_TARGET_BAND = 0.005
 
 M2_INTERPRETATION_SCOPE = "m2_money_supply"
@@ -435,6 +457,25 @@ def build_inflation_context_headline(growth_cycle):
         "target_label": "Fed 2% Target",
         "gap": growth_cycle.get("inflation_target_gap"),
         "description": _inflation_context_description(status),
+    }
+
+
+def build_gdp_expectations_headline(growth_cycle):
+    return {
+        "id": "gdp_expectations",
+        "label": "GDP Expectations",
+        "period": growth_cycle.get("gdp_expectations_period"),
+        "status": "pending_inputs",
+        "status_label": "Pending Inputs",
+        "expected_direction": None,
+        "required_inputs": [
+            "ISM Manufacturing",
+            "ISM Services",
+            "Labor trend",
+            "Consumer indicators",
+        ],
+        "supporting_context": "GDP / Market Relationship validates why GDP direction matters, but it does not replace a forward GDP expectation signal.",
+        "description": "Growth outlook context is needed to judge whether liquidity support is preemptive or defensive. Wait for leading indicators before producing a GDP direction signal.",
     }
 
 
@@ -709,7 +750,9 @@ def build_m2_money_supply_detail_payload(rows, core_pce_rows=None):
             "date": point["date"],
             "m2_yoy": point["value"],
             "core_pce_yoy": core_pce_yoy_by_date.get(point["date"]),
-            "fed_target": FED_INFLATION_TARGET * 100,
+            "fed_target": FED_INFLATION_TARGET * 100
+            if point["date"] >= FED_INFLATION_TARGET_EFFECTIVE_MONTH
+            else None,
         }
         for point in m2_yoy_series
     ]
@@ -725,7 +768,7 @@ def build_m2_money_supply_detail_payload(rows, core_pce_rows=None):
                 "labels": {
                     "m2_yoy": "M2 YoY Growth",
                     "core_pce_yoy": "Core PCE YoY",
-                    "fed_target": "Fed 2% Target",
+                    "fed_target": "Fed 2% Target (since 2012)",
                 },
                 "series": state_series,
             },
