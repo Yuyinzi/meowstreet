@@ -62,7 +62,14 @@ def test_parse_macro_indicator_csv_groups_points_by_series(tmp_path):
 
     parsed = import_us_macro_indicators.parse_csv(csv_path)
 
-    assert sorted(parsed) == ["core_pce_price_index", "cpi_yoy", "vix"]
+    assert sorted(parsed) == [
+        "core_pce_price_index",
+        "cpi_yoy",
+        "fed_mbs_holdings",
+        "fed_total_assets",
+        "fed_treasury_holdings",
+        "vix",
+    ]
     assert parsed["cpi_yoy"]["series"]["title"] == "CPI YoY"
     assert parsed["cpi_yoy"]["points"][-1]["value"] == 1.40
     assert parsed["vix"]["points"][-1]["value"] == 22.90
@@ -79,7 +86,14 @@ def test_import_macro_indicator_csv_saves_all_parsed_series(tmp_path):
 
     inserted = import_us_macro_indicators.import_csv(con, csv_path)
 
-    assert inserted == {"core_pce_price_index": 0, "cpi_yoy": 2, "vix": 2}
+    assert inserted == {
+        "core_pce_price_index": 0,
+        "cpi_yoy": 2,
+        "fed_mbs_holdings": 0,
+        "fed_total_assets": 0,
+        "fed_treasury_holdings": 0,
+        "vix": 2,
+    }
     assert (
         us_rates_liquidity.load_macro_indicator_points(con, "cpi_yoy")[-1]["value"]
         == 1.40
@@ -103,6 +117,18 @@ def test_import_fred_macro_csvs_saves_cpi_yoy_and_vix(tmp_path):
         "observation_date,PCEPILFE\n2020-12-01,130.0\n",
         encoding="utf-8",
     )
+    (fred_dir / "WALCL.csv").write_text(
+        "observation_date,WALCL\n2020-12-30,6500000.0\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "TREAST.csv").write_text(
+        "observation_date,TREAST\n2020-12-30,4200000.0\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "WSHOMCB.csv").write_text(
+        "observation_date,WSHOMCB\n2020-12-30,2100000.0\n",
+        encoding="utf-8",
+    )
 
     inserted = import_us_macro_indicators.import_fred_macro_csvs(
         con,
@@ -111,7 +137,14 @@ def test_import_fred_macro_csvs_saves_cpi_yoy_and_vix(tmp_path):
         end_date="2021-01-03",
     )
 
-    assert inserted == {"cpi_yoy": 3, "vix": 2, "core_pce_price_index": 1}
+    assert inserted == {
+        "cpi_yoy": 3,
+        "vix": 2,
+        "core_pce_price_index": 1,
+        "fed_total_assets": 1,
+        "fed_treasury_holdings": 1,
+        "fed_mbs_holdings": 1,
+    }
     assert us_rates_liquidity.load_macro_indicator_points(con, "cpi_yoy")[-1] == {
         "date": "2021-01-03",
         "value": 1.48,
@@ -170,6 +203,18 @@ def test_import_fred_macro_csvs_saves_core_pce_price_index(tmp_path):
         "2026-01-01,134.0\n",
         encoding="utf-8",
     )
+    (fred_dir / "WALCL.csv").write_text(
+        "observation_date,WALCL\n2026-01-07,6700000.0\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "TREAST.csv").write_text(
+        "observation_date,TREAST\n2026-01-07,4200000.0\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "WSHOMCB.csv").write_text(
+        "observation_date,WSHOMCB\n2026-01-07,2200000.0\n",
+        encoding="utf-8",
+    )
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
 
     inserted = import_us_macro_indicators.import_fred_macro_csvs(
@@ -180,6 +225,9 @@ def test_import_fred_macro_csvs_saves_core_pce_price_index(tmp_path):
     )
 
     assert inserted["core_pce_price_index"] == 3
+    assert inserted["fed_total_assets"] == 1
+    assert inserted["fed_treasury_holdings"] == 1
+    assert inserted["fed_mbs_holdings"] == 1
     assert us_rates_liquidity.load_macro_indicator_points(
         con,
         "core_pce_price_index",
@@ -211,8 +259,49 @@ def test_fetch_fred_macro_csvs_includes_core_pce(monkeypatch, tmp_path):
         "CPIAUCSL": tmp_path / "CPIAUCSL.csv",
         "PCEPILFE": tmp_path / "PCEPILFE.csv",
         "VIXCLS": tmp_path / "VIXCLS.csv",
+        "WALCL": tmp_path / "WALCL.csv",
+        "TREAST": tmp_path / "TREAST.csv",
+        "WSHOMCB": tmp_path / "WSHOMCB.csv",
     }
     assert calls == [
         ("init", tmp_path / "fred"),
-        ("fetch", ["CPIAUCSL", "PCEPILFE", "VIXCLS"]),
+        ("fetch", ["CPIAUCSL", "PCEPILFE", "TREAST", "VIXCLS", "WALCL", "WSHOMCB"]),
     ]
+
+
+def test_import_fred_macro_csvs_saves_fed_balance_sheet_series(tmp_path):
+    fred_dir = tmp_path / "fred"
+    fred_dir.mkdir()
+    (fred_dir / "CPIAUCSL.csv").write_text(
+        "observation_date,CPIAUCSL\n2025-01-01,300.0\n2026-01-01,306.0\n"
+    )
+    (fred_dir / "PCEPILFE.csv").write_text(
+        "observation_date,PCEPILFE\n2025-01-01,130.0\n2026-01-01,134.0\n"
+    )
+    (fred_dir / "VIXCLS.csv").write_text("observation_date,VIXCLS\n2026-01-02,15.0\n")
+    (fred_dir / "WALCL.csv").write_text(
+        "observation_date,WALCL\n2026-01-07,6700000.0\n2026-01-14,6710000.0\n"
+    )
+    (fred_dir / "TREAST.csv").write_text(
+        "observation_date,TREAST\n2026-01-07,4200000.0\n2026-01-14,4210000.0\n"
+    )
+    (fred_dir / "WSHOMCB.csv").write_text(
+        "observation_date,WSHOMCB\n2026-01-07,2200000.0\n2026-01-14,2195000.0\n"
+    )
+    con = import_us_macro_indicators.us_rates_liquidity.connect(
+        tmp_path / "market_data.sqlite"
+    )
+
+    inserted = import_us_macro_indicators.import_fred_macro_csvs(con, fred_dir)
+
+    assert inserted["fed_total_assets"] == 2
+    assert inserted["fed_treasury_holdings"] == 2
+    assert inserted["fed_mbs_holdings"] == 2
+    assert import_us_macro_indicators.us_rates_liquidity.load_macro_indicator_points(
+        con,
+        "fed_total_assets",
+    )[-1] == {
+        "date": "2026-01-14",
+        "value": 6710000.0,
+        "source": "FRED weekly",
+    }

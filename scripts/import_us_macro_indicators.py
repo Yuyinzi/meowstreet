@@ -17,16 +17,32 @@ DEFAULT_CSV_PATH = ROOT / "data" / "materials" / "Video 04" / "US_P4_Macro_Indic
 DEFAULT_FRED_DIR = DEFAULT_CSV_PATH.parent / "fred"
 FRED_SOURCE = "FRED weekly Sunday resample"
 FRED_MONTHLY_SOURCE = "FRED monthly"
+FRED_WEEKLY_SOURCE = "FRED weekly"
 SERIES_CONFIG = {
     "cpi_yoy": {"title": "CPI YoY", "units": "percent"},
     "vix": {"title": "VIX", "units": "index"},
     "core_pce_price_index": {"title": "Core PCE Price Index", "units": "index"},
+    "fed_total_assets": {
+        "title": "Federal Reserve Total Assets",
+        "units": "millions_usd",
+    },
+    "fed_treasury_holdings": {
+        "title": "Federal Reserve Treasury Holdings",
+        "units": "millions_usd",
+    },
+    "fed_mbs_holdings": {
+        "title": "Federal Reserve MBS Holdings",
+        "units": "millions_usd",
+    },
 }
 
 FRED_MACRO_SERIES_CONFIG = {
     "CPIAUCSL": "cpi_yoy",
     "PCEPILFE": "core_pce_price_index",
     "VIXCLS": "vix",
+    "WALCL": "fed_total_assets",
+    "TREAST": "fed_treasury_holdings",
+    "WSHOMCB": "fed_mbs_holdings",
 }
 
 
@@ -80,6 +96,17 @@ def _fred_monthly_points_payload(rows):
     ]
 
 
+def _fred_weekly_points_payload(rows):
+    return [
+        {
+            "date": date_key,
+            "value": value,
+            "source": FRED_WEEKLY_SOURCE,
+        }
+        for date_key, value in rows.items()
+    ]
+
+
 def fetch_fred_csvs(fred_dir=DEFAULT_FRED_DIR, fred_series_ids=None):
     series_ids = fred_series_ids or sorted(FRED_MACRO_SERIES_CONFIG)
     for fred_series_id in series_ids:
@@ -99,6 +126,9 @@ def import_fred_macro_csvs(
     cpi_yoy = compute_yoy(cpi_rows)
     vix_rows = parse_fred_csv(Path(fred_dir) / "VIXCLS.csv", "VIXCLS")
     core_pce_rows = parse_fred_csv(Path(fred_dir) / "PCEPILFE.csv", "PCEPILFE")
+    fed_total_assets_rows = parse_fred_csv(Path(fred_dir) / "WALCL.csv", "WALCL")
+    fed_treasury_rows = parse_fred_csv(Path(fred_dir) / "TREAST.csv", "TREAST")
+    fed_mbs_rows = parse_fred_csv(Path(fred_dir) / "WSHOMCB.csv", "WSHOMCB")
     payloads = {
         "cpi_yoy": _fred_points_payload(
             resample_to_weekly_sundays(
@@ -115,6 +145,9 @@ def import_fred_macro_csvs(
             )
         ),
         "core_pce_price_index": _fred_monthly_points_payload(core_pce_rows),
+        "fed_total_assets": _fred_weekly_points_payload(fed_total_assets_rows),
+        "fed_treasury_holdings": _fred_weekly_points_payload(fed_treasury_rows),
+        "fed_mbs_holdings": _fred_weekly_points_payload(fed_mbs_rows),
     }
     inserted = {}
     for series_id, points in payloads.items():
