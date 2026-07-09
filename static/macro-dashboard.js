@@ -875,6 +875,15 @@
     return `${Number(value).toFixed(2)}%`;
   }
 
+  function fmtUsdMillions(value) {
+    if (value === null || value === undefined) return "n/a";
+    const absValue = Math.abs(value);
+    const sign = value < 0 ? "-" : "";
+    if (absValue >= 1000000) return `${sign}$${fmtNumber(absValue / 1000000)}T`;
+    if (absValue >= 1000) return `${sign}$${fmtNumber(absValue / 1000)}B`;
+    return `${sign}$${fmtNumber(absValue)}M`;
+  }
+
   function fmtNumber(value) {
     if (value === null || value === undefined) return "n/a";
     return Number(value).toFixed(2);
@@ -1063,6 +1072,12 @@
     "Required Inputs": "所需输入",
     "Supporting Context": "辅助背景",
     "Not Ready": "未就绪",
+    "Fed Balance Sheet": "美联储资产负债表",
+    "Liquidity Context": "流动性背景",
+    "Total Assets": "总资产",
+    "13W Change": "13周变化",
+    "Treasury 13W": "美债13周",
+    "MBS 13W": "MBS 13周",
     "Above Target": "高于目标",
     "Near Target": "接近目标",
     "Below Target": "低于目标",
@@ -1306,6 +1321,7 @@
       if (card.id === "m2_money_supply") return renderM2MoneySupplyCard(card);
       if (card.id === "inflation_context") return renderInflationContextCard(card);
       if (card.id === "gdp_expectations") return renderGdpExpectationsCard(card);
+      if (card.id === "fed_balance_sheet") return renderFedBalanceSheetCard(card);
       return "";
     }).join("");
     section.innerHTML = `
@@ -1427,6 +1443,39 @@
         </div>
         <p class="m2-card-footnote">${escapeHtml(card.description || "")}</p>
         <p class="m2-card-footnote gdp-expectations-support">${escapeHtml(card.supporting_context || "")}</p>
+      </div>
+    `;
+  }
+
+  function renderFedBalanceSheetCard(card) {
+    return `
+      <div class="m2-card fed-balance-sheet-card">
+        <div class="m2-card-head">
+          <span>${escapeHtml(card.label || "Fed Balance Sheet")}<br><small>${escapeHtml(zhLabel(card.label) || "美联储资产负债表")}</small></span>
+          <strong class="inflation-status-badge">${bilingualLabel(card.status_label || "Liquidity Context")}</strong>
+        </div>
+        <div class="m2-metric-band">
+          <div>
+            <span>${bilingualLabel("Total Assets")}</span>
+            <strong>${escapeHtml(fmtUsdMillions(card.total_assets))}</strong>
+            <small>Fed H.4.1 total assets<br><span>美联储H.4.1总资产</span></small>
+          </div>
+          <div>
+            <span>${bilingualLabel("YoY Growth")}</span>
+            <strong>${escapeHtml(fmtDirectionalPct(card.total_assets_yoy))}</strong>
+            <small>vs same week last year<br><span>较去年同期</span></small>
+          </div>
+          <div>
+            <span>${bilingualLabel("13W Change")}</span>
+            <strong>${escapeHtml(fmtUsdMillions(card.total_assets_13w_change))}</strong>
+            <small>QE/QT direction context<br><span>扩表/缩表方向背景</span></small>
+          </div>
+        </div>
+        <div class="fed-balance-composition">
+          <span>${bilingualLabel("Treasury 13W")}: <strong>${escapeHtml(fmtUsdMillions(card.treasury_13w_change))}</strong></span>
+          <span>${bilingualLabel("MBS 13W")}: <strong>${escapeHtml(fmtUsdMillions(card.mbs_13w_change))}</strong></span>
+        </div>
+        <p class="m2-card-footnote">${escapeHtml(card.description || "")}</p>
       </div>
     `;
   }

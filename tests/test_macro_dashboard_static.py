@@ -714,6 +714,19 @@ def test_macro_dashboard_css_contains_macro_ai_interpretation_styles():
     assert ".macro-ai-interpretation" in css
 
 
+def test_macro_dashboard_js_renders_fed_balance_sheet_card():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "renderFedBalanceSheetCard" in js
+    assert "Fed Balance Sheet" in js
+    assert "美联储资产负债表" in js
+    assert "Liquidity Context" in js
+    assert "Total Assets" in js
+    assert "13W Change" in js
+    assert "Treasury 13W" in js
+    assert "MBS 13W" in js
+
+
 def test_macro_dashboard_js_renders_gdp_expectations_placeholder_card():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 
