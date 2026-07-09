@@ -14,6 +14,7 @@ def test_growth_cycle_source_fields_are_grouped_by_source():
         "m2_money_stock",
         "inflation_context",
         "gdp_expectations",
+        "fed_balance_sheet",
         "jobless_claims",
     ]
 
@@ -385,7 +386,7 @@ def test_normalize_m2_computes_three_month_momentum():
     assert round(growth_cycle["m2_3m_momentum"], 4) == 0.1204
 
 
-def test_build_m2_money_supply_detail_payload_returns_three_chart_series():
+def test_build_m2_money_supply_detail_payload_returns_four_chart_series():
     rows = [
         {"date": "2025-01-01", "value": 100.0, "source": "m2.xlsx"},
         {"date": "2025-02-01", "value": 101.0, "source": "m2.xlsx"},
@@ -403,6 +404,23 @@ def test_build_m2_money_supply_detail_payload_returns_three_chart_series():
     ]
 
     payload = macro_growth_cycle.build_m2_money_supply_detail_payload(rows)
+    assert [chart["title"] for chart in payload["charts"]] == [
+        "M2 YoY Growth vs Inflation Constraint",
+        "M2 3M Change",
+        "Fed Balance Sheet 13W Composition",
+        "M2 MoM Shock Events",
+    ]
+    assert payload["charts"][0]["series"] == [
+        {
+            "date": "2026-01-01",
+            "m2_yoy": 25.0,
+            "fed_total_assets_yoy": None,
+            "core_pce_yoy": None,
+            "fed_target": 2.0,
+        },
+    ]
+
+    payload = macro_growth_cycle.build_m2_money_supply_detail_payload(rows)
 
     assert payload["detail_id"] == "m2_money_supply"
     assert payload["title"] == "M2 Money Supply"
@@ -410,18 +428,20 @@ def test_build_m2_money_supply_detail_payload_returns_three_chart_series():
     assert [chart["title"] for chart in payload["charts"]] == [
         "M2 YoY Growth vs Inflation Constraint",
         "M2 3M Change",
+        "Fed Balance Sheet 13W Composition",
         "M2 MoM Shock Events",
     ]
     assert payload["charts"][0]["series"] == [
         {
             "date": "2026-01-01",
             "m2_yoy": 25.0,
+            "fed_total_assets_yoy": None,
             "core_pce_yoy": None,
             "fed_target": 2.0,
         },
     ]
     assert round(payload["charts"][1]["series"][-1]["value"], 4) == 14.6789
-    assert payload["charts"][2]["series"][-1] == {
+    assert payload["charts"][3]["series"][-1] == {
         "date": "2026-01-01",
         "value": 2,
         "mom_growth": 12.6126,
@@ -440,7 +460,8 @@ def test_build_m2_money_supply_detail_payload_handles_short_history():
 
     assert payload["charts"][0]["series"] == []
     assert payload["charts"][1]["series"] == []
-    assert payload["charts"][2]["series"] == [
+    assert payload["charts"][2]["series"] == []
+    assert payload["charts"][3]["series"] == [
         {
             "date": "2026-02-01",
             "value": 2,
@@ -743,9 +764,15 @@ def test_m2_detail_state_chart_includes_core_pce_yoy_and_fed_target():
     chart = payload["charts"][0]
 
     assert chart["title"] == "M2 YoY Growth vs Inflation Constraint"
-    assert chart["keys"] == ["m2_yoy", "core_pce_yoy", "fed_target"]
+    assert chart["keys"] == [
+        "m2_yoy",
+        "fed_total_assets_yoy",
+        "core_pce_yoy",
+        "fed_target",
+    ]
     assert chart["labels"] == {
         "m2_yoy": "M2 YoY Growth",
+        "fed_total_assets_yoy": "Fed Total Assets YoY",
         "core_pce_yoy": "Core PCE YoY",
         "fed_target": "Fed 2% Target (since 2012)",
     }
@@ -753,6 +780,7 @@ def test_m2_detail_state_chart_includes_core_pce_yoy_and_fed_target():
         {
             "date": "2026-01-01",
             "m2_yoy": 25.0,
+            "fed_total_assets_yoy": None,
             "core_pce_yoy": 4.6154,
             "fed_target": 2.0,
         }
@@ -787,6 +815,7 @@ def test_m2_detail_state_chart_starts_fed_target_in_2012():
     assert state_series[-2]["fed_target"] is None
     assert state_series[-1]["date"] == "2012-01-01"
     assert state_series[-1]["fed_target"] == 2.0
+    assert "fed_total_assets_yoy" in state_series[-1]
 
 
 def test_normalize_inflation_context_computes_core_pce_yoy_and_target_gap():
@@ -950,3 +979,45 @@ def test_normalize_fed_balance_sheet_computes_card_metrics_without_status():
     assert card["total_assets_13w_change"] == 60000.0
     assert card["treasury_13w_change"] == 20000.0
     assert card["mbs_13w_change"] == -15000.0
+
+
+def test_m2_detail_includes_fed_balance_sheet_comparison_charts():
+    m2_rows = [
+        {"date": f"2025-{month:02d}-01", "value": 100.0 + month, "source": "FRED"}
+        for month in range(1, 13)
+    ] + [{"date": "2026-01-01", "value": 125.0, "source": "FRED"}]
+    fed_rows = [
+        {
+            "date": f"2025-{month:02d}-01",
+            "value": 6000000.0 + month * 1000,
+            "source": "FRED weekly",
+        }
+        for month in range(1, 13)
+    ] + [{"date": "2026-01-01", "value": 6200000.0, "source": "FRED weekly"}]
+    treasury_rows = [
+        {"date": "2025-10-01", "value": 4200000.0, "source": "FRED weekly"},
+        {"date": "2026-01-01", "value": 4215000.0, "source": "FRED weekly"},
+    ]
+    mbs_rows = [
+        {"date": "2025-10-01", "value": 2200000.0, "source": "FRED weekly"},
+        {"date": "2026-01-01", "value": 2190000.0, "source": "FRED weekly"},
+    ]
+
+    payload = macro_growth_cycle.build_m2_money_supply_detail_payload(
+        m2_rows,
+        core_pce_rows=None,
+        fed_total_assets_rows=fed_rows,
+        fed_treasury_rows=treasury_rows,
+        fed_mbs_rows=mbs_rows,
+    )
+
+    assert payload["charts"][0]["keys"] == [
+        "m2_yoy",
+        "fed_total_assets_yoy",
+        "core_pce_yoy",
+        "fed_target",
+    ]
+    assert "Fed Total Assets YoY" in payload["charts"][0]["labels"].values()
+    composition_chart = payload["charts"][2]
+    assert composition_chart["title"] == "Fed Balance Sheet 13W Composition"
+    assert composition_chart["keys"] == ["treasury_13w_change", "mbs_13w_change"]

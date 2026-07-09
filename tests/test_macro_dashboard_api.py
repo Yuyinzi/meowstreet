@@ -793,7 +793,7 @@ def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):
     payload = response.json()
     assert payload["detail_id"] == "m2_money_supply"
     assert payload["title"] == "M2 Money Supply"
-    assert len(payload["charts"]) == 3
+    assert len(payload["charts"]) == 4
     assert payload["charts"][0]["kind"] == "time_series"
     assert payload["m2_ai_interpretation"]["text_en"] is not None
     assert "generator" in payload["m2_ai_interpretation"]["text_en"]
@@ -1116,6 +1116,12 @@ def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
             return rows(100)
         if series_id == "core_pce_price_index":
             return rows(130)
+        if series_id in (
+            "fed_total_assets",
+            "fed_treasury_holdings",
+            "fed_mbs_holdings",
+        ):
+            return rows(100)
         raise AssertionError(series_id)
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
@@ -1135,4 +1141,9 @@ def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
     assert response.status_code == 200
     chart = response.json()["charts"][0]
     assert chart["title"] == "M2 YoY Growth vs Inflation Constraint"
-    assert chart["keys"] == ["m2_yoy", "core_pce_yoy", "fed_target"]
+    assert chart["keys"] == [
+        "m2_yoy",
+        "fed_total_assets_yoy",
+        "core_pce_yoy",
+        "fed_target",
+    ]

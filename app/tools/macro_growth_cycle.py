@@ -830,6 +830,20 @@ def _core_pce_yoy_series(points):
     ]
 
 
+def _value_by_date(points):
+    return {point["date"]: point["value"] for point in points}
+
+
+def _weekly_change_series(points, weeks):
+    return [
+        {
+            "date": points[index]["date"],
+            "value": round(points[index]["value"] - points[index - weeks]["value"], 4),
+        }
+        for index in range(weeks, len(points))
+    ]
+
+
 def _m2_mom_shock_event_series(points):
     mom_values = []
     series = []
@@ -866,18 +880,40 @@ def _m2_mom_shock_event_series(points):
     return series
 
 
-def build_m2_money_supply_detail_payload(rows, core_pce_rows=None):
+def build_m2_money_supply_detail_payload(
+    rows,
+    core_pce_rows=None,
+    fed_total_assets_rows=None,
+    fed_treasury_rows=None,
+    fed_mbs_rows=None,
+):
     points = _m2_level_points(rows)
     core_pce_points = _m2_level_points(core_pce_rows or [])
+    fed_total_points = _m2_level_points(fed_total_assets_rows or [])
+    fed_treasury_points = _m2_level_points(fed_treasury_rows or [])
+    fed_mbs_points = _m2_level_points(fed_mbs_rows or [])
     source = points[-1].get("source") if points else None
     m2_yoy_series = _m2_growth_series(points, 12)
-    core_pce_yoy_by_date = {
-        point["date"]: point["value"] for point in _core_pce_yoy_series(core_pce_points)
-    }
+    core_pce_yoy_by_date = _value_by_date(_core_pce_yoy_series(core_pce_points))
+    fed_total_yoy_by_date = _value_by_date(_weekly_change_series(fed_total_points, 52))
+    treasury_change_by_date = _value_by_date(
+        _weekly_change_series(fed_treasury_points, 13)
+    )
+    mbs_change_by_date = _value_by_date(_weekly_change_series(fed_mbs_points, 13))
+    composition_dates = sorted(set(treasury_change_by_date) | set(mbs_change_by_date))
+    fed_composition_series = [
+        {
+            "date": date_key,
+            "treasury_13w_change": treasury_change_by_date.get(date_key),
+            "mbs_13w_change": mbs_change_by_date.get(date_key),
+        }
+        for date_key in composition_dates
+    ]
     state_series = [
         {
             "date": point["date"],
             "m2_yoy": point["value"],
+            "fed_total_assets_yoy": fed_total_yoy_by_date.get(point["date"]),
             "core_pce_yoy": core_pce_yoy_by_date.get(point["date"]),
             "fed_target": FED_INFLATION_TARGET * 100
             if point["date"] >= FED_INFLATION_TARGET_EFFECTIVE_MONTH
@@ -893,9 +929,15 @@ def build_m2_money_supply_detail_payload(rows, core_pce_rows=None):
             {
                 "kind": "time_series",
                 "title": "M2 YoY Growth vs Inflation Constraint",
-                "keys": ["m2_yoy", "core_pce_yoy", "fed_target"],
+                "keys": [
+                    "m2_yoy",
+                    "fed_total_assets_yoy",
+                    "core_pce_yoy",
+                    "fed_target",
+                ],
                 "labels": {
                     "m2_yoy": "M2 YoY Growth",
+                    "fed_total_assets_yoy": "Fed Total Assets YoY",
                     "core_pce_yoy": "Core PCE YoY",
                     "fed_target": "Fed 2% Target (since 2012)",
                 },
@@ -907,6 +949,17 @@ def build_m2_money_supply_detail_payload(rows, core_pce_rows=None):
                 "keys": ["value"],
                 "labels": {"value": "3M Change"},
                 "series": _m2_growth_series(points, 3),
+            },
+            {
+                "kind": "time_series",
+                "title": "Fed Balance Sheet 13W Composition",
+                "keys": ["treasury_13w_change", "mbs_13w_change"],
+                "labels": {
+                    "treasury_13w_change": "Treasury 13W Change",
+                    "mbs_13w_change": "MBS 13W Change",
+                },
+                "unit": "raw",
+                "series": fed_composition_series,
             },
             {
                 "kind": "time_series",

@@ -255,9 +255,24 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             con,
             "core_pce_price_index",
         )
+        fed_total_assets_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con,
+            "fed_total_assets",
+        )
+        fed_treasury_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con,
+            "fed_treasury_holdings",
+        )
+        fed_mbs_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con,
+            "fed_mbs_holdings",
+        )
         detail_payload = macro_growth_cycle.build_m2_money_supply_detail_payload(
             rows,
-            core_pce_rows,
+            core_pce_rows=core_pce_rows,
+            fed_total_assets_rows=fed_total_assets_rows,
+            fed_treasury_rows=fed_treasury_rows,
+            fed_mbs_rows=fed_mbs_rows,
         )
         dashboard_payload = macro_growth_cycle.build_growth_cycle_dashboard(
             m2_money_stock={"series": rows}
