@@ -477,6 +477,21 @@ h2 {
   box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
 }
 
+.inflation-context-card {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.54);
+  border-radius: 8px;
+  padding: 14px;
+  min-height: 180px;
+}
+
+.inflation-context-copy {
+  margin: 12px 0 0;
+  color: #cbd5e1;
+  line-height: 1.45;
+  font-size: 0.84rem;
+}
+
 .m2-card-button {
   appearance: none;
   color: inherit;
@@ -1954,42 +1969,37 @@ h2 {
 }
 
 .macro-ai-interpretation {
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(15, 23, 42, 0.42);
-  border-radius: 8px;
+  margin-top: 12px;
   padding: 12px 14px;
-  margin: 0 0 14px;
+  border: 1px solid #D8C7A6;
+  border-radius: 8px;
+  background: #FFF9EA;
+  color: #3B3530;
 }
 
 .macro-ai-interpretation strong {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  color: #f8fafc;
-  font-size: 0.9rem;
-}
-
-.macro-ai-interpretation strong small,
-.macro-ai-interpretation p small {
-  color: #94a3b8;
-  font-size: 0.78rem;
-  font-weight: 500;
+  display: block;
+  font-size: 14px;
+  line-height: 1.25;
 }
 
 .macro-ai-interpretation p {
-  margin: 8px 0 6px;
-  color: #cbd5e1;
-  line-height: 1.5;
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
-.macro-ai-interpretation p small {
+.macro-ai-interpretation small {
   display: block;
-  margin-top: 5px;
+  margin-top: 2px;
+  color: #8B7E74;
+  font-weight: 500;
 }
 
 .macro-ai-interpretation span {
-  color: #64748b;
-  font-size: 0.72rem;
+  display: block;
+  color: #9A8D82;
+  font-size: 11px;
 }
 
 .credit-data-gap-note {

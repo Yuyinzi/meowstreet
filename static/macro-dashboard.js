@@ -1049,6 +1049,15 @@
     "Strong Injection": "较强注入",
     "Strong Contraction": "较强收缩",
     "Extreme Contraction": "极端收缩",
+    // Inflation Context
+    "Growth Cycle": "增长周期",
+    "Inflation Context": "通胀环境",
+    "Core PCE YoY": "核心PCE同比",
+    "Gap vs Fed 2% Target": "相对美联储2%目标",
+    "Fed 2% Target": "美联储2%目标",
+    "Above Target": "高于目标",
+    "Near Target": "接近目标",
+    "Below Target": "低于目标",
   };
 
   function zhLabel(label) {
@@ -1285,19 +1294,24 @@
     const period = state.growthCycle.headline?.[0]?.period;
     pill.textContent = period ? `As of ${fmtDate(period)}` : "Import needed";
     const cards = state.growthCycle.headline || [];
+    const cardHtml = cards.map((card) => {
+      if (card.id === "m2_money_supply") return renderM2MoneySupplyCard(card);
+      if (card.id === "inflation_context") return renderInflationContextCard(card);
+      return "";
+    }).join("");
     section.innerHTML = `
       ${head.outerHTML}
-      ${cards.length ? `
+      ${cardHtml ? `
         <div class="rates-detail gdp-detail">
           <div class="rates-chart-subtitle">
             <div class="credit-conditions-head">
-              <p class="eyebrow">${bilingualLabel("M2 Money Supply")}</p>
+              <p class="eyebrow">${bilingualLabel("Growth Cycle")}</p>
               ${period ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDate(period))}</span>` : ""}
             </div>
-            <p>Money supply expansion and monetary base trends.<br><small>货币供应扩张和基础货币趋势</small></p>
+            <p>Money supply expansion, inflation context, and monetary base trends.<br><small>货币供应扩张、通胀环境和基础货币趋势</small></p>
           </div>
           <div class="growth-grid">
-            ${cards.map(renderM2MoneySupplyCard).join("")}
+            ${cardHtml}
           </div>
         </div>
       ` : ""}
@@ -1341,7 +1355,7 @@
           <div class="relationship-chart-grid">
             ${payload.charts.map((chart, index) => renderRatesDetailChart(chart, index)).join("")}
           </div>
-          ${renderMacroAiInterpretation(payload.m2_ai_interpretation, "M2 Liquidity Read", "M2流动性解读")}
+          ${renderMacroAiInterpretation(payload.m2_ai_interpretation)}
         `;
         attachRatesChartTooltips(body, payload.charts);
       })
@@ -1350,6 +1364,30 @@
         body.innerHTML = `<p class="status">Failed to load growth cycle detail.</p>`;
         console.error(error);
       });
+  }
+
+  function renderInflationContextCard(card) {
+    return `
+      <article class="inflation-context-card inflation-context-${escapeHtml(card.status || "missing")}" aria-label="${escapeHtml(card.label || "Inflation Context")}">
+        <div class="m2-card-head">
+          <span>${bilingualLabel("Inflation Context")}</span>
+          <strong>${bilingualLabel(card.status_label || "Missing")}</strong>
+        </div>
+        <div class="m2-metric-band">
+          <div>
+            <span>${bilingualLabel("Core PCE YoY")}</span>
+            <strong>${escapeHtml(fmtDirectionalPct(card.core_pce_yoy))}</strong>
+            <small>${escapeHtml(card.period || "")}<span>${escapeHtml(card.period || "")}</span></small>
+          </div>
+          <div>
+            <span>${bilingualLabel("Gap vs Fed 2% Target")}</span>
+            <strong>${escapeHtml(fmtDirectionalPct(card.gap))}</strong>
+            <small>${escapeHtml(card.target_label || "Fed 2% Target")}<span>${bilingualLabel(card.target_label || "Fed 2% Target")}</span></small>
+          </div>
+        </div>
+        <p class="inflation-context-copy">${escapeHtml(card.description || "")}</p>
+      </article>
+    `;
   }
 
   function renderM2MoneySupplyCard(card) {
@@ -1362,7 +1400,7 @@
           <div>
             <span>${bilingualLabel("YoY Growth")}</span>
             <strong>${escapeHtml(fmtDirectionalPct(card.state?.m2_yoy_pct_change))}</strong>
-            <small>vs same month last year · ${escapeHtml(fmtPercentRank(card.state?.m2_yoy_percent_rank))} percentile<span>较去年同月 · ${escapeHtml(fmtPercentRank(card.state?.m2_yoy_percent_rank))}分位</span></small>
+            <small>YoY growth vs same month last year · ${escapeHtml(fmtPercentRank(card.state?.m2_yoy_percent_rank))} percentile of history<span>同比增速：较去年同月 · 历史第${escapeHtml(fmtPercentRank(card.state?.m2_yoy_percent_rank))}百分位</span></small>
           </div>
           <div>
             <span>${bilingualLabel("3M Change")}</span>
@@ -1536,11 +1574,11 @@
     `;
   }
 
-  function renderMacroAiInterpretation(ai, title, titleZh) {
+  function renderMacroAiInterpretation(ai) {
     if (!ai) return "";
     return `
       <div class="macro-ai-interpretation">
-        <strong>${escapeHtml(title)}<small>${escapeHtml(titleZh)}</small></strong>
+        <strong>CaiCai<small>财财解读</small></strong>
         <p>${escapeHtml(ai.text_en)}<small>${escapeHtml(ai.text_zh)}</small></p>
         <span>${escapeHtml(ai.as_of || "")} · ${escapeHtml(ai.prompt_version || "")} · ${escapeHtml(ai.model || "")}</span>
       </div>

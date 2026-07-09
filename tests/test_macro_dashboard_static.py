@@ -653,8 +653,10 @@ def test_macro_dashboard_js_fetches_and_renders_growth_cycle_m2_card():
     assert "MoM Shock" in js
     assert "fmtDirectionalPct" in js
     assert "fmtDirectionalPercentRank" in js
-    assert "vs same month last year" in js
-    assert "较去年同月" in js
+    assert "YoY growth vs same month last year" in js
+    assert "percentile of history" in js
+    assert "同比增速：较去年同月" in js
+    assert "历史第" in js
     assert "latest level vs 3 months ago" in js
     assert "最新水平较3个月前" in js
     assert "最新月环比增长" in js
@@ -701,8 +703,8 @@ def test_macro_dashboard_js_renders_m2_ai_interpretation():
 
     assert "renderMacroAiInterpretation" in js
     assert "m2_ai_interpretation" in js
-    assert "M2 Liquidity Read" in js
-    assert "M2流动性解读" in js
+    assert "CaiCai" in js
+    assert "财财解读" in js
     assert "macro-ai-interpretation" in js
 
 
@@ -710,3 +712,16 @@ def test_macro_dashboard_css_contains_macro_ai_interpretation_styles():
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 
     assert ".macro-ai-interpretation" in css
+
+
+def test_macro_dashboard_js_renders_inflation_context_card():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "renderInflationContextCard" in js
+    assert "Inflation Context" in js
+    assert "Core PCE YoY" in js
+    assert "Gap vs Fed 2% Target" in js
+    assert "通胀环境" in js
+    assert "核心PCE同比" in js
+    assert "相对美联储2%目标" in js
+    assert "Fed 2% Target" in js
