@@ -534,6 +534,7 @@ def build_growth_cycle_dashboard_payload(growth_cycle_dashboard):
     inflation_card = build_inflation_context_headline(growth_cycle)
     if inflation_card["status"] != "missing":
         headline.append(inflation_card)
+    headline.append(build_gdp_expectations_headline(growth_cycle))
     return {
         "headline": headline,
         "missing": None,

@@ -13,6 +13,7 @@ def test_growth_cycle_source_fields_are_grouped_by_source():
         "ism_services",
         "m2_money_stock",
         "inflation_context",
+        "gdp_expectations",
         "jobless_claims",
     ]
 
@@ -26,6 +27,7 @@ def test_growth_cycle_source_fields_are_grouped_by_source():
     assert "macro.growth_cycle.services_business_activity" in fields
     assert "macro.growth_cycle.m2_money_stock" in fields
     assert "macro.growth_cycle.core_pce_yoy" in fields
+    assert "macro.growth_cycle.gdp_expectations" in fields
     assert "macro.growth_cycle.initial_jobless_claims" in fields
 
 
@@ -846,6 +848,30 @@ def test_build_inflation_context_headline_returns_card_shape():
         "gap": 0.0108,
         "description": "Inflation is above the Fed target, which can constrain liquidity support.",
     }
+
+
+def test_growth_cycle_dashboard_payload_includes_gdp_expectations_placeholder():
+    dashboard = {
+        "macro": {
+            "growth_cycle": {
+                "m2_period": "2026-01-01",
+                "m2_money_stock": 100.0,
+                "m2_mom_pct_change": 0.01,
+                "m2_yoy_pct_change": 0.04,
+                "m2_3m_momentum": 0.02,
+                "m2_mom_percent_rank": 0.50,
+                "m2_yoy_percent_rank": 0.60,
+            }
+        }
+    }
+
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+
+    assert [card["id"] for card in payload["headline"]] == [
+        "m2_money_supply",
+        "gdp_expectations",
+    ]
+    assert payload["headline"][1]["status"] == "pending_inputs"
 
 
 def test_build_gdp_expectations_headline_returns_pending_inputs_card():
