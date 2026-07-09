@@ -893,3 +893,60 @@ def test_build_gdp_expectations_headline_returns_pending_inputs_card():
         "supporting_context": "GDP / Market Relationship validates why GDP direction matters, but it does not replace a forward GDP expectation signal.",
         "description": "Growth outlook context is needed to judge whether liquidity support is preemptive or defensive. Wait for leading indicators before producing a GDP direction signal.",
     }
+
+
+def test_normalize_fed_balance_sheet_computes_card_metrics_without_status():
+    total_assets = {
+        "series": [
+            {"date": f"2025-{week:02d}-01", "value": 6000000.0} for week in range(1, 40)
+        ]
+        + [
+            {"date": f"2025-{week:02d}-01", "value": 6650000.0}
+            for week in range(40, 53)
+        ]
+        + [{"date": "2026-01-14", "value": 6710000.0}]
+    }
+    treasury = {
+        "series": [
+            {"date": f"2025-{week:02d}-01", "value": 4190000.0} for week in range(1, 40)
+        ]
+        + [
+            {"date": f"2025-{week:02d}-01", "value": 4190000.0}
+            for week in range(40, 53)
+        ]
+        + [{"date": "2026-01-14", "value": 4210000.0}]
+    }
+    mbs = {
+        "series": [
+            {"date": f"2025-{week:02d}-01", "value": 2210000.0} for week in range(1, 40)
+        ]
+        + [
+            {"date": f"2025-{week:02d}-01", "value": 2210000.0}
+            for week in range(40, 53)
+        ]
+        + [{"date": "2026-01-14", "value": 2195000.0}]
+    }
+
+    result = macro_growth_cycle.normalize_fed_balance_sheet(
+        total_assets,
+        treasury,
+        mbs,
+    )
+    growth_cycle = result["macro"]["growth_cycle"]
+
+    assert growth_cycle["fed_balance_sheet_period"] == "2026-01-14"
+    assert growth_cycle["fed_total_assets"] == 6710000.0
+    assert round(growth_cycle["fed_total_assets_yoy"], 4) == 0.1183
+    assert growth_cycle["fed_total_assets_13w_change"] == 60000.0
+    assert growth_cycle["fed_treasury_13w_change"] == 20000.0
+    assert growth_cycle["fed_mbs_13w_change"] == -15000.0
+
+    card = macro_growth_cycle.build_fed_balance_sheet_headline(growth_cycle)
+    assert card["id"] == "fed_balance_sheet"
+    assert card["status"] == "context"
+    assert card["status_label"] == "Liquidity Context"
+    assert card["total_assets"] == 6710000.0
+    assert card["total_assets_yoy"] == growth_cycle["fed_total_assets_yoy"]
+    assert card["total_assets_13w_change"] == 60000.0
+    assert card["treasury_13w_change"] == 20000.0
+    assert card["mbs_13w_change"] == -15000.0

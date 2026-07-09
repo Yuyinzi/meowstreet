@@ -213,6 +213,36 @@ GROWTH_CYCLE_DASHBOARD_FIELDS = [
         "field": "macro.growth_cycle.growth_cycle_bias",
         "kind": "compute",
     },
+    {
+        "id": "fed_total_assets",
+        "title": "Fed Total Assets",
+        "field": "macro.growth_cycle.fed_total_assets",
+        "kind": "query",
+    },
+    {
+        "id": "fed_total_assets_yoy",
+        "title": "Fed Total Assets YoY",
+        "field": "macro.growth_cycle.fed_total_assets_yoy",
+        "kind": "compute",
+    },
+    {
+        "id": "fed_total_assets_13w_change",
+        "title": "Fed Total Assets 13W Change",
+        "field": "macro.growth_cycle.fed_total_assets_13w_change",
+        "kind": "compute",
+    },
+    {
+        "id": "fed_treasury_13w_change",
+        "title": "Fed Treasury 13W Change",
+        "field": "macro.growth_cycle.fed_treasury_13w_change",
+        "kind": "compute",
+    },
+    {
+        "id": "fed_mbs_13w_change",
+        "title": "Fed MBS 13W Change",
+        "field": "macro.growth_cycle.fed_mbs_13w_change",
+        "kind": "compute",
+    },
 ]
 
 
@@ -280,6 +310,18 @@ GROWTH_CYCLE_SOURCES = [
         "fields": _dashboard_fields_by_id(
             "gdp_expectations",
             "gdp_expectations_status",
+        ),
+    },
+    {
+        "id": "fed_balance_sheet",
+        "title": "Fed Balance Sheet",
+        "frequency": "weekly",
+        "fields": _dashboard_fields_by_id(
+            "fed_total_assets",
+            "fed_total_assets_yoy",
+            "fed_total_assets_13w_change",
+            "fed_treasury_13w_change",
+            "fed_mbs_13w_change",
         ),
     },
     {
@@ -460,6 +502,77 @@ def build_inflation_context_headline(growth_cycle):
     }
 
 
+def _series_points(payload):
+    return [
+        {"date": row["date"], "value": float(row["value"])}
+        for row in payload.get("series", [])
+        if row.get("value") is not None
+    ]
+
+
+def _value_weeks_ago(points, weeks):
+    if len(points) < weeks + 1:
+        return None
+    return points[-weeks - 1]["value"]
+
+
+def normalize_fed_balance_sheet(total_assets, treasury_holdings, mbs_holdings):
+    total_points = _series_points(total_assets)
+    treasury_points = _series_points(treasury_holdings)
+    mbs_points = _series_points(mbs_holdings)
+    latest_total = total_points[-1]["value"] if total_points else None
+    year_ago_total = _value_weeks_ago(total_points, 52)
+    thirteen_week_total = _value_weeks_ago(total_points, 13)
+    thirteen_week_treasury = _value_weeks_ago(treasury_points, 13)
+    thirteen_week_mbs = _value_weeks_ago(mbs_points, 13)
+    latest_treasury = treasury_points[-1]["value"] if treasury_points else None
+    latest_mbs = mbs_points[-1]["value"] if mbs_points else None
+    return {
+        "macro": {
+            "growth_cycle": {
+                "fed_balance_sheet_period": total_points[-1]["date"]
+                if total_points
+                else None,
+                "fed_total_assets": latest_total,
+                "fed_total_assets_yoy": _pct_change(latest_total, year_ago_total),
+                "fed_total_assets_13w_change": latest_total - thirteen_week_total
+                if latest_total is not None and thirteen_week_total is not None
+                else None,
+                "fed_treasury_13w_change": latest_treasury - thirteen_week_treasury
+                if latest_treasury is not None and thirteen_week_treasury is not None
+                else None,
+                "fed_mbs_13w_change": latest_mbs - thirteen_week_mbs
+                if latest_mbs is not None and thirteen_week_mbs is not None
+                else None,
+            }
+        }
+    }
+
+
+def build_fed_balance_sheet_headline(growth_cycle):
+    if growth_cycle.get("fed_total_assets") is None:
+        return {
+            "id": "fed_balance_sheet",
+            "label": "Fed Balance Sheet",
+            "period": None,
+            "status": "missing",
+            "status_label": "Missing",
+        }
+    return {
+        "id": "fed_balance_sheet",
+        "label": "Fed Balance Sheet",
+        "period": growth_cycle.get("fed_balance_sheet_period"),
+        "status": "context",
+        "status_label": "Liquidity Context",
+        "total_assets": growth_cycle.get("fed_total_assets"),
+        "total_assets_yoy": growth_cycle.get("fed_total_assets_yoy"),
+        "total_assets_13w_change": growth_cycle.get("fed_total_assets_13w_change"),
+        "treasury_13w_change": growth_cycle.get("fed_treasury_13w_change"),
+        "mbs_13w_change": growth_cycle.get("fed_mbs_13w_change"),
+        "description": "Balance sheet expansion supports liquidity; contraction drains liquidity. Use this with M2, inflation, credit spreads, and GDP expectations.",
+    }
+
+
 def build_gdp_expectations_headline(growth_cycle):
     return {
         "id": "gdp_expectations",
@@ -535,6 +648,9 @@ def build_growth_cycle_dashboard_payload(growth_cycle_dashboard):
     if inflation_card["status"] != "missing":
         headline.append(inflation_card)
     headline.append(build_gdp_expectations_headline(growth_cycle))
+    balance_sheet_card = build_fed_balance_sheet_headline(growth_cycle)
+    if balance_sheet_card["status"] != "missing":
+        headline.append(balance_sheet_card)
     return {
         "headline": headline,
         "missing": None,
