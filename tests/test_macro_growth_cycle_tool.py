@@ -406,12 +406,17 @@ def test_build_m2_money_supply_detail_payload_returns_three_chart_series():
     assert payload["title"] == "M2 Money Supply"
     assert payload["source"] == "m2.xlsx"
     assert [chart["title"] for chart in payload["charts"]] == [
-        "M2 YoY Growth",
+        "M2 YoY Growth vs Inflation Constraint",
         "M2 3M Change",
         "M2 MoM Shock Events",
     ]
     assert payload["charts"][0]["series"] == [
-        {"date": "2026-01-01", "value": 25.0},
+        {
+            "date": "2026-01-01",
+            "m2_yoy": 25.0,
+            "core_pce_yoy": None,
+            "fed_target": 2.0,
+        },
     ]
     assert round(payload["charts"][1]["series"][-1]["value"], 4) == 14.6789
     assert payload["charts"][2]["series"][-1] == {
@@ -695,6 +700,61 @@ def test_m2_fallback_interpretation_returns_bilingual_text_by_status():
     headline = {}
     result = macro_growth_cycle.m2_fallback_interpretation(headline)
     assert "generate" in result["text_en"]
+
+
+def test_m2_detail_state_chart_includes_core_pce_yoy_and_fed_target():
+    m2_rows = [
+        {"date": "2025-01-01", "value": 100.0, "source": "m2.xlsx"},
+        {"date": "2025-02-01", "value": 101.0, "source": "m2.xlsx"},
+        {"date": "2025-03-01", "value": 102.0, "source": "m2.xlsx"},
+        {"date": "2025-04-01", "value": 103.0, "source": "m2.xlsx"},
+        {"date": "2025-05-01", "value": 104.0, "source": "m2.xlsx"},
+        {"date": "2025-06-01", "value": 105.0, "source": "m2.xlsx"},
+        {"date": "2025-07-01", "value": 106.0, "source": "m2.xlsx"},
+        {"date": "2025-08-01", "value": 107.0, "source": "m2.xlsx"},
+        {"date": "2025-09-01", "value": 108.0, "source": "m2.xlsx"},
+        {"date": "2025-10-01", "value": 109.0, "source": "m2.xlsx"},
+        {"date": "2025-11-01", "value": 110.0, "source": "m2.xlsx"},
+        {"date": "2025-12-01", "value": 111.0, "source": "m2.xlsx"},
+        {"date": "2026-01-01", "value": 125.0, "source": "m2.xlsx"},
+    ]
+    core_pce_rows = [
+        {"date": "2025-01-01", "value": 130.0, "source": "FRED monthly"},
+        {"date": "2025-02-01", "value": 130.5, "source": "FRED monthly"},
+        {"date": "2025-03-01", "value": 131.0, "source": "FRED monthly"},
+        {"date": "2025-04-01", "value": 131.5, "source": "FRED monthly"},
+        {"date": "2025-05-01", "value": 132.0, "source": "FRED monthly"},
+        {"date": "2025-06-01", "value": 132.5, "source": "FRED monthly"},
+        {"date": "2025-07-01", "value": 133.0, "source": "FRED monthly"},
+        {"date": "2025-08-01", "value": 133.5, "source": "FRED monthly"},
+        {"date": "2025-09-01", "value": 134.0, "source": "FRED monthly"},
+        {"date": "2025-10-01", "value": 134.5, "source": "FRED monthly"},
+        {"date": "2025-11-01", "value": 135.0, "source": "FRED monthly"},
+        {"date": "2025-12-01", "value": 135.5, "source": "FRED monthly"},
+        {"date": "2026-01-01", "value": 136.0, "source": "FRED monthly"},
+    ]
+
+    payload = macro_growth_cycle.build_m2_money_supply_detail_payload(
+        m2_rows,
+        core_pce_rows,
+    )
+    chart = payload["charts"][0]
+
+    assert chart["title"] == "M2 YoY Growth vs Inflation Constraint"
+    assert chart["keys"] == ["m2_yoy", "core_pce_yoy", "fed_target"]
+    assert chart["labels"] == {
+        "m2_yoy": "M2 YoY Growth",
+        "core_pce_yoy": "Core PCE YoY",
+        "fed_target": "Fed 2% Target",
+    }
+    assert chart["series"] == [
+        {
+            "date": "2026-01-01",
+            "m2_yoy": 25.0,
+            "core_pce_yoy": 4.6154,
+            "fed_target": 2.0,
+        }
+    ]
 
 
 def test_normalize_inflation_context_computes_core_pce_yoy_and_target_gap():

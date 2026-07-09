@@ -646,6 +646,20 @@ def _m2_growth_series(points, lookback_months):
     ]
 
 
+def _core_pce_yoy_series(points):
+    return [
+        {
+            "date": points[index]["date"],
+            "value": round(
+                _pct_change(points[index]["value"], points[index - 12]["value"]) * 100,
+                4,
+            ),
+        }
+        for index in range(12, len(points))
+        if _pct_change(points[index]["value"], points[index - 12]["value"]) is not None
+    ]
+
+
 def _m2_mom_shock_event_series(points):
     mom_values = []
     series = []
@@ -682,9 +696,23 @@ def _m2_mom_shock_event_series(points):
     return series
 
 
-def build_m2_money_supply_detail_payload(rows):
+def build_m2_money_supply_detail_payload(rows, core_pce_rows=None):
     points = _m2_level_points(rows)
+    core_pce_points = _m2_level_points(core_pce_rows or [])
     source = points[-1].get("source") if points else None
+    m2_yoy_series = _m2_growth_series(points, 12)
+    core_pce_yoy_by_date = {
+        point["date"]: point["value"] for point in _core_pce_yoy_series(core_pce_points)
+    }
+    state_series = [
+        {
+            "date": point["date"],
+            "m2_yoy": point["value"],
+            "core_pce_yoy": core_pce_yoy_by_date.get(point["date"]),
+            "fed_target": FED_INFLATION_TARGET * 100,
+        }
+        for point in m2_yoy_series
+    ]
     return {
         "detail_id": "m2_money_supply",
         "title": "M2 Money Supply",
@@ -692,10 +720,14 @@ def build_m2_money_supply_detail_payload(rows):
         "charts": [
             {
                 "kind": "time_series",
-                "title": "M2 YoY Growth",
-                "keys": ["value"],
-                "labels": {"value": "YoY Growth"},
-                "series": _m2_growth_series(points, 12),
+                "title": "M2 YoY Growth vs Inflation Constraint",
+                "keys": ["m2_yoy", "core_pce_yoy", "fed_target"],
+                "labels": {
+                    "m2_yoy": "M2 YoY Growth",
+                    "core_pce_yoy": "Core PCE YoY",
+                    "fed_target": "Fed 2% Target",
+                },
+                "series": state_series,
             },
             {
                 "kind": "time_series",
