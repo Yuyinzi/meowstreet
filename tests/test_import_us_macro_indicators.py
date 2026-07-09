@@ -62,7 +62,7 @@ def test_parse_macro_indicator_csv_groups_points_by_series(tmp_path):
 
     parsed = import_us_macro_indicators.parse_csv(csv_path)
 
-    assert sorted(parsed) == ["cpi_yoy", "vix"]
+    assert sorted(parsed) == ["core_pce_price_index", "cpi_yoy", "vix"]
     assert parsed["cpi_yoy"]["series"]["title"] == "CPI YoY"
     assert parsed["cpi_yoy"]["points"][-1]["value"] == 1.40
     assert parsed["vix"]["points"][-1]["value"] == 22.90
@@ -79,7 +79,7 @@ def test_import_macro_indicator_csv_saves_all_parsed_series(tmp_path):
 
     inserted = import_us_macro_indicators.import_csv(con, csv_path)
 
-    assert inserted == {"cpi_yoy": 2, "vix": 2}
+    assert inserted == {"core_pce_price_index": 0, "cpi_yoy": 2, "vix": 2}
     assert (
         us_rates_liquidity.load_macro_indicator_points(con, "cpi_yoy")[-1]["value"]
         == 1.40
@@ -99,6 +99,10 @@ def test_import_fred_macro_csvs_saves_cpi_yoy_and_vix(tmp_path):
         "observation_date,VIXCLS\n2020-12-24,21.53\n2020-12-31,22.75\n",
         encoding="utf-8",
     )
+    (fred_dir / "PCEPILFE.csv").write_text(
+        "observation_date,PCEPILFE\n2020-12-01,130.0\n",
+        encoding="utf-8",
+    )
 
     inserted = import_us_macro_indicators.import_fred_macro_csvs(
         con,
@@ -107,7 +111,7 @@ def test_import_fred_macro_csvs_saves_cpi_yoy_and_vix(tmp_path):
         end_date="2021-01-03",
     )
 
-    assert inserted == {"cpi_yoy": 3, "vix": 2}
+    assert inserted == {"cpi_yoy": 3, "vix": 2, "core_pce_price_index": 1}
     assert us_rates_liquidity.load_macro_indicator_points(con, "cpi_yoy")[-1] == {
         "date": "2021-01-03",
         "value": 1.48,
@@ -146,3 +150,69 @@ def test_fetch_fred_macro_csvs_uses_shared_fred_client(tmp_path, monkeypatch):
         "CPIAUCSL": tmp_path / "CPIAUCSL.csv",
         "VIXCLS": tmp_path / "VIXCLS.csv",
     }
+
+
+def test_import_fred_macro_csvs_saves_core_pce_price_index(tmp_path):
+    fred_dir = tmp_path / "fred"
+    fred_dir.mkdir()
+    (fred_dir / "CPIAUCSL.csv").write_text(
+        "observation_date,CPIAUCSL\n2025-01-01,320\n2026-01-01,330\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "VIXCLS.csv").write_text(
+        "observation_date,VIXCLS\n2026-01-05,14.5\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "PCEPILFE.csv").write_text(
+        "observation_date,PCEPILFE\n"
+        "2025-01-01,130.0\n"
+        "2025-02-01,130.5\n"
+        "2026-01-01,134.0\n",
+        encoding="utf-8",
+    )
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+
+    inserted = import_us_macro_indicators.import_fred_macro_csvs(
+        con,
+        fred_dir,
+        start_date="2026-01-04",
+        end_date="2026-01-11",
+    )
+
+    assert inserted["core_pce_price_index"] == 3
+    assert us_rates_liquidity.load_macro_indicator_points(
+        con,
+        "core_pce_price_index",
+    ) == [
+        {"date": "2025-01-01", "value": 130.0, "source": "FRED monthly"},
+        {"date": "2025-02-01", "value": 130.5, "source": "FRED monthly"},
+        {"date": "2026-01-01", "value": 134.0, "source": "FRED monthly"},
+    ]
+
+
+def test_fetch_fred_macro_csvs_includes_core_pce(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeFredClient:
+        def __init__(self, cache_dir):
+            calls.append(("init", cache_dir))
+
+        def fetch_csvs(self, series_ids):
+            calls.append(("fetch", series_ids))
+            return {
+                series_id: tmp_path / f"{series_id}.csv" for series_id in series_ids
+            }
+
+    monkeypatch.setattr(import_us_macro_indicators, "FredClient", FakeFredClient)
+
+    result = import_us_macro_indicators.fetch_fred_csvs(tmp_path / "fred")
+
+    assert result == {
+        "CPIAUCSL": tmp_path / "CPIAUCSL.csv",
+        "PCEPILFE": tmp_path / "PCEPILFE.csv",
+        "VIXCLS": tmp_path / "VIXCLS.csv",
+    }
+    assert calls == [
+        ("init", tmp_path / "fred"),
+        ("fetch", ["CPIAUCSL", "PCEPILFE", "VIXCLS"]),
+    ]

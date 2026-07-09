@@ -16,13 +16,16 @@ from scripts import import_benchmark_market_data
 DEFAULT_CSV_PATH = ROOT / "data" / "materials" / "Video 04" / "US_P4_Macro_Indicators.csv"
 DEFAULT_FRED_DIR = DEFAULT_CSV_PATH.parent / "fred"
 FRED_SOURCE = "FRED weekly Sunday resample"
+FRED_MONTHLY_SOURCE = "FRED monthly"
 SERIES_CONFIG = {
     "cpi_yoy": {"title": "CPI YoY", "units": "percent"},
     "vix": {"title": "VIX", "units": "index"},
+    "core_pce_price_index": {"title": "Core PCE Price Index", "units": "index"},
 }
 
 FRED_MACRO_SERIES_CONFIG = {
     "CPIAUCSL": "cpi_yoy",
+    "PCEPILFE": "core_pce_price_index",
     "VIXCLS": "vix",
 }
 
@@ -66,6 +69,17 @@ def _fred_points_payload(points):
     ]
 
 
+def _fred_monthly_points_payload(rows):
+    return [
+        {
+            "date": date_key,
+            "value": value,
+            "source": FRED_MONTHLY_SOURCE,
+        }
+        for date_key, value in rows.items()
+    ]
+
+
 def fetch_fred_csvs(fred_dir=DEFAULT_FRED_DIR, fred_series_ids=None):
     series_ids = fred_series_ids or sorted(FRED_MACRO_SERIES_CONFIG)
     for fred_series_id in series_ids:
@@ -84,6 +98,7 @@ def import_fred_macro_csvs(
     cpi_rows = parse_fred_csv(Path(fred_dir) / "CPIAUCSL.csv", "CPIAUCSL")
     cpi_yoy = compute_yoy(cpi_rows)
     vix_rows = parse_fred_csv(Path(fred_dir) / "VIXCLS.csv", "VIXCLS")
+    core_pce_rows = parse_fred_csv(Path(fred_dir) / "PCEPILFE.csv", "PCEPILFE")
     payloads = {
         "cpi_yoy": _fred_points_payload(
             resample_to_weekly_sundays(
@@ -99,6 +114,7 @@ def import_fred_macro_csvs(
                 end_date=end_date,
             )
         ),
+        "core_pce_price_index": _fred_monthly_points_payload(core_pce_rows),
     }
     inserted = {}
     for series_id, points in payloads.items():
