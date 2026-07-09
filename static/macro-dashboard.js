@@ -884,6 +884,12 @@
     return `${sign}$${fmtNumber(absValue)}M`;
   }
 
+  function fmtSignedUsdMillions(value) {
+    if (value === null || value === undefined) return "n/a";
+    const formatted = fmtUsdMillions(value);
+    return value > 0 ? `+${formatted}` : formatted;
+  }
+
   function fmtNumber(value) {
     if (value === null || value === undefined) return "n/a";
     return Number(value).toFixed(2);
@@ -1075,9 +1081,13 @@
     "Fed Balance Sheet": "美联储资产负债表",
     "Liquidity Context": "流动性背景",
     "Total Assets": "总资产",
-    "13W Change": "13周变化",
-    "Treasury 13W": "美债13周",
-    "MBS 13W": "MBS 13周",
+    "Total Assets 13W Net Change": "总资产13周净变化",
+    "Treasury 13W Net Change": "美债持仓13周净变化",
+    "MBS 13W Net Change": "MBS持仓13周净变化",
+    "Treasury 13W Change": "美债持仓13周净变化",
+    "MBS 13W Change": "MBS持仓13周净变化",
+    "Fed Total Assets YoY": "美联储总资产同比",
+    "Fed Balance Sheet 13W Composition": "美联储资产负债表13周构成",
     "Above Target": "高于目标",
     "Near Target": "接近目标",
     "Below Target": "低于目标",
@@ -1452,7 +1462,7 @@
       <div class="m2-card fed-balance-sheet-card">
         <div class="m2-card-head">
           <span>${escapeHtml(card.label || "Fed Balance Sheet")}<br><small>${escapeHtml(zhLabel(card.label) || "美联储资产负债表")}</small></span>
-          <strong class="inflation-status-badge">${bilingualLabel(card.status_label || "Liquidity Context")}</strong>
+          <strong class="inflation-status-badge">${escapeHtml(card.status_label || "Liquidity Context")}</strong>
         </div>
         <div class="m2-metric-band">
           <div>
@@ -1466,14 +1476,18 @@
             <small>vs same week last year<br><span>较去年同期</span></small>
           </div>
           <div>
-            <span>${bilingualLabel("13W Change")}</span>
-            <strong>${escapeHtml(fmtUsdMillions(card.total_assets_13w_change))}</strong>
-            <small>QE/QT direction context<br><span>扩表/缩表方向背景</span></small>
+            <span>${bilingualLabel("Total Assets 13W Net Change")}</span>
+            <strong>${escapeHtml(fmtSignedUsdMillions(card.total_assets_13w_change))}</strong>
+            <small>Positive = expansion, negative = runoff<br><span>正值=扩表，负值=缩表</span></small>
           </div>
         </div>
-        <div class="fed-balance-composition">
-          <span>${bilingualLabel("Treasury 13W")}: <strong>${escapeHtml(fmtUsdMillions(card.treasury_13w_change))}</strong></span>
-          <span>${bilingualLabel("MBS 13W")}: <strong>${escapeHtml(fmtUsdMillions(card.mbs_13w_change))}</strong></span>
+        <div class="m2-level-row">
+          <span>${bilingualLabel("Treasury 13W Net Change")}</span>
+          <strong>${escapeHtml(fmtSignedUsdMillions(card.treasury_13w_change))}</strong>
+        </div>
+        <div class="m2-level-row">
+          <span>${bilingualLabel("MBS 13W Net Change")}</span>
+          <strong>${escapeHtml(fmtSignedUsdMillions(card.mbs_13w_change))}</strong>
         </div>
         <p class="m2-card-footnote">${escapeHtml(card.description || "")}</p>
       </div>

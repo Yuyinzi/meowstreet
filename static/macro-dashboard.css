@@ -514,23 +514,10 @@ h2 {
   margin-top: 0;
 }
 
-.fed-balance-composition {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-  color: #4D4640;
-  font-size: 0.82rem;
-}
 
-.fed-balance-composition span {
-  border: 1px solid #E3D9CF;
-  border-radius: 8px;
-  padding: 7px 9px;
-  background: #FAF8F5;
-}
 
-.inflation-status-badge {
+.m2-card-head .inflation-status-badge,
+.m2-card-head .inflation-status-badge small {
   white-space: normal;
 }
 

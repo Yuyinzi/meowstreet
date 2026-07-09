@@ -722,9 +722,17 @@ def test_macro_dashboard_js_renders_fed_balance_sheet_card():
     assert "美联储资产负债表" in js
     assert "Liquidity Context" in js
     assert "Total Assets" in js
-    assert "13W Change" in js
-    assert "Treasury 13W" in js
-    assert "MBS 13W" in js
+    assert "Total Assets 13W Net Change" in js
+    assert "Treasury 13W Net Change" in js
+    assert "MBS 13W Net Change" in js
+    assert "总资产13周净变化" in js
+    assert "美债持仓13周净变化" in js
+    assert "MBS持仓13周净变化" in js
+    assert "Positive = expansion, negative = runoff" in js
+    assert "正值=扩表，负值=缩表" in js
+    assert "fmtSignedUsdMillions" in js
+    assert "美联储总资产同比" in js
+    assert "美联储资产负债表13周构成" in js
 
 
 def test_macro_dashboard_js_renders_gdp_expectations_placeholder_card():
