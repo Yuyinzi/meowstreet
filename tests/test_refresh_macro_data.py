@@ -42,3 +42,27 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
     assert "benchmark_yahoo: ok" in out
     assert "m2_fred_merge: ok" in out
     assert "macro data refresh completed: ok" in out
+
+
+def test_main_does_not_generate_ai_interpretations():
+    calls = []
+
+    def recorder(label):
+        def _record(argv):
+            calls.append((label, argv))
+            return 0
+
+        return _record
+
+    exit_code = refresh_macro_data.main(
+        [],
+        benchmark_main=recorder("benchmark"),
+        rates_main=recorder("rates"),
+        m2_main=recorder("m2"),
+        gdp_main=recorder("gdp"),
+    )
+
+    assert exit_code == 0
+    flattened_args = [arg for _, argv in calls for arg in argv]
+    assert "--generate-credit-interpretation" not in flattened_args
+    assert "--generate-interpretation" not in flattened_args
