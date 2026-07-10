@@ -227,3 +227,841 @@ def test_load_ai_interpretation_returns_none_for_missing_snapshot(tmp_path):
     )
 
     assert loaded is None
+
+
+def test_replace_macro_events_and_load_by_type(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        saved = us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [
+                {
+                    "event_id": "fomc_2026_06_16",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-06-16",
+                    "end_date": "2026-06-17",
+                    "display_month": "2026-06-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+                }
+            ],
+        )
+
+        rows = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
+    finally:
+        con.close()
+
+    assert saved == {"events": 1}
+    assert rows == [
+        {
+            "event_id": "fomc_2026_06_16",
+            "event_type": "fomc_meeting",
+            "start_date": "2026-06-16",
+            "end_date": "2026-06-17",
+            "display_month": "2026-06-01",
+            "title": "FOMC Meeting",
+            "source": "Federal Reserve",
+            "policy_tone": "unknown",
+            "has_sep": 0,
+            "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+        }
+    ]
+
+
+def test_load_next_macro_event_uses_start_date(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [
+                {
+                    "event_id": "fomc_2026_06_16",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-06-16",
+                    "end_date": "2026-06-17",
+                    "display_month": "2026-06-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+                },
+                {
+                    "event_id": "fomc_2026_07_28",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-07-28",
+                    "end_date": "2026-07-29",
+                    "display_month": "2026-07-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+                },
+            ],
+        )
+
+        row = us_rates_liquidity.load_next_macro_event(
+            con,
+            "fomc_meeting",
+            "2026-07-09",
+        )
+    finally:
+        con.close()
+
+    assert row["event_id"] == "fomc_2026_07_28"
+
+
+def test_replace_macro_event_document_and_load_by_event(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        saved = us_rates_liquidity.replace_macro_event_document(
+            con,
+            {
+                "event_id": "fomc_2026_07_28",
+                "document_type": "statement",
+                "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260729a.htm",
+                "text": "Recent indicators suggest that economic activity has continued to expand.",
+                "source_hash": "abc123",
+                "fetched_at": "2026-07-30T00:00:00Z",
+            },
+        )
+        rows = us_rates_liquidity.load_macro_event_documents(
+            con,
+            "fomc_2026_07_28",
+        )
+    finally:
+        con.close()
+
+    assert saved == {"documents": 1}
+    assert rows == [
+        {
+            "event_id": "fomc_2026_07_28",
+            "document_type": "statement",
+            "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260729a.htm",
+            "text": "Recent indicators suggest that economic activity has continued to expand.",
+            "source_hash": "abc123",
+            "fetched_at": "2026-07-30T00:00:00Z",
+        }
+    ]
+
+
+def test_replace_macro_event_document_upserts_by_event_and_type(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_event_document(
+            con,
+            {
+                "event_id": "fomc_2026_07_28",
+                "document_type": "statement",
+                "url": "https://example.test/old",
+                "text": "old text",
+                "source_hash": "oldhash",
+                "fetched_at": "2026-07-28T00:00:00Z",
+            },
+        )
+        us_rates_liquidity.replace_macro_event_document(
+            con,
+            {
+                "event_id": "fomc_2026_07_28",
+                "document_type": "statement",
+                "url": "https://example.test/new",
+                "text": "new text",
+                "source_hash": "newhash",
+                "fetched_at": "2026-07-30T00:00:00Z",
+            },
+        )
+        rows = us_rates_liquidity.load_macro_event_documents(
+            con,
+            "fomc_2026_07_28",
+        )
+    finally:
+        con.close()
+
+    assert len(rows) == 1
+    assert rows[0]["text"] == "new text"
+    assert rows[0]["source_hash"] == "newhash"
+
+
+def test_load_macro_event_document_returns_none_when_missing(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        row = us_rates_liquidity.load_macro_event_document(
+            con,
+            "fomc_2026_07_28",
+            "statement",
+        )
+    finally:
+        con.close()
+
+    assert row is None
+
+
+def test_replace_macro_event_tone_extraction_loads_latest(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        saved = us_rates_liquidity.replace_macro_event_tone_extraction(
+            con,
+            {
+                "event_id": "fomc_2026_07_28",
+                "source_document_type": "statement",
+                "source_hash": "abc123",
+                "previous_event_id": "fomc_2026_06_16",
+                "policy_action": "hold",
+                "guidance_bias": "neutral",
+                "language_tone": "hawkish",
+                "overall_bias": "mild_hawkish",
+                "statement_tone": "hawkish",
+                "minutes_tone": "unknown",
+                "marker_tone": "hawkish",
+                "tone_score": 1,
+                "tone_change": "more_hawkish",
+                "confidence": "medium",
+                "extraction_status": "approved",
+                "review_rounds": 1,
+                "extractor_model": "gpt-4.1-mini",
+                "reviewer_model": "gpt-4.1",
+                "facts_json": '[{"dimension":"inflation"}]',
+                "comparison_json": '{"inflation":{"change":"more_hawkish"}}',
+                "reviewer_feedback_json": "[]",
+                "final_reviewer_feedback_json": '["approved"]',
+                "reason": "Inflation language became firmer.",
+                "generated_at": "2026-07-30T00:00:00Z",
+            },
+        )
+        row = us_rates_liquidity.load_latest_macro_event_tone_extraction(
+            con,
+            "fomc_2026_07_28",
+            "statement",
+        )
+    finally:
+        con.close()
+
+    assert saved == {"tone_extractions": 1}
+    assert row["policy_action"] == "hold"
+    assert row["guidance_bias"] == "neutral"
+    assert row["language_tone"] == "hawkish"
+    assert row["overall_bias"] == "mild_hawkish"
+    assert row["statement_tone"] == "hawkish"
+    assert row["marker_tone"] == "hawkish"
+    assert row["tone_change"] == "more_hawkish"
+    assert row["final_reviewer_feedback_json"] == '["approved"]'
+
+
+def test_connect_migrates_macro_event_tone_final_feedback_column(tmp_path):
+    db_path = tmp_path / "market.sqlite"
+    con = us_rates_liquidity.connect(db_path)
+    try:
+        con.execute(
+            "alter table macro_event_tone_extractions drop column final_reviewer_feedback_json"
+        )
+        con.commit()
+    finally:
+        con.close()
+
+    con = us_rates_liquidity.connect(db_path)
+    try:
+        columns = [
+            row["name"]
+            for row in con.execute("pragma table_info(macro_event_tone_extractions)")
+        ]
+    finally:
+        con.close()
+
+    assert "final_reviewer_feedback_json" in columns
+
+
+def test_connect_migrates_macro_event_tone_bias_columns(tmp_path):
+    db_path = tmp_path / "market.sqlite"
+    con = us_rates_liquidity.connect(db_path)
+    try:
+        for column_name in [
+            "policy_action",
+            "guidance_bias",
+            "language_tone",
+            "overall_bias",
+        ]:
+            con.execute(
+                f"alter table macro_event_tone_extractions drop column {column_name}"
+            )
+        con.commit()
+    finally:
+        con.close()
+
+    con = us_rates_liquidity.connect(db_path)
+    try:
+        columns = [
+            row["name"]
+            for row in con.execute("pragma table_info(macro_event_tone_extractions)")
+        ]
+    finally:
+        con.close()
+
+    assert "policy_action" in columns
+    assert "guidance_bias" in columns
+    assert "language_tone" in columns
+    assert "overall_bias" in columns
+
+
+def test_load_macro_events_with_latest_tone_merges_tone_fields(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [
+                {
+                    "event_id": "fomc_2026_07_28",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-07-28",
+                    "end_date": "2026-07-29",
+                    "display_month": "2026-07-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://example.test",
+                },
+            ],
+        )
+        us_rates_liquidity.replace_macro_event_document(
+            con,
+            {
+                "event_id": "fomc_2026_07_28",
+                "document_type": "statement",
+                "url": "https://example.test/statement",
+                "text": "Federal Reserve issues FOMC statement\nRecent indicators suggest economic activity expanded.",
+                "source_hash": "abc123",
+                "fetched_at": "2026-07-30T00:00:00Z",
+            },
+        )
+        us_rates_liquidity.replace_macro_event_tone_extraction(
+            con,
+            {
+                "event_id": "fomc_2026_07_28",
+                "source_document_type": "statement",
+                "source_hash": "abc123",
+                "previous_event_id": None,
+                "policy_action": "hold",
+                "guidance_bias": "neutral",
+                "language_tone": "hawkish",
+                "overall_bias": "mild_hawkish",
+                "statement_tone": "hawkish",
+                "minutes_tone": "unknown",
+                "marker_tone": "hawkish",
+                "tone_score": 1,
+                "tone_change": "more_hawkish",
+                "confidence": "high",
+                "extraction_status": "approved",
+                "review_rounds": 1,
+                "extractor_model": "gpt-4.1-mini",
+                "reviewer_model": "gpt-4.1",
+                "facts_json": "[]",
+                "comparison_json": "{}",
+                "reviewer_feedback_json": "[]",
+                "reason": "test",
+                "generated_at": "2026-07-30T00:00:00Z",
+            },
+        )
+        events = us_rates_liquidity.load_macro_events_with_latest_tone(
+            con,
+            "fomc_meeting",
+        )
+    finally:
+        con.close()
+
+    assert len(events) == 1
+    assert events[0]["policy_action"] == "hold"
+    assert events[0]["guidance_bias"] == "neutral"
+    assert events[0]["language_tone"] == "hawkish"
+    assert events[0]["overall_bias"] == "mild_hawkish"
+    assert events[0]["statement_tone"] == "hawkish"
+    assert events[0]["marker_tone"] == "hawkish"
+    assert events[0]["tone_change"] == "more_hawkish"
+    assert events[0]["tone_confidence"] == "high"
+    assert events[0]["tone_reason"] == "test"
+
+
+def test_load_macro_event_tone_extraction_finds_exact_hash(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_event_tone_extraction(
+            con,
+            {
+                "event_id": "fomc_2026_07_28",
+                "source_document_type": "statement",
+                "source_hash": "abc123",
+                "previous_event_id": None,
+                "policy_action": "hold",
+                "guidance_bias": "neutral",
+                "language_tone": "hawkish",
+                "overall_bias": "mild_hawkish",
+                "statement_tone": "hawkish",
+                "minutes_tone": "unknown",
+                "marker_tone": "hawkish",
+                "tone_score": 1,
+                "tone_change": "more_hawkish",
+                "confidence": "high",
+                "extraction_status": "approved",
+                "review_rounds": 1,
+                "extractor_model": "gpt-4.1-mini",
+                "reviewer_model": "gpt-4.1",
+                "facts_json": "[]",
+                "comparison_json": "{}",
+                "reviewer_feedback_json": "[]",
+                "reason": "test",
+                "generated_at": "2026-07-30T00:00:00Z",
+            },
+        )
+        found = us_rates_liquidity.load_macro_event_tone_extraction(
+            con,
+            "fomc_2026_07_28",
+            "statement",
+            "abc123",
+        )
+        not_found = us_rates_liquidity.load_macro_event_tone_extraction(
+            con,
+            "fomc_2026_07_28",
+            "statement",
+            "nonexistent",
+        )
+    finally:
+        con.close()
+
+    assert found is not None
+    assert found["statement_tone"] == "hawkish"
+    assert not_found is None
+
+
+def test_load_macro_events_with_latest_tone_ignores_stale_hash(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [
+                {
+                    "event_id": "fomc_2026_07_28",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-07-28",
+                    "end_date": "2026-07-29",
+                    "display_month": "2026-07-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://example.test",
+                },
+            ],
+        )
+        us_rates_liquidity.replace_macro_event_document(
+            con,
+            {
+                "event_id": "fomc_2026_07_28",
+                "document_type": "statement",
+                "url": "https://example.test/statement",
+                "text": "Old statement text",
+                "source_hash": "abc123",
+                "fetched_at": "2026-07-29T00:00:00Z",
+            },
+        )
+        us_rates_liquidity.replace_macro_event_tone_extraction(
+            con,
+            {
+                "event_id": "fomc_2026_07_28",
+                "source_document_type": "statement",
+                "source_hash": "abc123",
+                "previous_event_id": None,
+                "statement_tone": "hawkish",
+                "minutes_tone": "unknown",
+                "marker_tone": "hawkish",
+                "tone_score": 1,
+                "tone_change": "more_hawkish",
+                "confidence": "high",
+                "extraction_status": "approved",
+                "review_rounds": 1,
+                "extractor_model": "gpt-4.1-mini",
+                "reviewer_model": "gpt-4.1",
+                "facts_json": "[]",
+                "comparison_json": "{}",
+                "reviewer_feedback_json": "[]",
+                "reason": "test",
+                "generated_at": "2026-07-30T00:00:00Z",
+            },
+        )
+        us_rates_liquidity.replace_macro_event_document(
+            con,
+            {
+                "event_id": "fomc_2026_07_28",
+                "document_type": "statement",
+                "url": "https://example.test/statement",
+                "text": "Cleaner statement text that re-fetched",
+                "source_hash": "def456",
+                "fetched_at": "2026-07-31T00:00:00Z",
+            },
+        )
+        events = us_rates_liquidity.load_macro_events_with_latest_tone(
+            con,
+            "fomc_meeting",
+        )
+    finally:
+        con.close()
+
+    assert len(events) == 1
+    assert "statement_tone" not in events[0]
+    assert "marker_tone" not in events[0]
+    assert "tone_change" not in events[0]
+
+
+def test_load_macro_events_with_latest_tone_defaults_when_no_tone(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [
+                {
+                    "event_id": "fomc_2026_07_28",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-07-28",
+                    "end_date": "2026-07-29",
+                    "display_month": "2026-07-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://example.test",
+                },
+            ],
+        )
+        events = us_rates_liquidity.load_macro_events_with_latest_tone(
+            con,
+            "fomc_meeting",
+        )
+    finally:
+        con.close()
+
+    assert len(events) == 1
+    assert "statement_tone" not in events[0]
+    assert "marker_tone" not in events[0]
+
+
+def test_load_latest_approved_macro_event_tone_returns_latest_past_event(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [
+                {
+                    "event_id": "fomc_2026_06_16",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-06-16",
+                    "end_date": "2026-06-17",
+                    "display_month": "2026-06-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://example.test",
+                },
+                {
+                    "event_id": "fomc_2026_07_28",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-07-28",
+                    "end_date": "2026-07-29",
+                    "display_month": "2026-07-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://example.test",
+                },
+            ],
+        )
+        for event_id, source_hash in [
+            ("fomc_2026_06_16", "abc123"),
+            ("fomc_2026_07_28", "def456"),
+        ]:
+            us_rates_liquidity.replace_macro_event_document(
+                con,
+                {
+                    "event_id": event_id,
+                    "document_type": "statement",
+                    "url": "https://example.test/statement",
+                    "text": f"Statement for {event_id}",
+                    "source_hash": source_hash,
+                    "fetched_at": f"{event_id[:17]}T00:00:00Z",
+                },
+            )
+            us_rates_liquidity.replace_macro_event_tone_extraction(
+                con,
+                {
+                    "event_id": event_id,
+                    "source_document_type": "statement",
+                    "source_hash": source_hash,
+                    "previous_event_id": None,
+                    "policy_action": "hold",
+                    "guidance_bias": "neutral",
+                    "language_tone": "hawkish",
+                    "overall_bias": "mild_hawkish",
+                    "statement_tone": "hawkish",
+                    "minutes_tone": "unknown",
+                    "marker_tone": "hawkish",
+                    "tone_score": 1,
+                    "tone_change": "more_hawkish",
+                    "confidence": "high",
+                    "extraction_status": "approved",
+                    "review_rounds": 1,
+                    "extractor_model": "gpt-4.1-mini",
+                    "reviewer_model": "gpt-4.1",
+                    "facts_json": "[]",
+                    "comparison_json": "{}",
+                    "reviewer_feedback_json": "[]",
+                    "reason": "test",
+                    "generated_at": "2026-07-30T00:00:00Z",
+                },
+            )
+        result = us_rates_liquidity.load_latest_approved_macro_event_tone(
+            con,
+            "fomc_meeting",
+            "2026-07-30",
+        )
+    finally:
+        con.close()
+
+    assert result is not None
+    assert result["event_id"] == "fomc_2026_07_28"
+    assert result["marker_tone"] == "hawkish"
+
+
+def test_load_latest_approved_macro_event_tone_ignores_future_events(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [
+                {
+                    "event_id": "fomc_2026_09_15",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-09-15",
+                    "end_date": "2026-09-16",
+                    "display_month": "2026-09-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://example.test",
+                },
+            ],
+        )
+        us_rates_liquidity.replace_macro_event_document(
+            con,
+            {
+                "event_id": "fomc_2026_09_15",
+                "document_type": "statement",
+                "url": "https://example.test/statement",
+                "text": "Future statement",
+                "source_hash": "abc123",
+                "fetched_at": "2026-09-17T00:00:00Z",
+            },
+        )
+        us_rates_liquidity.replace_macro_event_tone_extraction(
+            con,
+            {
+                "event_id": "fomc_2026_09_15",
+                "source_document_type": "statement",
+                "source_hash": "abc123",
+                "previous_event_id": None,
+                "policy_action": "hold",
+                "guidance_bias": "neutral",
+                "language_tone": "hawkish",
+                "overall_bias": "mild_hawkish",
+                "statement_tone": "hawkish",
+                "minutes_tone": "unknown",
+                "marker_tone": "hawkish",
+                "tone_score": 1,
+                "tone_change": "more_hawkish",
+                "confidence": "high",
+                "extraction_status": "approved",
+                "review_rounds": 1,
+                "extractor_model": "gpt-4.1-mini",
+                "reviewer_model": "gpt-4.1",
+                "facts_json": "[]",
+                "comparison_json": "{}",
+                "reviewer_feedback_json": "[]",
+                "reason": "test",
+                "generated_at": "2026-09-18T00:00:00Z",
+            },
+        )
+        result = us_rates_liquidity.load_latest_approved_macro_event_tone(
+            con,
+            "fomc_meeting",
+            "2026-07-30",
+        )
+    finally:
+        con.close()
+
+    assert result is None
+
+
+def test_load_latest_approved_macro_event_tone_ignores_stale_hash(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [
+                {
+                    "event_id": "fomc_2026_06_16",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-06-16",
+                    "end_date": "2026-06-17",
+                    "display_month": "2026-06-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://example.test",
+                },
+            ],
+        )
+        us_rates_liquidity.replace_macro_event_document(
+            con,
+            {
+                "event_id": "fomc_2026_06_16",
+                "document_type": "statement",
+                "url": "https://example.test/statement",
+                "text": "Current statement text",
+                "source_hash": "def456",
+                "fetched_at": "2026-06-18T00:00:00Z",
+            },
+        )
+        us_rates_liquidity.replace_macro_event_tone_extraction(
+            con,
+            {
+                "event_id": "fomc_2026_06_16",
+                "source_document_type": "statement",
+                "source_hash": "abc123",
+                "previous_event_id": None,
+                "policy_action": "hold",
+                "guidance_bias": "neutral",
+                "language_tone": "hawkish",
+                "overall_bias": "mild_hawkish",
+                "statement_tone": "hawkish",
+                "minutes_tone": "unknown",
+                "marker_tone": "hawkish",
+                "tone_score": 1,
+                "tone_change": "more_hawkish",
+                "confidence": "high",
+                "extraction_status": "approved",
+                "review_rounds": 1,
+                "extractor_model": "gpt-4.1-mini",
+                "reviewer_model": "gpt-4.1",
+                "facts_json": "[]",
+                "comparison_json": "{}",
+                "reviewer_feedback_json": "[]",
+                "reason": "test",
+                "generated_at": "2026-06-19T00:00:00Z",
+            },
+        )
+        result = us_rates_liquidity.load_latest_approved_macro_event_tone(
+            con,
+            "fomc_meeting",
+            "2026-07-01",
+        )
+    finally:
+        con.close()
+
+    assert result is None
+
+
+def test_load_latest_approved_macro_event_tone_ignores_unapproved(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [
+                {
+                    "event_id": "fomc_2026_06_16",
+                    "event_type": "fomc_meeting",
+                    "start_date": "2026-06-16",
+                    "end_date": "2026-06-17",
+                    "display_month": "2026-06-01",
+                    "title": "FOMC Meeting",
+                    "source": "Federal Reserve",
+                    "policy_tone": "unknown",
+                    "has_sep": 0,
+                    "url": "https://example.test",
+                },
+            ],
+        )
+        us_rates_liquidity.replace_macro_event_document(
+            con,
+            {
+                "event_id": "fomc_2026_06_16",
+                "document_type": "statement",
+                "url": "https://example.test/statement",
+                "text": "Statement text",
+                "source_hash": "abc123",
+                "fetched_at": "2026-06-18T00:00:00Z",
+            },
+        )
+        us_rates_liquidity.replace_macro_event_tone_extraction(
+            con,
+            {
+                "event_id": "fomc_2026_06_16",
+                "source_document_type": "statement",
+                "source_hash": "abc123",
+                "previous_event_id": None,
+                "policy_action": "hold",
+                "guidance_bias": "neutral",
+                "language_tone": "hawkish",
+                "overall_bias": "mild_hawkish",
+                "statement_tone": "hawkish",
+                "minutes_tone": "unknown",
+                "marker_tone": "hawkish",
+                "tone_score": 1,
+                "tone_change": "more_hawkish",
+                "confidence": "high",
+                "extraction_status": "pending",
+                "review_rounds": 1,
+                "extractor_model": "gpt-4.1-mini",
+                "reviewer_model": "gpt-4.1",
+                "facts_json": "[]",
+                "comparison_json": "{}",
+                "reviewer_feedback_json": "[]",
+                "reason": "test",
+                "generated_at": "2026-06-19T00:00:00Z",
+            },
+        )
+        result = us_rates_liquidity.load_latest_approved_macro_event_tone(
+            con,
+            "fomc_meeting",
+            "2026-07-01",
+        )
+    finally:
+        con.close()
+
+    assert result is None
+
+
+def test_load_latest_approved_macro_event_tone_returns_none_when_no_tone(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        result = us_rates_liquidity.load_latest_approved_macro_event_tone(
+            con,
+            "fomc_meeting",
+            "2026-07-01",
+        )
+    finally:
+        con.close()
+
+    assert result is None

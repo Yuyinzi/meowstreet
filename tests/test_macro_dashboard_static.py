@@ -756,3 +756,273 @@ def test_macro_dashboard_js_renders_inflation_context_card():
     assert "核心PCE同比" in js
     assert "相对美联储2%目标" in js
     assert "Fed 2% Target" in js
+
+
+def test_macro_dashboard_static_includes_fomc_chart_marker_renderer():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+
+    assert "renderRelationshipEventMarkers" in js
+    assert "relationship-event-marker" in js
+    assert "policy_tone" in js
+
+
+def test_macro_dashboard_static_includes_fomc_card_labels():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+
+    assert "FOMC Calendar" in js
+    assert "Next Meeting" in js
+    assert "Policy Timing" in js
+
+
+def test_macro_dashboard_static_includes_fomc_tone_card():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+
+    assert "fomc_tone" in js
+    assert "renderFomcToneCard" in js
+    assert "Next FOMC Meeting" in js
+    assert "Latest FOMC Tone" in js
+    assert "Action" in js
+    assert "Guidance" in js
+    assert "Language" in js
+    assert "Bias" in js
+    assert "Change" in js
+    assert "policy_action" in js
+    assert "guidance_bias" in js
+    assert "language_tone" in js
+    assert "overall_bias" in js
+    assert "tone_change" in js
+    assert "marker_tone" in js
+    assert "formatPolicyAction" in js
+    assert "formatToneValue" in js
+    assert "formatOverallBias" in js
+    assert "formatToneChange" in js
+    assert "toneBadgeClass" in js
+    assert "fomc-tone-badge" in js
+    assert "fomc-tone-card" in js
+    assert "tone-hawkish" in js
+    assert "tone-dovish" in js
+    assert "tone-neutral" in js
+    assert "No scheduled meeting" in js
+    assert "Tone unavailable" in js
+
+
+def test_macro_dashboard_range_filter_hooks_filter_series_and_events():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const series = [
+          { date: "2015-01-01", value: 1 },
+          { date: "2019-12-01", value: 2 },
+          { date: "2020-01-01", value: 3 },
+          { date: "2024-12-01", value: 4 },
+          { date: "2025-01-01", value: 5 },
+        ];
+        const events = [
+          { date: "2019-12-01", event_date: "2019-12-11", label: "FOMC" },
+          { date: "2020-01-01", event_date: "2020-01-29", label: "FOMC" },
+          { date: "2025-01-01", event_date: "2025-01-29", label: "FOMC" },
+        ];
+        const chart = { series, events };
+
+        console.log(JSON.stringify({
+          tenYearSeries: hooks.filterChartForRange(chart, "10y").series.map((point) => point.date),
+          fiveYearSeries: hooks.filterChartForRange(chart, "5y").series.map((point) => point.date),
+          fiveYearEvents: hooks.filterChartForRange(chart, "5y").events.map((event) => event.date),
+          maxSeries: hooks.filterChartForRange(chart, "max").series.map((point) => point.date),
+          maxEvents: hooks.filterChartForRange(chart, "max").events.map((event) => event.date),
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["tenYearSeries"] == [
+        "2015-01-01",
+        "2019-12-01",
+        "2020-01-01",
+        "2024-12-01",
+        "2025-01-01",
+    ]
+    assert payload["fiveYearSeries"] == ["2020-01-01", "2024-12-01", "2025-01-01"]
+    assert payload["fiveYearEvents"] == ["2020-01-01", "2025-01-01"]
+    assert payload["maxSeries"] == [
+        "2015-01-01",
+        "2019-12-01",
+        "2020-01-01",
+        "2024-12-01",
+        "2025-01-01",
+    ]
+    assert payload["maxEvents"] == []
+
+
+def test_macro_dashboard_css_has_fomc_tone_card_styles():
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert ".fomc-tone-card .m2-detail-rows" in css
+    assert ".fomc-tone-badge" in css
+    assert ".fomc-tone-badge.tone-hawkish" in css
+    assert ".fomc-tone-badge.tone-dovish" in css
+    assert ".fomc-tone-badge.tone-neutral" in css
+
+
+def test_macro_dashboard_static_includes_m2_range_control():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert "renderGrowthCycleRangeControl" in js
+    assert "data-growth-cycle-chart-range" in js
+    assert "selectedGrowthCycleChartRange" in js
+    assert "5Y" in js
+    assert "10Y" in js
+    assert "20Y" in js
+    assert "Max" in js
+    assert ".chart-range-control" in css
+
+
+def test_macro_dashboard_static_includes_fomc_tone_tooltip_fields():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+
+    assert "tone_change" in js
+    assert "statement_tone" in js
+    assert "confidence" in js
+
+
+def test_macro_dashboard_hides_event_marker_labels_when_requested():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const markup = hooks.renderRelationshipLineChart(
+          "Test",
+          [{ date: "2025-01-01", value: 1 }],
+          ["value"],
+          { value: "Value" },
+          {
+            events: [{ date: "2025-01-01", label: "FOMC", policy_tone: "unknown" }],
+            hideEventLabels: true,
+          },
+        );
+
+        console.log(JSON.stringify({
+          hasMarker: markup.includes("relationship-event-marker"),
+          hasLabel: markup.includes(">FOMC</text>"),
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasMarker"] is True
+    assert payload["hasLabel"] is False
+
+
+def test_macro_dashboard_renders_fomc_events_as_rail_ticks():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const markup = hooks.renderRelationshipLineChart(
+          "Test",
+          [{ date: "2025-01-01", value: 1 }],
+          ["value"],
+          { value: "Value" },
+          {
+            events: [{ date: "2025-01-01", label: "FOMC", policy_tone: "unknown" }],
+          },
+        );
+
+        console.log(JSON.stringify({
+          hasRail: markup.includes("relationship-event-rail"),
+          hasTick: markup.includes("relationship-event-tick"),
+          hasFullHeightMarker: markup.includes(`y1="${hooks.MARGIN_TOP}" y2="${hooks.PLOT_BOTTOM}"`),
+          hasLabel: markup.includes(">FOMC</text>"),
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasRail"] is True
+    assert payload["hasTick"] is True
+    assert payload["hasFullHeightMarker"] is False
+    assert payload["hasLabel"] is False

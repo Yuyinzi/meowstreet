@@ -469,6 +469,18 @@ h2 {
   margin-top: 14px;
 }
 
+.fomc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.fomc-card.m2-card-context,
+.fomc-card {
+  height: 100%;
+  margin-top: 0;
+}
+
 .m2-card {
   background: #FFFFFF;
   border: 1px solid #E0D6C8;
@@ -486,6 +498,69 @@ h2 {
   background: #FAF8F5;
   border-top: 1px solid #E3D9CF;
   border-radius: 0 0 8px 8px;
+}
+
+
+
+.fomc-tone-card .m2-detail-rows {
+  margin-top: 4px;
+}
+
+.fomc-tone-card .m2-level-row {
+  padding: 2px 0;
+  font-size: 0.73rem;
+  background: none;
+  border: none;
+  border-radius: 0;
+  margin-top: 0;
+}
+
+.fomc-tone-card .m2-level-row span {
+  font-size: 0.73rem;
+}
+
+.fomc-tone-date {
+  display: block;
+  font-size: 0.7rem;
+  color: #8B7E74;
+  margin-top: 2px;
+}
+
+.fomc-tone-card .m2-level-row small {
+  display: block;
+  font-size: 0.65rem;
+}
+
+.fomc-tone-card .m2-level-row strong {
+  font-size: 0.73rem;
+  text-align: right;
+}
+
+.fomc-tone-badge {
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
+.fomc-tone-badge.tone-hawkish {
+  color: #B85C38;
+  background: #FDF2EE;
+}
+
+.fomc-tone-badge.tone-dovish {
+  color: #2F9E74;
+  background: #EEF9F3;
+}
+
+.fomc-tone-badge.tone-neutral {
+  color: #8B7E74;
+  background: #F4F1EE;
+}
+
+.fomc-tone-badge.tone-unknown {
+  color: #8B7E74;
+  background: #F4F1EE;
 }
 
 .gdp-expectations-context {
@@ -515,6 +590,30 @@ h2 {
 }
 
 
+
+.relationship-event-rail > line {
+  stroke: #D8CEC2;
+  stroke-width: 1;
+  opacity: 0.7;
+}
+
+.relationship-event-marker .relationship-event-tick {
+  stroke: #8B7E74;
+  stroke-width: 1.4;
+  opacity: 0.75;
+}
+
+.relationship-event-marker-dovish .relationship-event-tick {
+  stroke: #2F9E74;
+}
+
+.relationship-event-marker-hawkish .relationship-event-tick {
+  stroke: #B85C38;
+}
+
+.relationship-event-marker-mixed .relationship-event-tick {
+  stroke: #B8872F;
+}
 
 .m2-card-head .inflation-status-badge,
 .m2-card-head .inflation-status-badge small {
@@ -1254,10 +1353,43 @@ h2 {
   color: #3B3530;
 }
 
+.chart-range-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 3px;
+  border: 1px solid #E0D6C8;
+  border-radius: 8px;
+  background: #F7F1EA;
+}
+
+.chart-range-control button {
+  min-width: 44px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6B6258;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chart-range-control button:hover {
+  background: #EFE4D8;
+}
+
+.chart-range-control button.active {
+  background: #3B3530;
+  color: #FDFAF7;
+}
+
 .relationship-chart-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .relationship-chart-grid-pre-method {

@@ -13,6 +13,7 @@
     growthCycle: null,
     growthCycleError: null,
     selectedGrowthCycleDetailId: null,
+    selectedGrowthCycleChartRange: "10y",
     growthCycleDetailsById: {},
     selectedNominalCurrentDate: null,
     selectedNominalComparisonDate: null,
@@ -240,6 +241,51 @@
         body.innerHTML = `<p class="status">Failed to load US rates detail.</p>`;
         console.error(error);
       });
+  }
+
+  const CHART_RANGE_OPTIONS = [
+    { id: "5y", label: "5Y", years: 5 },
+    { id: "10y", label: "10Y", years: 10 },
+    { id: "20y", label: "20Y", years: 20 },
+    { id: "max", label: "Max", years: null },
+  ];
+
+  function parseUtcDate(value) {
+    const date = new Date(`${value}T00:00:00Z`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function cutoffDateForRange(series, rangeId) {
+    const option = CHART_RANGE_OPTIONS.find((item) => item.id === rangeId)
+      || CHART_RANGE_OPTIONS.find((item) => item.id === "10y");
+    if (!option || option.years === null || !series.length) return null;
+    const lastPoint = series[series.length - 1];
+    const lastDate = parseUtcDate(lastPoint.date);
+    if (!lastDate) return null;
+    const cutoff = new Date(lastDate.getTime());
+    cutoff.setUTCFullYear(cutoff.getUTCFullYear() - option.years);
+    return cutoff.toISOString().slice(0, 10);
+  }
+
+  function filterSeriesForRange(series, rangeId) {
+    const rows = series || [];
+    const cutoff = cutoffDateForRange(rows, rangeId);
+    if (!cutoff) return rows.slice();
+    return rows.filter((point) => point.date >= cutoff);
+  }
+
+  function filterEventsForRange(events, filteredSeries) {
+    const dateSet = new Set((filteredSeries || []).map((point) => point.date));
+    return (events || []).filter((event) => dateSet.has(event.date));
+  }
+
+  function filterChartForRange(chart, rangeId) {
+    const series = filterSeriesForRange(chart.series || [], rangeId);
+    return {
+      ...chart,
+      series,
+      events: rangeId === "max" ? [] : filterEventsForRange(chart.events || [], series),
+    };
   }
 
   const CHART_WIDTH = 960;
@@ -658,6 +704,7 @@
           <svg class="relationship-chart-svg" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${titleHtml}">
             ${renderRelationshipYAxisAndGrid(relationshipYAxisTicks(series, keys, Y_AXIS_TICK_COUNT, options.yDomain), scale, valueFormatter)}
             ${scale.min <= 0 && scale.max >= 0 ? `<line class="relationship-zero" x1="${MARGIN_LEFT}" y1="${yAt(0, scale).toFixed(2)}" x2="${PLOT_RIGHT}" y2="${yAt(0, scale).toFixed(2)}"></line>` : ""}
+            ${renderRelationshipEventMarkers(series, options.events || [])}
             ${keys.flatMap((key, index) => (
               chartSegments(series, key, scale).map((points) => `<polyline class="relationship-line relationship-line-${index}" points="${escapeHtml(points)}"></polyline>`)
             )).join("")}
@@ -677,10 +724,45 @@
     `;
   }
 
+  function eventToneClass(event) {
+    const tone = String(event?.policy_tone || "unknown").toLowerCase();
+    if (["dovish", "easing"].includes(tone)) return "dovish";
+    if (["hawkish", "tightening"].includes(tone)) return "hawkish";
+    if (tone === "mixed") return "mixed";
+    return "unknown";
+  }
+
+  function renderRelationshipEventMarkers(series, events = []) {
+    if (!events.length) return "";
+    const dateToIndex = new Map(series.map((point, index) => [point.date, index]));
+    const ticks = events
+      .filter((event) => dateToIndex.has(event.date))
+      .map((event) => {
+        const index = dateToIndex.get(event.date);
+        const x = xAt(index, series.length).toFixed(2);
+        const y1 = (PLOT_BOTTOM - 12).toFixed(2);
+        const y2 = (PLOT_BOTTOM - 3).toFixed(2);
+        return `
+          <g class="relationship-event-marker relationship-event-marker-${escapeHtml(eventToneClass(event))}">
+            <line class="relationship-event-tick" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"></line>
+          </g>
+        `;
+      })
+      .join("");
+    if (!ticks) return "";
+    return `
+      <g class="relationship-event-rail">
+        <line x1="${MARGIN_LEFT}" y1="${(PLOT_BOTTOM - 2).toFixed(2)}" x2="${PLOT_RIGHT}" y2="${(PLOT_BOTTOM - 2).toFixed(2)}"></line>
+        ${ticks}
+      </g>
+    `;
+  }
+
   function attachRelationshipChartTooltip(svg, tooltip, series, keys, labels = {}, options = {}) {
     if (!svg || !tooltip || !series.length) return;
     const wrap = svg.parentElement;
     const valueFormatter = options.valueFormatter || fmtNumber;
+    const eventsByDate = new Map((options.events || []).map((event) => [event.date, event]));
     let lastIndex = -1;
     let tooltipRect = null;
 
@@ -712,10 +794,30 @@
             </div>
           `;
         }).join("");
+        const event = eventsByDate.get(point.date);
+        const eventRows = event ? `
+          <div class="chart-tooltip-row">
+            <span>${escapeHtml(event.label || "FOMC")}</span>
+            <strong>${escapeHtml(event.event_date || event.date)}</strong>
+          </div>
+          <div class="chart-tooltip-row">
+            <span>Statement tone</span>
+            <strong>${escapeHtml(event.statement_tone || event.policy_tone || "unknown")}</strong>
+          </div>
+          <div class="chart-tooltip-row">
+            <span>Tone change</span>
+            <strong>${escapeHtml(event.tone_change || "unknown")}</strong>
+          </div>
+          <div class="chart-tooltip-row">
+            <span>Confidence</span>
+            <strong>${escapeHtml(event.confidence || "n/a")}</strong>
+          </div>
+        ` : "";
         tooltip.innerHTML = `
           <div><strong>${escapeHtml(fmtMonthYear(point.date))}</strong></div>
           ${rows}
           ${extraRows}
+          ${eventRows}
         `;
         lastIndex = index;
         tooltip.style.left = "-9999px";
@@ -1091,6 +1193,38 @@
     "Above Target": "高于目标",
     "Near Target": "接近目标",
     "Below Target": "低于目标",
+    "FOMC Calendar": "FOMC日历",
+    "Policy Timing": "政策时点",
+    "Next Meeting": "下次会议",
+    "FOMC Tone": "FOMC倾向",
+    "Latest Tone": "最新倾向",
+    "Next FOMC Meeting": "下次FOMC会议",
+    "Latest FOMC Tone": "最近FOMC倾向",
+    "Next Meeting Date": "下次会议日期",
+    "Action": "政策动作",
+    "Guidance": "前瞻指引",
+    "Language": "声明语气",
+    "Bias": "综合倾向",
+    "Change": "较上次",
+    "Hold": "维持",
+    "Cut": "降息",
+    "Hike": "加息",
+    "Neutral": "中性",
+    "Hawkish": "偏鹰",
+    "Dovish": "偏鸽",
+    "Mixed": "混合",
+    "Mild Hawkish": "温和偏鹰",
+    "Mild Dovish": "温和偏鸽",
+    "More Hawkish vs previous": "较上次更偏鹰",
+    "More Dovish vs previous": "较上次更偏鸽",
+    "Unchanged": "未变化",
+    "Less Hawkish vs previous": "较上次偏鹰减弱",
+    "Less Dovish vs previous": "较上次偏鸽减弱",
+    "Policy meeting": "政策会议",
+    "Includes SEP": "包含经济预测摘要",
+    "No scheduled meeting": "暂无已安排会议",
+    "Tone unavailable": "暂无倾向",
+    "Pending review": "等待审核",
   };
 
   function zhLabel(label) {
@@ -1327,13 +1461,24 @@
     const period = state.growthCycle.headline?.[0]?.period;
     pill.textContent = period ? `As of ${fmtDate(period)}` : "Import needed";
     const cards = state.growthCycle.headline || [];
-    const cardHtml = cards.map((card) => {
-      if (card.id === "m2_money_supply") return renderM2MoneySupplyCard(card);
-      if (card.id === "inflation_context") return renderInflationContextCard(card);
-      if (card.id === "gdp_expectations") return renderGdpExpectationsCard(card);
-      if (card.id === "fed_balance_sheet") return renderFedBalanceSheetCard(card);
-      return "";
-    }).join("");
+    const fomcIds = new Set(["fomc_calendar", "fomc_tone"]);
+    const grouped = [];
+    let fomcBuffer = [];
+    for (const card of cards) {
+      if (fomcIds.has(card.id)) {
+        fomcBuffer.push(card);
+      } else {
+        if (fomcBuffer.length) {
+          grouped.push(`<div class="fomc-grid">${fomcBuffer.map(renderFomcCard).join("")}</div>`);
+          fomcBuffer = [];
+        }
+        grouped.push(renderCard(card));
+      }
+    }
+    if (fomcBuffer.length) {
+      grouped.push(`<div class="fomc-grid">${fomcBuffer.map(renderFomcCard).join("")}</div>`);
+    }
+    const cardHtml = grouped.join("");
     section.innerHTML = `
       ${head.outerHTML}
       ${cardHtml ? `
@@ -1386,13 +1531,18 @@
     loadGrowthCycleDetail(detailId)
       .then((payload) => {
         if (state.selectedGrowthCycleDetailId !== payload.detail_id) return;
+        const filteredCharts = payload.charts.map((chart) => (
+          filterChartForRange(chart, state.selectedGrowthCycleChartRange)
+        ));
         body.innerHTML = `
+          ${renderGrowthCycleRangeControl()}
           <div class="relationship-chart-grid">
-            ${payload.charts.map((chart, index) => renderRatesDetailChart(chart, index)).join("")}
+            ${filteredCharts.map((chart, index) => renderRatesDetailChart(chart, index)).join("")}
           </div>
           ${renderMacroAiInterpretation(payload.m2_ai_interpretation)}
         `;
-        attachRatesChartTooltips(body, payload.charts);
+        bindGrowthCycleRangeControl(body);
+        attachRatesChartTooltips(body, filteredCharts);
       })
       .catch((error) => {
         if (state.selectedGrowthCycleDetailId !== detailId) return;
@@ -1494,6 +1644,114 @@
     `;
   }
 
+  function renderGrowthCycleRangeControl() {
+    return `
+      <div class="chart-range-control" role="group" aria-label="Chart range">
+        ${CHART_RANGE_OPTIONS.map((option) => `
+          <button
+            type="button"
+            class="${option.id === state.selectedGrowthCycleChartRange ? "active" : ""}"
+            data-growth-cycle-chart-range="${escapeHtml(option.id)}"
+          >${escapeHtml(option.label)}</button>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function bindGrowthCycleRangeControl(body) {
+    body.querySelectorAll("[data-growth-cycle-chart-range]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const range = button.dataset.growthCycleChartRange;
+        if (!range || range === state.selectedGrowthCycleChartRange) return;
+        state.selectedGrowthCycleChartRange = range;
+        renderDetailPanel();
+      });
+    });
+  }
+
+  function renderFomcCalendarCard(card) {
+    const meeting = card.next_meeting || {};
+    const hasMeeting = meeting.start_date != null;
+    if (!hasMeeting) {
+      return `
+        <article class="m2-card m2-card-missing fomc-card">
+          <div class="m2-card-head">
+            <span>${bilingualTitle("Next FOMC Meeting")}<br><small>${escapeHtml(zhLabel("Next FOMC Meeting") || "")}</small></span>
+          </div>
+          <p class="m2-card-context">${bilingualLabel("No scheduled meeting")}</p>
+        </article>
+      `;
+    }
+    const dateRange = meeting.end_date && meeting.end_date !== meeting.start_date
+      ? `${meeting.start_date} - ${meeting.end_date}`
+      : meeting.start_date;
+    return `
+      <article class="m2-card m2-card-mixed fomc-card fomc-calendar-card">
+        <div class="m2-card-head">
+          <div>
+            <span>${bilingualTitle("Next FOMC Meeting")}</span>
+          </div>
+        </div>
+        <div class="m2-level-row">
+          <span>${bilingualTitle("Next Meeting Date")}<small>${escapeHtml(dateRange || "n/a")}</small></span>
+          <strong>${meeting.has_sep ? "SEP" : "Regular"}</strong>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderFomcToneCard(card) {
+    const tone = card.latest_tone || {};
+    const hasTone = tone.marker_tone != null;
+    if (!hasTone) {
+      return `
+        <article class="m2-card m2-card-missing fomc-card">
+          <div class="m2-card-head">
+            <span>${bilingualTitle("Latest FOMC Tone")}</span>
+          </div>
+          <p class="m2-card-context">${bilingualLabel("Tone unavailable")}</p>
+        </article>
+      `;
+    }
+    const toneLabel = formatToneValue(tone.marker_tone);
+    const toneBadge = toneBadgeClass(tone.marker_tone);
+    const dateStr = tone.end_date && tone.end_date !== tone.start_date
+      ? `${tone.start_date} \u2013 ${tone.end_date}`
+      : tone.start_date;
+    return `
+      <article class="m2-card m2-card-context fomc-card fomc-tone-card">
+        <div class="m2-card-head">
+          <div>
+            <span>${bilingualTitle("Latest FOMC Tone")}</span>
+            <small class="fomc-tone-date">${escapeHtml(dateStr || "")}</small>
+          </div>
+          <strong class="fomc-tone-badge ${escapeHtml(toneBadge)}">${bilingualLabel(toneLabel)}</strong>
+        </div>
+        <div class="m2-detail-rows">
+          <div class="m2-level-row"><span>${bilingualLabel("Action")}</span><strong>${bilingualLabel(formatPolicyAction(tone.policy_action))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Guidance")}</span><strong>${bilingualLabel(formatToneValue(tone.guidance_bias))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Language")}</span><strong>${bilingualLabel(formatToneValue(tone.language_tone))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Bias")}</span><strong>${bilingualLabel(formatOverallBias(tone.overall_bias))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Change")}</span><strong>${bilingualLabel(formatToneChange(tone.tone_change))}</strong></div>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderCard(card) {
+    if (card.id === "m2_money_supply") return renderM2MoneySupplyCard(card);
+    if (card.id === "inflation_context") return renderInflationContextCard(card);
+    if (card.id === "gdp_expectations") return renderGdpExpectationsCard(card);
+    if (card.id === "fed_balance_sheet") return renderFedBalanceSheetCard(card);
+    return "";
+  }
+
+  function renderFomcCard(card) {
+    if (card.id === "fomc_calendar") return renderFomcCalendarCard(card);
+    if (card.id === "fomc_tone") return renderFomcToneCard(card);
+    return "";
+  }
+
   function renderM2MoneySupplyCard(card) {
     return `
       <button class="m2-card m2-card-button m2-card-${escapeHtml(card.status || "missing")}${state.selectedGrowthCycleDetailId === card.id ? " selected" : ""}" type="button" data-growth-cycle-detail-id="${escapeHtml(card.id)}">
@@ -1534,6 +1792,56 @@
       .join(" ");
   }
 
+  function formatPolicyAction(value) {
+    const map = {
+      hold: "Hold",
+      cut: "Cut",
+      hike: "Hike",
+    };
+    return map[value] || titleCaseToken(value);
+  }
+
+  function formatToneValue(value) {
+    const map = {
+      hawkish: "Hawkish",
+      dovish: "Dovish",
+      neutral: "Neutral",
+      mixed: "Mixed",
+    };
+    return map[value] || titleCaseToken(value);
+  }
+
+  function formatOverallBias(value) {
+    const map = {
+      mild_hawkish: "Mild Hawkish",
+      mild_dovish: "Mild Dovish",
+      hawkish: "Hawkish",
+      dovish: "Dovish",
+      neutral: "Neutral",
+      mixed: "Mixed",
+    };
+    return map[value] || titleCaseToken(value);
+  }
+
+  function formatToneChange(value) {
+    const map = {
+      more_hawkish: "More Hawkish vs previous",
+      more_dovish: "More Dovish vs previous",
+      unchanged: "Unchanged",
+      less_hawkish: "Less Hawkish vs previous",
+      less_dovish: "Less Dovish vs previous",
+    };
+    return map[value] || titleCaseToken(value);
+  }
+
+  function toneBadgeClass(tone) {
+    const t = String(tone || "unknown").toLowerCase();
+    if (["dovish", "mild_dovish"].includes(t)) return "tone-dovish";
+    if (["hawkish", "mild_hawkish"].includes(t)) return "tone-hawkish";
+    if (t === "neutral") return "tone-neutral";
+    return "tone-unknown";
+  }
+
   function trendGlyph(value) {
     return { rising: "↑", falling: "↓", stable: "→" }[value] || "";
   }
@@ -1562,6 +1870,7 @@
         rawTitle: true,
         valueFormatter,
         yDomain: chart.y_domain,
+        events: chart.events || [],
       }
     );
   }
@@ -1998,7 +2307,7 @@
           : chart.series || [],
         chart.keys || ["value"],
         chart.labels || { value: "Value" },
-        { valueFormatter, tooltipExtra: chart.tooltip_extra }
+        { valueFormatter, tooltipExtra: chart.tooltip_extra, events: chart.events || [] }
       );
     });
   }
@@ -2391,7 +2700,10 @@
     window.__macroDashboardTestHooks = {
       X_AXIS_TICK_COUNT,
       Y_AXIS_TICK_COUNT,
+      MARGIN_TOP,
+      PLOT_BOTTOM,
       attachRelationshipChartTooltip,
+      filterChartForRange,
       fmtMonthYear,
       niceTicks,
       relationshipXAxisTicks,

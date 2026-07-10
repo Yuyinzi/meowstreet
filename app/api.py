@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException
@@ -236,7 +237,21 @@ def macro_dashboard_growth_cycle():
             fed_treasury_holdings=fed_treasury_holdings if fed_treasury_rows else None,
             fed_mbs_holdings=fed_mbs_holdings if fed_mbs_rows else None,
         )
-        return macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+        next_fomc_meeting = us_rates_liquidity_db.load_next_macro_event(
+            con,
+            "fomc_meeting",
+            date.today().isoformat(),
+        )
+        fomc_latest_tone = us_rates_liquidity_db.load_latest_approved_macro_event_tone(
+            con,
+            "fomc_meeting",
+            date.today().isoformat(),
+        )
+        return macro_growth_cycle.build_growth_cycle_dashboard_payload(
+            dashboard,
+            next_fomc_meeting=next_fomc_meeting,
+            fomc_latest_tone=fomc_latest_tone,
+        )
     finally:
         con.close()
 
@@ -267,12 +282,16 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             con,
             "fed_mbs_holdings",
         )
+        fomc_events = us_rates_liquidity_db.load_macro_events_with_latest_tone(
+            con, "fomc_meeting"
+        )
         detail_payload = macro_growth_cycle.build_m2_money_supply_detail_payload(
             rows,
             core_pce_rows=core_pce_rows,
             fed_total_assets_rows=fed_total_assets_rows,
             fed_treasury_rows=fed_treasury_rows,
             fed_mbs_rows=fed_mbs_rows,
+            fomc_events=fomc_events,
         )
         dashboard_payload = macro_growth_cycle.build_growth_cycle_dashboard(
             m2_money_stock={"series": rows}

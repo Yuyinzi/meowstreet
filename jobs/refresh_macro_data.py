@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scripts import import_fomc_calendar
 from scripts import import_gdp_market_relationships
 from scripts import import_m2_money_supply
 from scripts import refresh_benchmark_market_data
@@ -31,7 +32,22 @@ def _run_task(name, func, argv):
     return {"name": name, "status": "ok", "exit_code": 0, "error": ""}
 
 
-def _planned_tasks(args, benchmark_main, rates_main, m2_main, gdp_main):
+def _fomc_calendar_path(args):
+    configured_path = (
+        args.fomc_calendar_path or import_fomc_calendar.DEFAULT_CALENDAR_PATH
+    )
+    path = Path(configured_path)
+    return path if path.exists() else None
+
+
+def _planned_tasks(
+    args,
+    benchmark_main,
+    rates_main,
+    m2_main,
+    gdp_main,
+    fomc_main=import_fomc_calendar.main,
+):
     tasks = []
     if not args.skip_yahoo:
         tasks.append(("benchmark_yahoo", benchmark_main, ["--all"]))
@@ -43,6 +59,12 @@ def _planned_tasks(args, benchmark_main, rates_main, m2_main, gdp_main):
     if not args.skip_gdp:
         tasks.append(("gdp_fred_fetch", gdp_main, ["--fetch-fred-csv"]))
         tasks.append(("gdp_fred_merge", gdp_main, ["--us-csv-merge"]))
+    if not args.skip_fomc:
+        calendar_path = _fomc_calendar_path(args)
+        if calendar_path:
+            tasks.append(
+                ("fomc_calendar", fomc_main, ["--calendar-path", str(calendar_path)])
+            )
     return tasks
 
 
@@ -59,12 +81,15 @@ def main(
     rates_main=refresh_us_rates_liquidity.main,
     m2_main=import_m2_money_supply.main,
     gdp_main=import_gdp_market_relationships.main,
+    fomc_main=import_fomc_calendar.main,
 ):
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
     parser.add_argument("--skip-rates", action="store_true")
     parser.add_argument("--skip-m2", action="store_true")
     parser.add_argument("--skip-gdp", action="store_true")
+    parser.add_argument("--skip-fomc", action="store_true")
+    parser.add_argument("--fomc-calendar-path", type=Path)
     parser.add_argument(
         "--stop-on-error",
         action="store_true",
@@ -79,6 +104,7 @@ def main(
         rates_main,
         m2_main,
         gdp_main,
+        fomc_main,
     ):
         result = _run_task(name, func, task_argv)
         results.append(result)

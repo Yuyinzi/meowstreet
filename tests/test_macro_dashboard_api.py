@@ -732,6 +732,16 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -785,6 +795,11 @@ def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):
         api.us_rates_liquidity_db,
         "load_ai_interpretation",
         lambda con, scope, snapshot_hash: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_events_with_latest_tone",
+        lambda con, event_type: [],
     )
 
     response = client.get("/api/macro-dashboard/growth-cycle/m2_money_supply")
@@ -843,6 +858,12 @@ def test_growth_cycle_m2_detail_api_attaches_stored_ai_interpretation(monkeypatc
         fake_load,
     )
 
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_events_with_latest_tone",
+        lambda con, event_type: [],
+    )
+
     def fake_load_ai_interpretation(con, scope, snapshot_hash):
         calls.append((scope, snapshot_hash))
         return {
@@ -873,6 +894,68 @@ def test_growth_cycle_m2_detail_api_attaches_stored_ai_interpretation(monkeypatc
     )
     assert calls[0][0] == "m2_money_supply"
     assert len(calls[0][1]) == 64
+
+
+def test_growth_cycle_api_includes_next_fomc_meeting(monkeypatch):
+    from app import api
+
+    class FakeConnection:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeConnection())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: (
+            [
+                {"date": "2025-01-01", "value": 100.0, "source": "m2.csv"},
+                {"date": "2025-02-01", "value": 101.0, "source": "m2.csv"},
+                {"date": "2025-03-01", "value": 102.0, "source": "m2.csv"},
+                {"date": "2025-04-01", "value": 103.0, "source": "m2.csv"},
+                {"date": "2025-05-01", "value": 104.0, "source": "m2.csv"},
+                {"date": "2025-06-01", "value": 105.0, "source": "m2.csv"},
+                {"date": "2025-07-01", "value": 106.0, "source": "m2.csv"},
+                {"date": "2025-08-01", "value": 107.0, "source": "m2.csv"},
+                {"date": "2025-09-01", "value": 108.0, "source": "m2.csv"},
+                {"date": "2025-10-01", "value": 109.0, "source": "m2.csv"},
+                {"date": "2025-11-01", "value": 110.0, "source": "m2.csv"},
+                {"date": "2025-12-01", "value": 111.0, "source": "m2.csv"},
+                {"date": "2026-01-01", "value": 120.0, "source": "m2.csv"},
+            ]
+            if series_id == "m2_money_stock"
+            else []
+        ),
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: {
+            "event_id": "fomc_2026_07_28",
+            "event_type": "fomc_meeting",
+            "start_date": "2026-07-28",
+            "end_date": "2026-07-29",
+            "display_month": "2026-07-01",
+            "title": "FOMC Meeting",
+            "source": "Federal Reserve",
+            "policy_tone": "unknown",
+            "has_sep": 0,
+            "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+        },
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    card = next(
+        item for item in response.json()["headline"] if item["id"] == "fomc_calendar"
+    )
+    assert card["period"] == "2026-07-28"
 
 
 def test_growth_cycle_api_returns_missing_payload_when_m2_db_rows_are_missing(
@@ -961,6 +1044,16 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -1027,6 +1120,16 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -1072,6 +1175,16 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
         api.us_rates_liquidity_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
     )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
@@ -1135,6 +1248,11 @@ def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
         "load_ai_interpretation",
         lambda con, scope, snapshot_hash: None,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_events_with_latest_tone",
+        lambda con, event_type: [],
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle/m2_money_supply")
 
@@ -1149,3 +1267,71 @@ def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
     fed_chart = response.json()["charts"][1]
     assert fed_chart["title"] == "Fed Total Assets YoY"
     assert fed_chart["keys"] == ["fed_total_assets_yoy"]
+
+
+def test_growth_cycle_api_includes_fomc_tone_card(monkeypatch):
+    from app import api
+
+    class FakeConnection:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeConnection())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: (
+            [
+                {"date": "2025-01-01", "value": 100.0, "source": "m2.csv"},
+                {"date": "2025-02-01", "value": 101.0, "source": "m2.csv"},
+                {"date": "2025-03-01", "value": 102.0, "source": "m2.csv"},
+                {"date": "2025-04-01", "value": 103.0, "source": "m2.csv"},
+                {"date": "2025-05-01", "value": 104.0, "source": "m2.csv"},
+                {"date": "2025-06-01", "value": 105.0, "source": "m2.csv"},
+                {"date": "2025-07-01", "value": 106.0, "source": "m2.csv"},
+                {"date": "2025-08-01", "value": 107.0, "source": "m2.csv"},
+                {"date": "2025-09-01", "value": 108.0, "source": "m2.csv"},
+                {"date": "2025-10-01", "value": 109.0, "source": "m2.csv"},
+                {"date": "2025-11-01", "value": 110.0, "source": "m2.csv"},
+                {"date": "2025-12-01", "value": 111.0, "source": "m2.csv"},
+                {"date": "2026-01-01", "value": 120.0, "source": "m2.csv"},
+            ]
+            if series_id == "m2_money_stock"
+            else []
+        ),
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: {
+            "event_id": "fomc_2026_06_16",
+            "start_date": "2026-06-16",
+            "end_date": "2026-06-17",
+            "source_hash": "abc123",
+            "marker_tone": "hawkish",
+            "policy_action": "hold",
+            "guidance_bias": "neutral",
+            "language_tone": "hawkish",
+            "overall_bias": "mild_hawkish",
+            "tone_change": "more_hawkish",
+            "confidence": "high",
+            "reason": "Inflation language became firmer.",
+        },
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    tone_card = next(
+        item for item in response.json()["headline"] if item["id"] == "fomc_tone"
+    )
+    assert tone_card["label"] == "FOMC Tone"
+    assert tone_card["latest_tone"]["marker_tone"] == "hawkish"
+    assert tone_card["latest_tone"]["policy_action"] == "hold"
+    assert tone_card["latest_tone"]["overall_bias"] == "mild_hawkish"
+    assert tone_card["latest_tone"]["tone_change"] == "more_hawkish"

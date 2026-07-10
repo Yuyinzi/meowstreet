@@ -573,6 +573,94 @@ def build_fed_balance_sheet_headline(growth_cycle):
     }
 
 
+def _bool_event_flag(value):
+    return bool(int(value or 0))
+
+
+def build_fomc_calendar_headline(next_meeting):
+    if not next_meeting:
+        return {
+            "id": "fomc_calendar",
+            "label": "FOMC Calendar",
+            "period": None,
+            "status": "missing",
+            "status_label": "Missing",
+        }
+    return {
+        "id": "fomc_calendar",
+        "label": "FOMC Calendar",
+        "period": next_meeting.get("start_date"),
+        "status": "timing_context",
+        "status_label": "Policy Timing",
+        "next_meeting": {
+            "start_date": next_meeting.get("start_date"),
+            "end_date": next_meeting.get("end_date"),
+            "display_month": next_meeting.get("display_month"),
+            "title": next_meeting.get("title"),
+            "policy_tone": next_meeting.get("policy_tone", "unknown"),
+            "has_sep": _bool_event_flag(next_meeting.get("has_sep")),
+            "source": next_meeting.get("source"),
+            "url": next_meeting.get("url"),
+        },
+        "description": "FOMC dates are policy-timing context for reading liquidity, inflation, and balance-sheet changes. They are not buy/sell signals.",
+    }
+
+
+def build_fomc_tone_headline(latest_tone):
+    if not latest_tone:
+        return {
+            "id": "fomc_tone",
+            "label": "FOMC Tone",
+            "period": None,
+            "status": "missing",
+            "status_label": "Missing",
+        }
+    return {
+        "id": "fomc_tone",
+        "label": "FOMC Tone",
+        "period": latest_tone.get("start_date"),
+        "status": "context",
+        "status_label": "Latest Tone",
+        "latest_tone": {
+            "event_id": latest_tone.get("event_id"),
+            "start_date": latest_tone.get("start_date"),
+            "end_date": latest_tone.get("end_date"),
+            "source_hash": latest_tone.get("source_hash"),
+            "marker_tone": latest_tone.get("marker_tone"),
+            "policy_action": latest_tone.get("policy_action"),
+            "guidance_bias": latest_tone.get("guidance_bias"),
+            "language_tone": latest_tone.get("language_tone"),
+            "overall_bias": latest_tone.get("overall_bias"),
+            "tone_change": latest_tone.get("tone_change"),
+            "confidence": latest_tone.get("confidence"),
+            "reason": latest_tone.get("reason"),
+        },
+    }
+
+
+def _fomc_chart_events(events, available_dates):
+    date_set = set(available_dates)
+    return [
+        {
+            "date": event["display_month"],
+            "event_date": event["start_date"],
+            "end_date": event.get("end_date"),
+            "label": "FOMC",
+            "title": event.get("title", "FOMC Meeting"),
+            "kind": "fomc_meeting",
+            "policy_tone": event.get("marker_tone")
+            or event.get("policy_tone", "unknown"),
+            "has_sep": _bool_event_flag(event.get("has_sep")),
+            "statement_tone": event.get("statement_tone", "unknown"),
+            "tone_change": event.get("tone_change", "unknown"),
+            "confidence": event.get("tone_confidence") or event.get("confidence"),
+            "reason": event.get("tone_reason") or event.get("reason"),
+        }
+        for event in events or []
+        if event.get("display_month") in date_set
+    ]
+
+
 def build_gdp_expectations_headline(growth_cycle):
     return {
         "id": "gdp_expectations",
@@ -641,7 +729,9 @@ def build_m2_money_supply_headline(growth_cycle):
     }
 
 
-def build_growth_cycle_dashboard_payload(growth_cycle_dashboard):
+def build_growth_cycle_dashboard_payload(
+    growth_cycle_dashboard, next_fomc_meeting=None, fomc_latest_tone=None
+):
     growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
     headline = [build_m2_money_supply_headline(growth_cycle)]
     inflation_card = build_inflation_context_headline(growth_cycle)
@@ -650,6 +740,12 @@ def build_growth_cycle_dashboard_payload(growth_cycle_dashboard):
     balance_sheet_card = build_fed_balance_sheet_headline(growth_cycle)
     if balance_sheet_card["status"] != "missing":
         headline.append(balance_sheet_card)
+    fomc_card = build_fomc_calendar_headline(next_fomc_meeting)
+    if fomc_card["status"] != "missing":
+        headline.append(fomc_card)
+    tone_card = build_fomc_tone_headline(fomc_latest_tone)
+    if tone_card["status"] != "missing":
+        headline.append(tone_card)
     headline.append(build_gdp_expectations_headline(growth_cycle))
     return {
         "headline": headline,
@@ -898,6 +994,7 @@ def build_m2_money_supply_detail_payload(
     fed_total_assets_rows=None,
     fed_treasury_rows=None,
     fed_mbs_rows=None,
+    fomc_events=None,
 ):
     points = _m2_level_points(rows)
     core_pce_points = _m2_level_points(core_pce_rows or [])
@@ -942,6 +1039,10 @@ def build_m2_money_supply_detail_payload(
         for point in m2_yoy_series
         if fed_total_yoy_by_date.get(point["date"]) is not None
     ]
+    state_chart_events = _fomc_chart_events(
+        fomc_events,
+        [point["date"] for point in state_series],
+    )
     return {
         "detail_id": "m2_money_supply",
         "title": "M2 Money Supply",
@@ -961,6 +1062,7 @@ def build_m2_money_supply_detail_payload(
                     "fed_target": "Fed 2% Target (since 2012)",
                 },
                 "series": state_series,
+                "events": state_chart_events,
             },
             {
                 "kind": "time_series",
