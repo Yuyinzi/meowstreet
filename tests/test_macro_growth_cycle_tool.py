@@ -1085,3 +1085,137 @@ def test_m2_detail_resamples_weekly_fed_yoy_to_monthly_state_dates():
             "fed_total_assets_yoy": 120.0,
         },
     ]
+
+
+def test_growth_cycle_payload_includes_next_fomc_card():
+    dashboard = {"macro": {"growth_cycle": {}}}
+    next_meeting = {
+        "event_id": "fomc_2026_07_28",
+        "event_type": "fomc_meeting",
+        "start_date": "2026-07-28",
+        "end_date": "2026-07-29",
+        "display_month": "2026-07-01",
+        "title": "FOMC Meeting",
+        "source": "Federal Reserve",
+        "policy_tone": "unknown",
+        "has_sep": 0,
+        "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    }
+
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        dashboard,
+        next_fomc_meeting=next_meeting,
+    )
+
+    card = next(item for item in payload["headline"] if item["id"] == "fomc_calendar")
+    assert card == {
+        "id": "fomc_calendar",
+        "label": "FOMC Calendar",
+        "period": "2026-07-28",
+        "status": "timing_context",
+        "status_label": "Policy Timing",
+        "next_meeting": {
+            "start_date": "2026-07-28",
+            "end_date": "2026-07-29",
+            "display_month": "2026-07-01",
+            "title": "FOMC Meeting",
+            "policy_tone": "unknown",
+            "has_sep": False,
+            "source": "Federal Reserve",
+            "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+        },
+        "description": "FOMC dates are policy-timing context for reading liquidity, inflation, and balance-sheet changes. They are not buy/sell signals.",
+    }
+
+
+def test_m2_state_chart_includes_fomc_month_markers():
+    m2_rows = [
+        {"date": "2025-01-01", "value": 100.0, "source": "m2.csv"},
+        {"date": "2025-02-01", "value": 101.0, "source": "m2.csv"},
+        {"date": "2025-03-01", "value": 102.0, "source": "m2.csv"},
+        {"date": "2025-04-01", "value": 103.0, "source": "m2.csv"},
+        {"date": "2025-05-01", "value": 104.0, "source": "m2.csv"},
+        {"date": "2025-06-01", "value": 105.0, "source": "m2.csv"},
+        {"date": "2025-07-01", "value": 106.0, "source": "m2.csv"},
+        {"date": "2025-08-01", "value": 107.0, "source": "m2.csv"},
+        {"date": "2025-09-01", "value": 108.0, "source": "m2.csv"},
+        {"date": "2025-10-01", "value": 109.0, "source": "m2.csv"},
+        {"date": "2025-11-01", "value": 110.0, "source": "m2.csv"},
+        {"date": "2025-12-01", "value": 111.0, "source": "m2.csv"},
+        {"date": "2026-01-01", "value": 120.0, "source": "m2.csv"},
+        {"date": "2026-02-01", "value": 121.0, "source": "m2.csv"},
+    ]
+    events = [
+        {
+            "event_id": "fomc_2026_01_27",
+            "event_type": "fomc_meeting",
+            "start_date": "2026-01-27",
+            "end_date": "2026-01-28",
+            "display_month": "2026-01-01",
+            "title": "FOMC Meeting",
+            "source": "Federal Reserve",
+            "policy_tone": "unknown",
+            "has_sep": 0,
+            "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+        }
+    ]
+
+    payload = macro_growth_cycle.build_m2_money_supply_detail_payload(
+        m2_rows,
+        fomc_events=events,
+    )
+
+    assert payload["charts"][0]["events"] == [
+        {
+            "date": "2026-01-01",
+            "event_date": "2026-01-27",
+            "end_date": "2026-01-28",
+            "label": "FOMC",
+            "title": "FOMC Meeting",
+            "kind": "fomc_meeting",
+            "policy_tone": "unknown",
+            "has_sep": False,
+            "statement_tone": "unknown",
+            "tone_change": "unknown",
+            "confidence": None,
+            "reason": None,
+        }
+    ]
+    assert "events" not in payload["charts"][1]
+
+
+def test_m2_fomc_chart_events_use_reviewed_statement_tone():
+    events = [
+        {
+            "event_id": "fomc_2026_01_27",
+            "event_type": "fomc_meeting",
+            "start_date": "2026-01-27",
+            "end_date": "2026-01-28",
+            "display_month": "2026-01-01",
+            "title": "FOMC Meeting",
+            "source": "Federal Reserve",
+            "policy_tone": "unknown",
+            "statement_tone": "hawkish",
+            "marker_tone": "hawkish",
+            "tone_change": "more_hawkish",
+            "tone_confidence": "medium",
+            "tone_reason": "Inflation language became firmer.",
+            "has_sep": 0,
+            "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+        }
+    ]
+    rows = [
+        {"date": f"2025-{month:02d}-01", "value": 100 + month, "source": "m2.csv"}
+        for month in range(1, 13)
+    ] + [{"date": "2026-01-01", "value": 120, "source": "m2.csv"}]
+
+    payload = macro_growth_cycle.build_m2_money_supply_detail_payload(
+        rows,
+        fomc_events=events,
+    )
+
+    event = payload["charts"][0]["events"][0]
+    assert event["policy_tone"] == "hawkish"
+    assert event["statement_tone"] == "hawkish"
+    assert event["tone_change"] == "more_hawkish"
+    assert event["confidence"] == "medium"

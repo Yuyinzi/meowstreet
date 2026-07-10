@@ -26,6 +26,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         rates_main=rates_main,
         m2_main=m2_main,
         gdp_main=gdp_main,
+        fomc_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -60,6 +61,7 @@ def test_main_does_not_generate_ai_interpretations():
         rates_main=recorder("rates"),
         m2_main=recorder("m2"),
         gdp_main=recorder("gdp"),
+        fomc_main=recorder("fomc"),
     )
 
     assert exit_code == 0
@@ -145,6 +147,58 @@ def test_main_records_exceptions_as_failures(capsys):
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "benchmark_yahoo: failed - yahoo rate limited" in captured.err
+
+
+def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
+    calls = []
+
+    def fake_task(argv):
+        calls.append(argv)
+        return 0
+
+    exit_code = refresh_macro_data.main(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-m2",
+            "--skip-gdp",
+            "--fomc-calendar-path",
+            str(tmp_path / "missing_fomc_calendar.csv"),
+        ],
+        fomc_main=fake_task,
+    )
+
+    assert exit_code == 0
+    assert calls == []
+
+
+def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
+    calls = []
+    csv_path = tmp_path / "fomc_calendar.csv"
+    csv_path.write_text(
+        "start_date,end_date,title,has_sep,url\n"
+        "2026-07-28,2026-07-29,FOMC Meeting,0,https://example.test/fomc\n",
+        encoding="utf-8",
+    )
+
+    def fake_task(argv):
+        calls.append(argv)
+        return 0
+
+    exit_code = refresh_macro_data.main(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-m2",
+            "--skip-gdp",
+            "--fomc-calendar-path",
+            str(csv_path),
+        ],
+        fomc_main=fake_task,
+    )
+
+    assert exit_code == 0
+    assert calls == [["--calendar-path", str(csv_path)]]
 
 
 def test_main_skip_flags_remove_tasks():
