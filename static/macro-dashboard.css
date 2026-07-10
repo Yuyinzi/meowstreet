@@ -72,7 +72,12 @@ button {
 
 .macro-shell.panel-open {
   max-width: none;
-  grid-template-columns: 1fr 45%;
+  grid-template-columns: minmax(320px, 1fr) minmax(420px, 420px);
+  gap: 18px;
+}
+
+.macro-shell.panel-open.panel-expanded {
+  grid-template-columns: minmax(280px, 1fr) minmax(720px, min(960px, calc(100vw - 96px)));
 }
 
 .macro-main {
@@ -97,11 +102,33 @@ button {
   flex-direction: column;
 }
 
+.detail-panel-expand {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #E0D6C8;
+  border-radius: 999px;
+  background: #FAF7F4;
+  color: #3B3530;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.detail-panel-expand:hover {
+  border-color: #3B3530;
+  background: #FFFFFF;
+}
+
 .detail-panel-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   padding: 16px 16px 12px;
   border-bottom: 1px solid #F0EAE4;
 }
@@ -184,6 +211,14 @@ button {
 
 .detail-panel-body .market-chart {
   min-height: 180px;
+}
+
+.panel-expanded .detail-panel-body .relationship-chart-wide {
+  grid-column: 1 / -1;
+}
+
+.panel-expanded .detail-panel-body .relationship-chart svg {
+  min-height: 340px;
 }
 
 .detail-panel-body .rates-curve-combo {
@@ -591,28 +626,21 @@ h2 {
 
 
 
-.relationship-event-rail > line {
-  stroke: #D8CEC2;
-  stroke-width: 1;
-  opacity: 0.7;
+.relationship-event-marker .relationship-event-bar {
+  fill: #8B7E74;
+  opacity: 0.24;
 }
 
-.relationship-event-marker .relationship-event-tick {
-  stroke: #8B7E74;
-  stroke-width: 1.4;
-  opacity: 0.75;
+.relationship-event-marker-dovish .relationship-event-bar {
+  fill: #2F9E74;
 }
 
-.relationship-event-marker-dovish .relationship-event-tick {
-  stroke: #2F9E74;
+.relationship-event-marker-hawkish .relationship-event-bar {
+  fill: #B85C38;
 }
 
-.relationship-event-marker-hawkish .relationship-event-tick {
-  stroke: #B85C38;
-}
-
-.relationship-event-marker-mixed .relationship-event-tick {
-  stroke: #B8872F;
+.relationship-event-marker-mixed .relationship-event-bar {
+  fill: #B8872F;
 }
 
 .m2-card-head .inflation-status-badge,
@@ -1807,6 +1835,11 @@ h2 {
   display: block;
 }
 
+.chart-tooltip.relationship-tooltip-pinned {
+  min-width: 300px;
+  max-width: 360px;
+}
+
 .chart-tooltip strong {
   display: block;
   margin-bottom: 4px;
@@ -1820,13 +1853,18 @@ h2 {
 }
 
 .chart-tooltip-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: baseline;
 }
 
-.chart-tooltip-row span,
+.chart-tooltip-row span {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .chart-tooltip-row strong {
   white-space: nowrap;
 }
@@ -2233,6 +2271,10 @@ h2 {
   }
 
   .macro-shell.panel-open {
+    grid-template-columns: 1fr;
+  }
+
+  .macro-shell.panel-open.panel-expanded {
     grid-template-columns: 1fr;
   }
 

@@ -19,7 +19,23 @@
     selectedNominalComparisonDate: null,
     selectedRealCurrentDate: null,
     selectedRealComparisonDate: null,
+    isDetailPanelExpanded: false,
   };
+
+  const DETAIL_PANEL_EXPAND_LABEL = "Expand detail panel";
+  const DETAIL_PANEL_COLLAPSE_LABEL = "Collapse detail panel";
+
+  function syncDetailPanelWidthClass() {
+    const shell = $("macroDashboardApp");
+    if (!shell) return;
+    shell.classList.toggle("panel-expanded", Boolean(state.isDetailPanelExpanded));
+  }
+
+  function toggleDetailPanelExpanded() {
+    state.isDetailPanelExpanded = !state.isDetailPanelExpanded;
+    syncDetailPanelWidthClass();
+    renderDetailPanel();
+  }
 
   function closeDetailPanel() {
     state.selectedBenchmarkId = null;
@@ -31,6 +47,7 @@
     state.selectedRealCurrentDate = null;
     state.selectedRealComparisonDate = null;
     $("macroDashboardApp").classList.remove("panel-open");
+    syncDetailPanelWidthClass();
     $("detailPanel").innerHTML = "";
   }
 
@@ -42,11 +59,13 @@
     const anySelected = state.selectedBenchmarkId || state.selectedRelationshipId || state.selectedRatesDetailId || state.selectedGrowthCycleDetailId;
     if (!anySelected) {
       shell.classList.remove("panel-open");
+      syncDetailPanelWidthClass();
       panel.innerHTML = "";
       return;
     }
 
     shell.classList.add("panel-open");
+    syncDetailPanelWidthClass();
 
     let title = "";
     if (state.selectedBenchmarkId) {
@@ -66,10 +85,14 @@
       title = "M2 Money Supply";
     }
 
+    const expandLabel = state.isDetailPanelExpanded ? DETAIL_PANEL_COLLAPSE_LABEL : DETAIL_PANEL_EXPAND_LABEL;
+    const expandIcon = state.isDetailPanelExpanded ? "\u2039" : "\u203A";
+
     panel.innerHTML = `
       <div class="detail-panel-head">
+        <button class="detail-panel-expand" type="button" aria-label="${expandLabel}" title="${expandLabel}">${expandIcon}</button>
         <h2>${escapeHtml(title)}</h2>
-        <button class="detail-panel-close" aria-label="Close detail panel">×</button>
+        <button class="detail-panel-close" aria-label="Close detail panel">\u00d7</button>
       </div>
       <div class="detail-panel-body">
         <p class="status">Loading...</p>
@@ -82,6 +105,11 @@
       renderOverview();
       renderGdpRelationshipOverview();
       renderUsRatesLiquidity();
+    });
+
+    panel.querySelector(".detail-panel-expand").addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleDetailPanelExpanded();
     });
 
     const body = panel.querySelector(".detail-panel-body");
@@ -704,7 +732,7 @@
           <svg class="relationship-chart-svg" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${titleHtml}">
             ${renderRelationshipYAxisAndGrid(relationshipYAxisTicks(series, keys, Y_AXIS_TICK_COUNT, options.yDomain), scale, valueFormatter)}
             ${scale.min <= 0 && scale.max >= 0 ? `<line class="relationship-zero" x1="${MARGIN_LEFT}" y1="${yAt(0, scale).toFixed(2)}" x2="${PLOT_RIGHT}" y2="${yAt(0, scale).toFixed(2)}"></line>` : ""}
-            ${renderRelationshipEventMarkers(series, options.events || [])}
+            ${renderRelationshipEventMarkers(series, keys, scale, options.events || [])}
             ${keys.flatMap((key, index) => (
               chartSegments(series, key, scale).map((points) => `<polyline class="relationship-line relationship-line-${index}" points="${escapeHtml(points)}"></polyline>`)
             )).join("")}
@@ -725,35 +753,51 @@
   }
 
   function eventToneClass(event) {
-    const tone = String(event?.policy_tone || "unknown").toLowerCase();
+    const tone = String(event?.marker_tone || event?.policy_tone || "unknown").toLowerCase();
     if (["dovish", "easing"].includes(tone)) return "dovish";
     if (["hawkish", "tightening"].includes(tone)) return "hawkish";
     if (tone === "mixed") return "mixed";
     return "unknown";
   }
 
-  function renderRelationshipEventMarkers(series, events = []) {
+  function eventMarkerTopY(point, keys, scale) {
+    const values = keys
+      .map((key) => point?.[key])
+      .filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)))
+      .map((value) => Number(value));
+    if (!values.length) return MARGIN_TOP;
+    return yAt(Math.max(...values), scale);
+  }
+
+  function eventMarkerBottomY(scale) {
+    if (scale.min <= 0 && scale.max >= 0) return yAt(0, scale);
+    return PLOT_BOTTOM;
+  }
+
+  function renderRelationshipEventMarkers(series, keys, scale, events = []) {
     if (!events.length) return "";
     const dateToIndex = new Map(series.map((point, index) => [point.date, index]));
-    const ticks = events
+    const bars = events
       .filter((event) => dateToIndex.has(event.date))
       .map((event) => {
         const index = dateToIndex.get(event.date);
-        const x = xAt(index, series.length).toFixed(2);
-        const y1 = (PLOT_BOTTOM - 12).toFixed(2);
-        const y2 = (PLOT_BOTTOM - 3).toFixed(2);
+        const barWidth = 8;
+        const x = xAt(index, series.length) - barWidth / 2;
+        const topY = eventMarkerTopY(series[index], keys, scale);
+        const bottomY = eventMarkerBottomY(scale);
+        const y = Math.min(topY, bottomY);
+        const height = Math.max(Math.abs(bottomY - topY), 8);
         return `
           <g class="relationship-event-marker relationship-event-marker-${escapeHtml(eventToneClass(event))}">
-            <line class="relationship-event-tick" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"></line>
+            <rect class="relationship-event-bar" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barWidth}" height="${height.toFixed(2)}" rx="2"></rect>
           </g>
         `;
       })
       .join("");
-    if (!ticks) return "";
+    if (!bars) return "";
     return `
       <g class="relationship-event-rail">
-        <line x1="${MARGIN_LEFT}" y1="${(PLOT_BOTTOM - 2).toFixed(2)}" x2="${PLOT_RIGHT}" y2="${(PLOT_BOTTOM - 2).toFixed(2)}"></line>
-        ${ticks}
+        ${bars}
       </g>
     `;
   }
@@ -770,6 +814,14 @@
       if (value === null || value === undefined) return "n/a";
       if (fmt === "percent") return fmtRate(value);
       return fmtNumber(value);
+    }
+
+    function positionRelationshipTooltip(index) {
+      const wrapRect = wrap.getBoundingClientRect();
+      const left = index < series.length / 2 ? wrapRect.width - tooltipRect.width - 12 : 12;
+      tooltip.style.left = `${Math.max(8, left)}px`;
+      tooltip.style.top = "12px";
+      tooltip.classList.add("relationship-tooltip-pinned");
     }
 
     function show(index, clientX, clientY) {
@@ -825,27 +877,12 @@
         tooltip.classList.add("visible");
         tooltipRect = tooltip.getBoundingClientRect();
       }
-      const wrapRect = wrap.getBoundingClientRect();
-      let left = clientX - wrapRect.left + 12;
-      let top = clientY - wrapRect.top - tooltipRect.height - 12;
-      if (left + tooltipRect.width > wrapRect.width) {
-        left = wrapRect.width - tooltipRect.width - 8;
-      }
-      if (left < 0) {
-        left = 8;
-      }
-      if (top < 0) {
-        top = clientY - wrapRect.top + 16;
-      }
-      if (top + tooltipRect.height > wrapRect.height) {
-        top = wrapRect.height - tooltipRect.height - 8;
-      }
-      tooltip.style.left = `${left}px`;
-      tooltip.style.top = `${top}px`;
+      positionRelationshipTooltip(index);
     }
 
     function hide() {
       tooltip.classList.remove("visible");
+      tooltip.classList.remove("relationship-tooltip-pinned");
       lastIndex = -1;
       tooltipRect = null;
     }
@@ -2711,6 +2748,9 @@
       renderRelationshipLineChart,
       renderRelationshipXAxisTicks,
       renderRelationshipYAxisAndGrid,
+      state,
+      renderDetailPanel,
+      toggleDetailPanelExpanded,
       xAt,
       xAxisTicks,
       renderXAxisTicks,

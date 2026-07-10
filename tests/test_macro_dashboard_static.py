@@ -915,6 +915,18 @@ def test_macro_dashboard_static_includes_fomc_tone_tooltip_fields():
     assert "confidence" in js
 
 
+def test_macro_dashboard_relationship_tooltip_uses_pinned_positioning():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert "positionRelationshipTooltip" in js
+    assert "relationship-tooltip-pinned" in js
+    assert "index < series.length / 2" in js
+    assert "grid-template-columns: minmax(0, 1fr) auto" in css
+    assert ".chart-tooltip-row span" in css
+    assert "overflow-wrap: anywhere" in css
+
+
 def test_macro_dashboard_hides_event_marker_labels_when_requested():
     script = textwrap.dedent(
         """
@@ -970,7 +982,7 @@ def test_macro_dashboard_hides_event_marker_labels_when_requested():
     assert payload["hasLabel"] is False
 
 
-def test_macro_dashboard_renders_fomc_events_as_rail_ticks():
+def test_macro_dashboard_renders_fomc_events_as_tone_bars_to_highest_line():
     script = textwrap.dedent(
         """
         const fs = require("fs");
@@ -996,17 +1008,21 @@ def test_macro_dashboard_renders_fomc_events_as_rail_ticks():
         const hooks = window.__macroDashboardTestHooks;
         const markup = hooks.renderRelationshipLineChart(
           "Test",
-          [{ date: "2025-01-01", value: 1 }],
-          ["value"],
-          { value: "Value" },
+          [{ date: "2025-01-01", m2: 4, pce: 6, target: 2 }],
+          ["m2", "pce", "target"],
+          { m2: "M2", pce: "PCE", target: "Target" },
           {
-            events: [{ date: "2025-01-01", label: "FOMC", policy_tone: "unknown" }],
+            yDomain: { min: 0, max: 10 },
+            events: [{ date: "2025-01-01", label: "FOMC", policy_tone: "hawkish" }],
           },
         );
+        const expectedTop = hooks.yAt(6, { min: 0, max: 10, range: 10, height: hooks.PLOT_BOTTOM - hooks.MARGIN_TOP }).toFixed(2);
 
         console.log(JSON.stringify({
-          hasRail: markup.includes("relationship-event-rail"),
+          hasBar: markup.includes("relationship-event-bar"),
           hasTick: markup.includes("relationship-event-tick"),
+          hasHawkishClass: markup.includes("relationship-event-marker-hawkish"),
+          hasTopAtHighestLine: markup.includes(`y1="${expectedTop}"`),
           hasFullHeightMarker: markup.includes(`y1="${hooks.MARGIN_TOP}" y2="${hooks.PLOT_BOTTOM}"`),
           hasLabel: markup.includes(">FOMC</text>"),
         }));
@@ -1022,7 +1038,104 @@ def test_macro_dashboard_renders_fomc_events_as_rail_ticks():
     )
     payload = json.loads(result.stdout)
 
-    assert payload["hasRail"] is True
-    assert payload["hasTick"] is True
+    assert payload["hasBar"] is True
+    assert payload["hasTick"] is False
+    assert payload["hasHawkishClass"] is True
+    assert payload["hasTopAtHighestLine"] is True
     assert payload["hasFullHeightMarker"] is False
     assert payload["hasLabel"] is False
+
+
+def test_macro_dashboard_static_includes_expandable_detail_panel_hooks():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert "isDetailPanelExpanded" in js
+    assert "toggleDetailPanelExpanded" in js
+    assert "panel-expanded" in js
+    assert "detail-panel-expand" in js
+    assert "DETAIL_PANEL_EXPAND_LABEL" in js
+    assert "DETAIL_PANEL_COLLAPSE_LABEL" in js
+    assert '"Expand detail panel"' in js
+    assert '"Collapse detail panel"' in js
+    assert ".macro-shell.panel-open.panel-expanded" in css
+    assert "minmax(720px" in css
+    assert ".detail-panel-expand" in css
+
+
+def test_macro_dashboard_detail_panel_expand_button_toggles_class():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const classNames = new Set();
+        const detailPanel = {
+          innerHTML: "",
+          querySelector: (selector) => {
+            if (selector === ".detail-panel-close") {
+              return { addEventListener: () => {} };
+            }
+            if (selector === ".detail-panel-expand") {
+              return {
+                addEventListener: (eventName, handler) => {
+                  detailPanel.expandHandler = handler;
+                },
+              };
+            }
+            if (selector === ".detail-panel-body") {
+              return { innerHTML: "" };
+            }
+            return null;
+          },
+        };
+        const elements = {
+          macroDashboardApp: {
+            classList: {
+              add: (name) => classNames.add(name),
+              remove: (name) => classNames.delete(name),
+              toggle: (name, enabled) => {
+                if (enabled) classNames.add(name);
+                else classNames.delete(name);
+              },
+            },
+            insertAdjacentHTML: () => {},
+          },
+          detailPanel,
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        hooks.state.selectedGrowthCycleDetailId = "m2_money_supply";
+        hooks.renderDetailPanel();
+        const before = classNames.has("panel-expanded");
+        detailPanel.expandHandler({ stopPropagation: () => {} });
+        const after = classNames.has("panel-expanded");
+
+        console.log(JSON.stringify({ before, after }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload == {"before": False, "after": True}
