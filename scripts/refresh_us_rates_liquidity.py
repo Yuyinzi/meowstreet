@@ -22,6 +22,9 @@ def _print_fetched(label, fetched):
 
 
 def _print_imported(label, inserted):
+    if inserted is None:
+        print(f"{label} import skipped")
+        return
     print(f"{label} imported:")
     for series_id, count in inserted.items():
         print(f"  {series_id}: {count}")
@@ -34,6 +37,7 @@ def _generate_credit_interpretation(db_path):
 def refresh(
     db_path,
     skip_fetch=False,
+    skip_credit_workbook=False,
     connect=us_rates_liquidity.connect,
     fetch_rates=import_us_rates_liquidity.fetch_fred_csvs,
     fetch_macro=import_us_macro_indicators.fetch_fred_csvs,
@@ -50,7 +54,9 @@ def refresh(
         credit_fetched = None if skip_fetch else fetch_credit()
         rates_imported = import_rates(con)
         macro_imported = import_macro(con)
-        credit_workbook_imported = import_credit_workbook(con)
+        credit_workbook_imported = (
+            None if skip_credit_workbook else import_credit_workbook(con)
+        )
         credit_fred_imported = import_credit_fred(con)
         return {
             "rates_fetched": rates_fetched,
@@ -91,6 +97,11 @@ def main(
         help="import from already downloaded FRED CSVs without network fetch",
     )
     parser.add_argument(
+        "--skip-credit-workbook",
+        action="store_true",
+        help="skip importing the optional corporate credit workbook",
+    )
+    parser.add_argument(
         "--generate-credit-interpretation",
         action="store_true",
         help="generate stored AI interpretation after data refresh",
@@ -100,6 +111,7 @@ def main(
         result = refresh(
             args.db_path,
             skip_fetch=args.skip_fetch,
+            skip_credit_workbook=args.skip_credit_workbook,
             connect=connect,
             fetch_rates=fetch_rates,
             fetch_macro=fetch_macro,

@@ -31,7 +31,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
     assert exit_code == 0
     assert calls == [
         ("benchmark", ["--all"]),
-        ("rates", []),
+        ("rates", ["--skip-credit-workbook"]),
         ("m2", ["--fetch-fred-csv"]),
         ("m2", ["--fred-csv-merge"]),
         ("gdp", ["--fetch-fred-csv"]),
@@ -167,7 +167,7 @@ def test_main_skip_flags_remove_tasks():
 
     assert exit_code == 0
     assert calls == [
-        ("rates", []),
+        ("rates", ["--skip-credit-workbook"]),
         ("m2", ["--fetch-fred-csv"]),
         ("m2", ["--fred-csv-merge"]),
     ]

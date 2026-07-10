@@ -157,6 +157,43 @@ def test_main_skip_fetch_only_imports_existing_csvs(capsys):
     assert captured.err == ""
 
 
+def test_main_can_skip_credit_workbook_import(capsys):
+    calls = []
+    connection = FakeConnection()
+
+    def fake_connect(db_path):
+        calls.append(("connect", db_path))
+        return connection
+
+    exit_code = refresh_us_rates_liquidity.main(
+        ["--skip-fetch", "--skip-credit-workbook"],
+        connect=fake_connect,
+        fetch_rates=lambda: {},
+        fetch_macro=lambda: {},
+        fetch_credit=lambda: {},
+        import_rates=lambda con: calls.append(("import_rates",)) or {},
+        import_macro=lambda con: calls.append(("import_macro",)) or {},
+        import_credit_workbook=lambda con: calls.append(
+            ("import_credit_workbook",)
+        )
+        or {},
+        import_credit_fred=lambda con: calls.append(("import_credit_fred",)) or {},
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert calls == [
+        ("connect", refresh_us_rates_liquidity.us_rates_liquidity.DEFAULT_DB_PATH),
+        ("import_rates",),
+        ("import_macro",),
+        ("import_credit_fred",),
+    ]
+    assert "corporate credit workbook import skipped" in captured.out
+    assert "corporate credit fred imported:" in captured.out
+    assert captured.err == ""
+
+
 def test_main_forwards_custom_db_path(capsys):
     calls = []
     connection = FakeConnection()

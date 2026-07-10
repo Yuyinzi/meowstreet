@@ -36,7 +36,7 @@ def _planned_tasks(args, benchmark_main, rates_main, m2_main, gdp_main):
     if not args.skip_yahoo:
         tasks.append(("benchmark_yahoo", benchmark_main, ["--all"]))
     if not args.skip_rates:
-        tasks.append(("rates_fred", rates_main, []))
+        tasks.append(("rates_fred", rates_main, ["--skip-credit-workbook"]))
     if not args.skip_m2:
         tasks.append(("m2_fred_fetch", m2_main, ["--fetch-fred-csv"]))
         tasks.append(("m2_fred_merge", m2_main, ["--fred-csv-merge"]))
