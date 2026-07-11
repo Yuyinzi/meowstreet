@@ -806,6 +806,16 @@ def test_macro_dashboard_static_includes_fomc_tone_card():
     assert "Tone unavailable" in js
 
 
+def test_macro_dashboard_renders_fomc_minutes_policy_read_rows():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+
+    assert "Minutes Confirmation" in js
+    assert "Risk Focus" in js
+    assert "Policy Conviction" in js
+    assert "minutes_confirmation" in js
+    assert "policy_conviction" in js
+
+
 def test_macro_dashboard_range_filter_hooks_filter_series_and_events():
     script = textwrap.dedent(
         """

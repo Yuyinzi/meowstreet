@@ -1209,7 +1209,7 @@
     "Core PCE YoY": "核心PCE同比",
     "Gap vs Fed 2% Target": "相对美联储2%目标",
     "Fed 2% Target": "美联储2%目标",
-    "Fed 2% Target (since 2012)": "美联储2%目标（2012年起）",
+    "Fed Target (since 2012)": "美联储目标（2012年起）",
     "Fed Target": "美联储目标",
     "GDP Expectations": "GDP预期",
     "Pending Inputs": "待输入",
@@ -1262,6 +1262,25 @@
     "No scheduled meeting": "暂无已安排会议",
     "Tone unavailable": "暂无倾向",
     "Pending review": "等待审核",
+    "FOMC Policy Read": "FOMC政策解读",
+    "Statement Bias": "声明基调",
+    "Minutes Confirmation": "纪要确认",
+    "Risk Focus": "风险焦点",
+    "Policy Conviction": "政策坚定度",
+    "confirmed": "确认",
+    "confirmed_but_divided": "确认但有分歧",
+    "weakened": "削弱",
+    "stronger_underneath": "内部更强",
+    "contradicted": "矛盾",
+    "inflation": "通胀",
+    "growth_labor": "增长/就业",
+    "financial_stability": "金融稳定",
+    "balanced": "平衡",
+    "high": "高",
+    "moderate": "中等",
+    "low": "低",
+    "divided": "分歧",
+    "Pending": "待处理",
   };
 
   function zhLabel(label) {
@@ -1740,11 +1759,12 @@
   function renderFomcToneCard(card) {
     const tone = card.latest_tone || {};
     const hasTone = tone.marker_tone != null;
+    const cardLabel = card.label || "FOMC Policy Read";
     if (!hasTone) {
       return `
         <article class="m2-card m2-card-missing fomc-card">
           <div class="m2-card-head">
-            <span>${bilingualTitle("Latest FOMC Tone")}</span>
+            <span>${bilingualTitle(cardLabel)}</span>
           </div>
           <p class="m2-card-context">${bilingualLabel("Tone unavailable")}</p>
         </article>
@@ -1755,11 +1775,19 @@
     const dateStr = tone.end_date && tone.end_date !== tone.start_date
       ? `${tone.start_date} \u2013 ${tone.end_date}`
       : tone.start_date;
+    const minutesAvailable = tone.minutes_status === "available";
+    const minutesRows = minutesAvailable
+      ? `
+          <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel(formatMinutesConfirmation(tone.minutes_confirmation))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Risk Focus")}</span><strong>${bilingualLabel(formatRiskFocus(tone.risk_focus))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Policy Conviction")}</span><strong>${bilingualLabel(formatPolicyConviction(tone.policy_conviction))}</strong></div>`
+      : `
+          <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel("Pending")}</strong></div>`;
     return `
       <article class="m2-card m2-card-context fomc-card fomc-tone-card">
         <div class="m2-card-head">
           <div>
-            <span>${bilingualTitle("Latest FOMC Tone")}</span>
+            <span>${bilingualTitle(cardLabel)}</span>
             <small class="fomc-tone-date">${escapeHtml(dateStr || "")}</small>
           </div>
           <strong class="fomc-tone-badge ${escapeHtml(toneBadge)}">${bilingualLabel(toneLabel)}</strong>
@@ -1770,6 +1798,7 @@
           <div class="m2-level-row"><span>${bilingualLabel("Language")}</span><strong>${bilingualLabel(formatToneValue(tone.language_tone))}</strong></div>
           <div class="m2-level-row"><span>${bilingualLabel("Bias")}</span><strong>${bilingualLabel(formatOverallBias(tone.overall_bias))}</strong></div>
           <div class="m2-level-row"><span>${bilingualLabel("Change")}</span><strong>${bilingualLabel(formatToneChange(tone.tone_change))}</strong></div>
+          ${minutesRows}
         </div>
       </article>
     `;
@@ -1869,6 +1898,18 @@
       less_dovish: "Less Dovish vs previous",
     };
     return map[value] || titleCaseToken(value);
+  }
+
+  function formatMinutesConfirmation(value) {
+    return formatToneValue(value || "pending");
+  }
+
+  function formatRiskFocus(value) {
+    return formatToneValue(value || "unknown");
+  }
+
+  function formatPolicyConviction(value) {
+    return formatToneValue(value || "unknown");
   }
 
   function toneBadgeClass(tone) {
