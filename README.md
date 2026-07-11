@@ -25,6 +25,104 @@ http://127.0.0.1:8797
 .venv/bin/pytest -q
 ```
 
+## Macro Dashboard Data
+
+### FOMC calendar, statements, and tone
+
+The FOMC dashboard data is DB-backed. Import the calendar first, fetch statement documents second, then generate policy tone from the stored statement text.
+
+Import FOMC meetings from the local CSV:
+
+```bash
+.venv/bin/python scripts/import_fomc_calendar.py
+```
+
+By default this reads:
+
+```text
+data/source_material/Video 06/fomc_calendar.csv
+```
+
+Override the CSV path when needed:
+
+```bash
+.venv/bin/python scripts/import_fomc_calendar.py \
+  --calendar-path "data/source_material/Video 06/fomc_calendar.csv"
+```
+
+Fetch statement documents for all imported FOMC events:
+
+```bash
+.venv/bin/python scripts/fetch_fomc_documents.py
+```
+
+Generate tone for one statement:
+
+```bash
+.venv/bin/python scripts/generate_fomc_policy_tone.py \
+  --event-id fomc_2026_06_16 \
+  --max-rounds 3
+```
+
+Generate tone for all fetched statements:
+
+```bash
+.venv/bin/python scripts/generate_fomc_policy_tone.py \
+  --all \
+  --max-rounds 3
+```
+
+The generator loads `.env` through `app.llm`. Configure the model and API credentials there, for example:
+
+```text
+OPENAI_API_KEY=...
+OPENAI_BASE_URL=...
+OPENAI_MODEL=...
+```
+
+Use optional per-task model overrides only when needed:
+
+```text
+FOMC_TONE_EXTRACTOR_MODEL=...
+FOMC_TONE_REVIEWER_MODEL=...
+```
+
+Existing tone rows are skipped when the stored statement `source_hash` already has an extraction. Regenerate existing rows with:
+
+```bash
+.venv/bin/python scripts/generate_fomc_policy_tone.py \
+  --all \
+  --max-rounds 3 \
+  --force
+```
+
+Typical full refresh sequence:
+
+```bash
+.venv/bin/python scripts/import_fomc_calendar.py
+.venv/bin/python scripts/fetch_fomc_documents.py --document-type all
+.venv/bin/python scripts/generate_fomc_policy_tone.py --all --max-rounds 3
+.venv/bin/python scripts/generate_fomc_minutes_structure.py --all --max-rounds 3
+```
+
+Tone extraction stores both the detailed interpretation and the simplified chart marker:
+
+- `policy_action`: mechanical decision, such as `hold`, `hike`, or `cut`
+- `guidance_bias`: explicit forward guidance
+- `language_tone`: statement wording tone
+- `overall_bias`: trader-style combined bias
+- `marker_tone`: simplified dashboard marker, such as `hawkish`, `dovish`, or `neutral`
+
+### Minutes structure extraction
+
+Minutes analysis does not replace statement tone. The statement remains the public baseline. Minutes add structure fields:
+
+- `minutes_confirmation`
+- `risk_focus`
+- `divergence_level`
+- `uncertainty_level`
+- `policy_conviction`
+
 ## GDP Relationship Workbook Caveat
 
 - `data/source_material/Video 03/GDP_Correlations.xlsx` is the source of truth for the current GDP relationship dashboard import.
