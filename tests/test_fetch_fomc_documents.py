@@ -232,6 +232,60 @@ def test_fetch_statement_document_stores_statement_body_only():
     )
 
 
+def test_extract_minutes_body_removes_navigation_and_footer():
+    html = """
+    <html>
+      <head><title>Minutes of the Federal Open Market Committee</title></head>
+      <body>
+        <nav>Federal Reserve navigation</nav>
+        <main>
+          <h1>Minutes of the Federal Open Market Committee</h1>
+          <p>June 16-17, 2026</p>
+          <p>Participants agreed that inflation remained elevated.</p>
+          <p>A few participants noted downside risks to employment.</p>
+        </main>
+        <footer>Last Update: July 8, 2026</footer>
+      </body>
+    </html>
+    """
+
+    body = fetch_fomc_documents.extract_minutes_body_from_html(html)
+
+    assert "Minutes of the Federal Open Market Committee" in body
+    assert "Participants agreed that inflation remained elevated." in body
+    assert "A few participants noted downside risks to employment." in body
+    assert "Federal Reserve navigation" not in body
+    assert "Last Update" not in body
+
+
+def test_fetch_minutes_document_stores_minutes_body():
+    event = {
+        "event_id": "fomc_2026_06_16",
+        "start_date": "2026-06-16",
+        "end_date": "2026-06-17",
+        "url": "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260617.htm",
+    }
+    html = """
+    <html><body>
+      <h1>Minutes of the Federal Open Market Committee</h1>
+      <p>Participants agreed that inflation remained elevated.</p>
+    </body></html>
+    """
+
+    row = fetch_fomc_documents.fetch_minutes_document(
+        event,
+        fetch=lambda url: html,
+        now=lambda: "2026-07-11T00:00:00Z",
+    )
+
+    assert row["event_id"] == "fomc_2026_06_16"
+    assert row["document_type"] == "minutes"
+    assert row["url"] == event["url"]
+    assert "Participants agreed" in row["text"]
+    assert row["source_hash"]
+    assert row["fetched_at"] == "2026-07-11T00:00:00Z"
+
+
 def test_import_statement_documents_resolves_calendar_url(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
     try:

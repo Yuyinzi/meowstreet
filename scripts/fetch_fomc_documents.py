@@ -115,6 +115,26 @@ def extract_text_from_html(html):
     return "\n".join([line for line in lines if line])
 
 
+def extract_minutes_body_from_html(html):
+    text = extract_text_from_html(html)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    start_index = 0
+    for index, line in enumerate(lines):
+        if "Minutes of the Federal Open Market Committee" in line:
+            start_index = index
+    stop_phrases = {
+        "Last Update:",
+        "Federal Reserve Board",
+        "For media inquiries",
+    }
+    body_lines = []
+    for line in lines[start_index:]:
+        if any(line.startswith(phrase) for phrase in stop_phrases):
+            break
+        body_lines.append(line)
+    return "\n".join(body_lines).strip()
+
+
 def validate_statement_text(event, text):
     if not text:
         raise ValueError(f"statement text is empty for {event['event_id']}")
@@ -156,6 +176,15 @@ def fetch_statement_document(event, fetch=fetch_text, now=fetched_at_now):
     return document_row(event, "statement", url, text, now())
 
 
+def fetch_minutes_document(event, fetch=fetch_text, now=fetched_at_now):
+    url = event.get("minutes_url") or event.get("url")
+    if not url:
+        raise ValueError(f"fomc event {event['event_id']} has no minutes url")
+    html = fetch(url)
+    text = extract_minutes_body_from_html(html)
+    return document_row(event, "minutes", url, text, now())
+
+
 def import_statement_documents(con, fetch=fetch_text, skip_empty=True):
     events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
     count = 0
@@ -182,17 +211,43 @@ def import_statement_documents(con, fetch=fetch_text, skip_empty=True):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Fetch FOMC statement documents")
+    parser = argparse.ArgumentParser(description="Fetch FOMC documents")
     parser.add_argument(
         "--db-path", type=Path, default=us_rates_liquidity.DEFAULT_DB_PATH
+    )
+    parser.add_argument(
+        "--document-type",
+        choices=["statement", "minutes", "all"],
+        default="statement",
     )
     args = parser.parse_args(argv)
     con = us_rates_liquidity.connect(args.db_path)
     try:
-        imported = import_statement_documents(con)
+        events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
+        for event in events:
+            if args.document_type in {"statement", "all"}:
+                try:
+                    row = fetch_statement_document(event)
+                    us_rates_liquidity.replace_macro_event_document(con, row)
+                    print(
+                        f"  OK   {event['event_id']} statement: {len(row['text'])} chars"
+                    )
+                except ValueError as exc:
+                    print(f"  SKIP {event['event_id']} statement: {exc}")
+            if args.document_type in {"minutes", "all"}:
+                if not (event.get("minutes_url") or event.get("url")):
+                    print(f"  SKIP {event['event_id']} minutes: no url")
+                    continue
+                try:
+                    row = fetch_minutes_document(event)
+                    us_rates_liquidity.replace_macro_event_document(con, row)
+                    print(
+                        f"  OK   {event['event_id']} minutes: {len(row['text'])} chars"
+                    )
+                except ValueError as exc:
+                    print(f"  SKIP {event['event_id']} minutes: {exc}")
     finally:
         con.close()
-    print(f"statement_documents: {imported['statement_documents']}")
     return 0
 
 
