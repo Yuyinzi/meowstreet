@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from pathlib import Path
 
@@ -686,3 +687,63 @@ def load_latest_approved_macro_event_tone(
         (document_type, document_type, normalized_type, as_of_date),
     ).fetchall()
     return dict(rows[0]) if rows else None
+
+
+def _json_object(value):
+    if not value:
+        return {}
+    return json.loads(value)
+
+
+def load_latest_combined_fomc_policy_read(con, as_of_date):
+    statement = load_latest_approved_macro_event_tone(
+        con,
+        "fomc_meeting",
+        as_of_date,
+        "statement",
+    )
+    if not statement:
+        return None
+    minutes_document = load_macro_event_document(
+        con,
+        statement["event_id"],
+        "minutes",
+    )
+    minutes = None
+    minutes_facts = {}
+    if minutes_document:
+        minutes = load_macro_event_tone_extraction(
+            con,
+            statement["event_id"],
+            "minutes",
+            minutes_document["source_hash"],
+        )
+        if minutes and minutes.get("extraction_status") == "approved":
+            minutes_facts = _json_object(minutes.get("facts_json"))
+        else:
+            minutes = None
+    return {
+        "event_id": statement["event_id"],
+        "start_date": statement["start_date"],
+        "end_date": statement["end_date"],
+        "display_month": statement["display_month"],
+        "title": statement["title"],
+        "statement_marker_tone": statement["marker_tone"],
+        "statement_policy_action": statement["policy_action"],
+        "statement_guidance_bias": statement["guidance_bias"],
+        "statement_language_tone": statement["language_tone"],
+        "statement_overall_bias": statement["overall_bias"],
+        "statement_tone_change": statement["tone_change"],
+        "statement_confidence": statement["confidence"],
+        "statement_reason": statement["reason"],
+        "minutes_status": "available" if minutes else "pending",
+        "minutes_confirmation": minutes_facts.get("minutes_confirmation", "pending"),
+        "risk_focus": minutes_facts.get("risk_focus", "unknown"),
+        "risk_bias": minutes_facts.get("risk_bias", "unknown"),
+        "divergence_level": minutes_facts.get("divergence_level", "unknown"),
+        "uncertainty_level": minutes_facts.get("uncertainty_level", "unknown"),
+        "policy_conviction": minutes_facts.get("policy_conviction", "unknown"),
+        "minutes_tone": minutes["minutes_tone"] if minutes else "unknown",
+        "minutes_confidence": minutes["confidence"] if minutes else None,
+        "minutes_reason": minutes["reason"] if minutes else None,
+    }
