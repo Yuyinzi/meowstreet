@@ -242,11 +242,19 @@ def macro_dashboard_growth_cycle():
             "fomc_meeting",
             date.today().isoformat(),
         )
-        fomc_latest_tone = us_rates_liquidity_db.load_latest_approved_macro_event_tone(
+        as_of_date = date.today().isoformat()
+        fomc_latest_tone = us_rates_liquidity_db.load_latest_combined_fomc_policy_read(
             con,
-            "fomc_meeting",
-            date.today().isoformat(),
+            as_of_date,
         )
+        if not fomc_latest_tone:
+            fomc_latest_tone = (
+                us_rates_liquidity_db.load_latest_approved_macro_event_tone(
+                    con,
+                    "fomc_meeting",
+                    as_of_date,
+                )
+            )
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(
             dashboard,
             next_fomc_meeting=next_fomc_meeting,

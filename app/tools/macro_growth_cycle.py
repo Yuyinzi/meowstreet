@@ -610,30 +610,47 @@ def build_fomc_tone_headline(latest_tone):
     if not latest_tone:
         return {
             "id": "fomc_tone",
-            "label": "FOMC Tone",
+            "label": "FOMC Policy Read",
             "period": None,
             "status": "missing",
             "status_label": "Missing",
         }
+    marker_tone = latest_tone.get("statement_marker_tone") or latest_tone.get(
+        "marker_tone"
+    )
     return {
         "id": "fomc_tone",
-        "label": "FOMC Tone",
+        "label": "FOMC Policy Read",
         "period": latest_tone.get("start_date"),
         "status": "context",
-        "status_label": "Latest Tone",
+        "status_label": "Latest Policy Read",
         "latest_tone": {
             "event_id": latest_tone.get("event_id"),
             "start_date": latest_tone.get("start_date"),
             "end_date": latest_tone.get("end_date"),
-            "source_hash": latest_tone.get("source_hash"),
-            "marker_tone": latest_tone.get("marker_tone"),
-            "policy_action": latest_tone.get("policy_action"),
-            "guidance_bias": latest_tone.get("guidance_bias"),
-            "language_tone": latest_tone.get("language_tone"),
-            "overall_bias": latest_tone.get("overall_bias"),
-            "tone_change": latest_tone.get("tone_change"),
-            "confidence": latest_tone.get("confidence"),
-            "reason": latest_tone.get("reason"),
+            "marker_tone": marker_tone,
+            "policy_action": latest_tone.get("statement_policy_action")
+            or latest_tone.get("policy_action"),
+            "guidance_bias": latest_tone.get("statement_guidance_bias")
+            or latest_tone.get("guidance_bias"),
+            "language_tone": latest_tone.get("statement_language_tone")
+            or latest_tone.get("language_tone"),
+            "overall_bias": latest_tone.get("statement_overall_bias")
+            or latest_tone.get("overall_bias"),
+            "tone_change": latest_tone.get("statement_tone_change")
+            or latest_tone.get("tone_change"),
+            "confidence": latest_tone.get("statement_confidence")
+            or latest_tone.get("confidence"),
+            "reason": latest_tone.get("statement_reason") or latest_tone.get("reason"),
+            "minutes_status": latest_tone.get("minutes_status", "pending"),
+            "minutes_confirmation": latest_tone.get("minutes_confirmation", "pending"),
+            "risk_focus": latest_tone.get("risk_focus", "unknown"),
+            "risk_bias": latest_tone.get("risk_bias", "unknown"),
+            "divergence_level": latest_tone.get("divergence_level", "unknown"),
+            "uncertainty_level": latest_tone.get("uncertainty_level", "unknown"),
+            "policy_conviction": latest_tone.get("policy_conviction", "unknown"),
+            "minutes_confidence": latest_tone.get("minutes_confidence"),
+            "minutes_reason": latest_tone.get("minutes_reason"),
         },
     }
 
@@ -1059,7 +1076,7 @@ def build_m2_money_supply_detail_payload(
                 "labels": {
                     "m2_yoy": "M2 YoY Growth",
                     "core_pce_yoy": "Core PCE YoY",
-                    "fed_target": "Fed 2% Target (since 2012)",
+                    "fed_target": "Fed Target (since 2012)",
                 },
                 "series": state_series,
                 "events": state_chart_events,

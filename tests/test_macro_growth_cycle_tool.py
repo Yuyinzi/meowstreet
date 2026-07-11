@@ -769,7 +769,7 @@ def test_m2_detail_state_chart_includes_core_pce_yoy_and_fed_target():
     assert chart["labels"] == {
         "m2_yoy": "M2 YoY Growth",
         "core_pce_yoy": "Core PCE YoY",
-        "fed_target": "Fed 2% Target (since 2012)",
+        "fed_target": "Fed Target (since 2012)",
     }
     assert chart["series"] == [
         {
@@ -1014,7 +1014,7 @@ def test_m2_detail_includes_fed_balance_sheet_comparison_charts():
     assert state_chart["labels"] == {
         "m2_yoy": "M2 YoY Growth",
         "core_pce_yoy": "Core PCE YoY",
-        "fed_target": "Fed 2% Target (since 2012)",
+        "fed_target": "Fed Target (since 2012)",
     }
 
     fed_chart = payload["charts"][1]
@@ -1182,6 +1182,40 @@ def test_m2_state_chart_includes_fomc_month_markers():
         }
     ]
     assert "events" not in payload["charts"][1]
+
+
+def test_build_fomc_tone_headline_includes_minutes_structure_when_available():
+    card = macro_growth_cycle.build_fomc_tone_headline(
+        {
+            "event_id": "fomc_2026_06_16",
+            "start_date": "2026-06-16",
+            "end_date": "2026-06-17",
+            "statement_marker_tone": "hawkish",
+            "statement_policy_action": "hold",
+            "statement_guidance_bias": "neutral",
+            "statement_language_tone": "hawkish",
+            "statement_overall_bias": "mild_hawkish",
+            "statement_tone_change": "more_hawkish",
+            "statement_confidence": "medium",
+            "statement_reason": "statement reason",
+            "minutes_status": "available",
+            "minutes_confirmation": "confirmed_but_divided",
+            "risk_focus": "inflation",
+            "risk_bias": "hawkish",
+            "divergence_level": "medium",
+            "uncertainty_level": "medium",
+            "policy_conviction": "moderate",
+            "minutes_confidence": "medium",
+            "minutes_reason": "minutes reason",
+        }
+    )
+
+    assert card["id"] == "fomc_tone"
+    assert card["latest_tone"]["marker_tone"] == "hawkish"
+    assert card["latest_tone"]["minutes_status"] == "available"
+    assert card["latest_tone"]["minutes_confirmation"] == "confirmed_but_divided"
+    assert card["latest_tone"]["risk_focus"] == "inflation"
+    assert card["latest_tone"]["policy_conviction"] == "moderate"
 
 
 def test_m2_fomc_chart_events_use_reviewed_statement_tone():

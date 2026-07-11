@@ -742,6 +742,11 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
         "load_latest_approved_macro_event_tone",
         lambda con, event_type, as_of_date: None,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -948,6 +953,11 @@ def test_growth_cycle_api_includes_next_fomc_meeting(monkeypatch):
         "load_latest_approved_macro_event_tone",
         lambda con, event_type, as_of_date: None,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -1054,6 +1064,11 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
         "load_latest_approved_macro_event_tone",
         lambda con, event_type, as_of_date: None,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -1130,6 +1145,11 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
         "load_latest_approved_macro_event_tone",
         lambda con, event_type, as_of_date: None,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -1185,6 +1205,11 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
         api.us_rates_liquidity_db,
         "load_latest_approved_macro_event_tone",
         lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
     )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
@@ -1307,6 +1332,11 @@ def test_growth_cycle_api_includes_fomc_tone_card(monkeypatch):
     )
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
         "load_latest_approved_macro_event_tone",
         lambda con, event_type, as_of_date: {
             "event_id": "fomc_2026_06_16",
@@ -1330,7 +1360,7 @@ def test_growth_cycle_api_includes_fomc_tone_card(monkeypatch):
     tone_card = next(
         item for item in response.json()["headline"] if item["id"] == "fomc_tone"
     )
-    assert tone_card["label"] == "FOMC Tone"
+    assert tone_card["label"] == "FOMC Policy Read"
     assert tone_card["latest_tone"]["marker_tone"] == "hawkish"
     assert tone_card["latest_tone"]["policy_action"] == "hold"
     assert tone_card["latest_tone"]["overall_bias"] == "mild_hawkish"
