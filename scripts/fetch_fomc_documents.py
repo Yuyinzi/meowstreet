@@ -17,8 +17,18 @@ from app.db import us_rates_liquidity
 TAG_RE = re.compile(r"<[^>]+>")
 BLOCK_RE = re.compile(r"</(?:p|div|h1|h2|h3|li)>", re.IGNORECASE)
 STATEMENT_PATH_RE = re.compile(r"/newsevents/pressreleases/monetary\d{8}a\.htm$")
+MINUTES_PATH_RE = re.compile(r"/monetarypolicy/fomcminutes\d{8}\.htm$")
 FED_BASE_URL = "https://www.federalreserve.gov"
 FOMC_CALENDAR_URL = f"{FED_BASE_URL}/monetarypolicy/fomccalendars.htm"
+MINUTES_SECTION_HEADINGS = {
+    "Developments in Financial Markets and Open Market Operations",
+    "Staff Review of the Economic Situation",
+    "Staff Review of the Financial Situation",
+    "Staff Economic Outlook",
+    "Participants' Views on Current Conditions and the Economic Outlook",
+    "Committee Policy Actions",
+    "Committee Policy Action",
+}
 
 
 def fetched_at_now():
@@ -49,6 +59,13 @@ def _is_statement_url(url):
     return bool(STATEMENT_PATH_RE.search(absolute_url))
 
 
+def _is_minutes_url(url):
+    if not url:
+        return False
+    absolute_url = _absolute_fed_url(url)
+    return bool(MINUTES_PATH_RE.search(absolute_url))
+
+
 def _statement_date(event):
     date_value = str(event.get("end_date") or event.get("start_date") or "").strip()
     return date_value.replace("-", "")
@@ -60,6 +77,18 @@ def _statement_url_from_calendar_html(event, html):
         return ""
     pattern = re.compile(
         rf'href=["\']([^"\']*/newsevents/pressreleases/monetary{statement_date}a\.htm)["\']',
+        re.IGNORECASE,
+    )
+    match = pattern.search(html)
+    return _absolute_fed_url(match.group(1)) if match else ""
+
+
+def _minutes_url_from_calendar_html(event, html):
+    minutes_date = _statement_date(event)
+    if not minutes_date:
+        return ""
+    pattern = re.compile(
+        rf'href=["\']([^"\']*/monetarypolicy/fomcminutes{minutes_date}\.htm)["\']',
         re.IGNORECASE,
     )
     match = pattern.search(html)
@@ -79,6 +108,22 @@ def resolve_statement_url(event, fetch=None):
     if not statement_url:
         raise ValueError(f"statement url is missing for {event['event_id']}")
     return statement_url
+
+
+def resolve_minutes_url(event, fetch=None):
+    fetch_document = fetch or fetch_text
+    for key in ("minutes_url", "url"):
+        url = str(event.get(key) or "").strip()
+        if _is_minutes_url(url):
+            return _absolute_fed_url(url)
+    event_url = str(event.get("url") or "").strip()
+    if not event_url:
+        raise ValueError(f"minutes url is missing for {event['event_id']}")
+    calendar_html = fetch_document(event_url)
+    minutes_url = _minutes_url_from_calendar_html(event, calendar_html)
+    if not minutes_url:
+        raise ValueError(f"minutes url is missing for {event['event_id']}")
+    return minutes_url
 
 
 STATEMENT_BODY_STOP_PATTERNS = (
@@ -123,12 +168,26 @@ def extract_minutes_body_from_html(html):
         if "Minutes of the Federal Open Market Committee" in line:
             start_index = index
     stop_phrases = {
+        "Back to Top",
         "Last Update:",
         "Federal Reserve Board",
         "For media inquiries",
+        "_______________________",
     }
     body_lines = []
+    section_seen = False
+    skip_attendance = False
     for line in lines[start_index:]:
+        if line in MINUTES_SECTION_HEADINGS:
+            section_seen = True
+            skip_attendance = False
+        if line == "Attendance":
+            if section_seen:
+                break
+            skip_attendance = True
+            continue
+        if skip_attendance:
+            continue
         if any(line.startswith(phrase) for phrase in stop_phrases):
             break
         body_lines.append(line)
@@ -140,6 +199,13 @@ def validate_statement_text(event, text):
         raise ValueError(f"statement text is empty for {event['event_id']}")
     if "Federal Reserve issues FOMC statement" not in text:
         raise ValueError(f"statement text is invalid for {event['event_id']}")
+
+
+def validate_minutes_text(event, text):
+    if not text:
+        raise ValueError(f"minutes text is empty for {event['event_id']}")
+    if "Minutes of the Federal Open Market Committee" not in text:
+        raise ValueError(f"minutes text is invalid for {event['event_id']}")
 
 
 def fetch_text(url):
@@ -177,11 +243,10 @@ def fetch_statement_document(event, fetch=fetch_text, now=fetched_at_now):
 
 
 def fetch_minutes_document(event, fetch=fetch_text, now=fetched_at_now):
-    url = event.get("minutes_url") or event.get("url")
-    if not url:
-        raise ValueError(f"fomc event {event['event_id']} has no minutes url")
+    url = resolve_minutes_url(event, fetch=fetch)
     html = fetch(url)
     text = extract_minutes_body_from_html(html)
+    validate_minutes_text(event, text)
     return document_row(event, "minutes", url, text, now())
 
 

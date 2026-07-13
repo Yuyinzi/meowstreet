@@ -226,6 +226,43 @@ def test_previous_event_and_document_returns_none_when_no_previous():
     assert previous_doc is None
 
 
+def test_target_events_returns_all_events_for_all_mode():
+    events = [
+        {"event_id": "fomc_2026_06_16"},
+        {"event_id": "fomc_2026_07_28"},
+    ]
+
+    selected = generate_fomc_policy_tone.target_events(events, generate_all=True)
+
+    assert selected == events
+
+
+def test_target_events_returns_single_event():
+    events = [
+        {"event_id": "fomc_2026_06_16"},
+        {"event_id": "fomc_2026_07_28"},
+    ]
+
+    selected = generate_fomc_policy_tone.target_events(
+        events,
+        event_id="fomc_2026_07_28",
+    )
+
+    assert selected == [{"event_id": "fomc_2026_07_28"}]
+
+
+def test_target_events_rejects_unknown_event():
+    try:
+        generate_fomc_policy_tone.target_events(
+            [{"event_id": "fomc_2026_06_16"}],
+            event_id="missing",
+        )
+    except ValueError as exc:
+        assert str(exc) == "fomc event is unknown: missing"
+    else:
+        raise AssertionError("expected ValueError")
+
+
 def test_log_generation_context_prints_meeting_and_comparison(capsys):
     generate_fomc_policy_tone.log_generation_context(
         event={

@@ -258,6 +258,59 @@ def test_extract_minutes_body_removes_navigation_and_footer():
     assert "Last Update" not in body
 
 
+def test_extract_minutes_body_stops_before_attendance_and_end_matter():
+    html = """
+    <html>
+      <body>
+        <h1>Minutes of the Federal Open Market Committee</h1>
+        <h2>Committee Policy Actions</h2>
+        <p>Members agreed to maintain the target range.</p>
+        <h2>Attendance</h2>
+        <p>Kevin Warsh, Chairman</p>
+        <p>_______________________</p>
+        <p>Joshua Gallin</p>
+        <p>1. The Federal Open Market Committee is referenced as the FOMC.</p>
+        <p>Back to Top</p>
+      </body>
+    </html>
+    """
+
+    body = fetch_fomc_documents.extract_minutes_body_from_html(html)
+
+    assert "Committee Policy Actions" in body
+    assert "Members agreed to maintain the target range." in body
+    assert "Attendance" not in body
+    assert "Kevin Warsh" not in body
+    assert "_______________________" not in body
+    assert "Back to Top" not in body
+
+
+def test_extract_minutes_body_skips_initial_attendance_block():
+    html = """
+    <html>
+      <body>
+        <h1>Minutes of the Federal Open Market Committee</h1>
+        <p>January 30-31, 2024</p>
+        <p>A joint meeting was held.</p>
+        <h2>Attendance</h2>
+        <p>Jerome H. Powell, Chair</p>
+        <h2>Developments in Financial Markets and Open Market Operations</h2>
+        <p>The manager reviewed market developments.</p>
+        <h2>Committee Policy Actions</h2>
+        <p>Members agreed to maintain the target range.</p>
+      </body>
+    </html>
+    """
+
+    body = fetch_fomc_documents.extract_minutes_body_from_html(html)
+
+    assert "A joint meeting was held." in body
+    assert "Jerome H. Powell" not in body
+    assert "Developments in Financial Markets and Open Market Operations" in body
+    assert "The manager reviewed market developments." in body
+    assert "Committee Policy Actions" in body
+
+
 def test_fetch_minutes_document_stores_minutes_body():
     event = {
         "event_id": "fomc_2026_06_16",
@@ -284,6 +337,50 @@ def test_fetch_minutes_document_stores_minutes_body():
     assert "Participants agreed" in row["text"]
     assert row["source_hash"]
     assert row["fetched_at"] == "2026-07-11T00:00:00Z"
+
+
+def test_resolve_minutes_url_finds_html_link_from_calendar_page():
+    event = {
+        "event_id": "fomc_2026_06_16",
+        "start_date": "2026-06-16",
+        "end_date": "2026-06-17",
+        "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    }
+    html = """
+    <strong>Minutes:</strong>
+    <a href="/monetarypolicy/fomcminutes20260617.htm">HTML</a>
+    <strong>Statement:</strong>
+    <a href="/newsevents/pressreleases/monetary20260617a.htm">HTML</a>
+    """
+
+    resolved = fetch_fomc_documents.resolve_minutes_url(
+        event,
+        fetch=lambda url: html,
+    )
+
+    assert resolved == (
+        "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260617.htm"
+    )
+
+
+def test_fetch_minutes_document_raises_when_calendar_has_no_minutes_link():
+    event = {
+        "event_id": "fomc_2026_06_16",
+        "start_date": "2026-06-16",
+        "end_date": "2026-06-17",
+        "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    }
+
+    raised = False
+    try:
+        fetch_fomc_documents.fetch_minutes_document(
+            event,
+            fetch=lambda url: "<html>Meeting calendars and information</html>",
+        )
+    except ValueError as exc:
+        assert "minutes url is missing" in str(exc)
+        raised = True
+    assert raised
 
 
 def test_import_statement_documents_resolves_calendar_url(tmp_path):

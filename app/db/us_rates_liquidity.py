@@ -629,6 +629,12 @@ def load_macro_event_tone_extraction(con, event_id, source_document_type, source
     return dict(rows[0]) if rows else None
 
 
+def _json_object(value):
+    if not value:
+        return {}
+    return json.loads(value)
+
+
 def load_macro_events_with_latest_tone(con, event_type):
     events = load_macro_events(con, event_type)
     result = []
@@ -656,6 +662,59 @@ def load_macro_events_with_latest_tone(con, event_type):
                         "tone_reason": tone["reason"],
                     }
                 )
+        minutes_document = load_macro_event_document(con, event["event_id"], "minutes")
+        if minutes_document:
+            minutes_tone = load_macro_event_tone_extraction(
+                con,
+                event["event_id"],
+                "minutes",
+                minutes_document["source_hash"],
+            )
+            if minutes_tone and minutes_tone["extraction_status"] == "approved":
+                minutes_facts = _json_object(minutes_tone.get("facts_json"))
+                merged.update(
+                    {
+                        "minutes_status": "available",
+                        "minutes_tone": minutes_tone.get("minutes_tone", "unknown"),
+                        "minutes_confirmation": minutes_facts.get(
+                            "minutes_confirmation",
+                            "unknown",
+                        ),
+                        "risk_focus": minutes_facts.get("risk_focus", "unknown"),
+                        "risk_bias": minutes_facts.get("risk_bias", "unknown"),
+                        "divergence_level": minutes_facts.get(
+                            "divergence_level",
+                            "unknown",
+                        ),
+                        "uncertainty_level": minutes_facts.get(
+                            "uncertainty_level",
+                            "unknown",
+                        ),
+                        "policy_conviction": minutes_facts.get(
+                            "policy_conviction",
+                            "unknown",
+                        ),
+                        "minutes_confidence": minutes_tone.get("confidence"),
+                        "minutes_reason": minutes_tone.get("reason"),
+                        "minutes_generated_at": minutes_tone.get("generated_at"),
+                    }
+                )
+            else:
+                merged.update(
+                    {
+                        "minutes_status": "pending",
+                        "minutes_confirmation": "pending",
+                        "policy_conviction": "unknown",
+                    }
+                )
+        else:
+            merged.update(
+                {
+                    "minutes_status": "pending",
+                    "minutes_confirmation": "pending",
+                    "policy_conviction": "unknown",
+                }
+            )
         result.append(merged)
     return result
 
@@ -687,12 +746,6 @@ def load_latest_approved_macro_event_tone(
         (document_type, document_type, normalized_type, as_of_date),
     ).fetchall()
     return dict(rows[0]) if rows else None
-
-
-def _json_object(value):
-    if not value:
-        return {}
-    return json.loads(value)
 
 
 def load_latest_combined_fomc_policy_read(con, as_of_date):

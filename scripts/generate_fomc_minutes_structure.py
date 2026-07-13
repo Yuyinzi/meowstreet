@@ -41,6 +41,33 @@ def should_skip_existing_extraction(existing, source_hash, force):
     return bool(existing and existing.get("source_hash") == source_hash and not force)
 
 
+def pending_events(events, minutes_docs, statement_tones, load_existing, force):
+    pending = []
+    for event in target_events(events, minutes_docs, statement_tones):
+        minutes_document = minutes_docs[event["event_id"]]
+        existing = load_existing(
+            event["event_id"],
+            "minutes",
+            minutes_document["source_hash"],
+        )
+        if should_skip_existing_extraction(
+            existing,
+            minutes_document["source_hash"],
+            force,
+        ):
+            print("fomc minutes structure skipped:")
+            print(f"  event: {event['event_id']}")
+            print(f"  source_hash: {minutes_document['source_hash']}")
+            if existing.get("generated_at"):
+                print(f"  existing_generated_at: {existing['generated_at']}")
+            print(
+                "  reason: existing extraction for this minutes hash; use --force to regenerate"
+            )
+            continue
+        pending.append((event, minutes_document, statement_tones[event["event_id"]]))
+    return pending
+
+
 async def call_json(client, model, prompt):
     response = await client.chat.completions.create(
         model=model,
@@ -61,28 +88,14 @@ async def generate_event_minutes_structure(
     client,
     models,
     max_rounds,
-    force,
 ):
-    existing = us_rates_liquidity.load_macro_event_tone_extraction(
-        con,
-        event["event_id"],
-        "minutes",
-        minutes_document["source_hash"],
-    )
-    if should_skip_existing_extraction(
-        existing, minutes_document["source_hash"], force
-    ):
-        print("fomc minutes structure skipped:")
-        print(f"  event: {event['event_id']}")
-        print(f"  source_hash: {minutes_document['source_hash']}")
-        return 0
-
     feedback = []
     reviewer_feedback = []
     final_feedback = []
     extraction = None
     extraction_status = "rejected"
     rounds_used = 0
+    last_schema_error = None
     for round_index in range(max_rounds):
         rounds_used = round_index + 1
         extractor_prompt = fomc_minutes_structure.build_extractor_prompt(
@@ -96,7 +109,16 @@ async def generate_event_minutes_structure(
             models["extractor_model"],
             extractor_prompt,
         )
-        extraction = fomc_minutes_structure.parse_extractor_response(content)
+        try:
+            extraction = fomc_minutes_structure.parse_extractor_response(content)
+        except ValueError as exc:
+            last_schema_error = exc
+            feedback = [
+                "Extractor output failed schema validation.",
+                str(exc),
+                "Return strict JSON using only allowed enum values. participant_distribution and facts must be arrays. comparison must be an object.",
+            ]
+            continue
         reviewer_prompt = fomc_minutes_structure.build_reviewer_prompt(
             event,
             statement_tone,
@@ -117,6 +139,10 @@ async def generate_event_minutes_structure(
         feedback = review["feedback"]
 
     if extraction is None:
+        if last_schema_error is not None:
+            raise ValueError(
+                f"valid FOMC minutes structure JSON was not produced: {last_schema_error}"
+            ) from last_schema_error
         raise ValueError(f"fomc minutes extraction failed for {event['event_id']}")
 
     row = fomc_minutes_structure.tone_extraction_row(
@@ -199,8 +225,21 @@ async def async_main(argv=None):
             if not events:
                 raise ValueError(f"fomc event is unknown: {args.event_id}")
         minutes_docs, statement_tones = load_event_maps(con, events)
-        events = target_events(events, minutes_docs, statement_tones)
-        if not events:
+        pending = pending_events(
+            events,
+            minutes_docs,
+            statement_tones,
+            lambda event_id, document_type, source_hash: (
+                us_rates_liquidity.load_macro_event_tone_extraction(
+                    con,
+                    event_id,
+                    document_type,
+                    source_hash,
+                )
+            ),
+            args.force,
+        )
+        if not pending:
             print("fomc_minutes_structure: 0")
             return 0
         llm_bundle = llm.build_async_client_bundle(
@@ -215,17 +254,16 @@ async def async_main(argv=None):
         models = llm_bundle["models"]
         generated = 0
         failed = 0
-        for event in events:
+        for event, minutes_document, statement_tone in pending:
             try:
                 generated += await generate_event_minutes_structure(
                     con,
                     event,
-                    minutes_docs[event["event_id"]],
-                    statement_tones[event["event_id"]],
+                    minutes_document,
+                    statement_tone,
                     client,
                     models,
                     args.max_rounds,
-                    args.force,
                 )
             except Exception as exc:
                 failed += 1

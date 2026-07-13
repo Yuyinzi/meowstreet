@@ -1179,6 +1179,16 @@ def test_m2_state_chart_includes_fomc_month_markers():
             "tone_change": "unknown",
             "confidence": None,
             "reason": None,
+            "minutes_status": "pending",
+            "minutes_tone": "unknown",
+            "minutes_confirmation": "pending",
+            "risk_focus": "unknown",
+            "risk_bias": "unknown",
+            "divergence_level": "unknown",
+            "uncertainty_level": "unknown",
+            "policy_conviction": "unknown",
+            "minutes_confidence": None,
+            "minutes_generated_at": None,
         }
     ]
     assert "events" not in payload["charts"][1]
@@ -1253,3 +1263,48 @@ def test_m2_fomc_chart_events_use_reviewed_statement_tone():
     assert event["statement_tone"] == "hawkish"
     assert event["tone_change"] == "more_hawkish"
     assert event["confidence"] == "medium"
+
+
+def test_m2_fomc_chart_events_include_minutes_policy_track_fields():
+    rows = [
+        {"date": f"2025-{month:02d}-01", "value": 1000.0 + month, "source": "m2.csv"}
+        for month in range(1, 13)
+    ] + [
+        {"date": f"2026-{month:02d}-01", "value": 1100.0 + month, "source": "m2.csv"}
+        for month in range(1, 7)
+    ]
+    events = [
+        {
+            "event_id": "fomc_2026_06_16",
+            "display_month": "2026-06-01",
+            "start_date": "2026-06-16",
+            "end_date": "2026-06-17",
+            "title": "FOMC Meeting",
+            "marker_tone": "hawkish",
+            "statement_tone": "hawkish",
+            "tone_change": "more_hawkish",
+            "tone_confidence": "medium",
+            "minutes_status": "available",
+            "minutes_tone": "hawkish",
+            "minutes_confirmation": "confirmed_but_divided",
+            "risk_focus": "inflation",
+            "risk_bias": "hawkish",
+            "divergence_level": "high",
+            "uncertainty_level": "high",
+            "policy_conviction": "divided",
+            "minutes_generated_at": "2026-07-13T04:31:29Z",
+        }
+    ]
+
+    payload = macro_growth_cycle.build_m2_money_supply_detail_payload(
+        rows,
+        fomc_events=events,
+    )
+
+    event = payload["charts"][0]["events"][0]
+    assert event["policy_tone"] == "hawkish"
+    assert event["minutes_status"] == "available"
+    assert event["minutes_confirmation"] == "confirmed_but_divided"
+    assert event["risk_focus"] == "inflation"
+    assert event["policy_conviction"] == "divided"
+    assert event["minutes_generated_at"] == "2026-07-13T04:31:29Z"

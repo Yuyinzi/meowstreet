@@ -1179,3 +1179,119 @@ def test_load_latest_approved_macro_event_tone_returns_none_when_no_tone(tmp_pat
         con.close()
 
     assert result is None
+
+
+def test_load_macro_events_with_latest_tone_merges_minutes_structure_fields(tmp_path):
+    db_path = tmp_path / "macro.sqlite"
+    con = us_rates_liquidity.connect(db_path)
+    us_rates_liquidity.replace_macro_events(
+        con,
+        "fomc_meeting",
+        [
+            {
+                "event_id": "fomc_2026_06_16",
+                "event_type": "fomc_meeting",
+                "start_date": "2026-06-16",
+                "end_date": "2026-06-17",
+                "display_month": "2026-06-01",
+                "title": "FOMC Meeting",
+                "source": "Federal Reserve",
+                "policy_tone": "unknown",
+                "has_sep": 0,
+                "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+            }
+        ],
+    )
+    us_rates_liquidity.replace_macro_event_document(
+        con,
+        {
+            "event_id": "fomc_2026_06_16",
+            "document_type": "statement",
+            "url": "https://example.test/statement",
+            "text": "statement",
+            "source_hash": "statement_hash",
+            "fetched_at": "2026-06-17T00:00:00Z",
+        },
+    )
+    us_rates_liquidity.replace_macro_event_document(
+        con,
+        {
+            "event_id": "fomc_2026_06_16",
+            "document_type": "minutes",
+            "url": "https://example.test/minutes",
+            "text": "minutes",
+            "source_hash": "minutes_hash",
+            "fetched_at": "2026-07-08T00:00:00Z",
+        },
+    )
+    us_rates_liquidity.replace_macro_event_tone_extraction(
+        con,
+        {
+            "event_id": "fomc_2026_06_16",
+            "source_document_type": "statement",
+            "source_hash": "statement_hash",
+            "previous_event_id": None,
+            "policy_action": "hold",
+            "guidance_bias": "neutral",
+            "language_tone": "hawkish",
+            "overall_bias": "mild_hawkish",
+            "statement_tone": "hawkish",
+            "minutes_tone": "unknown",
+            "marker_tone": "hawkish",
+            "tone_score": 1,
+            "tone_change": "more_hawkish",
+            "confidence": "medium",
+            "extraction_status": "approved",
+            "review_rounds": 1,
+            "extractor_model": "extractor",
+            "reviewer_model": "reviewer",
+            "facts_json": "[]",
+            "comparison_json": "{}",
+            "reviewer_feedback_json": "[]",
+            "final_reviewer_feedback_json": "[]",
+            "reason": "statement reason",
+            "generated_at": "2026-06-17T00:00:00Z",
+        },
+    )
+    us_rates_liquidity.replace_macro_event_tone_extraction(
+        con,
+        {
+            "event_id": "fomc_2026_06_16",
+            "source_document_type": "minutes",
+            "source_hash": "minutes_hash",
+            "previous_event_id": None,
+            "policy_action": "hold",
+            "guidance_bias": "neutral",
+            "language_tone": "hawkish",
+            "overall_bias": "mild_hawkish",
+            "statement_tone": "hawkish",
+            "minutes_tone": "hawkish",
+            "marker_tone": "hawkish",
+            "tone_score": 1,
+            "tone_change": "more_hawkish",
+            "confidence": "high",
+            "extraction_status": "approved",
+            "review_rounds": 1,
+            "extractor_model": "extractor",
+            "reviewer_model": "reviewer",
+            "facts_json": '{"risk_focus":"inflation","risk_bias":"hawkish","divergence_level":"high","uncertainty_level":"high","policy_conviction":"divided","minutes_confirmation":"confirmed_but_divided","participant_distribution":[],"facts":[]}',
+            "comparison_json": "{}",
+            "reviewer_feedback_json": "[]",
+            "final_reviewer_feedback_json": "[]",
+            "reason": "minutes reason",
+            "generated_at": "2026-07-13T04:31:29Z",
+        },
+    )
+
+    events = us_rates_liquidity.load_macro_events_with_latest_tone(
+        con,
+        "fomc_meeting",
+    )
+
+    assert events[0]["marker_tone"] == "hawkish"
+    assert events[0]["minutes_status"] == "available"
+    assert events[0]["minutes_tone"] == "hawkish"
+    assert events[0]["minutes_confirmation"] == "confirmed_but_divided"
+    assert events[0]["risk_focus"] == "inflation"
+    assert events[0]["policy_conviction"] == "divided"
+    assert events[0]["minutes_generated_at"] == "2026-07-13T04:31:29Z"

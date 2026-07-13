@@ -672,6 +672,16 @@ def _fomc_chart_events(events, available_dates):
             "tone_change": event.get("tone_change", "unknown"),
             "confidence": event.get("tone_confidence") or event.get("confidence"),
             "reason": event.get("tone_reason") or event.get("reason"),
+            "minutes_status": event.get("minutes_status", "pending"),
+            "minutes_tone": event.get("minutes_tone", "unknown"),
+            "minutes_confirmation": event.get("minutes_confirmation", "pending"),
+            "risk_focus": event.get("risk_focus", "unknown"),
+            "risk_bias": event.get("risk_bias", "unknown"),
+            "divergence_level": event.get("divergence_level", "unknown"),
+            "uncertainty_level": event.get("uncertainty_level", "unknown"),
+            "policy_conviction": event.get("policy_conviction", "unknown"),
+            "minutes_confidence": event.get("minutes_confidence"),
+            "minutes_generated_at": event.get("minutes_generated_at"),
         }
         for event in events or []
         if event.get("display_month") in date_set

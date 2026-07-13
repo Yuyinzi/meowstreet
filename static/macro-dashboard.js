@@ -727,12 +727,20 @@
           ${keys.map((key, index) => `
             <span><i class="relationship-line-key relationship-line-key-${index}"></i>${options.rawLabels ? bilingualLineLabel(labels, key) : escapeHtml(lineLabel(labels, key))}</span>
           `).join("")}
+          ${options.policyTrack ? `
+            <span><i class="policy-legend-circle"></i>${bilingualLabel("Statement")}</span>
+            <span><i class="policy-legend-triangle"></i>${bilingualLabel("Minutes")}</span>
+            <span><i class="policy-color-swatch policy-color-hawkish"></i>${bilingualLabel("Hawkish")}</span>
+            <span><i class="policy-color-swatch policy-color-dovish"></i>${bilingualLabel("Dovish")}</span>
+            <span><i class="policy-color-swatch policy-color-mixed"></i>${bilingualLabel("Mixed")}</span>
+            <span><i class="policy-color-swatch policy-color-neutral"></i>${bilingualLabel("Neutral")}</span>
+          ` : ""}
         </div>
         <div class="chart-wrap relationship-chart-wrap">
           <svg class="relationship-chart-svg" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${titleHtml}">
             ${renderRelationshipYAxisAndGrid(relationshipYAxisTicks(series, keys, Y_AXIS_TICK_COUNT, options.yDomain), scale, valueFormatter)}
             ${scale.min <= 0 && scale.max >= 0 ? `<line class="relationship-zero" x1="${MARGIN_LEFT}" y1="${yAt(0, scale).toFixed(2)}" x2="${PLOT_RIGHT}" y2="${yAt(0, scale).toFixed(2)}"></line>` : ""}
-            ${renderRelationshipEventMarkers(series, keys, scale, options.events || [])}
+            ${options.policyTrack ? "" : renderRelationshipEventMarkers(series, keys, scale, options.events || [])}
             ${keys.flatMap((key, index) => (
               chartSegments(series, key, scale).map((points) => `<polyline class="relationship-line relationship-line-${index}" points="${escapeHtml(points)}"></polyline>`)
             )).join("")}
@@ -745,6 +753,7 @@
                 })
             )).join("") : ""}
             ${renderRelationshipXAxisTicks(series, options)}
+            ${options.policyTrack ? renderRelationshipPolicyTrack(series, options.events || [], scale) : ""}
           </svg>
           <div class="chart-tooltip" aria-hidden="true"></div>
         </div>
@@ -800,6 +809,82 @@
         ${bars}
       </g>
     `;
+  }
+
+  function policyTrackEvents(events = []) {
+    const rows = [];
+    events.forEach((event) => {
+      rows.push({
+        ...event,
+        policy_event_type: "statement",
+        policy_track_date: event.date,
+        policy_track_tone: event.policy_tone || event.statement_tone || "unknown",
+      });
+      if (event.minutes_status === "available") {
+        rows.push({
+          ...event,
+          policy_event_type: "minutes",
+          policy_track_date: event.minutes_display_month || event.date,
+          policy_track_tone: minutesPolicyToneClass(event),
+        });
+      }
+    });
+    return rows;
+  }
+
+  function minutesPolicyToneClass(event) {
+    const confirmation = String(event?.minutes_confirmation || "unknown").toLowerCase();
+    const conviction = String(event?.policy_conviction || "unknown").toLowerCase();
+    const riskBias = String(event?.risk_bias || event?.minutes_tone || "unknown").toLowerCase();
+    if (["confirmed_but_divided", "weakened", "mixed", "contradicted"].includes(confirmation) || conviction === "divided") {
+      return "mixed";
+    }
+    if (riskBias.includes("hawkish")) return "hawkish";
+    if (riskBias.includes("dovish")) return "dovish";
+    return "unknown";
+  }
+
+  function policyToneFill(tone) {
+    if (tone === "hawkish") return "#B94B4B";
+    if (tone === "dovish") return "#5C9C73";
+    if (tone === "mixed") return "#D1A54F";
+    return "#9A9288";
+  }
+
+  function renderRelationshipPolicyTrack(series, events = [], scale = null) {
+    if (!series.length || !events.length) return "";
+    const byDate = new Map(series.map((row, index) => [row.date, index]));
+    const trackEvents = policyTrackEvents(events).filter((event) =>
+      byDate.has(event.policy_track_date || event.date)
+    );
+    if (!trackEvents.length) return "";
+    const hasZero = scale && scale.min <= 0 && scale.max >= 0;
+    const baseY = hasZero ? yAt(0, scale) : PLOT_BOTTOM + 20;
+    const statY = baseY - 6;
+    const minsY = baseY + 6;
+    const statementMarkers = trackEvents
+      .filter((e) => e.policy_event_type === "statement")
+      .map((e) => {
+        const index = byDate.get(e.policy_track_date || e.date);
+        const x = xAt(index, series.length);
+        const fill = policyToneFill(eventToneClass(e));
+        return `<g transform="translate(${x.toFixed(2)} ${statY})"><circle r="4" fill="${fill}" stroke="#FFFFFF" stroke-width="1.5"></circle></g>`;
+      }).join("");
+    const minutesMarkers = trackEvents
+      .filter((e) => e.policy_event_type === "minutes")
+      .map((e) => {
+        const index = byDate.get(e.policy_track_date || e.date);
+        const x = xAt(index, series.length);
+        const fill = policyToneFill(minutesPolicyToneClass(e));
+        return `<g transform="translate(${x.toFixed(2)} ${minsY})"><path d="M0 -5 L5 5 L-5 5 Z" fill="${fill}" stroke="#FFFFFF" stroke-width="1.5"></path></g>`;
+      }).join("");
+    return `
+      <g class="relationship-policy-track" aria-label="FOMC policy track">
+        <line class="relationship-policy-axis" x1="${MARGIN_LEFT}" y1="${statY}" x2="${CHART_WIDTH - MARGIN_RIGHT}" y2="${statY}"></line>
+        <line class="relationship-policy-axis" x1="${MARGIN_LEFT}" y1="${minsY}" x2="${CHART_WIDTH - MARGIN_RIGHT}" y2="${minsY}"></line>
+        ${statementMarkers}
+        ${minutesMarkers}
+      </g>`;
   }
 
   function attachRelationshipChartTooltip(svg, tooltip, series, keys, labels = {}, options = {}) {
@@ -1234,6 +1319,9 @@
     "Policy Timing": "政策时点",
     "Next Meeting": "下次会议",
     "FOMC Tone": "FOMC倾向",
+    "Policy Track": "政策轨道",
+    "Statement": "声明",
+    "Minutes": "纪要",
     "Latest Tone": "最新倾向",
     "Next FOMC Meeting": "下次FOMC会议",
     "Latest FOMC Tone": "最近FOMC倾向",
@@ -1947,6 +2035,7 @@
         valueFormatter,
         yDomain: chart.y_domain,
         events: chart.events || [],
+        policyTrack: chart.title === "M2 YoY Growth vs Inflation Constraint",
       }
     );
   }
@@ -2782,9 +2871,12 @@
       filterChartForRange,
       fmtMonthYear,
       niceTicks,
+      policyTrackEvents,
+      minutesPolicyToneClass,
       relationshipXAxisTicks,
       relationshipYAxisTicks,
       renderRelationshipLineChart,
+      renderRelationshipPolicyTrack,
       renderRelationshipXAxisTicks,
       renderRelationshipYAxisAndGrid,
       state,

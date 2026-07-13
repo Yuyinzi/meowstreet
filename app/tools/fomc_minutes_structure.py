@@ -27,6 +27,7 @@ MinutesConfirmation = Literal[
     "unknown",
 ]
 Confidence = Literal["high", "medium", "low"]
+MAX_MINUTES_TEXT_CHARS = 120000
 
 
 class MinutesExtractorResponse(BaseModel):
@@ -103,6 +104,10 @@ def parse_reviewer_response(content):
 
 
 def build_extractor_prompt(event, statement_tone, minutes_text, feedback=None):
+    if len(minutes_text) > MAX_MINUTES_TEXT_CHARS:
+        raise ValueError(
+            f"minutes text is too long: {len(minutes_text)} chars exceeds {MAX_MINUTES_TEXT_CHARS}"
+        )
     feedback_text = (
         "\nReviewer feedback to address:\n" + json.dumps(feedback, ensure_ascii=False)
         if feedback
@@ -122,8 +127,18 @@ def build_extractor_prompt(event, statement_tone, minutes_text, feedback=None):
             "uncertainty_level measures data-dependence and unclear policy path language.",
             "policy_conviction combines divergence and uncertainty into high, moderate, low, divided, or unknown.",
             "minutes_confirmation compares minutes structure against the statement baseline.",
+            "Allowed statement_bias: hawkish, dovish, neutral, mixed, unknown.",
+            "Allowed risk_focus: inflation, growth_labor, financial_stability, balanced, unknown.",
+            "Allowed risk_bias: hawkish, dovish, neutral, mixed, unknown.",
+            "Allowed divergence_level: low, medium, high, unknown.",
+            "Allowed uncertainty_level: low, medium, high, unknown.",
+            "Allowed policy_conviction: high, moderate, low, divided, unknown.",
             "Allowed minutes_confirmation: confirmed, confirmed_but_divided, weakened, stronger_underneath, contradicted, mixed, pending, unknown.",
             "Return keys: statement_bias, risk_focus, risk_bias, divergence_level, uncertainty_level, policy_conviction, minutes_confirmation, confidence, participant_distribution, facts, comparison, reason.",
+            "participant_distribution must be a JSON array of objects, not a string.",
+            "facts must be a JSON array of objects, not a string.",
+            "comparison must be a JSON object, not a string.",
+            "Do not return values such as mild_hawkish, upside inflation risk, or moderate unless those exact values are listed as allowed.",
             "Use evidence from the minutes for every important claim.",
             "Event:",
             json.dumps(event, ensure_ascii=False, sort_keys=True),

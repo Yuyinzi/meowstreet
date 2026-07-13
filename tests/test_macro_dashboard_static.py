@@ -1149,3 +1149,104 @@ def test_macro_dashboard_detail_panel_expand_button_toggles_class():
     payload = json.loads(result.stdout)
 
     assert payload == {"before": False, "after": True}
+
+
+def test_macro_dashboard_static_includes_fomc_policy_track_renderer():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert "renderRelationshipPolicyTrack" in js
+    assert "relationship-policy-track" in js
+    assert "policyTrackEvents" in js
+    assert "policyToneFill" in js
+    assert "<circle" in js  # statement markers
+    assert "M0 -5 L5 5 L-5 5 Z" in js  # minutes triangle path
+    assert "policy-legend-circle" in js
+    assert "policy-legend-triangle" in js
+    assert "policy-color-swatch" in js
+    assert ".relationship-policy-axis" in css
+    assert ".policy-legend-circle" in css
+    assert ".policy-legend-triangle" in css
+    assert ".policy-color-swatch" in css
+    assert ".policy-color-hawkish" in css
+
+
+def test_macro_dashboard_policy_track_replaces_in_plot_event_bars_for_m2_chart():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+        const code = fs.readFileSync("static/macro-dashboard.js", "utf8");
+        const sandbox = {
+          window: { __MEOWSTREET_TEST__: true },
+          document: {
+            addEventListener: () => {},
+            getElementById: () => ({
+              querySelector: () => null,
+              querySelectorAll: () => [],
+              addEventListener: () => {},
+              insertAdjacentHTML: () => {},
+              textContent: "",
+              innerHTML: "",
+              classList: {
+                add: () => {},
+                remove: () => {},
+                toggle: () => {},
+              },
+            }),
+            querySelectorAll: () => [],
+          },
+          console,
+          fetch: async () => ({ ok: true, json: async () => ({ markets: [] }) }),
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(code, sandbox);
+        const hooks = sandbox.window.__macroDashboardTestHooks;
+        const series = [
+          { date: "2026-05-01", m2_yoy: 4, core_pce_yoy: 3, fed_target: 2 },
+          { date: "2026-06-01", m2_yoy: 5, core_pce_yoy: 3, fed_target: 2 },
+        ];
+        const markup = hooks.renderRelationshipLineChart(
+          "M2 YoY Growth vs Inflation Constraint",
+          series,
+          ["m2_yoy", "core_pce_yoy", "fed_target"],
+          { m2_yoy: "M2", core_pce_yoy: "Core PCE", fed_target: "Target" },
+          {
+            events: [
+              {
+                date: "2026-06-01",
+                event_date: "2026-06-16",
+                policy_tone: "hawkish",
+                statement_tone: "hawkish",
+                minutes_status: "available",
+                minutes_confirmation: "confirmed_but_divided",
+                risk_focus: "inflation",
+                risk_bias: "hawkish",
+                policy_conviction: "divided",
+              }
+            ],
+            policyTrack: true,
+          }
+        );
+        console.log(JSON.stringify({
+          hasPolicyTrack: markup.includes("relationship-policy-track"),
+          hasCircle: markup.includes("<circle"),
+          hasPath: markup.includes("<path"),
+          hasInPlotBar: markup.includes("relationship-event-bar")
+        }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    assert payload == {
+        "hasPolicyTrack": True,
+        "hasCircle": True,
+        "hasPath": True,
+        "hasInPlotBar": False,
+    }

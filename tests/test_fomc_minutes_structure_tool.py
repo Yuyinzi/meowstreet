@@ -80,3 +80,18 @@ def test_minutes_extractor_prompt_uses_statement_as_baseline():
     assert "Minutes tell conviction, divergence, uncertainty, and risk focus" in prompt
     assert "minutes_confirmation" in prompt
     assert "policy_conviction" in prompt
+    assert "Allowed risk_focus: inflation, growth_labor, financial_stability, balanced, unknown" in prompt
+    assert "Allowed divergence_level: low, medium, high, unknown" in prompt
+    assert "participant_distribution must be a JSON array" in prompt
+    assert "comparison must be a JSON object" in prompt
+
+
+def test_minutes_extractor_prompt_rejects_oversized_minutes_text():
+    oversized_text = "x" * 200001
+
+    with pytest.raises(ValueError, match="minutes text is too long"):
+        fomc_minutes_structure.build_extractor_prompt(
+            {"event_id": "fomc_2026_06_16"},
+            {"marker_tone": "hawkish"},
+            oversized_text,
+        )

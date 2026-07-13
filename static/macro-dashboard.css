@@ -2234,6 +2234,68 @@ h2 {
   font-weight: 500;
 }
 
+.relationship-policy-axis {
+  stroke: #D8CFC4;
+  stroke-width: 1;
+}
+
+.relationship-policy-marker circle,
+.relationship-policy-marker path {
+  stroke: #FFFFFF;
+  stroke-width: 1.5;
+}
+
+.relationship-policy-hawkish circle,
+.relationship-policy-hawkish path {
+  fill: #B94B4B;
+}
+
+.relationship-policy-dovish circle,
+.relationship-policy-dovish path {
+  fill: #5C9C73;
+}
+
+.relationship-policy-mixed circle,
+.relationship-policy-mixed path {
+  fill: #D1A54F;
+}
+
+.relationship-policy-neutral circle,
+.relationship-policy-neutral path,
+.relationship-policy-unknown circle,
+.relationship-policy-unknown path {
+  fill: #9A9288;
+}
+
+.policy-legend-circle {
+  background: #9A9288;
+  border-radius: 50%;
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+}
+
+.policy-color-swatch {
+  border-radius: 2px;
+  display: inline-block;
+  flex-shrink: 0;
+  height: 10px;
+  width: 10px;
+}
+.policy-color-hawkish { background: #B94B4B; }
+.policy-color-dovish { background: #5C9C73; }
+.policy-color-mixed { background: #D1A54F; }
+.policy-color-neutral { background: #9A9288; }
+
+.policy-legend-triangle {
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid #9A9288;
+  display: inline-block;
+  height: 0;
+  width: 0;
+}
+
 @media (max-width: 820px) {
   .credit-interpretation-strip {
     grid-template-columns: 1fr;
