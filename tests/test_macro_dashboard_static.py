@@ -1250,3 +1250,72 @@ def test_macro_dashboard_policy_track_replaces_in_plot_event_bars_for_m2_chart()
         "hasPath": True,
         "hasInPlotBar": False,
     }
+
+
+def test_macro_dashboard_js_renders_growth_cycle_sections():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+
+    assert "function renderGrowthCycleSections(" in js
+    assert "function renderGrowthCycleSection(" in js
+    assert "function renderGrowthCycleStatusPanel(" in js
+    assert "state.growthCycle.sections || []" in js
+    assert "growth-section" in js
+    assert "growth-section-card-grid" in js
+
+
+def test_macro_dashboard_js_renders_ism_overview_cards():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+
+    assert "function renderIsmManufacturingCard(" in js
+    assert 'card.id === "ism_manufacturing"' in js
+
+
+def test_macro_dashboard_css_styles_ism_overview_cards():
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert ".ism-card" in css
+    assert ".ism-card-primary" in css
+    assert ".ism-card-grid" in css
+    assert ".ism-metric-row" in css
+    assert ".ism-card-supportive" in css
+    assert ".ism-card-warning" in css
+
+
+def test_macro_dashboard_css_styles_growth_cycle_sections():
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert ".growth-section-list" in css
+    assert ".growth-section {" in css
+    assert ".growth-section-head" in css
+    assert ".growth-section-card-grid" in css
+    assert ".growth-section-status" in css
+
+
+def test_growth_cycle_ism_cards_open_focused_detail_static_assets():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert "selectedGrowthCycleDetailId" in js
+    assert "renderIsmManufacturingCard" in js
+    assert 'data-growth-cycle-detail-id="ism_manufacturing"' in js
+    assert ".ism-card-button" in css
+    assert ".ism-card-button.selected" in css
+    assert ".ism-composite-segments" in css
+    assert ".ism-composite-segment" in css
+
+
+def test_growth_cycle_ism_detail_renderer_static_assets():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert "function renderIsmDetailInPanel(" in js
+    assert "function renderIsmDetailChart(" in js
+    assert "function renderIsmHeatMap(" in js
+    assert "function ismHeatMapCellClass(" in js
+    assert "payload.latest" in js
+    assert "payload.latest_groups" in js
+    assert 'chart.kind === "heat_map"' in js
+    assert ".ism-detail-heat-map" in css
+    assert ".ism-heat-cell-expansion" in css
+    assert ".ism-heat-cell-contraction" in css
+    assert ".ism-detail-latest" in css

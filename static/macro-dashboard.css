@@ -504,6 +504,330 @@ h2 {
   margin-top: 14px;
 }
 
+.growth-section-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.growth-section {
+  border: 1px solid #E0D6C8;
+  border-radius: 10px;
+  background: #FFFDFB;
+  padding: 14px;
+}
+
+.growth-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.growth-section-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #3B3530;
+}
+
+.growth-section-head p {
+  margin: 4px 0 0;
+  color: #8B7E74;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.growth-section-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.growth-section-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  border: 1px solid #ECE4DB;
+  border-radius: 8px;
+  background: #FAF8F5;
+  padding: 10px 12px;
+  color: #5C534A;
+  font-size: 0.82rem;
+}
+
+.growth-section-status strong {
+  font-size: 0.82rem;
+}
+
+.growth-section-status small {
+  color: #8B7E74;
+  font-size: 0.75rem;
+}
+
+.growth-section-status-available strong {
+  color: #2F9E74;
+}
+
+.growth-section-status-missing strong,
+.growth-section-status-pending_inputs strong {
+  color: #8B7E74;
+}
+
+.ism-card {
+  display: grid;
+  gap: 12px;
+}
+
+.ism-card-primary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: baseline;
+  border: 1px solid #ECE4DB;
+  border-radius: 8px;
+  background: #FAF8F5;
+  padding: 10px 12px;
+}
+
+.ism-card-primary span,
+.ism-card-primary small {
+  color: #8B7E74;
+  font-size: 0.75rem;
+}
+
+.ism-card-primary strong {
+  color: #3B3530;
+  font-size: 1.35rem;
+}
+
+.ism-card-primary small {
+  grid-column: 1 / -1;
+}
+
+.ism-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ism-metric-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #ECE4DB;
+  border-radius: 8px;
+  background: #FFFDFB;
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+.ism-metric-row span {
+  color: #8B7E74;
+  font-size: 0.72rem;
+}
+
+.ism-metric-row strong {
+  color: #3B3530;
+  font-size: 0.82rem;
+}
+
+.ism-card-button {
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.ism-card-button:hover,
+.ism-card-button.selected {
+  border-color: #0f172a;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+}
+
+.ism-composite-segments {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ism-composite-segment {
+  border: 1px solid #ECE4DB;
+  border-radius: 8px;
+  background: #FAF8F5;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ism-composite-segment-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #A89B91;
+  letter-spacing: 0.04em;
+}
+
+.ism-composite-segment-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ism-composite-metric {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #3B3530;
+  font-variant-numeric: tabular-nums;
+}
+
+.ism-composite-caption {
+  font-size: 0.68rem;
+  color: #8B7E74;
+  line-height: 1.2;
+}
+
+.ism-detail-grid {
+  align-items: stretch;
+}
+
+.ism-detail-card {
+  overflow: hidden;
+}
+
+.ism-detail-heat-map {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: minmax(92px, 1.1fr) repeat(var(--ism-heat-metrics), minmax(74px, 1fr));
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 640px;
+}
+
+.ism-heat-header,
+.ism-heat-date,
+.ism-heat-cell {
+  align-items: center;
+  display: flex;
+  min-height: 34px;
+  padding: 7px 8px;
+}
+
+.ism-heat-header {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.ism-heat-date {
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ism-heat-cell {
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 800;
+  justify-content: center;
+}
+
+.ism-heat-cell-very-strong {
+  background: #166534;
+  color: #ffffff;
+}
+
+.ism-heat-cell-strong {
+  background: #4ade80;
+}
+
+.ism-heat-cell-expansion {
+  background: #bbf7d0;
+}
+
+.ism-heat-cell-soft {
+  background: #fde68a;
+}
+
+.ism-heat-cell-weak {
+  background: #fca5a5;
+}
+
+.ism-heat-cell-contraction {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.ism-heat-cell-missing {
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.ism-detail-latest {
+  margin-top: 20px;
+  border: 1px solid #E8E0D6;
+  border-radius: 10px;
+  padding: 14px;
+  background: #FDFAF7;
+}
+
+.ism-detail-latest h4 {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: #3B3530;
+}
+
+.ism-latest-group {
+  margin-bottom: 12px;
+}
+
+.ism-latest-group:last-child {
+  margin-bottom: 0;
+}
+
+.ism-latest-group-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  color: #A89B91;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ism-latest-group-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.ism-latest-group-rows .ism-metric-row {
+  border-color: #E0D6C8;
+  background: #FFFFFF;
+}
+
+.ism-card-supportive .inflation-status-badge {
+  color: #2F9E74;
+  background: #EEF9F3;
+}
+
+.ism-card-warning .inflation-status-badge {
+  color: #B85C38;
+  background: #FDF2EE;
+}
+
+.ism-card-mixed .inflation-status-badge,
+.ism-card-missing .inflation-status-badge {
+  color: #8B7E74;
+  background: #F4F1EE;
+}
+
 .fomc-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1283,11 +1607,6 @@ h2 {
 
 .gdp-detail {
   margin-top: 18px;
-  border: 1px solid #E8E0D6;
-  border-radius: 12px;
-  padding: 18px;
-  background: #FFFFFF;
-  box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
 }
 
 .phase-pill.confidence-high,
@@ -2350,5 +2669,24 @@ h2 {
 
   .m2-metric-band {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .growth-section-head {
+    display: grid;
+  }
+
+  .ism-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ism-composite-segments {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .ism-detail-heat-map {
+    grid-template-columns: minmax(88px, 1.1fr) repeat(var(--ism-heat-metrics), minmax(68px, 1fr));
+    max-height: 480px;
   }
 }

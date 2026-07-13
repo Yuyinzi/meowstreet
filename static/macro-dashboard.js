@@ -82,7 +82,11 @@
         title = "Yield Curve Analysis";
       }
     } else if (state.selectedGrowthCycleDetailId) {
-      title = "M2 Money Supply";
+      if (state.selectedGrowthCycleDetailId === "ism_manufacturing") {
+        title = "ISM Manufacturing";
+      } else {
+        title = "M2 Money Supply";
+      }
     }
 
     const expandLabel = state.isDetailPanelExpanded ? DETAIL_PANEL_COLLAPSE_LABEL : DETAIL_PANEL_EXPAND_LABEL;
@@ -272,6 +276,7 @@
   }
 
   const CHART_RANGE_OPTIONS = [
+    { id: "1y", label: "1Y", years: 1 },
     { id: "5y", label: "5Y", years: 5 },
     { id: "10y", label: "10Y", years: 10 },
     { id: "20y", label: "20Y", years: 20 },
@@ -1288,6 +1293,19 @@
     "Strong Injection": "较强注入",
     "Strong Contraction": "较强收缩",
     "Extreme Contraction": "极端收缩",
+    // ISM Manufacturing
+    "ISM Business Cycle": "商业周期",
+    "ISM Growth Drivers": "增长驱动力",
+    "ISM Inflation & Supply": "通胀与供应",
+    "ISM Industry Breadth": "行业广度",
+    "Business Cycle": "商业周期",
+    "Growth Drivers": "增长驱动力",
+    "Inflation & Supply": "通胀与供应",
+    "Industry Breadth": "行业广度",
+    "Pending": "待完成",
+    "PMI": "采购经理指数",
+    "Above 50": "高于50",
+    "Available drivers": "可用指标数",
     // Inflation Context
     "Growth Cycle": "增长周期",
     "Inflation Context": "通胀环境",
@@ -1583,6 +1601,63 @@
     renderGrowthCycle();
   }
 
+  function growthCycleCardsById(cards) {
+    const result = {};
+    for (const card of cards || []) {
+      result[card.id] = card;
+    }
+    return result;
+  }
+
+  function growthCycleStatusLabel(status) {
+    const labels = {
+      available: "Available",
+      missing: "Missing",
+      pending_inputs: "Pending Inputs",
+    };
+    return labels[status] || fmtStatus(status || "unknown");
+  }
+
+  function renderGrowthCycleStatusPanel(section) {
+    const period = section.period ? `<small>${escapeHtml(fmtDate(section.period))}</small>` : "";
+    return `
+      <div class="growth-section-status growth-section-status-${escapeHtml(section.status || "missing")}">
+        <strong>${escapeHtml(growthCycleStatusLabel(section.status))}</strong>
+        ${period}
+      </div>
+    `;
+  }
+
+  function renderGrowthCycleSection(section, cardsById) {
+    const cardIds = section.cards || [];
+    const cards = cardIds.map((cardId) => cardsById[cardId]).filter(Boolean);
+    const cardHtml = cards.map((card) => {
+      if (card.id === "fomc_calendar" || card.id === "fomc_tone") {
+        return renderFomcCard(card);
+      }
+      return renderCard(card);
+    }).join("");
+    return `
+      <section class="growth-section growth-section-${escapeHtml(section.id || "unknown")}">
+        <div class="growth-section-head">
+          <div>
+            <h3>${escapeHtml(section.title || "")}</h3>
+            <p>${escapeHtml(section.subtitle || "")}</p>
+          </div>
+          ${section.period ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDate(section.period))}</span>` : ""}
+        </div>
+        ${cardHtml ? `<div class="growth-section-card-grid">${cardHtml}</div>` : renderGrowthCycleStatusPanel(section)}
+      </section>
+    `;
+  }
+
+  function renderGrowthCycleSections(sections, cards) {
+    const cardsById = growthCycleCardsById(cards);
+    return (sections || [])
+      .map((section) => renderGrowthCycleSection(section, cardsById))
+      .join("");
+  }
+
   function renderGrowthCycle() {
     const section = $("growthCycle");
     if (!section) return;
@@ -1599,41 +1674,15 @@
       section.innerHTML = `${head.outerHTML}<p class="growth-empty">${escapeHtml(state.growthCycle.missing)}</p>`;
       return;
     }
-    const pill = head.querySelector(".mock-pill");
-    const period = state.growthCycle.headline?.[0]?.period;
-    pill.textContent = period ? `As of ${fmtDate(period)}` : "Import needed";
     const cards = state.growthCycle.headline || [];
-    const fomcIds = new Set(["fomc_calendar", "fomc_tone"]);
-    const grouped = [];
-    let fomcBuffer = [];
-    for (const card of cards) {
-      if (fomcIds.has(card.id)) {
-        fomcBuffer.push(card);
-      } else {
-        if (fomcBuffer.length) {
-          grouped.push(`<div class="fomc-grid">${fomcBuffer.map(renderFomcCard).join("")}</div>`);
-          fomcBuffer = [];
-        }
-        grouped.push(renderCard(card));
-      }
-    }
-    if (fomcBuffer.length) {
-      grouped.push(`<div class="fomc-grid">${fomcBuffer.map(renderFomcCard).join("")}</div>`);
-    }
-    const cardHtml = grouped.join("");
+    const sections = state.growthCycle.sections || [];
+    const sectionHtml = renderGrowthCycleSections(sections, cards);
     section.innerHTML = `
       ${head.outerHTML}
-      ${cardHtml ? `
+      ${sectionHtml ? `
         <div class="rates-detail gdp-detail">
-          <div class="rates-chart-subtitle">
-            <div class="credit-conditions-head">
-              <p class="eyebrow">${bilingualLabel("M2 Money Supply")}</p>
-              ${period ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDate(period))}</span>` : ""}
-            </div>
-            <p>Money supply expansion and monetary base trends.<br><small>货币供应扩张和基础货币趋势</small></p>
-          </div>
-          <div class="growth-grid">
-            ${cardHtml}
+          <div class="growth-section-list">
+            ${sectionHtml}
           </div>
         </div>
       ` : ""}
@@ -1666,6 +1715,56 @@
     return payload;
   }
 
+  function renderIsmDetailChart(chart, chartIndex, _focusedChartId) {
+    if (chart.kind === "heat_map") {
+      return `
+        <article class="relationship-chart-card ism-detail-card">
+          <div class="chart-card-head">
+            <h4>${escapeHtml(chart.title || "")}</h4>
+          </div>
+          ${renderIsmHeatMap(chart)}
+        </article>
+      `;
+    }
+    return renderRatesDetailChart(chart, chartIndex);
+  }
+
+  function renderIsmDetailInPanel(body, payload) {
+    const charts = (payload.charts || []).map((chart) => (
+      filterChartForRange(chart, state.selectedGrowthCycleChartRange)
+    ));
+    const lineCharts = charts.filter((chart) => chart.kind !== "heat_map");
+    const renderedCharts = charts.map((chart, index) => (
+      renderIsmDetailChart(chart, index, null)
+    ));
+    const latest = payload.latest || {};
+    const latestGroups = payload.latest_groups || [];
+    body.innerHTML = `
+      ${renderGrowthCycleRangeControl()}
+      <div class="relationship-chart-grid ism-detail-grid">
+        ${renderedCharts.join("")}
+      </div>
+      ${latestGroups.length ? `<div class="ism-detail-latest">
+        <h4>${bilingualLabel("Latest Values")}</h4>
+        ${latestGroups.map((group) => `
+          <div class="ism-latest-group">
+            <strong class="ism-latest-group-label">${escapeHtml(group.label || "")}</strong>
+            <div class="ism-latest-group-rows">
+              ${group.keys.map((key) => `
+                <div class="ism-metric-row">
+                  <span>${escapeHtml((charts[0]?.labels || {})[key] || key)}</span>
+                  <strong>${escapeHtml(fmtIsmIndex(latest[key]))}</strong>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        `).join("")}
+      </div>` : ""}
+    `;
+    bindGrowthCycleRangeControl(body);
+    attachRatesChartTooltips(body, lineCharts);
+  }
+
   function renderGrowthCycleDetailInPanel(body) {
     const detailId = state.selectedGrowthCycleDetailId;
     if (!detailId) return;
@@ -1673,6 +1772,10 @@
     loadGrowthCycleDetail(detailId)
       .then((payload) => {
         if (state.selectedGrowthCycleDetailId !== payload.detail_id) return;
+        if (payload.detail_id === "ism_manufacturing") {
+          renderIsmDetailInPanel(body, payload);
+          return;
+        }
         const filteredCharts = payload.charts.map((chart) => (
           filterChartForRange(chart, state.selectedGrowthCycleChartRange)
         ));
@@ -1691,6 +1794,124 @@
         body.innerHTML = `<p class="status">Failed to load growth cycle detail.</p>`;
         console.error(error);
       });
+  }
+
+  function fmtIsmIndex(value) {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return "n/a";
+    return Number(value).toFixed(1);
+  }
+
+  function ismBadgeClass(status) {
+    if (["expansion", "supportive", "neutral", "available"].includes(status)) return "supportive";
+    if (["contraction", "warning", "inflation_pressure", "supply_pressure"].includes(status)) return "warning";
+    if (["missing", "pending_inputs"].includes(status)) return "missing";
+    return "mixed";
+  }
+
+  function ismHeatMapCellClass(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "ism-heat-cell-missing";
+    if (numeric >= 62) return "ism-heat-cell-very-strong";
+    if (numeric >= 55) return "ism-heat-cell-strong";
+    if (numeric >= 50) return "ism-heat-cell-expansion";
+    if (numeric >= 45) return "ism-heat-cell-soft";
+    if (numeric >= 40) return "ism-heat-cell-weak";
+    return "ism-heat-cell-contraction";
+  }
+
+  function renderIsmHeatMap(chart) {
+    const rows = (chart.series || []).slice().reverse();
+    if (!rows.length) return `<p class="status">No ISM history available.</p>`;
+    const keys = chart.keys || [];
+    const labels = chart.labels || {};
+    return `
+      <div class="ism-detail-heat-map" style="--ism-heat-metrics: ${keys.length}">
+        <div class="ism-heat-header">Date</div>
+        ${keys.map((key) => `<div class="ism-heat-header">${escapeHtml(labels[key] || key)}</div>`).join("")}
+        ${rows.map((row) => `
+          <div class="ism-heat-date">${escapeHtml(fmtDate(row.date))}</div>
+          ${keys.map((key) => `
+            <div class="ism-heat-cell ${ismHeatMapCellClass(row[key])}">
+              ${escapeHtml(fmtIsmIndex(row[key]))}
+            </div>
+          `).join("")}
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function renderIsmMetricRow(label, value) {
+    return `
+      <div class="ism-metric-row">
+        <span>${bilingualLabel(label)}</span>
+        <strong>${escapeHtml(fmtIsmIndex(value))}</strong>
+      </div>
+    `;
+  }
+
+  function renderIsmManufacturingCard(card) {
+    const segments = card.segments || {};
+    const bc = segments.business_cycle || {};
+    const gd = segments.growth_drivers || {};
+    const inf = segments.inflation_supply || {};
+    const ib = segments.industry_breadth || {};
+    const selected = state.selectedGrowthCycleDetailId === "ism_manufacturing";
+    return `
+      <button class="m2-card ism-card ism-card-button ism-card-${escapeHtml(ismBadgeClass(card.status))}${selected ? " selected" : ""}" type="button" data-growth-cycle-detail-id="ism_manufacturing">
+        <div class="m2-card-head">
+          <span>${escapeHtml(card.label || "ISM Manufacturing")}<br><small>${escapeHtml(zhLabel(card.label) || "ISM制造业")}</small></span>
+        </div>
+        <div class="ism-composite-segments">
+          <div class="ism-composite-segment">
+            <span class="ism-composite-segment-label">Business Cycle<br><small>${escapeHtml(zhLabel("Business Cycle") || "商业周期")}</small></span>
+            <div class="ism-composite-segment-body">
+              <span class="ism-composite-metric">${escapeHtml(fmtIsmIndex(bc.pmi))}</span>
+              <span class="ism-composite-caption">PMI<br><small>${escapeHtml(zhLabel("PMI") || "采购经理指数")}</small> · ${escapeHtml(bc.phase_label || "Missing")}</span>
+            </div>
+          </div>
+          <div class="ism-composite-segment">
+            <span class="ism-composite-segment-label">Growth Drivers<br><small>${escapeHtml(zhLabel("Growth Drivers") || "增长驱动力")}</small></span>
+            <div class="ism-composite-segment-body">
+              <span class="ism-composite-metric">${escapeHtml(String(gd.above_50_count ?? 0))}/${escapeHtml(String(gd.available_count ?? 0))}</span>
+              <span class="ism-composite-caption">Above 50<br><small>${escapeHtml(zhLabel("Above 50") || "高于50")}</small></span>
+            </div>
+          </div>
+          <div class="ism-composite-segment">
+            <span class="ism-composite-segment-label">Inflation & Supply<br><small>${escapeHtml(zhLabel("Inflation & Supply") || "通胀与供应")}</small></span>
+            <div class="ism-composite-segment-body">
+              <span class="ism-composite-metric">${escapeHtml(fmtIsmIndex(inf.prices))}</span>
+              <span class="ism-composite-caption">Prices<br><small>${escapeHtml(zhLabel("Prices") || "价格")}</small></span>
+            </div>
+          </div>
+          <div class="ism-composite-segment">
+            <span class="ism-composite-segment-label">Industry Breadth<br><small>${escapeHtml(zhLabel("Industry Breadth") || "行业广度")}</small></span>
+            <div class="ism-composite-segment-body">
+              <span class="ism-composite-metric">${escapeHtml(ib.status === "pending_inputs" ? "—" : "")}</span>
+              <span class="ism-composite-caption">Pending<br><small>${escapeHtml(zhLabel("Pending") || "待完成")}</small></span>
+            </div>
+          </div>
+        </div>
+      </button>
+    `;
+  }
+
+  function renderIsmIndustryBreadthCard(card) {
+    const requiredInputs = (card.required_inputs || [])
+      .map((input) => `<li>${escapeHtml(input)}</li>`)
+      .join("");
+    return `
+      <article class="m2-card ism-card ism-card-missing">
+        <div class="m2-card-head">
+          <span>${escapeHtml(card.label || "ISM Industry Breadth")}<br><small>${escapeHtml(zhLabel(card.label) || "ISM行业广度")}</small></span>
+          <strong class="inflation-status-badge">${escapeHtml(card.status_label || "Pending Inputs")}</strong>
+        </div>
+        <div class="gdp-expectations-context">
+          <strong>${bilingualLabel("Required Inputs")}</strong>
+          <ul>${requiredInputs}</ul>
+        </div>
+        <p class="m2-card-footnote">${escapeHtml(card.description || "")}</p>
+      </article>
+    `;
   }
 
   function renderInflationContextCard(card) {
@@ -1891,6 +2112,7 @@
   }
 
   function renderCard(card) {
+    if (card.id === "ism_manufacturing") return renderIsmManufacturingCard(card);
     if (card.id === "m2_money_supply") return renderM2MoneySupplyCard(card);
     if (card.id === "inflation_context") return renderInflationContextCard(card);
     if (card.id === "gdp_expectations") return renderGdpExpectationsCard(card);

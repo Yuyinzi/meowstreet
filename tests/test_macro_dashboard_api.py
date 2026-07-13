@@ -705,6 +705,8 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
             "fed_mbs_holdings",
         ):
             return []
+        if series_id.startswith("ism_manufacturing_"):
+            return []
         assert series_id == "m2_money_stock"
         return [
             {"date": "2025-06-01", "value": 100, "source": "m2.xlsx"},
@@ -752,13 +754,172 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    card = payload["headline"][0]
-    assert card["id"] == "m2_money_supply"
-    assert card["label"] == "M2 Money Supply"
-    assert card["period"] == "2026-06-01"
-    assert card["state"]["m2_money_stock"] == 112.0
-    assert card["change"]["m2_3m_momentum"] is not None
+    m2_card = next(
+        card for card in payload["headline"] if card["id"] == "m2_money_supply"
+    )
+    assert m2_card["label"] == "M2 Money Supply"
+    assert m2_card["period"] == "2026-06-01"
+    assert m2_card["state"]["m2_money_stock"] == 112.0
+    assert m2_card["change"]["m2_3m_momentum"] is not None
     assert payload["missing"] is None
+    assert "ism_pmi" not in payload["growth_cycle"]
+
+
+def test_growth_cycle_api_includes_ism_manufacturing_values(monkeypatch):
+    from app import api
+
+    ISM_PMI_POINTS = [
+        {"date": "2026-05-01", "value": 50.0, "source": "ISM.xlsx"},
+        {"date": "2026-06-01", "value": 51.2, "source": "ISM.xlsx"},
+    ]
+
+    def fake_load_macro_indicator_points(con, series_id):
+        if series_id == "core_pce_price_index":
+            return []
+        if series_id in (
+            "fed_total_assets",
+            "fed_treasury_holdings",
+            "fed_mbs_holdings",
+        ):
+            return []
+        if series_id == "m2_money_stock":
+            return [
+                {"date": "2025-06-01", "value": 100, "source": "m2.xlsx"},
+                {"date": "2025-07-01", "value": 101, "source": "m2.xlsx"},
+                {"date": "2025-08-01", "value": 102, "source": "m2.xlsx"},
+                {"date": "2025-09-01", "value": 103, "source": "m2.xlsx"},
+                {"date": "2025-10-01", "value": 104, "source": "m2.xlsx"},
+                {"date": "2025-11-01", "value": 105, "source": "m2.xlsx"},
+                {"date": "2025-12-01", "value": 106, "source": "m2.xlsx"},
+                {"date": "2026-01-01", "value": 107, "source": "m2.xlsx"},
+                {"date": "2026-02-01", "value": 108, "source": "m2.xlsx"},
+                {"date": "2026-03-01", "value": 109, "source": "m2.xlsx"},
+                {"date": "2026-04-01", "value": 110, "source": "m2.xlsx"},
+                {"date": "2026-05-01", "value": 111, "source": "m2.xlsx"},
+                {"date": "2026-06-01", "value": 112, "source": "m2.xlsx"},
+            ]
+        if series_id == "ism_manufacturing_pmi":
+            return ISM_PMI_POINTS
+        if series_id == "ism_manufacturing_new_orders":
+            return [{"date": "2026-06-01", "value": 52.0, "source": "ISM.xlsx"}]
+        if series_id == "ism_manufacturing_customer_inventories":
+            return [{"date": "2026-06-01", "value": 47.5, "source": "ISM.xlsx"}]
+        if series_id.startswith("ism_manufacturing_"):
+            return [{"date": "2026-06-01", "value": 50.0, "source": "ISM.xlsx"}]
+        raise AssertionError(series_id)
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    payload = response.json()
+    gc = payload["growth_cycle"]
+    assert gc["ism_pmi"] == 51.2
+    assert gc["ism_new_orders"] == 52.0
+    assert gc["ism_customer_inventories"] == 47.5
+    assert gc["ism_imports"] == 50.0
+    assert gc["ism_period"] == "2026-06-01"
+    assert payload["headline"][0]["id"] == "ism_manufacturing"
+
+
+def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
+    from app import api
+
+    def fake_load_macro_indicator_points(con, series_id):
+        if series_id == "m2_money_stock":
+            return [
+                {"date": "2025-06-01", "value": 100, "source": "m2.xlsx"},
+                {"date": "2025-07-01", "value": 101, "source": "m2.xlsx"},
+                {"date": "2025-08-01", "value": 102, "source": "m2.xlsx"},
+                {"date": "2025-09-01", "value": 103, "source": "m2.xlsx"},
+                {"date": "2025-10-01", "value": 104, "source": "m2.xlsx"},
+                {"date": "2025-11-01", "value": 105, "source": "m2.xlsx"},
+                {"date": "2025-12-01", "value": 106, "source": "m2.xlsx"},
+                {"date": "2026-01-01", "value": 107, "source": "m2.xlsx"},
+                {"date": "2026-02-01", "value": 108, "source": "m2.xlsx"},
+                {"date": "2026-03-01", "value": 109, "source": "m2.xlsx"},
+                {"date": "2026-04-01", "value": 110, "source": "m2.xlsx"},
+                {"date": "2026-05-01", "value": 111, "source": "m2.xlsx"},
+                {"date": "2026-06-01", "value": 112, "source": "m2.xlsx"},
+            ]
+        if series_id == "core_pce_price_index":
+            return []
+        if series_id in (
+            "fed_total_assets",
+            "fed_treasury_holdings",
+            "fed_mbs_holdings",
+        ):
+            return []
+        if series_id.startswith("ism_manufacturing_"):
+            return [{"date": "2026-06-01", "value": 51.2, "source": "ISM.xlsx"}]
+        raise AssertionError(series_id)
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    sections = response.json()["sections"]
+    assert [section["id"] for section in sections] == [
+        "ism_manufacturing",
+        "m2_liquidity",
+        "inflation_context",
+        "services_labor",
+        "gdp_expectations",
+        "fomc_context",
+    ]
+    assert sections[0]["title"] == "ISM Manufacturing"
+    assert sections[0]["status"] == "available"
+    assert sections[1]["cards"] == ["m2_money_supply"]
 
 
 def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):
@@ -1046,6 +1207,8 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
                 }
                 for index in range(53)
             ]
+        if series_id.startswith("ism_manufacturing_"):
+            return []
         raise AssertionError(series_id)
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
@@ -1076,20 +1239,25 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
     payload = response.json()
     card_ids = [card["id"] for card in payload["headline"]]
     assert card_ids == [
+        "ism_manufacturing",
         "m2_money_supply",
         "inflation_context",
         "fed_balance_sheet",
         "gdp_expectations",
     ]
-    inflation = payload["headline"][1]
+    inflation = payload["headline"][2]
     assert inflation["label"] == "Inflation Context"
     assert inflation["status"] == "above_target"
     assert round(inflation["core_pce_yoy"], 4) == 0.0308
     assert round(inflation["gap"], 4) == 0.0108
-    fed_card = payload["headline"][2]
+    fed_card = next(
+        card for card in payload["headline"] if card["id"] == "fed_balance_sheet"
+    )
     assert fed_card["label"] == "Fed Balance Sheet"
     assert fed_card["status"] == "context"
-    gdp_expectations = payload["headline"][3]
+    gdp_expectations = next(
+        card for card in payload["headline"] if card["id"] == "gdp_expectations"
+    )
     assert gdp_expectations["label"] == "GDP Expectations"
     assert gdp_expectations["status"] == "pending_inputs"
     assert gdp_expectations["expected_direction"] is None
@@ -1127,6 +1295,8 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
             "fed_mbs_holdings",
         ):
             return []
+        if series_id.startswith("ism_manufacturing_"):
+            return []
         raise AssertionError(series_id)
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
@@ -1155,6 +1325,7 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
 
     assert response.status_code == 200
     assert [card["id"] for card in response.json()["headline"]] == [
+        "ism_manufacturing",
         "m2_money_supply",
         "gdp_expectations",
     ]
@@ -1188,6 +1359,8 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
             return rows(4200000, 53)
         if series_id == "fed_mbs_holdings":
             return rows(2200000, 53)
+        if series_id.startswith("ism_manufacturing_"):
+            return []
         raise AssertionError(series_id)
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
@@ -1217,12 +1390,14 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
     assert response.status_code == 200
     cards = response.json()["headline"]
     assert [card["id"] for card in cards] == [
+        "ism_manufacturing",
         "m2_money_supply",
         "fed_balance_sheet",
         "gdp_expectations",
     ]
-    assert cards[1]["status"] == "context"
-    assert cards[1]["total_assets"] == 6052000
+    fed_card = next(card for card in cards if card["id"] == "fed_balance_sheet")
+    assert fed_card["status"] == "context"
+    assert fed_card["total_assets"] == 6052000
 
 
 def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
@@ -1365,3 +1540,155 @@ def test_growth_cycle_api_includes_fomc_tone_card(monkeypatch):
     assert tone_card["latest_tone"]["policy_action"] == "hold"
     assert tone_card["latest_tone"]["overall_bias"] == "mild_hawkish"
     assert tone_card["latest_tone"]["tone_change"] == "more_hawkish"
+
+
+def test_growth_cycle_api_returns_ism_overview_cards_in_ism_section(monkeypatch):
+    from app import api
+
+    def fake_load_macro_indicator_points(con, series_id):
+        if series_id == "m2_money_stock":
+            return [
+                {"date": "2025-06-01", "value": 100, "source": "m2.xlsx"},
+                {"date": "2026-06-01", "value": 112, "source": "m2.xlsx"},
+            ]
+        if series_id == "core_pce_price_index":
+            return []
+        if series_id in (
+            "fed_total_assets",
+            "fed_treasury_holdings",
+            "fed_mbs_holdings",
+        ):
+            return []
+        values = {
+            "ism_manufacturing_pmi": 51.2,
+            "ism_manufacturing_new_orders": 52.0,
+            "ism_manufacturing_production": 50.4,
+            "ism_manufacturing_employment": 49.8,
+            "ism_manufacturing_supplier_deliveries": 50.1,
+            "ism_manufacturing_inventories": 48.6,
+            "ism_manufacturing_customer_inventories": 47.5,
+            "ism_manufacturing_prices": 55.3,
+            "ism_manufacturing_order_backlog": 49.0,
+            "ism_manufacturing_exports": 51.8,
+            "ism_manufacturing_imports": 50.2,
+        }
+        if series_id in values:
+            return [
+                {"date": "2026-06-01", "value": values[series_id], "source": "ISM.xlsx"}
+            ]
+        raise AssertionError(series_id)
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    payload = response.json()
+    cards = {card["id"]: card for card in payload["headline"]}
+    sections = {section["id"]: section for section in payload["sections"]}
+    assert sections["ism_manufacturing"]["cards"] == ["ism_manufacturing"]
+    assert cards["ism_manufacturing"]["pmi"] == 51.2
+    assert (
+        cards["ism_manufacturing"]["segments"]["growth_drivers"]["above_50_count"] == 4
+    )
+    assert cards["ism_manufacturing"]["segments"]["inflation_supply"]["prices"] == 55.3
+    assert (
+        cards["ism_manufacturing"]["segments"]["industry_breadth"]["status"]
+        == "pending_inputs"
+    )
+
+
+def test_growth_cycle_api_returns_ism_manufacturing_detail(monkeypatch):
+    from app import api
+
+    calls = []
+
+    def fake_connect():
+        class FakeConnection:
+            def close(self):
+                calls.append(("close",))
+
+        return FakeConnection()
+
+    def fake_load_macro_indicator_points_for_series(con, series_ids):
+        calls.append(("series", tuple(series_ids)))
+        return {
+            "ism_manufacturing_pmi": [
+                {"date": "2026-05-01", "value": 51.4, "source": "workbook"}
+            ],
+            "ism_manufacturing_new_orders": [
+                {"date": "2026-05-01", "value": 53.2, "source": "workbook"}
+            ],
+            "ism_manufacturing_production": [
+                {"date": "2026-05-01", "value": 52.0, "source": "workbook"}
+            ],
+            "ism_manufacturing_employment": [
+                {"date": "2026-05-01", "value": 48.8, "source": "workbook"}
+            ],
+            "ism_manufacturing_order_backlog": [
+                {"date": "2026-05-01", "value": 47.9, "source": "workbook"}
+            ],
+            "ism_manufacturing_exports": [
+                {"date": "2026-05-01", "value": 51.1, "source": "workbook"}
+            ],
+            "ism_manufacturing_imports": [
+                {"date": "2026-05-01", "value": 49.5, "source": "workbook"}
+            ],
+            "ism_manufacturing_prices": [
+                {"date": "2026-05-01", "value": 56.4, "source": "workbook"}
+            ],
+            "ism_manufacturing_supplier_deliveries": [
+                {"date": "2026-05-01", "value": 50.6, "source": "workbook"}
+            ],
+            "ism_manufacturing_inventories": [
+                {"date": "2026-05-01", "value": 46.8, "source": "workbook"}
+            ],
+            "ism_manufacturing_customer_inventories": [
+                {"date": "2026-05-01", "value": 44.9, "source": "workbook"}
+            ],
+        }
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points_for_series",
+        fake_load_macro_indicator_points_for_series,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle/ism_manufacturing")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["detail_id"] == "ism_manufacturing"
+    assert [chart["id"] for chart in payload["charts"]] == ["ism_heat_map"]
+    assert len(payload["charts"][0]["keys"]) == 11
+    assert "pmi" in payload["latest"]
+    assert "new_orders" in payload["latest"]
+    assert payload["latest"]["pmi"] == 51.4
+    assert len(payload["latest_groups"]) == 3
+    assert calls[0] == ("series", tuple(api.ISM_MANUFACTURING_SERIES_IDS))
+    assert calls[-1] == ("close",)

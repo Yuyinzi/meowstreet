@@ -70,6 +70,36 @@ GROWTH_CYCLE_DASHBOARD_FIELDS = [
         "kind": "query",
     },
     {
+        "id": "ism_customer_inventories",
+        "title": "ISM Customer Inventories",
+        "field": "macro.growth_cycle.ism_customer_inventories",
+        "kind": "query",
+    },
+    {
+        "id": "ism_prices",
+        "title": "ISM Prices",
+        "field": "macro.growth_cycle.ism_prices",
+        "kind": "query",
+    },
+    {
+        "id": "ism_order_backlog",
+        "title": "ISM Order Backlog",
+        "field": "macro.growth_cycle.ism_order_backlog",
+        "kind": "query",
+    },
+    {
+        "id": "ism_exports",
+        "title": "ISM Exports",
+        "field": "macro.growth_cycle.ism_exports",
+        "kind": "query",
+    },
+    {
+        "id": "ism_imports",
+        "title": "ISM Imports",
+        "field": "macro.growth_cycle.ism_imports",
+        "kind": "query",
+    },
+    {
         "id": "ism_sector_growth_ranking",
         "title": "ISM Sector Growth Ranking",
         "field": "macro.growth_cycle.ism_sector_growth_ranking",
@@ -264,6 +294,11 @@ GROWTH_CYCLE_SOURCES = [
             "ism_employment",
             "ism_supplier_deliveries",
             "ism_inventories",
+            "ism_customer_inventories",
+            "ism_prices",
+            "ism_order_backlog",
+            "ism_exports",
+            "ism_imports",
         ),
     },
     {
@@ -364,6 +399,13 @@ def normalize_ism_manufacturing(payload):
                 "ism_employment": _float_value(payload, "employment"),
                 "ism_supplier_deliveries": _float_value(payload, "supplier_deliveries"),
                 "ism_inventories": _float_value(payload, "inventories"),
+                "ism_customer_inventories": _float_value(
+                    payload, "customer_inventories"
+                ),
+                "ism_prices": _float_value(payload, "prices"),
+                "ism_order_backlog": _float_value(payload, "order_backlog"),
+                "ism_exports": _float_value(payload, "exports"),
+                "ism_imports": _float_value(payload, "imports"),
             }
         }
     }
@@ -386,6 +428,125 @@ def normalize_ism_services(payload):
                 "services_backlog_orders": _float_value(payload, "backlog_orders"),
             }
         }
+    }
+
+
+ISM_MANUFACTURING_DETAIL_LABELS = {
+    "pmi": "PMI",
+    "new_orders": "New Orders",
+    "production": "Production",
+    "employment": "Employment",
+    "order_backlog": "Order Backlog",
+    "exports": "Exports",
+    "imports": "Imports",
+    "prices": "Prices",
+    "supplier_deliveries": "Supplier Deliveries",
+    "inventories": "Inventories",
+    "customer_inventories": "Customer Inventories",
+}
+
+ISM_GROWTH_DRIVER_KEYS = [
+    "new_orders",
+    "production",
+    "employment",
+    "order_backlog",
+    "exports",
+    "imports",
+]
+
+ISM_INFLATION_SUPPLY_KEYS = [
+    "prices",
+    "supplier_deliveries",
+    "inventories",
+    "customer_inventories",
+]
+
+ISM_MANUFACTURING_SERIES_TO_PAYLOAD_KEY = {
+    "ism_manufacturing_pmi": "pmi",
+    "ism_manufacturing_new_orders": "new_orders",
+    "ism_manufacturing_production": "production",
+    "ism_manufacturing_employment": "employment",
+    "ism_manufacturing_supplier_deliveries": "supplier_deliveries",
+    "ism_manufacturing_inventories": "inventories",
+    "ism_manufacturing_customer_inventories": "customer_inventories",
+    "ism_manufacturing_prices": "prices",
+    "ism_manufacturing_order_backlog": "order_backlog",
+    "ism_manufacturing_exports": "exports",
+    "ism_manufacturing_imports": "imports",
+}
+
+
+def build_ism_manufacturing_payload_from_latest_points(points_by_series_id):
+    period = None
+    payload = {}
+    for series_id, payload_key in ISM_MANUFACTURING_SERIES_TO_PAYLOAD_KEY.items():
+        points = points_by_series_id.get(series_id, [])
+        if not points:
+            payload[payload_key] = None
+            continue
+        latest = points[-1]
+        payload[payload_key] = latest["value"]
+        if period is None or latest["date"] > period:
+            period = latest["date"]
+    return {"period": period, **payload}
+
+
+def _ism_detail_source(points_by_series_id):
+    for rows in points_by_series_id.values():
+        for row in rows:
+            if row.get("source"):
+                return row["source"]
+    return None
+
+
+def _ism_points_by_payload_key(points_by_series_id):
+    return {
+        payload_key: points_by_series_id.get(series_id, [])
+        for series_id, payload_key in ISM_MANUFACTURING_SERIES_TO_PAYLOAD_KEY.items()
+    }
+
+
+def _ism_aligned_rows(points_by_key, keys):
+    rows_by_date = {}
+    for key in keys:
+        for point in points_by_key.get(key, []):
+            if point.get("value") is None:
+                continue
+            row = rows_by_date.setdefault(point["date"], {"date": point["date"]})
+            row[key] = float(point["value"])
+    return [rows_by_date[date_key] for date_key in sorted(rows_by_date)]
+
+
+def _ism_labels_for_keys(keys):
+    return {key: ISM_MANUFACTURING_DETAIL_LABELS[key] for key in keys}
+
+
+def build_ism_manufacturing_detail_payload(points_by_series_id):
+    points_by_key = _ism_points_by_payload_key(points_by_series_id)
+    all_keys = list(ISM_MANUFACTURING_DETAIL_LABELS)
+    all_rows = _ism_aligned_rows(points_by_key, all_keys)
+    latest = dict(all_rows[-1]) if all_rows else {}
+    latest.pop("date", None)
+    return {
+        "detail_id": "ism_manufacturing",
+        "title": "ISM Manufacturing",
+        "source": _ism_detail_source(points_by_series_id),
+        "charts": [
+            {
+                "id": "ism_heat_map",
+                "kind": "heat_map",
+                "title": "ISM Heat Map",
+                "keys": all_keys,
+                "labels": _ism_labels_for_keys(all_keys),
+                "series": all_rows,
+            },
+        ],
+        "latest": latest,
+        "latest_groups": [
+            {"label": "Business Cycle", "keys": ["pmi"]},
+            {"label": "Growth Drivers", "keys": ISM_GROWTH_DRIVER_KEYS},
+            {"label": "Inflation & Supply", "keys": ISM_INFLATION_SUPPLY_KEYS},
+        ],
     }
 
 
@@ -756,11 +917,326 @@ def build_m2_money_supply_headline(growth_cycle):
     }
 
 
+def _headline_card_ids(headline):
+    return {card["id"] for card in headline}
+
+
+def _growth_cycle_section(
+    section_id, title, subtitle, cards, status="available", period=None
+):
+    return {
+        "id": section_id,
+        "title": title,
+        "subtitle": subtitle,
+        "kind": "cards" if cards else "status",
+        "status": status,
+        "period": period,
+        "cards": cards,
+    }
+
+
+def _ism_metric_values(growth_cycle, field_ids):
+    return [growth_cycle.get(field_id) for field_id in field_ids]
+
+
+def _available_values(values):
+    return [value for value in values if value is not None]
+
+
+def _above_50_count(values):
+    return len([value for value in values if value is not None and value > 50])
+
+
+def _ism_phase(pmi):
+    if pmi is None:
+        return "missing"
+    if pmi >= 60:
+        return "late_expansion"
+    if pmi > 50:
+        return "expansion"
+    if pmi >= 45:
+        return "slowdown"
+    return "contraction"
+
+
+def _ism_phase_label(phase):
+    labels = {
+        "late_expansion": "Late Expansion",
+        "expansion": "Expansion",
+        "slowdown": "Slowdown",
+        "contraction": "Contraction",
+        "missing": "Missing",
+    }
+    return labels.get(phase, "Mixed")
+
+
+def build_ism_business_cycle_headline(growth_cycle):
+    pmi = growth_cycle.get("ism_pmi")
+    phase = _ism_phase(pmi)
+    if pmi is None:
+        status = "missing"
+        status_label = "Missing"
+        description = "ISM Manufacturing PMI data is missing."
+    elif pmi > 50:
+        status = "expansion"
+        status_label = "Expansion"
+        description = "ISM PMI above 50 points to manufacturing expansion."
+    elif pmi < 50:
+        status = "contraction"
+        status_label = "Contraction"
+        description = "ISM PMI below 50 points to manufacturing contraction."
+    else:
+        status = "neutral"
+        status_label = "Neutral"
+        description = "ISM PMI is at the 50 expansion/contraction line."
+    return {
+        "id": "ism_business_cycle",
+        "label": "ISM Business Cycle",
+        "period": growth_cycle.get("ism_period"),
+        "status": status,
+        "status_label": status_label,
+        "phase": phase,
+        "phase_label": _ism_phase_label(phase),
+        "pmi": pmi,
+        "new_orders": growth_cycle.get("ism_new_orders"),
+        "description": description,
+    }
+
+
+def build_ism_growth_drivers_headline(growth_cycle):
+    fields = [
+        "ism_new_orders",
+        "ism_production",
+        "ism_employment",
+        "ism_order_backlog",
+        "ism_exports",
+        "ism_imports",
+    ]
+    values = _ism_metric_values(growth_cycle, fields)
+    available = _available_values(values)
+    new_orders = growth_cycle.get("ism_new_orders")
+    production = growth_cycle.get("ism_production")
+    if not available:
+        status = "missing"
+        status_label = "Missing"
+        description = "ISM growth driver data is missing."
+    elif (
+        new_orders is not None
+        and production is not None
+        and new_orders > 50
+        and production > 50
+    ):
+        status = "supportive"
+        status_label = "Supportive"
+        description = "New Orders and Production are both above 50."
+    elif (new_orders is not None and new_orders < 50) or (
+        production is not None and production < 50
+    ):
+        status = "warning"
+        status_label = "Warning"
+        description = "New Orders or Production is below 50."
+    else:
+        status = "mixed"
+        status_label = "Mixed"
+        description = "Growth driver signals are mixed."
+    return {
+        "id": "ism_growth_drivers",
+        "label": "ISM Growth Drivers",
+        "period": growth_cycle.get("ism_period"),
+        "status": status,
+        "status_label": status_label,
+        "above_50_count": _above_50_count(values),
+        "available_count": len(available),
+        "metrics": {
+            "new_orders": new_orders,
+            "production": production,
+            "employment": growth_cycle.get("ism_employment"),
+            "order_backlog": growth_cycle.get("ism_order_backlog"),
+            "exports": growth_cycle.get("ism_exports"),
+            "imports": growth_cycle.get("ism_imports"),
+        },
+        "description": description,
+    }
+
+
+def build_ism_inflation_supply_headline(growth_cycle):
+    fields = [
+        "ism_prices",
+        "ism_supplier_deliveries",
+        "ism_inventories",
+        "ism_customer_inventories",
+    ]
+    values = _ism_metric_values(growth_cycle, fields)
+    available = _available_values(values)
+    prices = growth_cycle.get("ism_prices")
+    deliveries = growth_cycle.get("ism_supplier_deliveries")
+    if not available:
+        status = "missing"
+        status_label = "Missing"
+        description = "ISM inflation and supply data is missing."
+    elif prices is not None and prices >= 60:
+        status = "inflation_pressure"
+        status_label = "Inflation Pressure"
+        description = "ISM Prices are elevated."
+    elif deliveries is not None and deliveries >= 55:
+        status = "supply_pressure"
+        status_label = "Supply Pressure"
+        description = "Supplier Deliveries indicate supply pressure."
+    elif prices is not None and prices < 50:
+        status = "disinflationary"
+        status_label = "Disinflationary"
+        description = "ISM Prices are below 50."
+    else:
+        status = "neutral"
+        status_label = "Neutral"
+        description = "Inflation and supply signals are not extreme."
+    return {
+        "id": "ism_inflation_supply",
+        "label": "ISM Inflation & Supply",
+        "period": growth_cycle.get("ism_period"),
+        "status": status,
+        "status_label": status_label,
+        "prices": prices,
+        "supplier_deliveries": deliveries,
+        "inventories": growth_cycle.get("ism_inventories"),
+        "customer_inventories": growth_cycle.get("ism_customer_inventories"),
+        "available_count": len(available),
+        "description": description,
+    }
+
+
+def build_ism_industry_breadth_headline(growth_cycle):
+    return {
+        "id": "ism_industry_breadth",
+        "label": "ISM Industry Breadth",
+        "period": growth_cycle.get("ism_period"),
+        "status": "pending_inputs",
+        "status_label": "Pending Inputs",
+        "required_inputs": [
+            "Sectors tab growth rankings",
+            "Industry comments",
+            "Growth and contraction breadth",
+        ],
+        "description": "Industry breadth requires the Sectors and Industry Comments workbook tabs, which are handled in later steps.",
+    }
+
+
+def build_growth_cycle_sections(growth_cycle, headline):
+    card_ids = _headline_card_ids(headline)
+    ism_status = "available" if growth_cycle.get("ism_pmi") is not None else "missing"
+    return [
+        _growth_cycle_section(
+            "ism_manufacturing",
+            "ISM Manufacturing",
+            "Manufacturing survey growth signal and heat-map inputs.",
+            ["ism_manufacturing"],
+            status=ism_status,
+            period=growth_cycle.get("ism_period"),
+        ),
+        _growth_cycle_section(
+            "m2_liquidity",
+            "M2 Liquidity",
+            "Money supply expansion and liquidity momentum.",
+            ["m2_money_supply"] if "m2_money_supply" in card_ids else [],
+            period=growth_cycle.get("m2_period"),
+        ),
+        _growth_cycle_section(
+            "inflation_context",
+            "Inflation Context",
+            "Core PCE constraint and gap versus the Fed target.",
+            ["inflation_context"] if "inflation_context" in card_ids else [],
+            status="available" if "inflation_context" in card_ids else "missing",
+            period=growth_cycle.get("inflation_context_period"),
+        ),
+        _growth_cycle_section(
+            "services_labor",
+            "Services / Labor",
+            "Services survey and labor confirmation inputs.",
+            [],
+            status="pending_inputs",
+            period=growth_cycle.get("services_period")
+            or growth_cycle.get("jobless_claims_period"),
+        ),
+        _growth_cycle_section(
+            "gdp_expectations",
+            "GDP Expectations",
+            "Forward growth direction once leading inputs are ready.",
+            ["gdp_expectations"] if "gdp_expectations" in card_ids else [],
+            status="available" if "gdp_expectations" in card_ids else "missing",
+            period=growth_cycle.get("gdp_expectations_period"),
+        ),
+        _growth_cycle_section(
+            "fomc_context",
+            "FOMC Context",
+            "Policy timing and latest policy-tone read.",
+            [
+                card_id
+                for card_id in ["fomc_calendar", "fomc_tone"]
+                if card_id in card_ids
+            ],
+            status="available"
+            if {"fomc_calendar", "fomc_tone"} & card_ids
+            else "missing",
+        ),
+    ]
+
+
+def _build_ism_manufacturing_headline(growth_cycle):
+    pmi = growth_cycle.get("ism_pmi")
+    growth_fields = [
+        "ism_new_orders",
+        "ism_production",
+        "ism_employment",
+        "ism_order_backlog",
+        "ism_exports",
+        "ism_imports",
+    ]
+    growth_values = _ism_metric_values(growth_cycle, growth_fields)
+    available = _available_values(growth_values)
+    phase = _ism_phase(pmi)
+    return {
+        "id": "ism_manufacturing",
+        "label": "ISM Manufacturing",
+        "period": growth_cycle.get("ism_period"),
+        "status": phase,
+        "phase": phase,
+        "pmi": pmi,
+        "above_50_count": _above_50_count(growth_values),
+        "available_count": len(available),
+        "segments": {
+            "business_cycle": {
+                "pmi": pmi,
+                "phase": phase,
+                "phase_label": _ism_phase_label(phase),
+            },
+            "growth_drivers": {
+                "above_50_count": _above_50_count(growth_values),
+                "available_count": len(available),
+            },
+            "inflation_supply": {
+                "prices": growth_cycle.get("ism_prices"),
+                "deliveries": growth_cycle.get("ism_supplier_deliveries"),
+            },
+            "industry_breadth": {
+                "status": "pending_inputs",
+                "required_inputs": [
+                    "Sectors tab growth rankings",
+                    "Industry comments",
+                    "Growth and contraction breadth",
+                ],
+            },
+        },
+    }
+
+
 def build_growth_cycle_dashboard_payload(
     growth_cycle_dashboard, next_fomc_meeting=None, fomc_latest_tone=None
 ):
     growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
-    headline = [build_m2_money_supply_headline(growth_cycle)]
+    headline = [
+        _build_ism_manufacturing_headline(growth_cycle),
+        build_m2_money_supply_headline(growth_cycle),
+    ]
     inflation_card = build_inflation_context_headline(growth_cycle)
     if inflation_card["status"] != "missing":
         headline.append(inflation_card)
@@ -774,8 +1250,11 @@ def build_growth_cycle_dashboard_payload(
     if tone_card["status"] != "missing":
         headline.append(tone_card)
     headline.append(build_gdp_expectations_headline(growth_cycle))
+    sections = build_growth_cycle_sections(growth_cycle, headline)
     return {
         "headline": headline,
+        "growth_cycle": growth_cycle,
+        "sections": sections,
         "missing": None,
     }
 

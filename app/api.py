@@ -21,6 +21,20 @@ ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
 METHOD_PATH = ROOT / "data" / "local_system" / "synthesis" / "method.v1.json"
 
+ISM_MANUFACTURING_SERIES_IDS = [
+    "ism_manufacturing_pmi",
+    "ism_manufacturing_new_orders",
+    "ism_manufacturing_production",
+    "ism_manufacturing_employment",
+    "ism_manufacturing_supplier_deliveries",
+    "ism_manufacturing_inventories",
+    "ism_manufacturing_customer_inventories",
+    "ism_manufacturing_prices",
+    "ism_manufacturing_order_backlog",
+    "ism_manufacturing_exports",
+    "ism_manufacturing_imports",
+]
+
 app = FastAPI(title="Meowstreet")
 
 if STATIC_DIR.exists():
@@ -230,7 +244,19 @@ def macro_dashboard_growth_cycle():
                 {"date": row["date"], "value": row["value"]} for row in fed_mbs_rows
             ]
         }
+        ism_points = us_rates_liquidity_db.load_macro_indicator_points_for_series(
+            con,
+            ISM_MANUFACTURING_SERIES_IDS,
+        )
+        ism_manufacturing = (
+            macro_growth_cycle.build_ism_manufacturing_payload_from_latest_points(
+                ism_points,
+            )
+            if any(ism_points.values())
+            else None
+        )
         dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+            ism_manufacturing=ism_manufacturing,
             m2_money_stock=m2_money_stock,
             core_pce_price_index=core_pce_price_index if core_pce_rows else None,
             fed_total_assets=fed_total_assets if fed_total_assets_rows else None,
@@ -266,13 +292,20 @@ def macro_dashboard_growth_cycle():
 
 @app.get("/api/macro-dashboard/growth-cycle/{detail_id}")
 def macro_dashboard_growth_cycle_detail(detail_id):
-    if detail_id != "m2_money_supply":
+    if detail_id not in {"m2_money_supply", "ism_manufacturing"}:
         raise HTTPException(
             status_code=400,
             detail=f"growth cycle detail is unknown: {detail_id}",
         )
     con = us_rates_liquidity_db.connect()
     try:
+        if detail_id == "ism_manufacturing":
+            ism_points = us_rates_liquidity_db.load_macro_indicator_points_for_series(
+                con,
+                ISM_MANUFACTURING_SERIES_IDS,
+            )
+            return macro_growth_cycle.build_ism_manufacturing_detail_payload(ism_points)
+
         rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
         core_pce_rows = us_rates_liquidity_db.load_macro_indicator_points(
             con,
