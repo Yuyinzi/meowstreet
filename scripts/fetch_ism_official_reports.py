@@ -103,11 +103,16 @@ def import_report(con, month, fetch=None, now=None):
         parsed["report"],
         parsed["comments"],
     )
+    at_a_glance_saved = us_rates_liquidity.replace_ism_at_a_glance_rows(
+        con,
+        parsed["at_a_glance_rows"],
+    )
     return {
         "report_id": parsed["report"]["report_id"],
         "metrics": metric_count,
         "rankings": len(parsed["rankings"]),
         "comments": saved["comments"],
+        "at_a_glance_rows": at_a_glance_saved["at_a_glance_rows"],
     }
 
 
@@ -141,7 +146,8 @@ def main(argv=None):
     for result in results:
         print(
             f"{result['report_id']}: metrics={result['metrics']} "
-            f"rankings={result['rankings']} comments={result['comments']}"
+            f"rankings={result['rankings']} comments={result['comments']} "
+            f"at_a_glance_rows={result['at_a_glance_rows']}"
         )
     return 1 if failed else 0
 

@@ -68,6 +68,7 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
         "metrics": 11,
         "rankings": 4,
         "comments": 1,
+        "at_a_glance_rows": 11,
     }
     assert us_rates_liquidity.load_macro_indicator_points(con, "ism_manufacturing_pmi")[
         -1
@@ -85,6 +86,11 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
         ]["industry"]
         == "Chemical Products"
     )
+    rows = us_rates_liquidity.load_latest_ism_at_a_glance_rows(con)
+    assert len(rows) == 11
+    assert rows[0]["point_change"] == -0.4
+    assert rows[0]["direction"] == "Too"
+    assert rows[0]["rate_of_change"] == "Low Faster"
 
 
 def test_requested_months_defaults_to_previous_month(monkeypatch):
@@ -147,4 +153,7 @@ def test_main_imports_requested_months(tmp_path, monkeypatch, capsys):
 
     assert exit_code == 0
     out = capsys.readouterr().out
-    assert "ism_manufacturing_2026_06: metrics=11 rankings=4 comments=1" in out
+    assert (
+        "ism_manufacturing_2026_06: metrics=11 rankings=4 comments=1 "
+        "at_a_glance_rows=11" in out
+    )
