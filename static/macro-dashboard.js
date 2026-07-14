@@ -2069,7 +2069,11 @@
       </div>
       ${latestGroups.length ? `<div class="ism-detail-latest">
         <h4>${bilingualLabel("Latest Values")}</h4>
-        ${latestGroups.map((group) => `
+        ${latestGroups.map((group) => {
+          if (group.industry_breadth || group.label === "Industry Breadth") {
+            return renderIsmIndustryBreadthGroup(group);
+          }
+          return `
           <div class="ism-latest-group">
             <strong class="ism-latest-group-label">${escapeHtml(group.label || "")}</strong>
             ${group.required_inputs ? `
@@ -2087,7 +2091,7 @@
               </div>
             `}
           </div>
-        `).join("")}
+        `}).join("")}
       </div>` : ""}
     `;
     bindGrowthCycleRangeControl(body);
@@ -2211,6 +2215,75 @@
     `;
   }
 
+  function fmtIsmBreadthCount(value) {
+    if (value === null || value === undefined) return "\u2014";
+    return String(value);
+  }
+
+  function renderIsmIndustryBreadthSegment(segment) {
+    if (!segment || segment.status !== "available") {
+      return `
+        <strong>\u2014</strong>
+        <small>Pending<br><small>${escapeHtml(zhLabel("Pending") || "\u5F85\u5B8C\u6210")}</small></small>
+      `;
+    }
+    return `
+      <strong>${escapeHtml(fmtIsmBreadthCount(segment.growth_count))}/${escapeHtml(fmtIsmBreadthCount(segment.total_count))}</strong>
+      <small>Growing<br><small>${escapeHtml(zhLabel("Growing") || "\u6269\u5F20\u884C\u4E1A")}</small></small>
+    `;
+  }
+
+  function renderIsmIndustryList(items, emptyLabel) {
+    const rows = (items || []).map((item) => `
+      <li>
+        <span>${escapeHtml(item.industry || "")}</span>
+        <strong>${escapeHtml(String(item.rank ?? ""))}</strong>
+      </li>
+    `).join("");
+    return rows || `<li><span>${escapeHtml(emptyLabel)}</span><strong>\u2014</strong></li>`;
+  }
+
+  function renderIsmIndustryBreadthGroup(group) {
+    const summary = group.industry_breadth;
+    if (!summary) {
+      const requiredInputs = (group.required_inputs || [])
+        .map((input) => `<li>${escapeHtml(input)}</li>`)
+        .join("");
+      return `
+        <section class="ism-detail-group ism-industry-ranking">
+          <h4>${bilingualLabel(group.label || "Industry Breadth")}</h4>
+          <div class="gdp-expectations-context">
+            <strong>${bilingualLabel("Required Inputs")}</strong>
+            <ul>${requiredInputs}</ul>
+          </div>
+        </section>
+      `;
+    }
+    return `
+      <section class="ism-detail-group ism-industry-ranking">
+        <div class="ism-detail-group-head">
+          <h4>${bilingualLabel(group.label || "Industry Breadth")}</h4>
+          <small>${escapeHtml(fmtDate(summary.date || ""))}</small>
+        </div>
+        <div class="ism-industry-counts">
+          <span><strong>${escapeHtml(fmtIsmBreadthCount(summary.growth_count))}</strong> Growing</span>
+          <span><strong>${escapeHtml(fmtIsmBreadthCount(summary.contraction_count))}</strong> Contracting</span>
+          <span><strong>${escapeHtml(fmtIsmBreadthCount(summary.total_count))}</strong> Total</span>
+        </div>
+        <div class="ism-industry-columns">
+          <div>
+            <h5>${bilingualLabel("Top Growing Industries")}</h5>
+            <ol class="ism-industry-list">${renderIsmIndustryList(summary.top_growth, "No growth industries")}</ol>
+          </div>
+          <div>
+            <h5>${bilingualLabel("Top Contracting Industries")}</h5>
+            <ol class="ism-industry-list">${renderIsmIndustryList(summary.top_contraction, "No contracting industries")}</ol>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
   function renderIsmManufacturingCard(card) {
     const segments = card.segments || {};
     const bc = segments.business_cycle || {};
@@ -2238,8 +2311,7 @@
           </div>
           <div>
             <span>Industry Breadth<br><small>${escapeHtml(zhLabel("Industry Breadth") || "行业广度")}</small></span>
-            <strong>${escapeHtml(ib.status === "pending_inputs" ? "—" : "")}</strong>
-            <small>Pending<br><small>${escapeHtml(zhLabel("Pending") || "待完成")}</small></small>
+            ${renderIsmIndustryBreadthSegment(ib)}
           </div>
         </div>
       </button>

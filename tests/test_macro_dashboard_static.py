@@ -5,6 +5,8 @@ import textwrap
 
 
 ROOT = Path(__file__).resolve().parents[1]
+STATIC_JS = ROOT / "static" / "macro-dashboard.js"
+STATIC_CSS = ROOT / "static" / "macro-dashboard.css"
 
 
 def test_macro_dashboard_html_links_assets_and_app_root():
@@ -1265,6 +1267,17 @@ def test_macro_dashboard_js_renders_growth_cycle_sections():
     assert "state.growthCycle.sections || []" in js
     assert "growth-section" in js
     assert "growth-section-card-grid" in js
+
+
+def test_macro_dashboard_static_assets_render_ism_industry_breadth():
+    js = STATIC_JS.read_text()
+    css = STATIC_CSS.read_text()
+
+    assert "function renderIsmIndustryBreadthSegment(" in js
+    assert "function renderIsmIndustryBreadthGroup(" in js
+    assert "ism-industry-ranking" in js
+    assert ".ism-industry-ranking" in css
+    assert ".ism-industry-list" in css
 
 
 def test_macro_dashboard_js_renders_ism_overview_cards():

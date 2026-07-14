@@ -2835,6 +2835,65 @@ h2 {
   }
 }
 
+.ism-industry-ranking {
+  border-top: 1px solid #E0D6C8;
+  padding-top: 14px;
+}
+
+.ism-industry-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.ism-industry-counts span {
+  border: 1px solid #E0D6C8;
+  border-radius: 8px;
+  padding: 8px;
+  background: #FAF8F5;
+  color: #8B7E74;
+  font-size: 0.78rem;
+}
+
+.ism-industry-counts strong {
+  display: block;
+  color: #3B3530;
+  font-size: 1rem;
+}
+
+.ism-industry-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ism-industry-columns h5 {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  color: #8B7E74;
+}
+
+.ism-industry-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ism-industry-list li {
+  margin: 0 0 6px;
+  color: #3B3530;
+}
+
+.ism-industry-list li span {
+  overflow-wrap: anywhere;
+}
+
+.ism-industry-list li strong {
+  float: right;
+  margin-left: 8px;
+  color: #8B7E74;
+}
+
 @media (max-width: 720px) {
   .growth-section-head {
     display: grid;
@@ -2854,6 +2913,11 @@ h2 {
   }
 
   .ism-relationship-context-list {
+    grid-template-columns: 1fr;
+  }
+
+  .ism-industry-counts,
+  .ism-industry-columns {
     grid-template-columns: 1fr;
   }
 }
