@@ -24,12 +24,17 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         calls.append(("ism", argv))
         return 0
 
+    def ism_official_main(argv):
+        calls.append(("ism_official", argv))
+        return 0
+
     exit_code = refresh_macro_data.main(
         [],
         benchmark_main=benchmark_main,
         rates_main=rates_main,
         m2_main=m2_main,
         ism_main=ism_main,
+        ism_official_main=ism_official_main,
         gdp_main=gdp_main,
         fomc_main=lambda argv: 0,
     )
@@ -41,6 +46,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         ("m2", ["--fetch-fred-csv"]),
         ("m2", ["--fred-csv-merge"]),
         ("ism", []),
+        ("ism_official", []),
         ("gdp", ["--fetch-fred-csv"]),
         ("gdp", ["--us-csv-merge"]),
     ]
@@ -48,6 +54,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
     assert "macro data refresh started" in out
     assert "benchmark_yahoo: ok" in out
     assert "m2_fred_merge: ok" in out
+    assert "ism_official_report: ok" in out
     assert "macro data refresh completed: ok" in out
 
 
@@ -67,6 +74,7 @@ def test_main_does_not_generate_ai_interpretations():
         rates_main=recorder("rates"),
         m2_main=recorder("m2"),
         ism_main=recorder("ism"),
+        ism_official_main=recorder("ism_official"),
         gdp_main=recorder("gdp"),
         fomc_main=recorder("fomc"),
     )
@@ -239,3 +247,21 @@ def test_main_skip_flags_remove_tasks():
         ("m2", ["--fetch-fred-csv"]),
         ("m2", ["--fred-csv-merge"]),
     ]
+
+
+def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
+    calls = []
+
+    exit_code = refresh_macro_data.main(
+        ["--skip-yahoo", "--skip-rates", "--skip-m2", "--skip-gdp", "--skip-fomc"],
+        benchmark_main=lambda argv: 0,
+        rates_main=lambda argv: 0,
+        m2_main=lambda argv: 0,
+        ism_main=lambda argv: 0,
+        ism_official_main=lambda argv: calls.append(argv) or 0,
+        gdp_main=lambda argv: 0,
+        fomc_main=lambda argv: 0,
+    )
+
+    assert exit_code == 0
+    assert calls == [[]]
