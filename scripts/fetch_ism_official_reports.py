@@ -48,10 +48,17 @@ def report_url(month):
     return BASE_URL.format(month=normalized)
 
 
+def _is_sso_page(html):
+    return "Object moved" in html and "ecommerce.ismworld.org" in html
+
+
 def fetch_text(url):
     request = Request(url, headers={"User-Agent": "Meowstreet local research"})
     with urlopen(request, timeout=30) as response:
-        return response.read().decode("utf-8")
+        text = response.read().decode("utf-8")
+    if _is_sso_page(text):
+        raise ValueError("ism official report requires ISM membership login")
+    return text
 
 
 def metric_points(parsed):
@@ -121,16 +128,22 @@ def main(argv=None):
     parser.add_argument("--current-year", action="store_true")
     args = parser.parse_args(argv)
     con = us_rates_liquidity.connect(args.db_path)
-    try:
-        results = [import_report(con, month) for month in requested_months(args)]
-    finally:
-        con.close()
+    results = []
+    failed = 0
+    for month in requested_months(args):
+        try:
+            result = import_report(con, month)
+            results.append(result)
+        except ValueError as exc:
+            print(f"ism_official_report/{month}: failed - {exc}", file=sys.stderr)
+            failed += 1
+    con.close()
     for result in results:
         print(
             f"{result['report_id']}: metrics={result['metrics']} "
             f"rankings={result['rankings']} comments={result['comments']}"
         )
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

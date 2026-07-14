@@ -1,6 +1,12 @@
+import pytest
+
 from app.db import us_rates_liquidity
 from scripts import fetch_ism_official_reports
 
+
+SSO_HTML = """<html><head><title>Object moved</title></head><body>
+<h2>Object moved to <a href="https://ecommerce.ismworld.org/SSO/Login.aspx">here</a>.</h2>
+</body></html>"""
 
 HTML = """
 <html>
@@ -27,6 +33,24 @@ HTML = """
 </body>
 </html>
 """
+
+
+def test_main_handles_sso_error_gracefully(tmp_path, monkeypatch, capsys):
+    db_path = tmp_path / "market_data.sqlite"
+
+    def failing_fetch(url):
+        raise ValueError("ism official report requires ISM membership login")
+
+    monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", failing_fetch)
+
+    exit_code = fetch_ism_official_reports.main(
+        ["--db-path", str(db_path), "--month", "june"]
+    )
+
+    assert exit_code == 1
+    err = capsys.readouterr().err
+    assert "ism_official_report/june: failed" in err
+    assert "ISM membership login" in err
 
 
 def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
