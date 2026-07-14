@@ -162,6 +162,23 @@ def connect(db_path=DEFAULT_DB_PATH):
         );
         create index if not exists idx_ism_report_comments_report
         on ism_report_comments(report_id);
+        create table if not exists ism_at_a_glance_rows (
+            report_id text not null,
+            report_month text not null,
+            series_id text not null,
+            label text not null,
+            current_value real not null,
+            previous_value real,
+            point_change real,
+            direction text not null,
+            rate_of_change text not null,
+            trend_months integer,
+            source_url text not null,
+            source_hash text not null,
+            primary key(report_id, series_id)
+        );
+        create index if not exists idx_ism_at_a_glance_rows_month
+        on ism_at_a_glance_rows(report_month);
         """
     )
     _ensure_column(
@@ -991,3 +1008,57 @@ def load_latest_combined_fomc_policy_read(con, as_of_date):
         "minutes_confidence": minutes["confidence"] if minutes else None,
         "minutes_reason": minutes["reason"] if minutes else None,
     }
+
+
+def replace_ism_at_a_glance_rows(con, rows):
+    report_ids = sorted({row["report_id"] for row in rows})
+    for report_id in report_ids:
+        con.execute(
+            "delete from ism_at_a_glance_rows where report_id = ?", (report_id,)
+        )
+    for row in rows:
+        con.execute(
+            """
+            insert into ism_at_a_glance_rows(
+                report_id, report_month, series_id, label, current_value,
+                previous_value, point_change, direction, rate_of_change,
+                trend_months, source_url, source_hash
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row["report_id"],
+                row["report_month"],
+                row["series_id"],
+                row["label"],
+                row["current_value"],
+                row.get("previous_value"),
+                row.get("point_change"),
+                row["direction"],
+                row["rate_of_change"],
+                row.get("trend_months"),
+                row["source_url"],
+                row["source_hash"],
+            ),
+        )
+    con.commit()
+    return {"at_a_glance_rows": len(rows)}
+
+
+def load_latest_ism_at_a_glance_rows(con):
+    latest = con.execute(
+        "select max(report_month) as latest_month from ism_at_a_glance_rows"
+    ).fetchone()["latest_month"]
+    if latest is None:
+        return []
+    rows = con.execute(
+        """
+        select report_id, report_month, series_id, label, current_value,
+               previous_value, point_change, direction, rate_of_change,
+               trend_months, source_url, source_hash
+        from ism_at_a_glance_rows
+        where report_month = ?
+        order by series_id
+        """,
+        (latest,),
+    ).fetchall()
+    return [dict(row) for row in rows]

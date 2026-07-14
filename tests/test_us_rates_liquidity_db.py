@@ -1448,3 +1448,42 @@ def test_replace_ism_report_snapshot_replaces_comments_for_same_report(tmp_path)
         ]["comment_text"]
         == "New comment."
     )
+
+
+def test_replace_ism_at_a_glance_rows_saves_and_loads_latest(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    rows = [
+        {
+            "report_id": "ism_manufacturing_2026_05",
+            "report_month": "2026-05-01",
+            "series_id": "ism_manufacturing_pmi",
+            "label": "Manufacturing PMI",
+            "current_value": 54.0,
+            "previous_value": 53.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 5,
+            "source_url": "https://www.ismworld.org/report/may/",
+            "source_hash": "mayhash",
+        },
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "series_id": "ism_manufacturing_pmi",
+            "label": "Manufacturing PMI",
+            "current_value": 53.3,
+            "previous_value": 54.0,
+            "point_change": -0.7,
+            "direction": "Growing",
+            "rate_of_change": "Slower",
+            "trend_months": 6,
+            "source_url": "https://www.ismworld.org/report/june/",
+            "source_hash": "junehash",
+        },
+    ]
+
+    saved = us_rates_liquidity.replace_ism_at_a_glance_rows(con, rows)
+
+    assert saved == {"at_a_glance_rows": 2}
+    assert us_rates_liquidity.load_latest_ism_at_a_glance_rows(con) == [rows[1]]
