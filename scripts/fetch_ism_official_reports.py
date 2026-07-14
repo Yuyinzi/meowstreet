@@ -1,0 +1,137 @@
+import argparse
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.request import Request, urlopen
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from app.db import us_rates_liquidity
+from app.tools import ism_official_report
+
+
+BASE_URL = (
+    "https://www.ismworld.org/supply-management-news-and-reports/reports/"
+    "ism-pmi-reports/pmi/{month}/"
+)
+
+MONTHS = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+]
+
+
+def fetched_at_now():
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def report_url(month):
+    normalized = month.strip().lower()
+    if normalized not in MONTHS:
+        raise ValueError(f"ism report month is unknown: {month}")
+    return BASE_URL.format(month=normalized)
+
+
+def fetch_text(url):
+    request = Request(url, headers={"User-Agent": "Meowstreet local research"})
+    with urlopen(request, timeout=30) as response:
+        return response.read().decode("utf-8")
+
+
+def metric_points(parsed):
+    return {
+        series_id: [
+            {
+                "date": parsed["report"]["report_month"],
+                "value": value,
+                "source": "ISM official report",
+            }
+        ]
+        for series_id, value in parsed["metrics"].items()
+    }
+
+
+def merge_metrics(con, parsed):
+    count = 0
+    for series_id, points in metric_points(parsed).items():
+        series = {
+            "series_id": series_id,
+            "title": series_id.replace("_", " ").title(),
+            "units": "index",
+            "source": "ISM official report",
+        }
+        saved = us_rates_liquidity.merge_macro_indicator_points(con, series, points)
+        count += saved["points"]
+    return count
+
+
+def import_report(con, month, fetch=None, now=None):
+    if fetch is None:
+        fetch = fetch_text
+    if now is None:
+        now = fetched_at_now
+    url = report_url(month)
+    html = fetch(url)
+    parsed = ism_official_report.parse_report(html, url, now())
+    metric_count = merge_metrics(con, parsed)
+    us_rates_liquidity.merge_ism_industry_rankings(con, parsed["rankings"])
+    saved = us_rates_liquidity.replace_ism_report_snapshot(
+        con,
+        parsed["report"],
+        parsed["comments"],
+    )
+    return {
+        "report_id": parsed["report"]["report_id"],
+        "metrics": metric_count,
+        "rankings": len(parsed["rankings"]),
+        "comments": saved["comments"],
+    }
+
+
+def requested_months(args):
+    if args.current_year:
+        return MONTHS[: datetime.now().month]
+    if args.month:
+        return args.month
+    return [datetime.now().strftime("%B").lower()]
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--db-path", type=Path, default=us_rates_liquidity.DEFAULT_DB_PATH
+    )
+    parser.add_argument("--month", action="append", choices=MONTHS)
+    parser.add_argument("--current-year", action="store_true")
+    args = parser.parse_args(argv)
+    con = us_rates_liquidity.connect(args.db_path)
+    try:
+        results = [import_report(con, month) for month in requested_months(args)]
+    finally:
+        con.close()
+    for result in results:
+        print(
+            f"{result['report_id']}: metrics={result['metrics']} "
+            f"rankings={result['rankings']} comments={result['comments']}"
+        )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

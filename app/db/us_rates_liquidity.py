@@ -409,6 +409,29 @@ def replace_ism_industry_rankings(con, rows):
     return len(rows)
 
 
+def merge_ism_industry_rankings(con, rows):
+    for row in rows:
+        con.execute(
+            """
+            insert into ism_industry_rankings(date, industry, direction, rank, source)
+            values (?, ?, ?, ?, ?)
+            on conflict(date, industry) do update set
+                direction = excluded.direction,
+                rank = excluded.rank,
+                source = excluded.source
+            """,
+            (
+                row["date"],
+                row["industry"],
+                row["direction"],
+                row["rank"],
+                row["source"],
+            ),
+        )
+    con.commit()
+    return len(rows)
+
+
 def load_latest_ism_industry_rankings(con):
     latest = con.execute(
         "select max(date) as latest_date from ism_industry_rankings"
