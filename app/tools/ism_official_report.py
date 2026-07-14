@@ -212,6 +212,40 @@ def parse_next_release(text):
     )
 
 
+def parse_at_a_glance_rows(text, report, source_url):
+    rows = []
+    found_series = set()
+    for label, series_id in METRIC_LABELS.items():
+        pattern = rf"{re.escape(label)}(?:\s?®\s?)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+([+-]?\d+(?:\.\d+)?)\s+([A-Za-z’' ]+?)\s+([A-Za-z’' ]+?)\s+(\d+)"
+        match = re.search(pattern, text)
+        if match:
+            current, previous, change, direction, rate, months = match.groups()
+            if series_id not in found_series:
+                found_series.add(series_id)
+                rows.append(
+                    {
+                        "report_id": report["report_id"],
+                        "report_month": report["report_month"],
+                        "series_id": series_id,
+                        "label": label,
+                        "current_value": float(current),
+                        "previous_value": float(previous),
+                        "point_change": float(change.replace("+", "")),
+                        "direction": direction.strip(),
+                        "rate_of_change": rate.strip(),
+                        "trend_months": int(months),
+                        "source_url": source_url,
+                        "source_hash": report["source_hash"],
+                    }
+                )
+    missing = sorted(set(METRIC_LABELS.values()) - found_series)
+    if missing:
+        raise ValueError(
+            f"ism at-a-glance rows are missing: {', '.join(sorted(set(missing)))}"
+        )
+    return rows
+
+
 def parse_report(html, source_url, fetched_at):
     text = html_to_text(html)
     normalized = normalize_text(text)
@@ -237,4 +271,5 @@ def parse_report(html, source_url, fetched_at):
         "metrics": parse_metrics(normalized),
         "rankings": parse_rankings(normalized, report_month),
         "comments": parse_comments(normalized, report, source_url),
+        "at_a_glance_rows": parse_at_a_glance_rows(normalized, report, source_url),
     }

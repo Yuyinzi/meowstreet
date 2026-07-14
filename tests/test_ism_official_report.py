@@ -82,6 +82,21 @@ def test_parse_report_with_sup_reg_in_markup_extracts_all_fields():
     assert parsed["rankings"][-1]["direction"] == "contraction"
     assert len(parsed["comments"]) == 2
     assert parsed["report"]["next_report_period"] == "2026-07-01"
+    assert len(parsed["at_a_glance_rows"]) == 11
+    assert parsed["at_a_glance_rows"][0] == {
+        "report_id": "ism_manufacturing_2026_06",
+        "report_month": "2026-06-01",
+        "series_id": "ism_manufacturing_pmi",
+        "label": "Manufacturing PMI",
+        "current_value": 53.3,
+        "previous_value": 54.0,
+        "point_change": -0.7,
+        "direction": "Growing",
+        "rate_of_change": "Slower",
+        "trend_months": 6,
+        "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
+        "source_hash": parsed["report"]["source_hash"],
+    }
 
 
 def test_parse_report_extracts_metadata_metrics_rankings_comments_and_release():
@@ -119,6 +134,21 @@ def test_parse_report_extracts_metadata_metrics_rankings_comments_and_release():
         "direction": "contraction",
         "rank": -3,
         "source": "ISM official report",
+    }
+    assert len(parsed["at_a_glance_rows"]) == 11
+    assert parsed["at_a_glance_rows"][0] == {
+        "report_id": "ism_manufacturing_2026_06",
+        "report_month": "2026-06-01",
+        "series_id": "ism_manufacturing_pmi",
+        "label": "Manufacturing PMI",
+        "current_value": 53.3,
+        "previous_value": 54.0,
+        "point_change": -0.7,
+        "direction": "Growing",
+        "rate_of_change": "Slower",
+        "trend_months": 6,
+        "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
+        "source_hash": parsed["report"]["source_hash"],
     }
     assert parsed["comments"] == [
         {
