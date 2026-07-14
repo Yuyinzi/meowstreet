@@ -281,10 +281,14 @@ def macro_dashboard_growth_cycle():
                     as_of_date,
                 )
             )
+        ism_industry_breadth = macro_growth_cycle.build_ism_industry_breadth_summary(
+            us_rates_liquidity_db.load_latest_ism_industry_rankings(con)
+        )
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(
             dashboard,
             next_fomc_meeting=next_fomc_meeting,
             fomc_latest_tone=fomc_latest_tone,
+            ism_industry_breadth=ism_industry_breadth,
         )
     finally:
         con.close()
@@ -318,10 +322,16 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             finally:
                 gdp_con.close()
                 benchmark_con.close()
+            ism_industry_breadth = (
+                macro_growth_cycle.build_ism_industry_breadth_summary(
+                    us_rates_liquidity_db.load_latest_ism_industry_rankings(con)
+                )
+            )
             return macro_growth_cycle.build_ism_manufacturing_detail_payload(
                 ism_points,
                 gdp_level_rows=gdp_level_rows,
                 sp500_price_rows=sp500_price_rows,
+                ism_industry_breadth=ism_industry_breadth,
             )
 
         rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")

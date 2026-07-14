@@ -798,6 +798,7 @@ def build_ism_manufacturing_detail_payload(
     points_by_series_id,
     gdp_level_rows=None,
     sp500_price_rows=None,
+    ism_industry_breadth=None,
 ):
     points_by_key = _ism_points_by_payload_key(points_by_series_id)
     all_keys = list(ISM_MANUFACTURING_DETAIL_LABELS)
@@ -832,15 +833,7 @@ def build_ism_manufacturing_detail_payload(
             {"label": "Business Cycle", "keys": ["pmi"]},
             {"label": "Growth Drivers", "keys": ISM_GROWTH_DRIVER_KEYS},
             {"label": "Inflation & Supply", "keys": ISM_INFLATION_SUPPLY_KEYS},
-            {
-                "label": "Industry Breadth",
-                "keys": [],
-                "required_inputs": [
-                    "Sectors tab growth rankings",
-                    "Industry comments",
-                    "Growth and contraction breadth",
-                ],
-            },
+            _ism_industry_breadth_detail_group(ism_industry_breadth),
         ],
         "relationship_summary": {
             "shared_months": len(macro_context_chart["series"])
@@ -1423,6 +1416,72 @@ def build_ism_inflation_supply_headline(growth_cycle):
     }
 
 
+def build_ism_industry_breadth_summary(rankings):
+    if not rankings:
+        return None
+    latest_date = max(row["date"] for row in rankings)
+    latest_rows = [row for row in rankings if row["date"] == latest_date]
+    growth = sorted(
+        [row for row in latest_rows if row["direction"] == "growth"],
+        key=lambda row: row["rank"],
+        reverse=True,
+    )
+    contraction = sorted(
+        [row for row in latest_rows if row["direction"] == "contraction"],
+        key=lambda row: row["rank"],
+    )
+    return {
+        "date": latest_date,
+        "growth_count": len(growth),
+        "contraction_count": len(contraction),
+        "total_count": len(latest_rows),
+        "top_growth": [
+            {"industry": row["industry"], "rank": row["rank"]} for row in growth[:3]
+        ],
+        "top_contraction": [
+            {"industry": row["industry"], "rank": row["rank"]}
+            for row in contraction[:3]
+        ],
+    }
+
+
+def _ism_industry_breadth_segment(summary):
+    if not summary:
+        return {
+            "status": "pending_inputs",
+            "required_inputs": [
+                "Sectors tab growth rankings",
+                "Growth and contraction breadth",
+            ],
+        }
+    return {
+        "status": "available",
+        "period": summary["date"],
+        "growth_count": summary["growth_count"],
+        "contraction_count": summary["contraction_count"],
+        "total_count": summary["total_count"],
+        "top_growth": summary["top_growth"],
+        "top_contraction": summary["top_contraction"],
+    }
+
+
+def _ism_industry_breadth_detail_group(summary):
+    if not summary:
+        return {
+            "label": "Industry Breadth",
+            "keys": [],
+            "required_inputs": [
+                "Sectors tab growth rankings",
+                "Growth and contraction breadth",
+            ],
+        }
+    return {
+        "label": "Industry Breadth",
+        "keys": [],
+        "industry_breadth": summary,
+    }
+
+
 def build_ism_industry_breadth_headline(growth_cycle):
     return {
         "id": "ism_industry_breadth",
@@ -1499,7 +1558,7 @@ def build_growth_cycle_sections(growth_cycle, headline):
     ]
 
 
-def _build_ism_manufacturing_headline(growth_cycle):
+def _build_ism_manufacturing_headline(growth_cycle, ism_industry_breadth=None):
     pmi = growth_cycle.get("ism_pmi")
     growth_fields = [
         "ism_new_orders",
@@ -1535,24 +1594,20 @@ def _build_ism_manufacturing_headline(growth_cycle):
                 "prices": growth_cycle.get("ism_prices"),
                 "deliveries": growth_cycle.get("ism_supplier_deliveries"),
             },
-            "industry_breadth": {
-                "status": "pending_inputs",
-                "required_inputs": [
-                    "Sectors tab growth rankings",
-                    "Industry comments",
-                    "Growth and contraction breadth",
-                ],
-            },
+            "industry_breadth": _ism_industry_breadth_segment(ism_industry_breadth),
         },
     }
 
 
 def build_growth_cycle_dashboard_payload(
-    growth_cycle_dashboard, next_fomc_meeting=None, fomc_latest_tone=None
+    growth_cycle_dashboard,
+    next_fomc_meeting=None,
+    fomc_latest_tone=None,
+    ism_industry_breadth=None,
 ):
     growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
     headline = [
-        _build_ism_manufacturing_headline(growth_cycle),
+        _build_ism_manufacturing_headline(growth_cycle, ism_industry_breadth),
         build_m2_money_supply_headline(growth_cycle),
     ]
     inflation_card = build_inflation_context_headline(growth_cycle)

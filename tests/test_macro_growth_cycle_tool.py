@@ -1366,6 +1366,120 @@ def test_build_ism_manufacturing_detail_payload_handles_missing_series():
     assert payload["latest"] is None
 
 
+def test_build_ism_industry_breadth_summary_from_latest_rankings():
+    rankings = [
+        {
+            "date": "2026-06-01",
+            "industry": "Computer & Electronic Products",
+            "direction": "growth",
+            "rank": 16,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Wood Products",
+            "direction": "growth",
+            "rank": 14,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Furniture & Related Products",
+            "direction": "contraction",
+            "rank": -1,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Machinery",
+            "direction": "contraction",
+            "rank": -2,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+    ]
+
+    summary = macro_growth_cycle.build_ism_industry_breadth_summary(rankings)
+
+    assert summary == {
+        "date": "2026-06-01",
+        "growth_count": 2,
+        "contraction_count": 2,
+        "total_count": 4,
+        "top_growth": [
+            {"industry": "Computer & Electronic Products", "rank": 16},
+            {"industry": "Wood Products", "rank": 14},
+        ],
+        "top_contraction": [
+            {"industry": "Machinery", "rank": -2},
+            {"industry": "Furniture & Related Products", "rank": -1},
+        ],
+    }
+
+
+def test_build_growth_cycle_payload_uses_ism_industry_breadth_summary():
+    dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+        ism_manufacturing={
+            "date": "2026-06-01",
+            "pmi": 51.2,
+            "new_orders": 52.0,
+        }
+    )
+    summary = {
+        "date": "2026-06-01",
+        "growth_count": 2,
+        "contraction_count": 1,
+        "total_count": 3,
+        "top_growth": [{"industry": "Computer & Electronic Products", "rank": 16}],
+        "top_contraction": [{"industry": "Machinery", "rank": -1}],
+    }
+
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        dashboard,
+        ism_industry_breadth=summary,
+    )
+
+    card = next(
+        card for card in payload["headline"] if card["id"] == "ism_manufacturing"
+    )
+    assert card["segments"]["industry_breadth"] == {
+        "status": "available",
+        "period": "2026-06-01",
+        "growth_count": 2,
+        "contraction_count": 1,
+        "total_count": 3,
+        "top_growth": [{"industry": "Computer & Electronic Products", "rank": 16}],
+        "top_contraction": [{"industry": "Machinery", "rank": -1}],
+    }
+
+
+def test_build_ism_detail_payload_includes_industry_ranking_group():
+    points = {
+        "ism_manufacturing_pmi": [
+            {"date": "2026-06-01", "value": 51.2, "source": "ISM.xlsx"}
+        ]
+    }
+    summary = {
+        "date": "2026-06-01",
+        "growth_count": 2,
+        "contraction_count": 1,
+        "total_count": 3,
+        "top_growth": [{"industry": "Computer & Electronic Products", "rank": 16}],
+        "top_contraction": [{"industry": "Machinery", "rank": -1}],
+    }
+
+    payload = macro_growth_cycle.build_ism_manufacturing_detail_payload(
+        points,
+        ism_industry_breadth=summary,
+    )
+
+    industry_group = payload["detail_groups"][3]
+    assert industry_group == {
+        "label": "Industry Breadth",
+        "keys": [],
+        "industry_breadth": summary,
+    }
+
+
 def test_build_ism_detail_payload_computes_small_multiple_relationship_context():
     ism_points = {
         "ism_manufacturing_pmi": [
