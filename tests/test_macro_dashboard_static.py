@@ -1349,3 +1349,16 @@ def test_growth_cycle_ism_detail_renderer_static_assets():
     assert "grid-template-columns: 140px minmax(0, 1fr)" in css
     assert ".ism-shared-tooltip" in css
     assert ".ism-relationship-context" in css
+
+
+def test_macro_dashboard_static_assets_render_ism_trend_metadata():
+    js = STATIC_JS.read_text()
+    css = STATIC_CSS.read_text()
+
+    assert "function fmtIsmPointChange(" in js
+    assert "function renderIsmTrendChip(" in js
+    assert "latest_metadata" in js
+    assert ".ism-trend-chip" in css
+    assert ".ism-trend-chip-green" in css
+    assert ".ism-trend-chip-amber" in css
+    assert ".ism-trend-chip-red" in css

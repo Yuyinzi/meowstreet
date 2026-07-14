@@ -2080,6 +2080,7 @@
       renderIsmDetailChart(chart, index, null)
     ));
     const latest = payload.latest || {};
+    const latestMetadata = payload.latest_metadata || {};
     const latestGroups = payload.detail_groups || [];
     body.innerHTML = `
       ${renderGrowthCycleRangeControl()}
@@ -2105,6 +2106,7 @@
                   <div class="ism-metric-row">
                     <span>${escapeHtml((charts[0]?.labels || {})[key] || key)}</span>
                     <strong>${escapeHtml(fmtIsmIndex(latest[key]))}</strong>
+                    ${latestMetadata[key] ? renderIsmTrendChip(latestMetadata[key]) : ""}
                   </div>
                 `).join("")}
               </div>
@@ -2225,6 +2227,24 @@
     `;
   }
 
+  function fmtIsmPointChange(value) {
+    if (value === null || value === undefined) return "\u2014";
+    const sign = value > 0 ? "+" : "";
+    return `${sign}${value.toFixed(1)}`;
+  }
+
+  function renderIsmTrendChip(trend) {
+    if (!trend) return "";
+    const tone = trend.tone || "muted";
+    const formatted = fmtIsmPointChange(trend.point_change);
+    return `
+      <span class="ism-trend-chip ism-trend-chip-${escapeHtml(tone)}">
+        <strong>${escapeHtml(formatted)}</strong>
+        <span>${escapeHtml(trend.direction)} / ${escapeHtml(trend.rate_of_change)} · ${escapeHtml(String(trend.trend_months))}m</span>
+      </span>
+    `;
+  }
+
   function renderIsmMetricRow(label, value) {
     return `
       <div class="ism-metric-row">
@@ -2319,6 +2339,7 @@
             <span>Business Cycle<br><small>${escapeHtml(zhLabel("Business Cycle") || "商业周期")}</small></span>
             <strong>${escapeHtml(fmtIsmIndex(bc.pmi))}</strong>
             <small>PMI<br><small>${escapeHtml(zhLabel("PMI") || "采购经理指数")}</small> · ${escapeHtml(bc.phase_label || "Missing")}</small>
+            ${bc.trend ? renderIsmTrendChip(bc.trend) : ""}
           </div>
           <div>
             <span>Growth Drivers<br><small>${escapeHtml(zhLabel("Growth Drivers") || "增长驱动力")}</small></span>
@@ -3553,6 +3574,8 @@
       renderRelationshipYAxisAndGrid,
       state,
       renderDetailPanel,
+      renderIsmTrendChip,
+      fmtIsmPointChange,
       toggleDetailPanelExpanded,
       xAt,
       xAxisTicks,
