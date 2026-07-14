@@ -614,8 +614,8 @@ h2 {
 }
 
 .ism-metric-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) 160px;
   gap: 8px;
   align-items: center;
   border: 1px solid #ECE4DB;
@@ -630,9 +630,17 @@ h2 {
   font-size: 0.72rem;
 }
 
-.ism-metric-row strong {
+.ism-metric-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ism-metric-value strong {
   color: #3B3530;
   font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .ism-card-button {
@@ -2919,6 +2927,7 @@ h2 {
   font-size: 0.75em;
   padding: 2px 6px;
   border-radius: 4px;
+  min-width: 82px;
 }
 
 .ism-trend-chip-green {

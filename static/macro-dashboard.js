@@ -2105,8 +2105,10 @@
                 ${group.keys.map((key) => `
                   <div class="ism-metric-row">
                     <span>${escapeHtml((charts[0]?.labels || {})[key] || key)}</span>
-                    <strong>${escapeHtml(fmtIsmIndex(latest[key]))}</strong>
-                    ${latestMetadata[key] ? renderIsmTrendChip(latestMetadata[key]) : ""}
+                    <div class="ism-metric-value">
+                      <strong>${escapeHtml(fmtIsmIndex(latest[key]))}</strong>
+                      ${latestMetadata[key] ? renderIsmTrendChip(latestMetadata[key]) : ""}
+                    </div>
                   </div>
                 `).join("")}
               </div>
