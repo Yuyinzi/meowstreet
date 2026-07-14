@@ -63,6 +63,50 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
     )
 
 
+def test_requested_months_defaults_to_previous_month(monkeypatch):
+    import datetime as dt_module
+
+    fake_july = dt_module.datetime(2026, 7, 14, 12, 0, 0)
+
+    class FakeDatetime:
+        @classmethod
+        def now(cls, tz=None):
+            return fake_july
+
+        @classmethod
+        def strftime(cls, fmt):
+            return fake_july.strftime(fmt)
+
+    monkeypatch.setattr(fetch_ism_official_reports, "datetime", FakeDatetime)
+
+    class FakeArgs:
+        current_year = False
+        month = None
+
+    result = fetch_ism_official_reports.requested_months(FakeArgs())
+    assert result == ["june"]
+
+
+def test_requested_months_current_year_excludes_current_month(monkeypatch):
+    import datetime as dt_module
+
+    fake_july = dt_module.datetime(2026, 7, 14, 12, 0, 0)
+
+    class FakeDatetime:
+        @classmethod
+        def now(cls, tz=None):
+            return fake_july
+
+    monkeypatch.setattr(fetch_ism_official_reports, "datetime", FakeDatetime)
+
+    class FakeArgs:
+        current_year = True
+        month = None
+
+    result = fetch_ism_official_reports.requested_months(FakeArgs())
+    assert result == ["january", "february", "march", "april", "may", "june"]
+
+
 def test_main_imports_requested_months(tmp_path, monkeypatch, capsys):
     db_path = tmp_path / "market_data.sqlite"
 

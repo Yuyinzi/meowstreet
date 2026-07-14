@@ -91,7 +91,7 @@ def clean_title(month_name, year):
 def parse_metrics(text):
     metrics = {}
     for label, series_id in METRIC_LABELS.items():
-        pattern = rf"{re.escape(label)}(?:®)?\s+(\d+(?:\.\d+)?)\s+"
+        pattern = rf"{re.escape(label)}(?:\s?®\s?)?\s+(\d+(?:\.\d+)?)\s+"
         match = re.search(pattern, text)
         if match:
             metrics[series_id] = float(match.group(1))
@@ -195,7 +195,7 @@ def parse_comments(text, report, source_url):
 
 def parse_next_release(text):
     match = re.search(
-        r"The next ISM® Manufacturing PMI® Report featuring ([A-Za-z]+) (\d{4}) data will be released at 10:00 a\.m\. ET on ([A-Za-z]+, [A-Za-z]+ \d{1,2}, \d{4})\.",
+        r"The next ISM\s?® Manufacturing PMI\s?® Report featuring ([A-Za-z]+) (\d{4}) data will be released at 10:00 a\.m\. ET on ([A-Za-z]+, [A-Za-z]+ \d{1,2}, \d{4})\.",
         text,
     )
     if not match:

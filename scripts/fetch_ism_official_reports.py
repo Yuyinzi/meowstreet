@@ -106,10 +106,10 @@ def import_report(con, month, fetch=None, now=None):
 
 def requested_months(args):
     if args.current_year:
-        return MONTHS[: datetime.now().month]
+        return MONTHS[: datetime.now().month - 1]
     if args.month:
         return args.month
-    return [datetime.now().strftime("%B").lower()]
+    return [MONTHS[datetime.now().month - 2]]
 
 
 def main(argv=None):
