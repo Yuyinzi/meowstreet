@@ -1295,3 +1295,56 @@ def test_load_macro_events_with_latest_tone_merges_minutes_structure_fields(tmp_
     assert events[0]["risk_focus"] == "inflation"
     assert events[0]["policy_conviction"] == "divided"
     assert events[0]["minutes_generated_at"] == "2026-07-13T04:31:29Z"
+
+
+def test_replace_ism_industry_rankings_saves_and_loads_latest_rows(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    rankings = [
+        {
+            "date": "2026-05-01",
+            "industry": "Machinery",
+            "direction": "growth",
+            "rank": 8,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Computer & Electronic Products",
+            "direction": "growth",
+            "rank": 16,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Furniture & Related Products",
+            "direction": "contraction",
+            "rank": -1,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+    ]
+
+    saved = us_rates_liquidity.replace_ism_industry_rankings(con, rankings)
+
+    assert saved == 3
+    assert us_rates_liquidity.load_latest_ism_industry_rankings(con) == [
+        {
+            "date": "2026-06-01",
+            "industry": "Computer & Electronic Products",
+            "direction": "growth",
+            "rank": 16,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Furniture & Related Products",
+            "direction": "contraction",
+            "rank": -1,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+    ]
+
+
+def test_load_latest_ism_industry_rankings_returns_empty_without_rows(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+
+    assert us_rates_liquidity.load_latest_ism_industry_rankings(con) == []

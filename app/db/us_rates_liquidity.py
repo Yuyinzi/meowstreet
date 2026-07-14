@@ -125,6 +125,16 @@ def connect(db_path=DEFAULT_DB_PATH):
         );
         create index if not exists idx_macro_event_tone_event_type_generated
         on macro_event_tone_extractions(event_id, source_document_type, generated_at);
+        create table if not exists ism_industry_rankings (
+            date text not null,
+            industry text not null,
+            direction text not null,
+            rank integer not null,
+            source text not null,
+            primary key(date, industry)
+        );
+        create index if not exists idx_ism_industry_rankings_date
+        on ism_industry_rankings(date);
         """
     )
     _ensure_column(
@@ -350,6 +360,53 @@ def load_latest_macro_indicator_points(con):
         """
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def replace_ism_industry_rankings(con, rows):
+    con.execute("delete from ism_industry_rankings")
+    for row in rows:
+        con.execute(
+            """
+            insert into ism_industry_rankings(date, industry, direction, rank, source)
+            values (?, ?, ?, ?, ?)
+            """,
+            (
+                row["date"],
+                row["industry"],
+                row["direction"],
+                row["rank"],
+                row["source"],
+            ),
+        )
+    con.commit()
+    return len(rows)
+
+
+def load_latest_ism_industry_rankings(con):
+    latest = con.execute(
+        "select max(date) as latest_date from ism_industry_rankings"
+    ).fetchone()["latest_date"]
+    if latest is None:
+        return []
+    rows = con.execute(
+        """
+        select date, industry, direction, rank, source
+        from ism_industry_rankings
+        where date = ?
+        order by direction desc, rank desc, industry
+        """,
+        (latest,),
+    ).fetchall()
+    return [
+        {
+            "date": row["date"],
+            "industry": row["industry"],
+            "direction": row["direction"],
+            "rank": row["rank"],
+            "source": row["source"],
+        }
+        for row in rows
+    ]
 
 
 def load_macro_indicator_points_for_series(con, series_ids):
