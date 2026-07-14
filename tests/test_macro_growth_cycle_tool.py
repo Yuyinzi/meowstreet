@@ -1657,3 +1657,308 @@ def test_build_ism_detail_payload_skips_small_multiple_without_existing_sources(
         "gdp_observations": 0,
         "sp500_observations": 0,
     }
+
+
+def test_ism_at_a_glance_tone_growing_faster_is_green():
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_pmi",
+                "direction": "Growing",
+                "rate_of_change": "Faster",
+            }
+        )
+        == "green"
+    )
+
+
+def test_ism_at_a_glance_tone_growing_slower_is_amber():
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_pmi",
+                "direction": "Growing",
+                "rate_of_change": "Slower",
+            }
+        )
+        == "amber"
+    )
+
+
+def test_ism_at_a_glance_tone_contracting_is_red():
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_pmi",
+                "direction": "Contracting",
+                "rate_of_change": "Slower",
+            }
+        )
+        == "red"
+    )
+
+
+def test_ism_at_a_glance_tone_prices_series_is_amber():
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_prices",
+                "direction": "Increasing",
+                "rate_of_change": "",
+            }
+        )
+        == "amber"
+    )
+
+
+def test_ism_at_a_glance_tone_supplier_deliveries_is_amber():
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_supplier_deliveries",
+                "direction": "Growing",
+                "rate_of_change": "Faster",
+            }
+        )
+        == "amber"
+    )
+
+
+def test_ism_at_a_glance_tone_customer_inventories_too_low_or_high_is_amber():
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_customer_inventories",
+                "direction": "Too Low",
+                "rate_of_change": "",
+            }
+        )
+        == "amber"
+    )
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_customer_inventories",
+                "direction": "Too High",
+                "rate_of_change": "",
+            }
+        )
+        == "amber"
+    )
+
+
+def test_ism_at_a_glance_tone_missing_or_unknown_direction_is_muted():
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_pmi",
+                "direction": "",
+                "rate_of_change": "",
+            }
+        )
+        == "muted"
+    )
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_pmi",
+                "direction": "N/A",
+                "rate_of_change": "",
+            }
+        )
+        == "muted"
+    )
+
+
+def test_ism_at_a_glance_tone_transition_direction_is_amber():
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_pmi",
+                "direction": "From Contracting",
+                "rate_of_change": "",
+            }
+        )
+        == "amber"
+    )
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_pmi",
+                "direction": "From Growing",
+                "rate_of_change": "",
+            }
+        )
+        == "amber"
+    )
+
+
+def test_ism_at_a_glance_tone_mixed_direction_is_amber():
+    assert (
+        macro_growth_cycle._ism_at_a_glance_tone(
+            {
+                "series_id": "ism_manufacturing_pmi",
+                "direction": "Mixed",
+                "rate_of_change": "",
+            }
+        )
+        == "amber"
+    )
+
+
+def test_ism_at_a_glance_by_key_converts_rows_to_metadata_dict():
+    rows = [
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "series_id": "ism_manufacturing_pmi",
+            "label": "Manufacturing PMI",
+            "current_value": 53.3,
+            "previous_value": 54.0,
+            "point_change": -0.7,
+            "direction": "Growing",
+            "rate_of_change": "Slower",
+            "trend_months": 6,
+            "source_url": "https://example.com",
+            "source_hash": "abc123",
+        },
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "series_id": "ism_manufacturing_new_orders",
+            "label": "New Orders",
+            "current_value": 52.0,
+            "previous_value": 51.5,
+            "point_change": 0.5,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 4,
+            "source_url": "https://example.com",
+            "source_hash": "abc123",
+        },
+    ]
+
+    result = macro_growth_cycle._ism_at_a_glance_by_key(rows)
+
+    assert "pmi" in result
+    assert "new_orders" in result
+    assert result["pmi"]["label"] == "Manufacturing PMI"
+    assert result["pmi"]["point_change"] == -0.7
+    assert result["pmi"]["direction"] == "Growing"
+    assert result["pmi"]["rate_of_change"] == "Slower"
+    assert result["pmi"]["tone"] == "amber"
+    assert result["new_orders"]["tone"] == "green"
+    assert result["new_orders"]["current_value"] == 52.0
+
+
+def test_build_ism_manufacturing_detail_payload_with_at_a_glance_metadata():
+    points = {
+        "ism_manufacturing_pmi": [
+            {"date": "2026-06-01", "value": 51.2, "source": "workbook"},
+        ],
+        "ism_manufacturing_new_orders": [
+            {"date": "2026-06-01", "value": 52.0, "source": "workbook"},
+        ],
+    }
+    at_a_glance = [
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "series_id": "ism_manufacturing_pmi",
+            "label": "Manufacturing PMI",
+            "current_value": 53.3,
+            "previous_value": 54.0,
+            "point_change": -0.7,
+            "direction": "Growing",
+            "rate_of_change": "Slower",
+            "trend_months": 6,
+            "source_url": "https://example.com",
+            "source_hash": "abc123",
+        },
+    ]
+
+    payload = macro_growth_cycle.build_ism_manufacturing_detail_payload(
+        points,
+        ism_at_a_glance=at_a_glance,
+    )
+
+    assert "latest_metadata" in payload
+    assert payload["latest_metadata"]["pmi"]["point_change"] == -0.7
+    assert payload["latest_metadata"]["pmi"]["tone"] == "amber"
+
+
+def test_build_ism_manufacturing_detail_payload_skips_metadata_when_not_provided():
+    points = {
+        "ism_manufacturing_pmi": [
+            {"date": "2026-06-01", "value": 51.2, "source": "workbook"},
+        ],
+    }
+
+    payload = macro_growth_cycle.build_ism_manufacturing_detail_payload(points)
+
+    assert "latest_metadata" not in payload
+
+
+def test_build_growth_cycle_dashboard_payload_headline_includes_trend_metadata():
+    dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+        ism_manufacturing={
+            "period": "2026-06-01",
+            "pmi": 53.3,
+            "new_orders": 52.0,
+            "production": 50.4,
+            "employment": 49.8,
+            "supplier_deliveries": 50.1,
+            "inventories": 48.6,
+            "customer_inventories": 47.5,
+            "prices": 55.3,
+            "order_backlog": 49.0,
+            "exports": 51.8,
+            "imports": 50.2,
+        },
+    )
+    at_a_glance = [
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "series_id": "ism_manufacturing_pmi",
+            "label": "Manufacturing PMI",
+            "current_value": 53.3,
+            "previous_value": 54.0,
+            "point_change": -0.7,
+            "direction": "Growing",
+            "rate_of_change": "Slower",
+            "trend_months": 6,
+            "source_url": "https://example.com",
+            "source_hash": "abc123",
+        },
+    ]
+
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        dashboard,
+        ism_at_a_glance=at_a_glance,
+    )
+
+    card = next(
+        card for card in payload["headline"] if card["id"] == "ism_manufacturing"
+    )
+    assert card["segments"]["business_cycle"]["trend"]["tone"] == "amber"
+    assert card["segments"]["business_cycle"]["trend"]["point_change"] == -0.7
+
+
+def test_build_growth_cycle_dashboard_payload_skips_trend_when_not_provided():
+    growth_cycle = {
+        "m2_period": "2026-06-01",
+        "m2_money_stock": 21210.0,
+        "m2_yoy_pct_change": 0.042,
+        "m2_yoy_percent_rank": 0.72,
+        "m2_3m_momentum": 0.011,
+        "m2_mom_pct_change": 0.004,
+        "m2_mom_percent_rank": 0.63,
+    }
+    result = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        {"macro": {"growth_cycle": growth_cycle}}
+    )
+    card = next(
+        card for card in result["headline"] if card["id"] == "ism_manufacturing"
+    )
+    assert "trend" not in card["segments"]["business_cycle"]

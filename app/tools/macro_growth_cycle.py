@@ -477,6 +477,49 @@ ISM_MANUFACTURING_SERIES_TO_PAYLOAD_KEY = {
 }
 
 
+def _ism_at_a_glance_tone(row):
+    series_id = row.get("series_id", "")
+    direction = row.get("direction", "")
+    rate_of_change = row.get("rate_of_change", "")
+    if series_id == "ism_manufacturing_supplier_deliveries":
+        return "amber"
+    if series_id == "ism_manufacturing_prices":
+        return "amber"
+    if series_id == "ism_manufacturing_customer_inventories":
+        if direction in ("Too Low", "Too High"):
+            return "amber"
+    if direction == "Contracting":
+        return "red"
+    if direction in ("From Contracting", "From Growing", "Mixed"):
+        return "amber"
+    if direction == "Growing":
+        if rate_of_change == "Faster":
+            return "green"
+        return "amber"
+    return "muted"
+
+
+def _ism_at_a_glance_by_key(rows):
+    result = {}
+    for row in rows:
+        payload_key = ISM_MANUFACTURING_SERIES_TO_PAYLOAD_KEY.get(
+            row.get("series_id", "")
+        )
+        if payload_key is None:
+            continue
+        result[payload_key] = {
+            "label": row["label"],
+            "current_value": row["current_value"],
+            "previous_value": row["previous_value"],
+            "point_change": row["point_change"],
+            "direction": row["direction"],
+            "rate_of_change": row["rate_of_change"],
+            "trend_months": row["trend_months"],
+            "tone": _ism_at_a_glance_tone(row),
+        }
+    return result
+
+
 def build_ism_manufacturing_payload_from_latest_points(points_by_series_id):
     period = None
     payload = {}
@@ -799,6 +842,7 @@ def build_ism_manufacturing_detail_payload(
     gdp_level_rows=None,
     sp500_price_rows=None,
     ism_industry_breadth=None,
+    ism_at_a_glance=None,
 ):
     points_by_key = _ism_points_by_payload_key(points_by_series_id)
     all_keys = list(ISM_MANUFACTURING_DETAIL_LABELS)
@@ -813,7 +857,7 @@ def build_ism_manufacturing_detail_payload(
         sp500_price_rows or [],
     )
     relationship_charts = [macro_context_chart] if macro_context_chart else []
-    return {
+    result = {
         "detail_id": "ism_manufacturing",
         "title": "ISM Manufacturing",
         "source": _ism_detail_source(points_by_series_id),
@@ -859,6 +903,9 @@ def build_ism_manufacturing_detail_payload(
             ),
         },
     }
+    if ism_at_a_glance:
+        result["latest_metadata"] = _ism_at_a_glance_by_key(ism_at_a_glance)
+    return result
 
 
 def _pct_change(current, previous):
@@ -1558,7 +1605,9 @@ def build_growth_cycle_sections(growth_cycle, headline):
     ]
 
 
-def _build_ism_manufacturing_headline(growth_cycle, ism_industry_breadth=None):
+def _build_ism_manufacturing_headline(
+    growth_cycle, ism_industry_breadth=None, ism_at_a_glance=None
+):
     pmi = growth_cycle.get("ism_pmi")
     growth_fields = [
         "ism_new_orders",
@@ -1571,7 +1620,8 @@ def _build_ism_manufacturing_headline(growth_cycle, ism_industry_breadth=None):
     growth_values = _ism_metric_values(growth_cycle, growth_fields)
     available = _available_values(growth_values)
     phase = _ism_phase(pmi)
-    return {
+    by_key = _ism_at_a_glance_by_key(ism_at_a_glance) if ism_at_a_glance else None
+    result = {
         "id": "ism_manufacturing",
         "label": "ISM Manufacturing",
         "period": growth_cycle.get("ism_period"),
@@ -1597,6 +1647,9 @@ def _build_ism_manufacturing_headline(growth_cycle, ism_industry_breadth=None):
             "industry_breadth": _ism_industry_breadth_segment(ism_industry_breadth),
         },
     }
+    if by_key:
+        result["segments"]["business_cycle"]["trend"] = by_key.get("pmi")
+    return result
 
 
 def build_growth_cycle_dashboard_payload(
@@ -1604,10 +1657,13 @@ def build_growth_cycle_dashboard_payload(
     next_fomc_meeting=None,
     fomc_latest_tone=None,
     ism_industry_breadth=None,
+    ism_at_a_glance=None,
 ):
     growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
     headline = [
-        _build_ism_manufacturing_headline(growth_cycle, ism_industry_breadth),
+        _build_ism_manufacturing_headline(
+            growth_cycle, ism_industry_breadth, ism_at_a_glance
+        ),
         build_m2_money_supply_headline(growth_cycle),
     ]
     inflation_card = build_inflation_context_headline(growth_cycle)

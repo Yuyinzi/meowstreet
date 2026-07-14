@@ -754,6 +754,11 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -843,6 +848,11 @@ def test_growth_cycle_api_includes_ism_manufacturing_values(monkeypatch):
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -917,6 +927,11 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
         "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
 
@@ -1139,6 +1154,11 @@ def test_growth_cycle_api_includes_next_fomc_meeting(monkeypatch):
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -1257,6 +1277,11 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -1350,6 +1375,11 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -1417,6 +1447,11 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
         "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
 
@@ -1568,6 +1603,11 @@ def test_growth_cycle_api_includes_fomc_tone_card(monkeypatch):
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
 
@@ -1646,6 +1686,11 @@ def test_growth_cycle_api_returns_ism_overview_cards_in_ism_section(monkeypatch)
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
         "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
 
@@ -1795,6 +1840,11 @@ def test_growth_cycle_api_returns_ism_manufacturing_detail(monkeypatch):
         "load_latest_ism_industry_rankings",
         fake_latest_rankings,
     )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle/ism_manufacturing")
 
@@ -1909,6 +1959,11 @@ def test_growth_cycle_api_returns_ism_industry_breadth(monkeypatch):
     )
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
         "load_macro_indicator_points_for_series",
         fake_load_macro_indicator_points_for_series,
     )
@@ -1923,3 +1978,78 @@ def test_growth_cycle_api_returns_ism_industry_breadth(monkeypatch):
     assert card["segments"]["industry_breadth"]["status"] == "available"
     assert card["segments"]["industry_breadth"]["growth_count"] == 1
     assert card["segments"]["industry_breadth"]["contraction_count"] == 1
+
+
+def test_growth_cycle_api_ism_detail_includes_at_a_glance_metadata(monkeypatch):
+    from app import api
+
+    class FakeCon:
+        def close(self):
+            pass
+
+    def fake_load_macro_indicator_points_for_series(con, series_ids):
+        assert hasattr(con, "close")
+        return {
+            "ism_manufacturing_pmi": [
+                {"date": "2026-06-01", "value": 51.2, "source": "workbook"},
+            ],
+            "ism_manufacturing_new_orders": [
+                {"date": "2026-06-01", "value": 52.0, "source": "workbook"},
+            ],
+        }
+
+    def fake_load_quad_rows(con, relationship_id):
+        return []
+
+    def fake_load_price_rows(con, benchmark_id):
+        return []
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db, "load_latest_ism_industry_rankings", lambda con: []
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [
+            {
+                "report_id": "ism_manufacturing_2026_06",
+                "report_month": "2026-06-01",
+                "series_id": "ism_manufacturing_pmi",
+                "label": "Manufacturing PMI",
+                "current_value": 53.3,
+                "previous_value": 54.0,
+                "point_change": -0.7,
+                "direction": "Growing",
+                "rate_of_change": "Slower",
+                "trend_months": 6,
+                "source_url": "https://example.com",
+                "source_hash": "abc123",
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points_for_series",
+        fake_load_macro_indicator_points_for_series,
+    )
+    monkeypatch.setattr(api.gdp_market_relationships, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.gdp_market_relationships,
+        "load_quad_rows",
+        fake_load_quad_rows,
+    )
+    monkeypatch.setattr(api.benchmark_market_data, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.benchmark_market_data,
+        "load_price_rows",
+        fake_load_price_rows,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle/ism_manufacturing")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "latest_metadata" in payload
+    assert payload["latest_metadata"]["pmi"]["point_change"] == -0.7
+    assert payload["latest_metadata"]["pmi"]["tone"] == "amber"
