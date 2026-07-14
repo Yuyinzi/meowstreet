@@ -1544,7 +1544,7 @@ def build_growth_cycle_sections(growth_cycle, headline):
         ),
         _growth_cycle_section(
             "fomc_context",
-            "FOMC Context",
+            "FOMC",
             "Policy timing and latest policy-tone read.",
             [
                 card_id

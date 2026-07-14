@@ -2876,7 +2876,25 @@ h2 {
 
 .ism-industry-list {
   margin: 0;
-  padding-left: 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.ism-industry-list li {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.ism-industry-list li span {
+  overflow-wrap: anywhere;
+}
+
+.ism-industry-zh {
+  display: block;
+  color: #A89B91;
+  font-size: 0.72rem;
+  margin-left: 20px;
 }
 
 .ism-industry-list li {

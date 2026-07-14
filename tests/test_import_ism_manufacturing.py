@@ -228,6 +228,50 @@ def test_import_workbook_saves_all_series_to_macro_indicator_tables(tmp_path):
     ]
 
 
+def test_parse_sector_rankings_deduplicates_duplicate_date_industry(tmp_path):
+    workbook_path = tmp_path / "ISM_Manufacturing_Index.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Sectors"
+    for _ in range(2):
+        sheet.append([None] * 18)
+        sheet.append([None] * 18)
+        sheet.append(
+            [
+                None,
+                "ISM Manufacturing",
+                datetime(2026, 6, 1),
+                None,
+                datetime(2026, 7, 1),
+                None,
+            ]
+        )
+        sheet.append([None] * 18)
+        sheet.append([None] * 18)
+        sheet.append([None, "Machinery", "Contraction", -2, "Contraction", -3])
+    workbook.save(workbook_path)
+
+    rankings = import_ism_manufacturing.parse_sector_rankings(workbook_path)
+
+    assert len(rankings) == 2
+    assert rankings == [
+        {
+            "date": "2026-06-01",
+            "industry": "Machinery",
+            "direction": "contraction",
+            "rank": -2,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+        {
+            "date": "2026-07-01",
+            "industry": "Machinery",
+            "direction": "contraction",
+            "rank": -3,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+    ]
+
+
 def test_main_imports_ism_via_cli(tmp_path, capsys):
     db_path = tmp_path / "market_data.sqlite"
     workbook_path = tmp_path / "ISM_Manufacturing_Index.xlsx"

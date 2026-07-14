@@ -179,7 +179,15 @@ def parse_sector_rankings(workbook_path=DEFAULT_WORKBOOK_PATH):
                     "source": workbook_path.name,
                 }
             )
-    return rows
+    seen = set()
+    deduplicated = []
+    for row in rows:
+        key = (row["date"], row["industry"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduplicated.append(row)
+    return deduplicated
 
 
 def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):

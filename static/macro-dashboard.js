@@ -1356,6 +1356,25 @@
     "PMI": "采购经理指数",
     "Above 50": "高于50",
     "Available drivers": "可用指标数",
+    // ISM Industries
+    "Computer & Electronic Products": "计算机与电子产品",
+    "Wood Products": "木制品",
+    "Furniture & Related Products": "家具及相关产品",
+    "Machinery": "机械设备",
+    "Transportation Equipment": "运输设备",
+    "Food, Beverage & Tobacco Products": "食品、饮料与烟草",
+    "Textile Mills": "纺织业",
+    "Apparel, Leather & Allied Products": "服装、皮革及相关产品",
+    "Paper Products": "造纸业",
+    "Printing & Related Support Activities": "印刷及相关支持",
+    "Petroleum & Coal Products": "石油与煤炭产品",
+    "Chemical Products": "化工产品",
+    "Plastics & Rubber Products": "塑料与橡胶制品",
+    "Nonmetallic Mineral Products": "非金属矿物制品",
+    "Primary Metals": "基础金属",
+    "Fabricated Metal Products": "金属制品",
+    "Electrical Equipment, Appliances & Components": "电气设备、家电及组件",
+    "Miscellaneous Manufacturing": "其他制造业",
     // Inflation Context
     "Growth Cycle": "增长周期",
     "Inflation Context": "通胀环境",
@@ -2233,14 +2252,19 @@
     `;
   }
 
-  function renderIsmIndustryList(items, emptyLabel) {
-    const rows = (items || []).map((item) => `
+  const MEDALS = ["\uD83E\uDD47", "\uD83E\uDD48", "\uD83E\uDD49"];
+
+  function renderIsmIndustryList(items, type, emptyLabel) {
+    const rows = (items || []).map((item, i) => {
+      const prefix = type === "growth" ? MEDALS[i] || "" : "\uD83D\uDD3B";
+      return `
       <li>
-        <span>${escapeHtml(item.industry || "")}</span>
-        <strong>${escapeHtml(String(item.rank ?? ""))}</strong>
+        <span>${prefix} ${escapeHtml(item.industry || "")}</span>
+        <small class="ism-industry-zh">${escapeHtml(zhLabel(item.industry) || "")}</small>
       </li>
-    `).join("");
-    return rows || `<li><span>${escapeHtml(emptyLabel)}</span><strong>\u2014</strong></li>`;
+    `;
+    }).join("");
+    return rows || `<li><span>${escapeHtml(emptyLabel)}</span></li>`;
   }
 
   function renderIsmIndustryBreadthGroup(group) {
@@ -2261,10 +2285,7 @@
     }
     return `
       <section class="ism-detail-group ism-industry-ranking">
-        <div class="ism-detail-group-head">
-          <h4>${bilingualLabel(group.label || "Industry Breadth")}</h4>
-          <small>${escapeHtml(fmtDate(summary.date || ""))}</small>
-        </div>
+        <h4>${escapeHtml(group.label || "Industry Breadth")}</h4>
         <div class="ism-industry-counts">
           <span><strong>${escapeHtml(fmtIsmBreadthCount(summary.growth_count))}</strong> Growing</span>
           <span><strong>${escapeHtml(fmtIsmBreadthCount(summary.contraction_count))}</strong> Contracting</span>
@@ -2272,12 +2293,12 @@
         </div>
         <div class="ism-industry-columns">
           <div>
-            <h5>${bilingualLabel("Top Growing Industries")}</h5>
-            <ol class="ism-industry-list">${renderIsmIndustryList(summary.top_growth, "No growth industries")}</ol>
+            <h5>${bilingualLabel("Growing Industries")}</h5>
+            <ul class="ism-industry-list">${renderIsmIndustryList(summary.top_growth, "growth", "No growth industries")}</ul>
           </div>
           <div>
-            <h5>${bilingualLabel("Top Contracting Industries")}</h5>
-            <ol class="ism-industry-list">${renderIsmIndustryList(summary.top_contraction, "No contracting industries")}</ol>
+            <h5>${bilingualLabel("Contracting Industries")}</h5>
+            <ul class="ism-industry-list">${renderIsmIndustryList(summary.top_contraction, "contraction", "No contracting industries")}</ul>
           </div>
         </div>
       </section>
