@@ -651,18 +651,47 @@
     return xAxisTicks(series);
   }
 
+  function relationshipYearlyXAxisTicks(series) {
+    const byYear = new Map();
+    (series || []).forEach((point, index) => {
+      const year = String(point.date || "").slice(0, 4);
+      const month = String(point.date || "").slice(5, 7);
+      if (!year || month !== "01") return;
+      if (!byYear.has(year)) {
+        byYear.set(year, { date: point.date, index });
+      }
+    });
+    const years = [...byYear.keys()].sort();
+    const step = Math.max(1, Math.ceil(years.length / X_AXIS_TICK_COUNT));
+    return years
+      .filter((year, index) => index % step === 0)
+      .map((year) => {
+        const point = byYear.get(year);
+        return {
+          date: point.date,
+          x: xAt(point.index, series.length),
+        };
+      });
+  }
+
+  function fmtYear(value) {
+    return String(value || "").slice(0, 4);
+  }
+
   function renderRelationshipXAxisTicks(series, options = {}) {
     const ticks = options.categoricalXAxis
       ? series.map((point, index) => ({
         date: point.label || point.date,
         x: xAt(index, series.length),
       }))
-      : xAxisTicks(series);
+      : options.xTickMode === "yearly"
+        ? relationshipYearlyXAxisTicks(series)
+        : xAxisTicks(series);
     return ticks
       .map((tick) => `
         <g class="chart-tick relationship-chart-tick" transform="translate(${tick.x.toFixed(2)} ${PLOT_BOTTOM})">
           <line y2="8"></line>
-          <text class="chart-x-label" y="${RELATIONSHIP_X_LABEL_Y}" text-anchor="middle" x="0" transform="rotate(-35 0 ${RELATIONSHIP_X_LABEL_Y})">${escapeHtml(options.categoricalXAxis ? tick.date : fmtMonthYear(tick.date))}</text>
+          <text class="chart-x-label" y="${RELATIONSHIP_X_LABEL_Y}" text-anchor="middle" x="0" transform="rotate(-35 0 ${RELATIONSHIP_X_LABEL_Y})">${escapeHtml(options.categoricalXAxis ? tick.date : options.xTickMode === "yearly" ? fmtYear(tick.date) : fmtMonthYear(tick.date))}</text>
         </g>
       `)
       .join("");
@@ -692,10 +721,27 @@
     `;
   }
 
+  function renderRelationshipReferenceLines(lines, scale, formatValue = fmtNumber) {
+    return (lines || [])
+      .filter((line) => line.value !== null && line.value !== undefined)
+      .map((line) => {
+        const y = yAt(line.value, scale).toFixed(2);
+        return `
+          <g class="relationship-reference-line">
+            <line x1="${MARGIN_LEFT}" y1="${y}" x2="${PLOT_RIGHT}" y2="${y}"></line>
+            <text x="${PLOT_RIGHT - 6}" y="${Number(y) - 6}" text-anchor="end">${escapeHtml(line.label || formatValue(line.value))}</text>
+          </g>
+        `;
+      })
+      .join("");
+  }
+
   function renderRelationshipLineChart(title, series, keys, labels = {}, options = {}) {
     const wideClass = options.wide ? " relationship-chart-wide" : "";
     const titleHtml = options.rawTitle ? title : escapeHtml(title);
+    const hideHead = options.hideHead || false;
     if (!series || !series.length) {
+      if (hideHead) return `<p class="status">No chart data available.</p>`;
       return `
         <div class="relationship-chart${wideClass}">
           <div class="relationship-chart-head">
@@ -708,6 +754,7 @@
     }
     const values = relationshipValues(series, keys);
     if (!values.length) {
+      if (hideHead) return `<p class="status">No chart data available.</p>`;
       return `
         <div class="relationship-chart${wideClass}">
           <div class="relationship-chart-head">
@@ -724,6 +771,7 @@
     const lastLabel = series[series.length - 1].label || series[series.length - 1].date;
     return `
       <div class="relationship-chart${wideClass}">
+        ${hideHead ? "" : `
         <div class="relationship-chart-head">
           <h3>${titleHtml}</h3>
           <span>${escapeHtml(fmtMonthYear(firstLabel))} - ${escapeHtml(fmtMonthYear(lastLabel))}</span>
@@ -741,13 +789,15 @@
             <span><i class="policy-color-swatch policy-color-neutral"></i>${bilingualLabel("Neutral")}</span>
           ` : ""}
         </div>
+        `}
         <div class="chart-wrap relationship-chart-wrap">
           <svg class="relationship-chart-svg" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="${titleHtml}">
             ${renderRelationshipYAxisAndGrid(relationshipYAxisTicks(series, keys, Y_AXIS_TICK_COUNT, options.yDomain), scale, valueFormatter)}
             ${scale.min <= 0 && scale.max >= 0 ? `<line class="relationship-zero" x1="${MARGIN_LEFT}" y1="${yAt(0, scale).toFixed(2)}" x2="${PLOT_RIGHT}" y2="${yAt(0, scale).toFixed(2)}"></line>` : ""}
+            ${renderRelationshipReferenceLines(options.referenceLines || [], scale, valueFormatter)}
             ${options.policyTrack ? "" : renderRelationshipEventMarkers(series, keys, scale, options.events || [])}
             ${keys.flatMap((key, index) => (
-              chartSegments(series, key, scale).map((points) => `<polyline class="relationship-line relationship-line-${index}" points="${escapeHtml(points)}"></polyline>`)
+              chartSegments(series, key, scale, { lineShape: options.lineShape }).map((points) => `<polyline class="relationship-line relationship-line-${index}" points="${escapeHtml(points)}"></polyline>`)
             )).join("")}
             ${options.showDots ? keys.flatMap((key, index) => (
               series
@@ -757,7 +807,7 @@
                   return `<circle class="relationship-dot relationship-dot-${index}" cx="${xAt(i, series.length).toFixed(2)}" cy="${yAt(point[key], scale).toFixed(2)}" r="3.5"></circle>`;
                 })
             )).join("") : ""}
-            ${renderRelationshipXAxisTicks(series, options)}
+            ${options.showXAxis === false ? "" : renderRelationshipXAxisTicks(series, options)}
             ${options.policyTrack ? renderRelationshipPolicyTrack(series, options.events || [], scale) : ""}
           </svg>
           <div class="chart-tooltip" aria-hidden="true"></div>
@@ -1715,6 +1765,203 @@
     return payload;
   }
 
+  function renderIsmRelationshipContext(context) {
+    if (!context) return "";
+    return `
+      <div class="ism-relationship-context ism-relationship-context-${escapeHtml(context.state || "mixed")}">
+        <strong class="ism-relationship-context-state">${escapeHtml(context.label || "Mixed")}</strong>
+        <span>${escapeHtml(context.description || "")}</span>
+      </div>
+    `;
+  }
+
+  function fmtIsmSmallMultipleValue(value, unit) {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return "n/a";
+    if (unit === "percent") return `${Number(value).toFixed(1)}%`;
+    return Number(value).toFixed(1);
+  }
+
+  function rebaseVisibleSmallMultipleSeries(chart) {
+    const series = (chart.series || []).map((point) => ({ ...point }));
+    const basePoint = series.find((point) => point.sp500_close !== null && point.sp500_close !== undefined);
+    const base = basePoint?.sp500_close;
+    if (!base) return series;
+    return series.map((point) => ({
+      ...point,
+      sp500_index: point.sp500_close === null || point.sp500_close === undefined
+        ? null
+        : Number(((point.sp500_close / base) * 100).toFixed(4)),
+    }));
+  }
+
+  function rebaseVisibleSmallMultipleChart(chart) {
+    return {
+      ...chart,
+      series: rebaseVisibleSmallMultipleSeries(chart),
+    };
+  }
+
+  function ismSparklineValues(series, key, referenceLines = []) {
+    return [
+      ...series.map((point) => point[key]),
+      ...referenceLines.map((line) => line.value),
+    ].filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
+  }
+
+  function ismSparklineScale(series, key, referenceLines = []) {
+    const values = ismSparklineValues(series, key, referenceLines);
+    if (!values.length) return null;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const padding = Math.max((max - min) * 0.12, Math.abs(max || min || 1) * 0.02, 0.5);
+    return {
+      min: min - padding,
+      max: max + padding,
+      range: max - min + padding * 2 || 1,
+    };
+  }
+
+  function ismSparklineXAt(index, count) {
+    if (count <= 1) return 48 + 850 / 2;
+    return 48 + (index / (count - 1)) * 850;
+  }
+
+  function ismSparklineYAt(value, scale) {
+    return 10 + ((scale.max - value) / scale.range) * 42;
+  }
+
+  function ismSparklineSegments(series, key, scale, lineShape) {
+    const segments = [];
+    let current = [];
+    series.forEach((point, index) => {
+      const value = point[key];
+      if (value === null || value === undefined) {
+        if (current.length) {
+          segments.push(current);
+          current = [];
+        }
+        return;
+      }
+      const x = ismSparklineXAt(index, series.length);
+      const y = ismSparklineYAt(value, scale);
+      if (lineShape === "step_after" && current.length) {
+        const previous = current[current.length - 1];
+        const previousY = previous.split(",")[1];
+        current.push(`${x.toFixed(2)},${previousY}`);
+      }
+      current.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+    });
+    if (current.length) segments.push(current);
+    return segments.map((segment) => segment.join(" "));
+  }
+
+  function ismSparklineYearTicks(series) {
+    const byYear = new Map();
+    series.forEach((point, index) => {
+      const year = String(point.date || "").slice(0, 4);
+      const month = String(point.date || "").slice(5, 7);
+      if (!year || month !== "01") return;
+      if (!byYear.has(year)) {
+        byYear.set(year, { date: point.date, index });
+      }
+    });
+    const years = [...byYear.keys()].sort();
+    const step = Math.max(1, Math.ceil(years.length / 8));
+    return years
+      .filter((year, index) => index % step === 0)
+      .map((year) => ({
+        year,
+        x: ismSparklineXAt(byYear.get(year).index, series.length),
+      }));
+  }
+
+  function renderIsmSparklineReferenceLines(panel, scale) {
+    return (panel.reference_lines || [])
+      .filter((line) => line.value !== null && line.value !== undefined)
+      .map((line) => {
+        const y = ismSparklineYAt(line.value, scale);
+        return `
+          <g class="ism-sparkline-reference">
+            <line x1="48" y1="${y.toFixed(2)}" x2="898" y2="${y.toFixed(2)}"></line>
+            <text x="892" y="${Math.max(12, y - 5).toFixed(2)}" text-anchor="end">${escapeHtml(line.label || "")}</text>
+          </g>
+        `;
+      })
+      .join("");
+  }
+
+  function renderIsmSparklineAxis(series, showXAxis) {
+    if (!showXAxis) return "";
+    return ismSparklineYearTicks(series)
+      .map((tick) => `
+        <g class="ism-sparkline-x-tick" transform="translate(${tick.x.toFixed(2)} 60)">
+          <line y2="4"></line>
+          <text y="15" text-anchor="middle">${escapeHtml(tick.year)}</text>
+        </g>
+      `)
+      .join("");
+  }
+
+  function renderIsmSparklineSvg(series, panel, unit, showXAxis) {
+    const key = panel.key;
+    const scale = ismSparklineScale(series, key, panel.reference_lines || []);
+    if (!scale) return `<p class="status">No chart data available.</p>`;
+    const segments = ismSparklineSegments(series, key, scale, panel.line_shape);
+    const latest = [...series].reverse().find((point) => point[key] !== null && point[key] !== undefined);
+    return `
+      <div class="ism-sparkline-plot">
+        <svg class="relationship-chart-svg ism-sparkline-svg" viewBox="0 0 960 76" role="img" aria-label="${escapeHtml(panel.title || key)}">
+          <line class="ism-sparkline-axis" x1="48" y1="60" x2="898" y2="60"></line>
+          ${scale.min <= 0 && scale.max >= 0 ? `<line class="ism-sparkline-zero" x1="48" y1="${ismSparklineYAt(0, scale).toFixed(2)}" x2="898" y2="${ismSparklineYAt(0, scale).toFixed(2)}"></line>` : ""}
+          ${renderIsmSparklineReferenceLines(panel, scale)}
+          ${segments.map((points) => `<polyline class="relationship-line relationship-line-0 ism-sparkline-line" points="${escapeHtml(points)}"></polyline>`).join("")}
+          ${latest ? `<text class="ism-sparkline-latest" x="930" y="${ismSparklineYAt(latest[key], scale).toFixed(2)}" text-anchor="end">${escapeHtml(fmtIsmSmallMultipleValue(latest[key], unit))}</text>` : ""}
+          ${renderIsmSparklineAxis(series, showXAxis)}
+        </svg>
+      </div>
+    `;
+  }
+
+  function renderIsmSmallMultiplePanel(chart, panel, panelIndex) {
+    const series = chart.series || [];
+    const key = panel.key;
+    const title = panel.title || key;
+    const unit = panel.unit || "raw";
+    const panelSeries = series.map((point) => ({
+      date: point.date,
+      gdp_period: point.gdp_period,
+      [key]: point[key],
+    }));
+    const showXAxis = panelIndex === (chart.panels || []).length - 1;
+    return `
+      <div class="ism-small-panel" data-ism-panel-key="${escapeHtml(key)}">
+        <div class="ism-small-panel-meta">
+          <strong>${escapeHtml(title)}</strong>
+          <span>${escapeHtml(panel.subtitle || panel.cadence || unit)}</span>
+        </div>
+        ${renderIsmSparklineSvg(panelSeries, panel, unit, showXAxis)}
+      </div>
+    `;
+  }
+
+  function renderIsmSmallMultiples(chart) {
+    const visibleChart = rebaseVisibleSmallMultipleChart(chart);
+    return `
+      <article class="relationship-chart-card ism-small-multiples">
+        <div class="chart-card-head">
+          <h4>${escapeHtml(chart.title || "")}</h4>
+        </div>
+        <div class="ism-relationship-context-list">
+          ${(chart.contexts || []).map((context) => renderIsmRelationshipContext(context)).join("")}
+        </div>
+        <div class="chart-tooltip ism-shared-tooltip" aria-hidden="true"></div>
+        <div class="ism-small-panel-list">
+          ${(visibleChart.panels || []).map((panel, index) => renderIsmSmallMultiplePanel(visibleChart, panel, index)).join("")}
+        </div>
+      </article>
+    `;
+  }
+
   function renderIsmDetailChart(chart, chartIndex, _focusedChartId) {
     if (chart.kind === "heat_map") {
       return `
@@ -1726,19 +1973,95 @@
         </article>
       `;
     }
-    return renderRatesDetailChart(chart, chartIndex);
+    if (chart.kind === "small_multiples") {
+      return renderIsmSmallMultiples(chart);
+    }
+    return `
+      <article class="ism-relationship-chart-card">
+        ${chart.contexts ? `
+          <div class="ism-relationship-context-list">
+            ${(chart.contexts || []).map((context) => renderIsmRelationshipContext(context)).join("")}
+          </div>
+        ` : renderIsmRelationshipContext(chart.context)}
+        ${renderRatesDetailChart(chart, chartIndex)}
+      </article>
+    `;
+  }
+
+  function attachIsmSharedTooltip(body, chart) {
+    const container = body.querySelector(".ism-small-multiples");
+    if (!container) return;
+    const tooltip = container.querySelector(".ism-shared-tooltip");
+    if (!tooltip) return;
+    const series = chart.series || [];
+    const panels = chart.panels || [];
+    const svgs = container.querySelectorAll(".ism-small-panel .relationship-chart-svg");
+
+    function showTooltip(index) {
+      const point = series[index];
+      if (!point) return;
+      const date = fmtMonthYear(point.date);
+      const rows = panels.map((panel) => {
+        const value = point[panel.key];
+        const formattedValue = fmtIsmSmallMultipleValue(value, panel.unit);
+        const text = panel.key === "gdp_growth" && point.gdp_period
+          ? `${formattedValue} (${point.gdp_period})`
+          : formattedValue;
+        return `
+          <div class="chart-tooltip-row">
+            <span>${escapeHtml(panel.title || panel.key)}</span>
+            <strong>${escapeHtml(text)}</strong>
+          </div>
+        `;
+      }).join("");
+      tooltip.innerHTML = `<div><strong>${escapeHtml(date)}</strong></div>${rows}`;
+      tooltip.classList.add("visible");
+    }
+
+    function hideTooltip() {
+      tooltip.classList.remove("visible");
+    }
+
+    function positionTooltip(e, containerRect) {
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const left = e.clientX - containerRect.left - tooltipRect.width / 2;
+      const top = e.clientY - containerRect.top - tooltipRect.height - 10;
+      tooltip.style.left = `${Math.max(0, Math.min(containerRect.width - tooltipRect.width, left))}px`;
+      tooltip.style.top = `${Math.max(0, top)}px`;
+    }
+
+    svgs.forEach((svg) => {
+      const wrap = svg.parentElement;
+      svg.addEventListener("mousemove", (e) => {
+        const wrapRect = wrap.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const mouseX = e.clientX - wrapRect.left;
+        const index = Math.round((mouseX / wrapRect.width) * (series.length - 1));
+        const clamped = Math.max(0, Math.min(series.length - 1, index));
+        showTooltip(clamped);
+        positionTooltip(e, containerRect);
+      });
+      svg.addEventListener("mouseleave", hideTooltip);
+    });
+
+    const scrollParent = body.closest(".detail-scroll");
+    if (scrollParent) {
+      scrollParent.addEventListener("scroll", hideTooltip);
+    }
   }
 
   function renderIsmDetailInPanel(body, payload) {
     const charts = (payload.charts || []).map((chart) => (
       filterChartForRange(chart, state.selectedGrowthCycleChartRange)
     ));
-    const lineCharts = charts.filter((chart) => chart.kind !== "heat_map");
+    const lineCharts = charts.filter((chart) => (
+      chart.kind !== "heat_map" && chart.kind !== "small_multiples"
+    ));
     const renderedCharts = charts.map((chart, index) => (
       renderIsmDetailChart(chart, index, null)
     ));
     const latest = payload.latest || {};
-    const latestGroups = payload.latest_groups || [];
+    const latestGroups = payload.detail_groups || [];
     body.innerHTML = `
       ${renderGrowthCycleRangeControl()}
       <div class="relationship-chart-grid ism-detail-grid">
@@ -1749,20 +2072,28 @@
         ${latestGroups.map((group) => `
           <div class="ism-latest-group">
             <strong class="ism-latest-group-label">${escapeHtml(group.label || "")}</strong>
-            <div class="ism-latest-group-rows">
-              ${group.keys.map((key) => `
-                <div class="ism-metric-row">
-                  <span>${escapeHtml((charts[0]?.labels || {})[key] || key)}</span>
-                  <strong>${escapeHtml(fmtIsmIndex(latest[key]))}</strong>
-                </div>
-              `).join("")}
-            </div>
+            ${group.required_inputs ? `
+              <div class="gdp-expectations-context">
+                <ul>${group.required_inputs.map((input) => `<li>${escapeHtml(input)}</li>`).join("")}</ul>
+              </div>
+            ` : `
+              <div class="ism-latest-group-rows">
+                ${group.keys.map((key) => `
+                  <div class="ism-metric-row">
+                    <span>${escapeHtml((charts[0]?.labels || {})[key] || key)}</span>
+                    <strong>${escapeHtml(fmtIsmIndex(latest[key]))}</strong>
+                  </div>
+                `).join("")}
+              </div>
+            `}
           </div>
         `).join("")}
       </div>` : ""}
     `;
     bindGrowthCycleRangeControl(body);
     attachRatesChartTooltips(body, lineCharts);
+    const multiChart = charts.find((c) => c.kind === "small_multiples");
+    if (multiChart) attachIsmSharedTooltip(body, rebaseVisibleSmallMultipleChart(multiChart));
   }
 
   function renderGrowthCycleDetailInPanel(body) {
@@ -1794,6 +2125,37 @@
         body.innerHTML = `<p class="status">Failed to load growth cycle detail.</p>`;
         console.error(error);
       });
+  }
+
+  function rerenderGrowthCycleDetailBodyPreservingScroll() {
+    const body = $("detailPanel")?.querySelector(".detail-panel-body");
+    if (!body || !state.selectedGrowthCycleDetailId) {
+      renderDetailPanel();
+      return;
+    }
+    const payload = state.growthCycleDetailsById[state.selectedGrowthCycleDetailId];
+    if (!payload) {
+      renderGrowthCycleDetailInPanel(body);
+      return;
+    }
+    const scrollTop = body.scrollTop;
+    if (payload.detail_id === "ism_manufacturing") {
+      renderIsmDetailInPanel(body, payload);
+    } else {
+      const filteredCharts = payload.charts.map((chart) => (
+        filterChartForRange(chart, state.selectedGrowthCycleChartRange)
+      ));
+      body.innerHTML = `
+        ${renderGrowthCycleRangeControl()}
+        <div class="relationship-chart-grid">
+          ${filteredCharts.map((chart, index) => renderRatesDetailChart(chart, index)).join("")}
+        </div>
+        ${renderMacroAiInterpretation(payload.m2_ai_interpretation)}
+      `;
+      bindGrowthCycleRangeControl(body);
+      attachRatesChartTooltips(body, filteredCharts);
+    }
+    body.scrollTop = scrollTop;
   }
 
   function fmtIsmIndex(value) {
@@ -1858,37 +2220,26 @@
     const selected = state.selectedGrowthCycleDetailId === "ism_manufacturing";
     return `
       <button class="m2-card ism-card ism-card-button ism-card-${escapeHtml(ismBadgeClass(card.status))}${selected ? " selected" : ""}" type="button" data-growth-cycle-detail-id="ism_manufacturing">
-        <div class="m2-card-head">
-          <span>${escapeHtml(card.label || "ISM Manufacturing")}<br><small>${escapeHtml(zhLabel(card.label) || "ISM制造业")}</small></span>
-        </div>
-        <div class="ism-composite-segments">
-          <div class="ism-composite-segment">
-            <span class="ism-composite-segment-label">Business Cycle<br><small>${escapeHtml(zhLabel("Business Cycle") || "商业周期")}</small></span>
-            <div class="ism-composite-segment-body">
-              <span class="ism-composite-metric">${escapeHtml(fmtIsmIndex(bc.pmi))}</span>
-              <span class="ism-composite-caption">PMI<br><small>${escapeHtml(zhLabel("PMI") || "采购经理指数")}</small> · ${escapeHtml(bc.phase_label || "Missing")}</span>
-            </div>
+        <div class="ism-metric-band">
+          <div>
+            <span>Business Cycle<br><small>${escapeHtml(zhLabel("Business Cycle") || "商业周期")}</small></span>
+            <strong>${escapeHtml(fmtIsmIndex(bc.pmi))}</strong>
+            <small>PMI<br><small>${escapeHtml(zhLabel("PMI") || "采购经理指数")}</small> · ${escapeHtml(bc.phase_label || "Missing")}</small>
           </div>
-          <div class="ism-composite-segment">
-            <span class="ism-composite-segment-label">Growth Drivers<br><small>${escapeHtml(zhLabel("Growth Drivers") || "增长驱动力")}</small></span>
-            <div class="ism-composite-segment-body">
-              <span class="ism-composite-metric">${escapeHtml(String(gd.above_50_count ?? 0))}/${escapeHtml(String(gd.available_count ?? 0))}</span>
-              <span class="ism-composite-caption">Above 50<br><small>${escapeHtml(zhLabel("Above 50") || "高于50")}</small></span>
-            </div>
+          <div>
+            <span>Growth Drivers<br><small>${escapeHtml(zhLabel("Growth Drivers") || "增长驱动力")}</small></span>
+            <strong>${escapeHtml(String(gd.above_50_count ?? 0))}/${escapeHtml(String(gd.available_count ?? 0))}</strong>
+            <small>Above 50<br><small>${escapeHtml(zhLabel("Above 50") || "高于50")}</small></small>
           </div>
-          <div class="ism-composite-segment">
-            <span class="ism-composite-segment-label">Inflation & Supply<br><small>${escapeHtml(zhLabel("Inflation & Supply") || "通胀与供应")}</small></span>
-            <div class="ism-composite-segment-body">
-              <span class="ism-composite-metric">${escapeHtml(fmtIsmIndex(inf.prices))}</span>
-              <span class="ism-composite-caption">Prices<br><small>${escapeHtml(zhLabel("Prices") || "价格")}</small></span>
-            </div>
+          <div>
+            <span>Inflation & Supply<br><small>${escapeHtml(zhLabel("Inflation & Supply") || "通胀与供应")}</small></span>
+            <strong>${escapeHtml(fmtIsmIndex(inf.prices))}</strong>
+            <small>Prices<br><small>${escapeHtml(zhLabel("Prices") || "价格")}</small></small>
           </div>
-          <div class="ism-composite-segment">
-            <span class="ism-composite-segment-label">Industry Breadth<br><small>${escapeHtml(zhLabel("Industry Breadth") || "行业广度")}</small></span>
-            <div class="ism-composite-segment-body">
-              <span class="ism-composite-metric">${escapeHtml(ib.status === "pending_inputs" ? "—" : "")}</span>
-              <span class="ism-composite-caption">Pending<br><small>${escapeHtml(zhLabel("Pending") || "待完成")}</small></span>
-            </div>
+          <div>
+            <span>Industry Breadth<br><small>${escapeHtml(zhLabel("Industry Breadth") || "行业广度")}</small></span>
+            <strong>${escapeHtml(ib.status === "pending_inputs" ? "—" : "")}</strong>
+            <small>Pending<br><small>${escapeHtml(zhLabel("Pending") || "待完成")}</small></small>
           </div>
         </div>
       </button>
@@ -2009,7 +2360,7 @@
 
   function renderGrowthCycleRangeControl() {
     return `
-      <div class="chart-range-control" role="group" aria-label="Chart range">
+      <div class="chart-range-control chart-range-control-sticky" role="group" aria-label="Chart range">
         ${CHART_RANGE_OPTIONS.map((option) => `
           <button
             type="button"
@@ -2027,7 +2378,7 @@
         const range = button.dataset.growthCycleChartRange;
         if (!range || range === state.selectedGrowthCycleChartRange) return;
         state.selectedGrowthCycleChartRange = range;
-        renderDetailPanel();
+        rerenderGrowthCycleDetailBodyPreservingScroll();
       });
     });
   }
@@ -2677,6 +3028,7 @@
     const charts = detail.querySelectorAll(".relationship-chart-wrap");
     charts.forEach((wrap, index) => {
       const chart = chartsPayload[index];
+      if (!chart) return;
       if (chart.kind === "credit_regime") {
         attachCreditRegimeChartTooltip(
           wrap.querySelector(".relationship-chart-svg"),
@@ -2815,7 +3167,7 @@
     `;
   }
 
-  function chartSegments(series, key, scale) {
+  function chartSegments(series, key, scale, options = {}) {
     const values = series
       .map((point) => point[key])
       .filter((value) => value !== null && value !== undefined);
@@ -2834,6 +3186,11 @@
       }
       const x = xAt(index, series.length);
       const y = yAt(value, scale);
+      if (options.lineShape === "step_after" && current.length) {
+        const previous = current[current.length - 1];
+        const previousY = previous.split(",")[1];
+        current.push(`${x.toFixed(2)},${previousY}`);
+      }
       current.push(`${x.toFixed(2)},${y.toFixed(2)}`);
     });
 

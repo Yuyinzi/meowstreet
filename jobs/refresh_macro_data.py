@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts import import_fomc_calendar
 from scripts import import_gdp_market_relationships
+from scripts import import_ism_manufacturing
 from scripts import import_m2_money_supply
 from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
@@ -45,6 +46,7 @@ def _planned_tasks(
     benchmark_main,
     rates_main,
     m2_main,
+    ism_main,
     gdp_main,
     fomc_main=import_fomc_calendar.main,
 ):
@@ -56,6 +58,8 @@ def _planned_tasks(
     if not args.skip_m2:
         tasks.append(("m2_fred_fetch", m2_main, ["--fetch-fred-csv"]))
         tasks.append(("m2_fred_merge", m2_main, ["--fred-csv-merge"]))
+    if not args.skip_ism:
+        tasks.append(("ism_manufacturing", ism_main, []))
     if not args.skip_gdp:
         tasks.append(("gdp_fred_fetch", gdp_main, ["--fetch-fred-csv"]))
         tasks.append(("gdp_fred_merge", gdp_main, ["--us-csv-merge"]))
@@ -80,6 +84,7 @@ def main(
     benchmark_main=refresh_benchmark_market_data.main,
     rates_main=refresh_us_rates_liquidity.main,
     m2_main=import_m2_money_supply.main,
+    ism_main=import_ism_manufacturing.main,
     gdp_main=import_gdp_market_relationships.main,
     fomc_main=import_fomc_calendar.main,
 ):
@@ -87,6 +92,7 @@ def main(
     parser.add_argument("--skip-yahoo", action="store_true")
     parser.add_argument("--skip-rates", action="store_true")
     parser.add_argument("--skip-m2", action="store_true")
+    parser.add_argument("--skip-ism", action="store_true")
     parser.add_argument("--skip-gdp", action="store_true")
     parser.add_argument("--skip-fomc", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
@@ -103,6 +109,7 @@ def main(
         benchmark_main,
         rates_main,
         m2_main,
+        ism_main,
         gdp_main,
         fomc_main,
     ):

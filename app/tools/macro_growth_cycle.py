@@ -1,6 +1,7 @@
 import hashlib
 import json
 from copy import deepcopy
+from datetime import date
 
 GROWTH_CYCLE_DASHBOARD_FIELDS = [
     {
@@ -521,32 +522,349 @@ def _ism_labels_for_keys(keys):
     return {key: ISM_MANUFACTURING_DETAIL_LABELS[key] for key in keys}
 
 
-def build_ism_manufacturing_detail_payload(points_by_series_id):
+def _numeric_points(rows, value_key):
+    return [
+        {
+            "date": row["date"],
+            "value": float(row[value_key]),
+            "period_label": row.get("period_label"),
+            "source_workbook": row.get("source_workbook"),
+            "source_sheet": row.get("source_sheet"),
+        }
+        for row in sorted(rows or [], key=lambda item: item["date"])
+        if row.get("date") and row.get(value_key) is not None
+    ]
+
+
+def _date_from_iso(date_value):
+    return date.fromisoformat(str(date_value)[:10])
+
+
+def _latest_point_on_or_before(points, date_value, max_stale_days=None):
+    candidates = [point for point in points if point["date"] <= date_value]
+    if not candidates:
+        return None
+    point = sorted(candidates, key=lambda item: item["date"])[-1]
+    if max_stale_days is None:
+        return point
+    stale_days = (_date_from_iso(date_value) - _date_from_iso(point["date"])).days
+    if stale_days > max_stale_days:
+        return None
+    return point
+
+
+def _latest_value_on_or_before(points, date_value, max_stale_days=None):
+    point = _latest_point_on_or_before(points, date_value, max_stale_days)
+    return point["value"] if point else None
+
+
+def _source_signature(row):
+    return (
+        row.get("source_workbook"),
+        row.get("source_sheet"),
+    )
+
+
+def _same_known_source(left, right):
+    left_signature = _source_signature(left)
+    right_signature = _source_signature(right)
+    if not any(left_signature) or not any(right_signature):
+        return True
+    return left_signature == right_signature
+
+
+def _gdp_qoq_annualized_rows(gdp_level_rows):
+    rows = _numeric_points(gdp_level_rows, "gdp_level")
+    result = []
+    for index in range(1, len(rows)):
+        if not _same_known_source(rows[index - 1], rows[index]):
+            continue
+        previous = rows[index - 1]["value"]
+        current = rows[index]["value"]
+        if previous == 0:
+            continue
+        result.append(
+            {
+                "date": rows[index]["date"],
+                "value": round(((current / previous) ** 4 - 1) * 100, 4),
+                "period_label": rows[index].get("period_label"),
+            }
+        )
+    return result
+
+
+def _monthly_last_close_rows(price_rows):
+    monthly = {}
+    for row in sorted(price_rows or [], key=lambda item: item["date"]):
+        if row.get("close") is None:
+            continue
+        month_key = row["date"][:7]
+        monthly[month_key] = {
+            "date": row["date"],
+            "value": float(row["close"]),
+        }
+    return [monthly[key] for key in sorted(monthly)]
+
+
+def _direction(values):
+    clean_values = [value for value in values if value is not None]
+    if len(clean_values) < 2:
+        return "flat"
+    if clean_values[-1] > clean_values[0]:
+        return "up"
+    if clean_values[-1] < clean_values[0]:
+        return "down"
+    return "flat"
+
+
+def _indexed_values(rows):
+    if not rows:
+        return []
+    base = rows[0]["value"]
+    return [
+        {
+            "date": row["date"],
+            "value": round(row["value"] / base * 100, 4) if base else None,
+            "raw_value": row["value"],
+        }
+        for row in rows
+    ]
+
+
+def _gdp_relationship_state(ism_direction, gdp_direction):
+    states = {
+        ("up", "down"): (
+            "early_recovery",
+            "Early Recovery",
+            "ISM is improving while GDP growth is still weakening.",
+        ),
+        ("down", "up"): (
+            "early_slowdown",
+            "Early Slowdown",
+            "ISM is weakening while GDP growth still looks firm.",
+        ),
+        ("up", "up"): (
+            "expansion",
+            "Expansion",
+            "ISM and GDP growth are improving together.",
+        ),
+        ("down", "down"): (
+            "contraction",
+            "Contraction",
+            "ISM and GDP growth are weakening together.",
+        ),
+    }
+    state, label, description = states.get(
+        (ism_direction, gdp_direction),
+        (
+            "mixed",
+            "Mixed",
+            "ISM and GDP trend directions are not decisive.",
+        ),
+    )
+    return {
+        "id": "gdp_context",
+        "state": state,
+        "label": label,
+        "ism_direction": ism_direction,
+        "comparison_direction": gdp_direction,
+        "description": description,
+    }
+
+
+def _sp500_relationship_state(ism_direction, sp500_direction):
+    states = {
+        ("up", "up"): (
+            "growth_priced",
+            "Growth Priced",
+            "ISM is improving and S&P 500 is rising with the growth signal.",
+        ),
+        ("up", "down"): (
+            "market_skeptical",
+            "Market Skeptical",
+            "ISM is improving but S&P 500 is not pricing the growth signal.",
+        ),
+        ("down", "up"): (
+            "liquidity_policy_rally",
+            "Liquidity / Policy Rally",
+            "S&P 500 is rising while ISM weakens; watch liquidity and rate-cut drivers.",
+        ),
+        ("down", "down"): (
+            "slowdown_priced",
+            "Slowdown Priced",
+            "ISM is weakening and S&P 500 is falling with the slowdown signal.",
+        ),
+    }
+    state, label, description = states.get(
+        (ism_direction, sp500_direction),
+        (
+            "mixed",
+            "Mixed",
+            "ISM and S&P 500 trend directions are not decisive.",
+        ),
+    )
+    return {
+        "id": "market_context",
+        "state": state,
+        "label": label,
+        "ism_direction": ism_direction,
+        "comparison_direction": sp500_direction,
+        "description": description,
+    }
+
+
+def _build_ism_macro_context_chart(ism_pmi_points, gdp_level_rows, sp500_price_rows):
+    pmi_points = _numeric_points(ism_pmi_points, "value")
+    gdp_growth_rows = _gdp_qoq_annualized_rows(gdp_level_rows)
+    sp500_rows = _monthly_last_close_rows(sp500_price_rows)
+    sp500_index_rows = _indexed_values(sp500_rows)
+    if not pmi_points or not sp500_index_rows:
+        return None
+    shared_rows = []
+    for sp500_row in sp500_index_rows:
+        pmi_value = _latest_value_on_or_before(
+            pmi_points,
+            sp500_row["date"],
+            max_stale_days=62,
+        )
+        gdp_point = _latest_point_on_or_before(gdp_growth_rows, sp500_row["date"])
+        shared_rows.append(
+            {
+                "date": sp500_row["date"],
+                "ism_pmi": pmi_value,
+                "gdp_growth": gdp_point["value"] if gdp_point else None,
+                "gdp_period": gdp_point.get("period_label") if gdp_point else None,
+                "sp500_index": sp500_row["value"],
+                "sp500_close": sp500_row["raw_value"],
+            }
+        )
+    if not shared_rows:
+        return None
+    pmi_values = [row["ism_pmi"] for row in shared_rows]
+    gdp_values = [
+        row["gdp_growth"] for row in shared_rows if row["gdp_growth"] is not None
+    ]
+    sp500_values = [
+        row["sp500_index"] for row in shared_rows if row["sp500_index"] is not None
+    ]
+    return {
+        "id": "ism_macro_context",
+        "kind": "small_multiples",
+        "title": "Macro Confirmation",
+        "series": shared_rows,
+        "panels": [
+            {
+                "id": "ism_pmi",
+                "title": "ISM PMI",
+                "key": "ism_pmi",
+                "unit": "index",
+                "subtitle": "Monthly",
+                "reference_lines": [
+                    {"value": 50, "label": "Expansion / Contraction threshold"}
+                ],
+            },
+            {
+                "id": "gdp_growth",
+                "title": "Real GDP QoQ Annualized",
+                "key": "gdp_growth",
+                "unit": "percent",
+                "subtitle": "Quarterly, shown as step series",
+                "cadence": "quarterly_forward_filled",
+                "line_shape": "step_after",
+            },
+            {
+                "id": "sp500_index",
+                "title": "S&P 500",
+                "key": "sp500_index",
+                "unit": "base_100",
+                "subtitle": "Base = 100",
+            },
+        ],
+        "contexts": [
+            _gdp_relationship_state(
+                _direction(pmi_values[-3:]),
+                _direction(gdp_values[-2:]),
+            ),
+            _sp500_relationship_state(
+                _direction(pmi_values[-3:]),
+                _direction(sp500_values[-3:]),
+            ),
+        ],
+        "description": "Small multiples share one time axis. PMI and GDP keep raw units; S&P 500 is based to 100.",
+    }
+
+
+def build_ism_manufacturing_detail_payload(
+    points_by_series_id,
+    gdp_level_rows=None,
+    sp500_price_rows=None,
+):
     points_by_key = _ism_points_by_payload_key(points_by_series_id)
     all_keys = list(ISM_MANUFACTURING_DETAIL_LABELS)
     all_rows = _ism_aligned_rows(points_by_key, all_keys)
-    latest = dict(all_rows[-1]) if all_rows else {}
-    latest.pop("date", None)
+    latest = dict(all_rows[-1]) if all_rows else None
+    if latest:
+        latest.pop("date", None)
+    pmi_points = points_by_series_id.get("ism_manufacturing_pmi", [])
+    macro_context_chart = _build_ism_macro_context_chart(
+        pmi_points,
+        gdp_level_rows or [],
+        sp500_price_rows or [],
+    )
+    relationship_charts = [macro_context_chart] if macro_context_chart else []
     return {
         "detail_id": "ism_manufacturing",
         "title": "ISM Manufacturing",
         "source": _ism_detail_source(points_by_series_id),
         "charts": [
             {
-                "id": "ism_heat_map",
+                "id": "ism_manufacturing_heat_map",
                 "kind": "heat_map",
-                "title": "ISM Heat Map",
+                "title": "ISM Manufacturing Heat Map",
                 "keys": all_keys,
                 "labels": _ism_labels_for_keys(all_keys),
                 "series": all_rows,
             },
+            *relationship_charts,
         ],
         "latest": latest,
-        "latest_groups": [
+        "detail_groups": [
             {"label": "Business Cycle", "keys": ["pmi"]},
             {"label": "Growth Drivers", "keys": ISM_GROWTH_DRIVER_KEYS},
             {"label": "Inflation & Supply", "keys": ISM_INFLATION_SUPPLY_KEYS},
+            {
+                "label": "Industry Breadth",
+                "keys": [],
+                "required_inputs": [
+                    "Sectors tab growth rankings",
+                    "Industry comments",
+                    "Growth and contraction breadth",
+                ],
+            },
         ],
+        "relationship_summary": {
+            "shared_months": len(macro_context_chart["series"])
+            if macro_context_chart
+            else 0,
+            "gdp_observations": len(
+                [
+                    row
+                    for row in (
+                        macro_context_chart["series"] if macro_context_chart else []
+                    )
+                    if row.get("gdp_growth") is not None
+                ]
+            ),
+            "sp500_observations": len(
+                [
+                    row
+                    for row in (
+                        macro_context_chart["series"] if macro_context_chart else []
+                    )
+                    if row.get("sp500_index") is not None
+                ]
+            ),
+        },
     }
 
 

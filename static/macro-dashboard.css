@@ -648,47 +648,49 @@ h2 {
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
 }
 
-.ism-composite-segments {
+.ism-metric-band {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-top: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
 }
 
-.ism-composite-segment {
-  border: 1px solid #ECE4DB;
-  border-radius: 8px;
-  background: #FAF8F5;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.ism-metric-band > div {
+  border-left: 1px solid #E0D6C8;
+  padding-left: 10px;
 }
 
-.ism-composite-segment-label {
-  font-size: 0.7rem;
-  font-weight: 800;
-  color: #A89B91;
-  letter-spacing: 0.04em;
+.ism-metric-band > div:first-child {
+  border-left: none;
+  padding-left: 0;
 }
 
-.ism-composite-segment-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.ism-metric-band span {
+  color: #5d5148;
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
-.ism-composite-metric {
-  font-size: 1.1rem;
-  font-weight: 800;
-  color: #3B3530;
+.ism-metric-band span small {
+  display: block;
+  font-weight: 500;
+  text-transform: none;
+}
+
+.ism-metric-band strong {
+  display: block;
+  font-size: 20px;
+  line-height: 1.2;
+  margin-top: 5px;
   font-variant-numeric: tabular-nums;
 }
 
-.ism-composite-caption {
-  font-size: 0.68rem;
+.ism-metric-band small {
   color: #8B7E74;
-  line-height: 1.2;
+  font-size: 12px;
+  margin-top: 3px;
 }
 
 .ism-detail-grid {
@@ -769,6 +771,160 @@ h2 {
 .ism-heat-cell-missing {
   background: #f1f5f9;
   color: #94a3b8;
+}
+
+.ism-relationship-chart-card {
+  display: grid;
+  gap: 10px;
+}
+
+.ism-relationship-context {
+  align-items: flex-start;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+}
+
+.ism-relationship-context-state {
+  color: #0f172a;
+  font-size: 0.76rem;
+}
+
+.ism-relationship-context span {
+  color: #64748b;
+  font-size: 0.7rem;
+  line-height: 1.25;
+}
+
+.ism-relationship-context-early_recovery,
+.ism-relationship-context-growth_priced,
+.ism-relationship-context-expansion {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.ism-relationship-context-early_slowdown,
+.ism-relationship-context-market_skeptical,
+.ism-relationship-context-liquidity_policy_rally {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.ism-relationship-context-contraction,
+.ism-relationship-context-slowdown_priced {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.ism-small-multiples {
+  display: grid;
+  gap: 6px;
+  position: relative;
+}
+
+.ism-relationship-context-list {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ism-small-panel-list {
+  display: grid;
+  gap: 5px;
+}
+
+.ism-small-panel {
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 140px minmax(0, 1fr);
+  min-height: 66px;
+  padding: 4px 6px;
+}
+
+.ism-small-panel-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ism-small-panel-meta strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+  line-height: 1.15;
+}
+
+.ism-small-panel-meta span,
+.ism-small-reference {
+  color: #64748b;
+  font-size: 0.68rem;
+  line-height: 1.2;
+}
+
+.ism-shared-tooltip {
+  min-width: 200px;
+  max-width: 260px;
+}
+
+.ism-sparkline-plot {
+  min-width: 0;
+}
+
+.ism-sparkline-svg {
+  display: block;
+  height: 58px;
+  overflow: visible;
+  width: 100%;
+}
+
+.ism-sparkline-axis {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+}
+
+.ism-sparkline-zero {
+  stroke: #cbd5e1;
+  stroke-dasharray: 5 5;
+  stroke-width: 1.2;
+}
+
+.ism-sparkline-reference line {
+  stroke: #475569;
+  stroke-dasharray: 7 5;
+  stroke-width: 2;
+}
+
+.ism-sparkline-reference text,
+.ism-sparkline-latest,
+.ism-sparkline-x-tick text {
+  fill: #475569;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.ism-sparkline-x-tick line {
+  stroke: #cbd5e1;
+}
+
+.ism-sparkline-line {
+  stroke-width: 2.4;
+}
+
+.relationship-reference-line line {
+  stroke: #475569;
+  stroke-dasharray: 7 5;
+  stroke-width: 2;
+}
+
+.relationship-reference-line text {
+  fill: #334155;
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
 .ism-detail-latest {
@@ -1709,6 +1865,13 @@ h2 {
   border: 1px solid #E0D6C8;
   border-radius: 8px;
   background: #F7F1EA;
+}
+
+.chart-range-control-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 6px 12px rgba(59, 53, 48, 0.08);
 }
 
 .chart-range-control button {
@@ -2681,12 +2844,16 @@ h2 {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .ism-composite-segments {
-    grid-template-columns: repeat(2, 1fr);
+  .ism-metric-band {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ism-detail-heat-map {
     grid-template-columns: minmax(88px, 1.1fr) repeat(var(--ism-heat-metrics), minmax(68px, 1fr));
     max-height: 480px;
+  }
+
+  .ism-relationship-context-list {
+    grid-template-columns: 1fr;
   }
 }

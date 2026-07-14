@@ -304,7 +304,25 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 con,
                 ISM_MANUFACTURING_SERIES_IDS,
             )
-            return macro_growth_cycle.build_ism_manufacturing_detail_payload(ism_points)
+            gdp_con = gdp_market_relationships.connect()
+            benchmark_con = benchmark_market_data.connect()
+            try:
+                gdp_level_rows = gdp_market_relationships.load_quad_rows(
+                    gdp_con,
+                    "us_sp500_gdp",
+                )
+                sp500_price_rows = benchmark_market_data.load_price_rows(
+                    benchmark_con,
+                    "us_sp500",
+                )
+            finally:
+                gdp_con.close()
+                benchmark_con.close()
+            return macro_growth_cycle.build_ism_manufacturing_detail_payload(
+                ism_points,
+                gdp_level_rows=gdp_level_rows,
+                sp500_price_rows=sp500_price_rows,
+            )
 
         rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
         core_pce_rows = us_rates_liquidity_db.load_macro_indicator_points(

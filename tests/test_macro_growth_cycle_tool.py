@@ -1331,7 +1331,9 @@ def test_build_ism_manufacturing_detail_payload_returns_pmi_and_heat_maps():
     assert payload["detail_id"] == "ism_manufacturing"
     assert payload["title"] == "ISM Manufacturing"
     assert payload["source"] == "workbook"
-    assert [chart["id"] for chart in payload["charts"]] == ["ism_heat_map"]
+    assert [chart["id"] for chart in payload["charts"]] == [
+        "ism_manufacturing_heat_map"
+    ]
 
     heat_map = payload["charts"][0]
     assert heat_map["kind"] == "heat_map"
@@ -1347,10 +1349,12 @@ def test_build_ism_manufacturing_detail_payload_returns_pmi_and_heat_maps():
     assert payload["latest"]["new_orders"] == 53.2
     assert payload["latest"]["prices"] == 56.4
     assert payload["latest"]["customer_inventories"] == 44.9
-    assert len(payload["latest_groups"]) == 3
-    assert payload["latest_groups"][0]["label"] == "Business Cycle"
-    assert payload["latest_groups"][1]["label"] == "Growth Drivers"
-    assert payload["latest_groups"][2]["label"] == "Inflation & Supply"
+    assert len(payload["detail_groups"]) == 4
+    assert payload["detail_groups"][0]["label"] == "Business Cycle"
+    assert payload["detail_groups"][1]["label"] == "Growth Drivers"
+    assert payload["detail_groups"][2]["label"] == "Inflation & Supply"
+    assert payload["detail_groups"][3]["label"] == "Industry Breadth"
+    assert "required_inputs" in payload["detail_groups"][3]
 
 
 def test_build_ism_manufacturing_detail_payload_handles_missing_series():
@@ -1359,5 +1363,183 @@ def test_build_ism_manufacturing_detail_payload_handles_missing_series():
     assert payload["detail_id"] == "ism_manufacturing"
     assert payload["source"] is None
     assert payload["charts"][0]["series"] == []
-    assert "latest" in payload
-    assert payload["latest"] == {}
+    assert payload["latest"] is None
+
+
+def test_build_ism_detail_payload_computes_small_multiple_relationship_context():
+    ism_points = {
+        "ism_manufacturing_pmi": [
+            {"date": "2025-10-01", "value": 47.0},
+            {"date": "2025-11-01", "value": 47.5},
+            {"date": "2025-12-01", "value": 48.0},
+            {"date": "2026-01-01", "value": 49.5},
+            {"date": "2026-02-01", "value": 52.0},
+            {"date": "2026-03-01", "value": 52.5},
+            {"date": "2026-04-01", "value": 53.0},
+            {"date": "2026-05-01", "value": 53.5},
+            {"date": "2026-06-01", "value": 54.0},
+        ],
+    }
+    gdp_level_rows = [
+        {"date": "2025-06-30", "gdp_level": 100.0, "index_level": 4900.0},
+        {"date": "2025-09-30", "gdp_level": 100.0, "index_level": 5000.0},
+        {"date": "2025-12-31", "gdp_level": 100.0, "index_level": 5100.0},
+        {"date": "2026-03-31", "gdp_level": 95.0, "index_level": 5200.0},
+        {"date": "2026-06-30", "gdp_level": 90.0, "index_level": 5300.0},
+    ]
+    sp500_price_rows = [
+        {"date": "2026-01-31", "close": 5000.0},
+        {"date": "2026-02-28", "close": 5100.0},
+        {"date": "2026-03-31", "close": 5300.0},
+        {"date": "2026-04-30", "close": 5500.0},
+        {"date": "2026-05-31", "close": 5700.0},
+        {"date": "2026-06-30", "close": 5900.0},
+    ]
+
+    payload = macro_growth_cycle.build_ism_manufacturing_detail_payload(
+        ism_points,
+        gdp_level_rows=gdp_level_rows,
+        sp500_price_rows=sp500_price_rows,
+    )
+
+    assert [chart["id"] for chart in payload["charts"]] == [
+        "ism_manufacturing_heat_map",
+        "ism_macro_context",
+    ]
+    chart = payload["charts"][1]
+    assert chart["kind"] == "small_multiples"
+    assert chart["title"] == "Macro Confirmation"
+    assert [panel["id"] for panel in chart["panels"]] == [
+        "ism_pmi",
+        "gdp_growth",
+        "sp500_index",
+    ]
+    assert chart["panels"][0]["reference_lines"] == [
+        {"value": 50, "label": "Expansion / Contraction threshold"}
+    ]
+    assert chart["panels"][0]["subtitle"] == "Monthly"
+    assert chart["panels"][1]["title"] == "Real GDP QoQ Annualized"
+    assert chart["panels"][1]["subtitle"] == "Quarterly, shown as step series"
+    assert chart["panels"][1]["line_shape"] == "step_after"
+    assert chart["panels"][2]["title"] == "S&P 500"
+    assert chart["panels"][2]["subtitle"] == "Base = 100"
+    assert chart["series"][-1] == {
+        "date": "2026-06-30",
+        "ism_pmi": 54.0,
+        "gdp_growth": -19.4481,
+        "gdp_period": None,
+        "sp500_index": 118.0,
+        "sp500_close": 5900.0,
+    }
+    assert chart["contexts"] == [
+        {
+            "id": "gdp_context",
+            "state": "early_recovery",
+            "label": "Early Recovery",
+            "ism_direction": "up",
+            "comparison_direction": "down",
+            "description": "ISM is improving while GDP growth is still weakening.",
+        },
+        {
+            "id": "market_context",
+            "state": "growth_priced",
+            "label": "Growth Priced",
+            "ism_direction": "up",
+            "comparison_direction": "up",
+            "description": "ISM is improving and S&P 500 is rising with the growth signal.",
+        },
+    ]
+    assert payload["relationship_summary"] == {
+        "shared_months": 6,
+        "gdp_observations": 6,
+        "sp500_observations": 6,
+    }
+
+
+def test_build_ism_detail_payload_does_not_forward_fill_stale_pmi():
+    payload = macro_growth_cycle.build_ism_manufacturing_detail_payload(
+        {
+            "ism_manufacturing_pmi": [
+                {"date": "2020-12-01", "value": 60.5},
+            ],
+        },
+        gdp_level_rows=[],
+        sp500_price_rows=[
+            {"date": "2021-01-29", "close": 100.0},
+            {"date": "2021-02-26", "close": 101.0},
+            {"date": "2021-03-31", "close": 102.0},
+        ],
+    )
+
+    chart = payload["charts"][1]
+
+    assert chart["series"] == [
+        {
+            "date": "2021-01-29",
+            "ism_pmi": 60.5,
+            "gdp_growth": None,
+            "gdp_period": None,
+            "sp500_index": 100.0,
+            "sp500_close": 100.0,
+        },
+        {
+            "date": "2021-02-26",
+            "ism_pmi": None,
+            "gdp_growth": None,
+            "gdp_period": None,
+            "sp500_index": 101.0,
+            "sp500_close": 101.0,
+        },
+        {
+            "date": "2021-03-31",
+            "ism_pmi": None,
+            "gdp_growth": None,
+            "gdp_period": None,
+            "sp500_index": 102.0,
+            "sp500_close": 102.0,
+        },
+    ]
+
+
+def test_gdp_qoq_growth_skips_source_boundary_discontinuity():
+    rows = [
+        {
+            "date": "2016-12-31",
+            "gdp_level": 17876.179,
+            "source_workbook": "GDP_Correlations.xlsx",
+            "source_sheet": "S&P500_US_Quadnomial",
+        },
+        {
+            "date": "2017-03-31",
+            "gdp_level": 19398.343,
+            "source_workbook": "GDPC1.csv+SP500.csv",
+            "source_sheet": "computed",
+        },
+        {
+            "date": "2017-06-30",
+            "gdp_level": 19506.949,
+            "source_workbook": "GDPC1.csv+SP500.csv",
+            "source_sheet": "computed",
+        },
+    ]
+
+    assert macro_growth_cycle._gdp_qoq_annualized_rows(rows) == [
+        {"date": "2017-06-30", "value": 2.2584, "period_label": None}
+    ]
+
+
+def test_build_ism_detail_payload_skips_small_multiple_without_existing_sources():
+    payload = macro_growth_cycle.build_ism_manufacturing_detail_payload(
+        {},
+        gdp_level_rows=[],
+        sp500_price_rows=[],
+    )
+
+    assert [chart["id"] for chart in payload["charts"]] == [
+        "ism_manufacturing_heat_map"
+    ]
+    assert payload["relationship_summary"] == {
+        "shared_months": 0,
+        "gdp_observations": 0,
+        "sp500_observations": 0,
+    }

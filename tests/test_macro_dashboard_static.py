@@ -915,6 +915,10 @@ def test_macro_dashboard_static_includes_m2_range_control():
     assert "20Y" in js
     assert "Max" in js
     assert ".chart-range-control" in css
+    assert "chart-range-control-sticky" in js
+    assert ".chart-range-control-sticky" in css
+    assert "rerenderGrowthCycleDetailBodyPreservingScroll" in js
+    assert "scrollTop" in js
 
 
 def test_macro_dashboard_static_includes_fomc_tone_tooltip_fields():
@@ -1300,8 +1304,7 @@ def test_growth_cycle_ism_cards_open_focused_detail_static_assets():
     assert 'data-growth-cycle-detail-id="ism_manufacturing"' in js
     assert ".ism-card-button" in css
     assert ".ism-card-button.selected" in css
-    assert ".ism-composite-segments" in css
-    assert ".ism-composite-segment" in css
+    assert ".ism-metric-band" in css
 
 
 def test_growth_cycle_ism_detail_renderer_static_assets():
@@ -1311,11 +1314,25 @@ def test_growth_cycle_ism_detail_renderer_static_assets():
     assert "function renderIsmDetailInPanel(" in js
     assert "function renderIsmDetailChart(" in js
     assert "function renderIsmHeatMap(" in js
-    assert "function ismHeatMapCellClass(" in js
-    assert "payload.latest" in js
-    assert "payload.latest_groups" in js
-    assert 'chart.kind === "heat_map"' in js
+    assert "function renderIsmSmallMultiples(" in js
+    assert "function renderIsmSmallMultiplePanel(" in js
+    assert "function renderIsmSparklineSvg(" in js
+    assert "function ismSparklineSegments(" in js
+    assert "function renderIsmRelationshipContext(" in js
+    assert "function attachIsmSharedTooltip(" in js
+    assert "function rebaseVisibleSmallMultipleSeries(" in js
+    assert "chart.contexts" in js
+    assert 'chart.kind === "small_multiples"' in js
+    assert "panel.line_shape" in js
+    assert "function ismSparklineYearTicks(" in js
+    assert "showXAxis" in js
+    assert "renderRelationshipReferenceLines" in js
+    assert ".relationship-reference-line" in css
+    assert "payload.detail_groups" in js
     assert ".ism-detail-heat-map" in css
-    assert ".ism-heat-cell-expansion" in css
-    assert ".ism-heat-cell-contraction" in css
-    assert ".ism-detail-latest" in css
+    assert ".ism-small-multiples" in css
+    assert ".ism-small-panel" in css
+    assert ".ism-sparkline-svg" in css
+    assert "grid-template-columns: 140px minmax(0, 1fr)" in css
+    assert ".ism-shared-tooltip" in css
+    assert ".ism-relationship-context" in css

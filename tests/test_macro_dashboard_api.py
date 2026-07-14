@@ -1634,11 +1634,31 @@ def test_growth_cycle_api_returns_ism_manufacturing_detail(monkeypatch):
 
         return FakeConnection()
 
+    def fake_gdp_connect():
+        class FakeConnection:
+            def close(self):
+                calls.append(("gdp_close",))
+
+        return FakeConnection()
+
+    def fake_benchmark_connect():
+        class FakeConnection:
+            def close(self):
+                calls.append(("benchmark_close",))
+
+        return FakeConnection()
+
     def fake_load_macro_indicator_points_for_series(con, series_ids):
         calls.append(("series", tuple(series_ids)))
         return {
             "ism_manufacturing_pmi": [
-                {"date": "2026-05-01", "value": 51.4, "source": "workbook"}
+                {"date": "2025-10-01", "value": 48.0, "source": "workbook"},
+                {"date": "2025-11-01", "value": 48.5, "source": "workbook"},
+                {"date": "2025-12-01", "value": 49.0, "source": "workbook"},
+                {"date": "2026-01-01", "value": 50.0, "source": "workbook"},
+                {"date": "2026-02-01", "value": 51.0, "source": "workbook"},
+                {"date": "2026-03-01", "value": 52.0, "source": "workbook"},
+                {"date": "2026-05-01", "value": 51.4, "source": "workbook"},
             ],
             "ism_manufacturing_new_orders": [
                 {"date": "2026-05-01", "value": 53.2, "source": "workbook"}
@@ -1672,11 +1692,39 @@ def test_growth_cycle_api_returns_ism_manufacturing_detail(monkeypatch):
             ],
         }
 
+    def fake_load_quad_rows(con, relationship_id):
+        calls.append(("gdp_level_rows", relationship_id))
+        return [
+            {"date": "2025-09-30", "gdp_level": 100.0, "index_level": 5000.0},
+            {"date": "2025-12-31", "gdp_level": 99.0, "index_level": 5100.0},
+            {"date": "2026-03-31", "gdp_level": 95.0, "index_level": 5200.0},
+        ]
+
+    def fake_load_price_rows(con, benchmark_id):
+        calls.append(("benchmark_prices", benchmark_id))
+        return [
+            {"date": "2026-01-31", "close": 5000.0},
+            {"date": "2026-02-28", "close": 5100.0},
+            {"date": "2026-03-31", "close": 5300.0},
+        ]
+
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
         "load_macro_indicator_points_for_series",
         fake_load_macro_indicator_points_for_series,
+    )
+    monkeypatch.setattr(api.gdp_market_relationships, "connect", fake_gdp_connect)
+    monkeypatch.setattr(
+        api.gdp_market_relationships,
+        "load_quad_rows",
+        fake_load_quad_rows,
+    )
+    monkeypatch.setattr(api.benchmark_market_data, "connect", fake_benchmark_connect)
+    monkeypatch.setattr(
+        api.benchmark_market_data,
+        "load_price_rows",
+        fake_load_price_rows,
     )
 
     response = client.get("/api/macro-dashboard/growth-cycle/ism_manufacturing")
@@ -1684,11 +1732,21 @@ def test_growth_cycle_api_returns_ism_manufacturing_detail(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert payload["detail_id"] == "ism_manufacturing"
-    assert [chart["id"] for chart in payload["charts"]] == ["ism_heat_map"]
+    assert [chart["id"] for chart in payload["charts"]] == [
+        "ism_manufacturing_heat_map",
+        "ism_macro_context",
+    ]
+    assert payload["charts"][1]["kind"] == "small_multiples"
     assert len(payload["charts"][0]["keys"]) == 11
     assert "pmi" in payload["latest"]
     assert "new_orders" in payload["latest"]
     assert payload["latest"]["pmi"] == 51.4
-    assert len(payload["latest_groups"]) == 3
+    assert len(payload["detail_groups"]) == 4
+    assert payload["detail_groups"][3]["label"] == "Industry Breadth"
+    assert "required_inputs" in payload["detail_groups"][3]
     assert calls[0] == ("series", tuple(api.ISM_MANUFACTURING_SERIES_IDS))
+    assert ("gdp_level_rows", "us_sp500_gdp") in calls
+    assert ("benchmark_prices", "us_sp500") in calls
+    assert ("gdp_close",) in calls
+    assert ("benchmark_close",) in calls
     assert calls[-1] == ("close",)

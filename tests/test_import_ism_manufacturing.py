@@ -1,0 +1,120 @@
+from datetime import datetime
+
+import pytest
+from openpyxl import Workbook
+
+from app.db import us_rates_liquidity
+from scripts import import_ism_manufacturing
+
+
+ISM_TEST_SHEETS = [
+    "PMI",
+    "New Orders",
+    "Production",
+    "Employment",
+    "Deliveries",
+    "Inventories",
+    "Customer Inventories",
+    "Prices",
+    "Order Backlog",
+    "Exports",
+    "Imports",
+]
+
+
+def write_ism_workbook(path):
+    workbook = Workbook()
+    for index, name in enumerate(ISM_TEST_SHEETS):
+        if index == 0:
+            sheet = workbook.active
+            sheet.title = name
+        else:
+            sheet = workbook.create_sheet(title=name)
+        sheet.append(["Date", name])
+        sheet.append([datetime(2026, 1, 1), 50.0 + index])
+        sheet.append([datetime(2026, 2, 1), 51.0 + index])
+        sheet.append(["not-a-date", 55.0])
+        sheet.append([datetime(2026, 3, 1), None])
+        sheet.append([datetime(2026, 4, 1), 52.0 + index])
+    workbook.save(path)
+
+
+def test_parse_workbook_reads_all_ism_sheets(tmp_path):
+    workbook_path = tmp_path / "ISM_Manufacturing_Index.xlsx"
+    write_ism_workbook(workbook_path)
+
+    results = import_ism_manufacturing.parse_workbook(workbook_path)
+
+    assert len(results) == 11
+    series_ids = [r["series"]["series_id"] for r in results]
+    assert series_ids == list(import_ism_manufacturing.SERIES_CONFIG)
+    pmi = next(
+        r for r in results if r["series"]["series_id"] == "ism_manufacturing_pmi"
+    )
+    assert pmi["series"] == {
+        "series_id": "ism_manufacturing_pmi",
+        "title": "ISM Manufacturing PMI",
+        "units": "index",
+        "source": "ISM_Manufacturing_Index.xlsx",
+    }
+    assert pmi["points"] == [
+        {"date": "2026-01-01", "value": 50.0, "source": "ISM_Manufacturing_Index.xlsx"},
+        {"date": "2026-02-01", "value": 51.0, "source": "ISM_Manufacturing_Index.xlsx"},
+        {"date": "2026-04-01", "value": 52.0, "source": "ISM_Manufacturing_Index.xlsx"},
+    ]
+    imports_series = next(
+        r for r in results if r["series"]["series_id"] == "ism_manufacturing_imports"
+    )
+    assert imports_series["points"][0]["value"] == 50.0 + 10
+
+
+def test_parse_workbook_rejects_missing_workbook(tmp_path):
+    with pytest.raises(ValueError, match="ism manufacturing workbook is missing"):
+        import_ism_manufacturing.parse_workbook(tmp_path / "missing.xlsx")
+
+
+def test_parse_workbook_rejects_missing_sheet(tmp_path):
+    workbook_path = tmp_path / "bad.xlsx"
+    workbook = Workbook()
+    workbook.active.title = "Wrong Sheet"
+    workbook.save(workbook_path)
+
+    with pytest.raises(ValueError, match="ism manufacturing sheet is missing"):
+        import_ism_manufacturing.parse_workbook(workbook_path)
+
+
+def test_import_workbook_saves_all_series_to_macro_indicator_tables(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    workbook_path = tmp_path / "ISM_Manufacturing_Index.xlsx"
+    write_ism_workbook(workbook_path)
+    con = us_rates_liquidity.connect(db_path)
+
+    inserted = import_ism_manufacturing.import_workbook(con, workbook_path)
+
+    assert list(inserted) == list(import_ism_manufacturing.SERIES_CONFIG)
+    assert all(count == 3 for count in inserted.values())
+    pmi_points = us_rates_liquidity.load_macro_indicator_points(
+        con, "ism_manufacturing_pmi"
+    )
+    assert pmi_points == [
+        {"date": "2026-01-01", "value": 50.0, "source": "ISM_Manufacturing_Index.xlsx"},
+        {"date": "2026-02-01", "value": 51.0, "source": "ISM_Manufacturing_Index.xlsx"},
+        {"date": "2026-04-01", "value": 52.0, "source": "ISM_Manufacturing_Index.xlsx"},
+    ]
+
+
+def test_main_imports_ism_via_cli(tmp_path, capsys):
+    db_path = tmp_path / "market_data.sqlite"
+    workbook_path = tmp_path / "ISM_Manufacturing_Index.xlsx"
+    write_ism_workbook(workbook_path)
+
+    exit_code = import_ism_manufacturing.main(
+        ["--db-path", str(db_path), "--workbook-path", str(workbook_path)]
+    )
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "ism_manufacturing_pmi: 3" in out
+    assert "ism_manufacturing_imports: 3" in out
+    for series_id in import_ism_manufacturing.SERIES_CONFIG:
+        assert f"{series_id}: 3" in out

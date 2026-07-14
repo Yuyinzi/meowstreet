@@ -20,11 +20,16 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         calls.append(("gdp", argv))
         return 0
 
+    def ism_main(argv):
+        calls.append(("ism", argv))
+        return 0
+
     exit_code = refresh_macro_data.main(
         [],
         benchmark_main=benchmark_main,
         rates_main=rates_main,
         m2_main=m2_main,
+        ism_main=ism_main,
         gdp_main=gdp_main,
         fomc_main=lambda argv: 0,
     )
@@ -35,6 +40,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         ("rates", ["--skip-credit-workbook"]),
         ("m2", ["--fetch-fred-csv"]),
         ("m2", ["--fred-csv-merge"]),
+        ("ism", []),
         ("gdp", ["--fetch-fred-csv"]),
         ("gdp", ["--us-csv-merge"]),
     ]
@@ -60,6 +66,7 @@ def test_main_does_not_generate_ai_interpretations():
         benchmark_main=recorder("benchmark"),
         rates_main=recorder("rates"),
         m2_main=recorder("m2"),
+        ism_main=recorder("ism"),
         gdp_main=recorder("gdp"),
         fomc_main=recorder("fomc"),
     )
@@ -89,6 +96,7 @@ def test_main_continues_after_provider_failure(capsys):
         benchmark_main=failing_benchmark,
         rates_main=ok_task("rates"),
         m2_main=ok_task("m2"),
+        ism_main=ok_task("ism"),
         gdp_main=ok_task("gdp"),
     )
 
@@ -98,6 +106,7 @@ def test_main_continues_after_provider_failure(capsys):
         "rates",
         "m2",
         "m2",
+        "ism",
         "gdp",
         "gdp",
     ]
@@ -125,6 +134,7 @@ def test_main_can_stop_after_first_failure():
         benchmark_main=failing_benchmark,
         rates_main=ok_task("rates"),
         m2_main=ok_task("m2"),
+        ism_main=ok_task("ism"),
         gdp_main=ok_task("gdp"),
     )
 
@@ -141,6 +151,7 @@ def test_main_records_exceptions_as_failures(capsys):
         benchmark_main=raising_benchmark,
         rates_main=lambda argv: 0,
         m2_main=lambda argv: 0,
+        ism_main=lambda argv: 0,
         gdp_main=lambda argv: 0,
     )
 
@@ -161,6 +172,7 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
             "--skip-yahoo",
             "--skip-rates",
             "--skip-m2",
+            "--skip-ism",
             "--skip-gdp",
             "--fomc-calendar-path",
             str(tmp_path / "missing_fomc_calendar.csv"),
@@ -190,6 +202,7 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
             "--skip-yahoo",
             "--skip-rates",
             "--skip-m2",
+            "--skip-ism",
             "--skip-gdp",
             "--fomc-calendar-path",
             str(csv_path),
@@ -212,10 +225,11 @@ def test_main_skip_flags_remove_tasks():
         return _record
 
     exit_code = refresh_macro_data.main(
-        ["--skip-yahoo", "--skip-gdp"],
+        ["--skip-yahoo", "--skip-ism", "--skip-gdp"],
         benchmark_main=recorder("benchmark"),
         rates_main=recorder("rates"),
         m2_main=recorder("m2"),
+        ism_main=recorder("ism"),
         gdp_main=recorder("gdp"),
     )
 
