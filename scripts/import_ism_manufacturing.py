@@ -81,6 +81,17 @@ def _iso_date(value):
     return str(value)
 
 
+SECTORS_SHEET = "Sectors"
+
+
+def _sector_direction(value):
+    if value == "Growth":
+        return "growth"
+    if value == "Contraction":
+        return "contraction"
+    return None
+
+
 def _is_date(value):
     if isinstance(value, (datetime, date)):
         return True
@@ -134,6 +145,43 @@ def parse_workbook(workbook_path=DEFAULT_WORKBOOK_PATH):
     return results
 
 
+def parse_sector_rankings(workbook_path=DEFAULT_WORKBOOK_PATH):
+    workbook_path = Path(workbook_path)
+    if not workbook_path.exists():
+        raise ValueError(f"ism manufacturing workbook is missing: {workbook_path}")
+    workbook = load_workbook(workbook_path, read_only=True, data_only=True)
+    if SECTORS_SHEET not in workbook.sheetnames:
+        raise ValueError(f"ism manufacturing sheet is missing: {SECTORS_SHEET}")
+    sheet = workbook[SECTORS_SHEET]
+    month_columns = [
+        (column, _iso_date(sheet.cell(row=3, column=column).value))
+        for column in range(3, sheet.max_column + 1, 2)
+        if _is_date(sheet.cell(row=3, column=column).value)
+    ]
+    rows = []
+    for row_index in range(6, sheet.max_row + 1):
+        industry = sheet.cell(row=row_index, column=2).value
+        if not industry:
+            continue
+        for status_column, month in month_columns:
+            direction = _sector_direction(
+                sheet.cell(row=row_index, column=status_column).value
+            )
+            rank = sheet.cell(row=row_index, column=status_column + 1).value
+            if direction is None or rank in (None, ""):
+                continue
+            rows.append(
+                {
+                    "date": month,
+                    "industry": str(industry),
+                    "direction": direction,
+                    "rank": int(rank),
+                    "source": workbook_path.name,
+                }
+            )
+    return rows
+
+
 def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
     parsed_list = parse_workbook(workbook_path)
     results = {}
@@ -145,6 +193,10 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
             parsed["points"],
         )
         results[sid] = saved["points"]
+    rankings = parse_sector_rankings(workbook_path)
+    results["ism_industry_rankings"] = us_rates_liquidity.replace_ism_industry_rankings(
+        con, rankings
+    )
     return results
 
 
