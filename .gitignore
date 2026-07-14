@@ -20,3 +20,4 @@ docs/superpowers/plans/
 .worktrees/
 logs/*
 !logs/.gitkeep
+.superpowers/
