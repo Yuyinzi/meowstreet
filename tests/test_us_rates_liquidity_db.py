@@ -1348,3 +1348,103 @@ def test_load_latest_ism_industry_rankings_returns_empty_without_rows(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
 
     assert us_rates_liquidity.load_latest_ism_industry_rankings(con) == []
+
+
+def test_replace_ism_report_snapshot_saves_metadata_and_comments(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    report = {
+        "report_id": "ism_manufacturing_2026_06",
+        "report_month": "2026-06-01",
+        "title": "June 2026 ISM Manufacturing PMI Report",
+        "source_url": "https://www.ismworld.org/report/june/",
+        "source_hash": "abc123",
+        "fetched_at": "2026-07-14T10:00:00Z",
+        "parse_status": "ok",
+        "next_report_period": "2026-07-01",
+        "next_release_at": "2026-08-03T10:00:00-04:00",
+        "next_release_label": "Monday, August 3, 2026 at 10:00 a.m. ET",
+    }
+    comments = [
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "industry": "Chemical Products",
+            "comment_index": 1,
+            "comment_text": "Input costs remain elevated.",
+            "source_url": "https://www.ismworld.org/report/june/",
+            "source_hash": "abc123",
+        },
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "industry": "Machinery",
+            "comment_index": 2,
+            "comment_text": "Conditions are optimistic.",
+            "source_url": "https://www.ismworld.org/report/june/",
+            "source_hash": "abc123",
+        },
+    ]
+
+    saved = us_rates_liquidity.replace_ism_report_snapshot(con, report, comments)
+
+    assert saved == {"reports": 1, "comments": 2}
+    assert us_rates_liquidity.load_latest_ism_report_snapshot(con) == report
+    assert (
+        us_rates_liquidity.load_ism_report_comments(con, "ism_manufacturing_2026_06")
+        == comments
+    )
+
+
+def test_replace_ism_report_snapshot_replaces_comments_for_same_report(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    report = {
+        "report_id": "ism_manufacturing_2026_06",
+        "report_month": "2026-06-01",
+        "title": "June 2026 ISM Manufacturing PMI Report",
+        "source_url": "https://www.ismworld.org/report/june/",
+        "source_hash": "abc123",
+        "fetched_at": "2026-07-14T10:00:00Z",
+        "parse_status": "ok",
+        "next_report_period": None,
+        "next_release_at": None,
+        "next_release_label": "",
+    }
+
+    us_rates_liquidity.replace_ism_report_snapshot(
+        con,
+        report,
+        [
+            {
+                "report_id": "ism_manufacturing_2026_06",
+                "report_month": "2026-06-01",
+                "industry": "Chemical Products",
+                "comment_index": 1,
+                "comment_text": "Old comment.",
+                "source_url": "https://www.ismworld.org/report/june/",
+                "source_hash": "abc123",
+            }
+        ],
+    )
+    saved = us_rates_liquidity.replace_ism_report_snapshot(
+        con,
+        report,
+        [
+            {
+                "report_id": "ism_manufacturing_2026_06",
+                "report_month": "2026-06-01",
+                "industry": "Machinery",
+                "comment_index": 1,
+                "comment_text": "New comment.",
+                "source_url": "https://www.ismworld.org/report/june/",
+                "source_hash": "abc123",
+            }
+        ],
+    )
+
+    assert saved == {"reports": 1, "comments": 1}
+    assert (
+        us_rates_liquidity.load_ism_report_comments(con, "ism_manufacturing_2026_06")[
+            0
+        ]["comment_text"]
+        == "New comment."
+    )

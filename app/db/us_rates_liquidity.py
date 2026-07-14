@@ -135,6 +135,33 @@ def connect(db_path=DEFAULT_DB_PATH):
         );
         create index if not exists idx_ism_industry_rankings_date
         on ism_industry_rankings(date);
+        create table if not exists ism_report_snapshots (
+            report_id text primary key,
+            report_month text not null,
+            title text not null,
+            source_url text not null,
+            source_hash text not null,
+            fetched_at text not null,
+            parse_status text not null,
+            next_report_period text,
+            next_release_at text,
+            next_release_label text not null
+        );
+        create index if not exists idx_ism_report_snapshots_month
+        on ism_report_snapshots(report_month);
+        create table if not exists ism_report_comments (
+            report_id text not null,
+            comment_index integer not null,
+            report_month text not null,
+            industry text not null,
+            comment_text text not null,
+            source_url text not null,
+            source_hash text not null,
+            primary key(report_id, comment_index),
+            foreign key(report_id) references ism_report_snapshots(report_id)
+        );
+        create index if not exists idx_ism_report_comments_report
+        on ism_report_comments(report_id);
         """
     )
     _ensure_column(
@@ -407,6 +434,90 @@ def load_latest_ism_industry_rankings(con):
         }
         for row in rows
     ]
+
+
+def replace_ism_report_snapshot(con, report, comments):
+    con.execute(
+        """
+        insert into ism_report_snapshots(
+            report_id, report_month, title, source_url, source_hash, fetched_at,
+            parse_status, next_report_period, next_release_at, next_release_label
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        on conflict(report_id) do update set
+            report_month = excluded.report_month,
+            title = excluded.title,
+            source_url = excluded.source_url,
+            source_hash = excluded.source_hash,
+            fetched_at = excluded.fetched_at,
+            parse_status = excluded.parse_status,
+            next_report_period = excluded.next_report_period,
+            next_release_at = excluded.next_release_at,
+            next_release_label = excluded.next_release_label
+        """,
+        (
+            report["report_id"],
+            report["report_month"],
+            report["title"],
+            report["source_url"],
+            report["source_hash"],
+            report["fetched_at"],
+            report["parse_status"],
+            report.get("next_report_period"),
+            report.get("next_release_at"),
+            report.get("next_release_label", ""),
+        ),
+    )
+    con.execute(
+        "delete from ism_report_comments where report_id = ?",
+        (report["report_id"],),
+    )
+    for comment in comments:
+        con.execute(
+            """
+            insert into ism_report_comments(
+                report_id, comment_index, report_month, industry, comment_text,
+                source_url, source_hash
+            ) values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                comment["report_id"],
+                comment["comment_index"],
+                comment["report_month"],
+                comment["industry"],
+                comment["comment_text"],
+                comment["source_url"],
+                comment["source_hash"],
+            ),
+        )
+    con.commit()
+    return {"reports": 1, "comments": len(comments)}
+
+
+def load_latest_ism_report_snapshot(con):
+    rows = con.execute(
+        """
+        select report_id, report_month, title, source_url, source_hash, fetched_at,
+               parse_status, next_report_period, next_release_at, next_release_label
+        from ism_report_snapshots
+        order by report_month desc
+        limit 1
+        """
+    ).fetchall()
+    return dict(rows[0]) if rows else None
+
+
+def load_ism_report_comments(con, report_id):
+    rows = con.execute(
+        """
+        select report_id, report_month, industry, comment_index, comment_text,
+               source_url, source_hash
+        from ism_report_comments
+        where report_id = ?
+        order by comment_index
+        """,
+        (report_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def load_macro_indicator_points_for_series(con, series_ids):
