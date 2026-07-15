@@ -16,6 +16,25 @@ Institute for Supply Management® Honors Award Winner
 """
 
 
+def test_parse_archive_listing_returns_report_month_metadata():
+    html = """
+    <a href="/news-releases/manufacturing-pmi-at-52-6-january-2026-ism-manufacturing-pmi-report-302700001.html">
+      Manufacturing PMI at 52.6%; January 2026 ISM Manufacturing PMI Report
+    </a>
+    """
+
+    reports = ism_prnewswire_archive.parse_archive_listing(html)
+
+    assert reports == [
+        {
+            "url": "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-52-6-january-2026-ism-manufacturing-pmi-report-302700001.html",
+            "title": "Manufacturing PMI at 52.6%; January 2026 ISM Manufacturing PMI Report",
+            "report_month": "2026-01-01",
+            "report_id": "ism_manufacturing_2026_01",
+        }
+    ]
+
+
 def test_parse_archive_listing_returns_manufacturing_report_urls_only():
     result = ism_prnewswire_archive.parse_archive_listing(LISTING_HTML)
 
@@ -23,6 +42,8 @@ def test_parse_archive_listing_returns_manufacturing_report_urls_only():
         {
             "title": "Jul 01, 2026, 10:00 ET Manufacturing PMI® at 53.3%; June 2026 ISM® Manufacturing PMI® Report",
             "url": "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html",
+            "report_month": "2026-06-01",
+            "report_id": "ism_manufacturing_2026_06",
         }
     ]
 

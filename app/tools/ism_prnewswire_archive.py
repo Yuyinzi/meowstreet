@@ -3,6 +3,22 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin
 
 
+MONTH_NUMBER_BY_NAME = {
+    "january": "01",
+    "february": "02",
+    "march": "03",
+    "april": "04",
+    "may": "05",
+    "june": "06",
+    "july": "07",
+    "august": "08",
+    "september": "09",
+    "october": "10",
+    "november": "11",
+    "december": "12",
+}
+
+
 BASE_URL = "https://www.prnewswire.com"
 ARCHIVE_URL = (
     "https://www.prnewswire.com/news/institute-for-supply-management/"
@@ -47,6 +63,24 @@ def archive_listing_url(page, pagesize=25):
     return ARCHIVE_URL.format(page=page, pagesize=pagesize)
 
 
+def report_month_from_title(title):
+    match = re.search(
+        r"\b(" + "|".join(MONTH_NUMBER_BY_NAME) + r")\s+(20\d{2})\b",
+        title,
+        re.IGNORECASE,
+    )
+    if not match:
+        raise ValueError(f"ism archive title report month is missing: {title}")
+    month_name = match.group(1).lower()
+    year = match.group(2)
+    return f"{year}-{MONTH_NUMBER_BY_NAME[month_name]}-01"
+
+
+def report_id(report_month):
+    year, month, _day = report_month.split("-")
+    return f"ism_manufacturing_{year}_{month}"
+
+
 def is_manufacturing_report_title(title):
     normalized = re.sub(r"\s+", " ", title)
     return (
@@ -69,5 +103,7 @@ def parse_archive_listing(html):
         if not is_manufacturing_report_title(link["title"]):
             continue
         seen.add(link["url"])
+        link["report_month"] = report_month_from_title(link["title"])
+        link["report_id"] = report_id(link["report_month"])
         result.append(link)
     return result
