@@ -594,6 +594,60 @@ def test_report_concurrency_must_be_positive(capsys):
     assert "report concurrency must be at least 1" in capsys.readouterr().err
 
 
+def test_import_target_from_db_path_opens_and_closes_own_connection(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "market_data.sqlite"
+    target = {
+        "source_name": "prnewswire",
+        "url": "https://www.prnewswire.com/jan-2025.html",
+        "report_month": "2025-01-01",
+        "report_id": "ism_manufacturing_2025_01",
+    }
+    calls = []
+
+    class FakeCon:
+        def close(self):
+            calls.append(("close",))
+
+    def fake_connect(path):
+        calls.append(("connect", path))
+        return FakeCon()
+
+    def fake_import_target(con, target_arg, index, total, fetch, ai_client, model):
+        calls.append(("import", con, target_arg, index, total, fetch, ai_client, model))
+        return {
+            "report_id": "ism_manufacturing_2025_01",
+            "metrics": 11,
+            "rankings": 0,
+            "comments": 10,
+            "at_a_glance_rows": 11,
+            "source_name": "prnewswire",
+        }
+
+    monkeypatch.setattr(
+        fetch_ism_official_reports.growth_cycle, "connect", fake_connect
+    )
+    monkeypatch.setattr(
+        fetch_ism_official_reports, "import_target", fake_import_target, raising=False
+    )
+
+    result = fetch_ism_official_reports.import_target_from_db_path(
+        db_path,
+        target,
+        1,
+        1,
+        fetch=object(),
+        ai_client=object(),
+        model="model",
+    )
+
+    assert result["report_id"] == "ism_manufacturing_2025_01"
+    assert calls[0] == ("connect", db_path)
+    assert calls[-1] == ("close",)
+    assert calls[1][0] == "import"
+
+
 def test_main_continues_when_prnewswire_article_fetch_fails(
     tmp_path, monkeypatch, capsys
 ):

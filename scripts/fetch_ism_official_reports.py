@@ -57,6 +57,14 @@ def extract_prepared_report_payload(con, prepared, source, ai_client):
     )
 
 
+def import_target_from_db_path(db_path, target, index, total, fetch, ai_client, model):
+    con = growth_cycle.connect(db_path)
+    try:
+        return import_target(con, target, index, total, fetch, ai_client, model)
+    finally:
+        con.close()
+
+
 def build_ai_client(config):
     from app import llm
     from scripts.extract_ism_report_ai import OpenAIJsonClient, llm_timeout
