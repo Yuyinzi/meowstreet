@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from subprocess import CalledProcessError
 
@@ -715,10 +717,11 @@ def test_main_current_year_uses_report_concurrency_for_target_imports(
     ]
 
 
-def test_report_concurrency_must_be_positive(capsys):
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_report_concurrency_must_be_positive(capsys, value):
     with pytest.raises(SystemExit) as exc:
         fetch_ism_official_reports.main(
-            ["--backfill-since", "2025", "--report-concurrency", "0"],
+            ["--backfill-since", "2025", "--report-concurrency", value],
             ai_client_factory=lambda config: object(),
         )
     assert exc.value.code == 2
@@ -800,8 +803,6 @@ def test_import_targets_concurrently_respects_concurrency_limit(monkeypatch):
         running += 1
         max_running = max(max_running, running)
         calls.append(("start", target["report_month"]))
-        import time
-
         time.sleep(0.01)
         running -= 1
         calls.append(("end", target["report_month"]))
