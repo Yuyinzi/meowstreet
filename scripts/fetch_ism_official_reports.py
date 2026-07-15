@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -8,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import us_rates_liquidity
-from app.tools import ism_official_report
+from app.tools import ism_official_report, ism_prnewswire_archive
 
 
 BASE_URL = (
@@ -93,14 +94,64 @@ def merge_metrics(con, parsed):
     return count
 
 
-def import_report(con, month, fetch=None, now=None):
+def source_name_for_url(url):
+    if "prnewswire.com" in url:
+        return "prnewswire"
+    if "ismworld.org" in url:
+        return "ismworld"
+    raise ValueError(f"ism report source is unsupported: {url}")
+
+
+def source_snapshot(
+    url, source_name, html, fetched_at, parse_status, parse_error=None, parsed=None
+):
+    report = parsed["report"] if parsed else {}
+    return {
+        "source_url": url,
+        "source_name": source_name,
+        "source_hash": hashlib.sha256(html.encode("utf-8")).hexdigest(),
+        "fetched_at": fetched_at,
+        "raw_html": html,
+        "parse_status": parse_status,
+        "parse_error": parse_error,
+        "report_id": report.get("report_id"),
+        "report_month": report.get("report_month"),
+    }
+
+
+def import_report_url(con, url, source_name=None, fetch=None, now=None):
     if fetch is None:
         fetch = fetch_text
     if now is None:
         now = fetched_at_now
-    url = report_url(month)
+    if source_name is None:
+        source_name = source_name_for_url(url)
+    fetched_at = now()
     html = fetch(url)
-    parsed = ism_official_report.parse_report(html, url, now())
+    try:
+        parsed = ism_official_report.parse_report(
+            html,
+            url,
+            fetched_at,
+            source_name=source_name,
+        )
+    except ValueError as exc:
+        us_rates_liquidity.replace_ism_report_source_snapshot(
+            con,
+            source_snapshot(
+                url,
+                source_name,
+                html,
+                fetched_at,
+                "failed",
+                parse_error=str(exc),
+            ),
+        )
+        raise
+    us_rates_liquidity.replace_ism_report_source_snapshot(
+        con,
+        source_snapshot(url, source_name, html, fetched_at, "ok", parsed=parsed),
+    )
     metric_count = merge_metrics(con, parsed)
     us_rates_liquidity.merge_ism_industry_rankings(con, parsed["rankings"])
     saved = us_rates_liquidity.replace_ism_report_snapshot(
@@ -118,7 +169,18 @@ def import_report(con, month, fetch=None, now=None):
         "rankings": len(parsed["rankings"]),
         "comments": saved["comments"],
         "at_a_glance_rows": at_a_glance_saved["at_a_glance_rows"],
+        "source_name": source_name,
     }
+
+
+def import_report(con, month, fetch=None, now=None):
+    return import_report_url(
+        con,
+        report_url(month),
+        source_name="ismworld",
+        fetch=fetch,
+        now=now,
+    )
 
 
 def requested_months(args):

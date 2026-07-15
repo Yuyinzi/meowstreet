@@ -113,6 +113,7 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
         "rankings": 4,
         "comments": 1,
         "at_a_glance_rows": 11,
+        "source_name": "ismworld",
     }
     assert us_rates_liquidity.load_macro_indicator_points(con, "ism_manufacturing_pmi")[
         -1
@@ -254,3 +255,43 @@ def test_main_current_year_skips_month_landing_pages(tmp_path, monkeypatch, caps
         "ism_manufacturing_2026_06: metrics=11 rankings=4 comments=1 "
         "at_a_glance_rows=11" in captured.out
     )
+
+
+def test_import_report_saves_failed_raw_snapshot(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    url = "https://www.prnewswire.com/news-releases/bad-report.html"
+
+    with pytest.raises(ValueError, match="ism report metrics are missing"):
+        fetch_ism_official_reports.import_report_url(
+            con,
+            url,
+            source_name="prnewswire",
+            fetch=lambda value: (
+                "<html><article>June 2026 ISM Manufacturing PMI Report</article></html>"
+            ),
+            now=lambda: "2026-07-15T10:00:00Z",
+        )
+
+    snapshot = us_rates_liquidity.load_ism_report_source_snapshot(con, url)
+    assert snapshot["source_name"] == "prnewswire"
+    assert snapshot["parse_status"] == "failed"
+    assert "ism report metrics are missing" in snapshot["parse_error"]
+    assert snapshot["raw_html"].startswith("<html>")
+
+
+def test_import_report_url_saves_successful_raw_snapshot(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html"
+
+    result = fetch_ism_official_reports.import_report_url(
+        con,
+        url,
+        source_name="prnewswire",
+        fetch=lambda value: HTML,
+        now=lambda: "2026-07-15T10:00:00Z",
+    )
+
+    snapshot = us_rates_liquidity.load_ism_report_source_snapshot(con, url)
+    assert result["report_id"] == "ism_manufacturing_2026_06"
+    assert snapshot["parse_status"] == "ok"
+    assert snapshot["report_id"] == "ism_manufacturing_2026_06"
