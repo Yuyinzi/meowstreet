@@ -112,6 +112,7 @@ def test_parse_report_extracts_metadata_metrics_rankings_comments_and_release():
         "title": "June 2026 ISM Manufacturing PMI Report",
         "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
         "source_hash": parsed["report"]["source_hash"],
+        "source_name": "ismworld",
         "fetched_at": "2026-07-14T10:00:00Z",
         "parse_status": "ok",
         "next_report_period": "2026-07-01",
@@ -247,3 +248,51 @@ def test_parse_report_accepts_same_at_a_glance_rate():
 
     assert parsed["at_a_glance_rows"][0]["direction"] == "Growing"
     assert parsed["at_a_glance_rows"][0]["rate_of_change"] == "Same"
+
+
+PRNEWSWIRE_HTML = """
+<html>
+<body>
+<nav>Send a Release</nav>
+<article>
+<h1>Manufacturing PMI® at 53.3%; June 2026 ISM® Manufacturing PMI® Report</h1>
+<p>WHAT RESPONDENTS ARE SAYING</p>
+<ul>
+<li>"Demand remains uneven." [Machinery]</li>
+</ul>
+<p>MANUFACTURING AT A GLANCE</p>
+<p>June 2026</p>
+<p>Manufacturing PMI®</p><p>53.3</p><p>54.0</p><p>-0.7</p><p>Growing</p><p>Slower</p><p>6</p>
+<p>New Orders</p><p>56.0</p><p>56.8</p><p>-0.8</p><p>Growing</p><p>Slower</p><p>6</p>
+<p>Production</p><p>52.2</p><p>54.3</p><p>-2.1</p><p>Growing</p><p>Slower</p><p>8</p>
+<p>Employment</p><p>49.7</p><p>48.6</p><p>+1.1</p><p>Contracting</p><p>Slower</p><p>33</p>
+<p>Supplier Deliveries</p><p>57.4</p><p>60.6</p><p>-3.2</p><p>Slowing</p><p>Slower</p><p>7</p>
+<p>Inventories</p><p>51.4</p><p>49.9</p><p>+1.5</p><p>Growing</p><p>From Contracting</p><p>1</p>
+<p>Customers' Inventories</p><p>42.3</p><p>42.7</p><p>-0.4</p><p>Too Low</p><p>Faster</p><p>21</p>
+<p>Prices</p><p>73.0</p><p>82.1</p><p>-9.1</p><p>Increasing</p><p>Slower</p><p>21</p>
+<p>Backlog of Orders</p><p>50.5</p><p>52.2</p><p>-1.7</p><p>Growing</p><p>Slower</p><p>6</p>
+<p>New Export Orders</p><p>48.5</p><p>50.6</p><p>-2.1</p><p>Contracting</p><p>From Growing</p><p>1</p>
+<p>Imports</p><p>52.9</p><p>53.0</p><p>-0.1</p><p>Growing</p><p>Slower</p><p>5</p>
+<p>The 14 manufacturing industries reporting growth in June — listed in order — are: Printing & Related Support Activities; Electrical Equipment, Appliances & Components; and Food, Beverage & Tobacco Products. The three industries in contraction are: Paper Products; Furniture & Related Products; and Wood Products.</p>
+<p>The next ISM® Manufacturing PMI® Report featuring July 2026 data will be released at 10:00 a.m. ET on Monday, August 3, 2026.</p>
+</article>
+<footer>Contact PR Newswire</footer>
+</body>
+</html>
+"""
+
+
+def test_parse_report_handles_prnewswire_article_body_table():
+    parsed = ism_official_report.parse_report(
+        PRNEWSWIRE_HTML,
+        "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html",
+        fetched_at="2026-07-15T10:00:00Z",
+        source_name="prnewswire",
+    )
+
+    assert parsed["report"]["report_id"] == "ism_manufacturing_2026_06"
+    assert parsed["report"]["source_name"] == "prnewswire"
+    assert parsed["metrics"]["ism_manufacturing_pmi"] == 53.3
+    assert len(parsed["at_a_glance_rows"]) == 11
+    assert parsed["at_a_glance_rows"][6]["direction"] == "Too Low"
+    assert parsed["at_a_glance_rows"][6]["rate_of_change"] == "Faster"

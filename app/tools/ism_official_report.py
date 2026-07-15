@@ -84,6 +84,19 @@ def normalize_text(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
+def extract_prnewswire_article_text(html):
+    match = re.search(r"<article\b.*?</article>", html, flags=re.I | re.S)
+    if match:
+        return html_to_text(match.group(0))
+    return html_to_text(html)
+
+
+def extract_report_text(html, source_name):
+    if source_name == "prnewswire":
+        return extract_prnewswire_article_text(html)
+    return html_to_text(html)
+
+
 def report_month_from_title(text):
     match = re.search(r"\b(" + "|".join(MONTHS) + r")\s+(\d{4})\s+ISM", text)
     if not match:
@@ -235,6 +248,47 @@ def split_at_a_glance_direction_rate(value):
     raise ValueError(f"ism at-a-glance direction/rate is unknown: {value}")
 
 
+NUMBER_RE = re.compile(r"^[+-]?\d+(?:\.\d+)?$")
+
+
+def _find_label_index(tokens, label):
+    words = label.replace("’", "'").split()
+    normalized_tokens = [token.replace("’", "'") for token in tokens]
+    for index in range(0, len(normalized_tokens) - len(words) + 1):
+        if normalized_tokens[index : index + len(words)] == words:
+            return index
+    return None
+
+
+def _parse_at_a_glance_row_from_tokens(tokens, label, report, source_url, source_hash):
+    index = _find_label_index(tokens, label)
+    if index is None:
+        return None
+    start = index + len(label.split())
+    values = tokens[start:]
+    numeric_positions = [
+        idx for idx, value in enumerate(values) if NUMBER_RE.match(value)
+    ]
+    if len(numeric_positions) < 4:
+        return None
+    current_pos, previous_pos, change_pos, months_pos = numeric_positions[:4]
+    direction_rate = " ".join(values[change_pos + 1 : months_pos])
+    direction, rate = split_at_a_glance_direction_rate(direction_rate)
+    return {
+        "current_value": float(values[current_pos]),
+        "previous_value": float(values[previous_pos]),
+        "point_change": float(values[change_pos].replace("+", "")),
+        "direction": direction,
+        "rate_of_change": rate,
+        "trend_months": int(values[months_pos]),
+        "source_url": source_url,
+        "source_hash": source_hash,
+        "report_id": report["report_id"],
+        "report_month": report["report_month"],
+        "label": label,
+    }
+
+
 def parse_at_a_glance_rows(text, report, source_url):
     rows = []
     found_series = set()
@@ -243,9 +297,7 @@ def parse_at_a_glance_rows(text, report, source_url):
         match = re.search(pattern, text)
         if match:
             current, previous, change, direction_rate, months = match.groups()
-            direction, rate = split_at_a_glance_direction_rate(
-                direction_rate.strip()
-            )
+            direction, rate = split_at_a_glance_direction_rate(direction_rate.strip())
             if series_id not in found_series:
                 found_series.add(series_id)
                 rows.append(
@@ -264,6 +316,25 @@ def parse_at_a_glance_rows(text, report, source_url):
                         "source_hash": report["source_hash"],
                     }
                 )
+    section_match = re.search(
+        r"MANUFACTURING AT A GLANCE\s+(.*?)(?:OVERALL ECONOMY|COMMODITIES REPORTED|MANUFACTURING INDEX SUMMARIES|The next ISM|$)",
+        text,
+    )
+    section_tokens = section_match.group(1).split() if section_match else []
+    missing = sorted(set(METRIC_LABELS.values()) - found_series)
+    for series_id in missing:
+        label = next(k for k, v in METRIC_LABELS.items() if v == series_id)
+        fallback = _parse_at_a_glance_row_from_tokens(
+            section_tokens,
+            label,
+            report,
+            source_url,
+            report["source_hash"],
+        )
+        if fallback:
+            fallback["series_id"] = series_id
+            rows.append(fallback)
+            found_series.add(series_id)
     missing = sorted(set(METRIC_LABELS.values()) - found_series)
     if missing:
         raise ValueError(
@@ -272,8 +343,8 @@ def parse_at_a_glance_rows(text, report, source_url):
     return rows
 
 
-def parse_report(html, source_url, fetched_at):
-    text = html_to_text(html)
+def parse_report(html, source_url, fetched_at, source_name="ismworld"):
+    text = extract_report_text(html, source_name)
     normalized = normalize_text(text)
     source_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
     report_month, month_name, year = report_month_from_title(normalized)
@@ -286,6 +357,7 @@ def parse_report(html, source_url, fetched_at):
         "title": clean_title(month_name, year),
         "source_url": source_url,
         "source_hash": source_hash,
+        "source_name": source_name,
         "fetched_at": fetched_at,
         "parse_status": "ok",
         "next_report_period": next_report_period,
