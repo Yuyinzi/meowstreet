@@ -167,6 +167,45 @@ def test_extract_snapshot_with_client_saves_ai_payload(tmp_path):
     }
 
 
+def test_extract_snapshot_uses_async_full_extraction(tmp_path, monkeypatch):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    us_rates_liquidity.replace_ism_report_source_snapshot(
+        con,
+        {
+            "source_url": "https://example.com/report.html",
+            "source_name": "prnewswire",
+            "source_hash": "abc123",
+            "fetched_at": "2026-07-15T10:00:00Z",
+            "raw_html": report_html(),
+            "parse_status": "failed",
+            "parse_error": "rankings missing",
+            "report_id": None,
+            "report_month": None,
+        },
+    )
+    seen = {}
+
+    async def fake_extract(report_text, client, max_attempts=2, max_concurrency=3):
+        seen["max_concurrency"] = max_concurrency
+        return ism_ai_extraction_test_payload()
+
+    monkeypatch.setattr(
+        extract_ism_report_ai.ism_ai_extraction,
+        "extract_with_client_async",
+        fake_extract,
+    )
+
+    result = extract_ism_report_ai.extract_snapshot(
+        con,
+        "https://example.com/report.html",
+        object(),
+        model="fake-model",
+    )
+
+    assert result["report_id"] == "ism_manufacturing_2026_06"
+    assert seen["max_concurrency"] == 3
+
+
 def test_extract_snapshot_rejects_llm_report_month_mismatch(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
     us_rates_liquidity.replace_ism_report_source_snapshot(

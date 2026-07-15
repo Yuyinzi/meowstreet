@@ -407,6 +407,43 @@ def test_ai_payload_to_metric_points_uses_at_a_glance_current_values():
     ]
 
 
+def test_import_report_url_uses_async_full_extraction(tmp_path, monkeypatch):
+    from tests.test_ism_ai_extraction import valid_extraction
+
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    seen = {}
+
+    async def fake_extract(report_text, client, max_attempts=2, max_concurrency=3):
+        seen["max_concurrency"] = max_concurrency
+        return valid_extraction()
+
+    monkeypatch.setattr(
+        fetch_ism_official_reports.ism_ai_extraction,
+        "extract_with_client_async",
+        fake_extract,
+    )
+
+    class FakeClient:
+        pass
+
+    result = fetch_ism_official_reports.import_report_url(
+        con,
+        "https://example.com/report.html",
+        source_name="prnewswire",
+        fetch=lambda url: (
+            "<html><article>Manufacturing PMI at 50.0%; June 2026 ISM "
+            "Manufacturing PMI Report text. WHAT RESPONDENTS ARE SAYING "
+            '"Input costs remain elevated." [Chemical Products]</article></html>'
+        ),
+        now=lambda: "2026-07-15T00:00:00Z",
+        ai_client=FakeClient(),
+        model="fake-model",
+    )
+
+    assert result["report_id"] == "ism_manufacturing_2026_06"
+    assert seen["max_concurrency"] == 3
+
+
 def test_import_report_url_uses_ai_extraction_by_default(tmp_path):
     from tests.test_ism_ai_extraction import valid_extraction
 
@@ -421,8 +458,8 @@ def test_import_report_url_uses_ai_extraction_by_default(tmp_path):
         "https://example.com/report.html",
         source_name="prnewswire",
         fetch=lambda url: (
-            '<html><article>Manufacturing PMI at 50.0%; June 2026 ISM '
-            'Manufacturing PMI Report text. WHAT RESPONDENTS ARE SAYING '
+            "<html><article>Manufacturing PMI at 50.0%; June 2026 ISM "
+            "Manufacturing PMI Report text. WHAT RESPONDENTS ARE SAYING "
             '"Input costs remain elevated." [Chemical Products]</article></html>'
         ),
         now=lambda: "2026-07-15T00:00:00Z",

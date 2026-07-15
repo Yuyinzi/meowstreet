@@ -15,6 +15,16 @@ from app.tools import ism_ai_extraction
 from app.tools import ism_official_report
 
 
+def extract_report_payload(report_text, client):
+    return asyncio.run(
+        ism_ai_extraction.extract_with_client_async(
+            report_text,
+            client,
+            max_concurrency=3,
+        )
+    )
+
+
 def _check_report_id(extracted_report_id, expected_report_id, source_url):
     if extracted_report_id != expected_report_id:
         raise ValueError(
@@ -39,7 +49,7 @@ def extract_snapshot(con, source_url, client, model):
         snapshot["raw_html"],
         snapshot["source_name"],
     )
-    payload = ism_ai_extraction.extract_with_client(report_text, client)
+    payload = extract_report_payload(report_text, client)
     snapshot_report_id = snapshot.get("report_id")
     if snapshot_report_id:
         _check_report_id(payload["report"]["report_id"], snapshot_report_id, source_url)

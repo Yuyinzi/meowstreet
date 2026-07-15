@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import hashlib
 import re
 import subprocess
@@ -33,6 +34,16 @@ MONTHS = [
     "november",
     "december",
 ]
+
+
+def extract_ai_payload(report_text, ai_client):
+    return asyncio.run(
+        ism_ai_extraction.extract_with_client_async(
+            report_text,
+            ai_client,
+            max_concurrency=3,
+        )
+    )
 
 
 def build_ai_client(config):
@@ -271,10 +282,7 @@ def import_report_url(
             "report_month": prepared["report_month"],
         },
     )
-    payload = ism_ai_extraction.extract_with_client(
-        prepared["report_text"],
-        ai_client,
-    )
+    payload = extract_ai_payload(prepared["report_text"], ai_client)
     if payload["report"]["report_id"] != prepared["report_id"]:
         raise ValueError(
             f"llm report_id mismatch for {url}: expected {prepared['report_id']}, "
