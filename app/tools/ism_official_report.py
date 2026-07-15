@@ -348,6 +348,11 @@ def prepare_report_for_ai(html, source_url, fetched_at, source_name="ismworld"):
     report_month, month_name, year = report_month_from_title(report_text)
     if "Manufacturing PMI" not in report_text:
         raise ValueError("ism report is not a manufacturing pmi report")
+    report_text = re.split(
+        r"(?i)\b(?:About This Report|Buying Policy)\b",
+        report_text,
+        maxsplit=1,
+    )[0]
     cleaned = re.sub(r"\s+", " ", report_text).strip()
     cleaned = re.sub(r"(?i)PR Newswire legal boilerplate.*$", "", cleaned).strip()
     return {

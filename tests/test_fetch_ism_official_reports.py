@@ -134,6 +134,7 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
         "industry_signals": 2,
         "ai_summary": 1,
         "commodities": 1,
+        "narrative_facts": 1,
     }
     assert us_rates_liquidity.load_macro_indicator_points(con, "ism_manufacturing_pmi")[
         -1
@@ -231,7 +232,9 @@ def test_main_imports_requested_months(tmp_path, monkeypatch, capsys):
     )
 
 
-def test_main_current_year_skips_month_landing_pages(tmp_path, monkeypatch, capsys):
+def test_main_current_year_uses_prnewswire_for_history_and_official_for_latest(
+    tmp_path, monkeypatch, capsys
+):
     from tests.test_ism_ai_extraction import valid_extraction
 
     db_path = tmp_path / "market_data.sqlite"
@@ -240,51 +243,34 @@ def test_main_current_year_skips_month_landing_pages(tmp_path, monkeypatch, caps
         def complete_json(self, prompt):
             return valid_extraction()
 
-    class FakeArgs:
-        current_year = True
-        month = None
-
-    responses = {
-        "january": NO_REPORT_HTML,
-        "february": NO_REPORT_HTML,
-        "march": NO_REPORT_HTML,
-        "april": HTML,
-    }
-
-    def fake_fetch(url):
-        for month, html in responses.items():
-            if f"/{month}/" in url:
-                return html
-        raise ValueError(f"unexpected url: {url}")
+    archive_reports = [
+        {
+            "url": "https://www.prnewswire.com/jun-2026.html",
+            "title": "June 2026 ISM Manufacturing PMI Report",
+            "report_month": "2026-06-01",
+            "report_id": "ism_manufacturing_2026_06",
+        },
+    ]
 
     monkeypatch.setattr(
         fetch_ism_official_reports,
-        "requested_months",
-        lambda args: ["january", "february", "march", "april"],
+        "discover_prnewswire_reports",
+        lambda since_year, fetch=None, pagesize=25, max_pages=100: archive_reports,
     )
-    monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", fake_fetch)
     monkeypatch.setattr(
         fetch_ism_official_reports,
         "fetched_at_now",
         lambda: "2026-07-14T10:00:00Z",
     )
+    monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", lambda url: HTML)
 
     exit_code = fetch_ism_official_reports.main(
-        ["--db-path", str(db_path), "--current-year"],
+        ["--db-path", str(db_path), "--current-year", "--force"],
         ai_client_factory=lambda config: FakeClient(),
     )
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "ism_official_report/january: skipped - no report page available" in (
-        captured.err
-    )
-    assert "ism_official_report/february: skipped - no report page available" in (
-        captured.err
-    )
-    assert "ism_official_report/march: skipped - no report page available" in (
-        captured.err
-    )
     assert (
         "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=0 comments=1 "
         "at_a_glance_rows=11" in captured.out
@@ -435,7 +421,9 @@ def test_import_report_url_uses_ai_extraction_by_default(tmp_path):
         "https://example.com/report.html",
         source_name="prnewswire",
         fetch=lambda url: (
-            "<html><article>Manufacturing PMI at 50.0%; June 2026 ISM Manufacturing PMI Report text</article></html>"
+            '<html><article>Manufacturing PMI at 50.0%; June 2026 ISM '
+            'Manufacturing PMI Report text. WHAT RESPONDENTS ARE SAYING '
+            '"Input costs remain elevated." [Chemical Products]</article></html>'
         ),
         now=lambda: "2026-07-15T00:00:00Z",
         ai_client=FakeClient(),
@@ -516,7 +504,8 @@ def test_main_imports_one_report_month_with_ai(tmp_path, capsys):
         ],
         fetch=lambda url: (
             "<html><article>Manufacturing PMI at 50.0%; "
-            "June 2026 ISM Manufacturing PMI Report text</article></html>"
+            "June 2026 ISM Manufacturing PMI Report text. WHAT RESPONDENTS "
+            'ARE SAYING "Input costs remain elevated." [Chemical Products]</article></html>'
         ),
         ai_client_factory=lambda config: FakeClient(),
     )

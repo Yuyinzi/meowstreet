@@ -21,6 +21,36 @@ for _label, _series_id in METRIC_LABELS.items():
 
 REQUIRED_SERIES_IDS = set(METRIC_LABEL_TO_SERIES_ID.values())
 
+
+def _previous_report_month(report_month):
+    year, month, _day = report_month.split("-")
+    year = int(year)
+    month = int(month)
+    if month == 1:
+        return f"{year - 1}-12-01"
+    return f"{year}-{month - 1:02d}-01"
+
+
+def _normalized_text(value):
+    return " ".join(
+        value.replace("“", '"')
+        .replace("”", '"')
+        .replace("’", "'")
+        .replace("‘", "'")
+        .split()
+    )
+
+
+def _validate_respondent_comments_are_from_source(payload, report_text):
+    source_text = _normalized_text(report_text)
+    for comment in payload.get("respondent_comments", []):
+        comment_text = _normalized_text(comment["comment_text"])
+        if comment_text not in source_text:
+            raise ValueError(
+                "respondent comment text is not present in source: "
+                f"{comment['comment_text']}"
+            )
+
 SignalType = Literal[
     "overall_growth",
     "overall_contraction",
@@ -159,7 +189,53 @@ class IsmRichExtractionModel(BaseModel):
             raise ValueError(
                 "at_a_glance_rows series ids do not match required ISM metrics"
             )
+        self.ai_summary.compared_to_report_month = _previous_report_month(
+            self.report.report_month
+        )
         return self
+
+
+class ReportSectionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report: ReportModel
+
+
+class AtAGlanceSectionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    at_a_glance_rows: list[AtAGlanceRowModel]
+
+    @model_validator(mode="after")
+    def validate_metric_set(self):
+        if len(self.at_a_glance_rows) != 11:
+            raise ValueError("at_a_glance_rows must contain exactly 11 rows")
+        series_ids = {row.series_id for row in self.at_a_glance_rows}
+        if series_ids != REQUIRED_SERIES_IDS:
+            raise ValueError(
+                "at_a_glance_rows series ids do not match required ISM metrics"
+            )
+        return self
+
+
+class IndustrySignalsSectionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    industry_signals: list[IndustrySignalModel]
+
+
+class CommentsCommoditiesSectionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    respondent_comments: list[RespondentCommentModel]
+    commodities: list[CommoditySignalModel]
+
+
+class NarrativeSummarySectionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    narrative_facts: NarrativeFactsModel
+    ai_summary: AiSummaryModel
 
 
 def validate_extraction(payload):
@@ -169,7 +245,136 @@ def validate_extraction(payload):
         raise ValueError(str(exc)) from exc
 
 
+def _validate_model(model, payload):
+    try:
+        return model.model_validate(payload).model_dump()
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
+
+
 PROMPT_VERSION = "ism-rich-v1"
+
+
+def _find_marker(text, marker):
+    index = text.lower().find(marker.lower())
+    return index if index >= 0 else None
+
+
+def _slice_between(text, start_marker=None, end_markers=None):
+    start = 0
+    if start_marker:
+        start_index = _find_marker(text, start_marker)
+        if start_index is None:
+            return text
+        start = start_index
+    end = len(text)
+    for marker in end_markers or []:
+        marker_index = _find_marker(text[start:], marker)
+        if marker_index is not None:
+            end = min(end, start + marker_index)
+    return text[start:end].strip()
+
+
+def report_section_texts(report_text):
+    intro = _slice_between(
+        report_text,
+        end_markers=["WHAT RESPONDENTS ARE SAYING", "MANUFACTURING AT A GLANCE"],
+    )
+    at_a_glance = _slice_between(
+        report_text,
+        "MANUFACTURING AT A GLANCE",
+        ["COMMODITIES REPORTED", "MANUFACTURING INDEX SUMMARIES"],
+    )
+    comments = _slice_between(
+        report_text,
+        "WHAT RESPONDENTS ARE SAYING",
+        ["MANUFACTURING AT A GLANCE"],
+    )
+    commodities = _slice_between(
+        report_text,
+        "COMMODITIES REPORTED",
+        ["MANUFACTURING INDEX SUMMARIES"],
+    )
+    index_summaries = _slice_between(
+        report_text,
+        "MANUFACTURING INDEX SUMMARIES",
+        ["Buying Policy", "About This Report"],
+    )
+    return {
+        "report": intro or report_text[:4000],
+        "at_a_glance_rows": at_a_glance or report_text,
+        "industry_signals": index_summaries or report_text,
+        "comments_commodities": "\n\n".join(
+            section for section in [comments, commodities] if section
+        )
+        or report_text,
+        "narrative_summary": "\n\n".join(
+            section for section in [intro, at_a_glance, index_summaries[:5000]] if section
+        )
+        or report_text,
+    }
+
+
+def schema_instructions():
+    return """
+Required JSON shape:
+{
+  "report": {
+    "report_id": "ism_manufacturing_YYYY_MM",
+    "report_month": "YYYY-MM-01",
+    "title": "...",
+    "source_name": "prnewswire or ismworld",
+    "source_url": "..."
+  },
+  "at_a_glance_rows": [
+    {
+      "series_id": "one of the allowed series ids",
+      "label": "official metric label",
+      "current_value": 52.6,
+      "previous_value": 47.9,
+      "point_change": 4.7,
+      "direction": "Growing",
+      "rate_of_change": "Faster",
+      "trend_months": 1
+    }
+  ],
+  "industry_signals": [
+    {
+      "signal_type": "overall_growth",
+      "direction": "growth",
+      "industry": "Machinery",
+      "rank": 1,
+      "evidence_text": "source sentence"
+    }
+  ],
+  "respondent_comments": [
+    {"industry": "Machinery", "comment_text": "quoted comment"}
+  ],
+  "commodities": [
+    {"commodity": "Steel", "signal_type": "up_in_price", "months": 2}
+  ],
+  "narrative_facts": {
+    "manufacturing_gdp_share_contracted_percent": 0.0,
+    "manufacturing_gdp_share_strong_contraction_percent": 0.0,
+    "pmi_implied_real_gdp_annualized_percent": 0.0,
+    "largest_industries_expanded": []
+  },
+  "ai_summary": {
+    "compared_to_report_month": "YYYY-MM-01",
+    "headline_changes": [
+      {
+        "label": "Headline PMI",
+        "series_id": "ism_manufacturing_pmi",
+        "point_change": 1.3
+      }
+    ],
+    "major_changes": ["..."],
+    "summary_text": "..."
+  }
+}
+
+Allowed at_a_glance_rows series_id values:
+""".strip() + "\n" + "\n".join(f"- {series_id}" for series_id in sorted(REQUIRED_SERIES_IDS))
 
 
 def build_prompt(report_text):
@@ -217,11 +422,302 @@ new_export_orders, imports.
 Preserve industry order as rank starting at 1. Include evidence_text copied
 from the source paragraph for each signal. Do not invent industries or values.
 
+{schema_instructions()}
+
 Report text:
 {report_text}
 """.strip()
 
 
-def extract_with_client(report_text, client):
-    payload = client.complete_json(build_prompt(report_text))
+def build_report_prompt(report_text):
+    return f"""
+Extract only report metadata from the ISM Manufacturing report.
+Return only valid JSON with this shape:
+{{
+  "report": {{
+    "report_id": "ism_manufacturing_YYYY_MM",
+    "report_month": "YYYY-MM-01",
+    "title": "...",
+    "source_name": "prnewswire or ismworld",
+    "source_url": "..."
+  }}
+}}
+
+Report text:
+{report_text}
+""".strip()
+
+
+def build_at_a_glance_prompt(report_text):
+    return f"""
+Extract only MANUFACTURING AT A GLANCE from the ISM Manufacturing report.
+Return only valid JSON with this shape:
+{{
+  "at_a_glance_rows": [
+    {{
+      "series_id": "one of the allowed series ids",
+      "label": "official metric label",
+      "current_value": 52.6,
+      "previous_value": 47.9,
+      "point_change": 4.7,
+      "direction": "Growing",
+      "rate_of_change": "Faster",
+      "trend_months": 1
+    }}
+  ]
+}}
+
+Return exactly 11 at_a_glance_rows. Use these series_id values exactly:
+{chr(10).join(f"- {series_id}" for series_id in sorted(REQUIRED_SERIES_IDS))}
+
+Report text:
+{report_text}
+""".strip()
+
+
+def build_industry_signals_prompt(report_text):
+    return f"""
+Extract only industry signal lists from the ISM Manufacturing report.
+Return only valid JSON with this shape:
+{{
+  "industry_signals": [
+    {{
+      "signal_type": "overall_growth",
+      "direction": "growth",
+      "industry": "Machinery",
+      "rank": 1,
+      "evidence_text": "source sentence"
+    }}
+  ]
+}}
+
+Use a flat list. Extract all available lists for overall_growth,
+overall_contraction, new_orders, production, employment, supplier_deliveries,
+inventories, customer_inventories, prices, backlog, new_export_orders, imports.
+Do not return nested objects.
+
+Report text:
+{report_text}
+""".strip()
+
+
+def build_comments_commodities_prompt(report_text):
+    return f"""
+Extract only respondent comments and commodities from the ISM Manufacturing report.
+Return only valid JSON with this shape:
+{{
+  "respondent_comments": [
+    {{"industry": "Machinery", "comment_text": "quoted comment"}}
+  ],
+  "commodities": [
+    {{"commodity": "Steel", "signal_type": "up_in_price", "months": 2}}
+  ]
+}}
+
+For respondent_comments, extract only exact quoted respondent comment text that
+appears in the source. Preserve the quoted wording exactly, excluding only the
+surrounding quote marks. Do not summarize, paraphrase, combine, infer, or create
+comments. If no quoted respondent comments are present, return an empty list.
+
+Commodities signal_type must be one of: up_in_price, down_in_price, short_supply.
+
+Report text:
+{report_text}
+""".strip()
+
+
+def build_narrative_summary_prompt(report_text):
+    return f"""
+Extract only narrative facts and AI summary from the ISM Manufacturing report.
+Return only valid JSON with this shape:
+{{
+  "narrative_facts": {{
+    "manufacturing_gdp_share_contracted_percent": 0.0,
+    "manufacturing_gdp_share_strong_contraction_percent": 0.0,
+    "pmi_implied_real_gdp_annualized_percent": 0.0,
+    "largest_industries_expanded": []
+  }},
+  "ai_summary": {{
+    "compared_to_report_month": "YYYY-MM-01",
+    "headline_changes": [
+      {{
+        "label": "Headline PMI",
+        "series_id": "ism_manufacturing_pmi",
+        "point_change": 1.3
+      }}
+    ],
+    "major_changes": ["..."],
+    "summary_text": "..."
+  }}
+}}
+
+Generate a concise month-over-month summary using only facts in the report.
+Do not invent changes, industries, commodities, or causal explanations.
+
+Report text:
+{report_text}
+""".strip()
+
+
+def build_repair_prompt(report_text, previous_payload, validation_error):
+    return f"""
+Your previous JSON failed schema validation. Return a corrected JSON object only.
+Do not explain the correction. Do not wrap the JSON in markdown.
+
+Important fixes:
+- report must be an object with report_id, report_month, title, source_name, and source_url.
+- at_a_glance_rows must contain exactly 11 rows.
+- at_a_glance_rows rows must use series_id, label, current_value, previous_value, point_change, direction, rate_of_change, trend_months.
+- industry_signals must be a flat list, not a nested object.
+- respondent_comments must use comment_text, not comment.
+- commodities must be a flat list.
+- narrative_facts must be an object.
+- ai_summary must be an object with compared_to_report_month, headline_changes, major_changes, and summary_text.
+
+Validation errors:
+{validation_error}
+
+Previous invalid JSON:
+{previous_payload}
+
+{schema_instructions()}
+
+Report text:
+{report_text}
+""".strip()
+
+
+def build_section_repair_prompt(report_text, section_name, previous_payload, validation_error, original_prompt):
+    return f"""
+Your previous JSON failed schema validation for section: {section_name}.
+Return a corrected JSON object only. Do not explain the correction. Do not wrap
+the JSON in markdown.
+
+Validation errors:
+{validation_error}
+
+Previous invalid JSON:
+{previous_payload}
+
+Original extraction instructions:
+{original_prompt}
+
+Report text:
+{report_text}
+""".strip()
+
+
+SECTION_KEYS = {
+    "report": ["report"],
+    "at_a_glance_rows": ["at_a_glance_rows"],
+    "industry_signals": ["industry_signals"],
+    "comments_commodities": ["respondent_comments", "commodities"],
+    "narrative_summary": ["narrative_facts", "ai_summary"],
+}
+
+
+def _section_payload(section_name, payload):
+    keys = SECTION_KEYS[section_name]
+    if not isinstance(payload, dict):
+        return payload
+    return {key: payload[key] for key in keys if key in payload}
+
+
+def _extract_section(report_text, client, section_name, prompt, model, max_attempts):
+    payload = None
+    validation_error = None
+    for attempt in range(max_attempts):
+        if attempt == 0:
+            current_prompt = prompt
+        else:
+            current_prompt = build_section_repair_prompt(
+                report_text,
+                section_name,
+                payload,
+                validation_error,
+                prompt,
+            )
+        payload = client.complete_json(current_prompt)
+        try:
+            section_payload = _validate_model(
+                model,
+                _section_payload(section_name, payload),
+            )
+            if section_name == "comments_commodities":
+                _validate_respondent_comments_are_from_source(
+                    section_payload,
+                    report_text,
+                )
+            return section_payload
+        except ValueError as exc:
+            validation_error = str(exc)
+    raise ValueError(validation_error)
+
+
+def extract_split_with_client(report_text, client, max_attempts=2):
+    section_texts = report_section_texts(report_text)
+    sections = [
+        (
+            "report",
+            section_texts["report"],
+            build_report_prompt(section_texts["report"]),
+            ReportSectionModel,
+        ),
+        (
+            "at_a_glance_rows",
+            section_texts["at_a_glance_rows"],
+            build_at_a_glance_prompt(section_texts["at_a_glance_rows"]),
+            AtAGlanceSectionModel,
+        ),
+        (
+            "industry_signals",
+            section_texts["industry_signals"],
+            build_industry_signals_prompt(section_texts["industry_signals"]),
+            IndustrySignalsSectionModel,
+        ),
+        (
+            "comments_commodities",
+            section_texts["comments_commodities"],
+            build_comments_commodities_prompt(section_texts["comments_commodities"]),
+            CommentsCommoditiesSectionModel,
+        ),
+        (
+            "narrative_summary",
+            section_texts["narrative_summary"],
+            build_narrative_summary_prompt(section_texts["narrative_summary"]),
+            NarrativeSummarySectionModel,
+        ),
+    ]
+    payload = {}
+    for section_name, section_text, prompt, model in sections:
+        payload.update(
+            _extract_section(
+                section_text,
+                client,
+                section_name,
+                prompt,
+                model,
+                max_attempts,
+            )
+        )
     return validate_extraction(payload)
+
+
+def extract_single_payload_with_client(report_text, client, max_attempts=3):
+    payload = None
+    validation_error = None
+    for attempt in range(max_attempts):
+        if attempt == 0:
+            prompt = build_prompt(report_text)
+        else:
+            prompt = build_repair_prompt(report_text, payload, validation_error)
+        payload = client.complete_json(prompt)
+        try:
+            return validate_extraction(payload)
+        except ValueError as exc:
+            validation_error = str(exc)
+    raise ValueError(validation_error)
+
+
+def extract_with_client(report_text, client, max_attempts=2):
+    return extract_split_with_client(report_text, client, max_attempts=max_attempts)

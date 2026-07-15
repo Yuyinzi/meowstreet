@@ -347,3 +347,61 @@ def test_prepare_report_for_ai_validates_and_cleans_report_text():
     assert prepared["report_month"] == "2026-01-01"
     assert "Manufacturing PMI" in prepared["report_text"]
     assert "PR Newswire legal boilerplate" not in prepared["report_text"]
+
+
+def test_prepare_report_for_ai_removes_about_this_report_tail():
+    html = """
+    <html>
+      <body>
+        <article>
+          <h1>Jan 2026 Manufacturing PMI® at 52.6%; January 2026 ISM® Manufacturing PMI® Report</h1>
+          <p>The Manufacturing PMI® registered 52.6 percent in January.</p>
+          <p>MANUFACTURING AT A GLANCE</p>
+          <p>New Orders 55.1 53.2 +1.9 Growing Faster 2</p>
+          <p>About This Report</p>
+          <p>This monthly report is based on survey data and methodology notes.</p>
+          <p>Contact: ISM Research Manager</p>
+        </article>
+      </body>
+    </html>
+    """
+
+    prepared = ism_official_report.prepare_report_for_ai(
+        html,
+        "https://example.com/january.html",
+        "2026-07-15T00:00:00Z",
+        source_name="prnewswire",
+    )
+
+    assert "MANUFACTURING AT A GLANCE" in prepared["report_text"]
+    assert "About This Report" not in prepared["report_text"]
+    assert "methodology notes" not in prepared["report_text"]
+
+
+def test_prepare_report_for_ai_removes_buying_policy_tail():
+    html = """
+    <html>
+      <body>
+        <article>
+          <h1>Jan 2026 Manufacturing PMI® at 52.6%; January 2026 ISM® Manufacturing PMI® Report</h1>
+          <p>The Manufacturing PMI® registered 52.6 percent in January.</p>
+          <p>MANUFACTURING AT A GLANCE</p>
+          <p>New Orders 55.1 53.2 +1.9 Growing Faster 2</p>
+          <p>Buying Policy</p>
+          <p>The average commitment lead time for Capital Expenditures was 172 days.</p>
+          <p>Contact: ISM Research Manager</p>
+        </article>
+      </body>
+    </html>
+    """
+
+    prepared = ism_official_report.prepare_report_for_ai(
+        html,
+        "https://example.com/january.html",
+        "2026-07-15T00:00:00Z",
+        source_name="prnewswire",
+    )
+
+    assert "MANUFACTURING AT A GLANCE" in prepared["report_text"]
+    assert "Buying Policy" not in prepared["report_text"]
+    assert "Capital Expenditures" not in prepared["report_text"]

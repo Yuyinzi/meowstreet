@@ -198,6 +198,10 @@ Use Pydantic v2 models to validate all LLM-generated JSON or AI extraction paylo
 
 LLM extraction remains offline/import-time only unless explicitly approved. Runtime dashboard classification and ticker workflow decisions must stay deterministic.
 
+### LLM Configuration
+
+AI/LLM scripts must load model, API key, and base URL from `.env` through `app.llm`. Do not hardcode model names, API URLs, or provider-specific defaults in scripts. CLI flags may override `.env` only when explicitly provided by the user; their default must be `None` so environment configuration remains the source of truth.
+
 ### Filesystem
 
 Always use `pathlib.Path`, never `os.path` or raw strings for paths:

@@ -1319,6 +1319,28 @@ def replace_ism_report_commodities(con, payload, source):
     return {"commodities": len(payload["commodities"])}
 
 
+def replace_ism_report_narrative_facts(con, payload, source):
+    report = payload["report"]
+    con.execute(
+        "delete from ism_report_narrative_facts where report_id = ?",
+        (report["report_id"],),
+    )
+    con.execute(
+        """
+        insert into ism_report_narrative_facts(
+            report_id, report_month, facts_json, source_hash
+        ) values (?, ?, ?, ?)
+        """,
+        (
+            report["report_id"],
+            report["report_month"],
+            json.dumps(payload.get("narrative_facts", {}), sort_keys=True),
+            source["source_hash"],
+        ),
+    )
+    return {"narrative_facts": 1}
+
+
 def load_ism_report_ai_summary(con, report_id):
     row = con.execute(
         """
@@ -1354,9 +1376,11 @@ def replace_ism_ai_report_outputs(con, payload, source):
     )
     summary_saved = replace_ism_ai_summary(con, payload, source)
     commodity_saved = replace_ism_report_commodities(con, payload, source)
+    narrative_saved = replace_ism_report_narrative_facts(con, payload, source)
     con.commit()
     return {
         **extraction_saved,
         **summary_saved,
         **commodity_saved,
+        **narrative_saved,
     }

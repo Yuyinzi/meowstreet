@@ -37,12 +37,12 @@ MONTHS = [
 
 def build_ai_client(config):
     from app import llm
-    from scripts.extract_ism_report_ai import OpenAIJsonClient
+    from scripts.extract_ism_report_ai import OpenAIJsonClient, llm_timeout
 
     sync = llm.build_async_client(
         config,
         max_retries=0,
-        timeout=120,
+        timeout=llm_timeout(),
         error_context="ISM report extraction",
     )
     return OpenAIJsonClient(sync, config["model"])
@@ -237,6 +237,20 @@ def import_report_url(
     fetched_at = now()
     html = fetch(url)
     source_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
+    us_rates_liquidity.replace_ism_report_source_snapshot(
+        con,
+        {
+            "source_url": url,
+            "source_name": source_name,
+            "source_hash": source_hash,
+            "fetched_at": fetched_at,
+            "raw_html": html,
+            "parse_status": "fetched",
+            "parse_error": None,
+            "report_id": None,
+            "report_month": None,
+        },
+    )
     prepared = ism_official_report.prepare_report_for_ai(
         html,
         url,
@@ -558,37 +572,61 @@ def main(argv=None, fetch=None, ai_client_factory=None):
             except (ValueError, CalledProcessError, TimeoutExpired) as exc:
                 print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
                 failed += 1
-        months = (
-            []
-            if (args.url or args.prnewswire_pages)
-            and not args.month
-            and not args.current_year
-            else requested_months(args)
-        )
-        for month in months:
-            try:
-                result = import_report(
-                    con, month, fetch=fetch, ai_client=ai_client, model=model
-                )
-                results.append(result)
-            except ism_official_report.IsmReportUnavailable as exc:
-                if args.current_year:
+        if args.current_year:
+            current_year = datetime.now().year
+            archive_reports = discover_prnewswire_reports(
+                since_year=current_year,
+                fetch=fetch,
+            )
+            existing_months = us_rates_liquidity.load_existing_ism_report_months(con)
+            targets = backfill_targets(
+                archive_reports,
+                since_year=current_year,
+                latest_report_month=latest_released_report_month(),
+                existing_months=existing_months,
+                missing_only=not args.force,
+            )
+            for target in targets:
+                try:
+                    result = import_report_url(
+                        con,
+                        target["url"],
+                        source_name=target["source_name"],
+                        fetch=fetch,
+                        ai_client=ai_client,
+                        model=model,
+                    )
+                    results.append(result)
+                except (ValueError, CalledProcessError, TimeoutExpired) as exc:
                     print(
-                        f"ism_official_report/{month}: skipped - {exc}",
+                        f"ism_official_report/{target['url']}: failed - {exc}",
                         file=sys.stderr,
                     )
-                    continue
-                print(
-                    f"ism_official_report/{month}: failed - {exc}",
-                    file=sys.stderr,
-                )
-                failed += 1
-            except (ValueError, CalledProcessError, TimeoutExpired) as exc:
-                print(
-                    f"ism_official_report/{month}: failed - {exc}",
-                    file=sys.stderr,
-                )
-                failed += 1
+                    failed += 1
+        else:
+            months = (
+                []
+                if (args.url or args.prnewswire_pages) and not args.month
+                else requested_months(args)
+            )
+            for month in months:
+                try:
+                    result = import_report(
+                        con, month, fetch=fetch, ai_client=ai_client, model=model
+                    )
+                    results.append(result)
+                except ism_official_report.IsmReportUnavailable as exc:
+                    print(
+                        f"ism_official_report/{month}: failed - {exc}",
+                        file=sys.stderr,
+                    )
+                    failed += 1
+                except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+                    print(
+                        f"ism_official_report/{month}: failed - {exc}",
+                        file=sys.stderr,
+                    )
+                    failed += 1
     con.close()
     for result in results:
         print(
