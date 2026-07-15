@@ -951,8 +951,14 @@ Original instructions:
 {prompt}
 """.strip()
         payload = await _complete_json_async(client, current_prompt)
+        if "summary_text" in payload:
+            summary_payload = payload
+        elif "ai_summary" in payload:
+            summary_payload = payload["ai_summary"]
+        else:
+            summary_payload = payload
         try:
-            return validate_summary_against_facts(payload, factual_payload)
+            return validate_summary_against_facts(summary_payload, factual_payload)
         except ValueError as exc:
             validation_error = str(exc)
     raise ValueError(validation_error)
