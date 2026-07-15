@@ -110,9 +110,9 @@ class OpenAIJsonClient:
         self.max_attempts = max_attempts
 
     def complete_json(self, prompt):
-        return asyncio.run(self._complete_json(prompt))
+        return asyncio.run(self.complete_json_async(prompt))
 
-    async def _complete_json(self, prompt):
+    async def complete_json_async(self, prompt):
         last_error = None
         for _attempt in range(self.max_attempts):
             try:

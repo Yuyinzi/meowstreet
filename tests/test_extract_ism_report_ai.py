@@ -99,6 +99,24 @@ def test_openai_json_client_streams_and_parses_json_chunks():
     assert fake_openai.completions.kwargs["model"] == "env-model"
 
 
+@pytest.mark.asyncio
+async def test_openai_json_client_supports_async_json_completion():
+    fake_openai = FakeStreamingOpenAIClient(
+        [
+            FakeChunk('{"ok":'),
+            FakeChunk(" true"),
+            FakeChunk("}"),
+        ]
+    )
+    client = extract_ism_report_ai.OpenAIJsonClient(fake_openai, "env-model")
+
+    result = await client.complete_json_async("Return JSON")
+
+    assert result == {"ok": True}
+    assert fake_openai.completions.kwargs["stream"] is True
+    assert fake_openai.completions.kwargs["model"] == "env-model"
+
+
 def test_openai_json_client_retries_stream_connection_errors():
     fake_openai = FakeFlakyOpenAIClient(
         [
