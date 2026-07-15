@@ -63,19 +63,14 @@ def extract_snapshot(con, source_url, client, model):
                 f"cannot verify llm report_id: snapshot {source_url} has no "
                 f"report_id and title could not be parsed: {exc}"
             ) from exc
-    saved = us_rates_liquidity.replace_ism_ai_extraction(
+    saved = us_rates_liquidity.replace_ism_ai_report_outputs(
         con,
+        payload,
         {
-            "report_id": payload["report"]["report_id"],
-            "report_month": payload["report"]["report_month"],
             "source_url": snapshot["source_url"],
             "source_hash": snapshot["source_hash"],
-            "extractor": "llm",
             "model": model,
             "prompt_version": ism_ai_extraction.PROMPT_VERSION,
-            "validation_status": "ok",
-            "validation_error": None,
-            "extraction_json": payload,
         },
     )
     return {
