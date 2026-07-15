@@ -47,15 +47,22 @@ NO_REPORT_HTML = """
 
 
 def test_main_handles_sso_error_gracefully(tmp_path, monkeypatch, capsys):
+    from tests.test_ism_ai_extraction import valid_extraction
+
     db_path = tmp_path / "market_data.sqlite"
 
     def failing_fetch(url):
         raise ValueError("ism official report requires ISM membership login")
 
+    class FakeClient:
+        def complete_json(self, prompt):
+            return valid_extraction()
+
     monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", failing_fetch)
 
     exit_code = fetch_ism_official_reports.main(
-        ["--db-path", str(db_path), "--month", "june"]
+        ["--db-path", str(db_path), "--month", "june"],
+        ai_client_factory=lambda config: FakeClient(),
     )
 
     assert exit_code == 1
@@ -99,29 +106,41 @@ def test_fetch_text_uses_plain_curl_transport(monkeypatch):
 
 
 def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
+    from tests.test_ism_ai_extraction import valid_extraction
+
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            return valid_extraction()
 
     result = fetch_ism_official_reports.import_report(
         con,
         "june",
         fetch=lambda url: HTML,
         now=lambda: "2026-07-14T10:00:00Z",
+        ai_client=FakeClient(),
+        model="test-model",
     )
 
     assert result == {
         "report_id": "ism_manufacturing_2026_06",
         "metrics": 11,
-        "rankings": 4,
+        "rankings": 0,
         "comments": 1,
         "at_a_glance_rows": 11,
         "source_name": "ismworld",
+        "ai_extractions": 1,
+        "industry_signals": 2,
+        "ai_summary": 1,
+        "commodities": 1,
     }
     assert us_rates_liquidity.load_macro_indicator_points(con, "ism_manufacturing_pmi")[
         -1
     ] == {
         "date": "2026-06-01",
-        "value": 53.3,
-        "source": "ISM official report",
+        "value": 50.0,
+        "source": "ISM AI extraction",
     }
     assert us_rates_liquidity.load_latest_ism_report_snapshot(con)["report_id"] == (
         "ism_manufacturing_2026_06"
@@ -134,8 +153,8 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
     )
     rows = us_rates_liquidity.load_latest_ism_at_a_glance_rows(con)
     assert len(rows) == 11
-    assert rows[0]["point_change"] == -0.4
-    assert rows[0]["direction"] == "Too Low"
+    assert rows[0]["point_change"] == 1.0
+    assert rows[0]["direction"] == "Growing"
     assert rows[0]["rate_of_change"] == "Faster"
 
 
@@ -184,7 +203,13 @@ def test_requested_months_current_year_excludes_current_month(monkeypatch):
 
 
 def test_main_imports_requested_months(tmp_path, monkeypatch, capsys):
+    from tests.test_ism_ai_extraction import valid_extraction
+
     db_path = tmp_path / "market_data.sqlite"
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            return valid_extraction()
 
     monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", lambda url: HTML)
     monkeypatch.setattr(
@@ -194,19 +219,26 @@ def test_main_imports_requested_months(tmp_path, monkeypatch, capsys):
     )
 
     exit_code = fetch_ism_official_reports.main(
-        ["--db-path", str(db_path), "--month", "june"]
+        ["--db-path", str(db_path), "--month", "june"],
+        ai_client_factory=lambda config: FakeClient(),
     )
 
     assert exit_code == 0
     out = capsys.readouterr().out
     assert (
-        "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=4 comments=1 "
+        "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=0 comments=1 "
         "at_a_glance_rows=11" in out
     )
 
 
 def test_main_current_year_skips_month_landing_pages(tmp_path, monkeypatch, capsys):
+    from tests.test_ism_ai_extraction import valid_extraction
+
     db_path = tmp_path / "market_data.sqlite"
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            return valid_extraction()
 
     class FakeArgs:
         current_year = True
@@ -238,7 +270,8 @@ def test_main_current_year_skips_month_landing_pages(tmp_path, monkeypatch, caps
     )
 
     exit_code = fetch_ism_official_reports.main(
-        ["--db-path", str(db_path), "--current-year"]
+        ["--db-path", str(db_path), "--current-year"],
+        ai_client_factory=lambda config: FakeClient(),
     )
 
     captured = capsys.readouterr()
@@ -253,7 +286,7 @@ def test_main_current_year_skips_month_landing_pages(tmp_path, monkeypatch, caps
         captured.err
     )
     assert (
-        "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=4 comments=1 "
+        "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=0 comments=1 "
         "at_a_glance_rows=11" in captured.out
     )
 
@@ -262,7 +295,11 @@ def test_import_report_saves_failed_raw_snapshot(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
     url = "https://www.prnewswire.com/news-releases/bad-report.html"
 
-    with pytest.raises(ValueError, match="ism report metrics are missing"):
+    class FakeClient:
+        def complete_json(self, prompt):
+            raise ValueError("simulated AI extraction failure")
+
+    with pytest.raises(ValueError, match="simulated AI extraction failure"):
         fetch_ism_official_reports.import_report_url(
             con,
             url,
@@ -271,18 +308,24 @@ def test_import_report_saves_failed_raw_snapshot(tmp_path):
                 "<html><article>June 2026 ISM Manufacturing PMI Report</article></html>"
             ),
             now=lambda: "2026-07-15T10:00:00Z",
+            ai_client=FakeClient(),
         )
 
     snapshot = us_rates_liquidity.load_ism_report_source_snapshot(con, url)
     assert snapshot["source_name"] == "prnewswire"
-    assert snapshot["parse_status"] == "failed"
-    assert "ism report metrics are missing" in snapshot["parse_error"]
+    assert snapshot["parse_status"] == "prepared"
     assert snapshot["raw_html"].startswith("<html>")
 
 
 def test_import_report_url_saves_successful_raw_snapshot(tmp_path):
+    from tests.test_ism_ai_extraction import valid_extraction
+
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
     url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html"
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            return valid_extraction()
 
     result = fetch_ism_official_reports.import_report_url(
         con,
@@ -290,17 +333,25 @@ def test_import_report_url_saves_successful_raw_snapshot(tmp_path):
         source_name="prnewswire",
         fetch=lambda value: HTML,
         now=lambda: "2026-07-15T10:00:00Z",
+        ai_client=FakeClient(),
+        model="test-model",
     )
 
     snapshot = us_rates_liquidity.load_ism_report_source_snapshot(con, url)
     assert result["report_id"] == "ism_manufacturing_2026_06"
-    assert snapshot["parse_status"] == "ok"
+    assert snapshot["parse_status"] == "prepared"
     assert snapshot["report_id"] == "ism_manufacturing_2026_06"
 
 
 def test_main_imports_single_url(tmp_path, monkeypatch, capsys):
+    from tests.test_ism_ai_extraction import valid_extraction
+
     db_path = tmp_path / "market_data.sqlite"
     url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html"
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            return valid_extraction()
 
     monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", lambda value: HTML)
     monkeypatch.setattr(
@@ -310,7 +361,8 @@ def test_main_imports_single_url(tmp_path, monkeypatch, capsys):
     )
 
     exit_code = fetch_ism_official_reports.main(
-        ["--db-path", str(db_path), "--url", url]
+        ["--db-path", str(db_path), "--url", url],
+        ai_client_factory=lambda config: FakeClient(),
     )
 
     assert exit_code == 0
@@ -320,6 +372,8 @@ def test_main_imports_single_url(tmp_path, monkeypatch, capsys):
 def test_main_discovers_prnewswire_pages_and_imports_urls(
     tmp_path, monkeypatch, capsys
 ):
+    from tests.test_ism_ai_extraction import valid_extraction
+
     db_path = tmp_path / "market_data.sqlite"
     article_url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html"
     listing_html = (
@@ -327,6 +381,10 @@ def test_main_discovers_prnewswire_pages_and_imports_urls(
         "Jul 01, 2026 Manufacturing PMI® at 53.3%; June 2026 ISM® Manufacturing PMI® Report"
         "</a>"
     )
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            return valid_extraction()
 
     def fake_fetch(url):
         if "institute-for-supply-management" in url:
@@ -341,7 +399,8 @@ def test_main_discovers_prnewswire_pages_and_imports_urls(
     )
 
     exit_code = fetch_ism_official_reports.main(
-        ["--db-path", str(db_path), "--prnewswire-pages", "1"]
+        ["--db-path", str(db_path), "--prnewswire-pages", "1"],
+        ai_client_factory=lambda config: FakeClient(),
     )
 
     assert exit_code == 0
@@ -423,9 +482,54 @@ def test_backfill_targets_use_prnewswire_for_history_and_official_for_latest():
     ]
 
 
+def test_normalize_report_month_rejects_bad_format():
+    with pytest.raises(ValueError, match="ism report month must be YYYY-MM"):
+        fetch_ism_official_reports.normalize_report_month("bad-date")
+
+
+def test_normalize_report_month_adds_day():
+    assert fetch_ism_official_reports.normalize_report_month("2026-06") == "2026-06-01"
+
+
+def test_normalize_report_month_preserves_full_date():
+    assert (
+        fetch_ism_official_reports.normalize_report_month("2026-06-01") == "2026-06-01"
+    )
+
+
+def test_main_imports_one_report_month_with_ai(tmp_path, capsys):
+    from tests.test_ism_ai_extraction import valid_extraction
+
+    db_path = tmp_path / "market_data.sqlite"
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            return valid_extraction()
+
+    exit_code = fetch_ism_official_reports.main(
+        [
+            "--db-path",
+            str(db_path),
+            "--report-month",
+            "2026-06",
+            "--force",
+        ],
+        fetch=lambda url: (
+            "<html><article>Manufacturing PMI at 50.0%; "
+            "June 2026 ISM Manufacturing PMI Report text</article></html>"
+        ),
+        ai_client_factory=lambda config: FakeClient(),
+    )
+
+    assert exit_code == 0
+    assert "ism_manufacturing_2026_06" in capsys.readouterr().out
+
+
 def test_main_continues_when_prnewswire_article_fetch_fails(
     tmp_path, monkeypatch, capsys
 ):
+    from tests.test_ism_ai_extraction import valid_extraction
+
     db_path = tmp_path / "market_data.sqlite"
     bad_url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-52-6-january-2026-ism-manufacturing-pmi-report-302675443.html"
     good_url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html"
@@ -437,6 +541,10 @@ def test_main_continues_when_prnewswire_article_fetch_fails(
         "Jul 01, 2026 Manufacturing PMI® at 53.3%; June 2026 ISM® Manufacturing PMI® Report"
         "</a>"
     )
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            return valid_extraction()
 
     def fake_fetch(url):
         if "institute-for-supply-management" in url:
@@ -453,13 +561,14 @@ def test_main_continues_when_prnewswire_article_fetch_fails(
     )
 
     exit_code = fetch_ism_official_reports.main(
-        ["--db-path", str(db_path), "--prnewswire-pages", "1"]
+        ["--db-path", str(db_path), "--prnewswire-pages", "1"],
+        ai_client_factory=lambda config: FakeClient(),
     )
 
     captured = capsys.readouterr()
     assert exit_code == 1
     assert f"ism_official_report/{bad_url}: failed -" in captured.err
     assert (
-        "ism_manufacturing_2026_06: source=prnewswire metrics=11 rankings=4 "
+        "ism_manufacturing_2026_06: source=prnewswire metrics=11 rankings=0 "
         "comments=1 at_a_glance_rows=11" in captured.out
     )

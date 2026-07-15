@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import re
 import subprocess
 import sys
 from subprocess import CalledProcessError, TimeoutExpired
@@ -32,6 +33,19 @@ MONTHS = [
     "november",
     "december",
 ]
+
+
+def build_ai_client(config):
+    from app import llm
+    from scripts.extract_ism_report_ai import OpenAIJsonClient
+
+    sync = llm.build_async_client(
+        config,
+        max_retries=0,
+        timeout=120,
+        error_context="ISM report extraction",
+    )
+    return OpenAIJsonClient(sync, config["model"])
 
 
 def fetched_at_now():
@@ -287,13 +301,15 @@ def import_report_url(
     }
 
 
-def import_report(con, month, fetch=None, now=None):
+def import_report(con, month, fetch=None, now=None, ai_client=None, model=None):
     return import_report_url(
         con,
         report_url(month),
         source_name="ismworld",
         fetch=fetch,
         now=now,
+        ai_client=ai_client,
+        model=model,
     )
 
 
@@ -382,7 +398,26 @@ def backfill_targets(
     return targets
 
 
-def main(argv=None):
+def normalize_report_month(value):
+    if re.fullmatch(r"20\d{2}-\d{2}", value):
+        return f"{value}-01"
+    if re.fullmatch(r"20\d{2}-\d{2}-01", value):
+        return value
+    raise ValueError(f"ism report month must be YYYY-MM: {value}")
+
+
+def discover_prnewswire_reports(fetch=None, pages=5, pagesize=25):
+    if fetch is None:
+        fetch = fetch_text
+    reports = []
+    for page in range(1, pages + 1):
+        url = ism_prnewswire_archive.archive_listing_url(page, pagesize)
+        html = fetch(url)
+        reports.extend(ism_prnewswire_archive.parse_archive_listing(html))
+    return reports
+
+
+def main(argv=None, fetch=None, ai_client_factory=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--db-path", type=Path, default=us_rates_liquidity.DEFAULT_DB_PATH
@@ -392,40 +427,149 @@ def main(argv=None):
     parser.add_argument("--url", action="append")
     parser.add_argument("--prnewswire-pages", type=int, default=0)
     parser.add_argument("--prnewswire-pagesize", type=int, default=25)
+    parser.add_argument("--backfill-since", type=int)
+    parser.add_argument("--missing-only", action="store_true")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--latest-only", action="store_true")
+    parser.add_argument("--report-month")
     args = parser.parse_args(argv)
     con = us_rates_liquidity.connect(args.db_path)
+    if ai_client_factory is None:
+        from app import llm
+
+        config = llm.load_openai_config(args, root=ROOT)
+        ai_client = build_ai_client(config)
+        model = config["model"]
+    else:
+        config = {"model": "test-model"}
+        ai_client = ai_client_factory(config)
+        model = config["model"]
     results = []
     failed = 0
-    for url in requested_urls(args):
+    if args.latest_only:
+        report_month = latest_released_report_month()
+        url = report_url(month_name_from_report_month(report_month))
         try:
-            result = import_report_url(con, url)
+            result = import_report_url(
+                con,
+                url,
+                source_name="ismworld",
+                fetch=fetch,
+                ai_client=ai_client,
+                model=model,
+            )
             results.append(result)
         except (ValueError, CalledProcessError, TimeoutExpired) as exc:
             print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
             failed += 1
-    months = (
-        []
-        if (args.url or args.prnewswire_pages)
-        and not args.month
-        and not args.current_year
-        else requested_months(args)
-    )
-    for month in months:
-        try:
-            result = import_report(con, month)
-            results.append(result)
-        except ism_official_report.IsmReportUnavailable as exc:
-            if args.current_year:
+    elif args.report_month:
+        normalized = normalize_report_month(args.report_month)
+        latest = latest_released_report_month()
+        if normalized == latest:
+            targets = [
+                {
+                    "source_name": "ismworld",
+                    "url": report_url(month_name_from_report_month(normalized)),
+                }
+            ]
+        else:
+            archive_reports = discover_prnewswire_reports(fetch=fetch)
+            targets = [
+                {"source_name": "prnewswire", "url": item["url"]}
+                for item in archive_reports
+                if item["report_month"] == normalized
+            ]
+            if not targets:
                 print(
-                    f"ism_official_report/{month}: skipped - {exc}",
+                    f"ism_official_report/{args.report_month}: no archive entry found",
                     file=sys.stderr,
                 )
-                continue
-            print(f"ism_official_report/{month}: failed - {exc}", file=sys.stderr)
-            failed += 1
-        except (ValueError, CalledProcessError, TimeoutExpired) as exc:
-            print(f"ism_official_report/{month}: failed - {exc}", file=sys.stderr)
-            failed += 1
+                failed += 1
+        for target in targets:
+            try:
+                result = import_report_url(
+                    con,
+                    target["url"],
+                    source_name=target["source_name"],
+                    fetch=fetch,
+                    ai_client=ai_client,
+                    model=model,
+                )
+                results.append(result)
+            except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+                print(
+                    f"ism_official_report/{target['url']}: failed - {exc}",
+                    file=sys.stderr,
+                )
+                failed += 1
+    elif args.backfill_since:
+        archive_reports = discover_prnewswire_reports(fetch=fetch)
+        existing_months = us_rates_liquidity.load_existing_ism_report_months(con)
+        targets = backfill_targets(
+            archive_reports,
+            since_year=args.backfill_since,
+            latest_report_month=latest_released_report_month(),
+            existing_months=existing_months,
+            missing_only=args.missing_only,
+        )
+        for target in targets:
+            try:
+                result = import_report_url(
+                    con,
+                    target["url"],
+                    source_name=target["source_name"],
+                    fetch=fetch,
+                    ai_client=ai_client,
+                    model=model,
+                )
+                results.append(result)
+            except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+                print(
+                    f"ism_official_report/{target['url']}: failed - {exc}",
+                    file=sys.stderr,
+                )
+                failed += 1
+    else:
+        for url in requested_urls(args, fetch=fetch):
+            try:
+                result = import_report_url(
+                    con, url, fetch=fetch, ai_client=ai_client, model=model
+                )
+                results.append(result)
+            except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+                print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
+                failed += 1
+        months = (
+            []
+            if (args.url or args.prnewswire_pages)
+            and not args.month
+            and not args.current_year
+            else requested_months(args)
+        )
+        for month in months:
+            try:
+                result = import_report(
+                    con, month, fetch=fetch, ai_client=ai_client, model=model
+                )
+                results.append(result)
+            except ism_official_report.IsmReportUnavailable as exc:
+                if args.current_year:
+                    print(
+                        f"ism_official_report/{month}: skipped - {exc}",
+                        file=sys.stderr,
+                    )
+                    continue
+                print(
+                    f"ism_official_report/{month}: failed - {exc}",
+                    file=sys.stderr,
+                )
+                failed += 1
+            except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+                print(
+                    f"ism_official_report/{month}: failed - {exc}",
+                    file=sys.stderr,
+                )
+                failed += 1
     con.close()
     for result in results:
         print(
