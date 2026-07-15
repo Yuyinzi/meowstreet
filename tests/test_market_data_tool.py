@@ -149,6 +149,60 @@ def test_chart_payload_to_price_rows_includes_ohlcv_and_adjusted_close():
     ]
 
 
+def test_chart_payload_to_price_rows_uses_final_index_metadata_close():
+    payload = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "symbol": "^GSPC",
+                        "instrumentType": "INDEX",
+                        "exchangeTimezoneName": "America/New_York",
+                        "regularMarketTime": 1784062596,
+                        "regularMarketPrice": 7543.59,
+                        "currentTradingPeriod": {
+                            "regular": {
+                                "start": 1784122200,
+                                "end": 1784145600,
+                            },
+                        },
+                    },
+                    "timestamp": [1783949400, 1784035800],
+                    "indicators": {
+                        "quote": [
+                            {
+                                "open": [7547.53, 7536.70],
+                                "high": [7565.37, 7557.44],
+                                "low": [7506.41, 7513.23],
+                                "close": [7515.34, None],
+                                "volume": [0, 0],
+                            }
+                        ],
+                        "adjclose": [
+                            {
+                                "adjclose": [7515.34, None],
+                            }
+                        ],
+                    },
+                },
+            ],
+            "error": None,
+        },
+    }
+
+    rows = market_data.chart_payload_to_price_rows(payload, "^GSPC")
+
+    assert rows[-1] == {
+        "date": "2026-07-14",
+        "open": 7536.70,
+        "high": 7557.44,
+        "low": 7513.23,
+        "close": 7543.59,
+        "adjusted_close": 7543.59,
+        "volume": 0,
+    }
+
+
 def test_fetch_yahoo_chart_json_for_dates_passes_period_timestamps(monkeypatch):
     captured = {}
 
@@ -181,7 +235,39 @@ def test_fetch_yahoo_chart_json_for_dates_passes_period_timestamps(monkeypatch):
     assert "period2=1782950400" in captured["url"]
     assert "interval=1d" in captured["url"]
     assert "events=history" in captured["url"]
-    assert captured["timeout"] == 20
+    assert captured["timeout"] == 45
+
+
+def test_fetch_yahoo_chart_json_for_dates_retries_timeouts(monkeypatch):
+    calls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return None
+
+        def read(self):
+            return b'{"chart": {"result": [], "error": null}}'
+
+    def fake_urlopen(request, timeout):
+        calls.append(timeout)
+        if len(calls) < 3:
+            raise TimeoutError("timed out")
+        return Response()
+
+    monkeypatch.setattr(market_data, "urlopen", fake_urlopen)
+
+    payload = market_data.fetch_yahoo_chart_json_for_dates(
+        "AAPL",
+        start_date="2026-06-25",
+        end_date="2026-07-02",
+        interval="1d",
+    )
+
+    assert payload == {"chart": {"result": [], "error": None}}
+    assert calls == [45, 45, 45]
 
 
 def test_fetch_market_data_saves_and_returns_cached_price_rows(tmp_path):

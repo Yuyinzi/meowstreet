@@ -2,14 +2,17 @@ import argparse
 import json
 import sys
 from datetime import UTC, date, datetime, time, timedelta
-
-from app.db import market_data as market_data_db
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
+
+from app.db import market_data as market_data_db
 
 
 _YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+_YAHOO_FETCH_ATTEMPTS = 3
+_YAHOO_TIMEOUT_SECONDS = 45
 
 
 def _normalize_symbol(symbol):
@@ -22,6 +25,10 @@ def _normalize_symbol(symbol):
 def _fetch_yahoo_chart_json(symbol, period, interval):
     query = urlencode({"range": period, "interval": interval})
     url = f"{_YAHOO_CHART_URL.format(symbol=symbol)}?{query}"
+    return _fetch_json_url(url, symbol)
+
+
+def _fetch_json_url(url, symbol):
     request = Request(
         url,
         headers={
@@ -29,15 +36,20 @@ def _fetch_yahoo_chart_json(symbol, period, interval):
             "User-Agent": "Mozilla/5.0",
         },
     )
-    try:
-        with urlopen(request, timeout=20) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        raise ValueError(
-            f"market data fetch failed for {symbol}: HTTP {exc.code} {exc.reason}"
-        ) from exc
-    except URLError as exc:
-        raise ValueError(f"market data fetch failed for {symbol}: {exc.reason}") from exc
+    last_error = "unknown error"
+    for _ in range(_YAHOO_FETCH_ATTEMPTS):
+        try:
+            with urlopen(request, timeout=_YAHOO_TIMEOUT_SECONDS) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise ValueError(
+                f"market data fetch failed for {symbol}: HTTP {exc.code} {exc.reason}"
+            ) from exc
+        except TimeoutError as exc:
+            last_error = str(exc)
+        except URLError as exc:
+            last_error = str(exc.reason)
+    raise ValueError(f"market data fetch failed for {symbol}: {last_error}")
 
 
 def _chart_result(payload, symbol):
@@ -70,6 +82,101 @@ def _adjusted_close_values(result, symbol):
     if not values:
         raise ValueError(f"adjusted close data is missing for {symbol}")
     return values
+
+
+def _exchange_date_from_timestamp(timestamp, timezone_name):
+    try:
+        exchange_timezone = ZoneInfo(timezone_name)
+    except Exception:
+        exchange_timezone = UTC
+    return datetime.fromtimestamp(timestamp, exchange_timezone).date().isoformat()
+
+
+def _current_regular_start_date(result):
+    meta = result.get("meta") if isinstance(result, dict) else None
+    current_period = (
+        meta.get("currentTradingPeriod") if isinstance(meta, dict) else None
+    )
+    regular_period = (
+        current_period.get("regular") if isinstance(current_period, dict) else None
+    )
+    start_timestamp = (
+        regular_period.get("start") if isinstance(regular_period, dict) else None
+    )
+    timezone_name = (
+        meta.get("exchangeTimezoneName")
+        if isinstance(meta, dict)
+        else None
+    )
+    if start_timestamp is None or not timezone_name:
+        return None
+    return _exchange_date_from_timestamp(start_timestamp, timezone_name)
+
+
+def _regular_market_price_date(result):
+    meta = result.get("meta") if isinstance(result, dict) else None
+    regular_market_time = (
+        meta.get("regularMarketTime") if isinstance(meta, dict) else None
+    )
+    timezone_name = (
+        meta.get("exchangeTimezoneName")
+        if isinstance(meta, dict)
+        else None
+    )
+    if regular_market_time is None or not timezone_name:
+        return None
+    return _exchange_date_from_timestamp(regular_market_time, timezone_name)
+
+
+def _regular_market_price_for_finalized_index_row(result, date_value):
+    meta = result.get("meta") if isinstance(result, dict) else None
+    if not isinstance(meta, dict) or meta.get("instrumentType") != "INDEX":
+        return None
+    regular_market_price = meta.get("regularMarketPrice")
+    if regular_market_price is None:
+        return None
+    if date_value != _regular_market_price_date(result):
+        return None
+    current_start_date = _current_regular_start_date(result)
+    if current_start_date is not None and date_value >= current_start_date:
+        return None
+    return regular_market_price
+
+
+def _adjusted_close_at(result, adjusted_close, closes, index, date_value):
+    value = _value_at(adjusted_close, index)
+    if value is not None:
+        return value
+    close = _value_at(closes, index)
+    if close is not None:
+        return close
+    return _regular_market_price_for_finalized_index_row(result, date_value)
+
+
+def _price_row(result, dates, adjusted_close, quotes, index):
+    date_value = dates[index]
+    adjusted_close_value = _adjusted_close_at(
+        result,
+        adjusted_close,
+        quotes["close"],
+        index,
+        date_value,
+    )
+    if adjusted_close_value is None:
+        return None
+    fallback_close = _regular_market_price_for_finalized_index_row(result, date_value)
+    close = _value_at(quotes["close"], index)
+    if close is None:
+        close = fallback_close
+    return {
+        "date": date_value,
+        "open": _value_at(quotes["open"], index),
+        "high": _value_at(quotes["high"], index),
+        "low": _value_at(quotes["low"], index),
+        "close": close,
+        "adjusted_close": adjusted_close_value,
+        "volume": _value_at(quotes["volume"], index),
+    }
 
 
 def _has_required_market_data(price, dates, adjusted_close):
@@ -183,23 +290,20 @@ def chart_payload_to_price_rows(payload, symbol):
     adjusted_close = _adjusted_close_values(result, normalized_symbol)
     if len(dates) != len(adjusted_close):
         raise ValueError(f"price dates and adjusted close lengths differ for {normalized_symbol}")
-    opens = _quote_values(result, "open")
-    highs = _quote_values(result, "high")
-    lows = _quote_values(result, "low")
-    closes = _quote_values(result, "close")
-    volumes = _quote_values(result, "volume")
+    quotes = {
+        "open": _quote_values(result, "open"),
+        "high": _quote_values(result, "high"),
+        "low": _quote_values(result, "low"),
+        "close": _quote_values(result, "close"),
+        "volume": _quote_values(result, "volume"),
+    }
     return [
-        {
-            "date": date_value,
-            "open": _value_at(opens, index),
-            "high": _value_at(highs, index),
-            "low": _value_at(lows, index),
-            "close": _value_at(closes, index),
-            "adjusted_close": adjusted_close[index],
-            "volume": _value_at(volumes, index),
-        }
-        for index, date_value in enumerate(dates)
-        if adjusted_close[index] is not None
+        row
+        for row in [
+            _price_row(result, dates, adjusted_close, quotes, index)
+            for index in range(len(dates))
+        ]
+        if row is not None
     ]
 
 
@@ -219,24 +323,7 @@ def fetch_yahoo_chart_json_for_dates(symbol, start_date, end_date, interval):
         }
     )
     url = f"{_YAHOO_CHART_URL.format(symbol=normalized_symbol)}?{query}"
-    request = Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0",
-        },
-    )
-    try:
-        with urlopen(request, timeout=20) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        raise ValueError(
-            f"market data fetch failed for {normalized_symbol}: HTTP {exc.code} {exc.reason}"
-        ) from exc
-    except URLError as exc:
-        raise ValueError(
-            f"market data fetch failed for {normalized_symbol}: {exc.reason}"
-        ) from exc
+    return _fetch_json_url(url, normalized_symbol)
 
 
 def main(argv=None, fetch_json=None):
