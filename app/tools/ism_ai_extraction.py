@@ -1,3 +1,4 @@
+import asyncio
 from typing import Literal
 
 from pydantic import (
@@ -648,6 +649,50 @@ def _section_payload(section_name, payload):
     return {key: payload[key] for key in keys if key in payload}
 
 
+async def _complete_json_async(client, prompt):
+    if hasattr(client, "complete_json_async"):
+        return await client.complete_json_async(prompt)
+    return await asyncio.to_thread(client.complete_json, prompt)
+
+
+async def _extract_section_async(
+    section_text,
+    client,
+    section_name,
+    prompt,
+    model,
+    max_attempts,
+):
+    payload = None
+    validation_error = None
+    for attempt in range(max_attempts):
+        if attempt == 0:
+            current_prompt = prompt
+        else:
+            current_prompt = build_section_repair_prompt(
+                section_text,
+                section_name,
+                payload,
+                validation_error,
+                prompt,
+            )
+        payload = await _complete_json_async(client, current_prompt)
+        try:
+            section_payload = _validate_model(
+                model,
+                _section_payload(section_name, payload),
+            )
+            if section_name == "comments_commodities":
+                _validate_respondent_comments_are_from_source(
+                    section_payload,
+                    section_text,
+                )
+            return section_payload
+        except ValueError as exc:
+            validation_error = str(exc)
+    raise ValueError(validation_error)
+
+
 def _extract_section(report_text, client, section_name, prompt, model, max_attempts):
     payload = None
     validation_error = None
@@ -677,6 +722,96 @@ def _extract_section(report_text, client, section_name, prompt, model, max_attem
         except ValueError as exc:
             validation_error = str(exc)
     raise ValueError(validation_error)
+
+
+def _factual_section_definitions(section_texts):
+    return [
+        (
+            "report",
+            section_texts["report"],
+            build_report_prompt(section_texts["report"]),
+            ReportSectionModel,
+        ),
+        (
+            "at_a_glance_rows",
+            section_texts["at_a_glance_rows"],
+            build_at_a_glance_prompt(section_texts["at_a_glance_rows"]),
+            AtAGlanceSectionModel,
+        ),
+        (
+            "industry_signals",
+            section_texts["industry_signals"],
+            build_industry_signals_prompt(section_texts["industry_signals"]),
+            IndustrySignalsSectionModel,
+        ),
+        (
+            "comments_commodities",
+            section_texts["comments_commodities"],
+            build_comments_commodities_prompt(section_texts["comments_commodities"]),
+            CommentsCommoditiesSectionModel,
+        ),
+        (
+            "narrative_facts",
+            section_texts["narrative_facts"],
+            build_narrative_facts_prompt(section_texts["narrative_facts"]),
+            NarrativeFactsSectionModel,
+        ),
+    ]
+
+
+async def extract_factual_with_client_async(
+    report_text,
+    client,
+    max_attempts=2,
+    max_concurrency=3,
+):
+    if max_concurrency < 1:
+        raise ValueError("max_concurrency must be at least 1")
+    section_texts = report_section_texts(report_text)
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def run_section(section_name, section_text, prompt, model):
+        async with semaphore:
+            return await _extract_section_async(
+                section_text,
+                client,
+                section_name,
+                prompt,
+                model,
+                max_attempts,
+            )
+
+    section_payloads = await asyncio.gather(
+        *[
+            run_section(section_name, section_text, prompt, model)
+            for section_name, section_text, prompt, model in _factual_section_definitions(
+                section_texts
+            )
+        ]
+    )
+    payload = {}
+    for section_payload in section_payloads:
+        payload.update(section_payload)
+    return validate_factual_extraction(payload)
+
+
+def extract_factual_with_client(report_text, client, max_attempts=2):
+    section_texts = report_section_texts(report_text)
+    payload = {}
+    for section_name, section_text, prompt, model in _factual_section_definitions(
+        section_texts
+    ):
+        payload.update(
+            _extract_section(
+                section_text,
+                client,
+                section_name,
+                prompt,
+                model,
+                max_attempts,
+            )
+        )
+    return validate_factual_extraction(payload)
 
 
 def extract_split_with_client(report_text, client, max_attempts=2):

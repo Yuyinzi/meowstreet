@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from app.tools import ism_ai_extraction
@@ -402,3 +404,49 @@ def test_build_prompt_requests_summary_with_major_changes():
     assert "New Orders" in prompt
     assert "major_changes" in prompt
     assert "Do not invent changes" in prompt
+
+
+@pytest.mark.asyncio
+async def test_extract_factual_with_client_async_runs_sections_with_concurrency_limit():
+    payload = valid_extraction()
+    payload.pop("ai_summary")
+
+    class AsyncFakeClient:
+        def __init__(self):
+            self.active = 0
+            self.max_seen = 0
+            self.calls = []
+
+        async def complete_json_async(self, prompt):
+            self.active += 1
+            self.max_seen = max(self.max_seen, self.active)
+            try:
+                await asyncio.sleep(0.01)
+                self.calls.append(prompt)
+                if "Extract only report metadata" in prompt:
+                    return {"report": payload["report"]}
+                if "Extract only MANUFACTURING AT A GLANCE" in prompt:
+                    return {"at_a_glance_rows": payload["at_a_glance_rows"]}
+                if "Extract only industry signal lists" in prompt:
+                    return {"industry_signals": payload["industry_signals"]}
+                if "Extract only respondent comments and commodities" in prompt:
+                    return {
+                        "respondent_comments": payload["respondent_comments"],
+                        "commodities": payload["commodities"],
+                    }
+                if "Extract only narrative facts" in prompt:
+                    return {"narrative_facts": payload["narrative_facts"]}
+                raise AssertionError(prompt)
+            finally:
+                self.active -= 1
+
+    client = AsyncFakeClient()
+
+    result = await ism_ai_extraction.extract_factual_with_client_async(
+        valid_report_text(),
+        client,
+    )
+
+    assert result == payload
+    assert len(client.calls) == 5
+    assert client.max_seen == 3
