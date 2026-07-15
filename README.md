@@ -123,6 +123,22 @@ Minutes analysis does not replace statement tone. The statement remains the publ
 - `uncertainty_level`
 - `policy_conviction`
 
+### ISM official report import
+
+Import historical ISM Manufacturing PMI reports from PRNewswire and ISM:
+
+```bash
+.venv/bin/python scripts/fetch_ism_official_reports.py --backfill-since 2025
+```
+
+Use `--missing-only` to skip already-imported report months:
+
+```bash
+.venv/bin/python scripts/fetch_ism_official_reports.py --backfill-since 2025 --missing-only --report-concurrency 2
+```
+
+Use `--report-concurrency 2` for faster historical backfills. Each report still runs section-level extraction internally, so avoid high report concurrency unless the LLM provider and SQLite workload have been validated.
+
 ## GDP Relationship Workbook Caveat
 
 - `data/source_material/Video 03/GDP_Correlations.xlsx` is the source of truth for the current GDP relationship dashboard import.
