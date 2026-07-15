@@ -189,7 +189,13 @@ def test_extract_snapshot_uses_checkpointed_extraction(tmp_path, monkeypatch):
     seen = {}
 
     def fake_extract(
-        con, report_text, source, client, force_sections=None, retry_failed=True
+        con,
+        report_text,
+        source,
+        client,
+        force_sections=None,
+        retry_failed=True,
+        **kwargs,
     ):
         seen["source"] = source
         payload = ism_ai_extraction_test_payload()
@@ -543,6 +549,39 @@ def test_summary_only_uses_stored_sections_without_section_calls(tmp_path):
     )
 
     assert summary["summary_text_zh"]
+
+
+def test_main_passes_summary_only_guidance(tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_extract_snapshot_with_options(con, source_url, client, model, **kwargs):
+        seen.update(kwargs)
+        return {"report_id": "ism_manufacturing_2026_06", "industry_signals": 2}
+
+    monkeypatch.setattr(
+        extract_ism_report_ai,
+        "extract_snapshot_with_options",
+        fake_extract_snapshot_with_options,
+    )
+
+    exit_code = extract_ism_report_ai.main(
+        [
+            "--db-path",
+            str(tmp_path / "market_data.sqlite"),
+            "--source-url",
+            "https://example.com/report.html",
+            "--summary-only",
+            "--force-summary",
+            "--summary-guidance",
+            "Use current expansion streak wording.",
+        ],
+        client_factory=lambda config: object(),
+    )
+
+    assert exit_code == 0
+    assert seen["summary_only"] is True
+    assert seen["force_summary"] is True
+    assert seen["summary_guidance"] == "Use current expansion streak wording."
 
 
 def ism_ai_extraction_test_payload():

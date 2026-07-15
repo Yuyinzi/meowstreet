@@ -127,10 +127,12 @@ def extract_or_load_factual_sections(
     client,
     force_sections=None,
     retry_failed=True,
+    sections=None,
 ):
+    section_names = sections or ism_ai_extraction.FACTUAL_SECTION_NAMES
     force_sections = set(force_sections or [])
     rows = []
-    for section_name in ism_ai_extraction.FACTUAL_SECTION_NAMES:
+    for section_name in section_names:
         existing = growth_cycle.load_ism_ai_section_extraction(
             con,
             source["report_id"],
@@ -166,6 +168,13 @@ def extract_or_load_factual_sections(
         }
         growth_cycle.replace_ism_ai_section_extraction(con, checkpoint)
         rows.append(checkpoint)
+    if sections is not None:
+        rows = growth_cycle.load_ism_ai_section_extractions(
+            con,
+            source["report_id"],
+            source["source_url"],
+            ism_ai_extraction.PROMPT_VERSION,
+        )
     failed = [row for row in rows if row["status"] != "ok"]
     if failed:
         names = ", ".join(row["section_name"] for row in failed)
@@ -173,7 +182,56 @@ def extract_or_load_factual_sections(
     return ism_ai_extraction.assemble_factual_payload_from_sections(rows)
 
 
-def extract_snapshot(con, source_url, client, model):
+def _load_factual_payload_from_stored(con, source):
+    rows = growth_cycle.load_ism_ai_section_extractions(
+        con,
+        source["report_id"],
+        source["source_url"],
+        ism_ai_extraction.PROMPT_VERSION,
+    )
+    if not rows:
+        raise ValueError(f"no stored factual sections for {source['report_id']}")
+    return ism_ai_extraction.assemble_factual_payload_from_sections(rows)
+
+
+def _write_rejected_summary_run(con, factual_payload, source, reason):
+    facts_digest = ism_ai_extraction.facts_hash(factual_payload)
+    existing = growth_cycle.load_latest_ism_ai_summary_run(con, source["report_id"])
+    growth_cycle.replace_ism_ai_summary_run(
+        con,
+        {
+            "report_id": source["report_id"],
+            "report_month": source["report_month"],
+            "source_hash": source["source_hash"],
+            "facts_hash": facts_digest,
+            "status": "ok",
+            "quality_status": "rejected",
+            "summary_text": existing["summary_text"] if existing else "",
+            "summary_json": existing["summary_json"] if existing else {},
+            "guidance": "",
+            "error": reason,
+            "attempt_count": (existing["attempt_count"] if existing else 0) + 1,
+            "model": source["model"],
+            "prompt_version": SUMMARY_PROMPT_VERSION,
+            "updated_at": source["updated_at"],
+        },
+    )
+
+
+def extract_snapshot(
+    con,
+    source_url,
+    client,
+    model,
+    sections=None,
+    retry_failed=True,
+    force_sections=None,
+    facts_only=False,
+    summary_only=False,
+    force_summary=False,
+    summary_guidance="",
+    reject_summary_reason="",
+):
     snapshot = growth_cycle.load_ism_report_source_snapshot(con, source_url)
     if not snapshot:
         raise ValueError(f"ism source snapshot is missing: {source_url}")
@@ -204,17 +262,49 @@ def extract_snapshot(con, source_url, client, model):
         "model": model,
         "updated_at": snapshot["fetched_at"],
     }
-    factual_payload = extract_or_load_factual_sections(
-        con,
-        report_text,
-        source,
-        client,
-    )
+    if summary_only:
+        factual_payload = _load_factual_payload_from_stored(con, source)
+    else:
+        factual_payload = extract_or_load_factual_sections(
+            con,
+            report_text,
+            source,
+            client,
+            force_sections=force_sections,
+            retry_failed=retry_failed,
+            sections=sections,
+        )
+    if reject_summary_reason:
+        _write_rejected_summary_run(con, factual_payload, source, reject_summary_reason)
+        if not summary_guidance:
+            payload = ism_ai_extraction.validate_factual_extraction(factual_payload)
+            _check_report_id(
+                payload["report"]["report_id"], expected_report_id, source_url
+            )
+            _check_report_month(
+                payload["report"]["report_month"], expected_report_month, source_url
+            )
+            return {
+                "report_id": payload["report"]["report_id"],
+                "industry_signals": len(payload.get("industry_signals", [])),
+            }
+    if facts_only:
+        payload = ism_ai_extraction.validate_factual_extraction(factual_payload)
+        _check_report_id(payload["report"]["report_id"], expected_report_id, source_url)
+        _check_report_month(
+            payload["report"]["report_month"], expected_report_month, source_url
+        )
+        return {
+            "report_id": payload["report"]["report_id"],
+            "industry_signals": len(payload.get("industry_signals", [])),
+        }
     summary = generate_or_load_summary(
         con,
         factual_payload,
         source,
         client,
+        force_summary=force_summary,
+        guidance=summary_guidance,
     )
     payload = ism_ai_extraction.validate_extraction(
         {**factual_payload, "ai_summary": summary}
@@ -259,6 +349,40 @@ def extract_snapshot(con, source_url, client, model):
         "report_id": payload["report"]["report_id"],
         "industry_signals": saved["industry_signals"],
     }
+
+
+def extract_snapshot_with_options(
+    con,
+    source_url,
+    client,
+    model,
+    sections=None,
+    retry_failed=True,
+    force_sections=None,
+    facts_only=False,
+    summary_only=False,
+    force_summary=False,
+    summary_guidance="",
+    reject_summary_reason="",
+):
+    if sections and summary_only:
+        raise ValueError("--section cannot be combined with --summary-only")
+    if facts_only and summary_only:
+        raise ValueError("--facts-only cannot be combined with --summary-only")
+    return extract_snapshot(
+        con,
+        source_url,
+        client,
+        model,
+        sections=sections,
+        retry_failed=retry_failed,
+        force_sections=force_sections,
+        facts_only=facts_only,
+        summary_only=summary_only,
+        force_summary=force_summary,
+        summary_guidance=summary_guidance,
+        reject_summary_reason=reject_summary_reason,
+    )
 
 
 class OpenAIJsonClient:
@@ -314,6 +438,20 @@ def main(argv=None, client_factory=build_client):
     parser.add_argument("--model", default=None)
     parser.add_argument("--openai-api-key", default="")
     parser.add_argument("--openai-base-url", default="")
+    parser.add_argument(
+        "--section", action="append", choices=ism_ai_extraction.FACTUAL_SECTION_NAMES
+    )
+    parser.add_argument("--retry-failed", action="store_true")
+    parser.add_argument(
+        "--force-section",
+        action="append",
+        choices=ism_ai_extraction.FACTUAL_SECTION_NAMES,
+    )
+    parser.add_argument("--facts-only", action="store_true")
+    parser.add_argument("--summary-only", action="store_true")
+    parser.add_argument("--force-summary", action="store_true")
+    parser.add_argument("--summary-guidance", default="")
+    parser.add_argument("--reject-summary", default="")
     args = parser.parse_args(argv)
     config = llm.load_openai_config(args, root=ROOT)
     client = client_factory(config)
@@ -323,7 +461,20 @@ def main(argv=None, client_factory=build_client):
     try:
         for source_url in args.source_url:
             try:
-                result = extract_snapshot(con, source_url, client, config["model"])
+                result = extract_snapshot_with_options(
+                    con,
+                    source_url,
+                    client,
+                    config["model"],
+                    sections=args.section,
+                    retry_failed=args.retry_failed,
+                    force_sections=args.force_section,
+                    facts_only=args.facts_only,
+                    summary_only=args.summary_only,
+                    force_summary=args.force_summary,
+                    summary_guidance=args.summary_guidance,
+                    reject_summary_reason=args.reject_summary,
+                )
                 print(
                     f"{result['report_id']}: "
                     f"industry_signals={result['industry_signals']}"
