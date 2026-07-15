@@ -73,13 +73,13 @@ def valid_extraction():
                 {
                     "label": "Headline PMI",
                     "series_id": "ism_manufacturing_pmi",
-                    "point_change": 1.3,
+                    "point_change": 1.0,
                 }
             ],
             "major_changes": [
                 "Transportation Equipment moved into expansion.",
             ],
-            "summary_text": "Compared with May, Headline PMI rose 1.3 points.",
+            "summary_text": "Compared with May, Headline PMI rose 1.0 points.",
         },
     }
 
@@ -196,6 +196,12 @@ def test_extract_with_client_validates_json_response():
                 }
             if "Extract only narrative facts from" in prompt:
                 return {"narrative_facts": payload["narrative_facts"]}
+            if "Summarize only the validated ISM Manufacturing facts" in prompt:
+                return {
+                    "summary_text": payload["ai_summary"]["summary_text"],
+                    "headline_changes": payload["ai_summary"]["headline_changes"],
+                    "major_changes": payload["ai_summary"]["major_changes"],
+                }
             raise AssertionError(prompt)
 
     result = ism_ai_extraction.extract_with_client(
@@ -257,6 +263,12 @@ def test_extract_with_client_uses_split_section_prompts():
                 }
             if "Extract only narrative facts from" in prompt:
                 return {"narrative_facts": payload["narrative_facts"]}
+            if "Summarize only the validated ISM Manufacturing facts" in prompt:
+                return {
+                    "summary_text": payload["ai_summary"]["summary_text"],
+                    "headline_changes": payload["ai_summary"]["headline_changes"],
+                    "major_changes": payload["ai_summary"]["major_changes"],
+                }
             raise AssertionError(prompt)
 
     result = ism_ai_extraction.extract_with_client(
@@ -265,8 +277,8 @@ def test_extract_with_client_uses_split_section_prompts():
     )
 
     assert result["report"]["report_id"] == "ism_manufacturing_2026_06"
-    assert "ai_summary" not in result
-    assert len(prompts) == 5
+    assert "ai_summary" in result
+    assert len(prompts) == 6
     assert all("Return only valid JSON" in prompt for prompt in prompts)
 
 
@@ -300,6 +312,12 @@ def test_extract_with_client_repairs_invalid_split_section():
                 }
             if "Extract only narrative facts from" in prompt:
                 return {"narrative_facts": payload["narrative_facts"]}
+            if "Summarize only the validated ISM Manufacturing facts" in prompt:
+                return {
+                    "summary_text": payload["ai_summary"]["summary_text"],
+                    "headline_changes": payload["ai_summary"]["headline_changes"],
+                    "major_changes": payload["ai_summary"]["major_changes"],
+                }
             raise AssertionError(prompt)
 
     result = ism_ai_extraction.extract_with_client(
@@ -345,6 +363,12 @@ def test_extract_with_client_repairs_comment_text_not_found_in_source():
                 }
             if "Extract only narrative facts from" in prompt:
                 return {"narrative_facts": payload["narrative_facts"]}
+            if "Summarize only the validated ISM Manufacturing facts" in prompt:
+                return {
+                    "summary_text": payload["ai_summary"]["summary_text"],
+                    "headline_changes": payload["ai_summary"]["headline_changes"],
+                    "major_changes": payload["ai_summary"]["major_changes"],
+                }
             raise AssertionError(prompt)
 
     client = FakeClient()
@@ -473,3 +497,42 @@ def test_validate_summary_rejects_headline_change_that_does_not_match_facts():
 
     with pytest.raises(ValueError, match="summary headline change does not match"):
         ism_ai_extraction.validate_summary_against_facts(summary, factual)
+
+
+@pytest.mark.asyncio
+async def test_extract_with_client_async_extracts_facts_then_summarizes_validated_payload():
+    payload = valid_extraction()
+    seen = {}
+
+    class AsyncFakeClient:
+        async def complete_json_async(self, prompt):
+            if "Extract only report metadata" in prompt:
+                return {"report": payload["report"]}
+            if "Extract only MANUFACTURING AT A GLANCE" in prompt:
+                return {"at_a_glance_rows": payload["at_a_glance_rows"]}
+            if "Extract only industry signal lists" in prompt:
+                return {"industry_signals": payload["industry_signals"]}
+            if "Extract only respondent comments and commodities" in prompt:
+                return {
+                    "respondent_comments": payload["respondent_comments"],
+                    "commodities": payload["commodities"],
+                }
+            if "Extract only narrative facts" in prompt:
+                return {"narrative_facts": payload["narrative_facts"]}
+            if "Summarize only the validated ISM Manufacturing facts" in prompt:
+                seen["summary_prompt"] = prompt
+                return {
+                    "summary_text": payload["ai_summary"]["summary_text"],
+                    "headline_changes": payload["ai_summary"]["headline_changes"],
+                    "major_changes": payload["ai_summary"]["major_changes"],
+                }
+            raise AssertionError(prompt)
+
+    result = await ism_ai_extraction.extract_with_client_async(
+        valid_report_text(),
+        AsyncFakeClient(),
+    )
+
+    assert result == payload
+    assert "June 2026 ISM report text" not in seen["summary_prompt"]
+    assert "at_a_glance_rows" in seen["summary_prompt"]

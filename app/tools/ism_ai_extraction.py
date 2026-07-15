@@ -968,5 +968,35 @@ def generate_summary_from_facts(factual_payload, client, max_attempts=2):
     )
 
 
+async def extract_with_client_async(
+    report_text,
+    client,
+    max_attempts=2,
+    max_concurrency=3,
+):
+    factual_payload = await extract_factual_with_client_async(
+        report_text,
+        client,
+        max_attempts=max_attempts,
+        max_concurrency=max_concurrency,
+    )
+    summary = await generate_summary_from_facts_async(
+        factual_payload,
+        client,
+        max_attempts=max_attempts,
+    )
+    return validate_extraction({**factual_payload, "ai_summary": summary})
+
+
 def extract_with_client(report_text, client, max_attempts=2):
-    return extract_split_with_client(report_text, client, max_attempts=max_attempts)
+    factual_payload = extract_factual_with_client(
+        report_text,
+        client,
+        max_attempts=max_attempts,
+    )
+    summary = generate_summary_from_facts(
+        factual_payload,
+        client,
+        max_attempts=max_attempts,
+    )
+    return validate_extraction({**factual_payload, "ai_summary": summary})
