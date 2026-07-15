@@ -51,6 +51,7 @@ def _validate_respondent_comments_are_from_source(payload, report_text):
                 f"{comment['comment_text']}"
             )
 
+
 SignalType = Literal[
     "overall_growth",
     "overall_contraction",
@@ -231,16 +232,44 @@ class CommentsCommoditiesSectionModel(BaseModel):
     commodities: list[CommoditySignalModel]
 
 
-class NarrativeSummarySectionModel(BaseModel):
+class NarrativeFactsSectionModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     narrative_facts: NarrativeFactsModel
-    ai_summary: AiSummaryModel
+
+
+class IsmFactualExtractionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report: ReportModel
+    at_a_glance_rows: list[AtAGlanceRowModel]
+    industry_signals: list[IndustrySignalModel]
+    respondent_comments: list[RespondentCommentModel]
+    commodities: list[CommoditySignalModel]
+    narrative_facts: NarrativeFactsModel
+
+    @model_validator(mode="after")
+    def validate_metric_set(self):
+        if len(self.at_a_glance_rows) != 11:
+            raise ValueError("at_a_glance_rows must contain exactly 11 rows")
+        series_ids = {row.series_id for row in self.at_a_glance_rows}
+        if series_ids != REQUIRED_SERIES_IDS:
+            raise ValueError(
+                "at_a_glance_rows series ids do not match required ISM metrics"
+            )
+        return self
 
 
 def validate_extraction(payload):
     try:
         return IsmRichExtractionModel.model_validate(payload).model_dump()
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def validate_factual_extraction(payload):
+    try:
+        return IsmFactualExtractionModel.model_validate(payload).model_dump()
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
 
@@ -308,15 +337,18 @@ def report_section_texts(report_text):
             section for section in [comments, commodities] if section
         )
         or report_text,
-        "narrative_summary": "\n\n".join(
-            section for section in [intro, at_a_glance, index_summaries[:5000]] if section
+        "narrative_facts": "\n\n".join(
+            section
+            for section in [intro, at_a_glance, index_summaries[:5000]]
+            if section
         )
         or report_text,
     }
 
 
 def schema_instructions():
-    return """
+    return (
+        """
 Required JSON shape:
 {
   "report": {
@@ -374,7 +406,10 @@ Required JSON shape:
 }
 
 Allowed at_a_glance_rows series_id values:
-""".strip() + "\n" + "\n".join(f"- {series_id}" for series_id in sorted(REQUIRED_SERIES_IDS))
+""".strip()
+        + "\n"
+        + "\n".join(f"- {series_id}" for series_id in sorted(REQUIRED_SERIES_IDS))
+    )
 
 
 def build_prompt(report_text):
@@ -526,9 +561,9 @@ Report text:
 """.strip()
 
 
-def build_narrative_summary_prompt(report_text):
+def build_narrative_facts_prompt(report_text):
     return f"""
-Extract only narrative facts and AI summary from the ISM Manufacturing report.
+Extract only narrative facts from the ISM Manufacturing report.
 Return only valid JSON with this shape:
 {{
   "narrative_facts": {{
@@ -536,23 +571,11 @@ Return only valid JSON with this shape:
     "manufacturing_gdp_share_strong_contraction_percent": 0.0,
     "pmi_implied_real_gdp_annualized_percent": 0.0,
     "largest_industries_expanded": []
-  }},
-  "ai_summary": {{
-    "compared_to_report_month": "YYYY-MM-01",
-    "headline_changes": [
-      {{
-        "label": "Headline PMI",
-        "series_id": "ism_manufacturing_pmi",
-        "point_change": 1.3
-      }}
-    ],
-    "major_changes": ["..."],
-    "summary_text": "..."
   }}
 }}
 
-Generate a concise month-over-month summary using only facts in the report.
-Do not invent changes, industries, commodities, or causal explanations.
+Use only explicit facts from the report text. Do not summarize the report and do
+not include ai_summary.
 
 Report text:
 {report_text}
@@ -587,7 +610,9 @@ Report text:
 """.strip()
 
 
-def build_section_repair_prompt(report_text, section_name, previous_payload, validation_error, original_prompt):
+def build_section_repair_prompt(
+    report_text, section_name, previous_payload, validation_error, original_prompt
+):
     return f"""
 Your previous JSON failed schema validation for section: {section_name}.
 Return a corrected JSON object only. Do not explain the correction. Do not wrap
@@ -612,7 +637,7 @@ SECTION_KEYS = {
     "at_a_glance_rows": ["at_a_glance_rows"],
     "industry_signals": ["industry_signals"],
     "comments_commodities": ["respondent_comments", "commodities"],
-    "narrative_summary": ["narrative_facts", "ai_summary"],
+    "narrative_facts": ["narrative_facts"],
 }
 
 
@@ -682,10 +707,10 @@ def extract_split_with_client(report_text, client, max_attempts=2):
             CommentsCommoditiesSectionModel,
         ),
         (
-            "narrative_summary",
-            section_texts["narrative_summary"],
-            build_narrative_summary_prompt(section_texts["narrative_summary"]),
-            NarrativeSummarySectionModel,
+            "narrative_facts",
+            section_texts["narrative_facts"],
+            build_narrative_facts_prompt(section_texts["narrative_facts"]),
+            NarrativeFactsSectionModel,
         ),
     ]
     payload = {}
@@ -700,7 +725,7 @@ def extract_split_with_client(report_text, client, max_attempts=2):
                 max_attempts,
             )
         )
-    return validate_extraction(payload)
+    return validate_factual_extraction(payload)
 
 
 def extract_single_payload_with_client(report_text, client, max_attempts=3):

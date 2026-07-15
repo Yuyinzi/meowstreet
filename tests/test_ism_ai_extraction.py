@@ -192,11 +192,8 @@ def test_extract_with_client_validates_json_response():
                     "respondent_comments": payload["respondent_comments"],
                     "commodities": payload["commodities"],
                 }
-            if "Extract only narrative facts and AI summary" in prompt:
-                return {
-                    "narrative_facts": payload["narrative_facts"],
-                    "ai_summary": payload["ai_summary"],
-                }
+            if "Extract only narrative facts from" in prompt:
+                return {"narrative_facts": payload["narrative_facts"]}
             raise AssertionError(prompt)
 
     result = ism_ai_extraction.extract_with_client(
@@ -256,11 +253,8 @@ def test_extract_with_client_uses_split_section_prompts():
                     "respondent_comments": payload["respondent_comments"],
                     "commodities": payload["commodities"],
                 }
-            if "Extract only narrative facts and AI summary" in prompt:
-                return {
-                    "narrative_facts": payload["narrative_facts"],
-                    "ai_summary": payload["ai_summary"],
-                }
+            if "Extract only narrative facts from" in prompt:
+                return {"narrative_facts": payload["narrative_facts"]}
             raise AssertionError(prompt)
 
     result = ism_ai_extraction.extract_with_client(
@@ -268,7 +262,8 @@ def test_extract_with_client_uses_split_section_prompts():
         FakeClient(),
     )
 
-    assert result == payload
+    assert result["report"]["report_id"] == "ism_manufacturing_2026_06"
+    assert "ai_summary" not in result
     assert len(prompts) == 5
     assert all("Return only valid JSON" in prompt for prompt in prompts)
 
@@ -301,11 +296,8 @@ def test_extract_with_client_repairs_invalid_split_section():
                     "respondent_comments": payload["respondent_comments"],
                     "commodities": payload["commodities"],
                 }
-            if "Extract only narrative facts and AI summary" in prompt:
-                return {
-                    "narrative_facts": payload["narrative_facts"],
-                    "ai_summary": payload["ai_summary"],
-                }
+            if "Extract only narrative facts from" in prompt:
+                return {"narrative_facts": payload["narrative_facts"]}
             raise AssertionError(prompt)
 
     result = ism_ai_extraction.extract_with_client(
@@ -349,11 +341,8 @@ def test_extract_with_client_repairs_comment_text_not_found_in_source():
                     "respondent_comments": payload["respondent_comments"],
                     "commodities": payload["commodities"],
                 }
-            if "Extract only narrative facts and AI summary" in prompt:
-                return {
-                    "narrative_facts": payload["narrative_facts"],
-                    "ai_summary": payload["ai_summary"],
-                }
+            if "Extract only narrative facts from" in prompt:
+                return {"narrative_facts": payload["narrative_facts"]}
             raise AssertionError(prompt)
 
     client = FakeClient()
@@ -391,7 +380,17 @@ def test_report_section_texts_reduce_each_prompt_to_relevant_slice():
     assert "New Orders text" in sections["industry_signals"]
     assert "Comment one" in sections["comments_commodities"]
     assert "Commodities Up in Price Steel" in sections["comments_commodities"]
-    assert "Non-core lead time details" not in sections["narrative_summary"]
+    assert "Non-core lead time details" not in sections["narrative_facts"]
+
+
+def test_validate_factual_extraction_accepts_payload_without_summary():
+    payload = valid_extraction()
+    payload.pop("ai_summary")
+
+    result = ism_ai_extraction.validate_factual_extraction(payload)
+
+    assert result["report"]["report_id"] == "ism_manufacturing_2026_06"
+    assert "ai_summary" not in result
 
 
 def test_build_prompt_requests_summary_with_major_changes():
