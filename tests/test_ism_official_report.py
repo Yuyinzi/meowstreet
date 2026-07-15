@@ -170,3 +170,80 @@ def test_parse_report_extracts_metadata_metrics_rankings_comments_and_release():
             "source_hash": parsed["report"]["source_hash"],
         },
     ]
+
+
+def test_parse_report_accepts_reporting_contraction_ranking_wording():
+    html = REPORT_HTML.replace(
+        "The three industries in contraction are: Paper Products; Furniture & Related Products; and Wood Products.",
+        "The three industries reporting contraction in June are: Paper Products; Furniture & Related Products; and Wood Products.",
+    )
+
+    parsed = ism_official_report.parse_report(
+        html,
+        "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
+        fetched_at="2026-07-14T10:00:00Z",
+    )
+
+    assert parsed["rankings"][-3:] == [
+        {
+            "date": "2026-06-01",
+            "industry": "Paper Products",
+            "direction": "contraction",
+            "rank": -1,
+            "source": "ISM official report",
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Furniture & Related Products",
+            "direction": "contraction",
+            "rank": -2,
+            "source": "ISM official report",
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Wood Products",
+            "direction": "contraction",
+            "rank": -3,
+            "source": "ISM official report",
+        },
+    ]
+
+
+def test_parse_report_accepts_singular_contraction_ranking_wording():
+    html = REPORT_HTML.replace(
+        "The 14 manufacturing industries reporting growth in June",
+        "The 16 manufacturing industries reporting growth in June",
+    ).replace(
+        "The three industries in contraction are: Paper Products; Furniture & Related Products; and Wood Products.",
+        "The only industry reporting contraction in June is Wood Products.",
+    )
+
+    parsed = ism_official_report.parse_report(
+        html,
+        "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
+        fetched_at="2026-07-14T10:00:00Z",
+    )
+
+    assert parsed["rankings"][-1] == {
+        "date": "2026-06-01",
+        "industry": "Wood Products",
+        "direction": "contraction",
+        "rank": -1,
+        "source": "ISM official report",
+    }
+
+
+def test_parse_report_accepts_same_at_a_glance_rate():
+    html = REPORT_HTML.replace(
+        "Manufacturing PMI® 53.3 54.0 -0.7 Growing Slower 6",
+        "Manufacturing PMI® 52.7 52.7 0.0 Growing Same 4",
+    )
+
+    parsed = ism_official_report.parse_report(
+        html,
+        "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
+        fetched_at="2026-07-14T10:00:00Z",
+    )
+
+    assert parsed["at_a_glance_rows"][0]["direction"] == "Growing"
+    assert parsed["at_a_glance_rows"][0]["rate_of_change"] == "Same"

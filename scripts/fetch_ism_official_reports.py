@@ -1,8 +1,8 @@
 import argparse
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -53,9 +53,14 @@ def _is_sso_page(html):
 
 
 def fetch_text(url):
-    request = Request(url, headers={"User-Agent": "Meowstreet local research"})
-    with urlopen(request, timeout=30) as response:
-        text = response.read().decode("utf-8")
+    result = subprocess.run(
+        ["curl", "-sS", url],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    text = result.stdout
     if _is_sso_page(text):
         raise ValueError("ism official report requires ISM membership login")
     return text
@@ -139,6 +144,15 @@ def main(argv=None):
         try:
             result = import_report(con, month)
             results.append(result)
+        except ism_official_report.IsmReportUnavailable as exc:
+            if args.current_year:
+                print(
+                    f"ism_official_report/{month}: skipped - {exc}",
+                    file=sys.stderr,
+                )
+                continue
+            print(f"ism_official_report/{month}: failed - {exc}", file=sys.stderr)
+            failed += 1
         except ValueError as exc:
             print(f"ism_official_report/{month}: failed - {exc}", file=sys.stderr)
             failed += 1

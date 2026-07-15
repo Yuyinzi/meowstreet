@@ -34,6 +34,16 @@ HTML = """
 </html>
 """
 
+NO_REPORT_HTML = """
+<html>
+<head><title>January</title></head>
+<body>
+<h1>January</h1>
+<p>Purchase Historical PMI® Data</p>
+</body>
+</html>
+"""
+
 
 def test_main_handles_sso_error_gracefully(tmp_path, monkeypatch, capsys):
     db_path = tmp_path / "market_data.sqlite"
@@ -51,6 +61,40 @@ def test_main_handles_sso_error_gracefully(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "ism_official_report/june: failed" in err
     assert "ISM membership login" in err
+
+
+def test_fetch_text_uses_plain_curl_transport(monkeypatch):
+    calls = []
+
+    class Result:
+        stdout = HTML
+
+    def fake_run(args, capture_output, text, check, timeout):
+        calls.append(
+            {
+                "args": args,
+                "capture_output": capture_output,
+                "text": text,
+                "check": check,
+                "timeout": timeout,
+            }
+        )
+        return Result()
+
+    monkeypatch.setattr(fetch_ism_official_reports.subprocess, "run", fake_run)
+
+    result = fetch_ism_official_reports.fetch_text("https://example.com/report")
+
+    assert result == HTML
+    assert calls == [
+        {
+            "args": ["curl", "-sS", "https://example.com/report"],
+            "capture_output": True,
+            "text": True,
+            "check": True,
+            "timeout": 30,
+        }
+    ]
 
 
 def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
@@ -89,8 +133,8 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
     rows = us_rates_liquidity.load_latest_ism_at_a_glance_rows(con)
     assert len(rows) == 11
     assert rows[0]["point_change"] == -0.4
-    assert rows[0]["direction"] == "Too"
-    assert rows[0]["rate_of_change"] == "Low Faster"
+    assert rows[0]["direction"] == "Too Low"
+    assert rows[0]["rate_of_change"] == "Faster"
 
 
 def test_requested_months_defaults_to_previous_month(monkeypatch):
@@ -156,4 +200,57 @@ def test_main_imports_requested_months(tmp_path, monkeypatch, capsys):
     assert (
         "ism_manufacturing_2026_06: metrics=11 rankings=4 comments=1 "
         "at_a_glance_rows=11" in out
+    )
+
+
+def test_main_current_year_skips_month_landing_pages(tmp_path, monkeypatch, capsys):
+    db_path = tmp_path / "market_data.sqlite"
+
+    class FakeArgs:
+        current_year = True
+        month = None
+
+    responses = {
+        "january": NO_REPORT_HTML,
+        "february": NO_REPORT_HTML,
+        "march": NO_REPORT_HTML,
+        "april": HTML,
+    }
+
+    def fake_fetch(url):
+        for month, html in responses.items():
+            if f"/{month}/" in url:
+                return html
+        raise ValueError(f"unexpected url: {url}")
+
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "requested_months",
+        lambda args: ["january", "february", "march", "april"],
+    )
+    monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", fake_fetch)
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "fetched_at_now",
+        lambda: "2026-07-14T10:00:00Z",
+    )
+
+    exit_code = fetch_ism_official_reports.main(
+        ["--db-path", str(db_path), "--current-year"]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "ism_official_report/january: skipped - no report page available" in (
+        captured.err
+    )
+    assert "ism_official_report/february: skipped - no report page available" in (
+        captured.err
+    )
+    assert "ism_official_report/march: skipped - no report page available" in (
+        captured.err
+    )
+    assert (
+        "ism_manufacturing_2026_06: metrics=11 rankings=4 comments=1 "
+        "at_a_glance_rows=11" in captured.out
     )

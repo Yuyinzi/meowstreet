@@ -34,6 +34,15 @@ METRIC_LABELS = {
     "Imports": "ism_manufacturing_imports",
 }
 
+AT_A_GLANCE_RATE_LABELS = (
+    "From Contracting",
+    "From Growing",
+    "Faster",
+    "Slower",
+    "Same",
+    "Unchanged",
+)
+
 ET_OFFSETS = {
     "January": "-05:00",
     "February": "-05:00",
@@ -48,6 +57,10 @@ ET_OFFSETS = {
     "November": "-05:00",
     "December": "-05:00",
 }
+
+
+class IsmReportUnavailable(ValueError):
+    pass
 
 
 class TextExtractor(HTMLParser):
@@ -74,7 +87,7 @@ def normalize_text(text):
 def report_month_from_title(text):
     match = re.search(r"\b(" + "|".join(MONTHS) + r")\s+(\d{4})\s+ISM", text)
     if not match:
-        raise ValueError("ism report month is missing")
+        raise IsmReportUnavailable("no report page available")
     month_name, year = match.groups()
     return f"{year}-{MONTHS[month_name]}-01", month_name, year
 
@@ -142,7 +155,7 @@ def parse_rankings(text, report_month):
         text,
     )
     contraction_match = re.search(
-        r"The\s+\w+\s+industries in contraction are:\s+(.*?)\.",
+        r"The\s+\w+\s+(?:manufacturing\s+)?industr(?:y|ies)(?:\s+in contraction|\s+reporting contraction(?:\s+in\s+[A-Za-z]+)?)\s+(?:is|are):?\s+(.*?)\.",
         text,
     )
     if not growth_match or not contraction_match:
@@ -212,14 +225,27 @@ def parse_next_release(text):
     )
 
 
+def split_at_a_glance_direction_rate(value):
+    for rate in AT_A_GLANCE_RATE_LABELS:
+        suffix = f" {rate}"
+        if value.endswith(suffix):
+            direction = value[: -len(suffix)].strip()
+            if direction:
+                return direction, rate
+    raise ValueError(f"ism at-a-glance direction/rate is unknown: {value}")
+
+
 def parse_at_a_glance_rows(text, report, source_url):
     rows = []
     found_series = set()
     for label, series_id in METRIC_LABELS.items():
-        pattern = rf"{re.escape(label)}(?:\s?®\s?)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+([+-]?\d+(?:\.\d+)?)\s+([A-Za-z’' ]+?)\s+([A-Za-z’' ]+?)\s+(\d+)"
+        pattern = rf"{re.escape(label)}(?:\s?®\s?)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+([+-]?\d+(?:\.\d+)?)\s+([A-Za-z’' ]+?)\s+(\d+)"
         match = re.search(pattern, text)
         if match:
-            current, previous, change, direction, rate, months = match.groups()
+            current, previous, change, direction_rate, months = match.groups()
+            direction, rate = split_at_a_glance_direction_rate(
+                direction_rate.strip()
+            )
             if series_id not in found_series:
                 found_series.add(series_id)
                 rows.append(
