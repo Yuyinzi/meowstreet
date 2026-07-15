@@ -317,3 +317,33 @@ def test_parse_report_extracts_prnewswire_straight_quote_comments():
             "source_hash": parsed["report"]["source_hash"],
         }
     ]
+
+
+def test_prepare_report_for_ai_validates_and_cleans_report_text():
+    html = """
+    <html>
+      <head><title>Jan 2026 Manufacturing PMI® at 52.6%; January 2026 ISM® Manufacturing PMI® Report</title></head>
+      <body>
+        <nav>Subscribe Share Contact</nav>
+        <article>
+          <h1>Jan 2026 Manufacturing PMI® at 52.6%; January 2026 ISM® Manufacturing PMI® Report</h1>
+          <p>The Manufacturing PMI® registered 52.6 percent in January.</p>
+          <p>MANUFACTURING AT A GLANCE</p>
+          <p>New Orders 55.1 53.2 +1.9 Growing Faster 2</p>
+        </article>
+        <footer>PR Newswire legal boilerplate</footer>
+      </body>
+    </html>
+    """
+
+    prepared = ism_official_report.prepare_report_for_ai(
+        html,
+        "https://example.com/january.html",
+        "2026-07-15T00:00:00Z",
+        source_name="prnewswire",
+    )
+
+    assert prepared["report_id"] == "ism_manufacturing_2026_01"
+    assert prepared["report_month"] == "2026-01-01"
+    assert "Manufacturing PMI" in prepared["report_text"]
+    assert "PR Newswire legal boilerplate" not in prepared["report_text"]

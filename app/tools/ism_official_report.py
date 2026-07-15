@@ -343,6 +343,25 @@ def parse_at_a_glance_rows(text, report, source_url):
     return rows
 
 
+def prepare_report_for_ai(html, source_url, fetched_at, source_name="ismworld"):
+    report_text = extract_report_text(html, source_name)
+    report_month, month_name, year = report_month_from_title(report_text)
+    if "Manufacturing PMI" not in report_text:
+        raise ValueError("ism report is not a manufacturing pmi report")
+    cleaned = re.sub(r"\s+", " ", report_text).strip()
+    cleaned = re.sub(r"(?i)PR Newswire legal boilerplate.*$", "", cleaned).strip()
+    return {
+        "report_id": report_id(report_month),
+        "report_month": report_month,
+        "month_name": month_name,
+        "year": year,
+        "source_url": source_url,
+        "source_name": source_name,
+        "fetched_at": fetched_at,
+        "report_text": cleaned,
+    }
+
+
 def parse_report(html, source_url, fetched_at, source_name="ismworld"):
     text = extract_report_text(html, source_name)
     normalized = normalize_text(text)
