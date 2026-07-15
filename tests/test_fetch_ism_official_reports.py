@@ -362,6 +362,33 @@ def test_ai_payload_to_metric_points_uses_at_a_glance_current_values():
     ]
 
 
+def test_import_report_url_uses_ai_extraction_by_default(tmp_path):
+    from tests.test_ism_ai_extraction import valid_extraction
+
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            return valid_extraction()
+
+    result = fetch_ism_official_reports.import_report_url(
+        con,
+        "https://example.com/report.html",
+        source_name="prnewswire",
+        fetch=lambda url: (
+            "<html><article>Manufacturing PMI at 50.0%; June 2026 ISM Manufacturing PMI Report text</article></html>"
+        ),
+        now=lambda: "2026-07-15T00:00:00Z",
+        ai_client=FakeClient(),
+        model="fake-model",
+    )
+
+    assert result["report_id"] == "ism_manufacturing_2026_06"
+    assert result["source_name"] == "prnewswire"
+    assert result["ai_summary"] == 1
+    assert result["industry_signals"] == 2
+
+
 def test_main_continues_when_prnewswire_article_fetch_fails(
     tmp_path, monkeypatch, capsys
 ):

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import us_rates_liquidity
-from app.tools import ism_official_report, ism_prnewswire_archive
+from app.tools import ism_ai_extraction, ism_official_report, ism_prnewswire_archive
 
 
 BASE_URL = (
@@ -136,7 +136,10 @@ def ai_report_snapshot(payload, source_url, source_hash, fetched_at):
         "source_url": source_url,
         "source_hash": source_hash,
         "fetched_at": fetched_at,
+        "parse_status": "ok",
+        "next_report_period": None,
         "next_release_at": None,
+        "next_release_label": "",
     }
 
 
@@ -153,6 +156,27 @@ def ai_comments(payload, source_url, source_hash):
             "source_hash": source_hash,
         }
         for index, comment in enumerate(payload["respondent_comments"], start=1)
+    ]
+
+
+def ai_at_a_glance_rows(payload, source_url, source_hash):
+    report = payload["report"]
+    return [
+        {
+            "report_id": report["report_id"],
+            "report_month": report["report_month"],
+            "series_id": row["series_id"],
+            "label": row["label"],
+            "current_value": row["current_value"],
+            "previous_value": row["previous_value"],
+            "point_change": row["point_change"],
+            "direction": row["direction"],
+            "rate_of_change": row["rate_of_change"],
+            "trend_months": row["trend_months"],
+            "source_url": source_url,
+            "source_hash": source_hash,
+        }
+        for row in payload["at_a_glance_rows"]
     ]
 
 
@@ -181,7 +205,15 @@ def source_snapshot(
     }
 
 
-def import_report_url(con, url, source_name=None, fetch=None, now=None):
+def import_report_url(
+    con,
+    url,
+    source_name=None,
+    fetch=None,
+    now=None,
+    ai_client=None,
+    model=None,
+):
     if fetch is None:
         fetch = fetch_text
     if now is None:
@@ -190,48 +222,68 @@ def import_report_url(con, url, source_name=None, fetch=None, now=None):
         source_name = source_name_for_url(url)
     fetched_at = now()
     html = fetch(url)
-    try:
-        parsed = ism_official_report.parse_report(
-            html,
-            url,
-            fetched_at,
-            source_name=source_name,
-        )
-    except ValueError as exc:
-        us_rates_liquidity.replace_ism_report_source_snapshot(
-            con,
-            source_snapshot(
-                url,
-                source_name,
-                html,
-                fetched_at,
-                "failed",
-                parse_error=str(exc),
-            ),
-        )
-        raise
+    source_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
+    prepared = ism_official_report.prepare_report_for_ai(
+        html,
+        url,
+        fetched_at,
+        source_name=source_name,
+    )
     us_rates_liquidity.replace_ism_report_source_snapshot(
         con,
-        source_snapshot(url, source_name, html, fetched_at, "ok", parsed=parsed),
+        {
+            "source_url": url,
+            "source_name": source_name,
+            "source_hash": source_hash,
+            "fetched_at": fetched_at,
+            "raw_html": html,
+            "parse_status": "prepared",
+            "parse_error": None,
+            "report_id": prepared["report_id"],
+            "report_month": prepared["report_month"],
+        },
     )
-    metric_count = merge_metrics(con, parsed)
-    us_rates_liquidity.merge_ism_industry_rankings(con, parsed["rankings"])
-    saved = us_rates_liquidity.replace_ism_report_snapshot(
-        con,
-        parsed["report"],
-        parsed["comments"],
+    payload = ism_ai_extraction.extract_with_client(
+        prepared["report_text"],
+        ai_client,
     )
-    at_a_glance_saved = us_rates_liquidity.replace_ism_at_a_glance_rows(
+    if payload["report"]["report_id"] != prepared["report_id"]:
+        raise ValueError(
+            f"llm report_id mismatch for {url}: expected {prepared['report_id']}, "
+            f"llm returned {payload['report']['report_id']}"
+        )
+    if payload["report"]["report_month"] != prepared["report_month"]:
+        raise ValueError(
+            f"llm report_month mismatch for {url}: expected {prepared['report_month']}, "
+            f"llm returned {payload['report']['report_month']}"
+        )
+    metric_count = merge_ai_metrics(con, payload)
+    us_rates_liquidity.replace_ism_at_a_glance_rows(
+        con, ai_at_a_glance_rows(payload, url, source_hash)
+    )
+    us_rates_liquidity.replace_ism_report_snapshot(
         con,
-        parsed["at_a_glance_rows"],
+        ai_report_snapshot(payload, url, source_hash, fetched_at),
+        ai_comments(payload, url, source_hash),
+    )
+    saved = us_rates_liquidity.replace_ism_ai_report_outputs(
+        con,
+        payload,
+        {
+            "source_url": url,
+            "source_hash": source_hash,
+            "model": model,
+            "prompt_version": ism_ai_extraction.PROMPT_VERSION,
+        },
     )
     return {
-        "report_id": parsed["report"]["report_id"],
+        "report_id": payload["report"]["report_id"],
         "metrics": metric_count,
-        "rankings": len(parsed["rankings"]),
-        "comments": saved["comments"],
-        "at_a_glance_rows": at_a_glance_saved["at_a_glance_rows"],
+        "rankings": 0,
+        "comments": len(payload["respondent_comments"]),
+        "at_a_glance_rows": len(payload["at_a_glance_rows"]),
         "source_name": source_name,
+        **saved,
     }
 
 
