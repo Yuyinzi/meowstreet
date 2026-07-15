@@ -179,6 +179,19 @@ def connect(db_path=DEFAULT_DB_PATH):
         );
         create index if not exists idx_ism_at_a_glance_rows_month
         on ism_at_a_glance_rows(report_month);
+        create table if not exists ism_report_source_snapshots (
+            source_url text primary key,
+            source_name text not null,
+            source_hash text not null,
+            fetched_at text not null,
+            raw_html text not null,
+            parse_status text not null,
+            parse_error text,
+            report_id text,
+            report_month text
+        );
+        create index if not exists idx_ism_report_source_snapshots_report
+        on ism_report_source_snapshots(report_id);
         """
     )
     _ensure_column(
@@ -1062,3 +1075,49 @@ def load_latest_ism_at_a_glance_rows(con):
         (latest,),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def replace_ism_report_source_snapshot(con, snapshot):
+    con.execute(
+        """
+        insert into ism_report_source_snapshots(
+            source_url, source_name, source_hash, fetched_at, raw_html,
+            parse_status, parse_error, report_id, report_month
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        on conflict(source_url) do update set
+            source_name = excluded.source_name,
+            source_hash = excluded.source_hash,
+            fetched_at = excluded.fetched_at,
+            raw_html = excluded.raw_html,
+            parse_status = excluded.parse_status,
+            parse_error = excluded.parse_error,
+            report_id = excluded.report_id,
+            report_month = excluded.report_month
+        """,
+        (
+            snapshot["source_url"],
+            snapshot["source_name"],
+            snapshot["source_hash"],
+            snapshot["fetched_at"],
+            snapshot["raw_html"],
+            snapshot["parse_status"],
+            snapshot.get("parse_error"),
+            snapshot.get("report_id"),
+            snapshot.get("report_month"),
+        ),
+    )
+    con.commit()
+    return {"source_snapshots": 1}
+
+
+def load_ism_report_source_snapshot(con, source_url):
+    row = con.execute(
+        """
+        select source_url, source_name, source_hash, fetched_at, raw_html,
+               parse_status, parse_error, report_id, report_month
+        from ism_report_source_snapshots
+        where source_url = ?
+        """,
+        (source_url,),
+    ).fetchone()
+    return dict(row) if row else None

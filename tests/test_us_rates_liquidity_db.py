@@ -1487,3 +1487,29 @@ def test_replace_ism_at_a_glance_rows_saves_and_loads_latest(tmp_path):
 
     assert saved == {"at_a_glance_rows": 2}
     assert us_rates_liquidity.load_latest_ism_at_a_glance_rows(con) == [rows[1]]
+
+
+def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    snapshot = {
+        "source_url": "https://www.prnewswire.com/news-releases/example.html",
+        "source_name": "prnewswire",
+        "source_hash": "abc123",
+        "fetched_at": "2026-07-15T10:00:00Z",
+        "raw_html": "<html><body>release</body></html>",
+        "parse_status": "failed",
+        "parse_error": "ism report overall industry rankings are missing",
+        "report_id": None,
+        "report_month": None,
+    }
+
+    saved = us_rates_liquidity.replace_ism_report_source_snapshot(con, snapshot)
+
+    assert saved == {"source_snapshots": 1}
+    assert (
+        us_rates_liquidity.load_ism_report_source_snapshot(
+            con,
+            "https://www.prnewswire.com/news-releases/example.html",
+        )
+        == snapshot
+    )
