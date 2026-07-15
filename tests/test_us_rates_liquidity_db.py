@@ -1,3 +1,5 @@
+import pytest
+
 from app.db import us_rates_liquidity
 
 
@@ -1490,32 +1492,10 @@ def test_replace_ism_at_a_glance_rows_saves_and_loads_latest(tmp_path):
 
 
 def test_replace_ism_ai_extraction_saves_payload_and_signals(tmp_path):
+    from tests.test_ism_ai_extraction import valid_extraction
+
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
-    payload = {
-        "report": {
-            "report_id": "ism_manufacturing_2026_06",
-            "report_month": "2026-06-01",
-            "title": "June 2026 ISM Manufacturing PMI Report",
-            "source_name": "prnewswire",
-            "source_url": "https://example.com/report.html",
-        },
-        "industry_signals": [
-            {
-                "signal_type": "overall_growth",
-                "direction": "growth",
-                "industry": "Printing & Related Support Activities",
-                "rank": 1,
-                "evidence_text": "The 14 manufacturing industries reporting growth...",
-            },
-            {
-                "signal_type": "backlog",
-                "direction": "higher",
-                "industry": "Nonmetallic Mineral Products",
-                "rank": 1,
-                "evidence_text": "The eight industries reporting higher backlogs...",
-            },
-        ],
-    }
+    payload = valid_extraction()
 
     saved = us_rates_liquidity.replace_ism_ai_extraction(
         con,
@@ -1543,6 +1523,35 @@ def test_replace_ism_ai_extraction_saves_payload_and_signals(tmp_path):
         )
         == 2
     )
+
+
+def test_replace_ism_ai_extraction_rejects_malformed_payload(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+
+    with pytest.raises(ValueError, match="Field required"):
+        us_rates_liquidity.replace_ism_ai_extraction(
+            con,
+            {
+                "report_id": "ism_manufacturing_2026_06",
+                "report_month": "2026-06-01",
+                "source_url": "https://example.com/report.html",
+                "source_hash": "abc123",
+                "extractor": "llm",
+                "model": "gpt-5-mini",
+                "prompt_version": "ism-rich-v1",
+                "validation_status": "ok",
+                "validation_error": None,
+                "extraction_json": {
+                    "report": {
+                        "report_id": "ism_manufacturing_2026_06",
+                        "report_month": "2026-06-01",
+                        "title": "June 2026 ISM Manufacturing PMI Report",
+                        "source_name": "prnewswire",
+                        "source_url": "https://example.com/report.html",
+                    },
+                },
+            },
+        )
 
 
 def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):

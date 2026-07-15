@@ -1153,8 +1153,12 @@ def load_ism_report_source_snapshot(con, source_url):
 def replace_ism_ai_extraction(con, extraction):
     import json
 
+    from app.tools.ism_ai_extraction import validate_extraction
+
     payload = extraction["extraction_json"]
     report_id = extraction["report_id"]
+    if extraction.get("validation_status") == "ok":
+        payload = validate_extraction(payload)
     con.execute(
         "delete from ism_report_industry_signals where report_id = ?",
         (report_id,),
