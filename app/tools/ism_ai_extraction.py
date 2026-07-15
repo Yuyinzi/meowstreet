@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from typing import Literal
 
 from pydantic import (
@@ -22,6 +23,30 @@ for _label, _series_id in METRIC_LABELS.items():
         METRIC_LABEL_TO_SERIES_ID[_label] = _series_id
 
 REQUIRED_SERIES_IDS = set(METRIC_LABEL_TO_SERIES_ID.values())
+SUMMARY_COMMENT_STOPWORDS = {
+    "about",
+    "above",
+    "after",
+    "again",
+    "also",
+    "being",
+    "below",
+    "could",
+    "every",
+    "from",
+    "have",
+    "into",
+    "other",
+    "their",
+    "there",
+    "these",
+    "those",
+    "through",
+    "which",
+    "while",
+    "with",
+    "would",
+}
 
 
 def _previous_report_month(report_month):
@@ -52,6 +77,15 @@ def _validate_respondent_comments_are_from_source(payload, report_text):
                 "respondent comment text is not present in source: "
                 f"{comment['comment_text']}"
             )
+
+
+def _comment_keywords(comments):
+    keywords = set()
+    for comment in comments:
+        for token in re.findall(r"[a-z][a-z-]+", comment["comment_text"].lower()):
+            if len(token) >= 5 and token not in SUMMARY_COMMENT_STOPWORDS:
+                keywords.add(token)
+    return keywords
 
 
 SignalType = Literal[
@@ -298,6 +332,43 @@ def validate_summary_against_facts(summary_payload, factual_payload):
             raise ValueError(
                 "summary headline change does not match extracted facts: "
                 f"{change['series_id']}"
+            )
+    known_entities = set()
+    for signal in factual_payload["industry_signals"]:
+        known_entities.add(signal["industry"].lower())
+    for commodity in factual_payload["commodities"]:
+        known_entities.add(commodity["commodity"].lower())
+    for row in factual_payload["at_a_glance_rows"]:
+        known_entities.add(row["label"].lower())
+        known_entities.add(row["label"].replace("\u00ae", "").strip().lower())
+    narrative_fact_entities = {
+        "largest manufacturing industries",
+        "six largest manufacturing industries",
+        "manufacturing gdp share",
+        "pmi implied real gdp",
+        "real gdp",
+    }
+    known_entities.update(narrative_fact_entities)
+    known_entities.update(_comment_keywords(factual_payload["respondent_comments"]))
+    known_entities.discard("")
+    for change in summary["major_changes"]:
+        text_lower = change.lower()
+        if not any(entity in text_lower for entity in known_entities):
+            raise ValueError(
+                f"summary major_change is not grounded in extracted facts: {change}"
+            )
+    summary_text_lower = summary["summary_text"].lower()
+    for change in summary["headline_changes"]:
+        row = rows_by_series[change["series_id"]]
+        headline_aliases = {
+            change["label"].lower(),
+            row["label"].lower(),
+            row["label"].replace("\u00ae", "").strip().lower(),
+        }
+        headline_aliases.discard("")
+        if not any(alias in summary_text_lower for alias in headline_aliases):
+            raise ValueError(
+                f"summary text does not mention headline change: {change['label']}"
             )
     summary["compared_to_report_month"] = _previous_report_month(
         factual_payload["report"]["report_month"]
@@ -852,55 +923,6 @@ def extract_factual_with_client(report_text, client, max_attempts=2):
     for section_name, section_text, prompt, model in _factual_section_definitions(
         section_texts
     ):
-        payload.update(
-            _extract_section(
-                section_text,
-                client,
-                section_name,
-                prompt,
-                model,
-                max_attempts,
-            )
-        )
-    return validate_factual_extraction(payload)
-
-
-def extract_split_with_client(report_text, client, max_attempts=2):
-    section_texts = report_section_texts(report_text)
-    sections = [
-        (
-            "report",
-            section_texts["report"],
-            build_report_prompt(section_texts["report"]),
-            ReportSectionModel,
-        ),
-        (
-            "at_a_glance_rows",
-            section_texts["at_a_glance_rows"],
-            build_at_a_glance_prompt(section_texts["at_a_glance_rows"]),
-            AtAGlanceSectionModel,
-        ),
-        (
-            "industry_signals",
-            section_texts["industry_signals"],
-            build_industry_signals_prompt(section_texts["industry_signals"]),
-            IndustrySignalsSectionModel,
-        ),
-        (
-            "comments_commodities",
-            section_texts["comments_commodities"],
-            build_comments_commodities_prompt(section_texts["comments_commodities"]),
-            CommentsCommoditiesSectionModel,
-        ),
-        (
-            "narrative_facts",
-            section_texts["narrative_facts"],
-            build_narrative_facts_prompt(section_texts["narrative_facts"]),
-            NarrativeFactsSectionModel,
-        ),
-    ]
-    payload = {}
-    for section_name, section_text, prompt, model in sections:
         payload.update(
             _extract_section(
                 section_text,

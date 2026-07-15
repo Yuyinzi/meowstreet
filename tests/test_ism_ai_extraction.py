@@ -77,7 +77,7 @@ def valid_extraction():
                 }
             ],
             "major_changes": [
-                "Transportation Equipment moved into expansion.",
+                "Primary Metals moved into expansion.",
             ],
             "summary_text": "Compared with May, Headline PMI rose 1.0 points.",
         },
@@ -121,15 +121,15 @@ def test_validate_extraction_accepts_month_over_month_summary():
             },
         ],
         "major_changes": [
-            "Transportation Equipment moved into expansion.",
-            "Steel was added to commodities up in price.",
-            "Supplier delivery delays increased.",
+            "Primary Metals moved into expansion.",
+            "Aluminum is up in price.",
+            "Printing & Related Support Activities reported growth.",
         ],
         "summary_text": (
             "Compared with May, Headline PMI rose 1.3 points, New Orders rose "
             "2.4 points, Production rose 1.8 points, and Prices fell 0.6 points. "
-            "Major changes: Transportation Equipment moved into expansion; Steel "
-            "was added to commodities up in price; Supplier delivery delays increased."
+            "Major changes: Primary Metals moved into expansion; Aluminum "
+            "is up in price; Printing & Related Support Activities reported growth."
         ),
     }
 
@@ -137,7 +137,7 @@ def test_validate_extraction_accepts_month_over_month_summary():
 
     assert result["ai_summary"]["compared_to_report_month"] == "2026-05-01"
     assert result["ai_summary"]["headline_changes"][0]["point_change"] == 1.3
-    assert "Supplier delivery delays increased" in result["ai_summary"]["summary_text"]
+    assert "Primary Metals moved into expansion" in result["ai_summary"]["summary_text"]
 
 
 def test_validate_extraction_normalizes_summary_comparison_to_previous_month():
@@ -497,6 +497,62 @@ def test_validate_summary_rejects_headline_change_that_does_not_match_facts():
 
     with pytest.raises(ValueError, match="summary headline change does not match"):
         ism_ai_extraction.validate_summary_against_facts(summary, factual)
+
+
+def test_validate_summary_rejects_major_change_not_grounded_in_facts():
+    factual = valid_extraction()
+    factual.pop("ai_summary")
+    summary = valid_extraction()["ai_summary"]
+    summary["major_changes"] = ["This change references nothing in the data."]
+
+    with pytest.raises(ValueError, match="summary major_change is not grounded"):
+        ism_ai_extraction.validate_summary_against_facts(summary, factual)
+
+
+def test_validate_summary_accepts_major_change_grounded_in_narrative_facts():
+    factual = valid_extraction()
+    factual.pop("ai_summary")
+    summary = valid_extraction()["ai_summary"]
+    summary["major_changes"] = [
+        "Five of the six largest manufacturing industries reported growth."
+    ]
+
+    result = ism_ai_extraction.validate_summary_against_facts(summary, factual)
+
+    assert result["major_changes"] == summary["major_changes"]
+
+
+def test_validate_summary_accepts_major_change_grounded_in_respondent_comments():
+    factual = valid_extraction()
+    factual.pop("ai_summary")
+    summary = valid_extraction()["ai_summary"]
+    summary["major_changes"] = ["Respondents said input costs remain elevated."]
+
+    result = ism_ai_extraction.validate_summary_against_facts(summary, factual)
+
+    assert result["major_changes"] == summary["major_changes"]
+
+
+def test_validate_summary_rejects_summary_text_missing_headline_label():
+    factual = valid_extraction()
+    factual.pop("ai_summary")
+    summary = valid_extraction()["ai_summary"]
+    summary["summary_text"] = "Some text that does not include the label."
+
+    with pytest.raises(ValueError, match="summary text does not mention headline"):
+        ism_ai_extraction.validate_summary_against_facts(summary, factual)
+
+
+def test_validate_summary_accepts_summary_text_with_metric_label_alias():
+    factual = valid_extraction()
+    factual.pop("ai_summary")
+    summary = valid_extraction()["ai_summary"]
+    summary["headline_changes"][0]["label"] = "Headline PMI"
+    summary["summary_text"] = "Manufacturing PMI rose from the prior month."
+
+    result = ism_ai_extraction.validate_summary_against_facts(summary, factual)
+
+    assert result["summary_text"] == summary["summary_text"]
 
 
 @pytest.mark.asyncio
