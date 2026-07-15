@@ -219,6 +219,31 @@ def connect(db_path=DEFAULT_DB_PATH):
         );
         create index if not exists idx_ism_report_industry_signals_industry
         on ism_report_industry_signals(industry, report_month);
+        create table if not exists ism_report_ai_summaries (
+            report_id text primary key,
+            report_month text not null,
+            compared_to_report_month text,
+            summary_text text not null,
+            summary_json text not null,
+            model text not null,
+            prompt_version text not null,
+            source_hash text not null
+        );
+        create table if not exists ism_report_commodities (
+            report_id text not null,
+            report_month text not null,
+            commodity text not null,
+            signal_type text not null,
+            months integer,
+            source_hash text not null,
+            primary key(report_id, commodity, signal_type)
+        );
+        create table if not exists ism_report_narrative_facts (
+            report_id text primary key,
+            report_month text not null,
+            facts_json text not null,
+            source_hash text not null
+        );
         """
     )
     _ensure_column(
@@ -1230,3 +1255,103 @@ def load_ism_report_industry_signals(con, report_id):
         (report_id,),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def replace_ism_ai_summary(con, payload, source):
+    report = payload["report"]
+    summary = payload["ai_summary"]
+    con.execute(
+        """
+        insert into ism_report_ai_summaries(
+            report_id, report_month, compared_to_report_month, summary_text,
+            summary_json, model, prompt_version, source_hash
+        ) values (?, ?, ?, ?, ?, ?, ?, ?)
+        on conflict(report_id) do update set
+            report_month = excluded.report_month,
+            compared_to_report_month = excluded.compared_to_report_month,
+            summary_text = excluded.summary_text,
+            summary_json = excluded.summary_json,
+            model = excluded.model,
+            prompt_version = excluded.prompt_version,
+            source_hash = excluded.source_hash
+        """,
+        (
+            report["report_id"],
+            report["report_month"],
+            summary.get("compared_to_report_month"),
+            summary["summary_text"],
+            json.dumps(summary, sort_keys=True),
+            source["model"],
+            source["prompt_version"],
+            source["source_hash"],
+        ),
+    )
+    return {"ai_summary": 1}
+
+
+def replace_ism_report_commodities(con, payload, source):
+    report = payload["report"]
+    con.execute(
+        "delete from ism_report_commodities where report_id = ?",
+        (report["report_id"],),
+    )
+    for commodity in payload["commodities"]:
+        con.execute(
+            """
+            insert into ism_report_commodities(
+                report_id, report_month, commodity, signal_type, months, source_hash
+            ) values (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                report["report_id"],
+                report["report_month"],
+                commodity["commodity"],
+                commodity["signal_type"],
+                commodity.get("months"),
+                source["source_hash"],
+            ),
+        )
+    return {"commodities": len(payload["commodities"])}
+
+
+def load_ism_report_ai_summary(con, report_id):
+    row = con.execute(
+        """
+        select report_id, report_month, compared_to_report_month, summary_text,
+               summary_json, model, prompt_version, source_hash
+        from ism_report_ai_summaries
+        where report_id = ?
+        """,
+        (report_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def replace_ism_ai_report_outputs(con, payload, source):
+    from app.tools.ism_ai_extraction import validate_extraction
+
+    payload = validate_extraction(payload)
+    report = payload["report"]
+    extraction_saved = replace_ism_ai_extraction(
+        con,
+        {
+            "report_id": report["report_id"],
+            "report_month": report["report_month"],
+            "source_url": source["source_url"],
+            "source_hash": source["source_hash"],
+            "extractor": "llm",
+            "model": source["model"],
+            "prompt_version": source["prompt_version"],
+            "validation_status": "ok",
+            "validation_error": None,
+            "extraction_json": payload,
+        },
+    )
+    summary_saved = replace_ism_ai_summary(con, payload, source)
+    commodity_saved = replace_ism_report_commodities(con, payload, source)
+    con.commit()
+    return {
+        **extraction_saved,
+        **summary_saved,
+        **commodity_saved,
+    }

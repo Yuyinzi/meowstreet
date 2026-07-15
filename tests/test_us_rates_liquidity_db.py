@@ -1607,3 +1607,28 @@ def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
         )
         == snapshot
     )
+
+
+def test_replace_ism_ai_report_outputs_saves_summary_and_commodities(tmp_path):
+    from tests.test_ism_ai_extraction import valid_extraction
+
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    payload = valid_extraction()
+    saved = us_rates_liquidity.replace_ism_ai_report_outputs(
+        con,
+        payload,
+        {
+            "source_url": "https://example.com/report.html",
+            "source_hash": "abc123",
+            "model": "gpt-5-mini",
+            "prompt_version": "ism-rich-v1",
+        },
+    )
+
+    assert saved["ai_summary"] == 1
+    assert saved["commodities"] == 1
+    summary = us_rates_liquidity.load_ism_report_ai_summary(
+        con,
+        "ism_manufacturing_2026_06",
+    )
+    assert "Headline PMI rose" in summary["summary_text"]
