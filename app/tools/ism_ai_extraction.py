@@ -1044,6 +1044,22 @@ def generate_summary_from_facts(factual_payload, client, max_attempts=2):
     )
 
 
+def factual_section_definition(section_name, report_text):
+    section_texts = report_section_texts(report_text)
+    for definition in _factual_section_definitions(section_texts):
+        if definition[0] == section_name:
+            return definition
+    raise ValueError(f"unknown ism factual section: {section_name}")
+
+
+def extract_section_with_client(
+    section_text, client, section_name, prompt, model, max_attempts=2
+):
+    return _extract_section(
+        section_text, client, section_name, prompt, model, max_attempts
+    )
+
+
 async def extract_with_client_async(
     report_text,
     client,

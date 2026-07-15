@@ -169,7 +169,7 @@ def test_extract_snapshot_with_client_saves_ai_payload(tmp_path):
     }
 
 
-def test_extract_snapshot_uses_async_full_extraction(tmp_path, monkeypatch):
+def test_extract_snapshot_uses_checkpointed_extraction(tmp_path, monkeypatch):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
     growth_cycle.init_db(con)
     growth_cycle.replace_ism_report_source_snapshot(
@@ -188,14 +188,26 @@ def test_extract_snapshot_uses_async_full_extraction(tmp_path, monkeypatch):
     )
     seen = {}
 
-    async def fake_extract(report_text, client, max_attempts=2, max_concurrency=3):
-        seen["max_concurrency"] = max_concurrency
-        return ism_ai_extraction_test_payload()
+    def fake_extract(
+        con, report_text, source, client, force_sections=None, retry_failed=True
+    ):
+        seen["source"] = source
+        payload = ism_ai_extraction_test_payload()
+        return {k: v for k, v in payload.items() if k != "ai_summary"}
+
+    def fake_summary(factual_payload, client, max_attempts=2):
+        payload = ism_ai_extraction_test_payload()
+        return payload["ai_summary"]
 
     monkeypatch.setattr(
-        extract_ism_report_ai.ism_ai_extraction,
-        "extract_with_client_async",
+        extract_ism_report_ai,
+        "extract_or_load_factual_sections",
         fake_extract,
+    )
+    monkeypatch.setattr(
+        extract_ism_report_ai.ism_ai_extraction,
+        "generate_summary_from_facts",
+        fake_summary,
     )
 
     result = extract_ism_report_ai.extract_snapshot(
@@ -206,7 +218,7 @@ def test_extract_snapshot_uses_async_full_extraction(tmp_path, monkeypatch):
     )
 
     assert result["report_id"] == "ism_manufacturing_2026_06"
-    assert seen["max_concurrency"] == 3
+    assert seen["source"]["source_url"] == "https://example.com/report.html"
 
 
 def test_extract_snapshot_rejects_llm_report_month_mismatch(tmp_path):
@@ -276,6 +288,87 @@ def test_extract_snapshot_saves_ai_summary(tmp_path):
         "ism_manufacturing_2026_06",
     )
     assert summary["summary_text"]
+
+
+def test_extract_snapshot_skips_ok_section_checkpoint(tmp_path, monkeypatch):
+    from app.db import growth_cycle
+
+    payload = ism_ai_extraction_test_payload()
+    factual = {key: value for key, value in payload.items() if key != "ai_summary"}
+    db_path = tmp_path / "market_data.sqlite"
+    con = us_rates_liquidity.connect(db_path)
+    growth_cycle.init_db(con)
+    source_url = "https://example.com/report.html"
+    growth_cycle.replace_ism_report_source_snapshot(
+        con,
+        {
+            "source_url": source_url,
+            "source_name": "prnewswire",
+            "source_hash": "abc123",
+            "fetched_at": "2026-07-15T10:00:00Z",
+            "raw_html": report_html(),
+            "parse_status": "prepared",
+            "parse_error": None,
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+        },
+    )
+    growth_cycle.replace_ism_ai_section_extraction(
+        con,
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "source_url": source_url,
+            "report_month": "2026-06-01",
+            "source_hash": "abc123",
+            "section_name": "report",
+            "status": "ok",
+            "payload_json": {"report": factual["report"]},
+            "error": None,
+            "attempt_count": 1,
+            "model": "fake-model",
+            "prompt_version": ism_ai_extraction.PROMPT_VERSION,
+            "updated_at": "2026-07-15T10:00:00Z",
+        },
+    )
+    calls = []
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            calls.append(prompt)
+            if "Extract only report metadata" in prompt:
+                raise AssertionError("report section should be skipped")
+            if "Extract only MANUFACTURING AT A GLANCE" in prompt:
+                return {"at_a_glance_rows": factual["at_a_glance_rows"]}
+            if "Extract only industry signal lists" in prompt:
+                return {"industry_signals": factual["industry_signals"]}
+            if "Extract only respondent comments and commodities" in prompt:
+                return {
+                    "respondent_comments": factual["respondent_comments"],
+                    "commodities": factual["commodities"],
+                }
+            if "Extract only narrative facts" in prompt:
+                return {"narrative_facts": factual["narrative_facts"]}
+            if "Summarize only the validated ISM Manufacturing facts" in prompt:
+                return {
+                    "summary_text": payload["ai_summary"]["summary_text"],
+                    "summary_text_zh": payload["ai_summary"]["summary_text_zh"],
+                    "headline_changes": payload["ai_summary"]["headline_changes"],
+                    "major_changes": payload["ai_summary"]["major_changes"],
+                    "major_changes_zh": payload["ai_summary"]["major_changes_zh"],
+                    "cat_takeaway_en": payload["ai_summary"]["cat_takeaway_en"],
+                    "cat_takeaway_zh": payload["ai_summary"]["cat_takeaway_zh"],
+                }
+            raise AssertionError(prompt)
+
+    result = extract_ism_report_ai.extract_snapshot(
+        con,
+        source_url,
+        FakeClient(),
+        model="fake-model",
+    )
+
+    assert result["report_id"] == "ism_manufacturing_2026_06"
+    assert not any("Extract only report metadata" in prompt for prompt in calls)
 
 
 def test_main_extracts_source_url_with_injected_client(tmp_path, capsys):

@@ -16,16 +16,6 @@ from app.tools import ism_ai_extraction
 from app.tools import ism_official_report
 
 
-def extract_report_payload(report_text, client):
-    return asyncio.run(
-        ism_ai_extraction.extract_with_client_async(
-            report_text,
-            client,
-            max_concurrency=3,
-        )
-    )
-
-
 def _check_report_id(extracted_report_id, expected_report_id, source_url):
     if extracted_report_id != expected_report_id:
         raise ValueError(
@@ -42,6 +32,82 @@ def _check_report_month(extracted_report_month, expected_report_month, source_ur
         )
 
 
+def extract_one_section(report_text, client, section_name):
+    section_name, section_text, prompt, model = (
+        ism_ai_extraction.factual_section_definition(section_name, report_text)
+    )
+    return ism_ai_extraction.extract_section_with_client(
+        section_text,
+        client,
+        section_name,
+        prompt,
+        model,
+    )
+
+
+def should_run_section(existing, force_sections, retry_failed):
+    if existing is None:
+        return True
+    if existing["section_name"] in force_sections:
+        return True
+    if existing["status"] == "failed" and retry_failed:
+        return True
+    return existing["status"] != "ok"
+
+
+def extract_or_load_factual_sections(
+    con,
+    report_text,
+    source,
+    client,
+    force_sections=None,
+    retry_failed=True,
+):
+    force_sections = set(force_sections or [])
+    rows = []
+    for section_name in ism_ai_extraction.FACTUAL_SECTION_NAMES:
+        existing = growth_cycle.load_ism_ai_section_extraction(
+            con,
+            source["report_id"],
+            source["source_url"],
+            ism_ai_extraction.PROMPT_VERSION,
+            section_name,
+        )
+        if not should_run_section(existing, force_sections, retry_failed):
+            rows.append(existing)
+            continue
+        attempt_count = (existing["attempt_count"] if existing else 0) + 1
+        try:
+            section_payload = extract_one_section(report_text, client, section_name)
+            status = "ok"
+            error = None
+        except Exception as exc:
+            section_payload = {}
+            status = "failed"
+            error = str(exc)
+        checkpoint = {
+            "report_id": source["report_id"],
+            "source_url": source["source_url"],
+            "report_month": source["report_month"],
+            "source_hash": source["source_hash"],
+            "section_name": section_name,
+            "status": status,
+            "payload_json": section_payload,
+            "error": error,
+            "attempt_count": attempt_count,
+            "model": source["model"],
+            "prompt_version": ism_ai_extraction.PROMPT_VERSION,
+            "updated_at": source["updated_at"],
+        }
+        growth_cycle.replace_ism_ai_section_extraction(con, checkpoint)
+        rows.append(checkpoint)
+    failed = [row for row in rows if row["status"] != "ok"]
+    if failed:
+        names = ", ".join(row["section_name"] for row in failed)
+        raise ValueError(f"ism factual sections failed: {names}")
+    return ism_ai_extraction.assemble_factual_payload_from_sections(rows)
+
+
 def extract_snapshot(con, source_url, client, model):
     snapshot = growth_cycle.load_ism_report_source_snapshot(con, source_url)
     if not snapshot:
@@ -50,32 +116,46 @@ def extract_snapshot(con, source_url, client, model):
         snapshot["raw_html"],
         snapshot["source_name"],
     )
-    payload = extract_report_payload(report_text, client)
     snapshot_report_id = snapshot.get("report_id")
     if snapshot_report_id:
-        _check_report_id(payload["report"]["report_id"], snapshot_report_id, source_url)
-        _check_report_month(
-            payload["report"]["report_month"],
-            snapshot["report_month"],
-            source_url,
-        )
+        expected_report_id = snapshot_report_id
+        expected_report_month = snapshot["report_month"]
     else:
         try:
-            report_month, _month_name, _year = (
+            expected_report_month, _month_name, _year = (
                 ism_official_report.report_month_from_title(report_text)
             )
-            derived = ism_official_report.report_id(report_month)
-            _check_report_id(payload["report"]["report_id"], derived, source_url)
-            _check_report_month(
-                payload["report"]["report_month"],
-                report_month,
-                source_url,
-            )
+            expected_report_id = ism_official_report.report_id(expected_report_month)
         except ism_official_report.IsmReportUnavailable as exc:
             raise ValueError(
                 f"cannot verify llm report_id: snapshot {source_url} has no "
                 f"report_id and title could not be parsed: {exc}"
             ) from exc
+    source = {
+        "report_id": expected_report_id,
+        "report_month": expected_report_month,
+        "source_url": snapshot["source_url"],
+        "source_hash": snapshot["source_hash"],
+        "model": model,
+        "updated_at": snapshot["fetched_at"],
+    }
+    factual_payload = extract_or_load_factual_sections(
+        con,
+        report_text,
+        source,
+        client,
+    )
+    summary = ism_ai_extraction.generate_summary_from_facts(
+        factual_payload,
+        client,
+    )
+    payload = ism_ai_extraction.validate_extraction(
+        {**factual_payload, "ai_summary": summary}
+    )
+    _check_report_id(payload["report"]["report_id"], expected_report_id, source_url)
+    _check_report_month(
+        payload["report"]["report_month"], expected_report_month, source_url
+    )
     from scripts.fetch_ism_official_reports import (
         ai_at_a_glance_rows,
         ai_report_snapshot,
