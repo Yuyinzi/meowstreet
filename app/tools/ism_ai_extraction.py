@@ -714,7 +714,7 @@ Report text:
 """.strip()
 
 
-def build_validated_summary_prompt(factual_payload):
+def build_validated_summary_prompt(factual_payload, guidance=""):
     return f"""
 Summarize only the validated ISM Manufacturing facts below.
 Return only valid JSON with this shape:
@@ -747,6 +747,9 @@ Rules:
 - Analogies must explain validated facts only; do not invent new data.
 - Keep Caicai's tone useful for traders, not cute for its own sake.
 - Do not use unsupported jokes or unrelated story details.
+
+Reviewer guidance:
+{guidance or "No additional reviewer guidance."}
 
 Validated facts:
 {json.dumps(factual_payload, ensure_ascii=False, sort_keys=True)}
@@ -1000,10 +1003,12 @@ def extract_single_payload_with_client(report_text, client, max_attempts=3):
     raise ValueError(validation_error)
 
 
-async def generate_summary_from_facts_async(factual_payload, client, max_attempts=2):
+async def generate_summary_from_facts_async(
+    factual_payload, client, max_attempts=2, guidance=""
+):
     payload = None
     validation_error = None
-    prompt = build_validated_summary_prompt(factual_payload)
+    prompt = build_validated_summary_prompt(factual_payload, guidance=guidance)
     for attempt in range(max_attempts):
         if attempt == 0:
             current_prompt = prompt
@@ -1034,12 +1039,13 @@ Original instructions:
     raise ValueError(validation_error)
 
 
-def generate_summary_from_facts(factual_payload, client, max_attempts=2):
+def generate_summary_from_facts(factual_payload, client, max_attempts=2, guidance=""):
     return asyncio.run(
         generate_summary_from_facts_async(
             factual_payload,
             client,
             max_attempts=max_attempts,
+            guidance=guidance,
         )
     )
 

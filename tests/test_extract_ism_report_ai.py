@@ -195,7 +195,7 @@ def test_extract_snapshot_uses_checkpointed_extraction(tmp_path, monkeypatch):
         payload = ism_ai_extraction_test_payload()
         return {k: v for k, v in payload.items() if k != "ai_summary"}
 
-    def fake_summary(factual_payload, client, max_attempts=2):
+    def fake_summary(*args, **kwargs):
         payload = ism_ai_extraction_test_payload()
         return payload["ai_summary"]
 
@@ -205,8 +205,8 @@ def test_extract_snapshot_uses_checkpointed_extraction(tmp_path, monkeypatch):
         fake_extract,
     )
     monkeypatch.setattr(
-        extract_ism_report_ai.ism_ai_extraction,
-        "generate_summary_from_facts",
+        extract_ism_report_ai,
+        "generate_or_load_summary",
         fake_summary,
     )
 
@@ -473,6 +473,76 @@ def test_build_client_uses_granular_llm_timeout(monkeypatch):
     assert "Timeout(connect=20.0" in repr(seen["timeout"])
     assert "read=300.0" in repr(seen["timeout"])
     assert "write=300.0" in repr(seen["timeout"])
+
+
+def test_summary_only_uses_stored_sections_without_section_calls(tmp_path):
+    payload = ism_ai_extraction_test_payload()
+    factual = {key: value for key, value in payload.items() if key != "ai_summary"}
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    source_url = "https://example.com/report.html"
+    source_hash = "abc123"
+    for section in [
+        ("report", {"report": factual["report"]}),
+        ("at_a_glance_rows", {"at_a_glance_rows": factual["at_a_glance_rows"]}),
+        ("industry_signals", {"industry_signals": factual["industry_signals"]}),
+        (
+            "comments_commodities",
+            {
+                "respondent_comments": factual["respondent_comments"],
+                "commodities": factual["commodities"],
+            },
+        ),
+        ("narrative_facts", {"narrative_facts": factual["narrative_facts"]}),
+    ]:
+        growth_cycle.replace_ism_ai_section_extraction(
+            con,
+            {
+                "report_id": factual["report"]["report_id"],
+                "source_url": source_url,
+                "report_month": factual["report"]["report_month"],
+                "source_hash": source_hash,
+                "section_name": section[0],
+                "status": "ok",
+                "payload_json": section[1],
+                "error": None,
+                "attempt_count": 1,
+                "model": "fake-model",
+                "prompt_version": ism_ai_extraction.PROMPT_VERSION,
+                "updated_at": "2026-07-15T10:00:00Z",
+            },
+        )
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            if "Summarize only the validated ISM Manufacturing facts" not in prompt:
+                raise AssertionError("summary-only should not extract factual sections")
+            return {
+                "summary_text": payload["ai_summary"]["summary_text"],
+                "summary_text_zh": payload["ai_summary"]["summary_text_zh"],
+                "headline_changes": payload["ai_summary"]["headline_changes"],
+                "major_changes": payload["ai_summary"]["major_changes"],
+                "major_changes_zh": payload["ai_summary"]["major_changes_zh"],
+                "cat_takeaway_en": payload["ai_summary"]["cat_takeaway_en"],
+                "cat_takeaway_zh": payload["ai_summary"]["cat_takeaway_zh"],
+            }
+
+    summary = extract_ism_report_ai.generate_or_load_summary(
+        con,
+        factual,
+        {
+            "report_id": factual["report"]["report_id"],
+            "report_month": factual["report"]["report_month"],
+            "source_url": source_url,
+            "source_hash": source_hash,
+            "model": "fake-model",
+            "updated_at": "2026-07-15T10:00:00Z",
+        },
+        FakeClient(),
+        force_summary=True,
+        guidance="Avoid confusing contraction streak wording.",
+    )
+
+    assert summary["summary_text_zh"]
 
 
 def ism_ai_extraction_test_payload():

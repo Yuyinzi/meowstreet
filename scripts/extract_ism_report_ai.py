@@ -32,6 +32,71 @@ def _check_report_month(extracted_report_month, expected_report_month, source_ur
         )
 
 
+SUMMARY_PROMPT_VERSION = "ism-summary-from-validated-v1"
+
+
+def generate_or_load_summary(
+    con,
+    factual_payload,
+    source,
+    client,
+    force_summary=False,
+    guidance="",
+):
+    facts_digest = ism_ai_extraction.facts_hash(factual_payload)
+    existing = growth_cycle.load_latest_ism_ai_summary_run(
+        con,
+        source["report_id"],
+    )
+    if (
+        existing
+        and existing["status"] == "ok"
+        and existing["quality_status"] == "accepted"
+        and existing["facts_hash"] == facts_digest
+        and not force_summary
+        and not guidance
+    ):
+        return existing["summary_json"]
+    try:
+        summary = ism_ai_extraction.generate_summary_from_facts(
+            factual_payload,
+            client,
+            guidance=guidance,
+        )
+        status = "ok"
+        quality_status = "accepted"
+        error = None
+        summary_text = summary["summary_text"]
+    except Exception as exc:
+        summary = {}
+        status = "failed"
+        quality_status = "needs_review"
+        error = str(exc)
+        summary_text = ""
+    growth_cycle.replace_ism_ai_summary_run(
+        con,
+        {
+            "report_id": source["report_id"],
+            "report_month": source["report_month"],
+            "source_hash": source["source_hash"],
+            "facts_hash": facts_digest,
+            "status": status,
+            "quality_status": quality_status,
+            "summary_text": summary_text,
+            "summary_json": summary,
+            "guidance": guidance,
+            "error": error,
+            "attempt_count": (existing["attempt_count"] if existing else 0) + 1,
+            "model": source["model"],
+            "prompt_version": SUMMARY_PROMPT_VERSION,
+            "updated_at": source["updated_at"],
+        },
+    )
+    if status != "ok":
+        raise ValueError(error)
+    return summary
+
+
 def extract_one_section(report_text, client, section_name):
     section_name, section_text, prompt, model = (
         ism_ai_extraction.factual_section_definition(section_name, report_text)
@@ -145,8 +210,10 @@ def extract_snapshot(con, source_url, client, model):
         source,
         client,
     )
-    summary = ism_ai_extraction.generate_summary_from_facts(
+    summary = generate_or_load_summary(
+        con,
         factual_payload,
+        source,
         client,
     )
     payload = ism_ai_extraction.validate_extraction(
