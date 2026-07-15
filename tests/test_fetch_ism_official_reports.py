@@ -348,6 +348,20 @@ def test_main_discovers_prnewswire_pages_and_imports_urls(
     assert "source=prnewswire" in capsys.readouterr().out
 
 
+def test_ai_payload_to_metric_points_uses_at_a_glance_current_values():
+    from tests.test_ism_ai_extraction import valid_extraction
+
+    points = fetch_ism_official_reports.ai_metric_points(valid_extraction())
+
+    assert points["ism_manufacturing_pmi"] == [
+        {
+            "date": "2026-06-01",
+            "value": 50.0,
+            "source": "ISM AI extraction",
+        }
+    ]
+
+
 def test_main_continues_when_prnewswire_article_fetch_fails(
     tmp_path, monkeypatch, capsys
 ):

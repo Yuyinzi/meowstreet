@@ -95,6 +95,67 @@ def merge_metrics(con, parsed):
     return count
 
 
+def ai_metric_points(payload):
+    report_month = payload["report"]["report_month"]
+    return {
+        row["series_id"]: [
+            {
+                "date": report_month,
+                "value": row["current_value"],
+                "source": "ISM AI extraction",
+            }
+        ]
+        for row in payload["at_a_glance_rows"]
+    }
+
+
+def merge_ai_metrics(con, payload):
+    count = 0
+    for row in payload["at_a_glance_rows"]:
+        series = {
+            "series_id": row["series_id"],
+            "title": row["label"],
+            "units": "index",
+            "source": "ISM AI extraction",
+        }
+        saved = us_rates_liquidity.merge_macro_indicator_points(
+            con,
+            series,
+            ai_metric_points(payload)[row["series_id"]],
+        )
+        count += saved["points"]
+    return count
+
+
+def ai_report_snapshot(payload, source_url, source_hash, fetched_at):
+    report = payload["report"]
+    return {
+        "report_id": report["report_id"],
+        "report_month": report["report_month"],
+        "title": report["title"],
+        "source_url": source_url,
+        "source_hash": source_hash,
+        "fetched_at": fetched_at,
+        "next_release_at": None,
+    }
+
+
+def ai_comments(payload, source_url, source_hash):
+    report = payload["report"]
+    return [
+        {
+            "report_id": report["report_id"],
+            "report_month": report["report_month"],
+            "comment_index": index,
+            "industry": comment["industry"],
+            "comment_text": comment["comment_text"],
+            "source_url": source_url,
+            "source_hash": source_hash,
+        }
+        for index, comment in enumerate(payload["respondent_comments"], start=1)
+    ]
+
+
 def source_name_for_url(url):
     if "prnewswire.com" in url:
         return "prnewswire"
