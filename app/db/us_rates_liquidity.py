@@ -1157,8 +1157,7 @@ def replace_ism_ai_extraction(con, extraction):
 
     payload = extraction["extraction_json"]
     report_id = extraction["report_id"]
-    if extraction.get("validation_status") == "ok":
-        payload = validate_extraction(payload)
+    payload = validate_extraction(payload)
     con.execute(
         "delete from ism_report_industry_signals where report_id = ?",
         (report_id,),

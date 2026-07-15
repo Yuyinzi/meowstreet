@@ -1554,6 +1554,35 @@ def test_replace_ism_ai_extraction_rejects_malformed_payload(tmp_path):
         )
 
 
+def test_replace_ism_ai_extraction_rejects_malformed_failed_payload(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+
+    with pytest.raises(ValueError, match="Field required"):
+        us_rates_liquidity.replace_ism_ai_extraction(
+            con,
+            {
+                "report_id": "ism_manufacturing_2026_06",
+                "report_month": "2026-06-01",
+                "source_url": "https://example.com/report.html",
+                "source_hash": "abc123",
+                "extractor": "llm",
+                "model": "gpt-5-mini",
+                "prompt_version": "ism-rich-v1",
+                "validation_status": "failed",
+                "validation_error": "llm returned incomplete json",
+                "extraction_json": {
+                    "report": {
+                        "report_id": "ism_manufacturing_2026_06",
+                        "report_month": "2026-06-01",
+                        "title": "June 2026 ISM Manufacturing PMI Report",
+                        "source_name": "prnewswire",
+                        "source_url": "https://example.com/report.html",
+                    },
+                },
+            },
+        )
+
+
 def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
     snapshot = {
