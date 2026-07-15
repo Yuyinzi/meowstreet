@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Literal
 
 from pydantic import (
@@ -280,6 +281,28 @@ def _validate_model(model, payload):
         return model.model_validate(payload).model_dump()
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
+
+
+def validate_summary_against_facts(summary_payload, factual_payload):
+    summary = _validate_model(AiSummaryModel, summary_payload)
+    rows_by_series = {
+        row["series_id"]: row for row in factual_payload["at_a_glance_rows"]
+    }
+    for change in summary["headline_changes"]:
+        row = rows_by_series.get(change["series_id"])
+        if not row:
+            raise ValueError(
+                f"summary headline change references unknown series: {change['series_id']}"
+            )
+        if change["point_change"] != row["point_change"]:
+            raise ValueError(
+                "summary headline change does not match extracted facts: "
+                f"{change['series_id']}"
+            )
+    summary["compared_to_report_month"] = _previous_report_month(
+        factual_payload["report"]["report_month"]
+    )
+    return summary
 
 
 PROMPT_VERSION = "ism-rich-v1"
@@ -583,6 +606,34 @@ Report text:
 """.strip()
 
 
+def build_validated_summary_prompt(factual_payload):
+    return f"""
+Summarize only the validated ISM Manufacturing facts below.
+Return only valid JSON with this shape:
+{{
+  "summary_text": "...",
+  "headline_changes": [
+    {{
+      "label": "Headline PMI",
+      "series_id": "ism_manufacturing_pmi",
+      "point_change": 1.3
+    }}
+  ],
+  "major_changes": ["..."]
+}}
+
+Rules:
+- Do not use facts outside this JSON.
+- Do not include compared_to_report_month; it is computed by code.
+- headline_changes must use series_id values from at_a_glance_rows.
+- headline_changes point_change must exactly match the selected at_a_glance_rows row.
+- major_changes must be grounded in at_a_glance_rows, industry_signals, commodities, narrative_facts, or respondent_comments.
+
+Validated facts:
+{json.dumps(factual_payload, ensure_ascii=False, sort_keys=True)}
+""".strip()
+
+
 def build_repair_prompt(report_text, previous_payload, validation_error):
     return f"""
 Your previous JSON failed schema validation. Return a corrected JSON object only.
@@ -877,6 +928,44 @@ def extract_single_payload_with_client(report_text, client, max_attempts=3):
         except ValueError as exc:
             validation_error = str(exc)
     raise ValueError(validation_error)
+
+
+async def generate_summary_from_facts_async(factual_payload, client, max_attempts=2):
+    payload = None
+    validation_error = None
+    prompt = build_validated_summary_prompt(factual_payload)
+    for attempt in range(max_attempts):
+        if attempt == 0:
+            current_prompt = prompt
+        else:
+            current_prompt = f"""
+Your previous JSON failed validation. Return a corrected JSON object only.
+
+Validation errors:
+{validation_error}
+
+Previous invalid JSON:
+{payload}
+
+Original instructions:
+{prompt}
+""".strip()
+        payload = await _complete_json_async(client, current_prompt)
+        try:
+            return validate_summary_against_facts(payload, factual_payload)
+        except ValueError as exc:
+            validation_error = str(exc)
+    raise ValueError(validation_error)
+
+
+def generate_summary_from_facts(factual_payload, client, max_attempts=2):
+    return asyncio.run(
+        generate_summary_from_facts_async(
+            factual_payload,
+            client,
+            max_attempts=max_attempts,
+        )
+    )
 
 
 def extract_with_client(report_text, client, max_attempts=2):

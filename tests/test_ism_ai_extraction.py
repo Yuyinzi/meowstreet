@@ -450,3 +450,26 @@ async def test_extract_factual_with_client_async_runs_sections_with_concurrency_
     assert result == payload
     assert len(client.calls) == 5
     assert client.max_seen == 3
+
+
+def test_build_validated_summary_prompt_uses_structured_payload_not_raw_report_text():
+    factual = valid_extraction()
+    factual.pop("ai_summary")
+
+    prompt = ism_ai_extraction.build_validated_summary_prompt(factual)
+
+    assert "Summarize only the validated ISM Manufacturing facts" in prompt
+    assert "at_a_glance_rows" in prompt
+    assert "industry_signals" in prompt
+    assert "respondent_comments" in prompt
+    assert "June 2026 ISM report text" not in prompt
+
+
+def test_validate_summary_rejects_headline_change_that_does_not_match_facts():
+    factual = valid_extraction()
+    factual.pop("ai_summary")
+    summary = valid_extraction()["ai_summary"]
+    summary["headline_changes"][0]["point_change"] = 99.0
+
+    with pytest.raises(ValueError, match="summary headline change does not match"):
+        ism_ai_extraction.validate_summary_against_facts(summary, factual)
