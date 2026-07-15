@@ -58,6 +58,17 @@ def extract_prepared_report_payload(con, prepared, source, ai_client):
     )
 
 
+def import_target(con, target, index, total, fetch, ai_client, model):
+    return import_report_url(
+        con,
+        target["url"],
+        source_name=target["source_name"],
+        fetch=fetch,
+        ai_client=ai_client,
+        model=model,
+    )
+
+
 def import_target_from_db_path(db_path, target, index, total, fetch, ai_client, model):
     con = growth_cycle.connect(db_path)
     try:
@@ -645,23 +656,16 @@ def main(argv=None, fetch=None, ai_client_factory=None):
             existing_months=existing_months,
             missing_only=args.missing_only,
         )
-        for target in targets:
-            try:
-                result = import_report_url(
-                    con,
-                    target["url"],
-                    source_name=target["source_name"],
-                    fetch=fetch,
-                    ai_client=ai_client,
-                    model=model,
-                )
-                results.append(result)
-            except (ValueError, CalledProcessError, TimeoutExpired) as exc:
-                print(
-                    f"ism_official_report/{target['url']}: failed - {exc}",
-                    file=sys.stderr,
-                )
-                failed += 1
+        target_results, target_failed = import_targets(
+            args.db_path,
+            targets,
+            fetch,
+            ai_client,
+            model,
+            args.report_concurrency,
+        )
+        results.extend(target_results)
+        failed += target_failed
     else:
         for url in requested_urls(args, fetch=fetch):
             try:
@@ -686,23 +690,16 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                 existing_months=existing_months,
                 missing_only=not args.force,
             )
-            for target in targets:
-                try:
-                    result = import_report_url(
-                        con,
-                        target["url"],
-                        source_name=target["source_name"],
-                        fetch=fetch,
-                        ai_client=ai_client,
-                        model=model,
-                    )
-                    results.append(result)
-                except (ValueError, CalledProcessError, TimeoutExpired) as exc:
-                    print(
-                        f"ism_official_report/{target['url']}: failed - {exc}",
-                        file=sys.stderr,
-                    )
-                    failed += 1
+            target_results, target_failed = import_targets(
+                args.db_path,
+                targets,
+                fetch,
+                ai_client,
+                model,
+                args.report_concurrency,
+            )
+            results.extend(target_results)
+            failed += target_failed
         else:
             months = (
                 []

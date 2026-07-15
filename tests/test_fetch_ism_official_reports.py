@@ -584,6 +584,137 @@ def test_discover_prnewswire_reports_stops_after_since_year():
     assert [report["report_month"] for report in reports] == ["2026-01-01"]
 
 
+def test_backfill_uses_import_targets_with_report_concurrency(tmp_path, monkeypatch):
+    db_path = tmp_path / "market_data.sqlite"
+    archive_reports = [
+        {
+            "url": "https://www.prnewswire.com/jan.html",
+            "title": "Manufacturing PMI at 50.9%; January 2025 Manufacturing ISM Report On Business",
+            "report_month": "2025-01-01",
+            "report_id": "ism_manufacturing_2025_01",
+        }
+    ]
+    seen = {}
+
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "discover_prnewswire_reports",
+        lambda since_year, fetch=None, pagesize=25, max_pages=100: archive_reports,
+    )
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "latest_released_report_month",
+        lambda: "2025-02-01",
+    )
+
+    def fake_import_targets(
+        db_path_arg, targets, fetch, ai_client, model, report_concurrency
+    ):
+        seen["db_path"] = db_path_arg
+        seen["targets"] = targets
+        seen["report_concurrency"] = report_concurrency
+        return [
+            {
+                "report_id": "ism_manufacturing_2025_01",
+                "metrics": 11,
+                "rankings": 0,
+                "comments": 10,
+                "at_a_glance_rows": 11,
+                "source_name": "prnewswire",
+            }
+        ], 0
+
+    monkeypatch.setattr(
+        fetch_ism_official_reports, "import_targets", fake_import_targets
+    )
+
+    exit_code = fetch_ism_official_reports.main(
+        [
+            "--db-path",
+            str(db_path),
+            "--backfill-since",
+            "2025",
+            "--report-concurrency",
+            "2",
+        ],
+        ai_client_factory=lambda config: object(),
+    )
+
+    assert exit_code == 0
+    assert seen["db_path"] == db_path
+    assert seen["report_concurrency"] == 2
+    assert [target["report_month"] for target in seen["targets"]] == [
+        "2025-01-01",
+        "2025-02-01",
+    ]
+
+
+def test_main_current_year_uses_report_concurrency_for_target_imports(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "market_data.sqlite"
+    archive_reports = [
+        {
+            "url": "https://www.prnewswire.com/jun-2026.html",
+            "title": "June 2026 ISM Manufacturing PMI Report",
+            "report_month": "2026-06-01",
+            "report_id": "ism_manufacturing_2026_06",
+        }
+    ]
+    seen = {}
+
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "discover_prnewswire_reports",
+        lambda since_year, fetch=None, pagesize=25, max_pages=100: archive_reports,
+    )
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "latest_released_report_month",
+        lambda: "2026-07-01",
+    )
+
+    def fake_import_targets(
+        db_path_arg, targets, fetch, ai_client, model, report_concurrency
+    ):
+        seen["db_path"] = db_path_arg
+        seen["targets"] = targets
+        seen["report_concurrency"] = report_concurrency
+        return [
+            {
+                "report_id": "ism_manufacturing_2026_06",
+                "metrics": 11,
+                "rankings": 0,
+                "comments": 10,
+                "at_a_glance_rows": 11,
+                "source_name": "prnewswire",
+            }
+        ], 0
+
+    monkeypatch.setattr(
+        fetch_ism_official_reports, "import_targets", fake_import_targets
+    )
+
+    exit_code = fetch_ism_official_reports.main(
+        [
+            "--db-path",
+            str(db_path),
+            "--current-year",
+            "--report-concurrency",
+            "3",
+        ],
+        ai_client_factory=lambda config: object(),
+    )
+
+    assert exit_code == 0
+    assert seen["db_path"] == db_path
+    assert seen["report_concurrency"] == 3
+    assert [target["report_month"] for target in seen["targets"]] == [
+        "2026-06-01",
+        "2026-07-01",
+    ]
+
+
 def test_report_concurrency_must_be_positive(capsys):
     with pytest.raises(SystemExit) as exc:
         fetch_ism_official_reports.main(
