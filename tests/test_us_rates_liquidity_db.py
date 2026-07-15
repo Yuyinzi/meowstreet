@@ -1489,6 +1489,62 @@ def test_replace_ism_at_a_glance_rows_saves_and_loads_latest(tmp_path):
     assert us_rates_liquidity.load_latest_ism_at_a_glance_rows(con) == [rows[1]]
 
 
+def test_replace_ism_ai_extraction_saves_payload_and_signals(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    payload = {
+        "report": {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "title": "June 2026 ISM Manufacturing PMI Report",
+            "source_name": "prnewswire",
+            "source_url": "https://example.com/report.html",
+        },
+        "industry_signals": [
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "industry": "Printing & Related Support Activities",
+                "rank": 1,
+                "evidence_text": "The 14 manufacturing industries reporting growth...",
+            },
+            {
+                "signal_type": "backlog",
+                "direction": "higher",
+                "industry": "Nonmetallic Mineral Products",
+                "rank": 1,
+                "evidence_text": "The eight industries reporting higher backlogs...",
+            },
+        ],
+    }
+
+    saved = us_rates_liquidity.replace_ism_ai_extraction(
+        con,
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "source_url": "https://example.com/report.html",
+            "source_hash": "abc123",
+            "extractor": "llm",
+            "model": "gpt-5-mini",
+            "prompt_version": "ism-rich-v1",
+            "validation_status": "ok",
+            "validation_error": None,
+            "extraction_json": payload,
+        },
+    )
+
+    assert saved == {"ai_extractions": 1, "industry_signals": 2}
+    assert (
+        len(
+            us_rates_liquidity.load_ism_report_industry_signals(
+                con,
+                "ism_manufacturing_2026_06",
+            )
+        )
+        == 2
+    )
+
+
 def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
     snapshot = {

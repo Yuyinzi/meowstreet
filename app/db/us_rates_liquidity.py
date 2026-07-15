@@ -192,6 +192,33 @@ def connect(db_path=DEFAULT_DB_PATH):
         );
         create index if not exists idx_ism_report_source_snapshots_report
         on ism_report_source_snapshots(report_id);
+        create table if not exists ism_ai_extractions (
+            report_id text not null,
+            source_url text not null,
+            report_month text not null,
+            source_hash text not null,
+            extractor text not null,
+            model text not null,
+            prompt_version text not null,
+            validation_status text not null,
+            validation_error text,
+            extraction_json text not null,
+            primary key(report_id, source_url, prompt_version)
+        );
+        create table if not exists ism_report_industry_signals (
+            report_id text not null,
+            report_month text not null,
+            signal_type text not null,
+            direction text not null,
+            industry text not null,
+            rank integer not null,
+            evidence_text text not null,
+            source_url text not null,
+            source_hash text not null,
+            primary key(report_id, signal_type, direction, industry)
+        );
+        create index if not exists idx_ism_report_industry_signals_industry
+        on ism_report_industry_signals(industry, report_month);
         """
     )
     _ensure_column(
@@ -1121,3 +1148,82 @@ def load_ism_report_source_snapshot(con, source_url):
         (source_url,),
     ).fetchone()
     return dict(row) if row else None
+
+
+def replace_ism_ai_extraction(con, extraction):
+    import json
+
+    payload = extraction["extraction_json"]
+    report_id = extraction["report_id"]
+    con.execute(
+        "delete from ism_report_industry_signals where report_id = ?",
+        (report_id,),
+    )
+    con.execute(
+        """
+        insert into ism_ai_extractions(
+            report_id, source_url, report_month, source_hash, extractor,
+            model, prompt_version, validation_status, validation_error,
+            extraction_json
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        on conflict(report_id, source_url, prompt_version) do update set
+            report_month = excluded.report_month,
+            source_hash = excluded.source_hash,
+            extractor = excluded.extractor,
+            model = excluded.model,
+            validation_status = excluded.validation_status,
+            validation_error = excluded.validation_error,
+            extraction_json = excluded.extraction_json
+        """,
+        (
+            report_id,
+            extraction["source_url"],
+            extraction["report_month"],
+            extraction["source_hash"],
+            extraction["extractor"],
+            extraction["model"],
+            extraction["prompt_version"],
+            extraction["validation_status"],
+            extraction.get("validation_error"),
+            json.dumps(payload, sort_keys=True),
+        ),
+    )
+    for signal in payload.get("industry_signals", []):
+        con.execute(
+            """
+            insert into ism_report_industry_signals(
+                report_id, report_month, signal_type, direction, industry,
+                rank, evidence_text, source_url, source_hash
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                report_id,
+                extraction["report_month"],
+                signal["signal_type"],
+                signal["direction"],
+                signal["industry"],
+                signal["rank"],
+                signal["evidence_text"],
+                extraction["source_url"],
+                extraction["source_hash"],
+            ),
+        )
+    con.commit()
+    return {
+        "ai_extractions": 1,
+        "industry_signals": len(payload.get("industry_signals", [])),
+    }
+
+
+def load_ism_report_industry_signals(con, report_id):
+    rows = con.execute(
+        """
+        select report_id, report_month, signal_type, direction, industry,
+               rank, evidence_text, source_url, source_hash
+        from ism_report_industry_signals
+        where report_id = ?
+        order by signal_type, direction, rank
+        """,
+        (report_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
