@@ -648,6 +648,120 @@ def test_import_target_from_db_path_opens_and_closes_own_connection(
     assert calls[1][0] == "import"
 
 
+def test_import_targets_concurrently_respects_concurrency_limit(monkeypatch):
+    targets = [
+        {
+            "source_name": "prnewswire",
+            "url": f"https://www.prnewswire.com/{month}.html",
+            "report_month": f"2025-0{index}-01",
+            "report_id": f"ism_manufacturing_2025_0{index}",
+        }
+        for index, month in enumerate(["jan", "feb", "mar"], start=1)
+    ]
+    running = 0
+    max_running = 0
+    calls = []
+
+    def fake_import_target_from_db_path(
+        db_path, target, index, total, fetch, ai_client, model
+    ):
+        nonlocal running, max_running
+        running += 1
+        max_running = max(max_running, running)
+        calls.append(("start", target["report_month"]))
+        import time
+
+        time.sleep(0.01)
+        running -= 1
+        calls.append(("end", target["report_month"]))
+        return {
+            "report_id": target["report_id"],
+            "metrics": 11,
+            "rankings": 0,
+            "comments": 10,
+            "at_a_glance_rows": 11,
+            "source_name": target["source_name"],
+        }
+
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "import_target_from_db_path",
+        fake_import_target_from_db_path,
+    )
+
+    results, failed = fetch_ism_official_reports.import_targets(
+        db_path="db.sqlite",
+        targets=targets,
+        fetch=object(),
+        ai_client=object(),
+        model="model",
+        report_concurrency=2,
+    )
+
+    assert failed == 0
+    assert [result["report_id"] for result in results] == [
+        "ism_manufacturing_2025_01",
+        "ism_manufacturing_2025_02",
+        "ism_manufacturing_2025_03",
+    ]
+    assert max_running == 2
+    assert len([call for call in calls if call[0] == "start"]) == 3
+
+
+def test_import_targets_continues_after_one_report_failure(monkeypatch, capsys):
+    targets = [
+        {
+            "source_name": "prnewswire",
+            "url": "https://www.prnewswire.com/jan.html",
+            "report_month": "2025-01-01",
+            "report_id": "ism_manufacturing_2025_01",
+        },
+        {
+            "source_name": "prnewswire",
+            "url": "https://www.prnewswire.com/feb.html",
+            "report_month": "2025-02-01",
+            "report_id": "ism_manufacturing_2025_02",
+        },
+    ]
+
+    def fake_import_target_from_db_path(
+        db_path, target, index, total, fetch, ai_client, model
+    ):
+        if target["report_month"] == "2025-01-01":
+            raise ValueError("bad report")
+        return {
+            "report_id": target["report_id"],
+            "metrics": 11,
+            "rankings": 0,
+            "comments": 10,
+            "at_a_glance_rows": 11,
+            "source_name": target["source_name"],
+        }
+
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "import_target_from_db_path",
+        fake_import_target_from_db_path,
+    )
+
+    results, failed = fetch_ism_official_reports.import_targets(
+        db_path="db.sqlite",
+        targets=targets,
+        fetch=object(),
+        ai_client=object(),
+        model="model",
+        report_concurrency=2,
+    )
+
+    captured = capsys.readouterr()
+    assert failed == 1
+    assert [result["report_id"] for result in results] == ["ism_manufacturing_2025_02"]
+    assert (
+        "ism_official_report/https://www.prnewswire.com/jan.html: failed - bad report"
+        in captured.err
+    )
+
+
 def test_main_continues_when_prnewswire_article_fetch_fails(
     tmp_path, monkeypatch, capsys
 ):

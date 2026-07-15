@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import hashlib
 import re
 import subprocess
@@ -63,6 +64,61 @@ def import_target_from_db_path(db_path, target, index, total, fetch, ai_client, 
         return import_target(con, target, index, total, fetch, ai_client, model)
     finally:
         con.close()
+
+
+def log_progress(message):
+    print(message, file=sys.stderr, flush=True)
+
+
+async def import_targets_async(
+    db_path, targets, fetch, ai_client, model, report_concurrency
+):
+    semaphore = asyncio.Semaphore(report_concurrency)
+    results_by_index = {}
+    failed = 0
+
+    async def run_one(index, target):
+        nonlocal failed
+        async with semaphore:
+            try:
+                result = await asyncio.to_thread(
+                    import_target_from_db_path,
+                    db_path,
+                    target,
+                    index,
+                    len(targets),
+                    fetch,
+                    ai_client,
+                    model,
+                )
+                results_by_index[index] = result
+            except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+                print(
+                    f"ism_official_report/{target['url']}: failed - {exc}",
+                    file=sys.stderr,
+                )
+                failed += 1
+
+    await asyncio.gather(
+        *[run_one(index, target) for index, target in enumerate(targets, start=1)]
+    )
+    return [results_by_index[index] for index in sorted(results_by_index)], failed
+
+
+def import_targets(db_path, targets, fetch, ai_client, model, report_concurrency):
+    if not targets:
+        return [], 0
+    log_progress(f"report concurrency={report_concurrency} targets={len(targets)}")
+    return asyncio.run(
+        import_targets_async(
+            db_path,
+            targets,
+            fetch,
+            ai_client,
+            model,
+            report_concurrency,
+        )
+    )
 
 
 def build_ai_client(config):
