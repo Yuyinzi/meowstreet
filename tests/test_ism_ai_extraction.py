@@ -592,3 +592,55 @@ async def test_extract_with_client_async_extracts_facts_then_summarizes_validate
     assert result == payload
     assert "June 2026 ISM report text" not in seen["summary_prompt"]
     assert "at_a_glance_rows" in seen["summary_prompt"]
+
+
+def test_assemble_factual_payload_from_sections_validates_complete_set():
+    payload = valid_extraction()
+    factual = {key: value for key, value in payload.items() if key != "ai_summary"}
+    sections = [
+        {"section_name": "report", "payload_json": {"report": factual["report"]}},
+        {
+            "section_name": "at_a_glance_rows",
+            "payload_json": {"at_a_glance_rows": factual["at_a_glance_rows"]},
+        },
+        {
+            "section_name": "industry_signals",
+            "payload_json": {"industry_signals": factual["industry_signals"]},
+        },
+        {
+            "section_name": "comments_commodities",
+            "payload_json": {
+                "respondent_comments": factual["respondent_comments"],
+                "commodities": factual["commodities"],
+            },
+        },
+        {
+            "section_name": "narrative_facts",
+            "payload_json": {"narrative_facts": factual["narrative_facts"]},
+        },
+    ]
+
+    result = ism_ai_extraction.assemble_factual_payload_from_sections(sections)
+
+    assert result == factual
+
+
+def test_assemble_factual_payload_from_sections_rejects_missing_section():
+    payload = valid_extraction()
+    sections = [
+        {"section_name": "report", "payload_json": {"report": payload["report"]}},
+    ]
+
+    with pytest.raises(ValueError, match="missing factual sections"):
+        ism_ai_extraction.assemble_factual_payload_from_sections(sections)
+
+
+def test_facts_hash_is_stable_for_same_payload():
+    payload = valid_extraction()
+    factual = {key: value for key, value in payload.items() if key != "ai_summary"}
+
+    first = ism_ai_extraction.facts_hash(factual)
+    second = ism_ai_extraction.facts_hash(dict(reversed(list(factual.items()))))
+
+    assert first == second
+    assert len(first) == 64

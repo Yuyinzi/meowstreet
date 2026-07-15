@@ -310,6 +310,33 @@ def validate_factual_extraction(payload):
         raise ValueError(str(exc)) from exc
 
 
+FACTUAL_SECTION_NAMES = [
+    "report",
+    "at_a_glance_rows",
+    "industry_signals",
+    "comments_commodities",
+    "narrative_facts",
+]
+
+
+def assemble_factual_payload_from_sections(section_rows):
+    by_name = {row["section_name"]: row["payload_json"] for row in section_rows}
+    missing = [name for name in FACTUAL_SECTION_NAMES if name not in by_name]
+    if missing:
+        raise ValueError(f"missing factual sections: {', '.join(missing)}")
+    payload = {}
+    for section_name in FACTUAL_SECTION_NAMES:
+        payload.update(by_name[section_name])
+    return validate_factual_extraction(payload)
+
+
+def facts_hash(factual_payload):
+    import hashlib
+
+    raw = json.dumps(factual_payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def _validate_model(model, payload):
     try:
         return model.model_validate(payload).model_dump()
