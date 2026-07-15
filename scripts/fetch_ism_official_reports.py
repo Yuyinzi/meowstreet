@@ -328,6 +328,60 @@ def requested_urls(args, fetch=None):
     return result
 
 
+def month_name_from_report_month(report_month):
+    month_index = int(report_month[5:7]) - 1
+    return MONTHS[month_index]
+
+
+def latest_released_report_month(today=None):
+    if today is None:
+        today = datetime.now()
+    year = today.year
+    month = today.month - 1
+    if month == 0:
+        year -= 1
+        month = 12
+    return f"{year}-{month:02d}-01"
+
+
+def backfill_targets(
+    archive_reports,
+    since_year,
+    latest_report_month,
+    existing_months,
+    missing_only,
+):
+    since_month = f"{since_year}-01-01"
+    archive_by_month = {
+        item["report_month"]: item
+        for item in archive_reports
+        if since_month <= item["report_month"] < latest_report_month
+    }
+    targets = []
+    for report_month in sorted(archive_by_month):
+        if missing_only and report_month in existing_months:
+            continue
+        item = archive_by_month[report_month]
+        targets.append(
+            {
+                "source_name": "prnewswire",
+                "url": item["url"],
+                "report_month": item["report_month"],
+                "report_id": item["report_id"],
+            }
+        )
+    if not missing_only or latest_report_month not in existing_months:
+        targets.append(
+            {
+                "source_name": "ismworld",
+                "url": report_url(month_name_from_report_month(latest_report_month)),
+                "report_month": latest_report_month,
+                "report_id": ism_prnewswire_archive.report_id(latest_report_month),
+            }
+        )
+    return targets
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(

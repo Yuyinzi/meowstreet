@@ -389,6 +389,40 @@ def test_import_report_url_uses_ai_extraction_by_default(tmp_path):
     assert result["industry_signals"] == 2
 
 
+def test_backfill_targets_use_prnewswire_for_history_and_official_for_latest():
+    archive_reports = [
+        {
+            "url": "https://www.prnewswire.com/jan-2026.html",
+            "title": "January 2026 ISM Manufacturing PMI Report",
+            "report_month": "2026-01-01",
+            "report_id": "ism_manufacturing_2026_01",
+        },
+        {
+            "url": "https://www.prnewswire.com/jun-2026.html",
+            "title": "June 2026 ISM Manufacturing PMI Report",
+            "report_month": "2026-06-01",
+            "report_id": "ism_manufacturing_2026_06",
+        },
+    ]
+
+    targets = fetch_ism_official_reports.backfill_targets(
+        archive_reports,
+        since_year=2026,
+        latest_report_month="2026-06-01",
+        existing_months={"2026-01-01"},
+        missing_only=True,
+    )
+
+    assert targets == [
+        {
+            "source_name": "ismworld",
+            "url": fetch_ism_official_reports.report_url("june"),
+            "report_month": "2026-06-01",
+            "report_id": "ism_manufacturing_2026_06",
+        }
+    ]
+
+
 def test_main_continues_when_prnewswire_article_fetch_fails(
     tmp_path, monkeypatch, capsys
 ):

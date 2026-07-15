@@ -1609,6 +1609,25 @@ def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
     )
 
 
+def test_load_existing_ism_report_months(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    us_rates_liquidity.replace_ism_report_snapshot(
+        con,
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "title": "June report",
+            "source_url": "https://example.com/june.html",
+            "source_hash": "abc123",
+            "fetched_at": "2026-07-15T00:00:00Z",
+            "next_release_at": None,
+        },
+        [],
+    )
+
+    assert us_rates_liquidity.load_existing_ism_report_months(con) == {"2026-06-01"}
+
+
 def test_replace_ism_ai_report_outputs_saves_summary_and_commodities(tmp_path):
     from tests.test_ism_ai_extraction import valid_extraction
 

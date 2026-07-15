@@ -566,7 +566,7 @@ def replace_ism_report_snapshot(con, report, comments):
             report["source_url"],
             report["source_hash"],
             report["fetched_at"],
-            report["parse_status"],
+            report.get("parse_status", ""),
             report.get("next_report_period"),
             report.get("next_release_at"),
             report.get("next_release_label", ""),
@@ -596,6 +596,11 @@ def replace_ism_report_snapshot(con, report, comments):
         )
     con.commit()
     return {"reports": 1, "comments": len(comments)}
+
+
+def load_existing_ism_report_months(con):
+    rows = con.execute("select report_month from ism_report_snapshots").fetchall()
+    return {row["report_month"] for row in rows}
 
 
 def load_latest_ism_report_snapshot(con):
