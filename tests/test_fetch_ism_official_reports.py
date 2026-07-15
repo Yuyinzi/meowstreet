@@ -525,6 +525,33 @@ def test_main_imports_one_report_month_with_ai(tmp_path, capsys):
     assert "ism_manufacturing_2026_06" in capsys.readouterr().out
 
 
+def test_discover_prnewswire_reports_stops_after_since_year():
+    pages = {
+        fetch_ism_official_reports.ism_prnewswire_archive.archive_listing_url(
+            1, 25
+        ): """
+        <a href="/news-releases/manufacturing-pmi-at-52-6-january-2026-ism-manufacturing-pmi-report-302700001.html">
+          Manufacturing PMI at 52.6%; January 2026 ISM Manufacturing PMI Report
+        </a>
+        """,
+        fetch_ism_official_reports.ism_prnewswire_archive.archive_listing_url(
+            2, 25
+        ): """
+        <a href="/news-releases/manufacturing-pmi-at-49-0-december-2019-ism-manufacturing-pmi-report-300900001.html">
+          Manufacturing PMI at 49.0%; December 2019 ISM Manufacturing PMI Report
+        </a>
+        """,
+    }
+
+    reports = fetch_ism_official_reports.discover_prnewswire_reports(
+        since_year=2020,
+        fetch=lambda url: pages[url],
+        pagesize=25,
+    )
+
+    assert [report["report_month"] for report in reports] == ["2026-01-01"]
+
+
 def test_main_continues_when_prnewswire_article_fetch_fails(
     tmp_path, monkeypatch, capsys
 ):

@@ -406,15 +406,30 @@ def normalize_report_month(value):
     raise ValueError(f"ism report month must be YYYY-MM: {value}")
 
 
-def discover_prnewswire_reports(fetch=None, pages=5, pagesize=25):
+def discover_prnewswire_reports(since_year, fetch=None, pagesize=25, max_pages=100):
     if fetch is None:
         fetch = fetch_text
     reports = []
-    for page in range(1, pages + 1):
-        url = ism_prnewswire_archive.archive_listing_url(page, pagesize)
-        html = fetch(url)
-        reports.extend(ism_prnewswire_archive.parse_archive_listing(html))
-    return reports
+    seen = set()
+    since_month = f"{since_year}-01-01"
+    reached_before_since = False
+    for page in range(1, max_pages + 1):
+        listing_url = ism_prnewswire_archive.archive_listing_url(page, pagesize)
+        html = fetch(listing_url)
+        page_reports = ism_prnewswire_archive.parse_archive_listing(html)
+        if not page_reports:
+            break
+        for report in page_reports:
+            if report["url"] in seen:
+                continue
+            seen.add(report["url"])
+            if report["report_month"] < since_month:
+                reached_before_since = True
+                continue
+            reports.append(report)
+        if reached_before_since:
+            break
+    return sorted(reports, key=lambda item: item["report_month"])
 
 
 def main(argv=None, fetch=None, ai_client_factory=None):
@@ -473,7 +488,9 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                 }
             ]
         else:
-            archive_reports = discover_prnewswire_reports(fetch=fetch)
+            archive_reports = discover_prnewswire_reports(
+                since_year=int(normalized[:4]), fetch=fetch
+            )
             targets = [
                 {"source_name": "prnewswire", "url": item["url"]}
                 for item in archive_reports
@@ -503,7 +520,9 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                 )
                 failed += 1
     elif args.backfill_since:
-        archive_reports = discover_prnewswire_reports(fetch=fetch)
+        archive_reports = discover_prnewswire_reports(
+            since_year=args.backfill_since, fetch=fetch
+        )
         existing_months = us_rates_liquidity.load_existing_ism_report_months(con)
         targets = backfill_targets(
             archive_reports,
