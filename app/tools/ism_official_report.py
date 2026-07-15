@@ -202,7 +202,7 @@ def parse_comments(text, report, source_url):
         return []
     comments = []
     for index, match in enumerate(
-        re.finditer(r"“([^”]+)”\s+\[([^\]]+)\]", section_match.group(1)),
+        re.finditer(r"[“\"]([^”\"]+)[”\"]\s+\[([^\]]+)\]", section_match.group(1)),
         start=1,
     ):
         comments.append(

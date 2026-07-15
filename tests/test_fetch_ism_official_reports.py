@@ -1,4 +1,5 @@
 import pytest
+from subprocess import CalledProcessError
 
 from app.db import us_rates_liquidity
 from scripts import fetch_ism_official_reports
@@ -345,3 +346,45 @@ def test_main_discovers_prnewswire_pages_and_imports_urls(
 
     assert exit_code == 0
     assert "source=prnewswire" in capsys.readouterr().out
+
+
+def test_main_continues_when_prnewswire_article_fetch_fails(
+    tmp_path, monkeypatch, capsys
+):
+    db_path = tmp_path / "market_data.sqlite"
+    bad_url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-52-6-january-2026-ism-manufacturing-pmi-report-302675443.html"
+    good_url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html"
+    listing_html = (
+        f'<a href="{bad_url}">'
+        "Jan 2026 Manufacturing PMI® at 52.6%; January 2026 ISM® Manufacturing PMI® Report"
+        "</a>"
+        f'<a href="{good_url}">'
+        "Jul 01, 2026 Manufacturing PMI® at 53.3%; June 2026 ISM® Manufacturing PMI® Report"
+        "</a>"
+    )
+
+    def fake_fetch(url):
+        if "institute-for-supply-management" in url:
+            return listing_html
+        if url == bad_url:
+            raise CalledProcessError(35, ["curl", "-sS", url])
+        return HTML
+
+    monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", fake_fetch)
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "fetched_at_now",
+        lambda: "2026-07-15T10:00:00Z",
+    )
+
+    exit_code = fetch_ism_official_reports.main(
+        ["--db-path", str(db_path), "--prnewswire-pages", "1"]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert f"ism_official_report/{bad_url}: failed -" in captured.err
+    assert (
+        "ism_manufacturing_2026_06: source=prnewswire metrics=11 rankings=4 "
+        "comments=1 at_a_glance_rows=11" in captured.out
+    )

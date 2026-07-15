@@ -2,6 +2,7 @@ import argparse
 import hashlib
 import subprocess
 import sys
+from subprocess import CalledProcessError, TimeoutExpired
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -232,7 +233,7 @@ def main(argv=None):
         try:
             result = import_report_url(con, url)
             results.append(result)
-        except ValueError as exc:
+        except (ValueError, CalledProcessError, TimeoutExpired) as exc:
             print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
             failed += 1
     months = (
@@ -255,7 +256,7 @@ def main(argv=None):
                 continue
             print(f"ism_official_report/{month}: failed - {exc}", file=sys.stderr)
             failed += 1
-        except ValueError as exc:
+        except (ValueError, CalledProcessError, TimeoutExpired) as exc:
             print(f"ism_official_report/{month}: failed - {exc}", file=sys.stderr)
             failed += 1
     con.close()

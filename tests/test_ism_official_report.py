@@ -296,3 +296,24 @@ def test_parse_report_handles_prnewswire_article_body_table():
     assert len(parsed["at_a_glance_rows"]) == 11
     assert parsed["at_a_glance_rows"][6]["direction"] == "Too Low"
     assert parsed["at_a_glance_rows"][6]["rate_of_change"] == "Faster"
+
+
+def test_parse_report_extracts_prnewswire_straight_quote_comments():
+    parsed = ism_official_report.parse_report(
+        PRNEWSWIRE_HTML,
+        "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html",
+        fetched_at="2026-07-15T10:00:00Z",
+        source_name="prnewswire",
+    )
+
+    assert parsed["comments"] == [
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "industry": "Machinery",
+            "comment_index": 1,
+            "comment_text": "Demand remains uneven.",
+            "source_url": "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html",
+            "source_hash": parsed["report"]["source_hash"],
+        }
+    ]

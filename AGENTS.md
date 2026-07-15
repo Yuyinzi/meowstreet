@@ -192,6 +192,12 @@ Runtime payloads, API responses, DB rows, and method-method artifacts remain pla
 
 The method artifact should include `version`, `generated_at`, `source_documents`, `concepts`, `workflow_nodes`, `node_checks`, `decision_rules`, and `extraction_warnings`. Workflow nodes should include decision questions, required inputs, criteria, tool hooks, source refs, incoming edges, and outgoing edges. Node checks should remain structured and deterministic.
 
+### LLM Extraction Schemas
+
+Use Pydantic v2 models to validate all LLM-generated JSON or AI extraction payloads before storing, transforming, or merging them into runtime data. Do not hand-roll schema validation for LLM output with ad hoc nested `if` checks. Pydantic models should use `ConfigDict(extra="forbid")`, constrained fields such as `Literal`, `Field`, and validators where useful, and should convert to plain dicts with `model_dump()` before crossing DB, API, or dashboard boundaries.
+
+LLM extraction remains offline/import-time only unless explicitly approved. Runtime dashboard classification and ticker workflow decisions must stay deterministic.
+
 ### Filesystem
 
 Always use `pathlib.Path`, never `os.path` or raw strings for paths:
