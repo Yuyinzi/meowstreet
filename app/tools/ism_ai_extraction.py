@@ -183,6 +183,31 @@ Return only valid JSON with these keys:
 - respondent_comments
 - commodities
 - narrative_facts
+- ai_summary
+
+For ai_summary, generate a concise month-over-month summary using only facts in
+the report. The summary should point out the major changes, for example:
+"Compared with May
+
+Headline PMI
++1.3
+
+New Orders
++2.4
+
+Production
++1.8
+
+Prices
+-0.6
+
+major_changes
+• Transportation Equipment moved into expansion.
+• Steel was added to commodities up in price.
+• Supplier delivery delays increased."
+
+Use the report's previous-month values and point changes. Do not invent changes,
+industries, commodities, or causal explanations that are not in the source text.
 
 For industry_signals, extract all available industry lists for:
 overall_growth, overall_contraction, new_orders, production, employment,

@@ -163,3 +163,14 @@ def test_extract_with_client_validates_json_response():
     )
 
     assert result["report"]["report_id"] == "ism_manufacturing_2026_06"
+
+
+def test_build_prompt_requests_summary_with_major_changes():
+    prompt = ism_ai_extraction.build_prompt("June 2026 ISM report text")
+
+    assert "ai_summary" in prompt
+    assert "Compared with" in prompt
+    assert "Headline PMI" in prompt
+    assert "New Orders" in prompt
+    assert "major_changes" in prompt
+    assert "Do not invent changes" in prompt
