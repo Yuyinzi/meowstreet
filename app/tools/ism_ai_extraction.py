@@ -203,7 +203,11 @@ class AiSummaryModel(BaseModel):
     compared_to_report_month: str | None = None
     headline_changes: list[HeadlineChangeModel] = Field(default_factory=list)
     major_changes: list[str] = Field(default_factory=list)
+    major_changes_zh: list[str] = Field(default_factory=list)
     summary_text: str
+    summary_text_zh: str = ""
+    cat_takeaway_en: str = ""
+    cat_takeaway_zh: str = ""
 
 
 class IsmRichExtractionModel(BaseModel):
@@ -346,6 +350,12 @@ def _validate_model(model, payload):
 
 def validate_summary_against_facts(summary_payload, factual_payload):
     summary = _validate_model(AiSummaryModel, summary_payload)
+    if not summary["summary_text_zh"]:
+        raise ValueError("summary_text_zh is required")
+    if not summary["cat_takeaway_en"]:
+        raise ValueError("cat_takeaway_en is required")
+    if not summary["cat_takeaway_zh"]:
+        raise ValueError("cat_takeaway_zh is required")
     rows_by_series = {
         row["series_id"]: row for row in factual_payload["at_a_glance_rows"]
     }
@@ -709,7 +719,8 @@ def build_validated_summary_prompt(factual_payload):
 Summarize only the validated ISM Manufacturing facts below.
 Return only valid JSON with this shape:
 {{
-  "summary_text": "...",
+  "summary_text": "English concise macro summary...",
+  "summary_text_zh": "中文宏观摘要...",
   "headline_changes": [
     {{
       "label": "Headline PMI",
@@ -717,7 +728,10 @@ Return only valid JSON with this shape:
       "point_change": 1.3
     }}
   ],
-  "major_changes": ["..."]
+  "major_changes": ["English grounded change..."],
+  "major_changes_zh": ["中文对应变化..."],
+  "cat_takeaway_en": "A vivid Caicai trader-cat takeaway in English...",
+  "cat_takeaway_zh": "中文财财交易猫总结..."
 }}
 
 Rules:
@@ -726,6 +740,13 @@ Rules:
 - headline_changes must use series_id values from at_a_glance_rows.
 - headline_changes point_change must exactly match the selected at_a_glance_rows row.
 - major_changes must be grounded in at_a_glance_rows, industry_signals, commodities, narrative_facts, or respondent_comments.
+- Write summary_text in English and summary_text_zh in Chinese.
+- Write cat_takeaway_en and cat_takeaway_zh in Caicai（财财） trader-cat voice.
+- Caicai（财财） is the Meowstreet trader. Use the name Caicai in English and 财财 in Chinese.
+- Caicai can use vivid examples such as buying fish, stocking a pantry, building a house, or checking a market stall.
+- Analogies must explain validated facts only; do not invent new data.
+- Keep Caicai's tone useful for traders, not cute for its own sake.
+- Do not use unsupported jokes or unrelated story details.
 
 Validated facts:
 {json.dumps(factual_payload, ensure_ascii=False, sort_keys=True)}

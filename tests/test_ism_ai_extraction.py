@@ -79,7 +79,11 @@ def valid_extraction():
             "major_changes": [
                 "Primary Metals moved into expansion.",
             ],
+            "major_changes_zh": ["Primary Metals进入扩张。"],
             "summary_text": "Compared with May, Headline PMI rose 1.0 points.",
+            "summary_text_zh": "PMI较上月改善。",
+            "cat_takeaway_en": "Caicai, the Meowstreet trader cat, sees demand returning like a fish stall getting fresh orders.",
+            "cat_takeaway_zh": "财财这只Meowstreet交易猫看到需求回来了，就像鱼摊又接到新订单。",
         },
     }
 
@@ -199,8 +203,12 @@ def test_extract_with_client_validates_json_response():
             if "Summarize only the validated ISM Manufacturing facts" in prompt:
                 return {
                     "summary_text": payload["ai_summary"]["summary_text"],
+                    "summary_text_zh": payload["ai_summary"]["summary_text_zh"],
                     "headline_changes": payload["ai_summary"]["headline_changes"],
                     "major_changes": payload["ai_summary"]["major_changes"],
+                    "major_changes_zh": payload["ai_summary"]["major_changes_zh"],
+                    "cat_takeaway_en": payload["ai_summary"]["cat_takeaway_en"],
+                    "cat_takeaway_zh": payload["ai_summary"]["cat_takeaway_zh"],
                 }
             raise AssertionError(prompt)
 
@@ -266,8 +274,12 @@ def test_extract_with_client_uses_split_section_prompts():
             if "Summarize only the validated ISM Manufacturing facts" in prompt:
                 return {
                     "summary_text": payload["ai_summary"]["summary_text"],
+                    "summary_text_zh": payload["ai_summary"]["summary_text_zh"],
                     "headline_changes": payload["ai_summary"]["headline_changes"],
                     "major_changes": payload["ai_summary"]["major_changes"],
+                    "major_changes_zh": payload["ai_summary"]["major_changes_zh"],
+                    "cat_takeaway_en": payload["ai_summary"]["cat_takeaway_en"],
+                    "cat_takeaway_zh": payload["ai_summary"]["cat_takeaway_zh"],
                 }
             raise AssertionError(prompt)
 
@@ -315,8 +327,12 @@ def test_extract_with_client_repairs_invalid_split_section():
             if "Summarize only the validated ISM Manufacturing facts" in prompt:
                 return {
                     "summary_text": payload["ai_summary"]["summary_text"],
+                    "summary_text_zh": payload["ai_summary"]["summary_text_zh"],
                     "headline_changes": payload["ai_summary"]["headline_changes"],
                     "major_changes": payload["ai_summary"]["major_changes"],
+                    "major_changes_zh": payload["ai_summary"]["major_changes_zh"],
+                    "cat_takeaway_en": payload["ai_summary"]["cat_takeaway_en"],
+                    "cat_takeaway_zh": payload["ai_summary"]["cat_takeaway_zh"],
                 }
             raise AssertionError(prompt)
 
@@ -366,8 +382,12 @@ def test_extract_with_client_repairs_comment_text_not_found_in_source():
             if "Summarize only the validated ISM Manufacturing facts" in prompt:
                 return {
                     "summary_text": payload["ai_summary"]["summary_text"],
+                    "summary_text_zh": payload["ai_summary"]["summary_text_zh"],
                     "headline_changes": payload["ai_summary"]["headline_changes"],
                     "major_changes": payload["ai_summary"]["major_changes"],
+                    "major_changes_zh": payload["ai_summary"]["major_changes_zh"],
+                    "cat_takeaway_en": payload["ai_summary"]["cat_takeaway_en"],
+                    "cat_takeaway_zh": payload["ai_summary"]["cat_takeaway_zh"],
                 }
             raise AssertionError(prompt)
 
@@ -555,6 +575,29 @@ def test_validate_summary_accepts_summary_text_with_metric_label_alias():
     assert result["summary_text"] == summary["summary_text"]
 
 
+def test_validate_summary_accepts_bilingual_cat_fields():
+    factual = valid_extraction()
+    factual.pop("ai_summary")
+    summary = valid_extraction()["ai_summary"]
+    summary.update(
+        {
+            "summary_text_zh": "制造业PMI改善，新订单和生产都在扩张。",
+            "major_changes_zh": ["新订单明显改善。"],
+            "cat_takeaway_en": (
+                "Caicai, the Meowstreet trader cat, sees factories restocking "
+                "like a fish stall preparing for a busy morning."
+            ),
+            "cat_takeaway_zh": "财财这只Meowstreet交易猫看到工厂像鱼摊备货一样，准备迎接更忙的早市。",
+        }
+    )
+
+    result = ism_ai_extraction.validate_summary_against_facts(summary, factual)
+
+    assert result["summary_text_zh"]
+    assert result["cat_takeaway_en"].startswith("Caicai")
+    assert result["cat_takeaway_zh"].startswith("财财")
+
+
 @pytest.mark.asyncio
 async def test_extract_with_client_async_extracts_facts_then_summarizes_validated_payload():
     payload = valid_extraction()
@@ -579,8 +622,12 @@ async def test_extract_with_client_async_extracts_facts_then_summarizes_validate
                 seen["summary_prompt"] = prompt
                 return {
                     "summary_text": payload["ai_summary"]["summary_text"],
+                    "summary_text_zh": payload["ai_summary"]["summary_text_zh"],
                     "headline_changes": payload["ai_summary"]["headline_changes"],
                     "major_changes": payload["ai_summary"]["major_changes"],
+                    "major_changes_zh": payload["ai_summary"]["major_changes_zh"],
+                    "cat_takeaway_en": payload["ai_summary"]["cat_takeaway_en"],
+                    "cat_takeaway_zh": payload["ai_summary"]["cat_takeaway_zh"],
                 }
             raise AssertionError(prompt)
 
