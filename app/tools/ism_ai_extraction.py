@@ -115,6 +115,30 @@ class NarrativeFactsModel(BaseModel):
     largest_industries_expanded: list[str] = Field(default_factory=list)
 
 
+class HeadlineChangeModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    series_id: str
+    point_change: float
+
+    @field_validator("series_id")
+    @classmethod
+    def validate_series_id(cls, value):
+        if value not in REQUIRED_SERIES_IDS:
+            raise ValueError(f"series id is unknown: {value}")
+        return value
+
+
+class AiSummaryModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    compared_to_report_month: str | None = None
+    headline_changes: list[HeadlineChangeModel] = Field(default_factory=list)
+    major_changes: list[str] = Field(default_factory=list)
+    summary_text: str
+
+
 class IsmRichExtractionModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -124,6 +148,7 @@ class IsmRichExtractionModel(BaseModel):
     respondent_comments: list[RespondentCommentModel]
     commodities: list[CommoditySignalModel]
     narrative_facts: NarrativeFactsModel
+    ai_summary: AiSummaryModel
 
     @model_validator(mode="after")
     def validate_metric_set(self):

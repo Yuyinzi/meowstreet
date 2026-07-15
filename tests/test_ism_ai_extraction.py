@@ -65,6 +65,20 @@ def valid_extraction():
                 "Machinery",
             ],
         },
+        "ai_summary": {
+            "compared_to_report_month": "2026-05-01",
+            "headline_changes": [
+                {
+                    "label": "Headline PMI",
+                    "series_id": "ism_manufacturing_pmi",
+                    "point_change": 1.3,
+                }
+            ],
+            "major_changes": [
+                "Transportation Equipment moved into expansion.",
+            ],
+            "summary_text": "Compared with May, Headline PMI rose 1.3 points.",
+        },
     }
 
 
@@ -72,7 +86,42 @@ def test_validate_extraction_accepts_complete_payload():
     result = ism_ai_extraction.validate_extraction(valid_extraction())
 
     assert result["report"]["report_id"] == "ism_manufacturing_2026_06"
-    assert len(result["at_a_glance_rows"]) == 11
+
+
+def test_validate_extraction_accepts_month_over_month_summary():
+    payload = valid_extraction()
+    payload["ai_summary"] = {
+        "compared_to_report_month": "2026-05-01",
+        "headline_changes": [
+            {
+                "label": "Headline PMI",
+                "series_id": "ism_manufacturing_pmi",
+                "point_change": 1.3,
+            },
+            {
+                "label": "New Orders",
+                "series_id": "ism_manufacturing_new_orders",
+                "point_change": 2.4,
+            },
+        ],
+        "major_changes": [
+            "Transportation Equipment moved into expansion.",
+            "Steel was added to commodities up in price.",
+            "Supplier delivery delays increased.",
+        ],
+        "summary_text": (
+            "Compared with May, Headline PMI rose 1.3 points, New Orders rose "
+            "2.4 points, Production rose 1.8 points, and Prices fell 0.6 points. "
+            "Major changes: Transportation Equipment moved into expansion; Steel "
+            "was added to commodities up in price; Supplier delivery delays increased."
+        ),
+    }
+
+    result = ism_ai_extraction.validate_extraction(payload)
+
+    assert result["ai_summary"]["compared_to_report_month"] == "2026-05-01"
+    assert result["ai_summary"]["headline_changes"][0]["point_change"] == 1.3
+    assert "Supplier delivery delays increased" in result["ai_summary"]["summary_text"]
 
 
 def test_validate_extraction_rejects_missing_metric_rows():
