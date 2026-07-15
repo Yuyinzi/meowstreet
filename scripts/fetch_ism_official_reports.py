@@ -439,6 +439,13 @@ def backfill_targets(
     return targets
 
 
+def positive_int(value):
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("report concurrency must be at least 1")
+    return parsed
+
+
 def normalize_report_month(value):
     if re.fullmatch(r"20\d{2}-\d{2}", value):
         return f"{value}-01"
@@ -487,6 +494,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
     parser.add_argument("--missing-only", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--latest-only", action="store_true")
+    parser.add_argument("--report-concurrency", type=positive_int, default=1)
     parser.add_argument("--report-month")
     args = parser.parse_args(argv)
     con = us_rates_liquidity.connect(args.db_path)

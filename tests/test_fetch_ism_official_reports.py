@@ -584,6 +584,16 @@ def test_discover_prnewswire_reports_stops_after_since_year():
     assert [report["report_month"] for report in reports] == ["2026-01-01"]
 
 
+def test_report_concurrency_must_be_positive(capsys):
+    with pytest.raises(SystemExit) as exc:
+        fetch_ism_official_reports.main(
+            ["--backfill-since", "2025", "--report-concurrency", "0"],
+            ai_client_factory=lambda config: object(),
+        )
+    assert exc.value.code == 2
+    assert "report concurrency must be at least 1" in capsys.readouterr().err
+
+
 def test_main_continues_when_prnewswire_article_fetch_fails(
     tmp_path, monkeypatch, capsys
 ):
