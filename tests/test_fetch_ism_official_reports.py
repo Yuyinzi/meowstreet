@@ -1,6 +1,7 @@
 import pytest
 from subprocess import CalledProcessError
 
+from app.db import growth_cycle
 from app.db import us_rates_liquidity
 from scripts import fetch_ism_official_reports
 
@@ -109,6 +110,7 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
     from tests.test_ism_ai_extraction import valid_extraction
 
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
 
     class FakeClient:
         def complete_json(self, prompt):
@@ -143,16 +145,16 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
         "value": 50.0,
         "source": "ISM AI extraction",
     }
-    assert us_rates_liquidity.load_latest_ism_report_snapshot(con)["report_id"] == (
+    assert growth_cycle.load_latest_ism_report_snapshot(con)["report_id"] == (
         "ism_manufacturing_2026_06"
     )
     assert (
-        us_rates_liquidity.load_ism_report_comments(con, "ism_manufacturing_2026_06")[
-            0
-        ]["industry"]
+        growth_cycle.load_ism_report_comments(con, "ism_manufacturing_2026_06")[0][
+            "industry"
+        ]
         == "Chemical Products"
     )
-    rows = us_rates_liquidity.load_latest_ism_at_a_glance_rows(con)
+    rows = growth_cycle.load_latest_ism_at_a_glance_rows(con)
     assert len(rows) == 11
     assert rows[0]["point_change"] == 1.0
     assert rows[0]["direction"] == "Growing"
@@ -279,6 +281,7 @@ def test_main_current_year_uses_prnewswire_for_history_and_official_for_latest(
 
 def test_import_report_saves_failed_raw_snapshot(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     url = "https://www.prnewswire.com/news-releases/bad-report.html"
 
     class FakeClient:
@@ -297,7 +300,7 @@ def test_import_report_saves_failed_raw_snapshot(tmp_path):
             ai_client=FakeClient(),
         )
 
-    snapshot = us_rates_liquidity.load_ism_report_source_snapshot(con, url)
+    snapshot = growth_cycle.load_ism_report_source_snapshot(con, url)
     assert snapshot["source_name"] == "prnewswire"
     assert snapshot["parse_status"] == "prepared"
     assert snapshot["raw_html"].startswith("<html>")
@@ -307,6 +310,7 @@ def test_import_report_url_saves_successful_raw_snapshot(tmp_path):
     from tests.test_ism_ai_extraction import valid_extraction
 
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html"
 
     class FakeClient:
@@ -323,7 +327,7 @@ def test_import_report_url_saves_successful_raw_snapshot(tmp_path):
         model="test-model",
     )
 
-    snapshot = us_rates_liquidity.load_ism_report_source_snapshot(con, url)
+    snapshot = growth_cycle.load_ism_report_source_snapshot(con, url)
     assert result["report_id"] == "ism_manufacturing_2026_06"
     assert snapshot["parse_status"] == "prepared"
     assert snapshot["report_id"] == "ism_manufacturing_2026_06"
@@ -411,6 +415,7 @@ def test_import_report_url_uses_async_full_extraction(tmp_path, monkeypatch):
     from tests.test_ism_ai_extraction import valid_extraction
 
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     seen = {}
 
     async def fake_extract(report_text, client, max_attempts=2, max_concurrency=3):
@@ -448,6 +453,7 @@ def test_import_report_url_uses_ai_extraction_by_default(tmp_path):
     from tests.test_ism_ai_extraction import valid_extraction
 
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
 
     class FakeClient:
         def complete_json(self, prompt):

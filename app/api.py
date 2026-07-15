@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import tool_runner, workflow_engine
 from app.db import benchmark_market_data, gdp_market_relationships
+from app.db import growth_cycle
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.tools import (
@@ -282,9 +283,9 @@ def macro_dashboard_growth_cycle():
                 )
             )
         ism_industry_breadth = macro_growth_cycle.build_ism_industry_breadth_summary(
-            us_rates_liquidity_db.load_latest_ism_industry_rankings(con)
+            growth_cycle.load_latest_ism_industry_rankings(con)
         )
-        ism_at_a_glance = us_rates_liquidity_db.load_latest_ism_at_a_glance_rows(con)
+        ism_at_a_glance = growth_cycle.load_latest_ism_at_a_glance_rows(con)
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(
             dashboard,
             next_fomc_meeting=next_fomc_meeting,
@@ -326,12 +327,10 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 benchmark_con.close()
             ism_industry_breadth = (
                 macro_growth_cycle.build_ism_industry_breadth_summary(
-                    us_rates_liquidity_db.load_latest_ism_industry_rankings(con)
+                    growth_cycle.load_latest_ism_industry_rankings(con)
                 )
             )
-            ism_at_a_glance = us_rates_liquidity_db.load_latest_ism_at_a_glance_rows(
-                con
-            )
+            ism_at_a_glance = growth_cycle.load_latest_ism_at_a_glance_rows(con)
             return macro_growth_cycle.build_ism_manufacturing_detail_payload(
                 ism_points,
                 gdp_level_rows=gdp_level_rows,

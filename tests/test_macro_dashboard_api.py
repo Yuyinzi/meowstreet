@@ -750,12 +750,12 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
         lambda con, as_of_date: None,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -844,12 +844,12 @@ def test_growth_cycle_api_includes_ism_manufacturing_values(monkeypatch):
         lambda con, as_of_date: None,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -925,12 +925,12 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
         lambda con, event_type, as_of_date: None,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -1150,12 +1150,12 @@ def test_growth_cycle_api_includes_next_fomc_meeting(monkeypatch):
         lambda con, as_of_date: None,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -1273,12 +1273,12 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
         lambda con, as_of_date: None,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -1371,12 +1371,12 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
         lambda con, as_of_date: None,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -1445,12 +1445,12 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
         lambda con, as_of_date: None,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -1599,12 +1599,12 @@ def test_growth_cycle_api_includes_fomc_tone_card(monkeypatch):
         },
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -1684,12 +1684,12 @@ def test_growth_cycle_api_returns_ism_overview_cards_in_ism_section(monkeypatch)
         lambda con, event_type, as_of_date: None,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         lambda con: [],
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -1836,12 +1836,12 @@ def test_growth_cycle_api_returns_ism_manufacturing_detail(monkeypatch):
         ]
 
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         fake_latest_rankings,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -1953,12 +1953,12 @@ def test_growth_cycle_api_returns_ism_industry_breadth(monkeypatch):
         lambda con, as_of_date: None,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_industry_rankings",
         fake_latest_rankings,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
@@ -2006,10 +2006,10 @@ def test_growth_cycle_api_ism_detail_includes_at_a_glance_metadata(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db, "load_latest_ism_industry_rankings", lambda con: []
+        api.growth_cycle, "load_latest_ism_industry_rankings", lambda con: []
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [
             {

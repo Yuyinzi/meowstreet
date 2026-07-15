@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from app.db import growth_cycle
 from app.db import us_rates_liquidity
 from app.tools import ism_ai_extraction
 from scripts import extract_ism_report_ai
@@ -134,7 +135,8 @@ def test_openai_json_client_retries_stream_connection_errors():
 
 def test_extract_snapshot_with_client_saves_ai_payload(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
-    us_rates_liquidity.replace_ism_report_source_snapshot(
+    growth_cycle.init_db(con)
+    growth_cycle.replace_ism_report_source_snapshot(
         con,
         {
             "source_url": "https://example.com/report.html",
@@ -169,7 +171,8 @@ def test_extract_snapshot_with_client_saves_ai_payload(tmp_path):
 
 def test_extract_snapshot_uses_async_full_extraction(tmp_path, monkeypatch):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
-    us_rates_liquidity.replace_ism_report_source_snapshot(
+    growth_cycle.init_db(con)
+    growth_cycle.replace_ism_report_source_snapshot(
         con,
         {
             "source_url": "https://example.com/report.html",
@@ -208,7 +211,8 @@ def test_extract_snapshot_uses_async_full_extraction(tmp_path, monkeypatch):
 
 def test_extract_snapshot_rejects_llm_report_month_mismatch(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
-    us_rates_liquidity.replace_ism_report_source_snapshot(
+    growth_cycle.init_db(con)
+    growth_cycle.replace_ism_report_source_snapshot(
         con,
         {
             "source_url": "https://example.com/report.html",
@@ -240,7 +244,8 @@ def test_extract_snapshot_rejects_llm_report_month_mismatch(tmp_path):
 
 def test_extract_snapshot_saves_ai_summary(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
-    us_rates_liquidity.replace_ism_report_source_snapshot(
+    growth_cycle.init_db(con)
+    growth_cycle.replace_ism_report_source_snapshot(
         con,
         {
             "source_url": "https://example.com/report.html",
@@ -266,7 +271,7 @@ def test_extract_snapshot_saves_ai_summary(tmp_path):
         model="fake-model",
     )
 
-    summary = us_rates_liquidity.load_ism_report_ai_summary(
+    summary = growth_cycle.load_ism_report_ai_summary(
         con,
         "ism_manufacturing_2026_06",
     )
@@ -276,7 +281,8 @@ def test_extract_snapshot_saves_ai_summary(tmp_path):
 def test_main_extracts_source_url_with_injected_client(tmp_path, capsys):
     db_path = tmp_path / "market_data.sqlite"
     con = us_rates_liquidity.connect(db_path)
-    us_rates_liquidity.replace_ism_report_source_snapshot(
+    growth_cycle.init_db(con)
+    growth_cycle.replace_ism_report_source_snapshot(
         con,
         {
             "source_url": "https://example.com/report.html",
@@ -315,7 +321,8 @@ def test_main_extracts_source_url_with_injected_client(tmp_path, capsys):
 def test_main_without_model_uses_env_model_config(tmp_path, monkeypatch):
     db_path = tmp_path / "market_data.sqlite"
     con = us_rates_liquidity.connect(db_path)
-    us_rates_liquidity.replace_ism_report_source_snapshot(
+    growth_cycle.init_db(con)
+    growth_cycle.replace_ism_report_source_snapshot(
         con,
         {
             "source_url": "https://example.com/report.html",

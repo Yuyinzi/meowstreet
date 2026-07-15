@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.db import growth_cycle
 from app.db import us_rates_liquidity
 from app.tools import ism_ai_extraction, ism_official_report, ism_prnewswire_archive
 
@@ -248,7 +249,7 @@ def import_report_url(
     fetched_at = now()
     html = fetch(url)
     source_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
-    us_rates_liquidity.replace_ism_report_source_snapshot(
+    growth_cycle.replace_ism_report_source_snapshot(
         con,
         {
             "source_url": url,
@@ -268,7 +269,7 @@ def import_report_url(
         fetched_at,
         source_name=source_name,
     )
-    us_rates_liquidity.replace_ism_report_source_snapshot(
+    growth_cycle.replace_ism_report_source_snapshot(
         con,
         {
             "source_url": url,
@@ -294,15 +295,15 @@ def import_report_url(
             f"llm returned {payload['report']['report_month']}"
         )
     metric_count = merge_ai_metrics(con, payload)
-    us_rates_liquidity.replace_ism_at_a_glance_rows(
+    growth_cycle.replace_ism_at_a_glance_rows(
         con, ai_at_a_glance_rows(payload, url, source_hash)
     )
-    us_rates_liquidity.replace_ism_report_snapshot(
+    growth_cycle.replace_ism_report_snapshot(
         con,
         ai_report_snapshot(payload, url, source_hash, fetched_at),
         ai_comments(payload, url, source_hash),
     )
-    saved = us_rates_liquidity.replace_ism_ai_report_outputs(
+    saved = growth_cycle.replace_ism_ai_report_outputs(
         con,
         payload,
         {
@@ -471,6 +472,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
     parser.add_argument("--report-month")
     args = parser.parse_args(argv)
     con = us_rates_liquidity.connect(args.db_path)
+    growth_cycle.init_db(con)
     if ai_client_factory is None:
         from app import llm
 
@@ -545,7 +547,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
         archive_reports = discover_prnewswire_reports(
             since_year=args.backfill_since, fetch=fetch
         )
-        existing_months = us_rates_liquidity.load_existing_ism_report_months(con)
+        existing_months = growth_cycle.load_existing_ism_report_months(con)
         targets = backfill_targets(
             archive_reports,
             since_year=args.backfill_since,
@@ -586,7 +588,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                 since_year=current_year,
                 fetch=fetch,
             )
-            existing_months = us_rates_liquidity.load_existing_ism_report_months(con)
+            existing_months = growth_cycle.load_existing_ism_report_months(con)
             targets = backfill_targets(
                 archive_reports,
                 since_year=current_year,

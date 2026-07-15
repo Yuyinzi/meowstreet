@@ -8,6 +8,7 @@ from openpyxl import load_workbook
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.db import growth_cycle
 from app.db import us_rates_liquidity
 
 DEFAULT_WORKBOOK_PATH = (
@@ -202,7 +203,7 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
         )
         results[sid] = saved["points"]
     rankings = parse_sector_rankings(workbook_path)
-    results["ism_industry_rankings"] = us_rates_liquidity.replace_ism_industry_rankings(
+    results["ism_industry_rankings"] = growth_cycle.replace_ism_industry_rankings(
         con, rankings
     )
     return results
@@ -216,6 +217,7 @@ def main(argv=None):
     parser.add_argument("--workbook-path", type=Path, default=DEFAULT_WORKBOOK_PATH)
     args = parser.parse_args(argv)
     con = us_rates_liquidity.connect(args.db_path)
+    growth_cycle.init_db(con)
     try:
         inserted = import_workbook(con, args.workbook_path)
     finally:

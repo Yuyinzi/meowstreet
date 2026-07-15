@@ -3,6 +3,7 @@ from datetime import datetime
 import pytest
 from openpyxl import Workbook
 
+from app.db import growth_cycle
 from app.db import us_rates_liquidity
 from scripts import import_ism_manufacturing
 
@@ -185,6 +186,7 @@ def test_import_workbook_saves_all_series_to_macro_indicator_tables(tmp_path):
     workbook_path = tmp_path / "ISM_Manufacturing_Index.xlsx"
     write_ism_workbook(workbook_path)
     con = us_rates_liquidity.connect(db_path)
+    growth_cycle.init_db(con)
 
     inserted = import_ism_manufacturing.import_workbook(con, workbook_path)
 
@@ -202,7 +204,7 @@ def test_import_workbook_saves_all_series_to_macro_indicator_tables(tmp_path):
         {"date": "2026-02-01", "value": 51.0, "source": "ISM_Manufacturing_Index.xlsx"},
         {"date": "2026-04-01", "value": 52.0, "source": "ISM_Manufacturing_Index.xlsx"},
     ]
-    rankings = us_rates_liquidity.load_latest_ism_industry_rankings(con)
+    rankings = growth_cycle.load_latest_ism_industry_rankings(con)
     assert rankings == [
         {
             "date": "2026-06-01",

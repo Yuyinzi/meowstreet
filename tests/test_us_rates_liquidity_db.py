@@ -1,5 +1,6 @@
 import pytest
 
+from app.db import growth_cycle
 from app.db import us_rates_liquidity
 
 
@@ -34,6 +35,7 @@ def points():
 
 def test_replace_rate_series_points_loads_sorted_rows(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
 
     saved = us_rates_liquidity.replace_rate_series_points(con, series(), points())
     loaded_series = us_rates_liquidity.load_rate_series(con)
@@ -48,6 +50,7 @@ def test_replace_rate_series_points_loads_sorted_rows(tmp_path):
 
 def test_replace_rate_series_points_deletes_old_points(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     us_rates_liquidity.replace_rate_series_points(con, series(), points())
 
     saved = us_rates_liquidity.replace_rate_series_points(
@@ -86,6 +89,7 @@ def test_normalize_series_id_rejects_empty_id():
 
 def test_load_rate_points_for_series_returns_grouped_sorted_rows(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     us_rates_liquidity.replace_rate_series_points(con, series(), points())
     us_rates_liquidity.replace_rate_series_points(
         con,
@@ -126,6 +130,7 @@ def test_load_rate_points_for_series_returns_grouped_sorted_rows(tmp_path):
 
 def test_merge_macro_indicator_points_preserves_existing_points(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     series = {
         "series_id": "bbb_corporate_yield",
         "title": "BBB Corporate Yield",
@@ -167,6 +172,7 @@ def test_merge_macro_indicator_points_preserves_existing_points(tmp_path):
 
 def test_merge_macro_indicator_points_replaces_matching_dates(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     series = {
         "series_id": "ccc_corporate_yield",
         "title": "CCC Corporate Yield",
@@ -194,6 +200,7 @@ def test_merge_macro_indicator_points_replaces_matching_dates(tmp_path):
 
 def test_replace_credit_ai_interpretation_loads_latest_by_scope(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     row = {
         "scope": "us_credit_conditions",
         "as_of": "2026-07-06",
@@ -221,6 +228,7 @@ def test_replace_credit_ai_interpretation_loads_latest_by_scope(tmp_path):
 
 def test_load_ai_interpretation_returns_none_for_missing_snapshot(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
 
     loaded = us_rates_liquidity.load_ai_interpretation(
         con,
@@ -1301,6 +1309,7 @@ def test_load_macro_events_with_latest_tone_merges_minutes_structure_fields(tmp_
 
 def test_replace_ism_industry_rankings_saves_and_loads_latest_rows(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     rankings = [
         {
             "date": "2026-05-01",
@@ -1325,10 +1334,10 @@ def test_replace_ism_industry_rankings_saves_and_loads_latest_rows(tmp_path):
         },
     ]
 
-    saved = us_rates_liquidity.replace_ism_industry_rankings(con, rankings)
+    saved = growth_cycle.replace_ism_industry_rankings(con, rankings)
 
     assert saved == 3
-    assert us_rates_liquidity.load_latest_ism_industry_rankings(con) == [
+    assert growth_cycle.load_latest_ism_industry_rankings(con) == [
         {
             "date": "2026-06-01",
             "industry": "Computer & Electronic Products",
@@ -1348,12 +1357,14 @@ def test_replace_ism_industry_rankings_saves_and_loads_latest_rows(tmp_path):
 
 def test_load_latest_ism_industry_rankings_returns_empty_without_rows(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
 
-    assert us_rates_liquidity.load_latest_ism_industry_rankings(con) == []
+    assert growth_cycle.load_latest_ism_industry_rankings(con) == []
 
 
 def test_replace_ism_report_snapshot_saves_metadata_and_comments(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     report = {
         "report_id": "ism_manufacturing_2026_06",
         "report_month": "2026-06-01",
@@ -1387,18 +1398,19 @@ def test_replace_ism_report_snapshot_saves_metadata_and_comments(tmp_path):
         },
     ]
 
-    saved = us_rates_liquidity.replace_ism_report_snapshot(con, report, comments)
+    saved = growth_cycle.replace_ism_report_snapshot(con, report, comments)
 
     assert saved == {"reports": 1, "comments": 2}
-    assert us_rates_liquidity.load_latest_ism_report_snapshot(con) == report
+    assert growth_cycle.load_latest_ism_report_snapshot(con) == report
     assert (
-        us_rates_liquidity.load_ism_report_comments(con, "ism_manufacturing_2026_06")
+        growth_cycle.load_ism_report_comments(con, "ism_manufacturing_2026_06")
         == comments
     )
 
 
 def test_replace_ism_report_snapshot_replaces_comments_for_same_report(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     report = {
         "report_id": "ism_manufacturing_2026_06",
         "report_month": "2026-06-01",
@@ -1412,7 +1424,7 @@ def test_replace_ism_report_snapshot_replaces_comments_for_same_report(tmp_path)
         "next_release_label": "",
     }
 
-    us_rates_liquidity.replace_ism_report_snapshot(
+    growth_cycle.replace_ism_report_snapshot(
         con,
         report,
         [
@@ -1427,7 +1439,7 @@ def test_replace_ism_report_snapshot_replaces_comments_for_same_report(tmp_path)
             }
         ],
     )
-    saved = us_rates_liquidity.replace_ism_report_snapshot(
+    saved = growth_cycle.replace_ism_report_snapshot(
         con,
         report,
         [
@@ -1445,15 +1457,16 @@ def test_replace_ism_report_snapshot_replaces_comments_for_same_report(tmp_path)
 
     assert saved == {"reports": 1, "comments": 1}
     assert (
-        us_rates_liquidity.load_ism_report_comments(con, "ism_manufacturing_2026_06")[
-            0
-        ]["comment_text"]
+        growth_cycle.load_ism_report_comments(con, "ism_manufacturing_2026_06")[0][
+            "comment_text"
+        ]
         == "New comment."
     )
 
 
 def test_replace_ism_at_a_glance_rows_saves_and_loads_latest(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     rows = [
         {
             "report_id": "ism_manufacturing_2026_05",
@@ -1485,19 +1498,20 @@ def test_replace_ism_at_a_glance_rows_saves_and_loads_latest(tmp_path):
         },
     ]
 
-    saved = us_rates_liquidity.replace_ism_at_a_glance_rows(con, rows)
+    saved = growth_cycle.replace_ism_at_a_glance_rows(con, rows)
 
     assert saved == {"at_a_glance_rows": 2}
-    assert us_rates_liquidity.load_latest_ism_at_a_glance_rows(con) == [rows[1]]
+    assert growth_cycle.load_latest_ism_at_a_glance_rows(con) == [rows[1]]
 
 
 def test_replace_ism_ai_extraction_saves_payload_and_signals(tmp_path):
     from tests.test_ism_ai_extraction import valid_extraction
 
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     payload = valid_extraction()
 
-    saved = us_rates_liquidity.replace_ism_ai_extraction(
+    saved = growth_cycle.replace_ism_ai_extraction(
         con,
         {
             "report_id": "ism_manufacturing_2026_06",
@@ -1516,7 +1530,7 @@ def test_replace_ism_ai_extraction_saves_payload_and_signals(tmp_path):
     assert saved == {"ai_extractions": 1, "industry_signals": 2}
     assert (
         len(
-            us_rates_liquidity.load_ism_report_industry_signals(
+            growth_cycle.load_ism_report_industry_signals(
                 con,
                 "ism_manufacturing_2026_06",
             )
@@ -1527,9 +1541,10 @@ def test_replace_ism_ai_extraction_saves_payload_and_signals(tmp_path):
 
 def test_replace_ism_ai_extraction_rejects_malformed_payload(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
 
     with pytest.raises(ValueError, match="Field required"):
-        us_rates_liquidity.replace_ism_ai_extraction(
+        growth_cycle.replace_ism_ai_extraction(
             con,
             {
                 "report_id": "ism_manufacturing_2026_06",
@@ -1556,9 +1571,10 @@ def test_replace_ism_ai_extraction_rejects_malformed_payload(tmp_path):
 
 def test_replace_ism_ai_extraction_rejects_malformed_failed_payload(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
 
     with pytest.raises(ValueError, match="Field required"):
-        us_rates_liquidity.replace_ism_ai_extraction(
+        growth_cycle.replace_ism_ai_extraction(
             con,
             {
                 "report_id": "ism_manufacturing_2026_06",
@@ -1585,6 +1601,7 @@ def test_replace_ism_ai_extraction_rejects_malformed_failed_payload(tmp_path):
 
 def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     snapshot = {
         "source_url": "https://www.prnewswire.com/news-releases/example.html",
         "source_name": "prnewswire",
@@ -1597,11 +1614,11 @@ def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
         "report_month": None,
     }
 
-    saved = us_rates_liquidity.replace_ism_report_source_snapshot(con, snapshot)
+    saved = growth_cycle.replace_ism_report_source_snapshot(con, snapshot)
 
     assert saved == {"source_snapshots": 1}
     assert (
-        us_rates_liquidity.load_ism_report_source_snapshot(
+        growth_cycle.load_ism_report_source_snapshot(
             con,
             "https://www.prnewswire.com/news-releases/example.html",
         )
@@ -1611,7 +1628,8 @@ def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
 
 def test_load_existing_ism_report_months(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
-    us_rates_liquidity.replace_ism_report_snapshot(
+    growth_cycle.init_db(con)
+    growth_cycle.replace_ism_report_snapshot(
         con,
         {
             "report_id": "ism_manufacturing_2026_06",
@@ -1625,15 +1643,16 @@ def test_load_existing_ism_report_months(tmp_path):
         [],
     )
 
-    assert us_rates_liquidity.load_existing_ism_report_months(con) == {"2026-06-01"}
+    assert growth_cycle.load_existing_ism_report_months(con) == {"2026-06-01"}
 
 
 def test_replace_ism_ai_report_outputs_saves_summary_and_commodities(tmp_path):
     from tests.test_ism_ai_extraction import valid_extraction
 
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
     payload = valid_extraction()
-    saved = us_rates_liquidity.replace_ism_ai_report_outputs(
+    saved = growth_cycle.replace_ism_ai_report_outputs(
         con,
         payload,
         {
@@ -1646,7 +1665,7 @@ def test_replace_ism_ai_report_outputs_saves_summary_and_commodities(tmp_path):
 
     assert saved["ai_summary"] == 1
     assert saved["commodities"] == 1
-    summary = us_rates_liquidity.load_ism_report_ai_summary(
+    summary = growth_cycle.load_ism_report_ai_summary(
         con,
         "ism_manufacturing_2026_06",
     )

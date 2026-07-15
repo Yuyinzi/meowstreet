@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app import llm
+from app.db import growth_cycle
 from app.db import us_rates_liquidity
 from app.tools import ism_ai_extraction
 from app.tools import ism_official_report
@@ -42,7 +43,7 @@ def _check_report_month(extracted_report_month, expected_report_month, source_ur
 
 
 def extract_snapshot(con, source_url, client, model):
-    snapshot = us_rates_liquidity.load_ism_report_source_snapshot(con, source_url)
+    snapshot = growth_cycle.load_ism_report_source_snapshot(con, source_url)
     if not snapshot:
         raise ValueError(f"ism source snapshot is missing: {source_url}")
     report_text = ism_official_report.extract_report_text(
@@ -83,11 +84,11 @@ def extract_snapshot(con, source_url, client, model):
     )
 
     merge_ai_metrics(con, payload)
-    us_rates_liquidity.replace_ism_at_a_glance_rows(
+    growth_cycle.replace_ism_at_a_glance_rows(
         con,
         ai_at_a_glance_rows(payload, snapshot["source_url"], snapshot["source_hash"]),
     )
-    us_rates_liquidity.replace_ism_report_snapshot(
+    growth_cycle.replace_ism_report_snapshot(
         con,
         ai_report_snapshot(
             payload,
@@ -97,7 +98,7 @@ def extract_snapshot(con, source_url, client, model):
         ),
         ai_comments(payload, snapshot["source_url"], snapshot["source_hash"]),
     )
-    saved = us_rates_liquidity.replace_ism_ai_report_outputs(
+    saved = growth_cycle.replace_ism_ai_report_outputs(
         con,
         payload,
         {
@@ -161,9 +162,7 @@ def build_client(config):
 
 def main(argv=None, client_factory=build_client):
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--db-path", type=Path, default=us_rates_liquidity.DEFAULT_DB_PATH
-    )
+    parser.add_argument("--db-path", type=Path, default=growth_cycle.DEFAULT_DB_PATH)
     parser.add_argument("--source-url", action="append", required=True)
     parser.add_argument("--model", default=None)
     parser.add_argument("--openai-api-key", default="")
@@ -172,6 +171,7 @@ def main(argv=None, client_factory=build_client):
     config = llm.load_openai_config(args, root=ROOT)
     client = client_factory(config)
     con = us_rates_liquidity.connect(args.db_path)
+    growth_cycle.init_db(con)
     failed = 0
     try:
         for source_url in args.source_url:
