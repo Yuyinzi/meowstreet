@@ -288,7 +288,7 @@ def test_import_report_saves_failed_raw_snapshot(tmp_path):
         def complete_json(self, prompt):
             raise ValueError("simulated AI extraction failure")
 
-    with pytest.raises(ValueError, match="simulated AI extraction failure"):
+    with pytest.raises(ValueError, match="ism factual sections failed"):
         fetch_ism_official_reports.import_report_url(
             con,
             url,
@@ -298,6 +298,7 @@ def test_import_report_saves_failed_raw_snapshot(tmp_path):
             ),
             now=lambda: "2026-07-15T10:00:00Z",
             ai_client=FakeClient(),
+            model="test-model",
         )
 
     snapshot = growth_cycle.load_ism_report_source_snapshot(con, url)
@@ -411,25 +412,24 @@ def test_ai_payload_to_metric_points_uses_at_a_glance_current_values():
     ]
 
 
-def test_import_report_url_uses_async_full_extraction(tmp_path, monkeypatch):
+def test_import_report_url_uses_checkpointed_extraction(tmp_path, monkeypatch):
+    from app.db import growth_cycle
+    from app.db import us_rates_liquidity
     from tests.test_ism_ai_extraction import valid_extraction
 
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
     growth_cycle.init_db(con)
     seen = {}
 
-    async def fake_extract(report_text, client, max_attempts=2, max_concurrency=3):
-        seen["max_concurrency"] = max_concurrency
+    def fake_extract_prepared_report(con_arg, prepared, source, ai_client):
+        seen["report_id"] = prepared["report_id"]
         return valid_extraction()
 
     monkeypatch.setattr(
-        fetch_ism_official_reports.ism_ai_extraction,
-        "extract_with_client_async",
-        fake_extract,
+        fetch_ism_official_reports,
+        "extract_prepared_report_payload",
+        fake_extract_prepared_report,
     )
-
-    class FakeClient:
-        pass
 
     result = fetch_ism_official_reports.import_report_url(
         con,
@@ -441,12 +441,12 @@ def test_import_report_url_uses_async_full_extraction(tmp_path, monkeypatch):
             '"Input costs remain elevated." [Chemical Products]</article></html>'
         ),
         now=lambda: "2026-07-15T00:00:00Z",
-        ai_client=FakeClient(),
+        ai_client=object(),
         model="fake-model",
     )
 
     assert result["report_id"] == "ism_manufacturing_2026_06"
-    assert seen["max_concurrency"] == 3
+    assert seen["report_id"] == "ism_manufacturing_2026_06"
 
 
 def test_import_report_url_uses_ai_extraction_by_default(tmp_path):

@@ -1,5 +1,4 @@
 import argparse
-import asyncio
 import hashlib
 import re
 import subprocess
@@ -37,13 +36,24 @@ MONTHS = [
 ]
 
 
-def extract_ai_payload(report_text, ai_client):
-    return asyncio.run(
-        ism_ai_extraction.extract_with_client_async(
-            report_text,
-            ai_client,
-            max_concurrency=3,
-        )
+def extract_prepared_report_payload(con, prepared, source, ai_client):
+    from app.db import growth_cycle as _growth_cycle
+    from scripts.extract_ism_report_ai import (
+        extract_or_load_factual_sections,
+        generate_or_load_summary,
+    )
+
+    _growth_cycle.init_db(con)
+
+    factual_payload = extract_or_load_factual_sections(
+        con,
+        prepared["report_text"],
+        source,
+        ai_client,
+    )
+    summary = generate_or_load_summary(con, factual_payload, source, ai_client)
+    return ism_ai_extraction.validate_extraction(
+        {**factual_payload, "ai_summary": summary}
     )
 
 
@@ -283,7 +293,15 @@ def import_report_url(
             "report_month": prepared["report_month"],
         },
     )
-    payload = extract_ai_payload(prepared["report_text"], ai_client)
+    source = {
+        "report_id": prepared["report_id"],
+        "report_month": prepared["report_month"],
+        "source_url": url,
+        "source_hash": source_hash,
+        "model": model,
+        "updated_at": fetched_at,
+    }
+    payload = extract_prepared_report_payload(con, prepared, source, ai_client)
     if payload["report"]["report_id"] != prepared["report_id"]:
         raise ValueError(
             f"llm report_id mismatch for {url}: expected {prepared['report_id']}, "
