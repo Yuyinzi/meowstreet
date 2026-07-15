@@ -191,6 +191,29 @@ def requested_months(args):
     return [MONTHS[datetime.now().month - 2]]
 
 
+def requested_urls(args, fetch=None):
+    if fetch is None:
+        fetch = fetch_text
+    urls = list(args.url or [])
+    for page in range(1, args.prnewswire_pages + 1):
+        listing_url = ism_prnewswire_archive.archive_listing_url(
+            page,
+            args.prnewswire_pagesize,
+        )
+        html = fetch(listing_url)
+        urls.extend(
+            item["url"] for item in ism_prnewswire_archive.parse_archive_listing(html)
+        )
+    seen = set()
+    result = []
+    for url in urls:
+        if url in seen:
+            continue
+        seen.add(url)
+        result.append(url)
+    return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -198,11 +221,28 @@ def main(argv=None):
     )
     parser.add_argument("--month", action="append", choices=MONTHS)
     parser.add_argument("--current-year", action="store_true")
+    parser.add_argument("--url", action="append")
+    parser.add_argument("--prnewswire-pages", type=int, default=0)
+    parser.add_argument("--prnewswire-pagesize", type=int, default=25)
     args = parser.parse_args(argv)
     con = us_rates_liquidity.connect(args.db_path)
     results = []
     failed = 0
-    for month in requested_months(args):
+    for url in requested_urls(args):
+        try:
+            result = import_report_url(con, url)
+            results.append(result)
+        except ValueError as exc:
+            print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
+            failed += 1
+    months = (
+        []
+        if (args.url or args.prnewswire_pages)
+        and not args.month
+        and not args.current_year
+        else requested_months(args)
+    )
+    for month in months:
         try:
             result = import_report(con, month)
             results.append(result)
@@ -221,9 +261,9 @@ def main(argv=None):
     con.close()
     for result in results:
         print(
-            f"{result['report_id']}: metrics={result['metrics']} "
-            f"rankings={result['rankings']} comments={result['comments']} "
-            f"at_a_glance_rows={result['at_a_glance_rows']}"
+            f"{result['report_id']}: source={result.get('source_name', 'ismworld')} "
+            f"metrics={result['metrics']} rankings={result['rankings']} "
+            f"comments={result['comments']} at_a_glance_rows={result['at_a_glance_rows']}"
         )
     return 1 if failed else 0
 

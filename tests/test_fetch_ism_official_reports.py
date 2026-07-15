@@ -199,7 +199,7 @@ def test_main_imports_requested_months(tmp_path, monkeypatch, capsys):
     assert exit_code == 0
     out = capsys.readouterr().out
     assert (
-        "ism_manufacturing_2026_06: metrics=11 rankings=4 comments=1 "
+        "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=4 comments=1 "
         "at_a_glance_rows=11" in out
     )
 
@@ -252,7 +252,7 @@ def test_main_current_year_skips_month_landing_pages(tmp_path, monkeypatch, caps
         captured.err
     )
     assert (
-        "ism_manufacturing_2026_06: metrics=11 rankings=4 comments=1 "
+        "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=4 comments=1 "
         "at_a_glance_rows=11" in captured.out
     )
 
@@ -295,3 +295,53 @@ def test_import_report_url_saves_successful_raw_snapshot(tmp_path):
     assert result["report_id"] == "ism_manufacturing_2026_06"
     assert snapshot["parse_status"] == "ok"
     assert snapshot["report_id"] == "ism_manufacturing_2026_06"
+
+
+def test_main_imports_single_url(tmp_path, monkeypatch, capsys):
+    db_path = tmp_path / "market_data.sqlite"
+    url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html"
+
+    monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", lambda value: HTML)
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "fetched_at_now",
+        lambda: "2026-07-15T10:00:00Z",
+    )
+
+    exit_code = fetch_ism_official_reports.main(
+        ["--db-path", str(db_path), "--url", url]
+    )
+
+    assert exit_code == 0
+    assert "source=prnewswire" in capsys.readouterr().out
+
+
+def test_main_discovers_prnewswire_pages_and_imports_urls(
+    tmp_path, monkeypatch, capsys
+):
+    db_path = tmp_path / "market_data.sqlite"
+    article_url = "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html"
+    listing_html = (
+        f'<a href="{article_url}">'
+        "Jul 01, 2026 Manufacturing PMI® at 53.3%; June 2026 ISM® Manufacturing PMI® Report"
+        "</a>"
+    )
+
+    def fake_fetch(url):
+        if "institute-for-supply-management" in url:
+            return listing_html
+        return HTML
+
+    monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", fake_fetch)
+    monkeypatch.setattr(
+        fetch_ism_official_reports,
+        "fetched_at_now",
+        lambda: "2026-07-15T10:00:00Z",
+    )
+
+    exit_code = fetch_ism_official_reports.main(
+        ["--db-path", str(db_path), "--prnewswire-pages", "1"]
+    )
+
+    assert exit_code == 0
+    assert "source=prnewswire" in capsys.readouterr().out
