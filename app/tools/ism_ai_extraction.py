@@ -142,3 +142,36 @@ def validate_extraction(payload):
         return IsmRichExtractionModel.model_validate(payload).model_dump()
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
+
+
+PROMPT_VERSION = "ism-rich-v1"
+
+
+def build_prompt(report_text):
+    return f"""
+Extract the ISM Manufacturing report into strict JSON.
+
+Return only valid JSON with these keys:
+- report
+- at_a_glance_rows
+- industry_signals
+- respondent_comments
+- commodities
+- narrative_facts
+
+For industry_signals, extract all available industry lists for:
+overall_growth, overall_contraction, new_orders, production, employment,
+supplier_deliveries, inventories, customer_inventories, prices, backlog,
+new_export_orders, imports.
+
+Preserve industry order as rank starting at 1. Include evidence_text copied
+from the source paragraph for each signal. Do not invent industries or values.
+
+Report text:
+{report_text}
+""".strip()
+
+
+def extract_with_client(report_text, client):
+    payload = client.complete_json(build_prompt(report_text))
+    return validate_extraction(payload)

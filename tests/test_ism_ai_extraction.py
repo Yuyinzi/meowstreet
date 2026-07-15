@@ -89,3 +89,28 @@ def test_validate_extraction_rejects_unknown_signal_type():
 
     with pytest.raises(ValueError, match="random_signal|Input should be"):
         ism_ai_extraction.validate_extraction(payload)
+
+
+def test_build_prompt_requests_full_rich_extraction_schema():
+    prompt = ism_ai_extraction.build_prompt("June 2026 ISM report text")
+
+    assert "at_a_glance_rows" in prompt
+    assert "industry_signals" in prompt
+    assert "new_orders" in prompt
+    assert "backlog" in prompt
+    assert "respondent_comments" in prompt
+    assert "Return only valid JSON" in prompt
+
+
+def test_extract_with_client_validates_json_response():
+    class FakeClient:
+        def complete_json(self, prompt):
+            payload = valid_extraction()
+            return payload
+
+    result = ism_ai_extraction.extract_with_client(
+        "June 2026 ISM report text",
+        FakeClient(),
+    )
+
+    assert result["report"]["report_id"] == "ism_manufacturing_2026_06"
