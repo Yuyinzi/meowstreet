@@ -188,14 +188,15 @@ def test_extract_snapshot_uses_checkpointed_extraction(tmp_path, monkeypatch):
     )
     seen = {}
 
-    def fake_extract(
+    async def fake_extract(
         con,
         report_text,
         source,
         client,
         force_sections=None,
         retry_failed=True,
-        **kwargs,
+        sections=None,
+        max_concurrency=3,
     ):
         seen["source"] = source
         payload = ism_ai_extraction_test_payload()
@@ -207,7 +208,7 @@ def test_extract_snapshot_uses_checkpointed_extraction(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         extract_ism_report_ai,
-        "extract_or_load_factual_sections",
+        "extract_or_load_factual_sections_async",
         fake_extract,
     )
     monkeypatch.setattr(

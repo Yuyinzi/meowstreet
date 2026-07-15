@@ -1,4 +1,4 @@
-from app.db import growth_cycle
+from app.db import growth_cycle, us_rates_liquidity
 
 
 def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
@@ -97,3 +97,38 @@ def test_replace_ism_ai_summary_run_saves_reviewable_summary(tmp_path):
     assert saved == {"ai_summary_runs": 1}
     assert row["quality_status"] == "accepted"
     assert row["summary_json"]["summary_text_zh"] == "制造业PMI改善。"
+
+
+def test_fresh_db_with_m2_only_does_not_crash_on_growth_cycle_ism_reads(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
+    us_rates_liquidity.replace_macro_indicator_points(
+        con,
+        {
+            "series_id": "m2_money_stock",
+            "title": "M2 Money Stock",
+            "units": "billions",
+            "source": "test",
+        },
+        [{"date": "2026-01-01", "value": 100.0, "source": "test"}],
+    )
+    con.close()
+
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
+    rows = us_rates_liquidity.load_macro_indicator_points(con, "m2_money_stock")
+    assert len(rows) == 1
+    at_a_glance = growth_cycle.load_latest_ism_at_a_glance_rows(con)
+    assert at_a_glance == []
+    rankings = growth_cycle.load_latest_ism_industry_rankings(con)
+    assert rankings == []
+    con.close()
+
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    rows = us_rates_liquidity.load_macro_indicator_points(con, "m2_money_stock")
+    assert len(rows) == 1
+    at_a_glance = growth_cycle.load_latest_ism_at_a_glance_rows(con)
+    assert at_a_glance == []
+    rankings = growth_cycle.load_latest_ism_industry_rankings(con)
+    assert rankings == []
+    con.close()

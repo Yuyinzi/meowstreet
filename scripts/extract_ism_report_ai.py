@@ -182,6 +182,89 @@ def extract_or_load_factual_sections(
     return ism_ai_extraction.assemble_factual_payload_from_sections(rows)
 
 
+async def extract_or_load_factual_sections_async(
+    con,
+    report_text,
+    source,
+    client,
+    force_sections=None,
+    retry_failed=True,
+    sections=None,
+    max_concurrency=3,
+):
+    section_names = sections or ism_ai_extraction.FACTUAL_SECTION_NAMES
+    force_sections = set(force_sections or [])
+    pending = []
+    rows_map = {}
+    for section_name in section_names:
+        existing = growth_cycle.load_ism_ai_section_extraction(
+            con,
+            source["report_id"],
+            source["source_url"],
+            ism_ai_extraction.PROMPT_VERSION,
+            section_name,
+        )
+        if not should_run_section(existing, force_sections, retry_failed):
+            rows_map[section_name] = existing
+            continue
+        pending.append((section_name, existing))
+
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def _run_one(report_text, client, section_name):
+        async with semaphore:
+            return await asyncio.to_thread(
+                extract_one_section, report_text, client, section_name
+            )
+
+    async def run_pending(section_name, existing):
+        attempt_count = (existing["attempt_count"] if existing else 0) + 1
+        try:
+            section_payload = await _run_one(report_text, client, section_name)
+            status = "ok"
+            error = None
+        except Exception as exc:
+            section_payload = {}
+            status = "failed"
+            error = str(exc)
+        checkpoint = {
+            "report_id": source["report_id"],
+            "source_url": source["source_url"],
+            "report_month": source["report_month"],
+            "source_hash": source["source_hash"],
+            "section_name": section_name,
+            "status": status,
+            "payload_json": section_payload,
+            "error": error,
+            "attempt_count": attempt_count,
+            "model": source["model"],
+            "prompt_version": ism_ai_extraction.PROMPT_VERSION,
+            "updated_at": source["updated_at"],
+        }
+        growth_cycle.replace_ism_ai_section_extraction(con, checkpoint)
+        return checkpoint
+
+    results = await asyncio.gather(
+        *[run_pending(section_name, existing) for section_name, existing in pending]
+    )
+    for checkpoint in results:
+        rows_map[checkpoint["section_name"]] = checkpoint
+
+    rows = [rows_map[name] for name in section_names]
+    if sections is not None:
+        rows = growth_cycle.load_ism_ai_section_extractions(
+            con,
+            source["report_id"],
+            source["source_url"],
+            ism_ai_extraction.PROMPT_VERSION,
+        )
+    failed = [row for row in rows if row["status"] != "ok"]
+    if failed:
+        names = ", ".join(row["section_name"] for row in failed)
+        raise ValueError(f"ism factual sections failed: {names}")
+    return ism_ai_extraction.assemble_factual_payload_from_sections(rows)
+
+
 def _load_factual_payload_from_stored(con, source):
     rows = growth_cycle.load_ism_ai_section_extractions(
         con,
@@ -265,14 +348,16 @@ def extract_snapshot(
     if summary_only:
         factual_payload = _load_factual_payload_from_stored(con, source)
     else:
-        factual_payload = extract_or_load_factual_sections(
-            con,
-            report_text,
-            source,
-            client,
-            force_sections=force_sections,
-            retry_failed=retry_failed,
-            sections=sections,
+        factual_payload = asyncio.run(
+            extract_or_load_factual_sections_async(
+                con,
+                report_text,
+                source,
+                client,
+                force_sections=force_sections,
+                retry_failed=retry_failed,
+                sections=sections,
+            )
         )
     if reject_summary_reason:
         _write_rejected_summary_run(con, factual_payload, source, reject_summary_reason)
@@ -436,8 +521,8 @@ def main(argv=None, client_factory=build_client):
     parser.add_argument("--db-path", type=Path, default=growth_cycle.DEFAULT_DB_PATH)
     parser.add_argument("--source-url", action="append", required=True)
     parser.add_argument("--model", default=None)
-    parser.add_argument("--openai-api-key", default="")
-    parser.add_argument("--openai-base-url", default="")
+    parser.add_argument("--openai-api-key", default=None)
+    parser.add_argument("--openai-base-url", default=None)
     parser.add_argument(
         "--section", action="append", choices=ism_ai_extraction.FACTUAL_SECTION_NAMES
     )

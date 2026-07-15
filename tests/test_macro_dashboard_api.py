@@ -6,6 +6,20 @@ from app.api import app
 client = TestClient(app)
 
 
+class _FakeConStubs:
+    def close(self):
+        pass
+
+    def executescript(self, script):
+        pass
+
+    def execute(self, sql, params=None):
+        return []
+
+    def commit(self):
+        pass
+
+
 def test_macro_dashboard_page_routes_are_served():
     response = client.get("/macro-dashboard.html")
 
@@ -17,9 +31,8 @@ def test_market_phase_api_returns_lightweight_market_overview(monkeypatch):
     from app import api
 
     def fake_connect():
-        class FakeConnection:
-            def close(self):
-                pass
+        class FakeConnection(_FakeConStubs):
+            pass
 
         return FakeConnection()
 
@@ -62,9 +75,8 @@ def test_market_phase_detail_api_returns_one_chart_series(monkeypatch):
     from app import api
 
     def fake_connect():
-        class FakeConnection:
-            def close(self):
-                pass
+        class FakeConnection(_FakeConStubs):
+            pass
 
         return FakeConnection()
 
@@ -106,9 +118,8 @@ def test_market_phase_detail_api_returns_400_for_unknown_benchmark(monkeypatch):
     from app import api
 
     def fake_connect():
-        class FakeConnection:
-            def close(self):
-                pass
+        class FakeConnection(_FakeConStubs):
+            pass
 
         return FakeConnection()
 
@@ -179,9 +190,8 @@ def test_market_phase_refresh_api_returns_400_for_refresh_errors(monkeypatch):
 def test_gdp_relationship_overview_api_is_lightweight(monkeypatch):
     from app import api
 
-    class FakeConnection:
-        def close(self):
-            pass
+    class FakeConnection(_FakeConStubs):
+        pass
 
     def fake_connect():
         return FakeConnection()
@@ -268,9 +278,8 @@ def test_gdp_relationship_overview_api_is_lightweight(monkeypatch):
 def test_gdp_relationship_detail_api_returns_one_relationship(monkeypatch):
     from app import api
 
-    class FakeConnection:
-        def close(self):
-            pass
+    class FakeConnection(_FakeConStubs):
+        pass
 
     def fake_connect():
         return FakeConnection()
@@ -334,9 +343,8 @@ def test_gdp_relationship_detail_api_returns_one_relationship(monkeypatch):
 def test_gdp_relationship_detail_api_returns_400_for_unknown_relationship(monkeypatch):
     from app import api
 
-    class FakeConnection:
-        def close(self):
-            pass
+    class FakeConnection(_FakeConStubs):
+        pass
 
     monkeypatch.setattr(
         api.gdp_market_relationships, "connect", lambda: FakeConnection()
@@ -354,9 +362,8 @@ def test_gdp_relationship_detail_api_returns_400_for_unknown_relationship(monkey
 def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
     from app import api
 
-    class FakeConnection:
-        def close(self):
-            pass
+    class FakeConnection(_FakeConStubs):
+        pass
 
     def fake_connect():
         return FakeConnection()
@@ -498,9 +505,8 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
 def test_us_rates_liquidity_detail_api_returns_two_charts(monkeypatch):
     from app import api
 
-    class FakeConnection:
-        def close(self):
-            pass
+    class FakeConnection(_FakeConStubs):
+        pass
 
     def fake_connect():
         return FakeConnection()
@@ -559,9 +565,8 @@ def test_us_rates_liquidity_detail_api_returns_400_for_unknown_detail():
 def test_us_rates_liquidity_curve_detail_api_passes_selected_dates(monkeypatch):
     from app import api
 
-    class FakeConnection:
-        def close(self):
-            pass
+    class FakeConnection(_FakeConStubs):
+        pass
 
     captured = {}
 
@@ -661,7 +666,7 @@ def test_credit_detail_endpoints_return_active_credit_charts(monkeypatch):
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
         "connect",
-        lambda: type("C", (), {"close": lambda self: None})(),
+        lambda: type("C", (_FakeConStubs,), {})(),
     )
     monkeypatch.setattr(api.us_rates_liquidity_db, "load_rate_series", lambda con: [])
     monkeypatch.setattr(
@@ -724,9 +729,8 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
             {"date": "2026-06-01", "value": 112, "source": "m2.xlsx"},
         ]
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
@@ -818,9 +822,8 @@ def test_growth_cycle_api_includes_ism_manufacturing_values(monkeypatch):
             return [{"date": "2026-06-01", "value": 50.0, "source": "ISM.xlsx"}]
         raise AssertionError(series_id)
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
@@ -899,9 +902,8 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
             return [{"date": "2026-06-01", "value": 51.2, "source": "ISM.xlsx"}]
         raise AssertionError(series_id)
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
@@ -955,9 +957,8 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
 def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):
     from app import api
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     rows = [
         {"date": "2025-01-01", "value": 100.0, "source": "m2.xlsx"},
@@ -1020,9 +1021,8 @@ def test_growth_cycle_detail_api_rejects_unknown_detail():
 def test_growth_cycle_m2_detail_api_attaches_stored_ai_interpretation(monkeypatch):
     from app import api
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     rows = [
         {"date": "2020-01-01", "value": 100.0, "source": "m2.xlsx"},
@@ -1095,9 +1095,8 @@ def test_growth_cycle_m2_detail_api_attaches_stored_ai_interpretation(monkeypatc
 def test_growth_cycle_api_includes_next_fomc_meeting(monkeypatch):
     from app import api
 
-    class FakeConnection:
-        def close(self):
-            pass
+    class FakeConnection(_FakeConStubs):
+        pass
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeConnection())
     monkeypatch.setattr(
@@ -1174,9 +1173,8 @@ def test_growth_cycle_api_returns_missing_payload_when_m2_db_rows_are_missing(
 ):
     from app import api
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
@@ -1197,9 +1195,8 @@ def test_growth_cycle_api_returns_missing_payload_when_m2_db_rows_are_missing(
 def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
     from app import api
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     def fake_load_macro_indicator_points(con, series_id):
         if series_id == "m2_money_stock":
@@ -1316,9 +1313,8 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
 def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch):
     from app import api
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     def fake_load_macro_indicator_points(con, series_id):
         if series_id == "m2_money_stock":
@@ -1394,9 +1390,8 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
 def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
     from app import api
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     def rows(start_value, count=53):
         return [
@@ -1473,9 +1468,8 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
 def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
     from app import api
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     def rows(start_value):
         return [
@@ -1542,9 +1536,8 @@ def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
 def test_growth_cycle_api_includes_fomc_tone_card(monkeypatch):
     from app import api
 
-    class FakeConnection:
-        def close(self):
-            pass
+    class FakeConnection(_FakeConStubs):
+        pass
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeConnection())
     monkeypatch.setattr(
@@ -1658,9 +1651,8 @@ def test_growth_cycle_api_returns_ism_overview_cards_in_ism_section(monkeypatch)
             ]
         raise AssertionError(series_id)
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
@@ -1718,21 +1710,21 @@ def test_growth_cycle_api_returns_ism_manufacturing_detail(monkeypatch):
     calls = []
 
     def fake_connect():
-        class FakeConnection:
+        class FakeConnection(_FakeConStubs):
             def close(self):
                 calls.append(("close",))
 
         return FakeConnection()
 
     def fake_gdp_connect():
-        class FakeConnection:
+        class FakeConnection(_FakeConStubs):
             def close(self):
                 calls.append(("gdp_close",))
 
         return FakeConnection()
 
     def fake_benchmark_connect():
-        class FakeConnection:
+        class FakeConnection(_FakeConStubs):
             def close(self):
                 calls.append(("benchmark_close",))
 
@@ -1927,9 +1919,8 @@ def test_growth_cycle_api_returns_ism_industry_breadth(monkeypatch):
             },
         ]
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
@@ -1983,9 +1974,8 @@ def test_growth_cycle_api_returns_ism_industry_breadth(monkeypatch):
 def test_growth_cycle_api_ism_detail_includes_at_a_glance_metadata(monkeypatch):
     from app import api
 
-    class FakeCon:
-        def close(self):
-            pass
+    class FakeCon(_FakeConStubs):
+        pass
 
     def fake_load_macro_indicator_points_for_series(con, series_ids):
         assert hasattr(con, "close")

@@ -197,6 +197,7 @@ def macro_dashboard_gdp_relationship_detail(relationship_id):
 @app.get("/api/macro-dashboard/growth-cycle")
 def macro_dashboard_growth_cycle():
     con = us_rates_liquidity_db.connect()
+    growth_cycle.init_db(con)
     try:
         rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
         if not rows:
@@ -305,6 +306,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             detail=f"growth cycle detail is unknown: {detail_id}",
         )
     con = us_rates_liquidity_db.connect()
+    growth_cycle.init_db(con)
     try:
         if detail_id == "ism_manufacturing":
             ism_points = us_rates_liquidity_db.load_macro_indicator_points_for_series(
