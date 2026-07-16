@@ -38,6 +38,10 @@ MONTHS = [
     "december",
 ]
 
+_IMPORT_ERRORS = (ValueError, CalledProcessError, TimeoutExpired, IntegrityError)
+_FETCH_ATTEMPTS = 4
+_FETCH_RETRYABLE_CURL_CODES = {6, 7, 18, 28, 35, 52, 56}
+
 
 def extract_prepared_report_payload(con, prepared, source, ai_client):
     from app.db import growth_cycle as _growth_cycle
@@ -117,7 +121,7 @@ async def import_targets_async(
                     model,
                 )
                 results_by_index[index] = result
-            except (ValueError, CalledProcessError, TimeoutExpired, IntegrityError) as exc:
+            except _IMPORT_ERRORS as exc:
                 print(
                     f"ism_official_report/{target['url']}: failed - {exc}",
                     file=sys.stderr,
@@ -187,13 +191,29 @@ def _is_sso_page(html):
 
 
 def fetch_text(url):
-    result = subprocess.run(
-        ["curl", "-sS", url],
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=30,
-    )
+    result = None
+    for attempt in range(1, _FETCH_ATTEMPTS + 1):
+        try:
+            result = subprocess.run(
+                ["curl", "-sS", url],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30,
+            )
+            break
+        except (CalledProcessError, TimeoutExpired) as exc:
+            retryable = isinstance(exc, TimeoutExpired) or (
+                exc.returncode in _FETCH_RETRYABLE_CURL_CODES
+            )
+            if not retryable or attempt == _FETCH_ATTEMPTS:
+                raise
+            delay = 2 ** (attempt - 1)
+            log_progress(
+                f"fetch retry attempt={attempt + 1}/{_FETCH_ATTEMPTS} "
+                f"delay={delay}s url={url} error={exc}"
+            )
+            time.sleep(delay)
     text = result.stdout
     if _is_sso_page(text):
         raise ValueError("ism official report requires ISM membership login")
@@ -626,7 +646,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                 model=model,
             )
             results.append(result)
-        except (ValueError, CalledProcessError, TimeoutExpired, IntegrityError) as exc:
+        except _IMPORT_ERRORS as exc:
             print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
             failed += 1
     elif args.report_month:
@@ -665,7 +685,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                     model=model,
                 )
                 results.append(result)
-            except (ValueError, CalledProcessError, TimeoutExpired, IntegrityError) as exc:
+            except _IMPORT_ERRORS as exc:
                 print(
                     f"ism_official_report/{target['url']}: failed - {exc}",
                     file=sys.stderr,
@@ -700,7 +720,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                     con, url, fetch=fetch, ai_client=ai_client, model=model
                 )
                 results.append(result)
-            except (ValueError, CalledProcessError, TimeoutExpired, IntegrityError) as exc:
+            except _IMPORT_ERRORS as exc:
                 print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
                 failed += 1
         if args.current_year:
@@ -745,12 +765,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                         file=sys.stderr,
                     )
                     failed += 1
-                except (
-                    ValueError,
-                    CalledProcessError,
-                    TimeoutExpired,
-                    IntegrityError,
-                ) as exc:
+                except _IMPORT_ERRORS as exc:
                     print(
                         f"ism_official_report/{month}: failed - {exc}",
                         file=sys.stderr,

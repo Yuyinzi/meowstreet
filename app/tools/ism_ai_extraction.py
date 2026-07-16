@@ -84,7 +84,8 @@ _OVERALL_CONTRACTION_COUNT_RE = re.compile(
 )
 _DECLARED_INDUSTRY_COUNT_RES = [
     re.compile(
-        rf"\bof(?: the)?\s+{_INDUSTRY_COUNT_PATTERN}\s+manufacturing industries"
+        rf"\bof(?: the)?\s+{_INDUSTRY_COUNT_PATTERN}\s+"
+        r"(?:manufacturing\s+)?industries"
         rf"\s*,\s*(?:the\s+)?(?P<count>{_INDUSTRY_COUNT_PATTERN})\s+"
         r"(?:industries\s+)?(?:reported|reporting|that reported)\b",
         re.IGNORECASE,
@@ -268,6 +269,21 @@ _GROUPED_DIRECTIONS_BY_SIGNAL_TYPE = {
     "imports": {"higher", "lower"},
 }
 
+_GROUPED_DIRECTION_ALIASES = {
+    ("inventories", "growth"): "higher",
+    ("inventories", "increase"): "higher",
+    ("inventories", "contraction"): "lower",
+    ("inventories", "decrease"): "lower",
+    ("backlog", "growth"): "higher",
+    ("backlog", "increase"): "higher",
+    ("backlog", "contraction"): "lower",
+    ("backlog", "decrease"): "lower",
+    ("imports", "growth"): "higher",
+    ("imports", "increase"): "higher",
+    ("imports", "contraction"): "lower",
+    ("imports", "decrease"): "lower",
+}
+
 
 class ReportModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -314,11 +330,15 @@ class IndustrySignalListModel(BaseModel):
 
     signal_type: SignalType
     direction: Direction
-    industries: list[str] = Field(min_length=1)
+    industries: list[str]
     evidence_text: str
 
     @model_validator(mode="after")
     def validate_signal_list(self):
+        self.direction = _GROUPED_DIRECTION_ALIASES.get(
+            (self.signal_type, self.direction),
+            self.direction,
+        )
         allowed_directions = _GROUPED_DIRECTIONS_BY_SIGNAL_TYPE[self.signal_type]
         if self.direction not in allowed_directions:
             raise ValueError(
@@ -327,6 +347,14 @@ class IndustrySignalListModel(BaseModel):
         if len(self.industries) != len(set(self.industries)):
             raise ValueError(
                 f"industries are duplicated for {self.signal_type} {self.direction}"
+            )
+        if not self.industries and not re.search(
+            r"\b(?:no industr(?:y|ies)|none)\b",
+            self.evidence_text,
+            re.IGNORECASE,
+        ):
+            raise ValueError(
+                f"industries are missing for {self.signal_type} {self.direction}"
             )
         return self
 
@@ -875,9 +903,10 @@ Return only valid JSON with this shape:
   ]
 }}
 
-Return one object per source industry list. Preserve industry order in the
-industries array. Include the source evidence sentence once per list. Do not
-return one object per industry and do not add rank fields.
+Return one object per source industry list that names at least one industry.
+Omit statements that say no industries reported a condition. Preserve industry
+order in the industries array. Copy the complete source evidence sentence
+verbatim once per list. Do not return one object per industry. Also, do not add rank fields.
 
 Extract all available lists for overall_growth,
 overall_contraction, new_orders, production, employment, supplier_deliveries,

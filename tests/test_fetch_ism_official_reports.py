@@ -108,6 +108,31 @@ def test_fetch_text_uses_plain_curl_transport(monkeypatch):
     ]
 
 
+def test_fetch_text_retries_transient_curl_ssl_failure(monkeypatch, capsys):
+    attempts = 0
+    delays = []
+
+    class Result:
+        stdout = HTML
+
+    def fake_run(args, capture_output, text, check, timeout):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise CalledProcessError(35, args)
+        return Result()
+
+    monkeypatch.setattr(fetch_ism_official_reports.subprocess, "run", fake_run)
+    monkeypatch.setattr(fetch_ism_official_reports.time, "sleep", delays.append)
+
+    result = fetch_ism_official_reports.fetch_text("https://example.com/report")
+
+    assert result == HTML
+    assert attempts == 2
+    assert delays == [1]
+    assert "fetch retry attempt=2/4" in capsys.readouterr().err
+
+
 def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
     from tests.test_ism_ai_extraction import valid_extraction
 

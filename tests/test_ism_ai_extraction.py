@@ -570,6 +570,79 @@ def test_industry_signal_validation_uses_reported_subset_not_industry_universe()
     ism_ai_extraction._validate_industry_signals_against_source(payload, evidence)
 
 
+def test_industry_signal_validation_uses_subset_without_manufacturing_qualifier():
+    evidence = (
+        "Of the 18 industries, 16 reported slower supplier deliveries in May, "
+        "listed in the following order: Industry 1; Industry 2; Industry 3; "
+        "Industry 4; Industry 5; Industry 6; Industry 7; Industry 8; "
+        "Industry 9; Industry 10; Industry 11; Industry 12; Industry 13; "
+        "Industry 14; Industry 15; and Industry 16."
+    )
+    payload = {
+        "industry_signals": [
+            {
+                "signal_type": "supplier_deliveries",
+                "direction": "slower",
+                "industry": f"Industry {rank}",
+                "rank": rank,
+                "evidence_text": evidence,
+            }
+            for rank in range(1, 17)
+        ]
+    }
+
+    ism_ai_extraction._validate_industry_signals_against_source(payload, evidence)
+
+
+def test_grouped_industry_signal_normalizes_historical_growth_directions():
+    result = ism_ai_extraction.IndustrySignalsSectionModel.model_validate(
+        {
+            "industry_signal_lists": [
+                {
+                    "signal_type": "backlog",
+                    "direction": "growth",
+                    "industries": ["Machinery"],
+                    "evidence_text": (
+                        "The industry reporting growth in order backlogs is "
+                        "Machinery."
+                    ),
+                },
+                {
+                    "signal_type": "imports",
+                    "direction": "decrease",
+                    "industries": ["Primary Metals"],
+                    "evidence_text": (
+                        "The industry reporting a decrease in imports is "
+                        "Primary Metals."
+                    ),
+                },
+            ]
+        }
+    ).model_dump()
+
+    assert result["industry_signal_lists"][0]["direction"] == "higher"
+    assert result["industry_signal_lists"][1]["direction"] == "lower"
+
+
+def test_grouped_industry_signal_accepts_explicit_empty_source_list():
+    result = ism_ai_extraction.IndustrySignalsSectionModel.model_validate(
+        {
+            "industry_signal_lists": [
+                {
+                    "signal_type": "supplier_deliveries",
+                    "direction": "faster",
+                    "industries": [],
+                    "evidence_text": (
+                        "No industries reported faster supplier deliveries in October."
+                    ),
+                }
+            ]
+        }
+    ).model_dump()
+
+    assert result["industry_signal_lists"][0]["industries"] == []
+
+
 def test_validate_factual_extraction_accepts_payload_without_summary():
     payload = valid_extraction()
     payload.pop("ai_summary")

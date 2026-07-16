@@ -379,6 +379,45 @@ def test_extract_snapshot_skips_ok_section_checkpoint(tmp_path, monkeypatch):
     assert not any("Extract only report metadata" in prompt for prompt in calls)
 
 
+def test_should_reuse_section_rejects_duplicate_industry_signal_checkpoint():
+    evidence = (
+        "The two manufacturing industries reporting growth are: Machinery; "
+        "and Chemical Products."
+    )
+    existing = {
+        "section_name": "industry_signals",
+        "status": "ok",
+        "payload_json": {
+            "industry_signals": [
+                {
+                    "signal_type": "overall_growth",
+                    "direction": "growth",
+                    "industry": "Machinery",
+                    "rank": 1,
+                    "evidence_text": evidence,
+                },
+                {
+                    "signal_type": "overall_growth",
+                    "direction": "growth",
+                    "industry": "Machinery",
+                    "rank": 2,
+                    "evidence_text": evidence,
+                },
+            ]
+        },
+    }
+
+    reuse, error = extract_ism_report_ai.should_reuse_section(
+        existing,
+        set(),
+        True,
+        evidence,
+    )
+
+    assert reuse is False
+    assert "duplicated" in error
+
+
 def test_main_extracts_source_url_with_injected_client(tmp_path, capsys):
     db_path = tmp_path / "market_data.sqlite"
     con = us_rates_liquidity.connect(db_path)
