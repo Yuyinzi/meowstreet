@@ -4,6 +4,7 @@ import hashlib
 import re
 import subprocess
 import sys
+import time
 from subprocess import CalledProcessError, TimeoutExpired
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,33 +41,49 @@ MONTHS = [
 def extract_prepared_report_payload(con, prepared, source, ai_client):
     from app.db import growth_cycle as _growth_cycle
     from scripts.extract_ism_report_ai import (
-        extract_or_load_factual_sections,
+        extract_or_load_factual_sections_async,
         generate_or_load_summary,
     )
 
     _growth_cycle.init_db(con)
 
-    factual_payload = extract_or_load_factual_sections(
-        con,
-        prepared["report_text"],
-        source,
-        ai_client,
+    factual_payload = asyncio.run(
+        extract_or_load_factual_sections_async(
+            con,
+            prepared["report_text"],
+            source,
+            ai_client,
+        )
     )
+    log_progress(f"summary started report_id={source['report_id']}")
     summary = generate_or_load_summary(con, factual_payload, source, ai_client)
+    log_progress(f"summary ok report_id={source['report_id']}")
     return ism_ai_extraction.validate_extraction(
         {**factual_payload, "ai_summary": summary}
     )
 
 
 def import_target(con, target, index, total, fetch, ai_client, model):
-    return import_report_url(
+    report_month = target.get("report_month", "unknown")
+    source_name = target["source_name"]
+    url = target["url"]
+    started = time.perf_counter()
+    log_progress(f"[{index}/{total}] {report_month} {source_name} fetching {url}")
+    result = import_report_url(
         con,
-        target["url"],
-        source_name=target["source_name"],
+        url,
+        source_name=source_name,
         fetch=fetch,
         ai_client=ai_client,
         model=model,
     )
+    elapsed = time.perf_counter() - started
+    log_progress(
+        f"[{index}/{total}] {report_month} ok report_id={result['report_id']} "
+        f"metrics={result['metrics']} comments={result['comments']} "
+        f"at_a_glance_rows={result['at_a_glance_rows']} {elapsed:.1f}s"
+    )
+    return result
 
 
 def import_target_from_db_path(db_path, target, index, total, fetch, ai_client, model):
