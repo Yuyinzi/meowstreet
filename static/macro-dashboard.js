@@ -13,7 +13,7 @@
     growthCycle: null,
     growthCycleError: null,
     selectedGrowthCycleDetailId: null,
-    selectedGrowthCycleChartRange: "10y",
+    selectedGrowthCycleChartRange: "1y",
     growthCycleDetailsById: {},
     selectedNominalCurrentDate: null,
     selectedNominalComparisonDate: null,
@@ -290,7 +290,7 @@
 
   function cutoffDateForRange(series, rangeId) {
     const option = CHART_RANGE_OPTIONS.find((item) => item.id === rangeId)
-      || CHART_RANGE_OPTIONS.find((item) => item.id === "10y");
+      || CHART_RANGE_OPTIONS.find((item) => item.id === "1y");
     if (!option || option.years === null || !series.length) return null;
     const lastPoint = series[series.length - 1];
     const lastDate = parseUtcDate(lastPoint.date);
@@ -2007,6 +2007,69 @@
     `;
   }
 
+  function renderIsmOfficialReportSummary(summary) {
+    if (!summary) return "";
+    const changes = (summary.major_changes || [])
+      .map((item) => `<div class="ism-official-major-change">${escapeHtml(item)}</div>`)
+      .join("");
+    const commentsData = summary.respondent_comments || [];
+    const commentPreviewCount = summary.comment_preview_count || 3;
+    const hiddenCommentCount = Math.max(0, commentsData.length - commentPreviewCount);
+    const comments = commentsData
+      .map((comment, index) => `
+        <div class="ism-official-comment-row${index >= commentPreviewCount ? " ism-official-comment-row-extra" : ""}">
+          <span class="ism-official-comment-industry">${escapeHtml(comment.industry || "")}</span>
+          <p class="ism-official-comment-text">${escapeHtml(comment.comment_text || "")}</p>
+        </div>
+      `)
+      .join("");
+    return `
+      <section class="relationship-chart-card ism-official-summary">
+        <div class="chart-card-head">
+          <h4>${bilingualLabel("Official Report Summary")}</h4>
+        </div>
+        <div class="ism-official-summary-row">
+          <span class="ism-official-summary-label">${bilingualLabel("Headline")}</span>
+          <p class="ism-official-summary-value">${escapeHtml(summary.headline || "")}</p>
+        </div>
+        ${changes ? `
+          <div class="ism-official-summary-row">
+            <span class="ism-official-summary-label">${bilingualLabel("Major Changes")}</span>
+            <div class="ism-official-summary-value ism-official-major-change-list">${changes}</div>
+          </div>
+        ` : ""}
+        ${comments ? `
+          <div class="ism-official-summary-row">
+            <span class="ism-official-summary-label">${bilingualLabel("Respondent Comments")}</span>
+            <div class="ism-official-summary-value">
+              <div class="ism-official-comment-list">${comments}</div>
+              ${hiddenCommentCount ? `
+                <button type="button" class="ism-official-comment-toggle" data-ism-comment-toggle>
+                  ${bilingualLabel(`Show all ${commentsData.length} comments`)}
+                </button>
+              ` : ""}
+            </div>
+          </div>
+        ` : ""}
+        <div class="ism-official-summary-footer">${escapeHtml(summary.title || "")}</div>
+      </section>
+    `;
+  }
+
+  function attachIsmOfficialSummaryHandlers(body) {
+    body.querySelectorAll("[data-ism-comment-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const row = button.closest(".ism-official-summary-row");
+        const list = row ? row.querySelector(".ism-official-comment-list") : null;
+        if (!list) return;
+        const expanded = list.classList.toggle("expanded");
+        button.textContent = expanded
+          ? bilingualLabel("Show fewer comments")
+          : bilingualLabel(`Show all ${list.querySelectorAll(".ism-official-comment-row").length} comments`);
+      });
+    });
+  }
+
   function attachIsmSharedTooltip(body, chart) {
     const container = body.querySelector(".ism-small-multiples");
     if (!container) return;
@@ -2084,6 +2147,7 @@
     const latestGroups = payload.detail_groups || [];
     body.innerHTML = `
       ${renderGrowthCycleRangeControl()}
+      ${renderIsmOfficialReportSummary(payload.official_report_summary)}
       <div class="relationship-chart-grid ism-detail-grid">
         ${renderedCharts.join("")}
       </div>
@@ -2118,6 +2182,7 @@
       </div>` : ""}
     `;
     bindGrowthCycleRangeControl(body);
+    attachIsmOfficialSummaryHandlers(body);
     attachRatesChartTooltips(body, lineCharts);
     const multiChart = charts.find((c) => c.kind === "small_multiples");
     if (multiChart) attachIsmSharedTooltip(body, rebaseVisibleSmallMultipleChart(multiChart));
