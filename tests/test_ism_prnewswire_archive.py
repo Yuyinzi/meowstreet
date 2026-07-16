@@ -48,6 +48,29 @@ def test_parse_archive_listing_returns_manufacturing_report_urls_only():
     ]
 
 
+def test_parse_archive_listing_uses_report_month_from_url_when_title_is_undated():
+    html = """
+    <a href="/news-releases/manufacturing-pmi-at-49-0-june-2025-ism-manufacturing-pmi-report-302000001.html">
+      Manufacturing PMI at 49.0%; ISM Manufacturing PMI Report
+    </a>
+    """
+
+    reports = ism_prnewswire_archive.parse_archive_listing(html)
+
+    assert reports[0]["report_month"] == "2025-06-01"
+    assert reports[0]["report_id"] == "ism_manufacturing_2025_06"
+
+
+def test_parse_archive_listing_ignores_undated_manufacturing_link():
+    html = """
+    <a href="/news-releases/ism-manufacturing-pmi-report.html">
+      ISM Manufacturing PMI Report
+    </a>
+    """
+
+    assert ism_prnewswire_archive.parse_archive_listing(html) == []
+
+
 def test_archive_listing_url_uses_page_and_pagesize():
     assert ism_prnewswire_archive.archive_listing_url(3, 50) == (
         "https://www.prnewswire.com/news/institute-for-supply-management/?page=3&pagesize=50"

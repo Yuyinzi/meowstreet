@@ -31,8 +31,8 @@ HTML = """
 <p>Backlog of Orders 50.5 52.2 -1.7 Growing Slower 6</p>
 <p>New Export Orders 48.5 50.6 -2.1 Contracting From Growing 1</p>
 <p>Imports 52.9 53.0 -0.1 Growing Slower 5</p>
-<p>The 14 manufacturing industries reporting growth in June — listed in order — are: Printing & Related Support Activities; Electrical Equipment, Appliances & Components.</p>
-<p>The three industries in contraction are: Paper Products; Furniture & Related Products.</p>
+<p>The one manufacturing industry reporting growth is Printing & Related Support Activities.</p>
+<p>The one manufacturing industry that reported growth in new orders is Primary Metals.</p>
 <p>The next ISM® Manufacturing PMI® Report featuring July 2026 data will be released at 10:00 a.m. ET on Monday, August 3, 2026.</p>
 </body>
 </html>
@@ -136,7 +136,7 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
         "source_name": "ismworld",
         "ai_extractions": 1,
         "industry_signals": 2,
-        "ai_summary": 1,
+        "ai_summary": 0,
         "commodities": 1,
         "narrative_facts": 1,
     }
@@ -451,7 +451,53 @@ def test_import_report_url_uses_checkpointed_extraction(tmp_path, monkeypatch):
     assert seen["report_id"] == "ism_manufacturing_2026_06"
 
 
-def test_import_report_url_uses_ai_extraction_by_default(tmp_path):
+def test_extract_prepared_report_payload_does_not_generate_summary_by_default(
+    tmp_path, monkeypatch
+):
+    from scripts import extract_ism_report_ai
+    from tests.test_ism_ai_extraction import valid_extraction
+
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
+    payload = valid_extraction()
+    factual = {key: value for key, value in payload.items() if key != "ai_summary"}
+
+    async def fake_extract_async(con, report_text, source, ai_client, **kwargs):
+        return factual
+
+    def fail_summary(*args, **kwargs):
+        raise AssertionError("import should not generate ai summary by default")
+
+    monkeypatch.setattr(
+        extract_ism_report_ai,
+        "extract_or_load_factual_sections_async",
+        fake_extract_async,
+    )
+    monkeypatch.setattr(
+        extract_ism_report_ai,
+        "generate_or_load_summary",
+        fail_summary,
+    )
+
+    result = fetch_ism_official_reports.extract_prepared_report_payload(
+        con,
+        {"report_text": "report text"},
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "source_url": "https://example.com/report.html",
+            "source_hash": "abc123",
+            "model": "fake-model",
+            "updated_at": "2026-07-15T10:00:00Z",
+        },
+        object(),
+    )
+
+    assert "ai_summary" not in result
+    assert result["report"]["report_id"] == "ism_manufacturing_2026_06"
+
+
+def test_import_report_url_uses_factual_extraction_by_default(tmp_path):
     from tests.test_ism_ai_extraction import valid_extraction
 
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
@@ -477,8 +523,15 @@ def test_import_report_url_uses_ai_extraction_by_default(tmp_path):
 
     assert result["report_id"] == "ism_manufacturing_2026_06"
     assert result["source_name"] == "prnewswire"
-    assert result["ai_summary"] == 1
+    assert result["ai_summary"] == 0
     assert result["industry_signals"] == 2
+    assert (
+        growth_cycle.load_ism_report_ai_summary(
+            con,
+            "ism_manufacturing_2026_06",
+        )
+        is None
+    )
 
 
 def test_backfill_targets_use_prnewswire_for_history_and_official_for_latest():

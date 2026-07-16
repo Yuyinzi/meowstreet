@@ -8,6 +8,7 @@ import time
 from subprocess import CalledProcessError, TimeoutExpired
 from datetime import datetime, timezone
 from pathlib import Path
+from sqlite3 import IntegrityError
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -40,27 +41,23 @@ MONTHS = [
 
 def extract_prepared_report_payload(con, prepared, source, ai_client):
     from app.db import growth_cycle as _growth_cycle
-    from scripts.extract_ism_report_ai import (
-        extract_or_load_factual_sections_async,
-        generate_or_load_summary,
-    )
+    from scripts.extract_ism_report_ai import extract_or_load_factual_sections_async
 
     _growth_cycle.init_db(con)
 
+    log_progress(
+        f"section extraction concurrency=3 sections={len(ism_ai_extraction.FACTUAL_SECTION_NAMES)}"
+    )
     factual_payload = asyncio.run(
         extract_or_load_factual_sections_async(
             con,
             prepared["report_text"],
             source,
             ai_client,
+            progress=log_progress,
         )
     )
-    log_progress(f"summary started report_id={source['report_id']}")
-    summary = generate_or_load_summary(con, factual_payload, source, ai_client)
-    log_progress(f"summary ok report_id={source['report_id']}")
-    return ism_ai_extraction.validate_extraction(
-        {**factual_payload, "ai_summary": summary}
-    )
+    return ism_ai_extraction.validate_factual_extraction(factual_payload)
 
 
 def import_target(con, target, index, total, fetch, ai_client, model):
@@ -120,7 +117,7 @@ async def import_targets_async(
                     model,
                 )
                 results_by_index[index] = result
-            except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+            except (ValueError, CalledProcessError, TimeoutExpired, IntegrityError) as exc:
                 print(
                     f"ism_official_report/{target['url']}: failed - {exc}",
                     file=sys.stderr,
@@ -153,13 +150,20 @@ def build_ai_client(config):
     from app import llm
     from scripts.extract_ism_report_ai import OpenAIJsonClient, llm_timeout
 
-    sync = llm.build_async_client(
-        config,
-        max_retries=0,
-        timeout=llm_timeout(),
-        error_context="ISM report extraction",
+    def client_factory():
+        return llm.build_async_client(
+            config,
+            max_retries=0,
+            timeout=llm_timeout(),
+            error_context="ISM report extraction",
+        )
+
+    return OpenAIJsonClient(
+        client_factory(),
+        config["model"],
+        client_factory=client_factory,
+        progress=log_progress,
     )
-    return OpenAIJsonClient(sync, config["model"])
 
 
 def fetched_at_now():
@@ -365,6 +369,7 @@ def import_report_url(
             "report_month": None,
         },
     )
+    log_progress(f"raw snapshot saved source={source_name} url={url}")
     prepared = ism_official_report.prepare_report_for_ai(
         html,
         url,
@@ -384,6 +389,9 @@ def import_report_url(
             "report_id": prepared["report_id"],
             "report_month": prepared["report_month"],
         },
+    )
+    log_progress(
+        f"prepared report_id={prepared['report_id']} report_month={prepared['report_month']}"
     )
     source = {
         "report_id": prepared["report_id"],
@@ -555,8 +563,10 @@ def discover_prnewswire_reports(since_year, fetch=None, pagesize=25, max_pages=1
     reached_before_since = False
     for page in range(1, max_pages + 1):
         listing_url = ism_prnewswire_archive.archive_listing_url(page, pagesize)
+        log_progress(f"archive page={page} fetching {listing_url}")
         html = fetch(listing_url)
         page_reports = ism_prnewswire_archive.parse_archive_listing(html)
+        log_progress(f"archive page={page} reports={len(page_reports)}")
         if not page_reports:
             break
         for report in page_reports:
@@ -616,7 +626,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                 model=model,
             )
             results.append(result)
-        except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+        except (ValueError, CalledProcessError, TimeoutExpired, IntegrityError) as exc:
             print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
             failed += 1
     elif args.report_month:
@@ -655,7 +665,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                     model=model,
                 )
                 results.append(result)
-            except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+            except (ValueError, CalledProcessError, TimeoutExpired, IntegrityError) as exc:
                 print(
                     f"ism_official_report/{target['url']}: failed - {exc}",
                     file=sys.stderr,
@@ -690,7 +700,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                     con, url, fetch=fetch, ai_client=ai_client, model=model
                 )
                 results.append(result)
-            except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+            except (ValueError, CalledProcessError, TimeoutExpired, IntegrityError) as exc:
                 print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
                 failed += 1
         if args.current_year:
@@ -735,7 +745,12 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                         file=sys.stderr,
                     )
                     failed += 1
-                except (ValueError, CalledProcessError, TimeoutExpired) as exc:
+                except (
+                    ValueError,
+                    CalledProcessError,
+                    TimeoutExpired,
+                    IntegrityError,
+                ) as exc:
                     print(
                         f"ism_official_report/{month}: failed - {exc}",
                         file=sys.stderr,

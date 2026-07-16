@@ -48,6 +48,58 @@ SUMMARY_COMMENT_STOPWORDS = {
     "would",
 }
 
+_INDUSTRY_COUNT_BY_WORD = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+}
+_INDUSTRY_COUNT_PATTERN = r"(?:\d+|" + "|".join(_INDUSTRY_COUNT_BY_WORD) + r")"
+_OVERALL_GROWTH_COUNT_RE = re.compile(
+    rf"\b(?:the|of the)\s+(?P<count>{_INDUSTRY_COUNT_PATTERN})\s+"
+    r"manufacturing industries\s+(?:that\s+)?(?:reported|reporting)\s+growth\b"
+    r"(?!\s+in\s+(?:new orders|production|employment|new export orders|imports))",
+    re.IGNORECASE,
+)
+_OVERALL_CONTRACTION_COUNT_RE = re.compile(
+    rf"\b(?:the|of the)\s+(?P<count>{_INDUSTRY_COUNT_PATTERN})\s+"
+    r"(?:manufacturing\s+)?industries\s+(?:in|reporting|that reported)\s+"
+    r"(?:a\s+)?(?:decline|contraction)\b"
+    r"(?!\s+in\s+(?:new orders|production|employment|new export orders|imports))",
+    re.IGNORECASE,
+)
+_DECLARED_INDUSTRY_COUNT_RES = [
+    re.compile(
+        rf"\bof(?: the)?\s+{_INDUSTRY_COUNT_PATTERN}\s+manufacturing industries"
+        rf"\s*,\s*(?:the\s+)?(?P<count>{_INDUSTRY_COUNT_PATTERN})\s+"
+        r"(?:industries\s+)?(?:reported|reporting|that reported)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:the|of the|only)\s+(?P<count>{_INDUSTRY_COUNT_PATTERN})\s+"
+        r"(?:manufacturing\s+)?industr(?:y|ies)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\bthe\s+(?P<count>{_INDUSTRY_COUNT_PATTERN})\s+that\s+reported\b",
+        re.IGNORECASE,
+    ),
+]
+
 
 def _previous_report_month(report_month):
     year, month, _day = report_month.split("-")
@@ -77,6 +129,90 @@ def _validate_respondent_comments_are_from_source(payload, report_text):
                 "respondent comment text is not present in source: "
                 f"{comment['comment_text']}"
             )
+
+
+def _industry_count(value):
+    normalized = value.lower()
+    if normalized.isdigit():
+        return int(normalized)
+    return _INDUSTRY_COUNT_BY_WORD[normalized]
+
+
+def _declared_industry_count(evidence_text):
+    for pattern in _DECLARED_INDUSTRY_COUNT_RES:
+        match = pattern.search(evidence_text)
+        if match:
+            return _industry_count(match.group("count"))
+    return None
+
+
+def _validate_industry_signals_are_from_source(payload, report_text):
+    source_text = _normalized_text(report_text)
+    if not re.search(r"\bindustr(?:y|ies)\b", source_text, re.IGNORECASE):
+        return
+    groups = {}
+    for signal in payload.get("industry_signals", []):
+        evidence_text = _normalized_text(signal["evidence_text"])
+        if evidence_text not in source_text:
+            raise ValueError(
+                "industry signal evidence is not present in source: "
+                f"{signal['industry']}"
+            )
+        key = (signal["signal_type"], signal["direction"])
+        groups.setdefault(key, []).append(signal)
+    for key, signals in groups.items():
+        ranks = sorted(signal["rank"] for signal in signals)
+        expected_ranks = list(range(1, len(signals) + 1))
+        if ranks != expected_ranks:
+            raise ValueError(
+                f"industry signal ranks are incomplete for {key[0]} {key[1]}"
+            )
+        industries = [signal["industry"] for signal in signals]
+        if len(industries) != len(set(industries)):
+            raise ValueError(
+                f"industry signals are duplicated for {key[0]} {key[1]}"
+            )
+        declared_counts = {
+            count
+            for signal in signals
+            if (count := _declared_industry_count(signal["evidence_text"]))
+            is not None
+        }
+        if len(declared_counts) == 1:
+            expected_count = declared_counts.pop()
+            if len(signals) != expected_count:
+                raise ValueError(
+                    f"{key[0]} {key[1]} must contain {expected_count} industries "
+                    f"from its source list, got {len(signals)}"
+                )
+
+
+def _validate_overall_industry_lists_are_complete(payload, report_text):
+    expected_groups = [
+        ("overall_growth", "growth", _OVERALL_GROWTH_COUNT_RE),
+        ("overall_contraction", "contraction", _OVERALL_CONTRACTION_COUNT_RE),
+    ]
+    for signal_type, direction, pattern in expected_groups:
+        match = pattern.search(report_text)
+        if not match:
+            continue
+        expected_count = _industry_count(match.group("count"))
+        signals = [
+            signal
+            for signal in payload.get("industry_signals", [])
+            if signal["signal_type"] == signal_type
+            and signal["direction"] == direction
+        ]
+        if len(signals) != expected_count:
+            raise ValueError(
+                f"{signal_type} must contain {expected_count} industries from the "
+                f"comprehensive source list, got {len(signals)}"
+            )
+
+
+def _validate_industry_signals_against_source(payload, report_text):
+    _validate_industry_signals_are_from_source(payload, report_text)
+    _validate_overall_industry_lists_are_complete(payload, report_text)
 
 
 def _comment_keywords(comments):
@@ -117,6 +253,21 @@ Direction = Literal[
     "no_change",
 ]
 
+_GROUPED_DIRECTIONS_BY_SIGNAL_TYPE = {
+    "overall_growth": {"growth"},
+    "overall_contraction": {"contraction"},
+    "new_orders": {"growth", "decrease"},
+    "production": {"growth", "decrease"},
+    "employment": {"growth", "decrease"},
+    "supplier_deliveries": {"slower", "faster"},
+    "inventories": {"higher", "lower"},
+    "customer_inventories": {"too_high", "too_low"},
+    "prices": {"increase", "decrease"},
+    "backlog": {"higher", "lower"},
+    "new_export_orders": {"growth", "decrease"},
+    "imports": {"higher", "lower"},
+}
+
 
 class ReportModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -154,8 +305,30 @@ class IndustrySignalModel(BaseModel):
     signal_type: SignalType
     direction: Direction
     industry: str
-    rank: int
+    rank: int = Field(ge=1)
     evidence_text: str
+
+
+class IndustrySignalListModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    signal_type: SignalType
+    direction: Direction
+    industries: list[str] = Field(min_length=1)
+    evidence_text: str
+
+    @model_validator(mode="after")
+    def validate_signal_list(self):
+        allowed_directions = _GROUPED_DIRECTIONS_BY_SIGNAL_TYPE[self.signal_type]
+        if self.direction not in allowed_directions:
+            raise ValueError(
+                f"direction {self.direction} is invalid for {self.signal_type}"
+            )
+        if len(self.industries) != len(set(self.industries)):
+            raise ValueError(
+                f"industries are duplicated for {self.signal_type} {self.direction}"
+            )
+        return self
 
 
 class RespondentCommentModel(BaseModel):
@@ -262,7 +435,20 @@ class AtAGlanceSectionModel(BaseModel):
 class IndustrySignalsSectionModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    industry_signals: list[IndustrySignalModel]
+    industry_signal_lists: list[IndustrySignalListModel] | None = None
+    industry_signals: list[IndustrySignalModel] | None = None
+
+    @model_validator(mode="after")
+    def validate_payload_format(self):
+        formats = [
+            self.industry_signal_lists is not None,
+            self.industry_signals is not None,
+        ]
+        if sum(formats) != 1:
+            raise ValueError(
+                "exactly one of industry_signal_lists or industry_signals is required"
+            )
+        return self
 
 
 class CommentsCommoditiesSectionModel(BaseModel):
@@ -436,6 +622,21 @@ def _slice_between(text, start_marker=None, end_markers=None):
     return text[start:end].strip()
 
 
+def _industry_list_sentences(text):
+    sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z“])", text)
+    relevant = [
+        sentence.strip()
+        for sentence in sentences
+        if re.search(r"\bindustr(?:y|ies)\b", sentence, re.IGNORECASE)
+        and not re.search(
+            r"\b(?:largest|big) manufacturing industries\b",
+            sentence,
+            re.IGNORECASE,
+        )
+    ]
+    return "\n".join(relevant)
+
+
 def report_section_texts(report_text):
     intro = _slice_between(
         report_text,
@@ -461,10 +662,27 @@ def report_section_texts(report_text):
         "MANUFACTURING INDEX SUMMARIES",
         ["Buying Policy", "About This Report"],
     )
+    overall_industry_lists = intro
+    overall_marker = re.search(
+        r"\b(?:the|of the)\s+"
+        + _INDUSTRY_COUNT_PATTERN
+        + r"\s+manufacturing industries\s+(?:that\s+)?"
+        r"(?:reported|reporting)\s+growth\b",
+        intro,
+        re.IGNORECASE,
+    )
+    if overall_marker:
+        overall_industry_lists = intro[overall_marker.start() :]
+    compact_index_industry_lists = _industry_list_sentences(index_summaries)
     return {
         "report": intro or report_text[:4000],
         "at_a_glance_rows": at_a_glance or report_text,
-        "industry_signals": index_summaries or report_text,
+        "industry_signals": "\n\n".join(
+            section
+            for section in [overall_industry_lists, compact_index_industry_lists]
+            if section
+        )
+        or report_text,
         "comments_commodities": "\n\n".join(
             section for section in [comments, commodities] if section
         )
@@ -647,21 +865,36 @@ def build_industry_signals_prompt(report_text):
 Extract only industry signal lists from the ISM Manufacturing report.
 Return only valid JSON with this shape:
 {{
-  "industry_signals": [
+  "industry_signal_lists": [
     {{
       "signal_type": "overall_growth",
       "direction": "growth",
-      "industry": "Machinery",
-      "rank": 1,
+      "industries": ["Machinery", "Chemical Products"],
       "evidence_text": "source sentence"
     }}
   ]
 }}
 
-Use a flat list. Extract all available lists for overall_growth,
+Return one object per source industry list. Preserve industry order in the
+industries array. Include the source evidence sentence once per list. Do not
+return one object per industry and do not add rank fields.
+
+Extract all available lists for overall_growth,
 overall_contraction, new_orders, production, employment, supplier_deliveries,
 inventories, customer_inventories, prices, backlog, new_export_orders, imports.
-Do not return nested objects.
+For overall_growth and overall_contraction, use the comprehensive industry lists.
+Do not substitute commentary about only the largest industries for a comprehensive
+list. The number of rows must match each count stated in the source.
+
+Use these direction values:
+- overall_growth: growth
+- overall_contraction: contraction
+- new_orders, production, employment: growth or decrease
+- supplier_deliveries: slower or faster
+- inventories, backlog, imports: higher or lower
+- customer_inventories: too_high or too_low
+- prices: increase or decrease
+- new_export_orders: growth or decrease
 
 Report text:
 {report_text}
@@ -809,7 +1042,7 @@ Report text:
 SECTION_KEYS = {
     "report": ["report"],
     "at_a_glance_rows": ["at_a_glance_rows"],
-    "industry_signals": ["industry_signals"],
+    "industry_signals": ["industry_signal_lists", "industry_signals"],
     "comments_commodities": ["respondent_comments", "commodities"],
     "narrative_facts": ["narrative_facts"],
 }
@@ -820,6 +1053,26 @@ def _section_payload(section_name, payload):
     if not isinstance(payload, dict):
         return payload
     return {key: payload[key] for key in keys if key in payload}
+
+
+def _normalize_section_payload(section_name, payload):
+    if section_name != "industry_signals":
+        return payload
+    signal_lists = payload.get("industry_signal_lists")
+    if signal_lists is None:
+        return {"industry_signals": payload["industry_signals"]}
+    industry_signals = [
+        {
+            "signal_type": signal_list["signal_type"],
+            "direction": signal_list["direction"],
+            "industry": industry,
+            "rank": rank,
+            "evidence_text": signal_list["evidence_text"],
+        }
+        for signal_list in signal_lists
+        for rank, industry in enumerate(signal_list["industries"], start=1)
+    ]
+    return {"industry_signals": industry_signals}
 
 
 async def _complete_json_async(client, prompt):
@@ -855,8 +1108,17 @@ async def _extract_section_async(
                 model,
                 _section_payload(section_name, payload),
             )
+            section_payload = _normalize_section_payload(
+                section_name,
+                section_payload,
+            )
             if section_name == "comments_commodities":
                 _validate_respondent_comments_are_from_source(
+                    section_payload,
+                    section_text,
+                )
+            if section_name == "industry_signals":
+                _validate_industry_signals_against_source(
                     section_payload,
                     section_text,
                 )
@@ -886,8 +1148,17 @@ def _extract_section(report_text, client, section_name, prompt, model, max_attem
                 model,
                 _section_payload(section_name, payload),
             )
+            section_payload = _normalize_section_payload(
+                section_name,
+                section_payload,
+            )
             if section_name == "comments_commodities":
                 _validate_respondent_comments_are_from_source(
+                    section_payload,
+                    report_text,
+                )
+            if section_name == "industry_signals":
+                _validate_industry_signals_against_source(
                     section_payload,
                     report_text,
                 )

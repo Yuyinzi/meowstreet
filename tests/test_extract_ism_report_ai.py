@@ -197,6 +197,7 @@ def test_extract_snapshot_uses_checkpointed_extraction(tmp_path, monkeypatch):
         retry_failed=True,
         sections=None,
         max_concurrency=3,
+        progress=None,
     ):
         seen["source"] = source
         payload = ism_ai_extraction_test_payload()

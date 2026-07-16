@@ -2,6 +2,9 @@ import argparse
 import asyncio
 import json
 import sys
+import threading
+import time
+import weakref
 from pathlib import Path
 
 import httpx
@@ -33,6 +36,10 @@ def _check_report_month(extracted_report_month, expected_report_month, source_ur
 
 
 SUMMARY_PROMPT_VERSION = "ism-summary-from-validated-v1"
+
+
+def log_progress(message):
+    print(message, file=sys.stderr, flush=True)
 
 
 def generate_or_load_summary(
@@ -120,6 +127,24 @@ def should_run_section(existing, force_sections, retry_failed):
     return existing["status"] != "ok"
 
 
+def should_reuse_section(existing, force_sections, retry_failed, report_text):
+    if should_run_section(existing, force_sections, retry_failed):
+        return False, None
+    if existing["section_name"] != "industry_signals":
+        return True, None
+    section_text = ism_ai_extraction.report_section_texts(report_text)[
+        "industry_signals"
+    ]
+    try:
+        ism_ai_extraction._validate_industry_signals_against_source(
+            existing["payload_json"],
+            section_text,
+        )
+    except ValueError as exc:
+        return False, str(exc)
+    return True, None
+
+
 def extract_or_load_factual_sections(
     con,
     report_text,
@@ -140,7 +165,13 @@ def extract_or_load_factual_sections(
             ism_ai_extraction.PROMPT_VERSION,
             section_name,
         )
-        if not should_run_section(existing, force_sections, retry_failed):
+        reuse, _reuse_error = should_reuse_section(
+            existing,
+            force_sections,
+            retry_failed,
+            report_text,
+        )
+        if reuse:
             rows.append(existing)
             continue
         attempt_count = (existing["attempt_count"] if existing else 0) + 1
@@ -177,8 +208,11 @@ def extract_or_load_factual_sections(
         )
     failed = [row for row in rows if row["status"] != "ok"]
     if failed:
-        names = ", ".join(row["section_name"] for row in failed)
-        raise ValueError(f"ism factual sections failed: {names}")
+        details = ", ".join(
+            f"{row['section_name']} ({row['error'] or 'unknown error'})"
+            for row in failed
+        )
+        raise ValueError(f"ism factual sections failed: {details}")
     return ism_ai_extraction.assemble_factual_payload_from_sections(rows)
 
 
@@ -191,6 +225,7 @@ async def extract_or_load_factual_sections_async(
     retry_failed=True,
     sections=None,
     max_concurrency=3,
+    progress=None,
 ):
     section_names = sections or ism_ai_extraction.FACTUAL_SECTION_NAMES
     force_sections = set(force_sections or [])
@@ -204,10 +239,27 @@ async def extract_or_load_factual_sections_async(
             ism_ai_extraction.PROMPT_VERSION,
             section_name,
         )
-        if not should_run_section(existing, force_sections, retry_failed):
+        reuse, reuse_error = should_reuse_section(
+            existing,
+            force_sections,
+            retry_failed,
+            report_text,
+        )
+        if reuse:
             rows_map[section_name] = existing
             continue
+        if progress and reuse_error:
+            progress(
+                f"section {section_name} checkpoint rejected error={reuse_error}"
+            )
         pending.append((section_name, existing))
+
+    if progress:
+        reused_count = len(section_names) - len(pending)
+        progress(
+            f"section extraction pending={len(pending)} reused={reused_count} "
+            f"concurrency={max_concurrency}"
+        )
 
     semaphore = asyncio.Semaphore(max_concurrency)
 
@@ -219,6 +271,9 @@ async def extract_or_load_factual_sections_async(
 
     async def run_pending(section_name, existing):
         attempt_count = (existing["attempt_count"] if existing else 0) + 1
+        started = time.perf_counter()
+        if progress:
+            progress(f"section {section_name} started")
         try:
             section_payload = await _run_one(report_text, client, section_name)
             status = "ok"
@@ -227,6 +282,12 @@ async def extract_or_load_factual_sections_async(
             section_payload = {}
             status = "failed"
             error = str(exc)
+        if progress:
+            elapsed = time.perf_counter() - started
+            message = f"section {section_name} {status} {elapsed:.1f}s"
+            if error:
+                message = f"{message} error={error}"
+            progress(message)
         checkpoint = {
             "report_id": source["report_id"],
             "source_url": source["source_url"],
@@ -260,8 +321,11 @@ async def extract_or_load_factual_sections_async(
         )
     failed = [row for row in rows if row["status"] != "ok"]
     if failed:
-        names = ", ".join(row["section_name"] for row in failed)
-        raise ValueError(f"ism factual sections failed: {names}")
+        details = ", ".join(
+            f"{row['section_name']} ({row['error'] or 'unknown error'})"
+            for row in failed
+        )
+        raise ValueError(f"ism factual sections failed: {details}")
     return ism_ai_extraction.assemble_factual_payload_from_sections(rows)
 
 
@@ -315,6 +379,7 @@ def extract_snapshot(
     summary_guidance="",
     reject_summary_reason="",
 ):
+    log_progress(f"snapshot loading url={source_url}")
     snapshot = growth_cycle.load_ism_report_source_snapshot(con, source_url)
     if not snapshot:
         raise ValueError(f"ism source snapshot is missing: {source_url}")
@@ -345,7 +410,13 @@ def extract_snapshot(
         "model": model,
         "updated_at": snapshot["fetched_at"],
     }
+    requested_sections = sections or ism_ai_extraction.FACTUAL_SECTION_NAMES
+    log_progress(
+        f"snapshot loaded report_id={expected_report_id} "
+        f"report_month={expected_report_month} sections={','.join(requested_sections)}"
+    )
     if summary_only:
+        log_progress("stored factual sections loading")
         factual_payload = _load_factual_payload_from_stored(con, source)
     else:
         factual_payload = asyncio.run(
@@ -357,6 +428,7 @@ def extract_snapshot(
                 force_sections=force_sections,
                 retry_failed=retry_failed,
                 sections=sections,
+                progress=log_progress,
             )
         )
     if reject_summary_reason:
@@ -379,9 +451,23 @@ def extract_snapshot(
         _check_report_month(
             payload["report"]["report_month"], expected_report_month, source_url
         )
+        saved = growth_cycle.replace_ism_ai_report_outputs(
+            con,
+            payload,
+            {
+                "source_url": snapshot["source_url"],
+                "source_hash": snapshot["source_hash"],
+                "model": model,
+                "prompt_version": ism_ai_extraction.PROMPT_VERSION,
+            },
+        )
+        log_progress(
+            f"facts saved report_id={payload['report']['report_id']} "
+            f"industry_signals={saved['industry_signals']}"
+        )
         return {
             "report_id": payload["report"]["report_id"],
-            "industry_signals": len(payload.get("industry_signals", [])),
+            "industry_signals": saved["industry_signals"],
         }
     summary = generate_or_load_summary(
         con,
@@ -471,19 +557,43 @@ def extract_snapshot_with_options(
 
 
 class OpenAIJsonClient:
-    def __init__(self, client, model, max_attempts=3):
+    def __init__(
+        self,
+        client,
+        model,
+        max_attempts=3,
+        client_factory=None,
+        progress=None,
+    ):
         self.client = client
         self.model = model
         self.max_attempts = max_attempts
+        self.client_factory = client_factory
+        self.progress = progress
+        self._clients_by_loop = weakref.WeakKeyDictionary()
+        self._client_lock = threading.Lock()
+
+    def _client_for_current_loop(self):
+        if self.client_factory is None:
+            return self.client
+        loop = asyncio.get_running_loop()
+        with self._client_lock:
+            client = self._clients_by_loop.get(loop)
+            if client is None:
+                client = self.client_factory()
+                self._clients_by_loop[loop] = client
+            return client
 
     def complete_json(self, prompt):
         return asyncio.run(self.complete_json_async(prompt))
 
     async def complete_json_async(self, prompt):
         last_error = None
-        for _attempt in range(self.max_attempts):
+        for attempt in range(1, self.max_attempts + 1):
+            if self.progress:
+                self.progress(f"llm attempt={attempt}/{self.max_attempts} started")
             try:
-                stream = await self.client.chat.completions.create(
+                stream = await self._client_for_current_loop().chat.completions.create(
                     model=self.model,
                     messages=[{"role": "user", "content": prompt}],
                     response_format={"type": "json_object"},
@@ -499,6 +609,10 @@ class OpenAIJsonClient:
                 return json.loads("".join(chunks))
             except Exception as exc:
                 last_error = exc
+                if self.progress:
+                    self.progress(
+                        f"llm attempt={attempt}/{self.max_attempts} failed error={exc}"
+                    )
         raise last_error
 
 
@@ -507,13 +621,20 @@ def llm_timeout():
 
 
 def build_client(config):
-    client = llm.build_async_client(
-        config,
-        max_retries=0,
-        timeout=llm_timeout(),
-        error_context="ISM rich report extraction",
+    def client_factory():
+        return llm.build_async_client(
+            config,
+            max_retries=0,
+            timeout=llm_timeout(),
+            error_context="ISM rich report extraction",
+        )
+
+    return OpenAIJsonClient(
+        client_factory(),
+        config["model"],
+        client_factory=client_factory,
+        progress=log_progress,
     )
-    return OpenAIJsonClient(client, config["model"])
 
 
 def main(argv=None, client_factory=build_client):

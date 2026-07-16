@@ -98,7 +98,10 @@ def extract_report_text(html, source_name):
 
 
 def report_month_from_title(text):
-    match = re.search(r"\b(" + "|".join(MONTHS) + r")\s+(\d{4})\s+ISM", text)
+    match = re.search(
+        r"\b(" + "|".join(MONTHS) + r")\s+(\d{4})\s+(?:Manufacturing\s+)?ISM",
+        text,
+    )
     if not match:
         raise IsmReportUnavailable("no report page available")
     month_name, year = match.groups()

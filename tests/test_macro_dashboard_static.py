@@ -1351,6 +1351,44 @@ def test_growth_cycle_ism_detail_renderer_static_assets():
     assert ".ism-relationship-context" in css
 
 
+def test_macro_dashboard_renders_ism_report_summary_as_compact_rows():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert "ism-official-summary-row" in js
+    assert "ism-official-summary-label" in js
+    assert "ism-official-summary-value" in js
+    assert "ism-official-major-change-list" in js
+    assert "ism-official-major-change" in js
+    assert "ism-official-comment-list" in js
+    assert "ism-official-comment-row" in js
+    assert "ism-official-comment-industry" in js
+    assert "ism-official-comment-text" in js
+    assert ".ism-official-summary-row" in css
+    assert ".ism-official-summary-label" in css
+    assert ".ism-official-summary-value" in css
+    assert ".ism-official-major-change-list" in css
+    assert ".ism-official-major-change" in css
+    assert ".ism-official-comment-list" in css
+    assert ".ism-official-comment-row" in css
+    assert ".ism-official-comment-industry" in css
+    assert ".ism-official-comment-text" in css
+
+
+def test_macro_dashboard_renders_ism_comment_expander_static_assets():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert "comment_preview_count" in js
+    assert "ism-official-comment-row-extra" in js
+    assert "ism-official-comment-toggle" in js
+    assert "data-ism-comment-toggle" in js
+    assert "attachIsmOfficialSummaryHandlers" in js
+    assert ".ism-official-comment-row-extra" in css
+    assert ".ism-official-comment-toggle" in css
+    assert ".ism-official-comment-list.expanded" in css
+
+
 def test_macro_dashboard_static_assets_render_ism_trend_metadata():
     js = STATIC_JS.read_text()
     css = STATIC_CSS.read_text()

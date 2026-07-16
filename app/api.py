@@ -13,6 +13,7 @@ from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.tools import (
     gdp_market_relationship,
+    ism_official_report,
     macro_growth_cycle,
     market_phase,
     us_rates_liquidity,
@@ -48,6 +49,34 @@ def _us_gdp_relationships(relationships):
         for relationship in relationships
         if str(relationship.get("region", "")).lower() == "us"
     ]
+
+
+def _load_latest_ism_industry_breadth(con, latest_ism_report=None):
+    try:
+        report = latest_ism_report or growth_cycle.load_latest_ism_report_snapshot(con)
+    except AttributeError:
+        report = None
+    if report:
+        snapshot = growth_cycle.load_ism_report_source_snapshot(
+            con,
+            report["source_url"],
+        )
+        if snapshot:
+            try:
+                report_text = ism_official_report.extract_report_text(
+                    snapshot["raw_html"],
+                    snapshot["source_name"],
+                )
+                rankings = ism_official_report.parse_rankings(
+                    ism_official_report.normalize_text(report_text),
+                    report["report_month"],
+                )
+                return macro_growth_cycle.build_ism_industry_breadth_summary(rankings)
+            except ValueError:
+                pass
+    return macro_growth_cycle.build_ism_industry_breadth_summary(
+        growth_cycle.load_latest_ism_industry_rankings(con)
+    )
 
 
 def load_workflow_method():
@@ -283,9 +312,7 @@ def macro_dashboard_growth_cycle():
                     as_of_date,
                 )
             )
-        ism_industry_breadth = macro_growth_cycle.build_ism_industry_breadth_summary(
-            growth_cycle.load_latest_ism_industry_rankings(con)
-        )
+        ism_industry_breadth = _load_latest_ism_industry_breadth(con)
         ism_at_a_glance = growth_cycle.load_latest_ism_at_a_glance_rows(con)
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(
             dashboard,
@@ -327,18 +354,32 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             finally:
                 gdp_con.close()
                 benchmark_con.close()
-            ism_industry_breadth = (
-                macro_growth_cycle.build_ism_industry_breadth_summary(
-                    growth_cycle.load_latest_ism_industry_rankings(con)
-                )
-            )
             ism_at_a_glance = growth_cycle.load_latest_ism_at_a_glance_rows(con)
+            latest_ism_report = growth_cycle.load_latest_ism_report_snapshot(con)
+            ism_industry_breadth = _load_latest_ism_industry_breadth(
+                con,
+                latest_ism_report,
+            )
+            ism_comments = (
+                growth_cycle.load_ism_report_comments(
+                    con,
+                    latest_ism_report["report_id"],
+                )
+                if latest_ism_report
+                else []
+            )
+            ism_official_summary = macro_growth_cycle.build_ism_official_report_summary(
+                latest_ism_report,
+                ism_at_a_glance,
+                ism_comments,
+            )
             return macro_growth_cycle.build_ism_manufacturing_detail_payload(
                 ism_points,
                 gdp_level_rows=gdp_level_rows,
                 sp500_price_rows=sp500_price_rows,
                 ism_industry_breadth=ism_industry_breadth,
                 ism_at_a_glance=ism_at_a_glance,
+                ism_official_summary=ism_official_summary,
             )
 
         rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")

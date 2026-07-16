@@ -418,10 +418,15 @@ def replace_ism_ai_extraction(con, extraction):
     import json
 
     from app.tools.ism_ai_extraction import validate_extraction
+    from app.tools.ism_ai_extraction import validate_factual_extraction
 
     payload = extraction["extraction_json"]
     report_id = extraction["report_id"]
-    payload = validate_extraction(payload)
+    payload = (
+        validate_extraction(payload)
+        if "ai_summary" in payload
+        else validate_factual_extraction(payload)
+    )
     con.execute(
         "delete from ism_report_industry_signals where report_id = ?",
         (report_id,),
@@ -590,8 +595,14 @@ def load_ism_report_ai_summary(con, report_id):
 
 def replace_ism_ai_report_outputs(con, payload, source):
     from app.tools.ism_ai_extraction import validate_extraction
+    from app.tools.ism_ai_extraction import validate_factual_extraction
 
-    payload = validate_extraction(payload)
+    has_ai_summary = "ai_summary" in payload
+    payload = (
+        validate_extraction(payload)
+        if has_ai_summary
+        else validate_factual_extraction(payload)
+    )
     report = payload["report"]
     extraction_saved = replace_ism_ai_extraction(
         con,
@@ -608,7 +619,11 @@ def replace_ism_ai_report_outputs(con, payload, source):
             "extraction_json": payload,
         },
     )
-    summary_saved = replace_ism_ai_summary(con, payload, source)
+    summary_saved = (
+        replace_ism_ai_summary(con, payload, source)
+        if has_ai_summary
+        else {"ai_summary": 0}
+    )
     commodity_saved = replace_ism_report_commodities(con, payload, source)
     narrative_saved = replace_ism_report_narrative_facts(con, payload, source)
     con.commit()

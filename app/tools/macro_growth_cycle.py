@@ -843,6 +843,7 @@ def build_ism_manufacturing_detail_payload(
     sp500_price_rows=None,
     ism_industry_breadth=None,
     ism_at_a_glance=None,
+    ism_official_summary=None,
 ):
     points_by_key = _ism_points_by_payload_key(points_by_series_id)
     all_keys = list(ISM_MANUFACTURING_DETAIL_LABELS)
@@ -905,6 +906,8 @@ def build_ism_manufacturing_detail_payload(
     }
     if ism_at_a_glance:
         result["latest_metadata"] = _ism_at_a_glance_by_key(ism_at_a_glance)
+    if ism_official_summary:
+        result["official_report_summary"] = ism_official_summary
     return result
 
 
@@ -1526,6 +1529,54 @@ def _ism_industry_breadth_detail_group(summary):
         "label": "Industry Breadth",
         "keys": [],
         "industry_breadth": summary,
+    }
+
+
+def _format_ism_summary_change(row):
+    change = row.get("point_change")
+    change_text = "n/a" if change is None else f"{change:+.1f}"
+    return (
+        f"{row['label']}: {row['current_value']:.1f}, {change_text} points; "
+        f"{row['direction']} / {row['rate_of_change']}."
+    )
+
+
+def build_ism_official_report_summary(report, at_a_glance_rows, comments):
+    if not report or not at_a_glance_rows:
+        return None
+    rows_by_series = {row["series_id"]: row for row in at_a_glance_rows}
+    pmi = rows_by_series.get("ism_manufacturing_pmi")
+    if pmi:
+        pmi_change = pmi.get("point_change")
+        pmi_change_text = "n/a" if pmi_change is None else f"{pmi_change:+.1f}"
+        headline = (
+            f"Manufacturing PMI {pmi['current_value']:.1f}, "
+            f"{pmi_change_text} points from prior month; "
+            f"{pmi['direction']} / {pmi['rate_of_change']}."
+        )
+    else:
+        headline = "Official report facts are available from extracted ISM rows."
+    sorted_rows = sorted(
+        at_a_glance_rows,
+        key=lambda row: abs(row.get("point_change") or 0),
+        reverse=True,
+    )
+    return {
+        "source_type": "report_extracted",
+        "report_id": report["report_id"],
+        "period": report["report_month"],
+        "title": report["title"],
+        "source_url": report["source_url"],
+        "headline": headline,
+        "major_changes": [_format_ism_summary_change(row) for row in sorted_rows[:5]],
+        "comment_preview_count": 3,
+        "respondent_comments": [
+            {
+                "industry": comment["industry"],
+                "comment_text": comment["comment_text"],
+            }
+            for comment in comments
+        ],
     }
 
 

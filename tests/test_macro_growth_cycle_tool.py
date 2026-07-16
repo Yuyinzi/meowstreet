@@ -1887,6 +1887,117 @@ def test_build_ism_manufacturing_detail_payload_with_at_a_glance_metadata():
     assert payload["latest_metadata"]["pmi"]["tone"] == "amber"
 
 
+def test_build_ism_manufacturing_detail_payload_includes_official_report_summary():
+    points = {
+        "ism_manufacturing_pmi": [
+            {"date": "2026-06-01", "value": 53.3, "source": "ISM"}
+        ]
+    }
+    at_a_glance = [
+        {
+            "series_id": "ism_manufacturing_pmi",
+            "label": "Manufacturing PMI",
+            "current_value": 53.3,
+            "previous_value": 54.0,
+            "point_change": -0.7,
+            "direction": "Growing",
+            "rate_of_change": "Slower",
+            "trend_months": 6,
+        },
+        {
+            "series_id": "ism_manufacturing_prices",
+            "label": "Prices",
+            "current_value": 73.0,
+            "previous_value": 82.1,
+            "point_change": -9.1,
+            "direction": "Increasing",
+            "rate_of_change": "Slower",
+            "trend_months": 21,
+        },
+    ]
+    official_summary = macro_growth_cycle.build_ism_official_report_summary(
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "title": "June 2026 ISM Manufacturing PMI Report",
+            "source_url": "https://example.com/june.html",
+        },
+        at_a_glance,
+        [
+            {
+                "industry": "Machinery",
+                "comment_text": "Demand remains uneven.",
+            }
+        ],
+    )
+
+    payload = macro_growth_cycle.build_ism_manufacturing_detail_payload(
+        points,
+        ism_at_a_glance=at_a_glance,
+        ism_official_summary=official_summary,
+    )
+
+    assert payload["official_report_summary"] == {
+        "source_type": "report_extracted",
+        "report_id": "ism_manufacturing_2026_06",
+        "period": "2026-06-01",
+        "title": "June 2026 ISM Manufacturing PMI Report",
+        "source_url": "https://example.com/june.html",
+        "headline": "Manufacturing PMI 53.3, -0.7 points from prior month; Growing / Slower.",
+        "comment_preview_count": 3,
+        "major_changes": [
+            "Prices: 73.0, -9.1 points; Increasing / Slower.",
+            "Manufacturing PMI: 53.3, -0.7 points; Growing / Slower.",
+        ],
+        "respondent_comments": [
+            {
+                "industry": "Machinery",
+                "comment_text": "Demand remains uneven.",
+            }
+        ],
+    }
+
+
+def test_build_ism_official_report_summary_keeps_all_comments_with_preview_count():
+    at_a_glance = [
+        {
+            "series_id": "ism_manufacturing_pmi",
+            "label": "Manufacturing PMI",
+            "current_value": 53.3,
+            "previous_value": 54.0,
+            "point_change": -0.7,
+            "direction": "Growing",
+            "rate_of_change": "Slower",
+            "trend_months": 6,
+        },
+    ]
+    comments = [
+        {
+            "industry": f"Industry {index}",
+            "comment_text": f"Official comment {index}.",
+        }
+        for index in range(1, 6)
+    ]
+
+    summary = macro_growth_cycle.build_ism_official_report_summary(
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "title": "June 2026 ISM Manufacturing PMI Report",
+            "source_url": "https://example.com/june.html",
+        },
+        at_a_glance,
+        comments,
+    )
+
+    assert summary["comment_preview_count"] == 3
+    assert len(summary["respondent_comments"]) == 5
+    assert summary["respondent_comments"][-1] == {
+        "industry": "Industry 5",
+        "comment_text": "Official comment 5.",
+    }
+
+
 def test_build_ism_manufacturing_detail_payload_skips_metadata_when_not_provided():
     points = {
         "ism_manufacturing_pmi": [

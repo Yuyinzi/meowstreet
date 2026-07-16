@@ -27,6 +27,92 @@ def test_macro_dashboard_page_routes_are_served():
     assert "text/html" in response.headers["content-type"]
 
 
+def test_growth_cycle_ism_industry_breadth_prefers_latest_official_report(monkeypatch):
+    from app import api
+
+    con = object()
+    report = {
+        "report_id": "ism_manufacturing_2026_06",
+        "report_month": "2026-06-01",
+        "source_url": "https://example.com/june",
+    }
+    html = """
+    <h1>June 2026 ISM Manufacturing PMI Report</h1>
+    <p>The 14 manufacturing industries reporting growth in June — listed in order — are:
+    Printing & Related Support Activities; Electrical Equipment, Appliances & Components;
+    and Food, Beverage & Tobacco Products. The three industries in contraction are:
+    Paper Products; Furniture & Related Products; and Wood Products.</p>
+    """
+
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda db: report,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_source_snapshot",
+        lambda db, source_url: {
+            "source_name": "ismworld",
+            "raw_html": html,
+        },
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda db: [
+            {
+                "date": "2020-12-01",
+                "industry": "Apparel, Leather & Allied Products",
+                "direction": "growth",
+                "rank": 16,
+                "source": "ISM_Manufacturing_Index.xlsx",
+            }
+        ],
+    )
+
+    summary = api._load_latest_ism_industry_breadth(con)
+
+    assert summary["date"] == "2026-06-01"
+    assert summary["growth_count"] == 3
+    assert summary["contraction_count"] == 3
+    assert summary["top_growth"][0] == {
+        "industry": "Printing & Related Support Activities",
+        "rank": 3,
+    }
+
+
+def test_growth_cycle_ism_industry_breadth_falls_back_to_workbook(monkeypatch):
+    from app import api
+
+    con = object()
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda db: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda db: [
+            {
+                "date": "2020-12-01",
+                "industry": "Apparel, Leather & Allied Products",
+                "direction": "growth",
+                "rank": 16,
+                "source": "ISM_Manufacturing_Index.xlsx",
+            }
+        ],
+    )
+
+    summary = api._load_latest_ism_industry_breadth(con)
+
+    assert summary["date"] == "2020-12-01"
+    assert summary["top_growth"] == [
+        {"industry": "Apparel, Leather & Allied Products", "rank": 16}
+    ]
+
+
 def test_market_phase_api_returns_lightweight_market_overview(monkeypatch):
     from app import api
 
@@ -762,6 +848,11 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
         api.growth_cycle,
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
     )
 
     response = client.get("/api/macro-dashboard/growth-cycle")
@@ -1837,6 +1928,11 @@ def test_growth_cycle_api_returns_ism_manufacturing_detail(monkeypatch):
         "load_latest_ism_at_a_glance_rows",
         lambda con: [],
     )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle/ism_manufacturing")
 
@@ -2017,6 +2113,11 @@ def test_growth_cycle_api_ism_detail_includes_at_a_glance_metadata(monkeypatch):
                 "source_hash": "abc123",
             },
         ],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
     )
     monkeypatch.setattr(
         api.us_rates_liquidity_db,

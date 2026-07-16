@@ -1670,3 +1670,35 @@ def test_replace_ism_ai_report_outputs_saves_summary_and_commodities(tmp_path):
         "ism_manufacturing_2026_06",
     )
     assert "Headline PMI rose" in summary["summary_text"]
+
+
+def test_replace_ism_ai_report_outputs_accepts_factual_payload_without_summary(
+    tmp_path,
+):
+    from tests.test_ism_ai_extraction import valid_extraction
+
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
+    payload = valid_extraction()
+    payload.pop("ai_summary")
+    saved = growth_cycle.replace_ism_ai_report_outputs(
+        con,
+        payload,
+        {
+            "source_url": "https://example.com/report.html",
+            "source_hash": "abc123",
+            "model": "gpt-5-mini",
+            "prompt_version": "ism-rich-v1",
+        },
+    )
+
+    assert saved["ai_summary"] == 0
+    assert saved["commodities"] == 1
+    assert saved["narrative_facts"] == 1
+    assert (
+        growth_cycle.load_ism_report_ai_summary(
+            con,
+            "ism_manufacturing_2026_06",
+        )
+        is None
+    )

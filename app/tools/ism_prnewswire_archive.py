@@ -76,6 +76,19 @@ def report_month_from_title(title):
     return f"{year}-{MONTH_NUMBER_BY_NAME[month_name]}-01"
 
 
+def report_month_from_url(url):
+    match = re.search(
+        r"(?:^|[-/])(" + "|".join(MONTH_NUMBER_BY_NAME) + r")[-_](20\d{2})(?:[-_.]|$)",
+        url,
+        re.IGNORECASE,
+    )
+    if not match:
+        raise ValueError(f"ism archive url report month is missing: {url}")
+    month_name = match.group(1).lower()
+    year = match.group(2)
+    return f"{year}-{MONTH_NUMBER_BY_NAME[month_name]}-01"
+
+
 def report_id(report_month):
     year, month, _day = report_month.split("-")
     return f"ism_manufacturing_{year}_{month}"
@@ -103,7 +116,13 @@ def parse_archive_listing(html):
         if not is_manufacturing_report_title(link["title"]):
             continue
         seen.add(link["url"])
-        link["report_month"] = report_month_from_title(link["title"])
+        try:
+            link["report_month"] = report_month_from_title(link["title"])
+        except ValueError:
+            try:
+                link["report_month"] = report_month_from_url(link["url"])
+            except ValueError:
+                continue
         link["report_id"] = report_id(link["report_month"])
         result.append(link)
     return result

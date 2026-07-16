@@ -99,6 +99,12 @@ def test_parse_report_with_sup_reg_in_markup_extracts_all_fields():
     }
 
 
+def test_report_month_from_title_accepts_historical_prnewswire_title():
+    assert ism_official_report.report_month_from_title(
+        "Manufacturing PMI at 48.5%; May 2025 Manufacturing ISM Report On Business"
+    ) == ("2025-05-01", "May", "2025")
+
+
 def test_parse_report_extracts_metadata_metrics_rankings_comments_and_release():
     parsed = ism_official_report.parse_report(
         REPORT_HTML,

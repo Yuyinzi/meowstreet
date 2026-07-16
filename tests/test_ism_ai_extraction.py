@@ -35,14 +35,14 @@ def valid_extraction():
                 "direction": "growth",
                 "industry": "Printing & Related Support Activities",
                 "rank": 1,
-                "evidence_text": "The 14 manufacturing industries reporting growth...",
+                "evidence_text": "The one manufacturing industry reporting growth is Printing & Related Support Activities.",
             },
             {
                 "signal_type": "new_orders",
                 "direction": "growth",
                 "industry": "Primary Metals",
                 "rank": 1,
-                "evidence_text": "The 11 manufacturing industries that reported growth in new orders...",
+                "evidence_text": "The one manufacturing industry that reported growth in new orders is Primary Metals.",
             },
         ],
         "respondent_comments": [
@@ -91,6 +91,7 @@ def valid_extraction():
 def valid_report_text():
     return """
     June 2026 ISM Manufacturing PMI Report.
+    The one manufacturing industry reporting growth is Printing & Related Support Activities.
     WHAT RESPONDENTS ARE SAYING
     "Input costs remain elevated." [Chemical Products]
     MANUFACTURING AT A GLANCE
@@ -98,7 +99,8 @@ def valid_report_text():
     COMMODITIES REPORTED UP/DOWN IN PRICE AND IN SHORT SUPPLY
     Aluminum is up in price.
     JUNE 2026 MANUFACTURING INDEX SUMMARIES
-    Manufacturing PMI text. New Orders text.
+    Manufacturing PMI text.
+    The one manufacturing industry that reported growth in new orders is Primary Metals.
     """
 
 
@@ -412,7 +414,7 @@ def test_report_section_texts_reduce_each_prompt_to_relevant_slice():
     COMMODITIES REPORTED UP/DOWN IN PRICE AND IN SHORT SUPPLY
     Commodities Up in Price Steel.
     JANUARY 2026 MANUFACTURING INDEX SUMMARIES
-    Manufacturing PMI text. New Orders text.
+    Manufacturing PMI text. New Orders industries text.
     Buying Policy
     Non-core lead time details.
     """
@@ -423,10 +425,149 @@ def test_report_section_texts_reduce_each_prompt_to_relevant_slice():
     assert "WHAT RESPONDENTS" not in sections["report"]
     assert "MANUFACTURING AT A GLANCE" in sections["at_a_glance_rows"]
     assert "COMMODITIES REPORTED" not in sections["at_a_glance_rows"]
-    assert "New Orders text" in sections["industry_signals"]
+    assert "New Orders industries text" in sections["industry_signals"]
     assert "Comment one" in sections["comments_commodities"]
     assert "Commodities Up in Price Steel" in sections["comments_commodities"]
     assert "Non-core lead time details" not in sections["narrative_facts"]
+
+
+def test_report_section_texts_include_comprehensive_overall_industry_list():
+    report_text = """
+    June 2026 ISM Manufacturing PMI Report.
+    Five of the six largest manufacturing industries expanded in June.
+    The 14 manufacturing industries reporting growth in June, listed in order, are:
+    Printing & Related Support Activities; Machinery; and Chemical Products.
+    WHAT RESPONDENTS ARE SAYING
+    MANUFACTURING AT A GLANCE
+    MANUFACTURING INDEX SUMMARIES
+    New Orders industries text.
+    """
+
+    sections = ism_ai_extraction.report_section_texts(report_text)
+
+    assert "The 14 manufacturing industries" in sections["industry_signals"]
+    assert "Five of the six largest" not in sections["industry_signals"]
+    assert "New Orders industries text" in sections["industry_signals"]
+
+
+def test_report_section_texts_remove_non_industry_index_narrative():
+    report_text = """
+    June 2026 ISM Manufacturing PMI Report.
+    WHAT RESPONDENTS ARE SAYING
+    MANUFACTURING AT A GLANCE
+    MANUFACTURING INDEX SUMMARIES
+    New Orders expanded to 56 percent and remained above its historical threshold.
+    The two industries reporting growth in new orders are: Machinery; and Primary Metals.
+    New Orders 22.3 64.3 13.4 56.0
+    Buying Policy
+    """
+
+    section = ism_ai_extraction.report_section_texts(report_text)["industry_signals"]
+
+    assert "two industries reporting growth" in section
+    assert "historical threshold" not in section
+    assert "22.3 64.3" not in section
+
+
+def test_industry_signal_validation_rejects_partial_overall_growth_list():
+    evidence = (
+        "Five of the six largest manufacturing industries expanded in June, "
+        "with Petroleum & Coal Products the exception."
+    )
+    report_text = f"""
+    {evidence}
+    The 14 manufacturing industries reporting growth in June, listed in order,
+    are: Printing & Related Support Activities; Machinery; and Chemical Products.
+    """
+    payload = {
+        "industry_signals": [
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "industry": industry,
+                "rank": rank,
+                "evidence_text": evidence,
+            }
+            for rank, industry in enumerate(
+                [
+                    "Computer & Electronic Products",
+                    "Machinery",
+                    "Transportation Equipment",
+                    "Chemical Products",
+                    "Food, Beverage & Tobacco Products",
+                ],
+                start=1,
+            )
+        ]
+    }
+
+    with pytest.raises(ValueError, match="must contain 14 industries"):
+        ism_ai_extraction._validate_industry_signals_against_source(
+            payload,
+            report_text,
+        )
+
+
+def test_industry_signal_validation_rejects_partial_subindex_list():
+    evidence = (
+        "The 11 manufacturing industries that reported growth in new orders "
+        "are: Primary Metals; Machinery; and Chemical Products."
+    )
+    payload = {
+        "industry_signals": [
+            {
+                "signal_type": "new_orders",
+                "direction": "growth",
+                "industry": industry,
+                "rank": rank,
+                "evidence_text": evidence,
+            }
+            for rank, industry in enumerate(
+                ["Primary Metals", "Machinery", "Chemical Products"],
+                start=1,
+            )
+        ]
+    }
+
+    with pytest.raises(ValueError, match="must contain 11 industries"):
+        ism_ai_extraction._validate_industry_signals_against_source(
+            payload,
+            evidence,
+        )
+
+
+def test_industry_signal_validation_uses_reported_subset_not_industry_universe():
+    evidence = (
+        "Of the 18 manufacturing industries, nine reported employment growth "
+        "in June, in the following order: Printing; Paper; Primary Metals; "
+        "Electrical Equipment; Plastics; Machinery; Miscellaneous Manufacturing; "
+        "Transportation Equipment; and Chemical Products."
+    )
+    industries = [
+        "Printing",
+        "Paper",
+        "Primary Metals",
+        "Electrical Equipment",
+        "Plastics",
+        "Machinery",
+        "Miscellaneous Manufacturing",
+        "Transportation Equipment",
+        "Chemical Products",
+    ]
+    payload = {
+        "industry_signals": [
+            {
+                "signal_type": "employment",
+                "direction": "growth",
+                "industry": industry,
+                "rank": rank,
+                "evidence_text": evidence,
+            }
+            for rank, industry in enumerate(industries, start=1)
+        ]
+    }
+
+    ism_ai_extraction._validate_industry_signals_against_source(payload, evidence)
 
 
 def test_validate_factual_extraction_accepts_payload_without_summary():
@@ -450,6 +591,72 @@ def test_build_prompt_requests_summary_with_major_changes():
     assert "Do not invent changes" in prompt
 
 
+def test_build_industry_signals_prompt_requests_grouped_lists():
+    prompt = ism_ai_extraction.build_industry_signals_prompt("industry text")
+
+    assert '"industry_signal_lists"' in prompt
+    assert '"industries": ["Machinery", "Chemical Products"]' in prompt
+    assert "do not add rank fields" in prompt
+
+
+def test_extract_section_expands_grouped_industry_lists_to_flat_rows():
+    evidence = (
+        "The two manufacturing industries reporting growth are: Machinery; "
+        "and Chemical Products."
+    )
+    report_text = f"""
+    June 2026 ISM Manufacturing PMI Report.
+    {evidence}
+    WHAT RESPONDENTS ARE SAYING
+    MANUFACTURING AT A GLANCE
+    MANUFACTURING INDEX SUMMARIES
+    """
+    section_name, section_text, prompt, model = (
+        ism_ai_extraction.factual_section_definition(
+            "industry_signals",
+            report_text,
+        )
+    )
+
+    class FakeClient:
+        def complete_json(self, prompt):
+            return {
+                "industry_signal_lists": [
+                    {
+                        "signal_type": "overall_growth",
+                        "direction": "growth",
+                        "industries": ["Machinery", "Chemical Products"],
+                        "evidence_text": evidence,
+                    }
+                ]
+            }
+
+    result = ism_ai_extraction.extract_section_with_client(
+        section_text,
+        FakeClient(),
+        section_name,
+        prompt,
+        model,
+    )
+
+    assert result == {
+        "industry_signals": [
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "industry": "Machinery",
+                "rank": 1,
+                "evidence_text": evidence,
+            },
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "industry": "Chemical Products",
+                "rank": 2,
+                "evidence_text": evidence,
+            },
+        ]
+    }
 @pytest.mark.asyncio
 async def test_extract_factual_with_client_async_runs_sections_with_concurrency_limit():
     payload = valid_extraction()
