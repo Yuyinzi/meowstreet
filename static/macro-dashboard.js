@@ -1456,6 +1456,31 @@
     "Moderate": "中等",
     "Divided": "分歧",
     "Pending": "待处理",
+    // GDP Expectations components
+    "ISM Manufacturing": "ISM制造业",
+    "ISM Services": "ISM服务业",
+    "Labor Trend": "就业趋势",
+    "Consumer Indicators": "消费指标",
+    "Available": "可用",
+    "Unavailable": "不可用",
+    "Supports Growth": "支持增长",
+    "Evidence": "证据",
+    // ISM Policy Context
+    "ISM Policy Context": "ISM政策背景",
+    "Growth Pressure": "增长压力",
+    "Inflation Pressure": "通胀压力",
+    "Supply Pressure": "供应压力",
+    "Combined Pressure": "综合压力",
+    "Inflation Caution": "通胀警惕",
+    "Less Easing Pressure": "宽松减弱压力",
+    // Bias Evidence
+    "Bias Evidence": "偏向证据",
+    "ISM Contribution": "ISM贡献",
+    "Long": "做多",
+    "Short": "做空",
+    "Manufacturing": "制造业",
+    "Services": "服务业",
+    "Labor": "就业",
   };
 
   function zhLabel(label) {
@@ -1748,6 +1773,9 @@
     const cards = state.growthCycle.headline || [];
     const sections = state.growthCycle.sections || [];
     const sectionHtml = renderGrowthCycleSections(sections, cards);
+    const gc = state.growthCycle.growth_cycle || {};
+    const biasEvidence = gc.growth_cycle_bias_evidence;
+    const biasHtml = biasEvidence ? renderBiasEvidenceStrip(biasEvidence) : "";
     section.innerHTML = `
       ${head.outerHTML}
       ${sectionHtml ? `
@@ -1755,8 +1783,9 @@
           <div class="growth-section-list">
             ${sectionHtml}
           </div>
+          ${biasHtml}
         </div>
-      ` : ""}
+      ` : biasHtml ? `<div class="rates-detail gdp-detail">${biasHtml}</div>` : ""}
     `;
     section.querySelectorAll("[data-growth-cycle-detail-id]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -3046,8 +3075,28 @@
   }
 
   function renderGdpExpectationsCard(card) {
-    const requiredInputs = (card.required_inputs || [])
-      .map((input) => `<li>${escapeHtml(input)}</li>`)
+    const components = (card.components || []).map((comp) => {
+      const label = componentLabel(comp.id);
+      const badge = componentStatusBadge(comp.status);
+      const directionHtml = comp.status === "available" && comp.direction
+        ? `<small>${bilingualLabel(formatComponentDirection(comp.direction))}</small>`
+        : "";
+      const periodHtml = comp.period
+        ? `<small>${escapeHtml(fmtDate(comp.period))}</small>`
+        : "";
+      return `
+        <div class="gdp-component-row">
+          <span>${bilingualLabel(label)}</span>
+          <div class="gdp-component-row-right">
+            ${badge}
+            ${directionHtml}
+            ${periodHtml}
+          </div>
+        </div>
+      `;
+    }).join("");
+    const evidenceItems = (card.evidence || [])
+      .map((item) => `<li>${escapeHtml(item)}</li>`)
       .join("");
     return `
       <div class="m2-card m2-card-${escapeHtml(card.status || "pending_inputs")} gdp-expectations-card">
@@ -3062,11 +3111,8 @@
             <small>Wait for leading indicators<br><span>等待领先指标</span></small>
           </div>
         </div>
-        <div class="gdp-expectations-context">
-          <strong>${bilingualLabel("Required Inputs")}</strong>
-          <ul>${requiredInputs}</ul>
-        </div>
-        <p class="m2-card-footnote">${escapeHtml(card.description || "")}</p>
+        ${components ? `<div class="gdp-components">${components}</div>` : ""}
+        ${evidenceItems ? `<div class="gdp-expectations-context"><strong>${bilingualLabel("Evidence")}</strong><ul>${evidenceItems}</ul></div>` : ""}
         <p class="m2-card-footnote gdp-expectations-support">${escapeHtml(card.supporting_context || "")}</p>
       </div>
     `;
@@ -3168,8 +3214,9 @@
   function renderFomcToneCard(card) {
     const tone = card.latest_tone || {};
     const hasTone = tone.marker_tone != null;
+    const hasIsmContext = card.ism_policy_context != null;
     const cardLabel = card.label || "FOMC Policy Read";
-    if (!hasTone) {
+    if (!hasTone && !hasIsmContext) {
       return `
         <article class="m2-card m2-card-missing fomc-card">
           <div class="m2-card-head">
@@ -3179,21 +3226,22 @@
         </article>
       `;
     }
-    const toneLabel = formatToneValue(tone.marker_tone);
-    const toneBadge = toneBadgeClass(tone.marker_tone);
-    const dateStr = tone.end_date && tone.end_date !== tone.start_date
-      ? `${tone.start_date} \u2013 ${tone.end_date}`
-      : tone.start_date;
-    const minutesAvailable = tone.minutes_status === "available";
-    const minutesRows = minutesAvailable
-      ? `
-          <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel(formatMinutesConfirmation(tone.minutes_confirmation))}</strong></div>
-          <div class="m2-level-row"><span>${bilingualLabel("Risk Focus")}</span><strong>${bilingualLabel(formatRiskFocus(tone.risk_focus))}</strong></div>
-          <div class="m2-level-row"><span>${bilingualLabel("Policy Conviction")}</span><strong>${bilingualLabel(formatPolicyConviction(tone.policy_conviction))}</strong></div>`
-      : `
-          <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel("Pending")}</strong></div>`;
-    return `
-      <article class="m2-card m2-card-context fomc-card fomc-tone-card">
+    let toneHtml = "";
+    if (hasTone) {
+      const toneLabel = formatToneValue(tone.marker_tone);
+      const toneBadge = toneBadgeClass(tone.marker_tone);
+      const dateStr = tone.end_date && tone.end_date !== tone.start_date
+        ? `${tone.start_date} \u2013 ${tone.end_date}`
+        : tone.start_date;
+      const minutesAvailable = tone.minutes_status === "available";
+      const minutesRows = minutesAvailable
+        ? `
+            <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel(formatMinutesConfirmation(tone.minutes_confirmation))}</strong></div>
+            <div class="m2-level-row"><span>${bilingualLabel("Risk Focus")}</span><strong>${bilingualLabel(formatRiskFocus(tone.risk_focus))}</strong></div>
+            <div class="m2-level-row"><span>${bilingualLabel("Policy Conviction")}</span><strong>${bilingualLabel(formatPolicyConviction(tone.policy_conviction))}</strong></div>`
+        : `
+            <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel("Pending")}</strong></div>`;
+      toneHtml = `
         <div class="m2-card-head">
           <div>
             <span>${bilingualTitle(cardLabel)}</span>
@@ -3209,6 +3257,27 @@
           <div class="m2-level-row"><span>${bilingualLabel("Change")}</span><strong>${bilingualLabel(formatToneChange(tone.tone_change))}</strong></div>
           ${minutesRows}
         </div>
+      `;
+    }
+    let ismHtml = "";
+    if (hasIsmContext) {
+      const ctx = card.ism_policy_context;
+      ismHtml = `
+        <div class="ism-policy-context">
+          <div class="ism-policy-context-head">
+            <span>${bilingualTitle("ISM Policy Context")}</span>
+          </div>
+          <div class="m2-level-row"><span>${bilingualLabel("Combined Pressure")}</span><strong>${bilingualLabel(formatPressureValue(ctx.combined_pressure))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Growth Pressure")}</span><strong>${bilingualLabel(formatPressureValue(ctx.growth_pressure))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Inflation Pressure")}</span><strong>${bilingualLabel(formatPressureValue(ctx.inflation_pressure))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Supply Pressure")}</span><strong>${bilingualLabel(formatPressureValue(ctx.supply_pressure))}</strong></div>
+        </div>
+      `;
+    }
+    return `
+      <article class="m2-card m2-card-context fomc-card fomc-tone-card">
+        ${toneHtml}
+        ${ismHtml}
       </article>
     `;
   }
@@ -3328,6 +3397,107 @@
     if (["hawkish", "mild_hawkish"].includes(t)) return "tone-hawkish";
     if (t === "neutral") return "tone-neutral";
     return "tone-unknown";
+  }
+
+  function formatPressureValue(value) {
+    const map = {
+      inflation_caution: "Inflation Caution",
+      less_easing_pressure: "Less Easing Pressure",
+      easing_pressure: "Easing Pressure",
+      elevated: "Elevated",
+      normal: "Normal",
+      mixed: "Mixed",
+    };
+    return map[value] || titleCaseToken(value);
+  }
+
+  function formatBiasValue(value) {
+    const map = {
+      long: "Long",
+      short: "Short",
+      neutral: "Neutral",
+    };
+    return map[value] || titleCaseToken(value);
+  }
+
+  function componentLabel(compId) {
+    const map = {
+      ism_manufacturing: "ISM Manufacturing",
+      ism_services: "ISM Services",
+      labor_trend: "Labor Trend",
+      consumer_indicators: "Consumer Indicators",
+    };
+    return map[compId] || titleCaseToken(compId);
+  }
+
+  function componentStatusBadge(status) {
+    if (status === "available") {
+      return `<strong class="inflation-status-badge component-status-available">${bilingualLabel("Available")}</strong>`;
+    }
+    if (status === "pending") {
+      return `<strong class="inflation-status-badge component-status-pending">${bilingualLabel("Pending")}</strong>`;
+    }
+    return `<strong class="inflation-status-badge component-status-unavailable">${bilingualLabel("Unavailable")}</strong>`;
+  }
+
+  function formatComponentDirection(direction) {
+    const map = {
+      supports_growth: "Supports Growth",
+      supports_long: "Supports Long",
+      supports_short: "Supports Short",
+      conflicting: "Conflicting",
+    };
+    return map[direction] || titleCaseToken(direction);
+  }
+
+  function formatBiasComponentValue(value) {
+    const map = {
+      supports_growth: "Supports Growth",
+      supports_long: "Supports Long",
+      supports_short: "Supports Short",
+      conflicting: "Conflicting",
+      unavailable: "Unavailable",
+      pending: "Pending",
+    };
+    return map[value] || titleCaseToken(value);
+  }
+
+  function formatComponentLabel(key) {
+    const map = {
+      ism_manufacturing: "Manufacturing",
+      ism_services: "Services",
+      labor: "Labor",
+    };
+    return map[key] || titleCaseToken(key);
+  }
+
+  function renderBiasEvidenceStrip(evidence) {
+    const isAvailable = evidence.status === "available";
+    const componentEntries = Object.entries(evidence.components || {});
+    const componentRows = componentEntries.map(([key, value]) => `
+      <span class="bias-component">
+        <span>${bilingualLabel(formatComponentLabel(key))}</span>
+        <strong class="bias-component-status-${escapeHtml(value || "unavailable")}">${bilingualLabel(formatBiasComponentValue(value))}</strong>
+      </span>
+    `).join("");
+    const reasonItems = (evidence.reasons || [])
+      .map((r) => `<li>${escapeHtml(r)}</li>`)
+      .join("");
+    return `
+      <div class="bias-evidence-strip">
+        <div class="bias-evidence-head">
+          <span>${bilingualLabel("Bias Evidence")}</span>
+          <strong class="${isAvailable ? "bias-available" : "bias-pending"}">${isAvailable ? bilingualLabel(formatBiasValue(evidence.bias)) : bilingualLabel("Pending Inputs")}</strong>
+        </div>
+        <div class="bias-evidence-body">
+          ${evidence.ism_contribution ? `
+            <div class="m2-level-row"><span>${bilingualLabel("ISM Contribution")}</span><strong>${bilingualLabel(formatBiasComponentValue(evidence.ism_contribution))}</strong></div>
+          ` : ""}
+          ${componentRows ? `<div class="bias-components">${componentRows}</div>` : ""}
+          ${reasonItems ? `<ul class="bias-reasons">${reasonItems}</ul>` : ""}
+        </div>
+      </div>
+    `;
   }
 
   function trendGlyph(value) {
@@ -4239,6 +4409,16 @@
       renderIsmIndustryList,
       updateIsmIndustryDetail,
       bindIsmIndustrySelector,
+      formatPressureValue,
+      formatBiasValue,
+      formatBiasComponentValue,
+      componentLabel,
+      componentStatusBadge,
+      formatComponentDirection,
+      formatComponentLabel,
+      renderBiasEvidenceStrip,
+      renderGdpExpectationsCard,
+      renderFomcToneCard,
     };
   }
 

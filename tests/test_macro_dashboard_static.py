@@ -745,6 +745,13 @@ def test_macro_dashboard_js_renders_gdp_expectations_placeholder_card():
     assert "GDP预期" in js
     assert "Pending Inputs" in js
     assert "待输入" in js
+    assert "componentStatusBadge(" in js
+    assert "componentLabel(" in js
+    assert "gdp-component-row" in js
+    assert "comp.id" in js
+    assert "comp.status" in js
+    assert "card.evidence" in js
+    assert "Expected Direction" in js
 
 
 def test_macro_dashboard_js_renders_inflation_context_card():
@@ -806,6 +813,16 @@ def test_macro_dashboard_static_includes_fomc_tone_card():
     assert "tone-neutral" in js
     assert "No scheduled meeting" in js
     assert "Tone unavailable" in js
+    assert "ism_policy_context" in js
+    assert "formatPressureValue" in js
+    assert "ISM Policy Context" in js
+    assert "Combined Pressure" in js
+    assert "Growth Pressure" in js
+    assert "Inflation Pressure" in js
+    assert "Supply Pressure" in js
+    assert "inflation_caution" in js
+    assert "less_easing_pressure" in js
+    assert "ism-policy-context" in js
 
 
 def test_macro_dashboard_renders_fomc_minutes_policy_read_rows():
@@ -925,9 +942,9 @@ def test_macro_dashboard_static_includes_m2_range_control():
 
 def test_growth_cycle_detail_reloads_current_data_when_reopened():
     js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
-    function_body = js.split(
-        "async function loadGrowthCycleDetail(detailId) {", 1
-    )[1].split("\n  }", 1)[0]
+    function_body = js.split("async function loadGrowthCycleDetail(detailId) {", 1)[
+        1
+    ].split("\n  }", 1)[0]
 
     assert "fetch(`/api/macro-dashboard/growth-cycle/" in function_body
     assert "if (state.growthCycleDetailsById[detailId])" not in function_body
@@ -2029,3 +2046,408 @@ def test_macro_dashboard_js_industry_selection_interaction():
     assert payload["noExtraListeners"] is True
     assert payload["afterChangeUsesLatest"] is True
     assert payload["afterClickIsMachinery"] is True
+
+
+def test_macro_dashboard_css_has_gdp_expectations_component_styles():
+    css = STATIC_CSS.read_text()
+
+    assert ".gdp-components" in css
+    assert ".gdp-component-row" in css
+    assert ".gdp-component-row-right" in css
+    assert ".component-status-available" in css
+    assert ".component-status-pending" in css
+    assert ".component-status-unavailable" in css
+
+
+def test_macro_dashboard_css_has_ism_policy_context_styles():
+    css = STATIC_CSS.read_text()
+
+    assert ".ism-policy-context" in css
+    assert ".ism-policy-context-head" in css
+
+
+def test_macro_dashboard_css_has_bias_evidence_strip_styles():
+    css = STATIC_CSS.read_text()
+
+    assert ".bias-evidence-strip" in css
+    assert ".bias-evidence-head" in css
+    assert ".bias-evidence-body" in css
+    assert ".bias-components" in css
+    assert ".bias-component" in css
+    assert ".bias-reasons" in css
+    assert ".bias-available" in css
+    assert ".bias-pending" in css
+
+
+def test_macro_dashboard_js_renders_gdp_expectations_card_with_components():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const card = {
+          id: "gdp_expectations",
+          label: "GDP Expectations",
+          status: "partial_inputs",
+          status_label: "Partial Inputs",
+          components: [
+            { id: "ism_manufacturing", status: "available", direction: "supports_growth", period: "2026-06-01" },
+            { id: "ism_services", status: "pending" },
+            { id: "labor_trend", status: "pending" },
+            { id: "consumer_indicators", status: "unavailable" },
+          ],
+          evidence: ["Manufacturing PMI is above 50 and rising"],
+          supporting_context: "GDP direction matters for market correlation.",
+          expected_direction: null,
+        };
+
+        const html = hooks.renderGdpExpectationsCard(card);
+
+        console.log(JSON.stringify({
+          hasComponents: html.indexOf("gdp-component-row") !== -1,
+          ismManufacturingLabel: html.indexOf("ISM Manufacturing") !== -1,
+          ismServicesLabel: html.indexOf("ISM Services") !== -1,
+          laborTrendLabel: html.indexOf("Labor Trend") !== -1,
+          consumerIndicatorsLabel: html.indexOf("Consumer Indicators") !== -1,
+          availableBadge: html.indexOf("Available") !== -1,
+          pendingBadge: html.indexOf("Pending") !== -1,
+          unavailableBadge: html.indexOf("Unavailable") !== -1,
+          supportsGrowth: html.indexOf("Supports Growth") !== -1,
+          evidenceText: html.indexOf("Manufacturing PMI") !== -1,
+          notReady: html.indexOf("Not Ready") !== -1,
+          oldRequiredInputs: html.indexOf("Required Inputs") === -1,
+          componentStatusAvailable: html.indexOf("component-status-available") !== -1,
+          componentStatusPending: html.indexOf("component-status-pending") !== -1,
+          componentStatusUnavailable: html.indexOf("component-status-unavailable") !== -1,
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasComponents"] is True
+    assert payload["ismManufacturingLabel"] is True
+    assert payload["ismServicesLabel"] is True
+    assert payload["laborTrendLabel"] is True
+    assert payload["consumerIndicatorsLabel"] is True
+    assert payload["availableBadge"] is True
+    assert payload["pendingBadge"] is True
+    assert payload["unavailableBadge"] is True
+    assert payload["supportsGrowth"] is True
+    assert payload["evidenceText"] is True
+    assert payload["notReady"] is True
+    assert payload["oldRequiredInputs"] is True
+    assert payload["componentStatusAvailable"] is True
+    assert payload["componentStatusPending"] is True
+    assert payload["componentStatusUnavailable"] is True
+
+
+def test_macro_dashboard_js_renders_fomc_tone_card_with_ism_policy_context():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const card = {
+          id: "fomc_tone",
+          label: "FOMC Policy Read",
+          status: "context",
+          latest_tone: {
+            marker_tone: "hawkish",
+            policy_action: "hold",
+            guidance_bias: "hawkish",
+            language_tone: "hawkish",
+            overall_bias: "hawkish",
+            tone_change: "unchanged",
+            start_date: "2026-06-16",
+            end_date: "2026-06-17",
+            minutes_status: "available",
+            minutes_confirmation: "confirmed_but_divided",
+            risk_focus: "inflation",
+            policy_conviction: "divided",
+          },
+          ism_policy_context: {
+            combined_pressure: "inflation_caution",
+            growth_pressure: "less_easing_pressure",
+            inflation_pressure: "elevated",
+            supply_pressure: "normal",
+            period: "2026-06-01",
+            version: "ism_macro_signal_v1",
+          },
+        };
+
+        const html = hooks.renderFomcToneCard(card);
+
+        console.log(JSON.stringify({
+          hasToneSection: html.indexOf("fomc-tone-badge") !== -1,
+          hasAction: html.indexOf("Action") !== -1,
+          hasGuidance: html.indexOf("Guidance") !== -1,
+          hasLanguage: html.indexOf("Language") !== -1,
+          hasBias: html.indexOf("Bias") !== -1,
+          hasChange: html.indexOf("Change") !== -1,
+          hasIsmPolicyContext: html.indexOf("ism-policy-context") !== -1,
+          hasCombinedPressure: html.indexOf("Combined Pressure") !== -1,
+          hasGrowthPressure: html.indexOf("Growth Pressure") !== -1,
+          hasInflationPressure: html.indexOf("Inflation Pressure") !== -1,
+          hasSupplyPressure: html.indexOf("Supply Pressure") !== -1,
+          hasInflationCaution: html.indexOf("Inflation Caution") !== -1,
+          hasLessEasing: html.indexOf("Less Easing Pressure") !== -1,
+          hasElevated: html.indexOf("Elevated") !== -1,
+          hasNormal: html.indexOf("Normal") !== -1,
+          hasMinutesBlock: html.indexOf("Minutes Confirmation") !== -1,
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasToneSection"] is True
+    assert payload["hasAction"] is True
+    assert payload["hasGuidance"] is True
+    assert payload["hasLanguage"] is True
+    assert payload["hasBias"] is True
+    assert payload["hasChange"] is True
+    assert payload["hasIsmPolicyContext"] is True
+    assert payload["hasCombinedPressure"] is True
+    assert payload["hasGrowthPressure"] is True
+    assert payload["hasInflationPressure"] is True
+    assert payload["hasSupplyPressure"] is True
+    assert payload["hasInflationCaution"] is True
+    assert payload["hasLessEasing"] is True
+    assert payload["hasElevated"] is True
+    assert payload["hasNormal"] is True
+    assert payload["hasMinutesBlock"] is True
+
+
+def test_macro_dashboard_js_renders_fomc_tone_card_with_ism_context_no_tone():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const card = {
+          id: "fomc_tone",
+          label: "FOMC Policy Read",
+          status: "context",
+          latest_tone: null,
+          ism_policy_context: {
+            combined_pressure: "inflation_caution",
+            growth_pressure: "less_easing_pressure",
+            inflation_pressure: "elevated",
+            supply_pressure: "normal",
+            period: "2026-06-01",
+            version: "ism_macro_signal_v1",
+          },
+        };
+
+        const html = hooks.renderFomcToneCard(card);
+
+        console.log(JSON.stringify({
+          hasIsmPolicyContext: html.indexOf("ism-policy-context") !== -1,
+          hasCombinedPressure: html.indexOf("Combined Pressure") !== -1,
+          hasGrowthPressure: html.indexOf("Growth Pressure") !== -1,
+          hasInflationPressure: html.indexOf("Inflation Pressure") !== -1,
+          hasSupplyPressure: html.indexOf("Supply Pressure") !== -1,
+          hasInflationCaution: html.indexOf("Inflation Caution") !== -1,
+          noToneUnavailable: html.indexOf("Tone unavailable") === -1,
+          noToneBadge: html.indexOf("fomc-tone-badge") === -1,
+          notMissingCard: html.indexOf("m2-card-missing") === -1,
+          isContextCard: html.indexOf("m2-card-context") !== -1,
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasIsmPolicyContext"] is True
+    assert payload["hasCombinedPressure"] is True
+    assert payload["hasGrowthPressure"] is True
+    assert payload["hasInflationPressure"] is True
+    assert payload["hasSupplyPressure"] is True
+    assert payload["hasInflationCaution"] is True
+    assert payload["noToneUnavailable"] is True
+    assert payload["noToneBadge"] is True
+    assert payload["notMissingCard"] is True
+    assert payload["isContextCard"] is True
+
+
+def test_macro_dashboard_js_renders_bias_evidence_strip():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const evidence = {
+          version: "growth_cycle_bias_v2",
+          status: "pending_inputs",
+          bias: null,
+          ism_contribution: "supports_long",
+          components: {
+            ism_manufacturing: "supports_growth",
+            ism_services: "unavailable",
+            labor: "unavailable",
+          },
+          missing_inputs: ["ISM Services", "Labor trend"],
+          reasons: ["Manufacturing growth evidence is supportive but lacks cross-validation"],
+        };
+
+        const availableEvidence = {
+          version: "growth_cycle_bias_v2",
+          status: "available",
+          bias: "long",
+          ism_contribution: "supports_long",
+          components: {
+            ism_manufacturing: "supports_growth",
+            ism_services: "supports_growth",
+            labor: "supports_growth",
+          },
+          missing_inputs: [],
+          reasons: ["All three sectors support a long bias"],
+        };
+
+        const pendingHtml = hooks.renderBiasEvidenceStrip(evidence);
+        const availableHtml = hooks.renderBiasEvidenceStrip(availableEvidence);
+
+        console.log(JSON.stringify({
+          pendingHasStrip: pendingHtml.indexOf("bias-evidence-strip") !== -1,
+          pendingShowsPending: pendingHtml.indexOf("Pending Inputs") !== -1,
+          pendingHasM2LevelRow: pendingHtml.indexOf("m2-level-row") !== -1,
+          pendingHasIsmContribution: pendingHtml.indexOf("ISM Contribution") !== -1,
+          pendingHasComponents: pendingHtml.indexOf("bias-components") !== -1,
+          pendingHasManufacturingSupport: pendingHtml.indexOf("Supports Growth") !== -1,
+          pendingHasManufacturingLabel: pendingHtml.indexOf("Manufacturing") !== -1,
+          pendingHasServices: pendingHtml.indexOf("Services") !== -1,
+          pendingHasLabor: pendingHtml.indexOf("Labor") !== -1,
+          pendingHasUnavailable: pendingHtml.indexOf("Unavailable") !== -1,
+          pendingHasReasons: pendingHtml.indexOf("bias-reasons") !== -1,
+          pendingHasReasonText: pendingHtml.indexOf("cross-validation") !== -1,
+          pendingNotBiasAvailable: pendingHtml.indexOf("bias-available") === -1,
+          pendingIsBiasPending: pendingHtml.indexOf("bias-pending") !== -1,
+          availableShowsLong: availableHtml.indexOf("Long") !== -1,
+          availableIsBiasAvailable: availableHtml.indexOf("bias-available") !== -1,
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["pendingHasStrip"] is True
+    assert payload["pendingShowsPending"] is True
+    assert payload["pendingHasM2LevelRow"] is True
+    assert payload["pendingHasIsmContribution"] is True
+    assert payload["pendingHasComponents"] is True
+    assert payload["pendingHasManufacturingSupport"] is True
+    assert payload["pendingHasManufacturingLabel"] is True
+    assert payload["pendingHasServices"] is True
+    assert payload["pendingHasLabor"] is True
+    assert payload["pendingHasUnavailable"] is True
+    assert payload["pendingHasReasons"] is True
+    assert payload["pendingHasReasonText"] is True
+    assert payload["pendingNotBiasAvailable"] is True
+    assert payload["pendingIsBiasPending"] is True
+    assert payload["availableShowsLong"] is True
+    assert payload["availableIsBiasAvailable"] is True

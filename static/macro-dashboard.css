@@ -3515,6 +3515,195 @@ h2 {
   font-style: italic;
 }
 
+/* GDP Expectation component rows */
+.gdp-components {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.gdp-component-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #ECE4DB;
+  border-radius: 8px;
+  background: #FAF8F5;
+  font-size: 0.82rem;
+}
+
+.gdp-component-row span {
+  color: #3B3530;
+  font-weight: 600;
+}
+
+.gdp-component-row-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gdp-component-row-right .inflation-status-badge {
+  font-size: 0.72rem;
+  padding: 3px 7px;
+}
+
+.gdp-component-row-right small {
+  color: #6B6258;
+  font-size: 0.72rem;
+}
+
+.component-status-available {
+  color: #2F9E74;
+  background: #EEF9F3;
+}
+
+.component-status-pending {
+  color: #B8872F;
+  background: #F8F4EA;
+}
+
+.component-status-unavailable {
+  color: #8B7E74;
+  background: #F4F1EE;
+}
+
+/* ISM Policy Context */
+.ism-policy-context {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #E8E0D6;
+}
+
+.ism-policy-context-head span {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #3B3530;
+}
+
+.ism-policy-context .m2-level-row {
+  margin-top: 6px;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+}
+
+.ism-policy-context .m2-level-row span {
+  font-size: 0.72rem;
+}
+
+.ism-policy-context .m2-level-row strong {
+  font-size: 0.78rem;
+}
+
+/* Bias Evidence Strip */
+.bias-evidence-strip {
+  margin-top: 14px;
+  border: 1px solid #E0D6C8;
+  border-radius: 10px;
+  background: #FFFDFB;
+  overflow: hidden;
+}
+
+.bias-evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #FAF8F5;
+  border-bottom: 1px solid #E3D9CF;
+}
+
+.bias-evidence-head span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #3B3530;
+}
+
+.bias-evidence-head strong {
+  font-size: 0.82rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.bias-available {
+  background: #EEF9F3;
+  color: #2F9E74;
+}
+
+.bias-pending {
+  background: #F4F1EE;
+  color: #8B7E74;
+}
+
+.bias-evidence-body {
+  padding: 10px 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.bias-evidence-body .m2-level-row {
+  margin-top: 0;
+}
+
+.bias-components {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bias-component {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid #E8E0D6;
+  border-radius: 6px;
+  background: #FAF8F5;
+  font-size: 0.78rem;
+}
+
+.bias-component span {
+  color: #8B7E74;
+  font-size: 0.72rem;
+}
+
+.bias-component strong {
+  font-size: 0.78rem;
+}
+
+.bias-component-status-supports_growth,
+.bias-component-status-supports_long,
+.bias-component-status-available {
+  color: #2F9E74;
+}
+
+.bias-component-status-unavailable {
+  color: #8B7E74;
+}
+
+.bias-component-status-pending,
+.bias-component-status-conflicting {
+  color: #B8872F;
+}
+
+.bias-reasons {
+  margin: 0;
+  padding-left: 18px;
+  color: #6B6258;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.bias-reasons li + li {
+  margin-top: 3px;
+}
+
 /* Source link */
 .ism-industry-source {
   margin-top: 2px;
