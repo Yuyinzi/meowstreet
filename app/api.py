@@ -472,9 +472,104 @@ def macro_dashboard_growth_cycle():
             ism_at_a_glance=ism_at_a_glance,
             ism_macro_signal=ism_macro_signal_result,
         )
-        market_phase_payload = _load_market_phase_for_setup()
-        rates_liquidity_payload = _load_rates_liquidity_for_setup(con)
-        growth_cycle_data = growth_cycle_payload.get("growth_cycle", {})
+        return growth_cycle_payload
+    finally:
+        con.close()
+
+
+@app.get("/api/macro-dashboard/market-setup")
+def macro_dashboard_market_setup():
+    con = us_rates_liquidity_db.connect()
+    growth_cycle.init_db(con)
+    try:
+        rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
+        core_pce_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con, "core_pce_price_index"
+        )
+        fed_total_assets_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con, "fed_total_assets"
+        )
+        fed_treasury_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con, "fed_treasury_holdings"
+        )
+        fed_mbs_rows = us_rates_liquidity_db.load_macro_indicator_points(
+            con, "fed_mbs_holdings"
+        )
+        m2_money_stock = (
+            {"series": [{"date": row["date"], "value": row["value"]} for row in rows]}
+            if rows
+            else None
+        )
+        core_pce_price_index = {
+            "series": [
+                {"date": row["date"], "value": row["value"]} for row in core_pce_rows
+            ]
+        }
+        fed_total_assets = {
+            "series": [
+                {"date": row["date"], "value": row["value"]}
+                for row in fed_total_assets_rows
+            ]
+        }
+        fed_treasury_holdings = {
+            "series": [
+                {"date": row["date"], "value": row["value"]}
+                for row in fed_treasury_rows
+            ]
+        }
+        fed_mbs_holdings = {
+            "series": [
+                {"date": row["date"], "value": row["value"]} for row in fed_mbs_rows
+            ]
+        }
+        ism_points = us_rates_liquidity_db.load_macro_indicator_points_for_series(
+            con, ISM_MANUFACTURING_SERIES_IDS
+        )
+        ism_manufacturing = (
+            macro_growth_cycle.build_ism_manufacturing_payload_from_latest_points(
+                ism_points
+            )
+            if any(ism_points.values())
+            else None
+        )
+        dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+            ism_manufacturing=ism_manufacturing,
+            m2_money_stock=m2_money_stock,
+            core_pce_price_index=core_pce_price_index if core_pce_rows else None,
+            fed_total_assets=fed_total_assets if fed_total_assets_rows else None,
+            fed_treasury_holdings=fed_treasury_holdings if fed_treasury_rows else None,
+            fed_mbs_holdings=fed_mbs_holdings if fed_mbs_rows else None,
+        )
+        as_of_date = date.today().isoformat()
+        fomc_latest_tone = us_rates_liquidity_db.load_latest_combined_fomc_policy_read(
+            con, as_of_date
+        )
+        if not fomc_latest_tone:
+            fomc_latest_tone = (
+                us_rates_liquidity_db.load_latest_approved_macro_event_tone(
+                    con, "fomc_meeting", as_of_date
+                )
+            )
+        ism_industry_breadth = _load_latest_ism_industry_breadth(con)
+        ism_at_a_glance = growth_cycle.load_latest_ism_at_a_glance_rows(con)
+        ism_reports = growth_cycle.load_recent_ism_report_snapshots(con, limit=6)
+        ism_macro_signal_result = None
+        if ism_reports:
+            report_ids = [r["report_id"] for r in ism_reports]
+            report_at_a_glance = growth_cycle.load_ism_at_a_glance_rows_for_reports(
+                con, report_ids
+            )
+            try:
+                ism_macro_signal_result = ism_macro_signal.build_ism_macro_signal(
+                    ism_reports,
+                    report_at_a_glance,
+                    industry_breadth=ism_industry_breadth,
+                )
+            except ValueError:
+                logging.warning(
+                    "ism macro signal build failed for market setup", exc_info=True
+                )
+        growth_cycle_data = dashboard
         fomc_tone_headline = macro_growth_cycle.build_fomc_tone_headline(
             fomc_latest_tone
         )
@@ -487,14 +582,17 @@ def macro_dashboard_growth_cycle():
         fed_balance_sheet = macro_growth_cycle.build_fed_balance_sheet_headline(
             growth_cycle_data
         )
-        growth_cycle_bias_evidence = growth_cycle_data.get("growth_cycle_bias_evidence")
+        market_phase_payload = _load_market_phase_for_setup()
+        rates_liquidity_payload = _load_rates_liquidity_for_setup(con)
         ism_industry_analysis_payload = _load_ism_industry_analysis_for_setup(
             con, ism_reports[-1] if ism_reports else None, ism_at_a_glance
         )
-        payload_market_setup = market_setup.build_market_setup(
+        payload = market_setup.build_market_setup(
             market_phase_payload=market_phase_payload,
             ism_macro_signal=ism_macro_signal_result,
-            growth_cycle_bias_evidence=growth_cycle_bias_evidence,
+            growth_cycle_bias_evidence=growth_cycle_data.get(
+                "growth_cycle_bias_evidence"
+            ),
             rates_liquidity_payload=rates_liquidity_payload,
             fomc_tone=fomc_tone_headline,
             m2_headline=m2_headline,
@@ -502,7 +600,7 @@ def macro_dashboard_growth_cycle():
             fed_balance_sheet=fed_balance_sheet,
             ism_industry_analysis=ism_industry_analysis_payload,
         )
-        return {**growth_cycle_payload, "market_setup": payload_market_setup}
+        return payload
     finally:
         con.close()
 

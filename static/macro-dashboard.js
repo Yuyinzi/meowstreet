@@ -12,6 +12,8 @@
     usRatesDetailsById: {},
     growthCycle: null,
     growthCycleError: null,
+    marketSetup: null,
+    marketSetupError: null,
     selectedGrowthCycleDetailId: null,
     selectedGrowthCycleChartRange: "1y",
     growthCycleDetailsById: {},
@@ -1767,6 +1769,19 @@
       .join("");
   }
 
+  async function loadMarketSetup() {
+    try {
+      const response = await fetch("/api/macro-dashboard/market-setup");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      state.marketSetup = await response.json();
+      state.marketSetupError = null;
+    } catch (error) {
+      state.marketSetup = null;
+      state.marketSetupError = error.message;
+    }
+    renderMarketSetup();
+  }
+
   function setupStateLabel(state) {
     return titleCaseToken(state || "unavailable");
   }
@@ -1782,7 +1797,7 @@
   function renderMarketSetup() {
     const section = $("marketSetup");
     if (!section) return;
-    const setup = state.growthCycle?.market_setup;
+    const setup = state.marketSetup;
     if (!setup || setup.status === "unavailable") {
       section.innerHTML = `
         <div class="market-setup-head">
@@ -1973,7 +1988,6 @@
         </div>
       ` : biasHtml ? `<div class="rates-detail gdp-detail">${biasHtml}</div>` : ""}
     `;
-    renderMarketSetup();
     section.querySelectorAll("[data-growth-cycle-detail-id]").forEach((button) => {
       button.addEventListener("click", () => {
         state.selectedGrowthCycleDetailId = state.selectedGrowthCycleDetailId === button.dataset.growthCycleDetailId
@@ -4630,6 +4644,7 @@
   }
 
   loadGrowthCycle();
+  loadMarketSetup();
 
   loadDashboard().catch((error) => {
     $("dashboardStatus").textContent = "Failed to load market phase data.";
