@@ -3,6 +3,8 @@ import json
 from copy import deepcopy
 from datetime import date
 
+from app.tools import ism_macro_signal
+
 GROWTH_CYCLE_DASHBOARD_FIELDS = [
     {
         "id": "gdp_indicator",
@@ -1312,15 +1314,7 @@ def _above_50_count(values):
 
 
 def _ism_phase(pmi):
-    if pmi is None:
-        return "missing"
-    if pmi >= 60:
-        return "late_expansion"
-    if pmi > 50:
-        return "expansion"
-    if pmi >= 45:
-        return "slowdown"
-    return "contraction"
+    return ism_macro_signal._phase(pmi)
 
 
 def _ism_phase_label(phase):
@@ -1330,6 +1324,7 @@ def _ism_phase_label(phase):
         "slowdown": "Slowdown",
         "contraction": "Contraction",
         "missing": "Missing",
+        "unavailable": "Unavailable",
     }
     return labels.get(phase, "Mixed")
 
