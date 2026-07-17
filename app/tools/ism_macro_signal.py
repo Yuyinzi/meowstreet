@@ -4,6 +4,8 @@ _REQUIRED_METRICS = ["pmi", "new_orders"]
 _OPTIONAL_METRICS = ["production", "inventories", "prices", "supplier_deliveries"]
 _ALL_METRICS = _REQUIRED_METRICS + _OPTIONAL_METRICS
 
+from datetime import date, datetime
+
 _SERIES_IDS = {
     "pmi": "ism_manufacturing_pmi",
     "new_orders": "ism_manufacturing_new_orders",
@@ -273,8 +275,6 @@ def _validate_and_group(reports, at_a_glance_rows):
 
 
 def _parse_date(date_val):
-    from datetime import date, datetime
-
     if isinstance(date_val, date):
         return date_val
     return datetime.strptime(date_val, "%Y-%m-%d").date()
@@ -398,7 +398,7 @@ def build_ism_macro_signal(reports, at_a_glance_rows, industry_breadth=None):
     )
 
     trend = []
-    for report in reports_sorted:
+    for report in reports_sorted[:6]:
         rid = report["report_id"]
         period = report["report_month"]
         report_rows = rows_by_report.get(rid, [])
