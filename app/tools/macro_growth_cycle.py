@@ -1133,8 +1133,18 @@ def build_fomc_calendar_headline(next_meeting):
     }
 
 
-def build_fomc_tone_headline(latest_tone):
+def build_fomc_tone_headline(latest_tone, ism_policy_context=None):
     if not latest_tone:
+        if ism_policy_context:
+            return {
+                "id": "fomc_tone",
+                "label": "FOMC Policy Read",
+                "period": ism_policy_context.get("period"),
+                "status": "context",
+                "status_label": "ISM Policy Context",
+                "latest_tone": None,
+                "ism_policy_context": ism_policy_context,
+            }
         return {
             "id": "fomc_tone",
             "label": "FOMC Policy Read",
@@ -1145,7 +1155,7 @@ def build_fomc_tone_headline(latest_tone):
     marker_tone = latest_tone.get("statement_marker_tone") or latest_tone.get(
         "marker_tone"
     )
-    return {
+    result = {
         "id": "fomc_tone",
         "label": "FOMC Policy Read",
         "period": latest_tone.get("start_date"),
@@ -1180,6 +1190,9 @@ def build_fomc_tone_headline(latest_tone):
             "minutes_reason": latest_tone.get("minutes_reason"),
         },
     }
+    if ism_policy_context:
+        result["ism_policy_context"] = ism_policy_context
+    return result
 
 
 def _fomc_chart_events(events, available_dates):
@@ -1215,22 +1228,56 @@ def _fomc_chart_events(events, available_dates):
     ]
 
 
-def build_gdp_expectations_headline(growth_cycle):
-    return {
+def build_gdp_expectations_headline(growth_cycle, ism_macro_signal=None):
+    period = growth_cycle.get("gdp_expectations_period")
+    base = {
         "id": "gdp_expectations",
         "label": "GDP Expectations",
-        "period": growth_cycle.get("gdp_expectations_period"),
-        "status": "pending_inputs",
-        "status_label": "Pending Inputs",
+        "period": period,
         "expected_direction": None,
-        "required_inputs": [
-            "ISM Manufacturing",
+        "supporting_context": "GDP / Market Relationship validates why GDP direction matters, but it does not replace a forward GDP expectation signal.",
+    }
+    if ism_macro_signal is None:
+        return {
+            **base,
+            "status": "pending_inputs",
+            "status_label": "Pending Inputs",
+            "components": [
+                {"id": "ism_manufacturing", "status": "pending"},
+                {"id": "ism_services", "status": "pending"},
+                {"id": "labor_trend", "status": "pending"},
+                {"id": "consumer_indicators", "status": "pending"},
+            ],
+            "missing_inputs": [
+                "ISM Services",
+                "Labor trend",
+                "Consumer indicators",
+            ],
+            "evidence": [],
+        }
+    return {
+        **base,
+        "status": "partial_inputs",
+        "status_label": "Partial Inputs",
+        "components": [
+            {
+                "id": "ism_manufacturing",
+                "status": ism_macro_signal.get("status", "unavailable"),
+                "direction": ism_macro_signal.get("growth_impulse"),
+                "period": ism_macro_signal.get("period"),
+                "version": ism_macro_signal.get("version", "ism_macro_signal_v1"),
+                "growth_impulse": ism_macro_signal.get("growth_impulse"),
+            },
+            {"id": "ism_services", "status": "pending"},
+            {"id": "labor_trend", "status": "pending"},
+            {"id": "consumer_indicators", "status": "pending"},
+        ],
+        "missing_inputs": [
             "ISM Services",
             "Labor trend",
             "Consumer indicators",
         ],
-        "supporting_context": "GDP / Market Relationship validates why GDP direction matters, but it does not replace a forward GDP expectation signal.",
-        "description": "Growth outlook context is needed to judge whether liquidity support is preemptive or defensive. Wait for leading indicators before producing a GDP direction signal.",
+        "evidence": ism_macro_signal.get("evidence", []),
     }
 
 
@@ -1635,7 +1682,14 @@ def build_growth_cycle_sections(growth_cycle, headline):
             "GDP Expectations",
             "Forward growth direction once leading inputs are ready.",
             ["gdp_expectations"] if "gdp_expectations" in card_ids else [],
-            status="available" if "gdp_expectations" in card_ids else "missing",
+            status=next(
+                (
+                    card.get("status", "missing")
+                    for card in headline
+                    if card["id"] == "gdp_expectations"
+                ),
+                "missing",
+            ),
             period=growth_cycle.get("gdp_expectations_period"),
         ),
         _growth_cycle_section(
@@ -1707,6 +1761,7 @@ def build_growth_cycle_dashboard_payload(
     fomc_latest_tone=None,
     ism_industry_breadth=None,
     ism_at_a_glance=None,
+    ism_macro_signal=None,
 ):
     growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
     headline = [
@@ -1724,10 +1779,17 @@ def build_growth_cycle_dashboard_payload(
     fomc_card = build_fomc_calendar_headline(next_fomc_meeting)
     if fomc_card["status"] != "missing":
         headline.append(fomc_card)
-    tone_card = build_fomc_tone_headline(fomc_latest_tone)
+    ism_policy_context = (
+        ism_macro_signal.get("policy_context") if ism_macro_signal else None
+    )
+    tone_card = build_fomc_tone_headline(
+        fomc_latest_tone, ism_policy_context=ism_policy_context
+    )
     if tone_card["status"] != "missing":
         headline.append(tone_card)
-    headline.append(build_gdp_expectations_headline(growth_cycle))
+    headline.append(
+        build_gdp_expectations_headline(growth_cycle, ism_macro_signal=ism_macro_signal)
+    )
     sections = build_growth_cycle_sections(growth_cycle, headline)
     return {
         "headline": headline,

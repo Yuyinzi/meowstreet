@@ -895,15 +895,141 @@ def test_build_gdp_expectations_headline_returns_pending_inputs_card():
         "status": "pending_inputs",
         "status_label": "Pending Inputs",
         "expected_direction": None,
-        "required_inputs": [
-            "ISM Manufacturing",
+        "components": [
+            {"id": "ism_manufacturing", "status": "pending"},
+            {"id": "ism_services", "status": "pending"},
+            {"id": "labor_trend", "status": "pending"},
+            {"id": "consumer_indicators", "status": "pending"},
+        ],
+        "missing_inputs": [
             "ISM Services",
             "Labor trend",
             "Consumer indicators",
         ],
+        "evidence": [],
         "supporting_context": "GDP / Market Relationship validates why GDP direction matters, but it does not replace a forward GDP expectation signal.",
-        "description": "Growth outlook context is needed to judge whether liquidity support is preemptive or defensive. Wait for leading indicators before producing a GDP direction signal.",
     }
+
+
+def test_build_gdp_expectations_headline_with_supportive_ism():
+    signal = {
+        "status": "available",
+        "period": "2026-06-01",
+        "version": "ism_macro_signal_v1",
+        "growth_impulse": "supports_growth",
+        "evidence": [
+            "PMI is above 50 and rising month over month",
+            "New Orders are above 50 and rising month over month",
+            "Growth impulse supports continued expansion",
+        ],
+    }
+    card = macro_growth_cycle.build_gdp_expectations_headline(
+        {"gdp_expectations_period": "2026-06-01"},
+        ism_macro_signal=signal,
+    )
+
+    assert card["id"] == "gdp_expectations"
+    assert card["status"] == "partial_inputs"
+    assert card["status_label"] == "Partial Inputs"
+    assert card["expected_direction"] is None
+    assert card["components"][0] == {
+        "id": "ism_manufacturing",
+        "status": "available",
+        "direction": "supports_growth",
+        "period": "2026-06-01",
+        "version": "ism_macro_signal_v1",
+        "growth_impulse": "supports_growth",
+    }
+    assert card["components"][1:] == [
+        {"id": "ism_services", "status": "pending"},
+        {"id": "labor_trend", "status": "pending"},
+        {"id": "consumer_indicators", "status": "pending"},
+    ]
+    assert "PMI is above 50" in card["evidence"][0]
+    assert "Growth impulse supports continued expansion" in card["evidence"][2]
+    assert "ISM Services" in card["missing_inputs"]
+
+
+def test_build_gdp_expectations_headline_with_cautionary_ism():
+    signal = {
+        "status": "available",
+        "period": "2026-06-01",
+        "version": "ism_macro_signal_v1",
+        "growth_impulse": "growth_caution",
+        "evidence": [
+            "PMI is above 50 but falling month over month",
+            "Growth impulse signals caution in expansion",
+        ],
+    }
+    card = macro_growth_cycle.build_gdp_expectations_headline(
+        {},
+        ism_macro_signal=signal,
+    )
+
+    assert card["status"] == "partial_inputs"
+    assert card["components"][0]["direction"] == "growth_caution"
+    assert card["components"][0]["growth_impulse"] == "growth_caution"
+    assert "Growth impulse signals caution" in card["evidence"][1]
+
+
+def test_build_gdp_expectations_headline_with_contraction_ism():
+    signal = {
+        "status": "available",
+        "period": "2026-06-01",
+        "version": "ism_macro_signal_v1",
+        "growth_impulse": "supports_contraction",
+        "evidence": [
+            "PMI is below 50 and falling month over month",
+            "Growth impulse supports continued contraction",
+        ],
+    }
+    card = macro_growth_cycle.build_gdp_expectations_headline(
+        {},
+        ism_macro_signal=signal,
+    )
+
+    assert card["status"] == "partial_inputs"
+    assert card["components"][0]["direction"] == "supports_contraction"
+    assert "supports continued contraction" in card["evidence"][1]
+
+
+def test_build_gdp_expectations_headline_with_unavailable_ism():
+    signal = {
+        "status": "unavailable",
+        "period": "2026-06-01",
+        "version": "ism_macro_signal_v1",
+        "growth_impulse": None,
+        "evidence": [],
+    }
+    card = macro_growth_cycle.build_gdp_expectations_headline(
+        {},
+        ism_macro_signal=signal,
+    )
+
+    assert card["status"] == "partial_inputs"
+    assert card["status_label"] == "Partial Inputs"
+    assert card["components"][0]["status"] == "unavailable"
+    assert card["components"][0]["direction"] is None
+    assert card["evidence"] == []
+
+
+def test_build_gdp_expectations_headline_with_partial_ism():
+    signal = {
+        "status": "partial",
+        "period": "2026-06-01",
+        "version": "ism_macro_signal_v1",
+        "growth_impulse": "mixed",
+        "evidence": ["New Orders are missing or unavailable"],
+    }
+    card = macro_growth_cycle.build_gdp_expectations_headline(
+        {},
+        ism_macro_signal=signal,
+    )
+
+    assert card["status"] == "partial_inputs"
+    assert card["components"][0]["status"] == "partial"
+    assert card["components"][0]["direction"] == "mixed"
+    assert "New Orders are missing" in card["evidence"][0]
 
 
 def test_normalize_fed_balance_sheet_computes_card_metrics_without_status():
@@ -1145,6 +1271,100 @@ def test_build_fomc_tone_headline_includes_minutes_structure_when_available():
     assert card["latest_tone"]["minutes_confirmation"] == "confirmed_but_divided"
     assert card["latest_tone"]["risk_focus"] == "inflation"
     assert card["latest_tone"]["policy_conviction"] == "moderate"
+
+
+def test_build_fomc_tone_headline_with_ism_policy_context():
+    tone = {
+        "event_id": "fomc_2026_06_16",
+        "start_date": "2026-06-16",
+        "end_date": "2026-06-17",
+        "statement_marker_tone": "hawkish",
+        "statement_policy_action": "hold",
+        "statement_guidance_bias": "neutral",
+        "statement_language_tone": "hawkish",
+        "statement_overall_bias": "mild_hawkish",
+        "statement_tone_change": "more_hawkish",
+        "statement_confidence": "medium",
+        "statement_reason": "statement reason",
+    }
+    ism_context = {
+        "combined_pressure": "inflation_caution",
+        "growth_pressure": "less_easing_pressure",
+        "inflation_pressure": "elevated",
+        "supply_pressure": "normal",
+        "period": "2026-06-01",
+        "version": "ism_macro_signal_v1",
+        "source_url": "https://example.com/june",
+    }
+    card = macro_growth_cycle.build_fomc_tone_headline(
+        tone, ism_policy_context=ism_context
+    )
+
+    assert card["id"] == "fomc_tone"
+    assert card["latest_tone"]["marker_tone"] == "hawkish"
+    assert card["latest_tone"]["minutes_status"] == "pending"
+    assert card["ism_policy_context"] == ism_context
+
+
+def test_build_fomc_tone_headline_without_ism_context_is_unchanged():
+    tone = {
+        "event_id": "fomc_2026_06_16",
+        "start_date": "2026-06-16",
+        "end_date": "2026-06-17",
+        "statement_marker_tone": "dovish",
+        "statement_policy_action": "cut",
+    }
+    card_with = macro_growth_cycle.build_fomc_tone_headline(
+        tone, ism_policy_context=None
+    )
+    card_without = macro_growth_cycle.build_fomc_tone_headline(tone)
+
+    assert card_with == card_without
+    assert "ism_policy_context" not in card_with
+
+
+def test_build_fomc_tone_missing_with_ism_context_stays_visible():
+    ism_context = {
+        "combined_pressure": "inflation_caution",
+        "growth_pressure": "less_easing_pressure",
+        "inflation_pressure": "elevated",
+        "supply_pressure": "normal",
+        "period": "2026-06-01",
+        "version": "ism_macro_signal_v1",
+        "source_url": "https://example.com/june",
+    }
+    card = macro_growth_cycle.build_fomc_tone_headline(
+        None, ism_policy_context=ism_context
+    )
+
+    assert card["status"] == "context"
+    assert card["status_label"] == "ISM Policy Context"
+    assert card["latest_tone"] is None
+    assert card["ism_policy_context"] == ism_context
+
+
+def test_build_fomc_tone_ism_context_does_not_change_marker_tone():
+    tone = {
+        "event_id": "fomc_2026_06_16",
+        "start_date": "2026-06-16",
+        "end_date": "2026-06-17",
+        "statement_marker_tone": "hawkish",
+        "statement_policy_action": "hold",
+    }
+    ism_context = {
+        "combined_pressure": "stagflationary_tension",
+        "growth_pressure": "more_easing_pressure",
+        "inflation_pressure": "elevated",
+        "supply_pressure": "elevated",
+        "period": "2026-06-01",
+        "version": "ism_macro_signal_v1",
+    }
+    card = macro_growth_cycle.build_fomc_tone_headline(
+        tone, ism_policy_context=ism_context
+    )
+
+    assert card["latest_tone"]["marker_tone"] == "hawkish"
+    assert card["ism_policy_context"]["combined_pressure"] == "stagflationary_tension"
 
 
 def test_m2_fomc_chart_events_use_reviewed_statement_tone():

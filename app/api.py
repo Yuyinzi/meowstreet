@@ -14,6 +14,7 @@ from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.tools import (
     gdp_market_relationship,
     ism_industry_analysis,
+    ism_macro_signal,
     ism_official_report,
     macro_growth_cycle,
     market_phase,
@@ -230,11 +231,6 @@ def macro_dashboard_growth_cycle():
     growth_cycle.init_db(con)
     try:
         rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
-        if not rows:
-            return {
-                "headline": [],
-                "missing": "No M2 money supply data found. Run scripts/import_m2_money_supply.py.",
-            }
         core_pce_rows = us_rates_liquidity_db.load_macro_indicator_points(
             con,
             "core_pce_price_index",
@@ -251,9 +247,11 @@ def macro_dashboard_growth_cycle():
             con,
             "fed_mbs_holdings",
         )
-        m2_money_stock = {
-            "series": [{"date": row["date"], "value": row["value"]} for row in rows]
-        }
+        m2_money_stock = (
+            {"series": [{"date": row["date"], "value": row["value"]} for row in rows]}
+            if rows
+            else None
+        )
         core_pce_price_index = {
             "series": [
                 {"date": row["date"], "value": row["value"]} for row in core_pce_rows
@@ -315,12 +313,28 @@ def macro_dashboard_growth_cycle():
             )
         ism_industry_breadth = _load_latest_ism_industry_breadth(con)
         ism_at_a_glance = growth_cycle.load_latest_ism_at_a_glance_rows(con)
+        ism_reports = growth_cycle.load_recent_ism_report_snapshots(con, limit=6)
+        ism_macro_signal_result = None
+        if ism_reports:
+            report_ids = [r["report_id"] for r in ism_reports]
+            report_at_a_glance = growth_cycle.load_ism_at_a_glance_rows_for_reports(
+                con, report_ids
+            )
+            try:
+                ism_macro_signal_result = ism_macro_signal.build_ism_macro_signal(
+                    ism_reports,
+                    report_at_a_glance,
+                    industry_breadth=ism_industry_breadth,
+                )
+            except ValueError:
+                pass
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(
             dashboard,
             next_fomc_meeting=next_fomc_meeting,
             fomc_latest_tone=fomc_latest_tone,
             ism_industry_breadth=ism_industry_breadth,
             ism_at_a_glance=ism_at_a_glance,
+            ism_macro_signal=ism_macro_signal_result,
         )
     finally:
         con.close()
