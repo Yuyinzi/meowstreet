@@ -19,12 +19,106 @@ from app.tools import (
     ism_official_report,
     macro_growth_cycle,
     market_phase,
+    market_setup,
     us_rates_liquidity,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
 METHOD_PATH = ROOT / "data" / "local_system" / "synthesis" / "method.v1.json"
+
+
+def _load_market_phase_for_setup():
+    try:
+        con = benchmark_market_data.connect()
+    except (ValueError, TypeError, RuntimeError):
+        logging.warning(
+            "benchmark market data connect failed for market setup", exc_info=True
+        )
+        return None
+    try:
+        return market_phase.build_dashboard_payload(
+            lambda benchmark_id: benchmark_market_data.load_price_rows(
+                con, benchmark_id
+            )
+        )
+    except (ValueError, TypeError, RuntimeError):
+        logging.warning("market phase load failed for market setup", exc_info=True)
+        return None
+    finally:
+        con.close()
+
+
+def _load_rates_liquidity_for_setup(con):
+    try:
+        latest_points = us_rates_liquidity_db.load_latest_points(con)
+        if not latest_points:
+            return None
+        latest_macro = us_rates_liquidity_db.load_latest_macro_indicator_points(con)
+        credit_rate_points = us_rates_liquidity_db.load_rate_points_for_series(
+            con, ["treasury_10y"]
+        )
+        credit_macro_points = (
+            us_rates_liquidity_db.load_macro_indicator_points_for_series(
+                con,
+                ["aaa_corporate_yield", "bbb_corporate_yield", "ccc_corporate_yield"],
+            )
+        )
+        return us_rates_liquidity.build_dashboard_payload(
+            us_rates_liquidity_db.load_rate_series(con),
+            latest_points,
+            latest_macro,
+            credit_rate_points=credit_rate_points,
+            credit_macro_points=credit_macro_points,
+            credit_macro_series_points=credit_macro_points,
+        )
+    except (ValueError, TypeError, RuntimeError):
+        logging.warning("rates liquidity load failed for market setup", exc_info=True)
+        return None
+
+
+def _load_ism_industry_analysis_for_setup(con, latest_ism_report, ism_at_a_glance):
+    if not latest_ism_report:
+        return None
+    report_id = latest_ism_report["report_id"]
+    try:
+        signals = growth_cycle.load_ism_report_industry_signals(con, report_id)
+        coverage = growth_cycle.load_ism_report_industry_signal_coverage(con, report_id)
+        payload = ism_industry_analysis.build_ism_industry_analysis(
+            latest_ism_report, signals, coverage, ism_at_a_glance, []
+        )
+        if payload.get("industries"):
+            recent_reports = growth_cycle.load_recent_ism_report_snapshots(con, limit=6)
+            report_ids = [r["report_id"] for r in recent_reports]
+            hist_signals = growth_cycle.load_ism_report_industry_signals_for_reports(
+                con, report_ids
+            )
+            hist_coverage = (
+                growth_cycle.load_ism_report_industry_signal_coverage_for_reports(
+                    con, report_ids
+                )
+            )
+            history = ism_industry_analysis.build_ism_industry_history(
+                recent_reports, hist_signals, hist_coverage, []
+            )
+            for ind in payload["industries"]:
+                ind_history = history.get(ind["industry"], {})
+                ind["trend"] = ind_history.get("trend", [])
+                ind["trend_summary"] = ind_history.get(
+                    "trend_summary",
+                    {
+                        "latest_score_change": None,
+                        "positive_month_streak": 0,
+                        "negative_month_streak": 0,
+                        "broad_confirmation_streak": 0,
+                        "eligible_month_count": 0,
+                        "requested_month_count": 0,
+                    },
+                )
+        return payload
+    except (ValueError, TypeError, RuntimeError):
+        return None
+
 
 ISM_MANUFACTURING_SERIES_IDS = [
     "ism_manufacturing_pmi",
@@ -370,7 +464,7 @@ def macro_dashboard_growth_cycle():
                     },
                     "evidence": [],
                 }
-        return macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        growth_cycle_payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
             dashboard,
             next_fomc_meeting=next_fomc_meeting,
             fomc_latest_tone=fomc_latest_tone,
@@ -378,6 +472,37 @@ def macro_dashboard_growth_cycle():
             ism_at_a_glance=ism_at_a_glance,
             ism_macro_signal=ism_macro_signal_result,
         )
+        market_phase_payload = _load_market_phase_for_setup()
+        rates_liquidity_payload = _load_rates_liquidity_for_setup(con)
+        growth_cycle_data = growth_cycle_payload.get("growth_cycle", {})
+        fomc_tone_headline = macro_growth_cycle.build_fomc_tone_headline(
+            fomc_latest_tone
+        )
+        m2_headline = macro_growth_cycle.build_m2_money_supply_headline(
+            growth_cycle_data
+        )
+        inflation_context = macro_growth_cycle.build_inflation_context_headline(
+            growth_cycle_data
+        )
+        fed_balance_sheet = macro_growth_cycle.build_fed_balance_sheet_headline(
+            growth_cycle_data
+        )
+        growth_cycle_bias_evidence = growth_cycle_data.get("growth_cycle_bias_evidence")
+        ism_industry_analysis_payload = _load_ism_industry_analysis_for_setup(
+            con, ism_reports[-1] if ism_reports else None, ism_at_a_glance
+        )
+        payload_market_setup = market_setup.build_market_setup(
+            market_phase_payload=market_phase_payload,
+            ism_macro_signal=ism_macro_signal_result,
+            growth_cycle_bias_evidence=growth_cycle_bias_evidence,
+            rates_liquidity_payload=rates_liquidity_payload,
+            fomc_tone=fomc_tone_headline,
+            m2_headline=m2_headline,
+            inflation_context=inflation_context,
+            fed_balance_sheet=fed_balance_sheet,
+            ism_industry_analysis=ism_industry_analysis_payload,
+        )
+        return {**growth_cycle_payload, "market_setup": payload_market_setup}
     finally:
         con.close()
 

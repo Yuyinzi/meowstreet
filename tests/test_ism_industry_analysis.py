@@ -1177,6 +1177,7 @@ def test_build_history_apparel_negative_in_both_months():
         assert point["overall_direction"] == "contraction"
         assert point["new_orders"]["status"] == "negative"
         assert point["production"]["status"] == "negative"
+    assert apparel["trend_summary"]["negative_month_streak"] == 2
 
 
 def test_build_history_excludes_evidence_text():
@@ -1209,6 +1210,7 @@ def test_build_history_trend_summary():
     assert ts["requested_month_count"] == 2
     assert ts["latest_positive_confirmation_count"] == 2
     assert ts["positive_month_streak"] >= 1
+    assert ts["negative_month_streak"] == 0
     assert ts["broad_confirmation_streak"] == 0
 
 
@@ -1238,6 +1240,57 @@ def test_build_trend_summary_counts_consecutive_broad_confirmation():
 
     assert result["broad_confirmation_streak"] == 2
     assert result["latest_positive_confirmation_count"] == 3
+
+
+def test_build_trend_summary_counts_consecutive_contraction():
+    points = [
+        {
+            "period": "2026-04-01",
+            "score": 42.0,
+            "overall_direction": "contraction",
+            "positive_confirmation_count": 0,
+        },
+        {
+            "period": "2026-05-01",
+            "score": 40.0,
+            "overall_direction": "contraction",
+            "positive_confirmation_count": 0,
+        },
+        {
+            "period": "2026-06-01",
+            "score": 38.0,
+            "overall_direction": "contraction",
+            "positive_confirmation_count": 0,
+        },
+    ]
+
+    result = ism_industry_analysis._build_trend_summary(points)
+
+    assert result["negative_month_streak"] == 3
+    assert result["positive_month_streak"] == 0
+    assert result["eligible_month_count"] == 3
+
+
+def test_build_trend_summary_stops_contraction_streak_at_gap():
+    points = [
+        {
+            "period": "2026-04-01",
+            "score": 42.0,
+            "overall_direction": "contraction",
+            "positive_confirmation_count": 0,
+        },
+        {
+            "period": "2026-06-01",
+            "score": 40.0,
+            "overall_direction": "contraction",
+            "positive_confirmation_count": 0,
+        },
+    ]
+
+    result = ism_industry_analysis._build_trend_summary(points)
+
+    assert result["negative_month_streak"] == 1
+    assert result["positive_month_streak"] == 0
 
 
 def test_build_trend_summary_stops_broad_streak_across_missing_month():

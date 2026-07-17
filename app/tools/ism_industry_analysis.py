@@ -660,6 +660,7 @@ def _build_trend_summary(trend_points):
         return {
             "latest_score_change": None,
             "positive_month_streak": 0,
+            "negative_month_streak": 0,
             "broad_confirmation_streak": 0,
             "latest_positive_confirmation_count": 0,
             "eligible_month_count": 0,
@@ -688,6 +689,20 @@ def _build_trend_summary(trend_points):
         streak += 1
         later_period = period
 
+    neg_streak = 0
+    later_period = None
+    for point in reversed(trend_points):
+        if (
+            point["overall_direction"] not in ("contraction", "decrease", "lower")
+            or point.get("score") is None
+        ):
+            break
+        period = point.get("period")
+        if later_period and not _report_months_are_adjacent(period, later_period):
+            break
+        neg_streak += 1
+        later_period = period
+
     broad_confirmation_streak = 0
     later_period = None
     for point in reversed(trend_points):
@@ -708,6 +723,7 @@ def _build_trend_summary(trend_points):
     return {
         "latest_score_change": latest_score_change,
         "positive_month_streak": streak,
+        "negative_month_streak": neg_streak,
         "broad_confirmation_streak": broad_confirmation_streak,
         "latest_positive_confirmation_count": latest_confirmed,
         "eligible_month_count": eligible,

@@ -186,7 +186,7 @@
             <div><span>${bilingualTitle("GDP YoY")}</span><strong>${escapeHtml(fmtPercent(gdpYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
             <div><span>${bilingualTitle("Average 10Y Correlation")}</span><strong>${escapeHtml(fmtCorrelationPercent(latest.average_10y_correlation))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag average</small></div>
             <div><span>${bilingualTitle("Same Direction")}</span><strong>${escapeHtml(fmtPercent(payload.same_direction_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B</small></div>
-            <div><span>${bilingualTitle("Method Coverage")}</span><strong>${escapeHtml(fmtPercent(payload.method_explainable_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B + C</small></div>
+            <div><span>${bilingualTitle("Scenario Coverage")}</span><strong>${escapeHtml(fmtPercent(payload.method_explainable_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B + C</small></div>
             <div><span>${bilingualTitle("Current Case")}</span><strong>${escapeHtml(latest.quadnomial_current_plain_label || latest.quadnomial_current_case)}</strong><small class="metric-context">Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}</small></div>
             <div><span>${bilingualTitle("Signal usability")}</span><strong class="signal-status ${signal.className}" title="${escapeHtml(payload.relationship_signal_usability)}">${escapeHtml(signal.label)}</strong></div>
             <div><span>${bilingualTitle("Portfolio Bias")}</span><strong class="signal-status ${portfolioBias.className}" title="${escapeHtml(payload.portfolio_bias_status)}">${escapeHtml(portfolioBias.label)}</strong></div>
@@ -202,7 +202,7 @@
               <li>Usability is strong when the primary-lag average 10Y correlation is at least 40% and the same-direction rate is at least 60%. It is caution when correlation is at least 25% and same-direction rate is at least 55%; below those levels, the GDP relationship is weak.</li>
               <li>The confidence badge uses the same evidence: high when both strong thresholds are met, medium when only the caution thresholds are met, and low when the relationship is below those levels or lacks enough data.</li>
               <li>Quadnomial distribution defines A as index down/GDP down, B as index up/GDP up, C as index down/GDP up, and D as index up/GDP down.</li>
-              <li>Method coverage combines A, B, and C for the primary 6M lag: same-direction GDP confirmation plus the profit-taking case where GDP rises but the index falls. It is not used as relationship confidence.</li>
+              <li>Scenario coverage combines A, B, and C for the primary 6M lag: same-direction GDP confirmation plus the profit-taking case where GDP rises but the index falls. It is not used as relationship confidence.</li>
             </ul>
           </section>
           <div class="relationship-chart-grid">
@@ -1075,14 +1075,14 @@
       <div class="relationship-chart">
         <div class="relationship-chart-head">
           <h3>${bilingualTitle("Lag comparison")}</h3>
-          <span>${bilingualLabel("Method primary")} lag</span>
+          <span>${bilingualLabel("Primary lag")}</span>
         </div>
         <div class="lag-table">
           ${relationship.lag_correlations.map((lag) => `
             <div class="lag-row ${lag.method_primary ? "lag-row-primary" : ""}">
               <span>${escapeHtml(lag.label)}</span>
               <strong>${escapeHtml(fmtCorrelationPercent(lag.value))}</strong>
-              ${lag.method_primary ? '<em class="lag-primary-pill">Method primary</em>' : "<em></em>"}
+              ${lag.method_primary ? '<em class="lag-primary-pill">Primary</em>' : "<em></em>"}
             </div>
           `).join("")}
         </div>
@@ -1252,7 +1252,7 @@
     "Avg 10Y corr": "10年平均相关性",
     "Average 10Y Correlation": "10年平均相关性",
     "Same Direction": "同向率",
-    "Method Coverage": "课程覆盖",
+    "Scenario Coverage": "情景覆盖率",
     "Current Case": "当前案例",
     "confidence": "置信度",
     "High": "高",
@@ -1269,8 +1269,8 @@
     "long bias": "多头偏向",
     "defensive": "防御性",
     "requires GDP forecast": "需要GDP预测",
-    "Method primary lag": "课程主要滞后",
-    "Method primary": "课程主要滞后",
+    "Primary lag": "主要滞后期",
+    "Primary": "主要",
     // Market Phase
     "Drawdown": "回撤",
     "Through": "截至",
@@ -1388,6 +1388,8 @@
     "GDP Expectations": "GDP预期",
     "Pending Inputs": "待输入",
     "Expected Direction": "预期方向",
+    "ISM-Implied Direction": "ISM隐含方向",
+    "ISM Outlook": "ISM展望",
     "Required Inputs": "所需输入",
     "Supporting Context": "辅助背景",
     "Not Ready": "未就绪",
@@ -1463,10 +1465,18 @@
     "Consumer Indicators": "消费指标",
     "Available": "可用",
     "Unavailable": "不可用",
+    "Not Loaded": "未加载",
     "Supports Growth": "支持增长",
+    "Growth Slowing": "增长放缓",
+    "Supports Contraction": "支持收缩",
+    "Contraction Easing": "收缩缓解",
+    "Turning Supportive": "转向支持",
+    "Slowing": "放缓",
+    "Improving": "改善",
+    "Turning Up": "转向上行",
     "Evidence": "证据",
-    // ISM Policy Context
-    "ISM Policy Context": "ISM政策背景",
+    // ISM Policy Pressure
+    "Policy Pressure": "政策压力",
     "Growth Pressure": "增长压力",
     "Inflation Pressure": "通胀压力",
     "Supply Pressure": "供应压力",
@@ -1475,7 +1485,10 @@
     "Less Easing Pressure": "宽松减弱压力",
     // Bias Evidence
     "Bias Evidence": "偏向证据",
+    "Macro Portfolio Bias": "宏观组合偏向",
     "ISM Contribution": "ISM贡献",
+    "Confirmation Status": "确认状态",
+    "Partial": "部分确认",
     "Long": "做多",
     "Short": "做空",
     "Manufacturing": "制造业",
@@ -1754,6 +1767,179 @@
       .join("");
   }
 
+  function setupStateLabel(state) {
+    return titleCaseToken(state || "unavailable");
+  }
+
+  function setupPostureLabel(posture) {
+    return titleCaseToken(posture || "neutral");
+  }
+
+  function renderMarketSetupEvidenceLink(link) {
+    return `<span class="market-setup-evidence-link" data-evidence-link="${escapeHtml(link)}">${escapeHtml(titleCaseToken(link))}</span>`;
+  }
+
+  function renderMarketSetup() {
+    const section = $("marketSetup");
+    if (!section) return;
+    const setup = state.growthCycle?.market_setup;
+    if (!setup || setup.status === "unavailable") {
+      section.innerHTML = `
+        <div class="market-setup-head">
+          <div>
+            <h2>Market Setup</h2>
+            <p class="subtitle">Connected view of market environment, growth path, financial conditions, and policy response.</p>
+          </div>
+        </div>
+        <div class="market-setup-empty">Market setup data is not yet available.</div>
+      `;
+      return;
+    }
+
+    const me = setup.market_environment || {};
+    const eg = setup.expected_growth || {};
+    const fc = setup.financial_conditions || {};
+    const pr = setup.policy_response || {};
+    const posture = setup.portfolio_posture || "neutral";
+    const setupType = setup.setup_type || "insufficient_data";
+    const implications = setup.trade_implications || [];
+    const agreements = setup.agreements || [];
+    const conflicts = setup.conflicts || [];
+    const pending = setup.pending_confirmations || [];
+    const missing = setup.missing_inputs || [];
+    const evidenceLinks = [
+      ...(me.evidence_links || []),
+      ...(eg.evidence_links || []),
+      ...(fc.evidence_links || []),
+      ...(pr.evidence_links || []),
+    ];
+    const uniqueLinks = [...new Set(evidenceLinks)];
+
+    const allReasons = [
+      ...(fc.reasons || []),
+      ...(pr.reasons || []),
+    ];
+
+    section.innerHTML = `
+      <div class="market-setup-head">
+        <div>
+          <h2>Market Setup</h2>
+          <p class="subtitle">Connected view of market environment, growth path, financial conditions, and policy response.</p>
+        </div>
+        <span class="setup-type-badge setup-${escapeHtml(setupType)}">${escapeHtml(titleCaseToken(setupType))}</span>
+      </div>
+      <div class="market-setup-grid">
+        <div class="market-setup-card">
+          <span class="market-setup-card-label">${bilingualLabel("Market Environment")}</span>
+          <span class="market-setup-card-value">${escapeHtml(setupStateLabel(me.state))}</span>
+          <span class="market-setup-card-reason">${escapeHtml(me.reason || "")}</span>
+          <span class="market-setup-posture-badge posture-${escapeHtml(posture)}">${escapeHtml(posture)}</span>
+        </div>
+        <div class="market-setup-card">
+          <span class="market-setup-card-label">${bilingualLabel("Expected Growth")}</span>
+          <span class="market-setup-card-value">${escapeHtml(setupStateLabel(eg.state))}</span>
+          <span class="market-setup-card-reason">GDP direction: ${escapeHtml(setupStateLabel(eg.expected_gdp_direction))}</span>
+        </div>
+        <div class="market-setup-card">
+          <span class="market-setup-card-label">${bilingualLabel("Financial Conditions")}</span>
+          <span class="market-setup-card-value">${escapeHtml(setupStateLabel(fc.state))}</span>
+          ${fc.reasons ? fc.reasons.slice(0, 2).map((r) => `<span class="market-setup-card-reason">${escapeHtml(r)}</span>`).join("") : ""}
+        </div>
+        <div class="market-setup-card">
+          <span class="market-setup-card-label">${bilingualLabel("Policy Response")}</span>
+          <span class="market-setup-card-value">${escapeHtml(setupStateLabel(pr.state))}</span>
+          ${(pr.details?.fomc_tone) ? `<span class="market-setup-policy-detail">FOMC: ${escapeHtml(pr.details.fomc_tone)} · M2: ${escapeHtml(pr.details.m2_status)}</span>` : ""}
+          ${pr.reasons ? pr.reasons.slice(0, 1).map((r) => `<span class="market-setup-card-reason">${escapeHtml(r)}</span>`).join("") : ""}
+        </div>
+      </div>
+
+      ${implications.length ? `
+      <div class="market-setup-implications">
+        <h3>${bilingualLabel("Trade Implication")}</h3>
+        <ul>
+          ${implications.map((imp) => `<li>${escapeHtml(imp)}</li>`).join("")}
+        </ul>
+      </div>` : ""}
+
+      ${allReasons.length ? `
+      <div class="market-setup-evidence">
+        <h3>${bilingualLabel("Why This Setup")}</h3>
+        <ul class="market-setup-evidence-list">
+          ${allReasons.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}
+        </ul>
+      </div>` : ""}
+
+      ${agreements.length ? `
+      <div class="market-setup-evidence">
+        <h3>${bilingualLabel("Agreements")}</h3>
+        <ul class="market-setup-evidence-list">
+          ${agreements.map((a) => `<li class="market-setup-agreement">${escapeHtml(a)}</li>`).join("")}
+        </ul>
+      </div>` : ""}
+
+      ${conflicts.length ? `
+      <div class="market-setup-evidence">
+        <h3>${bilingualLabel("Conflicts")}</h3>
+        <ul class="market-setup-evidence-list">
+          ${conflicts.map((c) => `<li class="market-setup-conflict">${escapeHtml(c)}</li>`).join("")}
+        </ul>
+      </div>` : ""}
+
+      ${(setup.idea_generation?.industry_long_clues?.length || setup.idea_generation?.industry_short_clues?.length) ? `
+      <div class="market-setup-evidence">
+        <h3>${bilingualLabel("Industry Research Clues")}</h3>
+        <ul class="market-setup-evidence-list">
+          ${setup.idea_generation.industry_long_clues?.length ? `
+            <li><strong>${bilingualLabel("Long clues")}:</strong> ${escapeHtml(setup.idea_generation.industry_long_clues.join(", "))}</li>
+          ` : ""}
+          ${setup.idea_generation.industry_short_clues?.length ? `
+            <li><strong>${bilingualLabel("Short clues")}:</strong> ${escapeHtml(setup.idea_generation.industry_short_clues.join(", "))}</li>
+          ` : ""}
+        </ul>
+        <p style="font-size:0.72rem;color:#8B7E74;margin:4px 0 0;">${escapeHtml(setup.idea_generation.warning || "")}</p>
+      </div>` : ""}
+
+      ${uniqueLinks.length ? `
+      <div class="market-setup-evidence">
+        <h3>${bilingualLabel("What to Inspect")}</h3>
+        <ul class="market-setup-evidence-list">
+          ${uniqueLinks.map((link) => `<li>${renderMarketSetupEvidenceLink(link)}</li>`).join("")}
+        </ul>
+      </div>` : ""}
+
+      ${pending.length ? `
+      <div class="market-setup-pending">
+        <strong>${bilingualLabel("Pending Confirmation")}:</strong> ${escapeHtml(pending.join(" · "))}
+      </div>` : ""}
+
+      ${missing.length ? `
+      <div class="market-setup-pending">
+        <strong>${bilingualLabel("Missing Inputs")}:</strong> ${escapeHtml(missing.join(" · "))}
+      </div>` : ""}
+    `;
+
+    section.querySelectorAll("[data-evidence-link]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const link = el.dataset.evidenceLink;
+        const TARGET_MAP = {
+          market_phase: "marketGrid",
+          ism_manufacturing: "growthCycle",
+          yield_curve: "usRatesLiquidity",
+          real_rate_risk: "usRatesLiquidity",
+          credit_conditions: "usRatesLiquidity",
+          vix: "usRatesLiquidity",
+          fomc_policy: "growthCycle",
+          m2_money_supply: "growthCycle",
+        };
+        const targetId = TARGET_MAP[link] || "growthCycle";
+        const target = $(targetId);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth" });
+        }
+      });
+    });
+  }
+
   function renderGrowthCycle() {
     const section = $("growthCycle");
     if (!section) return;
@@ -1787,6 +1973,7 @@
         </div>
       ` : biasHtml ? `<div class="rates-detail gdp-detail">${biasHtml}</div>` : ""}
     `;
+    renderMarketSetup();
     section.querySelectorAll("[data-growth-cycle-detail-id]").forEach((button) => {
       button.addEventListener("click", () => {
         state.selectedGrowthCycleDetailId = state.selectedGrowthCycleDetailId === button.dataset.growthCycleDetailId
@@ -2991,6 +3178,23 @@
     });
   }
 
+  function renderIsmPolicyPressure(context) {
+    if (!context) return "";
+    return `
+      <div class="ism-policy-pressure">
+        <div class="ism-policy-pressure-head">
+          <span>${bilingualTitle("Policy Pressure")}</span>
+        </div>
+        <div class="ism-policy-pressure-grid">
+          <div class="m2-level-row"><span>${bilingualLabel("Combined Pressure")}</span><strong>${bilingualLabel(formatPressureValue(context.combined_pressure))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Growth Pressure")}</span><strong>${bilingualLabel(formatPressureValue(context.growth_pressure))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Inflation Pressure")}</span><strong>${bilingualLabel(formatPressureValue(context.inflation_pressure))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Supply Pressure")}</span><strong>${bilingualLabel(formatPressureValue(context.supply_pressure))}</strong></div>
+        </div>
+      </div>
+    `;
+  }
+
   function renderIsmManufacturingCard(card) {
     const segments = card.segments || {};
     const bc = segments.business_cycle || {};
@@ -3022,6 +3226,7 @@
             ${renderIsmIndustryBreadthSegment(ib)}
           </div>
         </div>
+        ${renderIsmPolicyPressure(card.policy_context)}
       </button>
     `;
   }
@@ -3106,9 +3311,9 @@
         </div>
         <div class="m2-metric-band">
           <div>
-            <span>${bilingualLabel("Expected Direction")}</span>
-            <strong>${bilingualLabel("Not Ready")}</strong>
-            <small>Wait for leading indicators<br><span>等待领先指标</span></small>
+            <span>${bilingualLabel(card.expected_direction ? "ISM-Implied Direction" : "Expected Direction")}</span>
+            <strong>${bilingualLabel(card.expected_direction ? formatGdpDirection(card.expected_direction) : "Not Ready")}</strong>
+            <small>${card.expected_direction ? "Manufacturing leading signal" : "Wait for ISM Manufacturing"}<br><span>${card.expected_direction ? "制造业领先信号" : "等待ISM制造业数据"}</span></small>
           </div>
         </div>
         ${components ? `<div class="gdp-components">${components}</div>` : ""}
@@ -3214,9 +3419,8 @@
   function renderFomcToneCard(card) {
     const tone = card.latest_tone || {};
     const hasTone = tone.marker_tone != null;
-    const hasIsmContext = card.ism_policy_context != null;
     const cardLabel = card.label || "FOMC Policy Read";
-    if (!hasTone && !hasIsmContext) {
+    if (!hasTone) {
       return `
         <article class="m2-card m2-card-missing fomc-card">
           <div class="m2-card-head">
@@ -3226,22 +3430,21 @@
         </article>
       `;
     }
-    let toneHtml = "";
-    if (hasTone) {
-      const toneLabel = formatToneValue(tone.marker_tone);
-      const toneBadge = toneBadgeClass(tone.marker_tone);
-      const dateStr = tone.end_date && tone.end_date !== tone.start_date
-        ? `${tone.start_date} \u2013 ${tone.end_date}`
-        : tone.start_date;
-      const minutesAvailable = tone.minutes_status === "available";
-      const minutesRows = minutesAvailable
-        ? `
-            <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel(formatMinutesConfirmation(tone.minutes_confirmation))}</strong></div>
-            <div class="m2-level-row"><span>${bilingualLabel("Risk Focus")}</span><strong>${bilingualLabel(formatRiskFocus(tone.risk_focus))}</strong></div>
-            <div class="m2-level-row"><span>${bilingualLabel("Policy Conviction")}</span><strong>${bilingualLabel(formatPolicyConviction(tone.policy_conviction))}</strong></div>`
-        : `
-            <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel("Pending")}</strong></div>`;
-      toneHtml = `
+    const toneLabel = formatToneValue(tone.marker_tone);
+    const toneBadge = toneBadgeClass(tone.marker_tone);
+    const dateStr = tone.end_date && tone.end_date !== tone.start_date
+      ? `${tone.start_date} \u2013 ${tone.end_date}`
+      : tone.start_date;
+    const minutesAvailable = tone.minutes_status === "available";
+    const minutesRows = minutesAvailable
+      ? `
+          <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel(formatMinutesConfirmation(tone.minutes_confirmation))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Risk Focus")}</span><strong>${bilingualLabel(formatRiskFocus(tone.risk_focus))}</strong></div>
+          <div class="m2-level-row"><span>${bilingualLabel("Policy Conviction")}</span><strong>${bilingualLabel(formatPolicyConviction(tone.policy_conviction))}</strong></div>`
+      : `
+          <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel("Pending")}</strong></div>`;
+    return `
+      <article class="m2-card m2-card-context fomc-card fomc-tone-card">
         <div class="m2-card-head">
           <div>
             <span>${bilingualTitle(cardLabel)}</span>
@@ -3257,27 +3460,6 @@
           <div class="m2-level-row"><span>${bilingualLabel("Change")}</span><strong>${bilingualLabel(formatToneChange(tone.tone_change))}</strong></div>
           ${minutesRows}
         </div>
-      `;
-    }
-    let ismHtml = "";
-    if (hasIsmContext) {
-      const ctx = card.ism_policy_context;
-      ismHtml = `
-        <div class="ism-policy-context">
-          <div class="ism-policy-context-head">
-            <span>${bilingualTitle("ISM Policy Context")}</span>
-          </div>
-          <div class="m2-level-row"><span>${bilingualLabel("Combined Pressure")}</span><strong>${bilingualLabel(formatPressureValue(ctx.combined_pressure))}</strong></div>
-          <div class="m2-level-row"><span>${bilingualLabel("Growth Pressure")}</span><strong>${bilingualLabel(formatPressureValue(ctx.growth_pressure))}</strong></div>
-          <div class="m2-level-row"><span>${bilingualLabel("Inflation Pressure")}</span><strong>${bilingualLabel(formatPressureValue(ctx.inflation_pressure))}</strong></div>
-          <div class="m2-level-row"><span>${bilingualLabel("Supply Pressure")}</span><strong>${bilingualLabel(formatPressureValue(ctx.supply_pressure))}</strong></div>
-        </div>
-      `;
-    }
-    return `
-      <article class="m2-card m2-card-context fomc-card fomc-tone-card">
-        ${toneHtml}
-        ${ismHtml}
       </article>
     `;
   }
@@ -3437,6 +3619,9 @@
     if (status === "pending") {
       return `<strong class="inflation-status-badge component-status-pending">${bilingualLabel("Pending")}</strong>`;
     }
+    if (status === "not_loaded") {
+      return `<strong class="inflation-status-badge component-status-pending">${bilingualLabel("Not Loaded")}</strong>`;
+    }
     return `<strong class="inflation-status-badge component-status-unavailable">${bilingualLabel("Unavailable")}</strong>`;
   }
 
@@ -3446,6 +3631,24 @@
       supports_long: "Supports Long",
       supports_short: "Supports Short",
       conflicting: "Conflicting",
+      mixed: "Mixed",
+      growth_caution: "Growth Slowing",
+      supports_contraction: "Supports Contraction",
+      contraction_easing: "Contraction Easing",
+      turning_supportive: "Turning Supportive",
+    };
+    return map[direction] || titleCaseToken(direction);
+  }
+
+  function formatGdpDirection(direction) {
+    const map = {
+      rising: "Rising",
+      slowing: "Slowing",
+      falling: "Falling",
+      improving: "Improving",
+      turning_up: "Turning Up",
+      stable: "Stable",
+      mixed: "Mixed",
     };
     return map[direction] || titleCaseToken(direction);
   }
@@ -3486,12 +3689,15 @@
     return `
       <div class="bias-evidence-strip">
         <div class="bias-evidence-head">
-          <span>${bilingualLabel("Bias Evidence")}</span>
+          <span>${bilingualLabel("Macro Portfolio Bias")}</span>
           <strong class="${isAvailable ? "bias-available" : "bias-pending"}">${isAvailable ? bilingualLabel(formatBiasValue(evidence.bias)) : bilingualLabel("Pending Inputs")}</strong>
         </div>
         <div class="bias-evidence-body">
           ${evidence.ism_contribution ? `
             <div class="m2-level-row"><span>${bilingualLabel("ISM Contribution")}</span><strong>${bilingualLabel(formatBiasComponentValue(evidence.ism_contribution))}</strong></div>
+          ` : ""}
+          ${evidence.confirmation_status ? `
+            <div class="m2-level-row"><span>${bilingualLabel("Confirmation Status")}</span><strong>${bilingualLabel(titleCaseToken(evidence.confirmation_status))}</strong></div>
           ` : ""}
           ${componentRows ? `<div class="bias-components">${componentRows}</div>` : ""}
           ${reasonItems ? `<ul class="bias-reasons">${reasonItems}</ul>` : ""}
@@ -4416,6 +4622,7 @@
       componentStatusBadge,
       formatComponentDirection,
       formatComponentLabel,
+      renderIsmPolicyPressure,
       renderBiasEvidenceStrip,
       renderGdpExpectationsCard,
       renderFomcToneCard,
