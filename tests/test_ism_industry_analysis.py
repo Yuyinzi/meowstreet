@@ -1065,3 +1065,306 @@ def test_build_analysis_idempotent():
         ism_industry_analysis.build_ism_industry_analysis(*args), sort_keys=True
     )
     assert first == second
+
+
+# ── Step 7.4: industry history ────────────────────────────────────────────────
+
+
+def _may_2026_reports_and_data():
+    may_signals = _june_2026_signals()
+    for s in may_signals:
+        s["report_id"] = "ism_manufacturing_2026_05"
+        s["report_month"] = "2026-05-01"
+    may_coverage = _june_2026_coverage()
+    for c in may_coverage:
+        c["report_id"] = "ism_manufacturing_2026_05"
+        c["report_month"] = "2026-05-01"
+    return may_signals, may_coverage
+
+
+def _history_reports():
+    return [
+        {
+            "report_id": "ism_manufacturing_2026_05",
+            "report_month": "2026-05-01",
+        },
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+        },
+    ]
+
+
+def _history_signals():
+    may_signals, _ = _may_2026_reports_and_data()
+    june_signals = _june_2026_signals()
+    for s in june_signals:
+        s["report_id"] = "ism_manufacturing_2026_06"
+        s["report_month"] = "2026-06-01"
+
+    return may_signals + june_signals
+
+
+def _history_coverage():
+    _, may_coverage = _may_2026_reports_and_data()
+    june_coverage = _june_2026_coverage()
+    for c in june_coverage:
+        c["report_id"] = "ism_manufacturing_2026_06"
+        c["report_month"] = "2026-06-01"
+    return may_coverage + june_coverage
+
+
+def test_build_history_returns_printing_points():
+    result = ism_industry_analysis.build_ism_industry_history(
+        _history_reports(),
+        _history_signals(),
+        _history_coverage(),
+        [],
+    )
+
+    printing = result.get("Printing & Related Support Activities")
+    assert printing is not None
+    assert len(printing["trend"]) == 2
+    assert printing["trend"][0]["period"] == "2026-05-01"
+    assert printing["trend"][1]["period"] == "2026-06-01"
+
+
+def test_build_history_printing_both_months_have_scores():
+    result = ism_industry_analysis.build_ism_industry_history(
+        _history_reports(),
+        _history_signals(),
+        _history_coverage(),
+        [],
+    )
+
+    printing = result["Printing & Related Support Activities"]
+    may = printing["trend"][0]
+    june = printing["trend"][1]
+
+    assert may["overall_status"] == "positive"
+    assert june["overall_status"] == "positive"
+    assert may["overall_rank"] == 1
+    assert june["overall_rank"] == 1
+    assert may["new_orders"]["status"] == "positive"
+    assert june["new_orders"]["status"] == "positive"
+    assert may["score"] is not None
+    assert june["score"] is not None
+
+
+def test_build_history_includes_positive_confirmation_count():
+    result = ism_industry_analysis.build_ism_industry_history(
+        _history_reports(),
+        _history_signals(),
+        _history_coverage(),
+        [],
+    )
+
+    printing = result["Printing & Related Support Activities"]
+    for point in printing["trend"]:
+        assert 0 <= point["positive_confirmation_count"] <= 3
+
+
+def test_build_history_apparel_negative_in_both_months():
+    result = ism_industry_analysis.build_ism_industry_history(
+        _history_reports(),
+        _history_signals(),
+        _history_coverage(),
+        [],
+    )
+
+    apparel = result["Apparel, Leather & Allied Products"]
+    for point in apparel["trend"]:
+        assert point["overall_direction"] == "contraction"
+        assert point["new_orders"]["status"] == "negative"
+        assert point["production"]["status"] == "negative"
+
+
+def test_build_history_excludes_evidence_text():
+    result = ism_industry_analysis.build_ism_industry_history(
+        _history_reports(),
+        _history_signals(),
+        _history_coverage(),
+        [],
+    )
+
+    printing = result["Printing & Related Support Activities"]
+    point = printing["trend"][0]
+    assert "evidence_text" not in point
+    assert "comments" not in point
+    assert "macro_context" not in point
+    assert "secondary_signals" not in point
+
+
+def test_build_history_trend_summary():
+    result = ism_industry_analysis.build_ism_industry_history(
+        _history_reports(),
+        _history_signals(),
+        _history_coverage(),
+        [],
+    )
+
+    printing = result["Printing & Related Support Activities"]
+    ts = printing["trend_summary"]
+    assert ts["eligible_month_count"] == 2
+    assert ts["requested_month_count"] == 2
+    assert ts["latest_positive_confirmation_count"] == 2
+    assert ts["positive_month_streak"] >= 1
+    assert ts["broad_confirmation_streak"] == 0
+
+
+def test_build_trend_summary_counts_consecutive_broad_confirmation():
+    points = [
+        {
+            "period": "2026-04-01",
+            "score": 70.0,
+            "overall_direction": "growth",
+            "positive_confirmation_count": 1,
+        },
+        {
+            "period": "2026-05-01",
+            "score": None,
+            "overall_direction": None,
+            "positive_confirmation_count": 3,
+        },
+        {
+            "period": "2026-06-01",
+            "score": 85.0,
+            "overall_direction": "growth",
+            "positive_confirmation_count": 3,
+        },
+    ]
+
+    result = ism_industry_analysis._build_trend_summary(points)
+
+    assert result["broad_confirmation_streak"] == 2
+    assert result["latest_positive_confirmation_count"] == 3
+
+
+def test_build_trend_summary_stops_broad_streak_across_missing_month():
+    points = [
+        {
+            "period": "2026-04-01",
+            "score": None,
+            "overall_direction": None,
+            "positive_confirmation_count": 3,
+        },
+        {
+            "period": "2026-06-01",
+            "score": 85.0,
+            "overall_direction": "growth",
+            "positive_confirmation_count": 3,
+        },
+    ]
+
+    result = ism_industry_analysis._build_trend_summary(points)
+
+    assert result["broad_confirmation_streak"] == 1
+
+
+def test_build_history_empty_reports_returns_empty():
+    result = ism_industry_analysis.build_ism_industry_history([], [], [], [])
+
+    assert result == {}
+
+
+def test_build_history_idempotent():
+    import json
+
+    args = (
+        _history_reports(),
+        _history_signals(),
+        _history_coverage(),
+        [],
+    )
+    first = json.dumps(
+        ism_industry_analysis.build_ism_industry_history(*args), sort_keys=True
+    )
+    second = json.dumps(
+        ism_industry_analysis.build_ism_industry_history(*args), sort_keys=True
+    )
+    assert first == second
+
+
+def test_build_history_only_includes_industries_from_latest_report():
+    result = ism_industry_analysis.build_ism_industry_history(
+        _history_reports(),
+        _history_signals(),
+        _history_coverage(),
+        [],
+    )
+
+    assert "Printing & Related Support Activities" in result
+    assert "Nonmetallic Mineral Products" in result
+
+
+def _history_partial_coverage_reports():
+    return [
+        {
+            "report_id": "ism_manufacturing_2026_05",
+            "report_month": "2026-05-01",
+        },
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+        },
+    ]
+
+
+def _history_partial_coverage_signals():
+    may_signals, _ = _may_2026_reports_and_data()
+    for s in may_signals:
+        s["report_id"] = "ism_manufacturing_2026_05"
+        s["report_month"] = "2026-05-01"
+    june_signals = _june_2026_signals()
+    for s in june_signals:
+        s["report_id"] = "ism_manufacturing_2026_06"
+        s["report_month"] = "2026-06-01"
+    return may_signals + june_signals
+
+
+def _history_partial_coverage():
+    _, may_coverage = _may_2026_reports_and_data()
+    for c in may_coverage:
+        c["report_id"] = "ism_manufacturing_2026_05"
+        c["report_month"] = "2026-05-01"
+    june_coverage = _june_2026_coverage()
+    for c in june_coverage:
+        c["report_id"] = "ism_manufacturing_2026_06"
+        c["report_month"] = "2026-06-01"
+    for c in june_coverage:
+        if c["signal_type"] == "backlog":
+            c["validation_status"] = "partial"
+    return may_coverage + june_coverage
+
+
+def test_build_history_partial_month_has_null_score():
+    result = ism_industry_analysis.build_ism_industry_history(
+        _history_partial_coverage_reports(),
+        _history_partial_coverage_signals(),
+        _history_partial_coverage(),
+        [],
+    )
+
+    printing = result["Printing & Related Support Activities"]
+    may = printing["trend"][0]
+    june = printing["trend"][1]
+
+    assert may["score"] is not None
+    assert may["score_coverage"] > 0
+    assert june["score"] is None
+    assert june["score_coverage"] == 80.0
+    assert june["new_orders"]["status"] is not None
+
+
+def test_build_history_eligible_count_matches_scored_months():
+    result = ism_industry_analysis.build_ism_industry_history(
+        _history_partial_coverage_reports(),
+        _history_partial_coverage_signals(),
+        _history_partial_coverage(),
+        [],
+    )
+
+    printing = result["Printing & Related Support Activities"]
+    ts = printing["trend_summary"]
+    assert ts["eligible_month_count"] == 1
+    assert ts["requested_month_count"] == 2

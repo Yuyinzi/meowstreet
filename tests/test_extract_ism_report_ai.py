@@ -229,6 +229,61 @@ def test_extract_snapshot_uses_checkpointed_extraction(tmp_path, monkeypatch):
     assert seen["source"]["source_url"] == "https://example.com/report.html"
 
 
+def test_extract_snapshot_facts_only_saves_dashboard_metrics(tmp_path, monkeypatch):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
+    source_url = "https://example.com/report.html"
+    growth_cycle.replace_ism_report_source_snapshot(
+        con,
+        {
+            "source_url": source_url,
+            "source_name": "prnewswire",
+            "source_hash": "abc123",
+            "fetched_at": "2026-07-15T10:00:00Z",
+            "raw_html": report_html(),
+            "parse_status": "prepared",
+            "parse_error": None,
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+        },
+    )
+    factual = {
+        key: value
+        for key, value in ism_ai_extraction_test_payload().items()
+        if key != "ai_summary"
+    }
+
+    async def fake_extract(*args, **kwargs):
+        return factual
+
+    monkeypatch.setattr(
+        extract_ism_report_ai,
+        "extract_or_load_factual_sections_async",
+        fake_extract,
+    )
+
+    extract_ism_report_ai.extract_snapshot(
+        con,
+        source_url,
+        object(),
+        model="fake-model",
+        facts_only=True,
+    )
+
+    points = us_rates_liquidity.load_macro_indicator_points(
+        con,
+        "ism_manufacturing_pmi",
+    )
+    rows = growth_cycle.load_ism_at_a_glance_rows(
+        con,
+        "ism_manufacturing_2026_06",
+    )
+
+    assert points[-1]["date"] == "2026-06-01"
+    assert points[-1]["value"] == 50.0
+    assert len(rows) == 11
+
+
 def test_extract_snapshot_rejects_llm_report_month_mismatch(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
     growth_cycle.init_db(con)

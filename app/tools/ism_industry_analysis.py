@@ -1,4 +1,5 @@
 import re
+from datetime import date
 
 from app.tools.macro_growth_cycle import ism_at_a_glance_tone
 
@@ -594,3 +595,180 @@ def build_ism_industry_analysis(
         "industries": industries,
     }
     return result
+
+
+def _monthly_industry_point(
+    industry_signals_for_month,
+    coverage_for_month,
+    industry,
+):
+    signals = [
+        s
+        for s in industry_signals_for_month
+        if normalize_industry(s["industry"]) == industry
+    ]
+    coverage = _group_coverage_by_key(coverage_for_month)
+    overall = _derive_overall_status(industry, signals, coverage)
+    core_signals = {}
+    for signal_type, pos_dir, neg_dir in CORE_SIGNAL_PAIRS:
+        core_signals[signal_type] = _derive_signal_status(
+            industry, signals, coverage, signal_type, pos_dir, neg_dir
+        )
+
+    for signal_type in ["new_orders", "production", "backlog"]:
+        cs = core_signals.get(signal_type, {})
+        cs["component_score"] = _round_score(_signal_component_score(cs))
+    overall["component_score"] = _round_score(_signal_component_score(overall))
+
+    sufficient = _report_has_sufficient_coverage(coverage)
+    if sufficient:
+        score, score_cov, _, _ = _build_industry_scores(overall, core_signals)
+    else:
+        _, score_cov, _, _ = _build_industry_scores(overall, core_signals)
+        score = None
+
+    confirmed = sum(
+        1
+        for st in ["new_orders", "production", "backlog"]
+        if core_signals.get(st, {}).get("status") == "positive"
+    )
+
+    return {
+        "score": _round_score(score),
+        "score_coverage": round(score_cov, 1) if score_cov else 0.0,
+        "overall_status": overall.get("status"),
+        "overall_rank": overall.get("rank"),
+        "overall_direction": overall.get("direction"),
+        "positive_confirmation_count": confirmed,
+        "new_orders": {
+            "status": core_signals.get("new_orders", {}).get("status"),
+            "rank": core_signals.get("new_orders", {}).get("rank"),
+        },
+        "production": {
+            "status": core_signals.get("production", {}).get("status"),
+            "rank": core_signals.get("production", {}).get("rank"),
+        },
+        "backlog": {
+            "status": core_signals.get("backlog", {}).get("status"),
+            "rank": core_signals.get("backlog", {}).get("rank"),
+        },
+    }
+
+
+def _build_trend_summary(trend_points):
+    if not trend_points:
+        return {
+            "latest_score_change": None,
+            "positive_month_streak": 0,
+            "broad_confirmation_streak": 0,
+            "latest_positive_confirmation_count": 0,
+            "eligible_month_count": 0,
+            "requested_month_count": 0,
+        }
+
+    latest_score = trend_points[-1]["score"]
+    prev_score = None
+    for point in reversed(trend_points[:-1]):
+        if point["score"] is not None:
+            prev_score = point["score"]
+            break
+
+    latest_score_change = None
+    if latest_score is not None and prev_score is not None:
+        latest_score_change = round(latest_score - prev_score, 1)
+
+    streak = 0
+    later_period = None
+    for point in reversed(trend_points):
+        if point["overall_direction"] != "growth" or point.get("score") is None:
+            break
+        period = point.get("period")
+        if later_period and not _report_months_are_adjacent(period, later_period):
+            break
+        streak += 1
+        later_period = period
+
+    broad_confirmation_streak = 0
+    later_period = None
+    for point in reversed(trend_points):
+        if point["positive_confirmation_count"] != 3:
+            break
+        period = point.get("period")
+        if later_period and not _report_months_are_adjacent(period, later_period):
+            break
+        broad_confirmation_streak += 1
+        later_period = period
+
+    latest_confirmed = (
+        trend_points[-1]["positive_confirmation_count"] if trend_points else 0
+    )
+
+    eligible = sum(1 for p in trend_points if p["score"] is not None)
+
+    return {
+        "latest_score_change": latest_score_change,
+        "positive_month_streak": streak,
+        "broad_confirmation_streak": broad_confirmation_streak,
+        "latest_positive_confirmation_count": latest_confirmed,
+        "eligible_month_count": eligible,
+        "requested_month_count": len(trend_points),
+    }
+
+
+def _report_months_are_adjacent(earlier, later):
+    if not earlier or not later:
+        return False
+    earlier_date = date.fromisoformat(earlier)
+    later_date = date.fromisoformat(later)
+    return (
+        later_date.year * 12
+        + later_date.month
+        - earlier_date.year * 12
+        - earlier_date.month
+        == 1
+    )
+
+
+def build_ism_industry_history(
+    reports,
+    industry_signals,
+    signal_coverage,
+    at_a_glance_rows,
+):
+    if not reports:
+        return {}
+
+    signals_by_report = {}
+    for signal in industry_signals:
+        signals_by_report.setdefault(signal["report_id"], []).append(signal)
+
+    coverage_by_report = {}
+    for cov in signal_coverage:
+        coverage_by_report.setdefault(cov["report_id"], []).append(cov)
+
+    report_months = {r["report_id"]: r["report_month"] for r in reports}
+
+    latest_industries = set()
+    latest_signals = signals_by_report.get(reports[-1]["report_id"], [])
+    for signal in latest_signals:
+        try:
+            latest_industries.add(normalize_industry(signal["industry"]))
+        except ValueError:
+            pass
+
+    industry_history = {}
+    for industry in latest_industries:
+        points = []
+        for report in reports:
+            rid = report["report_id"]
+            sigs = signals_by_report.get(rid, [])
+            covs = coverage_by_report.get(rid, [])
+            point = _monthly_industry_point(sigs, covs, industry)
+            point["period"] = report["report_month"]
+            points.append(point)
+        industry_history[industry] = {
+            "trend": points,
+            "trend_summary": _build_trend_summary(points),
+        }
+
+    return industry_history

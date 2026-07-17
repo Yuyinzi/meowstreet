@@ -1776,9 +1776,6 @@
   }
 
   async function loadGrowthCycleDetail(detailId) {
-    if (state.growthCycleDetailsById[detailId]) {
-      return state.growthCycleDetailsById[detailId];
-    }
     const response = await fetch(`/api/macro-dashboard/growth-cycle/${encodeURIComponent(detailId)}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
@@ -2162,11 +2159,15 @@
     body.innerHTML = `
       ${renderGrowthCycleRangeControl()}
       ${renderIsmOfficialReportSummary(payload.official_report_summary)}
-      <div class="relationship-chart-grid ism-detail-grid">
-        ${renderedCharts.join("")}
-      </div>
-      ${latestGroups.length ? `<div class="ism-detail-latest">
-        <h4>${bilingualLabel("Latest Values")}</h4>
+      <details class="ism-section-collapse"${renderedCharts.length ? "" : ""}>
+        <summary>${bilingualLabel("Charts & Heat Maps")}</summary>
+        <div class="relationship-chart-grid ism-detail-grid">
+          ${renderedCharts.join("")}
+        </div>
+      </details>
+      ${latestGroups.length ? `<details class="ism-section-collapse" open>
+        <summary>${bilingualLabel("Latest Values")}</summary>
+        <div class="ism-detail-latest ism-detail-latest-collapsible">
         ${latestGroups.map((group) => {
           if (group.industry_breadth || group.label === "Industry Breadth") {
             return renderIsmIndustryBreadthGroup(group);
@@ -2193,8 +2194,12 @@
             `}
           </div>
         `}).join("")}
-      </div>` : ""}
-      ${renderIsmIndustryAnalysisSection(industryAnalysis, selectedIndustryData)}
+        </div>
+      </details>` : ""}
+      <details class="ism-section-collapse" open>
+        <summary>${bilingualLabel("Industry Analysis (6 Month)")}</summary>
+        ${renderIsmIndustryAnalysisSection(industryAnalysis, selectedIndustryData)}
+      </details>
     `;
     bindGrowthCycleRangeControl(body);
     attachIsmOfficialSummaryHandlers(body);
@@ -2459,22 +2464,54 @@
     const labels = {
       positive: "Positive",
       negative: "Negative",
-      not_reported: "Not reported",
+      not_reported: "Not listed",
       unavailable: "Unavailable",
     };
     return labels[status] || "Unavailable";
   }
 
-  function ismTrendStatusAbbr(status) {
-    if (status === "positive") return "P";
-    if (status === "negative") return "N";
-    if (status === "not_reported") return "\u2014";
-    return "?";
+  function ismOverallTrendLabel(point) {
+    if (point.overall_status === "positive") return "Growth";
+    if (point.overall_status === "negative") return "Contraction";
+    if (point.overall_status === "not_reported") return "Not listed";
+    return "Unavailable";
   }
 
-  function renderIsmSignalBadge(signal) {
+  function ismRankedSignalLabel(signalKey, signal) {
     const status = signal && signal.status ? signal.status : "unavailable";
-    return `<span class="ism-signal-badge ${escapeHtml(ismSignalBadgeClass(status))}">${escapeHtml(ismSignalLabel(status))}</span>`;
+    const first = signal && signal.rank === 1;
+    if (status === "positive" && signalKey === "backlog") return first ? "Largest backlog increase" : "Backlogs higher";
+    if (status === "negative" && signalKey === "backlog") return first ? "Largest backlog decrease" : "Backlogs lower";
+    if (status === "positive" && signalKey === "overall") return first ? "Strongest overall growth" : "Growth";
+    if (status === "negative" && signalKey === "overall") return first ? "Strongest contraction" : "Contraction";
+    if (status === "positive") return first ? "Strongest growth" : "Growth";
+    if (status === "negative") return first ? "Strongest decline" : "Decline";
+    return ismSignalLabel(status);
+  }
+
+  function ismRankedSignalDescription(signalKey, signal) {
+    const rank = signal ? signal.rank : null;
+    const listSize = signal ? signal.list_size : null;
+    const status = signal && signal.status ? signal.status : "unavailable";
+    if (rank == null || listSize == null) return "\u2014";
+    if (signalKey === "backlog" && status === "positive") return `#${rank} of ${listSize} industries with higher backlogs`;
+    if (signalKey === "backlog" && status === "negative") return `#${rank} of ${listSize} industries with lower backlogs`;
+    if (status === "positive") return `#${rank} of ${listSize} growing industries`;
+    if (status === "negative") return `#${rank} of ${listSize} declining industries`;
+    return `#${rank} of ${listSize}`;
+  }
+
+  function ismCoreTrendLabel(signalKey, status) {
+    if (signalKey === "backlog" && status === "positive") return "Higher";
+    if (signalKey === "backlog" && status === "negative") return "Lower";
+    if (status === "positive") return "Growth";
+    if (status === "negative") return "Decline";
+    return ismSignalLabel(status);
+  }
+
+  function renderIsmSignalBadge(signal, signalKey = "") {
+    const status = signal && signal.status ? signal.status : "unavailable";
+    return `<span class="ism-signal-badge ${escapeHtml(ismSignalBadgeClass(status))}">${escapeHtml(ismRankedSignalLabel(signalKey, signal))}</span>`;
   }
 
   function renderIsmRankText(listSize, rank) {
@@ -2487,7 +2524,6 @@
       if (analysis && analysis.status === "unavailable") {
         return `
           <section class="ism-detail-group ism-industry-analysis">
-            <h4>${bilingualLabel("Industry Analysis")}</h4>
             <p class="ism-industry-unavailable">${escapeHtml(analysis.reason || "Industry analysis unavailable")}</p>
           </section>
         `;
@@ -2523,8 +2559,7 @@
 
     return `
       <section class="ism-detail-group ism-industry-analysis">
-        <h4>${bilingualLabel("Industry Analysis")} <small>${escapeHtml(scoreVersion)}</small></h4>
-        <p class="ism-industry-score-explanation">ISM signal configuration, not an investment recommendation.</p>
+        <p class="ism-industry-score-explanation">ISM signal configuration, not an investment recommendation. <small>${escapeHtml(scoreVersion)}</small></p>
         <div class="ism-industry-meta">
           <span>${bilingualLabel("Report")}: ${escapeHtml(formattedPeriod)}</span>
           <span>${coverageText}</span>
@@ -2571,8 +2606,8 @@
     }).join("");
 
     const overallRowClass = ismSignalRowClass(overallSignal.status);
-    const overallBadge = renderIsmSignalBadge(overallSignal);
-    const overallRankText = renderIsmRankText(overallSignal.list_size, overallSignal.rank);
+    const overallBadge = renderIsmSignalBadge(overallSignal, "overall");
+    const overallRankText = ismRankedSignalDescription("overall", overallSignal);
     const overallScore = overallSignal.component_score;
     const overallScoreText = overallScore != null ? overallScore.toFixed(1) : "\u2014";
 
@@ -2607,7 +2642,7 @@
           <h6>${bilingualLabel("Respondent Comments")}</h6>
           ${comments && comments.length ? comments.map((text) => `<p class="ism-industry-comment-text">${escapeHtml(text)}</p>`).join("") : `<p class="ism-industry-no-comment">${bilingualLabel("No respondent comment in this report")}</p>`}
         </div>
-        ${renderIsmIndustryTrend(trend)}
+        ${renderIsmIndustryTrend(trend, industryData.trend_summary)}
         ${sourceUrl ? `<div class="ism-industry-source"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${bilingualLabel("Official ISM Report")} &rarr;</a></div>` : ""}
       </div>
     `;
@@ -2616,8 +2651,8 @@
   function renderIsmCoreSignalRow(signalKey, signal, label) {
     const status = signal && signal.status ? signal.status : "unavailable";
     const rowClass = ismSignalRowClass(status);
-    const badge = renderIsmSignalBadge(signal);
-    const rankText = renderIsmRankText(signal ? signal.list_size : null, signal ? signal.rank : null);
+    const badge = renderIsmSignalBadge(signal, signalKey);
+    const rankText = ismRankedSignalDescription(signalKey, signal);
     const componentScore = signal ? signal.component_score : null;
     const scoreText = componentScore != null ? componentScore.toFixed(1) : "\u2014";
     return `
@@ -2728,8 +2763,85 @@
     `;
   }
 
-  function renderIsmIndustryTrend(trend) {
-    if (!trend || !trend.length) {
+  function renderIsmScoreTrendSvg(sorted) {
+    const pointCount = sorted.length;
+    const labelSkip = pointCount > 6 ? Math.ceil(pointCount / 6) : 1;
+    const minWidth = Math.max(280, pointCount * 40);
+    const width = Math.min(minWidth, 600);
+    const height = 100;
+    const padLeft = 28;
+    const padRight = 8;
+    const padTop = 6;
+    const padBottom = 18;
+    const plotW = width - padLeft - padRight;
+    const plotH = height - padTop - padBottom;
+    const yMin = 0;
+    const yMax = 100;
+    const neutralY = padTop + plotH * (1 - 50 / (yMax - yMin));
+
+    const validPoints = sorted.map((p, i) => ({ ...p, index: i }));
+
+    const yScale = (v) => padTop + plotH * (1 - (v - yMin) / (yMax - yMin));
+    const xScale = (i) => padLeft + (validPoints.length > 1 ? (i / (validPoints.length - 1)) * plotW : plotW / 2);
+
+    const segments = [];
+    let currentSeg = [];
+    for (const p of validPoints) {
+      if (p.score != null) {
+        currentSeg.push(p);
+      } else {
+        if (currentSeg.length > 1) segments.push(currentSeg);
+        currentSeg = [];
+      }
+    }
+    if (currentSeg.length > 1) segments.push(currentSeg);
+
+    const lines = segments.map((seg) => {
+      const points = seg.map((p) => `${xScale(p.index).toFixed(1)},${yScale(p.score).toFixed(1)}`);
+      return `<polyline fill="none" stroke="#5D7FA8" stroke-width="1.5" points="${points.join(" ")}"/>`;
+    }).join("");
+
+    const lastIndex = validPoints.length - 1;
+    const circles = validPoints.map((p) => {
+      if (p.score == null) return "";
+      const cx = xScale(p.index).toFixed(1);
+      const cy = yScale(p.score).toFixed(1);
+      const period = fmtMonthYear(p.period);
+      const rank = p.overall_rank != null ? `${bilingualLabel("Rank")}: ${p.overall_rank}` : "";
+      const dir = p.overall_direction || "";
+      const cov = p.score_coverage != null ? `${bilingualLabel("Cov")}: ${p.score_coverage.toFixed(0)}%` : "";
+      const noStatus = p.new_orders ? ismCoreTrendLabel("new_orders", p.new_orders.status) : "";
+      const noRank = p.new_orders && p.new_orders.rank != null ? `#${p.new_orders.rank}` : "";
+      const prodStatus = p.production ? ismCoreTrendLabel("production", p.production.status) : "";
+      const prodRank = p.production && p.production.rank != null ? `#${p.production.rank}` : "";
+      const blStatus = p.backlog ? ismCoreTrendLabel("backlog", p.backlog.status) : "";
+      const blRank = p.backlog && p.backlog.rank != null ? `#${p.backlog.rank}` : "";
+      const detail = `${bilingualLabel("Period")}: ${escapeHtml(period)}, ${bilingualLabel("Score")}: ${p.score.toFixed(1)}${cov ? `, ${cov}` : ""}${rank ? `, ${rank}` : ""}${dir ? `, ${escapeHtml(dir)}` : ""} | New Orders: ${escapeHtml(noStatus)}${noRank ? ` ${escapeHtml(noRank)}` : ""}; Production: ${escapeHtml(prodStatus)}${prodRank ? ` ${escapeHtml(prodRank)}` : ""}; Order Backlogs: ${escapeHtml(blStatus)}${blRank ? ` ${escapeHtml(blRank)}` : ""}`;
+      return `<circle tabindex="0" cx="${cx}" cy="${cy}" r="3" fill="#5D7FA8" aria-label="${detail}"><title>${detail}</title></circle>`;
+    }).join("");
+
+    const xLabels = validPoints.map((p) => {
+      if (p.index !== lastIndex && p.index % labelSkip !== 0) return "";
+      const x = xScale(p.index).toFixed(1);
+      return `<text x="${x}" y="${height - 2}" text-anchor="middle" font-size="7" fill="#8B7E74">${escapeHtml(fmtMonthYear(p.period))}</text>`;
+    }).join("");
+
+    return `
+      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block;" role="img" aria-label="${bilingualLabel("Score trend chart")}">
+        <line x1="${padLeft}" y1="${neutralY.toFixed(1)}" x2="${width - padRight}" y2="${neutralY.toFixed(1)}" stroke="#E0D6C8" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="${padLeft - 2}" y="${neutralY - 2}" text-anchor="end" font-size="6" fill="#A89B91">50</text>
+        <text x="${padLeft - 2}" y="${padTop + 6}" text-anchor="end" font-size="6" fill="#A89B91">100</text>
+        <text x="${padLeft - 2}" y="${height - padBottom + 2}" text-anchor="end" font-size="6" fill="#A89B91">0</text>
+        ${lines}
+        ${circles}
+        ${xLabels}
+      </svg>
+    `;
+  }
+
+  function renderIsmIndustryTrend(trend, trendSummary) {
+    const allNull = trend && trend.length && trend.every((p) => p.score == null);
+    if (!trend || !trend.length || allNull) {
       return `
         <div class="ism-industry-trend">
           <h6>${bilingualLabel("Signal Trend")}</h6>
@@ -2739,22 +2851,54 @@
     }
 
     const sorted = [...trend].sort((a, b) => a.period.localeCompare(b.period));
+    const svgChart = renderIsmScoreTrendSvg(sorted);
+
+    const summary = trendSummary || {};
+    const scoreChange = summary.latest_score_change;
+    const streak = summary.positive_month_streak || 0;
+    const broadStreak = summary.broad_confirmation_streak || 0;
+    const confirmed = summary.latest_positive_confirmation_count || 0;
+    const changeText = scoreChange != null
+      ? `${bilingualLabel("Score change")}: ${escapeHtml(scoreChange >= 0 ? "+" : "")}${escapeHtml(scoreChange.toFixed(1))}`
+      : "";
+
+    let assessment = "No broad improvement is confirmed in the latest month.";
+    if (confirmed === 3 && broadStreak >= 2) {
+      assessment = `Broad and persistent improvement: New Orders, Production, and Order Backlogs have all been positive for ${broadStreak} consecutive months.`;
+    } else if (confirmed === 3) {
+      assessment = "Broad improvement: New Orders, Production, and Order Backlogs are all positive, but currently this is only a one-month signal.";
+    } else if (confirmed === 2) {
+      assessment = "Improvement is partially confirmed by 2 of 3 core signals: New Orders, Production, and Order Backlogs.";
+    } else if (confirmed === 1) {
+      assessment = "Improvement is narrow: only 1 of New Orders, Production, and Order Backlogs is positive.";
+    }
+
+    const trendMeta = [changeText, `${bilingualLabel("Overall growth streak")}: ${escapeHtml(String(streak))} ${bilingualLabel("mo")}`, `Positive core signals: ${escapeHtml(String(confirmed))}/3`].filter(Boolean).join(" &middot; ");
 
     const headers = [
-      bilingualLabel("Period"),
-      bilingualLabel("Score"),
-      bilingualLabel("Cov"),
-      bilingualLabel("Rank"),
-      bilingualLabel("NO"),
-      bilingualLabel("Prod"),
-      bilingualLabel("BL"),
+      "Period",
+      "Score",
+      "Coverage",
+      "Overall Industry",
+      "New Orders",
+      "Production",
+      "Order Backlogs",
     ];
 
     const rows = sorted.map((point) => {
       const period = fmtMonthYear(point.period);
       const score = point.score != null ? point.score.toFixed(1) : "\u2014";
       const cov = point.score_coverage != null ? point.score_coverage.toFixed(0) : "\u2014";
-      const rank = point.overall_rank != null ? String(point.overall_rank) : "\u2014";
+      const overallStatus = point.overall_status || (
+        point.overall_direction === "growth"
+          ? "positive"
+          : point.overall_direction === "contraction"
+            ? "negative"
+            : point.score != null
+              ? "not_reported"
+              : "unavailable"
+      );
+      const overallLabel = ismOverallTrendLabel({ ...point, overall_status: overallStatus });
 
       const noStatus = point.new_orders ? point.new_orders.status : null;
       const prodStatus = point.production ? point.production.status : null;
@@ -2765,10 +2909,10 @@
           <td>${escapeHtml(period)}</td>
           <td>${escapeHtml(score)}</td>
           <td>${escapeHtml(cov)}</td>
-          <td>${escapeHtml(rank)}</td>
-          <td class="${escapeHtml(ismSignalBadgeClass(noStatus))}">${escapeHtml(ismTrendStatusAbbr(noStatus))}</td>
-          <td class="${escapeHtml(ismSignalBadgeClass(prodStatus))}">${escapeHtml(ismTrendStatusAbbr(prodStatus))}</td>
-          <td class="${escapeHtml(ismSignalBadgeClass(blStatus))}">${escapeHtml(ismTrendStatusAbbr(blStatus))}</td>
+          <td class="${escapeHtml(ismSignalBadgeClass(overallStatus))}">${escapeHtml(overallLabel)}</td>
+          <td class="${escapeHtml(ismSignalBadgeClass(noStatus))}">${escapeHtml(ismCoreTrendLabel("new_orders", noStatus))}</td>
+          <td class="${escapeHtml(ismSignalBadgeClass(prodStatus))}">${escapeHtml(ismCoreTrendLabel("production", prodStatus))}</td>
+          <td class="${escapeHtml(ismSignalBadgeClass(blStatus))}">${escapeHtml(ismCoreTrendLabel("backlog", blStatus))}</td>
         </tr>
       `;
     }).join("");
@@ -2776,6 +2920,9 @@
     return `
       <div class="ism-industry-trend">
         <h6>${bilingualLabel("Signal Trend")}</h6>
+        <p class="ism-trend-assessment">${escapeHtml(assessment)}</p>
+        ${trendMeta ? `<p class="ism-trend-meta">${trendMeta}</p>` : ""}
+        <div class="ism-score-trend-svg-wrap">${svgChart}</div>
         <div class="ism-trend-table-wrap">
           <table class="ism-trend-table">
             <thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
@@ -4078,7 +4225,7 @@
       ismSignalBadgeClass,
       ismSignalRowClass,
       ismSignalLabel,
-      ismTrendStatusAbbr,
+      ismOverallTrendLabel,
       renderIsmSignalBadge,
       renderIsmRankText,
       renderIsmIndustryAnalysisSection,
@@ -4088,6 +4235,7 @@
       renderIsmEvidenceDetail,
       renderIsmMacroContext,
       renderIsmIndustryTrend,
+      renderIsmScoreTrendSvg,
       renderIsmIndustryList,
       updateIsmIndustryDetail,
       bindIsmIndustrySelector,

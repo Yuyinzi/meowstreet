@@ -49,6 +49,7 @@ SUMMARY_COMMENT_STOPWORDS = {
 }
 
 _INDUSTRY_COUNT_BY_WORD = {
+    "only": 1,
     "one": 1,
     "two": 2,
     "three": 3,
@@ -723,7 +724,7 @@ def _industry_list_sentences(text):
         for sentence in sentences
         if re.search(r"\bindustr(?:y|ies)\b", sentence, re.IGNORECASE)
         and not re.search(
-            r"\b(?:largest|big) manufacturing industries\b",
+            r"\b(?:largest|biggest|big)(?:\s+manufacturing)?\s+industries\b",
             sentence,
             re.IGNORECASE,
         )

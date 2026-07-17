@@ -365,6 +365,31 @@ def _write_rejected_summary_run(con, factual_payload, source, reason):
     )
 
 
+def _save_factual_dashboard_outputs(con, payload, snapshot):
+    from scripts.fetch_ism_official_reports import (
+        ai_at_a_glance_rows,
+        ai_comments,
+        ai_report_snapshot,
+        merge_ai_metrics,
+    )
+
+    merge_ai_metrics(con, payload)
+    growth_cycle.replace_ism_at_a_glance_rows(
+        con,
+        ai_at_a_glance_rows(payload, snapshot["source_url"], snapshot["source_hash"]),
+    )
+    growth_cycle.replace_ism_report_snapshot(
+        con,
+        ai_report_snapshot(
+            payload,
+            snapshot["source_url"],
+            snapshot["source_hash"],
+            snapshot["fetched_at"],
+        ),
+        ai_comments(payload, snapshot["source_url"], snapshot["source_hash"]),
+    )
+
+
 def extract_snapshot(
     con,
     source_url,
@@ -451,6 +476,7 @@ def extract_snapshot(
         _check_report_month(
             payload["report"]["report_month"], expected_report_month, source_url
         )
+        _save_factual_dashboard_outputs(con, payload, snapshot)
         saved = growth_cycle.replace_ism_ai_report_outputs(
             con,
             payload,
@@ -484,28 +510,7 @@ def extract_snapshot(
     _check_report_month(
         payload["report"]["report_month"], expected_report_month, source_url
     )
-    from scripts.fetch_ism_official_reports import (
-        ai_at_a_glance_rows,
-        ai_report_snapshot,
-        ai_comments,
-        merge_ai_metrics,
-    )
-
-    merge_ai_metrics(con, payload)
-    growth_cycle.replace_ism_at_a_glance_rows(
-        con,
-        ai_at_a_glance_rows(payload, snapshot["source_url"], snapshot["source_hash"]),
-    )
-    growth_cycle.replace_ism_report_snapshot(
-        con,
-        ai_report_snapshot(
-            payload,
-            snapshot["source_url"],
-            snapshot["source_hash"],
-            snapshot["fetched_at"],
-        ),
-        ai_comments(payload, snapshot["source_url"], snapshot["source_hash"]),
-    )
+    _save_factual_dashboard_outputs(con, payload, snapshot)
     saved = growth_cycle.replace_ism_ai_report_outputs(
         con,
         payload,

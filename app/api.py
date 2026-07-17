@@ -391,6 +391,39 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                         ism_comments,
                     )
                 )
+                if ism_industry_analysis_payload.get("industries"):
+                    recent_reports = growth_cycle.load_recent_ism_report_snapshots(
+                        con, limit=6
+                    )
+                    report_ids = [r["report_id"] for r in recent_reports]
+                    hist_signals = (
+                        growth_cycle.load_ism_report_industry_signals_for_reports(
+                            con, report_ids
+                        )
+                    )
+                    hist_coverage = growth_cycle.load_ism_report_industry_signal_coverage_for_reports(
+                        con, report_ids
+                    )
+                    history = ism_industry_analysis.build_ism_industry_history(
+                        recent_reports,
+                        hist_signals,
+                        hist_coverage,
+                        [],
+                    )
+                    for ind in ism_industry_analysis_payload["industries"]:
+                        ind_history = history.get(ind["industry"], {})
+                        ind["trend"] = ind_history.get("trend", [])
+                        ind["trend_summary"] = ind_history.get(
+                            "trend_summary",
+                            {
+                                "latest_score_change": None,
+                                "positive_month_streak": 0,
+                                "broad_confirmation_streak": 0,
+                                "latest_positive_confirmation_count": 0,
+                                "eligible_month_count": 0,
+                                "requested_month_count": 0,
+                            },
+                        )
             return macro_growth_cycle.build_ism_manufacturing_detail_payload(
                 ism_points,
                 gdp_level_rows=gdp_level_rows,

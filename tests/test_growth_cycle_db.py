@@ -364,3 +364,238 @@ def test_replace_ism_ai_extraction_deletes_stale_coverage(tmp_path):
     coverage_by_key = {(r["signal_type"], r["direction"]): r for r in rows}
     assert ("overall_growth", "growth") in coverage_by_key
     assert ("new_orders", "growth") in coverage_by_key
+
+
+# ── Step 7.4: batched historical loaders ─────────────────────────────────────
+
+
+def _seed_report_with_signals(con, report_id, report_month, month_num):
+    growth_count = 3 + (month_num % 3)
+    for rank in range(1, growth_count + 1):
+        con.execute(
+            """
+            insert into ism_report_industry_signals(
+                report_id, report_month, signal_type, direction, industry,
+                rank, evidence_text, source_url, source_hash
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                report_id,
+                report_month,
+                "overall_growth",
+                "growth",
+                f"Industry {rank}",
+                rank,
+                f"{growth_count} industries reporting growth.",
+                "https://example.com",
+                "hash",
+            ),
+        )
+
+
+def _seed_report_with_coverage(con, report_id, report_month):
+    con.execute(
+        """
+        insert into ism_report_industry_signal_coverage(
+            report_id, report_month, signal_type, direction, list_present,
+            declared_count, extracted_count, validation_status, evidence_text,
+            source_url, source_hash
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            report_id,
+            report_month,
+            "overall_growth",
+            "growth",
+            1,
+            14,
+            14,
+            "complete",
+            "14 industries reporting growth.",
+            "https://example.com",
+            "hash",
+        ),
+    )
+
+
+def _seed_report_with_at_a_glance(con, report_id, report_month):
+    con.execute(
+        """
+        insert into ism_at_a_glance_rows(
+            report_id, report_month, series_id, label, current_value,
+            previous_value, point_change, direction, rate_of_change,
+            trend_months, source_url, source_hash
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            report_id,
+            report_month,
+            "ism_manufacturing_new_orders",
+            "New Orders",
+            50.0,
+            49.0,
+            1.0,
+            "Growing",
+            "Faster",
+            1,
+            "https://example.com",
+            "hash",
+        ),
+    )
+
+
+def _seed_report_snapshot(con, report_id, report_month):
+    con.execute(
+        """
+        insert into ism_report_snapshots(
+            report_id, report_month, title, source_url, source_hash, fetched_at,
+            parse_status, next_report_period, next_release_at, next_release_label
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            report_id,
+            report_month,
+            f"ISM Report {report_month}",
+            "https://example.com",
+            "hash",
+            "2026-07-15T00:00:00Z",
+            "ok",
+            None,
+            None,
+            "",
+        ),
+    )
+
+
+def test_load_recent_ism_report_snapshots_returns_ascending_order(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    for i, month in enumerate(["2026-01-01", "2026-02-01", "2026-03-01"]):
+        _seed_report_snapshot(
+            con, f"ism_manufacturing_{month.replace('-', '_')}", month
+        )
+
+    result = growth_cycle.load_recent_ism_report_snapshots(con, limit=12)
+
+    assert len(result) == 3
+    assert result[0]["report_month"] == "2026-01-01"
+    assert result[-1]["report_month"] == "2026-03-01"
+
+
+def test_load_recent_ism_report_snapshots_respects_limit(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    for i in range(5):
+        month = f"2026-{i + 1:02d}-01"
+        _seed_report_snapshot(
+            con, f"ism_manufacturing_{month.replace('-', '_')}", month
+        )
+
+    result = growth_cycle.load_recent_ism_report_snapshots(con, limit=3)
+
+    assert len(result) == 3
+    assert result[0]["report_month"] == "2026-03-01"  # most recent 3, ascending
+    assert result[-1]["report_month"] == "2026-05-01"
+
+
+def test_load_recent_ism_report_snapshots_defaults_to_six(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    for i in range(8):
+        month = f"2025-{i + 1:02d}-01"
+        _seed_report_snapshot(
+            con, f"ism_manufacturing_{month.replace('-', '_')}", month
+        )
+
+    result = growth_cycle.load_recent_ism_report_snapshots(con)
+
+    assert len(result) == 6
+    assert result[0]["report_month"] == "2025-03-01"
+    assert result[-1]["report_month"] == "2025-08-01"
+
+
+def test_load_recent_ism_report_snapshots_empty_db(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+
+    result = growth_cycle.load_recent_ism_report_snapshots(con, limit=12)
+
+    assert result == []
+
+
+def test_load_ism_report_industry_signals_for_reports_returns_all(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    _seed_report_with_signals(con, "rid_01", "2026-01-01", 1)
+    _seed_report_with_signals(con, "rid_02", "2026-02-01", 2)
+
+    result = growth_cycle.load_ism_report_industry_signals_for_reports(
+        con, ["rid_01", "rid_02"]
+    )
+
+    assert len(result) >= 2
+    report_ids = {r["report_id"] for r in result}
+    assert report_ids == {"rid_01", "rid_02"}
+
+
+def test_load_ism_report_industry_signals_for_reports_empty_input(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+
+    result = growth_cycle.load_ism_report_industry_signals_for_reports(con, [])
+
+    assert result == []
+
+
+def test_load_ism_report_industry_signal_coverage_for_reports_returns_all(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    _seed_report_with_coverage(con, "rid_01", "2026-01-01")
+    _seed_report_with_coverage(con, "rid_02", "2026-02-01")
+
+    result = growth_cycle.load_ism_report_industry_signal_coverage_for_reports(
+        con, ["rid_01", "rid_02"]
+    )
+
+    assert len(result) == 2
+    report_ids = {r["report_id"] for r in result}
+    assert report_ids == {"rid_01", "rid_02"}
+    assert result[0]["list_present"] is True
+
+
+def test_load_ism_report_industry_signal_coverage_for_reports_empty_input(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+
+    result = growth_cycle.load_ism_report_industry_signal_coverage_for_reports(con, [])
+
+    assert result == []
+
+
+def test_load_ism_at_a_glance_rows_for_reports_returns_all(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    _seed_report_with_at_a_glance(con, "rid_01", "2026-01-01")
+    _seed_report_with_at_a_glance(con, "rid_02", "2026-02-01")
+
+    result = growth_cycle.load_ism_at_a_glance_rows_for_reports(
+        con, ["rid_01", "rid_02"]
+    )
+
+    assert len(result) == 2
+    report_ids = {r["report_id"] for r in result}
+    assert report_ids == {"rid_01", "rid_02"}
+
+
+def test_load_ism_at_a_glance_rows_for_reports_empty_input(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+
+    result = growth_cycle.load_ism_at_a_glance_rows_for_reports(con, [])
+
+    assert result == []
+
+
+def test_batched_loaders_respect_report_isolation(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    _seed_report_with_signals(con, "rid_01", "2026-01-01", 1)
+
+    signals = growth_cycle.load_ism_report_industry_signals_for_reports(con, ["rid_02"])
+    coverage = growth_cycle.load_ism_report_industry_signal_coverage_for_reports(
+        con, ["rid_02"]
+    )
+    at_a_glance = growth_cycle.load_ism_at_a_glance_rows_for_reports(con, ["rid_02"])
+
+    assert signals == []
+    assert coverage == []
+    assert at_a_glance == []

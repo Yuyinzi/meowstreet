@@ -923,6 +923,16 @@ def test_macro_dashboard_static_includes_m2_range_control():
     assert "scrollTop" in js
 
 
+def test_growth_cycle_detail_reloads_current_data_when_reopened():
+    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    function_body = js.split(
+        "async function loadGrowthCycleDetail(detailId) {", 1
+    )[1].split("\n  }", 1)[0]
+
+    assert "fetch(`/api/macro-dashboard/growth-cycle/" in function_body
+    assert "if (state.growthCycleDetailsById[detailId])" not in function_body
+
+
 def test_macro_dashboard_static_includes_fomc_tone_tooltip_fields():
     js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
 
@@ -1411,7 +1421,7 @@ def test_macro_dashboard_js_has_industry_analysis_renderers():
     assert "function ismSignalBadgeClass(" in js
     assert "function ismSignalRowClass(" in js
     assert "function ismSignalLabel(" in js
-    assert "function ismTrendStatusAbbr(" in js
+    assert "function ismOverallTrendLabel(" in js
     assert "function renderIsmSignalBadge(" in js
     assert "function renderIsmRankText(" in js
     assert "function renderIsmIndustryAnalysisSection(" in js
@@ -1497,15 +1507,12 @@ def test_macro_dashboard_js_industry_analysis_renderers_produce_correct_html():
           signalLabelPositive: hooks.ismSignalLabel("positive"),
           signalLabelNotReported: hooks.ismSignalLabel("not_reported"),
           signalLabelUnavailable: hooks.ismSignalLabel("unavailable"),
-          trendAbbrPositive: hooks.ismTrendStatusAbbr("positive"),
-          trendAbbrNegative: hooks.ismTrendStatusAbbr("negative"),
-          trendAbbrNotReported: hooks.ismTrendStatusAbbr("not_reported"),
-          trendAbbrUnavailable: hooks.ismTrendStatusAbbr("unavailable"),
           rankTextNormal: hooks.renderIsmRankText(11, 3),
           rankTextNull: hooks.renderIsmRankText(null, null),
           signalBadgeHtml: hooks.renderIsmSignalBadge({ status: "positive", rank: 3, list_size: 11, component_score: 90.9 }),
           signalBadgeUnavailableHtml: hooks.renderIsmSignalBadge({}),
           coreSignalRowHtml: hooks.renderIsmCoreSignalRow("new_orders", { status: "positive", rank: 3, list_size: 11, component_score: 90.9 }, "New Orders"),
+          coreSignalRowNegative: hooks.renderIsmCoreSignalRow("new_orders", { status: "negative", rank: 1, list_size: 6, component_score: 0.0 }, "New Orders"),
           coreSignalRowNotReported: hooks.renderIsmCoreSignalRow("backlog", { status: "not_reported", rank: null, list_size: null, component_score: 50.0 }, "Backlog"),
           unavailableSection: hooks.renderIsmIndustryAnalysisSection({ status: "unavailable", reason: "latest ISM report is unavailable", industries: [] }, null),
           noAnalysis: hooks.renderIsmIndustryAnalysisSection(null, null),
@@ -1531,23 +1538,21 @@ def test_macro_dashboard_js_industry_analysis_renderers_produce_correct_html():
     assert payload["signalRowPositive"] == "ism-signal-row-positive"
     assert payload["signalRowNegative"] == "ism-signal-row-negative"
     assert payload["signalLabelPositive"] == "Positive"
-    assert payload["signalLabelNotReported"] == "Not reported"
+    assert payload["signalLabelNotReported"] == "Not listed"
     assert payload["signalLabelUnavailable"] == "Unavailable"
-    assert payload["trendAbbrPositive"] == "P"
-    assert payload["trendAbbrNegative"] == "N"
-    assert payload["trendAbbrNotReported"] == "\u2014"
-    assert payload["trendAbbrUnavailable"] == "?"
     assert payload["rankTextNormal"] == "#3 of 11"
     assert payload["rankTextNull"] == "\u2014"
     assert "ism-signal-positive" in payload["signalBadgeHtml"]
-    assert "Positive" in payload["signalBadgeHtml"]
+    assert "Growth" in payload["signalBadgeHtml"]
     assert "ism-signal-unavailable" in payload["signalBadgeUnavailableHtml"]
     assert "ism-signal-row-positive" in payload["coreSignalRowHtml"]
     assert "New Orders" in payload["coreSignalRowHtml"]
-    assert "#3 of 11" in payload["coreSignalRowHtml"]
+    assert "#3 of 11 growing industries" in payload["coreSignalRowHtml"]
     assert "90.9" in payload["coreSignalRowHtml"]
+    assert "Strongest decline" in payload["coreSignalRowNegative"]
+    assert "#1 of 6 declining industries" in payload["coreSignalRowNegative"]
     assert "ism-signal-row-not-reported" in payload["coreSignalRowNotReported"]
-    assert "Not reported" in payload["coreSignalRowNotReported"]
+    assert "Not listed" in payload["coreSignalRowNotReported"]
     assert "\u2014" in payload["coreSignalRowNotReported"]
     assert "ISM report is unavailable" in payload["unavailableSection"]
     assert payload["noAnalysis"] == ""
@@ -1636,7 +1641,7 @@ def test_macro_dashboard_js_renders_industry_analysis_detail_view():
           detailHasRank3Of11: detailHtml.indexOf("#3 of 11") !== -1,
           detailHasRank1Of8: detailHtml.indexOf("#1 of 8") !== -1,
           detailHasPositiveBadge: (detailHtml.match(/class="[^"]*ism-signal-positive[^"]*"/g) || []).length >= 1,
-          detailHasNotReportedBadge: detailHtml.indexOf("Not reported") !== -1,
+          detailHasNotReportedBadge: detailHtml.indexOf("Not listed") !== -1,
           detailHasScoreComponents: detailHtml.indexOf("Score Components") !== -1,
           sectionHasMacroContextBeforeSelector: sectionHtml.indexOf("ism-demand-wrap") !== -1 && sectionHtml.indexOf("ism-demand-wrap") < sectionHtml.indexOf("data-ism-industry-select"),
           detailHasNoComment: detailHtml.indexOf("No respondent comment in this report") !== -1,
@@ -1648,6 +1653,40 @@ def test_macro_dashboard_js_renders_industry_analysis_detail_view():
           macroContextHtml: hooks.renderIsmMacroContext(analysis.macro_context),
           trendHtml: hooks.renderIsmIndustryTrend(analysis.industries[0].trend),
           emptyTrendHtml: hooks.renderIsmIndustryTrend([]),
+          allNullTrendHtml: hooks.renderIsmIndustryTrend([
+            { period: "2026-05-01", score: null, score_coverage: 0.0, overall_rank: null, overall_direction: null, positive_confirmation_count: 0, new_orders: { status: null }, production: { status: null }, backlog: { status: null } },
+            { period: "2026-06-01", score: null, score_coverage: 0.0, overall_rank: null, overall_direction: null, positive_confirmation_count: 0, new_orders: { status: null }, production: { status: null }, backlog: { status: null } },
+          ]),
+          oneMonthTrendHtml: hooks.renderIsmIndustryTrend([
+            { period: "2026-06-01", score: 75.0, score_coverage: 100.0, overall_rank: 1, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 3 }, production: { status: "positive", rank: 1 }, backlog: { status: "not_reported", rank: null } },
+          ]),
+          svgChartMarkup: hooks.renderIsmScoreTrendSvg([
+            { period: "2026-05-01", score: 71.2, score_coverage: 100.0, overall_rank: 4, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 5 }, production: { status: "positive", rank: 3 }, backlog: { status: "not_reported", rank: null } },
+            { period: "2026-06-01", score: 86.4, score_coverage: 100.0, overall_rank: 1, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 3 }, production: { status: "positive", rank: 1 }, backlog: { status: "not_reported", rank: null } },
+          ]),
+          svgGapChart: hooks.renderIsmScoreTrendSvg([
+            { period: "2026-05-01", score: 71.2, score_coverage: 100.0, overall_rank: 4, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 5 }, production: { status: "positive", rank: 3 }, backlog: { status: "not_reported", rank: null } },
+            { period: "2026-06-01", score: null, score_coverage: 0.0, overall_rank: null, overall_direction: null, positive_confirmation_count: 0, new_orders: { status: null }, production: { status: null }, backlog: { status: null } },
+            { period: "2026-07-01", score: 86.4, score_coverage: 100.0, overall_rank: 1, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 3 }, production: { status: "positive", rank: 1 }, backlog: { status: "not_reported", rank: null } },
+          ]),
+          scoreChangePositive: hooks.renderIsmIndustryTrend([
+            { period: "2026-05-01", score: 50.0, score_coverage: 100.0, overall_rank: 5, overall_direction: "growth", positive_confirmation_count: 1, new_orders: { status: "positive", rank: 5 }, production: { status: "positive", rank: 5 }, backlog: { status: "not_reported", rank: null } },
+            { period: "2026-06-01", score: 65.2, score_coverage: 100.0, overall_rank: 3, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 3 }, production: { status: "positive", rank: 3 }, backlog: { status: "not_reported", rank: null } },
+          ], { latest_score_change: 15.2 }),
+          scoreChangeNull: hooks.renderIsmIndustryTrend([
+            { period: "2026-06-01", score: 65.2, score_coverage: 100.0, overall_rank: 3, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 3 }, production: { status: "positive", rank: 3 }, backlog: { status: "not_reported", rank: null } },
+          ], { latest_score_change: null }),
+          scoreChangeNegative: hooks.renderIsmIndustryTrend([
+            { period: "2026-05-01", score: 68.3, score_coverage: 100.0, overall_rank: 2, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 2 }, production: { status: "positive", rank: 2 }, backlog: { status: "not_reported", rank: null } },
+            { period: "2026-06-01", score: 65.2, score_coverage: 100.0, overall_rank: 3, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 3 }, production: { status: "positive", rank: 3 }, backlog: { status: "not_reported", rank: null } },
+          ], { latest_score_change: -3.1 }),
+          broadOneMonth: hooks.renderIsmIndustryTrend([
+            { period: "2026-06-01", score: 89.2, score_coverage: 100.0, overall_rank: 1, overall_direction: "growth", positive_confirmation_count: 3, new_orders: { status: "positive", rank: 1 }, production: { status: "positive", rank: 1 }, backlog: { status: "positive", rank: 1 } },
+          ], { latest_positive_confirmation_count: 3, broad_confirmation_streak: 1 }),
+          broadPersistent: hooks.renderIsmIndustryTrend([
+            { period: "2026-05-01", score: null, score_coverage: 90.0, overall_rank: null, overall_direction: null, positive_confirmation_count: 3, new_orders: { status: "positive", rank: 2 }, production: { status: "positive", rank: 2 }, backlog: { status: "positive", rank: 2 } },
+            { period: "2026-06-01", score: 89.2, score_coverage: 100.0, overall_rank: 1, overall_direction: "growth", positive_confirmation_count: 3, new_orders: { status: "positive", rank: 1 }, production: { status: "positive", rank: 1 }, backlog: { status: "positive", rank: 1 } },
+          ], { latest_positive_confirmation_count: 3, broad_confirmation_streak: 2 }),
         }));
         """
     )
@@ -1694,8 +1733,44 @@ def test_macro_dashboard_js_renders_industry_analysis_detail_view():
     assert "ism-trend-chip" in payload["macroContextHtml"]
     assert "ism-trend-table" in payload["trendHtml"]
     assert "May 2026" in payload["trendHtml"]
-    assert "P" in payload["trendHtml"]
+    assert ">Coverage<" in payload["trendHtml"]
+    assert ">Overall Industry<" in payload["trendHtml"]
+    assert ">New Orders<" in payload["trendHtml"]
+    assert ">Production<" in payload["trendHtml"]
+    assert ">Order Backlogs<" in payload["trendHtml"]
+    assert "Overall\u6574\u4f53" not in payload["trendHtml"]
+    assert "Growth" in payload["trendHtml"]
+    assert "Not listed" in payload["trendHtml"]
     assert "Historical coverage unavailable" in payload["emptyTrendHtml"]
+
+    assert "+15.2" in payload["scoreChangePositive"]
+    assert "Score change:" not in payload["scoreChangeNull"]
+    assert "-3.1" in payload["scoreChangeNegative"]
+    assert "only a one-month signal" in payload["broadOneMonth"]
+    assert "Broad and persistent improvement" in payload["broadPersistent"]
+    assert "New Orders, Production, and Order Backlogs" in payload["broadPersistent"]
+    assert "Positive core signals: 3/3" in payload["broadPersistent"]
+    assert "Historical coverage unavailable" in payload["allNullTrendHtml"]
+    assert "Jun 2026" in payload["oneMonthTrendHtml"]
+    assert "75.0" in payload["oneMonthTrendHtml"]
+    assert "<polyline" in payload["svgChartMarkup"]
+    assert "<circle" in payload["svgChartMarkup"]
+    assert 'tabindex="0"' in payload["svgChartMarkup"]
+    assert "aria-label" in payload["svgChartMarkup"]
+    assert "Rank:" in payload["svgChartMarkup"]
+    assert "New Orders:" in payload["svgChartMarkup"]
+    assert "Production:" in payload["svgChartMarkup"]
+    assert "Order Backlogs:" in payload["svgChartMarkup"]
+    assert "Cov:" in payload["svgChartMarkup"]
+    assert "#5" in payload["svgChartMarkup"]  # New Orders rank
+    assert "#3" in payload["svgChartMarkup"]  # Production rank
+    assert "<title>" in payload["svgChartMarkup"]
+    assert 'stroke-dasharray="3,2"' in payload["svgChartMarkup"]
+    assert "max-width:100%" not in payload["svgChartMarkup"]
+    assert "height:auto" not in payload["svgChartMarkup"]
+    # Gap chart should have no line connecting through null midpoint
+    gap_polyline_count = payload["svgGapChart"].count("<polyline")
+    assert gap_polyline_count == 0  # both segments have only 1 point, so no polyline
 
 
 def test_macro_dashboard_js_industry_analysis_evidence_section():

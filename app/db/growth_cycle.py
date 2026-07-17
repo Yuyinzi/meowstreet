@@ -665,6 +665,80 @@ def load_ism_at_a_glance_rows(con, report_id):
     return [dict(row) for row in rows]
 
 
+def load_recent_ism_report_snapshots(con, limit=6):
+    rows = con.execute(
+        """
+        select report_id, report_month, title, source_url, source_hash, fetched_at,
+               parse_status, next_report_period, next_release_at, next_release_label
+        from ism_report_snapshots
+        order by report_month desc
+        limit ?
+        """,
+        (limit,),
+    ).fetchall()
+    result = [dict(row) for row in rows]
+    result.reverse()
+    return result
+
+
+def load_ism_report_industry_signals_for_reports(con, report_ids):
+    if not report_ids:
+        return []
+    placeholders = ",".join("?" for _ in report_ids)
+    rows = con.execute(
+        f"""
+        select report_id, report_month, signal_type, direction, industry,
+               rank, evidence_text, source_url, source_hash
+        from ism_report_industry_signals
+        where report_id in ({placeholders})
+        order by report_id, signal_type, direction, rank
+        """,
+        report_ids,
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def load_ism_report_industry_signal_coverage_for_reports(con, report_ids):
+    if not report_ids:
+        return []
+    placeholders = ",".join("?" for _ in report_ids)
+    rows = con.execute(
+        f"""
+        select report_id, report_month, signal_type, direction, list_present,
+               declared_count, extracted_count, validation_status, evidence_text,
+               source_url, source_hash
+        from ism_report_industry_signal_coverage
+        where report_id in ({placeholders})
+        order by report_id, signal_type, direction
+        """,
+        report_ids,
+    ).fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["list_present"] = bool(item["list_present"])
+        result.append(item)
+    return result
+
+
+def load_ism_at_a_glance_rows_for_reports(con, report_ids):
+    if not report_ids:
+        return []
+    placeholders = ",".join("?" for _ in report_ids)
+    rows = con.execute(
+        f"""
+        select report_id, report_month, series_id, label, current_value,
+               previous_value, point_change, direction, rate_of_change,
+               trend_months, source_url, source_hash
+        from ism_at_a_glance_rows
+        where report_id in ({placeholders})
+        order by report_id, series_id
+        """,
+        report_ids,
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def replace_ism_ai_summary(con, payload, source):
     report = payload["report"]
     summary = payload["ai_summary"]

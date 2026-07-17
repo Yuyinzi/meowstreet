@@ -3214,7 +3214,7 @@ h2 {
 
 .ism-industry-signal-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto 36px;
+  grid-template-columns: minmax(90px, 1fr) auto minmax(120px, 1.4fr) 36px;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -3238,7 +3238,7 @@ h2 {
   color: #8B7E74;
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .ism-signal-component-score {
@@ -3256,7 +3256,8 @@ h2 {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
 }
 
 .ism-signal-positive { background: #d4edda; color: #155724; }
@@ -3466,7 +3467,6 @@ h2 {
 .ism-trend-table td {
   padding: 4px 5px;
   text-align: center;
-  white-space: nowrap;
   border-bottom: 1px solid #E8E0D6;
 }
 
@@ -3475,10 +3475,38 @@ h2 {
   font-weight: 700;
   text-transform: uppercase;
   font-size: 0.65rem;
+  white-space: normal;
 }
 
 .ism-trend-table td {
   color: #3B3530;
+  white-space: nowrap;
+}
+
+.ism-score-trend-svg-wrap {
+  margin: 6px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ism-score-trend-svg-wrap svg {
+  display: block;
+  max-width: none;
+}
+
+.ism-trend-meta {
+  margin: 4px 0 6px;
+  color: #8B7E74;
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.ism-trend-assessment {
+  margin: 4px 0;
+  color: #3B3530;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .ism-trend-empty {
@@ -3501,6 +3529,39 @@ h2 {
 
 .ism-industry-source a:hover {
   text-decoration: underline;
+}
+
+/* Collapsible ISM section details */
+.ism-section-collapse {
+  margin-top: 8px;
+  border: 1px solid #E8E0D6;
+  border-radius: 10px;
+  background: #FDFAF7;
+  padding: 10px 14px;
+}
+
+.ism-section-collapse summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #3B3530;
+  padding: 2px 0;
+}
+
+.ism-section-collapse[open] summary {
+  margin-bottom: 8px;
+}
+
+.ism-section-collapse .ism-detail-latest-collapsible {
+  margin-top: 0;
+  border: none;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+
+.ism-section-collapse .ism-detail-latest-collapsible h4 {
+  display: none;
 }
 
 .ism-industry-unavailable {

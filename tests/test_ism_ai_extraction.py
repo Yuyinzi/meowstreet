@@ -469,6 +469,29 @@ def test_report_section_texts_remove_non_industry_index_narrative():
     assert "22.3 64.3" not in section
 
 
+def test_report_section_texts_remove_big_industry_commentary_variants():
+    report_text = """
+    January 2026 ISM Manufacturing PMI Report.
+    The nine manufacturing industries reporting growth in January are:
+    Printing & Related Support Activities; and Computer & Electronic Products.
+    WHAT RESPONDENTS ARE SAYING
+    MANUFACTURING AT A GLANCE
+    MANUFACTURING INDEX SUMMARIES
+    Of the six biggest manufacturing industries, five registered growth in January.
+    Of the six big industries, five reported slower supplier deliveries in January.
+    The eight manufacturing industries that reported growth in new orders in January
+    are: Apparel, Leather & Allied Products; and Food, Beverage & Tobacco Products.
+    Buying Policy
+    """
+
+    section = ism_ai_extraction.report_section_texts(report_text)["industry_signals"]
+
+    assert "nine manufacturing industries reporting growth" in section
+    assert "eight manufacturing industries that reported growth" in section
+    assert "six biggest manufacturing industries" not in section
+    assert "six big industries" not in section
+
+
 def test_industry_signal_validation_rejects_partial_overall_growth_list():
     evidence = (
         "Five of the six largest manufacturing industries expanded in June, "
@@ -711,6 +734,26 @@ def test_zero_industry_list_builds_complete_coverage():
     assert coverage[0]["declared_count"] == 0
     assert coverage[0]["extracted_count"] == 0
     assert coverage[0]["list_present"] is True
+
+
+def test_only_industry_list_builds_complete_coverage():
+    coverage = ism_ai_extraction.build_industry_signal_coverage(
+        [
+            {
+                "signal_type": "new_orders",
+                "direction": "decrease",
+                "industries": ["Wood Products"],
+                "evidence_text": (
+                    "The only industry reporting a decline in new orders in May "
+                    "is Wood Products."
+                ),
+            }
+        ]
+    )
+
+    assert coverage[0]["validation_status"] == "complete"
+    assert coverage[0]["declared_count"] == 1
+    assert coverage[0]["extracted_count"] == 1
 
 
 def test_grouped_industry_signal_accepts_explicit_empty_source_list():

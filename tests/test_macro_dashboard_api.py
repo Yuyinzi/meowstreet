@@ -2039,6 +2039,29 @@ def test_growth_cycle_api_ism_detail_includes_industry_analysis(monkeypatch):
         "load_ism_report_comments",
         lambda con, rid: _default_comments(),
     )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_recent_ism_report_snapshots",
+        lambda con, limit=6: [report],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_industry_signals_for_reports",
+        lambda con, rids: _default_signals(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_industry_signal_coverage_for_reports",
+        lambda con, rids: [
+            {**c, "report_id": rids[0], "report_month": "2026-06-01"}
+            for c in _default_coverage()
+        ],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_at_a_glance_rows_for_reports",
+        lambda con, rids: [],
+    )
 
     response = client.get("/api/macro-dashboard/growth-cycle/ism_manufacturing")
 
@@ -2059,6 +2082,10 @@ def test_growth_cycle_api_ism_detail_includes_industry_analysis(monkeypatch):
     assert printing["core_signals"]["production"]["rank"] == 1
     assert printing["core_signals"]["backlog"]["status"] == "not_reported"
     assert printing["comments"] == []
+    assert "trend" in printing
+    assert "trend_summary" in printing
+    assert len(printing["trend"]) == 1
+    assert printing["trend"][0]["period"] == "2026-06-01"
 
 
 def _default_signals():
