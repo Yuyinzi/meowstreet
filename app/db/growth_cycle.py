@@ -173,6 +173,22 @@ def init_db(con):
         );
         create index if not exists idx_ism_ai_summary_runs_report
         on ism_ai_summary_runs(report_id, status, quality_status, updated_at);
+        create table if not exists ism_report_industry_signal_coverage (
+            report_id text not null,
+            report_month text not null,
+            signal_type text not null,
+            direction text not null,
+            list_present integer not null,
+            declared_count integer,
+            extracted_count integer not null,
+            validation_status text not null,
+            evidence_text text not null,
+            source_url text not null,
+            source_hash text not null,
+            primary key(report_id, signal_type, direction)
+        );
+        create index if not exists idx_ism_signal_coverage_month
+        on ism_report_industry_signal_coverage(report_month);
         """
     )
     con.commit()
@@ -300,6 +316,18 @@ def load_latest_ism_report_snapshot(con):
     return dict(rows[0]) if rows else None
 
 
+def load_all_ism_report_snapshots(con):
+    rows = con.execute(
+        """
+        select report_id, report_month, title, source_url, source_hash, fetched_at,
+               parse_status, next_report_period, next_release_at, next_release_label
+        from ism_report_snapshots
+        order by report_month
+        """
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def load_ism_report_comments(con, report_id):
     rows = con.execute(
         """
@@ -414,11 +442,45 @@ def load_ism_report_source_snapshot(con, source_url):
     return dict(row) if row else None
 
 
+def _derive_coverage_from_flat_signals(flat_signals):
+    from collections import OrderedDict
+
+    from app.tools.ism_ai_extraction import declared_industry_count
+
+    groups = OrderedDict()
+    for signal in flat_signals:
+        key = (signal["signal_type"], signal["direction"])
+        groups.setdefault(key, []).append(signal)
+    coverage = []
+    for (signal_type, direction), signals in groups.items():
+        extracted_count = len(signals)
+        declared = declared_industry_count(signals[0]["evidence_text"])
+        list_present = extracted_count > 0
+        if declared is not None and extracted_count == declared:
+            validation_status = "complete"
+        else:
+            validation_status = "partial"
+        coverage.append(
+            {
+                "signal_type": signal_type,
+                "direction": direction,
+                "list_present": list_present,
+                "declared_count": declared,
+                "extracted_count": extracted_count,
+                "validation_status": validation_status,
+                "evidence_text": signals[0]["evidence_text"],
+            }
+        )
+    return coverage
+
+
 def replace_ism_ai_extraction(con, extraction):
     import json
 
-    from app.tools.ism_ai_extraction import validate_extraction
-    from app.tools.ism_ai_extraction import validate_factual_extraction
+    from app.tools.ism_ai_extraction import (
+        validate_extraction,
+        validate_factual_extraction,
+    )
 
     payload = extraction["extraction_json"]
     report_id = extraction["report_id"]
@@ -427,6 +489,11 @@ def replace_ism_ai_extraction(con, extraction):
         if "ai_summary" in payload
         else validate_factual_extraction(payload)
     )
+
+    if not payload.get("industry_signal_coverage") and payload.get("industry_signals"):
+        payload["industry_signal_coverage"] = _derive_coverage_from_flat_signals(
+            payload["industry_signals"]
+        )
     con.execute(
         "delete from ism_report_industry_signals where report_id = ?",
         (report_id,),
@@ -480,10 +547,38 @@ def replace_ism_ai_extraction(con, extraction):
                 extraction["source_hash"],
             ),
         )
+    con.execute(
+        "delete from ism_report_industry_signal_coverage where report_id = ?",
+        (report_id,),
+    )
+    for row in payload.get("industry_signal_coverage", []):
+        con.execute(
+            """
+            insert into ism_report_industry_signal_coverage(
+                report_id, report_month, signal_type, direction, list_present,
+                declared_count, extracted_count, validation_status, evidence_text,
+                source_url, source_hash
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                report_id,
+                extraction["report_month"],
+                row["signal_type"],
+                row["direction"],
+                1 if row["list_present"] else 0,
+                row.get("declared_count"),
+                row["extracted_count"],
+                row["validation_status"],
+                row["evidence_text"],
+                extraction["source_url"],
+                extraction["source_hash"],
+            ),
+        )
     con.commit()
     return {
         "ai_extractions": 1,
         "industry_signals": len(payload.get("industry_signals", [])),
+        "industry_signal_coverage": len(payload.get("industry_signal_coverage", [])),
     }
 
 
@@ -495,6 +590,75 @@ def load_ism_report_industry_signals(con, report_id):
         from ism_report_industry_signals
         where report_id = ?
         order by signal_type, direction, rank
+        """,
+        (report_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def replace_ism_report_industry_signal_coverage(
+    con, report_id, report_month, coverage_rows, source_url, source_hash
+):
+    con.execute(
+        "delete from ism_report_industry_signal_coverage where report_id = ?",
+        (report_id,),
+    )
+    for row in coverage_rows:
+        con.execute(
+            """
+            insert into ism_report_industry_signal_coverage(
+                report_id, report_month, signal_type, direction, list_present,
+                declared_count, extracted_count, validation_status, evidence_text,
+                source_url, source_hash
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                report_id,
+                report_month,
+                row["signal_type"],
+                row["direction"],
+                1 if row["list_present"] else 0,
+                row.get("declared_count"),
+                row["extracted_count"],
+                row["validation_status"],
+                row["evidence_text"],
+                source_url,
+                source_hash,
+            ),
+        )
+    con.commit()
+    return {"industry_signal_coverage": len(coverage_rows)}
+
+
+def load_ism_report_industry_signal_coverage(con, report_id):
+    rows = con.execute(
+        """
+        select report_id, report_month, signal_type, direction, list_present,
+               declared_count, extracted_count, validation_status, evidence_text,
+               source_url, source_hash
+        from ism_report_industry_signal_coverage
+        where report_id = ?
+        order by signal_type, direction
+        """,
+        (report_id,),
+    ).fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["list_present"] = bool(item["list_present"])
+        result.append(item)
+    return result
+
+
+def load_ism_at_a_glance_rows(con, report_id):
+    rows = con.execute(
+        """
+        select report_id, report_month, series_id, label, current_value,
+               previous_value, point_change, direction, rate_of_change,
+               trend_months, source_url, source_hash
+        from ism_at_a_glance_rows
+        where report_id = ?
+        order by series_id
         """,
         (report_id,),
     ).fetchall()

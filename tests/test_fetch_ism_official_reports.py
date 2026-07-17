@@ -161,6 +161,7 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
         "source_name": "ismworld",
         "ai_extractions": 1,
         "industry_signals": 2,
+        "industry_signal_coverage": 2,
         "ai_summary": 0,
         "commodities": 1,
         "narrative_facts": 1,

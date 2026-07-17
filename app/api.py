@@ -13,6 +13,7 @@ from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.tools import (
     gdp_market_relationship,
+    ism_industry_analysis,
     ism_official_report,
     macro_growth_cycle,
     market_phase,
@@ -373,6 +374,23 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 ism_at_a_glance,
                 ism_comments,
             )
+            ism_industry_analysis_payload = None
+            if latest_ism_report:
+                report_id = latest_ism_report["report_id"]
+                signals = growth_cycle.load_ism_report_industry_signals(con, report_id)
+                coverage = growth_cycle.load_ism_report_industry_signal_coverage(
+                    con, report_id
+                )
+                at_a_glance = growth_cycle.load_ism_at_a_glance_rows(con, report_id)
+                ism_industry_analysis_payload = (
+                    ism_industry_analysis.build_ism_industry_analysis(
+                        latest_ism_report,
+                        signals,
+                        coverage,
+                        at_a_glance,
+                        ism_comments,
+                    )
+                )
             return macro_growth_cycle.build_ism_manufacturing_detail_payload(
                 ism_points,
                 gdp_level_rows=gdp_level_rows,
@@ -380,6 +398,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 ism_industry_breadth=ism_industry_breadth,
                 ism_at_a_glance=ism_at_a_glance,
                 ism_official_summary=ism_official_summary,
+                ism_industry_analysis=ism_industry_analysis_payload,
             )
 
         rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")

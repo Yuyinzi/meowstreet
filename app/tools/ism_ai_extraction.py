@@ -170,14 +170,11 @@ def _validate_industry_signals_are_from_source(payload, report_text):
             )
         industries = [signal["industry"] for signal in signals]
         if len(industries) != len(set(industries)):
-            raise ValueError(
-                f"industry signals are duplicated for {key[0]} {key[1]}"
-            )
+            raise ValueError(f"industry signals are duplicated for {key[0]} {key[1]}")
         declared_counts = {
             count
             for signal in signals
-            if (count := _declared_industry_count(signal["evidence_text"]))
-            is not None
+            if (count := _declared_industry_count(signal["evidence_text"])) is not None
         }
         if len(declared_counts) == 1:
             expected_count = declared_counts.pop()
@@ -201,8 +198,7 @@ def _validate_overall_industry_lists_are_complete(payload, report_text):
         signals = [
             signal
             for signal in payload.get("industry_signals", [])
-            if signal["signal_type"] == signal_type
-            and signal["direction"] == direction
+            if signal["signal_type"] == signal_type and signal["direction"] == direction
         ]
         if len(signals) != expected_count:
             raise ValueError(
@@ -211,9 +207,23 @@ def _validate_overall_industry_lists_are_complete(payload, report_text):
             )
 
 
+def _validate_industry_signal_coverage_against_source(payload, report_text):
+    source_text = _normalized_text(report_text)
+    for cov in payload.get("industry_signal_coverage", []):
+        if cov["extracted_count"] > 0:
+            continue
+        cov_evidence = _normalized_text(cov["evidence_text"])
+        if cov_evidence not in source_text:
+            raise ValueError(
+                "industry signal coverage evidence is not present in source: "
+                f"{cov['signal_type']} {cov['direction']}"
+            )
+
+
 def _validate_industry_signals_against_source(payload, report_text):
     _validate_industry_signals_are_from_source(payload, report_text)
     _validate_overall_industry_lists_are_complete(payload, report_text)
+    _validate_industry_signal_coverage_against_source(payload, report_text)
 
 
 def _comment_keywords(comments):
@@ -283,6 +293,56 @@ _GROUPED_DIRECTION_ALIASES = {
     ("imports", "contraction"): "lower",
     ("imports", "decrease"): "lower",
 }
+
+
+class IndustrySignalCoverageModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    signal_type: SignalType
+    direction: Direction
+    list_present: bool
+    declared_count: int | None = None
+    extracted_count: int
+    validation_status: Literal["complete", "partial"]
+    evidence_text: str
+
+
+def declared_industry_count(evidence_text):
+    return _declared_industry_count(evidence_text)
+
+
+def build_industry_signal_coverage(signal_lists):
+    coverage = []
+    for signal_list in signal_lists:
+        extracted_count = len(signal_list["industries"])
+        declared = _declared_industry_count(signal_list["evidence_text"])
+        is_zero_list = bool(
+            re.search(
+                r"\b(?:no industr(?:y|ies)|none)\b",
+                signal_list["evidence_text"],
+                re.IGNORECASE,
+            )
+        )
+        list_present = extracted_count > 0 or is_zero_list
+        if is_zero_list and extracted_count == 0:
+            declared = 0
+            validation_status = "complete"
+        elif declared is not None and extracted_count == declared:
+            validation_status = "complete"
+        else:
+            validation_status = "partial"
+        coverage.append(
+            {
+                "signal_type": signal_list["signal_type"],
+                "direction": signal_list["direction"],
+                "list_present": list_present,
+                "declared_count": declared,
+                "extracted_count": extracted_count,
+                "validation_status": validation_status,
+                "evidence_text": signal_list["evidence_text"],
+            }
+        )
+    return coverage
 
 
 class ReportModel(BaseModel):
@@ -417,6 +477,9 @@ class IsmRichExtractionModel(BaseModel):
     report: ReportModel
     at_a_glance_rows: list[AtAGlanceRowModel]
     industry_signals: list[IndustrySignalModel]
+    industry_signal_coverage: list[IndustrySignalCoverageModel] = Field(
+        default_factory=list
+    )
     respondent_comments: list[RespondentCommentModel]
     commodities: list[CommoditySignalModel]
     narrative_facts: NarrativeFactsModel
@@ -498,6 +561,9 @@ class IsmFactualExtractionModel(BaseModel):
     report: ReportModel
     at_a_glance_rows: list[AtAGlanceRowModel]
     industry_signals: list[IndustrySignalModel]
+    industry_signal_coverage: list[IndustrySignalCoverageModel] = Field(
+        default_factory=list
+    )
     respondent_comments: list[RespondentCommentModel]
     commodities: list[CommoditySignalModel]
     narrative_facts: NarrativeFactsModel
@@ -1089,7 +1155,13 @@ def _normalize_section_payload(section_name, payload):
         return payload
     signal_lists = payload.get("industry_signal_lists")
     if signal_lists is None:
-        return {"industry_signals": payload["industry_signals"]}
+        flat_signals = payload["industry_signals"]
+        coverage = _derive_legacy_signal_coverage(flat_signals)
+        return {
+            "industry_signals": flat_signals,
+            "industry_signal_coverage": coverage,
+        }
+    coverage = build_industry_signal_coverage(signal_lists)
     industry_signals = [
         {
             "signal_type": signal_list["signal_type"],
@@ -1101,7 +1173,40 @@ def _normalize_section_payload(section_name, payload):
         for signal_list in signal_lists
         for rank, industry in enumerate(signal_list["industries"], start=1)
     ]
-    return {"industry_signals": industry_signals}
+    return {
+        "industry_signals": industry_signals,
+        "industry_signal_coverage": coverage,
+    }
+
+
+def _derive_legacy_signal_coverage(flat_signals):
+    from collections import OrderedDict
+
+    groups = OrderedDict()
+    for signal in flat_signals:
+        key = (signal["signal_type"], signal["direction"])
+        groups.setdefault(key, []).append(signal)
+    coverage = []
+    for (signal_type, direction), signals in groups.items():
+        extracted_count = len(signals)
+        declared = _declared_industry_count(signals[0]["evidence_text"])
+        list_present = extracted_count > 0
+        if declared is not None and extracted_count == declared:
+            validation_status = "complete"
+        else:
+            validation_status = "partial"
+        coverage.append(
+            {
+                "signal_type": signal_type,
+                "direction": direction,
+                "list_present": list_present,
+                "declared_count": declared,
+                "extracted_count": extracted_count,
+                "validation_status": validation_status,
+                "evidence_text": signals[0]["evidence_text"],
+            }
+        )
+    return coverage
 
 
 async def _complete_json_async(client, prompt):

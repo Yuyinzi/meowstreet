@@ -15,6 +15,7 @@
     selectedGrowthCycleDetailId: null,
     selectedGrowthCycleChartRange: "1y",
     growthCycleDetailsById: {},
+    selectedIsmIndustry: null,
     selectedNominalCurrentDate: null,
     selectedNominalComparisonDate: null,
     selectedRealCurrentDate: null,
@@ -42,6 +43,7 @@
     state.selectedRelationshipId = null;
     state.selectedRatesDetailId = null;
     state.selectedGrowthCycleDetailId = null;
+    state.selectedIsmIndustry = null;
     state.selectedNominalCurrentDate = null;
     state.selectedNominalComparisonDate = null;
     state.selectedRealCurrentDate = null;
@@ -2145,6 +2147,18 @@
     const latest = payload.latest || {};
     const latestMetadata = payload.latest_metadata || {};
     const latestGroups = payload.detail_groups || [];
+
+    const industryAnalysis = payload.industry_analysis;
+    let selectedIndustryData = null;
+    if (industryAnalysis && industryAnalysis.status !== "unavailable" && industryAnalysis.industries && industryAnalysis.industries.length) {
+      if (!state.selectedIsmIndustry || !industryAnalysis.industries.some((ind) => ind.industry === state.selectedIsmIndustry)) {
+        state.selectedIsmIndustry = industryAnalysis.industries[0].industry;
+      }
+      selectedIndustryData = industryAnalysis.industries.find((ind) => ind.industry === state.selectedIsmIndustry) || industryAnalysis.industries[0];
+    } else {
+      state.selectedIsmIndustry = null;
+    }
+
     body.innerHTML = `
       ${renderGrowthCycleRangeControl()}
       ${renderIsmOfficialReportSummary(payload.official_report_summary)}
@@ -2180,12 +2194,16 @@
           </div>
         `}).join("")}
       </div>` : ""}
+      ${renderIsmIndustryAnalysisSection(industryAnalysis, selectedIndustryData)}
     `;
     bindGrowthCycleRangeControl(body);
     attachIsmOfficialSummaryHandlers(body);
     attachRatesChartTooltips(body, lineCharts);
     const multiChart = charts.find((c) => c.kind === "small_multiples");
     if (multiChart) attachIsmSharedTooltip(body, rebaseVisibleSmallMultipleChart(multiChart));
+    if (industryAnalysis && industryAnalysis.status !== "unavailable" && industryAnalysis.industries && industryAnalysis.industries.length) {
+      bindIsmIndustrySelector(body, industryAnalysis);
+    }
   }
 
   function renderGrowthCycleDetailInPanel(body) {
@@ -2344,14 +2362,15 @@
   function renderIsmIndustryList(items, type, emptyLabel) {
     const rows = (items || []).map((item, i) => {
       const prefix = type === "growth" ? MEDALS[i] || "" : "\uD83D\uDD3B";
+      const selected = state.selectedIsmIndustry === item.industry ? " ism-industry-button-selected" : "";
       return `
-      <li>
-        <span>${prefix} ${escapeHtml(item.industry || "")}</span>
+      <button type="button" class="ism-industry-list-button${selected}" data-ism-industry="${escapeHtml(item.industry)}">
+        <span class="ism-industry-list-text">${prefix} ${escapeHtml(item.industry || "")}</span>
         <small class="ism-industry-zh">${escapeHtml(zhLabel(item.industry) || "")}</small>
-      </li>
+      </button>
     `;
     }).join("");
-    return rows || `<li><span>${escapeHtml(emptyLabel)}</span></li>`;
+    return rows || `<p class="ism-industry-empty">${escapeHtml(emptyLabel)}</p>`;
   }
 
   function renderIsmIndustryBreadthGroup(group) {
@@ -2381,15 +2400,419 @@
         <div class="ism-industry-columns">
           <div>
             <h5>${bilingualLabel("Growing Industries")}</h5>
-            <ul class="ism-industry-list">${renderIsmIndustryList(summary.top_growth, "growth", "No growth industries")}</ul>
+            <div class="ism-industry-list">${renderIsmIndustryList(summary.top_growth, "growth", "No growth industries")}</div>
           </div>
           <div>
             <h5>${bilingualLabel("Contracting Industries")}</h5>
-            <ul class="ism-industry-list">${renderIsmIndustryList(summary.top_contraction, "contraction", "No contracting industries")}</ul>
+            <div class="ism-industry-list">${renderIsmIndustryList(summary.top_contraction, "contraction", "No contracting industries")}</div>
           </div>
         </div>
       </section>
     `;
+  }
+
+  function ismScoreLabelClass(label) {
+    const classes = {
+      strong: "ism-score-strong",
+      improving: "ism-score-improving",
+      mixed: "ism-score-mixed",
+      weakening: "ism-score-weakening",
+      weak: "ism-score-weak",
+      unavailable: "ism-score-unavailable",
+    };
+    return classes[label] || "ism-score-unavailable";
+  }
+
+  function ismSignalBadgeClass(status) {
+    const classes = {
+      positive: "ism-signal-positive",
+      negative: "ism-signal-negative",
+      not_reported: "ism-signal-not-reported",
+      unavailable: "ism-signal-unavailable",
+    };
+    return classes[status] || "ism-signal-unavailable";
+  }
+
+  function ismSignalRowClass(status) {
+    const classes = {
+      positive: "ism-signal-row-positive",
+      negative: "ism-signal-row-negative",
+      not_reported: "ism-signal-row-not-reported",
+      unavailable: "ism-signal-row-unavailable",
+    };
+    return classes[status] || "ism-signal-row-unavailable";
+  }
+
+  function ismScoreLabelDisplay(label) {
+    const labels = {
+      strong: "Strong",
+      improving: "Improving",
+      mixed: "Mixed",
+      weakening: "Weakening",
+      weak: "Weak",
+      unavailable: "Unavailable",
+    };
+    return labels[label] || "Unavailable";
+  }
+
+  function ismSignalLabel(status) {
+    const labels = {
+      positive: "Positive",
+      negative: "Negative",
+      not_reported: "Not reported",
+      unavailable: "Unavailable",
+    };
+    return labels[status] || "Unavailable";
+  }
+
+  function ismTrendStatusAbbr(status) {
+    if (status === "positive") return "P";
+    if (status === "negative") return "N";
+    if (status === "not_reported") return "\u2014";
+    return "?";
+  }
+
+  function renderIsmSignalBadge(signal) {
+    const status = signal && signal.status ? signal.status : "unavailable";
+    return `<span class="ism-signal-badge ${escapeHtml(ismSignalBadgeClass(status))}">${escapeHtml(ismSignalLabel(status))}</span>`;
+  }
+
+  function renderIsmRankText(listSize, rank) {
+    if (rank != null && listSize != null) return `#${rank} of ${listSize}`;
+    return "\u2014";
+  }
+
+  function renderIsmIndustryAnalysisSection(analysis, selectedIndustryData) {
+    if (!analysis || analysis.status === "unavailable") {
+      if (analysis && analysis.status === "unavailable") {
+        return `
+          <section class="ism-detail-group ism-industry-analysis">
+            <h4>${bilingualLabel("Industry Analysis")}</h4>
+            <p class="ism-industry-unavailable">${escapeHtml(analysis.reason || "Industry analysis unavailable")}</p>
+          </section>
+        `;
+      }
+      return "";
+    }
+
+    const industries = analysis.industries || [];
+    const selectedIndustry = selectedIndustryData || industries[0];
+    if (!selectedIndustry) return "";
+
+    const coverageSummary = analysis.coverage_summary || {};
+    const period = analysis.period || "";
+    const formattedPeriod = fmtMonthYear(period);
+    const sourceUrl = analysis.source_url || "";
+    const scoreVersion = analysis.score_version || "";
+    const macroContext = analysis.macro_context || {};
+
+    const totalComponents = (coverageSummary.complete_components ?? 0) + (coverageSummary.unavailable_components ?? 0);
+    const noneUnavailable = (coverageSummary.unavailable_components ?? 0) === 0;
+    const coverageText = noneUnavailable
+      ? `Data Coverage: Complete`
+      : `Data Coverage: ${escapeHtml(String(coverageSummary.complete_components ?? 0))}/${escapeHtml(String(totalComponents))} components, ${escapeHtml(String(coverageSummary.unavailable_components ?? 0))} unavailable`;
+
+    const selectorOptions = industries.map((ind) => {
+      const score = ind.score != null ? ` (Score: ${ind.score.toFixed(1)})` : "";
+      const selected = ind.industry === state.selectedIsmIndustry ? " selected" : "";
+      return `<option value="${escapeHtml(ind.industry)}"${selected}>${escapeHtml(ind.industry + score)}</option>`;
+    }).join("");
+
+    const macroHtml = renderIsmMacroContext(macroContext);
+    const detailHtml = renderIsmIndustryDetailView(selectedIndustry, analysis);
+
+    return `
+      <section class="ism-detail-group ism-industry-analysis">
+        <h4>${bilingualLabel("Industry Analysis")} <small>${escapeHtml(scoreVersion)}</small></h4>
+        <p class="ism-industry-score-explanation">ISM signal configuration, not an investment recommendation.</p>
+        <div class="ism-industry-meta">
+          <span>${bilingualLabel("Report")}: ${escapeHtml(formattedPeriod)}</span>
+          <span>${coverageText}</span>
+          ${sourceUrl ? `<span><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${bilingualLabel("Source")}</a></span>` : ""}
+        </div>
+        ${macroHtml}
+        <div class="ism-industry-selector-wrap">
+          <label for="ism-industry-select">${bilingualLabel("Select Industry")}</label>
+          <select id="ism-industry-select" class="ism-industry-select" data-ism-industry-select>${selectorOptions}</select>
+        </div>
+        ${detailHtml}
+      </section>
+    `;
+  }
+
+  function renderIsmIndustryDetailView(industryData, analysis) {
+    const overallSignal = industryData.overall_signal || {};
+    const coreSignals = industryData.core_signals || {};
+    const comments = industryData.comments || [];
+    const trend = industryData.trend || [];
+    const summary = industryData.summary;
+
+    const score = industryData.score;
+    const scoreCoverage = industryData.score_coverage;
+    const scoreLabel = industryData.score_label || "unavailable";
+    const scoreDisplay = score != null ? score.toFixed(1) : "n/a";
+    const coverageDisplay = scoreCoverage != null ? `${scoreCoverage.toFixed(1)}% ${bilingualLabel("coverage")}` : "";
+    const labelClass = ismScoreLabelClass(scoreLabel);
+    const labelDisplay = ismScoreLabelDisplay(scoreLabel);
+
+    const weights = analysis.score_weights || {};
+    const period = analysis.period || "";
+    const sourceUrl = analysis.source_url || "";
+
+    const signalConfig = [
+      ["new_orders", "New Orders"],
+      ["production", "Production"],
+      ["backlog", "Backlog"],
+    ];
+
+    const signalRowsHtml = signalConfig.map(([key, label]) => {
+      const sig = coreSignals[key] || {};
+      return renderIsmCoreSignalRow(key, sig, label);
+    }).join("");
+
+    const overallRowClass = ismSignalRowClass(overallSignal.status);
+    const overallBadge = renderIsmSignalBadge(overallSignal);
+    const overallRankText = renderIsmRankText(overallSignal.list_size, overallSignal.rank);
+    const overallScore = overallSignal.component_score;
+    const overallScoreText = overallScore != null ? overallScore.toFixed(1) : "\u2014";
+
+    const summaryHtml = summary ? `<p class="ism-industry-summary">${escapeHtml(summary)}</p>` : "";
+
+    return `
+      <div class="ism-industry-detail" data-ism-industry-detail>
+        <div class="ism-industry-header">
+          <h5>${escapeHtml(industryData.industry)}</h5>
+          <span class="ism-industry-period">${escapeHtml(fmtMonthYear(period))}</span>
+        </div>
+        ${summaryHtml}
+        <div class="ism-industry-score-band">
+          <div class="ism-industry-main-score">
+            <span class="ism-score-value">${escapeHtml(scoreDisplay)}</span>
+            <span class="ism-score-label ${escapeHtml(labelClass)}">${escapeHtml(labelDisplay)}</span>
+          </div>
+          <span class="ism-industry-score-coverage">${coverageDisplay}</span>
+        </div>
+        <div class="ism-industry-signals">
+          ${signalRowsHtml}
+          <div class="ism-industry-signal-row ism-industry-signal-row-overall ${escapeHtml(overallRowClass)}">
+            <span class="ism-signal-name">Overall</span>
+            ${overallBadge}
+            <span class="ism-signal-rank">${escapeHtml(overallRankText)}</span>
+            <span class="ism-signal-component-score">${escapeHtml(overallScoreText)}</span>
+          </div>
+        </div>
+        ${renderIsmScoreComponentDetail(coreSignals, overallSignal, weights)}
+        ${renderIsmEvidenceDetail(coreSignals)}
+        <div class="ism-industry-comments">
+          <h6>${bilingualLabel("Respondent Comments")}</h6>
+          ${comments && comments.length ? comments.map((text) => `<p class="ism-industry-comment-text">${escapeHtml(text)}</p>`).join("") : `<p class="ism-industry-no-comment">${bilingualLabel("No respondent comment in this report")}</p>`}
+        </div>
+        ${renderIsmIndustryTrend(trend)}
+        ${sourceUrl ? `<div class="ism-industry-source"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${bilingualLabel("Official ISM Report")} &rarr;</a></div>` : ""}
+      </div>
+    `;
+  }
+
+  function renderIsmCoreSignalRow(signalKey, signal, label) {
+    const status = signal && signal.status ? signal.status : "unavailable";
+    const rowClass = ismSignalRowClass(status);
+    const badge = renderIsmSignalBadge(signal);
+    const rankText = renderIsmRankText(signal ? signal.list_size : null, signal ? signal.rank : null);
+    const componentScore = signal ? signal.component_score : null;
+    const scoreText = componentScore != null ? componentScore.toFixed(1) : "\u2014";
+    return `
+      <div class="ism-industry-signal-row ${escapeHtml(rowClass)}">
+        <span class="ism-signal-name">${escapeHtml(label)}</span>
+        ${badge}
+        <span class="ism-signal-rank">${escapeHtml(rankText)}</span>
+        <span class="ism-signal-component-score">${escapeHtml(scoreText)}</span>
+      </div>
+    `;
+  }
+
+  function renderIsmScoreComponentDetail(coreSignals, overallSignal, weights) {
+    const entries = [
+      ["new_orders", "New Orders", coreSignals.new_orders, weights.new_orders],
+      ["production", "Production", coreSignals.production, weights.production],
+      ["backlog", "Backlog", coreSignals.backlog, weights.backlog],
+      ["overall", "Overall Rank", overallSignal, weights.overall],
+    ];
+
+    const rows = entries.map(([key, label, signal, weight]) => {
+      const score = signal ? signal.component_score : null;
+      const scoreText = score != null ? score.toFixed(1) : "\u2014";
+      const weightPct = weight != null ? (weight * 100).toFixed(0) : "0";
+      return `
+        <div class="ism-component-row">
+          <span class="ism-component-label">${escapeHtml(label)}</span>
+          <div class="ism-component-bar-wrap"><span class="ism-component-bar" style="width: ${escapeHtml(weightPct)}%"></span></div>
+          <span class="ism-component-pct">${escapeHtml(weightPct)}%</span>
+          <span class="ism-component-score-val">${escapeHtml(scoreText)}</span>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <details class="ism-industry-components">
+        <summary>${bilingualLabel("Score Components")}</summary>
+        <div class="ism-component-rows">${rows}</div>
+      </details>
+    `;
+  }
+
+  function renderIsmEvidenceDetail(coreSignals) {
+    const signalConfig = [
+      ["new_orders", "New Orders"],
+      ["production", "Production"],
+      ["backlog", "Backlog"],
+    ];
+    const rows = signalConfig.map(([key, label]) => {
+      const sig = coreSignals[key] || {};
+      const evidence = sig.evidence_text;
+      if (!evidence) return "";
+      return `
+        <div class="ism-macro-row">
+          <span>${escapeHtml(label)}</span>
+          <span>${escapeHtml(evidence)}</span>
+        </div>
+      `;
+    }).filter(Boolean).join("");
+    if (!rows) return "";
+    return `
+      <details class="ism-industry-macro-context">
+        <summary>${bilingualLabel("Source Evidence")}</summary>
+        <div class="ism-macro-rows">${rows}</div>
+      </details>
+    `;
+  }
+
+  function renderIsmMacroContext(macroContext) {
+    const keys = [
+      ["new_orders", "New Orders"],
+      ["production", "Production"],
+      ["backlog", "Backlog"],
+      ["inventories", "Inventories"],
+      ["customer_inventories", "Customers' Inventories"],
+    ];
+
+    const rows = keys.map(([key, label]) => {
+      const ctx = macroContext[key];
+      if (!ctx) return "";
+      const chip = ctx.tone && ctx.point_change != null ? renderIsmTrendChip({
+        tone: ctx.tone,
+        point_change: ctx.point_change,
+        direction: ctx.direction || "",
+        rate_of_change: ctx.rate_of_change || "",
+        trend_months: ctx.trend_months || 0,
+      }) : "";
+      return `
+        <div class="ism-demand-row">
+          <span class="ism-demand-label">${escapeHtml(label)}</span>
+          <div class="ism-demand-right">
+            <strong class="ism-demand-value">${escapeHtml(fmtIsmIndex(ctx.value))}</strong>
+            ${chip}
+          </div>
+        </div>
+      `;
+    }).filter(Boolean).join("");
+
+    if (!rows) return "";
+
+    return `
+      <div class="ism-demand-wrap">
+        <h6 class="ism-demand-heading">${bilingualLabel("Macro Demand Context")}</h6>
+        <div class="ism-demand-rows">
+          ${rows}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderIsmIndustryTrend(trend) {
+    if (!trend || !trend.length) {
+      return `
+        <div class="ism-industry-trend">
+          <h6>${bilingualLabel("Signal Trend")}</h6>
+          <p class="ism-trend-empty">${bilingualLabel("Historical coverage unavailable")}</p>
+        </div>
+      `;
+    }
+
+    const sorted = [...trend].sort((a, b) => a.period.localeCompare(b.period));
+
+    const headers = [
+      bilingualLabel("Period"),
+      bilingualLabel("Score"),
+      bilingualLabel("Cov"),
+      bilingualLabel("Rank"),
+      bilingualLabel("NO"),
+      bilingualLabel("Prod"),
+      bilingualLabel("BL"),
+    ];
+
+    const rows = sorted.map((point) => {
+      const period = fmtMonthYear(point.period);
+      const score = point.score != null ? point.score.toFixed(1) : "\u2014";
+      const cov = point.score_coverage != null ? point.score_coverage.toFixed(0) : "\u2014";
+      const rank = point.overall_rank != null ? String(point.overall_rank) : "\u2014";
+
+      const noStatus = point.new_orders ? point.new_orders.status : null;
+      const prodStatus = point.production ? point.production.status : null;
+      const blStatus = point.backlog ? point.backlog.status : null;
+
+      return `
+        <tr>
+          <td>${escapeHtml(period)}</td>
+          <td>${escapeHtml(score)}</td>
+          <td>${escapeHtml(cov)}</td>
+          <td>${escapeHtml(rank)}</td>
+          <td class="${escapeHtml(ismSignalBadgeClass(noStatus))}">${escapeHtml(ismTrendStatusAbbr(noStatus))}</td>
+          <td class="${escapeHtml(ismSignalBadgeClass(prodStatus))}">${escapeHtml(ismTrendStatusAbbr(prodStatus))}</td>
+          <td class="${escapeHtml(ismSignalBadgeClass(blStatus))}">${escapeHtml(ismTrendStatusAbbr(blStatus))}</td>
+        </tr>
+      `;
+    }).join("");
+
+    return `
+      <div class="ism-industry-trend">
+        <h6>${bilingualLabel("Signal Trend")}</h6>
+        <div class="ism-trend-table-wrap">
+          <table class="ism-trend-table">
+            <thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function updateIsmIndustryDetail(body, industryName, analysis) {
+    const detailContainer = body.querySelector("[data-ism-industry-detail]");
+    if (!detailContainer) return;
+    const industryData = analysis.industries.find((ind) => ind.industry === industryName);
+    if (!industryData) return;
+    state.selectedIsmIndustry = industryName;
+    detailContainer.outerHTML = renderIsmIndustryDetailView(industryData, analysis);
+    body.querySelectorAll("[data-ism-industry]").forEach((btn) => {
+      btn.classList.toggle("ism-industry-button-selected", btn.dataset.ismIndustry === industryName);
+    });
+    if (body.querySelector("[data-ism-industry-select]")) {
+      body.querySelector("[data-ism-industry-select]").value = industryName;
+    }
+  }
+
+  function bindIsmIndustrySelector(body, analysis) {
+    body._ismIndustryAnalysis = analysis;
+    if (body.dataset.ismIndustryBound === "true") return;
+    body.dataset.ismIndustryBound = "true";
+    body.addEventListener("change", (event) => {
+      const select = event.target.closest("[data-ism-industry-select]");
+      if (select) updateIsmIndustryDetail(body, select.value, body._ismIndustryAnalysis);
+    });
+    body.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-ism-industry]");
+      if (button) updateIsmIndustryDetail(body, button.dataset.ismIndustry, body._ismIndustryAnalysis);
+    });
   }
 
   function renderIsmManufacturingCard(card) {
@@ -3642,6 +4065,7 @@
       state,
       renderDetailPanel,
       renderIsmTrendChip,
+      renderIsmDetailInPanel,
       fmtIsmPointChange,
       toggleDetailPanelExpanded,
       xAt,
@@ -3649,6 +4073,24 @@
       renderXAxisTicks,
       yAt,
       yAxisTicks,
+      ismScoreLabelClass,
+      ismScoreLabelDisplay,
+      ismSignalBadgeClass,
+      ismSignalRowClass,
+      ismSignalLabel,
+      ismTrendStatusAbbr,
+      renderIsmSignalBadge,
+      renderIsmRankText,
+      renderIsmIndustryAnalysisSection,
+      renderIsmIndustryDetailView,
+      renderIsmCoreSignalRow,
+      renderIsmScoreComponentDetail,
+      renderIsmEvidenceDetail,
+      renderIsmMacroContext,
+      renderIsmIndustryTrend,
+      renderIsmIndustryList,
+      updateIsmIndustryDetail,
+      bindIsmIndustrySelector,
     };
   }
 

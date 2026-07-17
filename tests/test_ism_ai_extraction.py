@@ -594,6 +594,75 @@ def test_industry_signal_validation_uses_subset_without_manufacturing_qualifier(
     ism_ai_extraction._validate_industry_signals_against_source(payload, evidence)
 
 
+def test_zero_list_coverage_evidence_rejected_when_absent_from_source():
+    evidence = "Some completely unrelated evidence text about the economy."
+    payload = {
+        "industry_signals": [],
+        "industry_signal_coverage": [
+            {
+                "signal_type": "backlog",
+                "direction": "lower",
+                "list_present": True,
+                "declared_count": 0,
+                "extracted_count": 0,
+                "validation_status": "complete",
+                "evidence_text": "No industries reported lower backlogs in October.",
+            }
+        ],
+    }
+
+    with pytest.raises(
+        ValueError, match="industry signal coverage evidence is not present in source"
+    ):
+        ism_ai_extraction._validate_industry_signal_coverage_against_source(
+            payload, evidence
+        )
+
+
+def test_zero_list_coverage_evidence_accepted_when_present_in_source():
+    report_text = "No industries reported lower backlogs in October. Other text."
+    payload = {
+        "industry_signals": [],
+        "industry_signal_coverage": [
+            {
+                "signal_type": "backlog",
+                "direction": "lower",
+                "list_present": True,
+                "declared_count": 0,
+                "extracted_count": 0,
+                "validation_status": "complete",
+                "evidence_text": "No industries reported lower backlogs in October.",
+            }
+        ],
+    }
+
+    ism_ai_extraction._validate_industry_signal_coverage_against_source(
+        payload, report_text
+    )
+
+
+def test_non_zero_coverage_evidence_not_validated_against_source():
+    evidence = ""
+    payload = {
+        "industry_signals": [],
+        "industry_signal_coverage": [
+            {
+                "signal_type": "new_orders",
+                "direction": "growth",
+                "list_present": True,
+                "declared_count": 5,
+                "extracted_count": 5,
+                "validation_status": "complete",
+                "evidence_text": "Five industries reported growth.",
+            }
+        ],
+    }
+
+    ism_ai_extraction._validate_industry_signal_coverage_against_source(
+        payload, evidence
+    )
+
+
 def test_grouped_industry_signal_normalizes_historical_growth_directions():
     result = ism_ai_extraction.IndustrySignalsSectionModel.model_validate(
         {
@@ -603,8 +672,7 @@ def test_grouped_industry_signal_normalizes_historical_growth_directions():
                     "direction": "growth",
                     "industries": ["Machinery"],
                     "evidence_text": (
-                        "The industry reporting growth in order backlogs is "
-                        "Machinery."
+                        "The industry reporting growth in order backlogs is Machinery."
                     ),
                 },
                 {
@@ -622,6 +690,27 @@ def test_grouped_industry_signal_normalizes_historical_growth_directions():
 
     assert result["industry_signal_lists"][0]["direction"] == "higher"
     assert result["industry_signal_lists"][1]["direction"] == "lower"
+
+
+def test_zero_industry_list_builds_complete_coverage():
+    coverage = ism_ai_extraction.build_industry_signal_coverage(
+        [
+            {
+                "signal_type": "backlog",
+                "direction": "lower",
+                "industries": [],
+                "evidence_text": (
+                    "No industries reported lower order backlogs in October."
+                ),
+            }
+        ]
+    )
+
+    assert len(coverage) == 1
+    assert coverage[0]["validation_status"] == "complete"
+    assert coverage[0]["declared_count"] == 0
+    assert coverage[0]["extracted_count"] == 0
+    assert coverage[0]["list_present"] is True
 
 
 def test_grouped_industry_signal_accepts_explicit_empty_source_list():
@@ -712,24 +801,30 @@ def test_extract_section_expands_grouped_industry_lists_to_flat_rows():
         model,
     )
 
-    assert result == {
-        "industry_signals": [
-            {
-                "signal_type": "overall_growth",
-                "direction": "growth",
-                "industry": "Machinery",
-                "rank": 1,
-                "evidence_text": evidence,
-            },
-            {
-                "signal_type": "overall_growth",
-                "direction": "growth",
-                "industry": "Chemical Products",
-                "rank": 2,
-                "evidence_text": evidence,
-            },
-        ]
-    }
+    assert result["industry_signals"] == [
+        {
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "industry": "Machinery",
+            "rank": 1,
+            "evidence_text": evidence,
+        },
+        {
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "industry": "Chemical Products",
+            "rank": 2,
+            "evidence_text": evidence,
+        },
+    ]
+    assert len(result["industry_signal_coverage"]) == 1
+    cov = result["industry_signal_coverage"][0]
+    assert cov["signal_type"] == "overall_growth"
+    assert cov["extracted_count"] == 2
+    assert cov["declared_count"] == 2
+    assert cov["validation_status"] == "complete"
+
+
 @pytest.mark.asyncio
 async def test_extract_factual_with_client_async_runs_sections_with_concurrency_limit():
     payload = valid_extraction()
@@ -771,7 +866,9 @@ async def test_extract_factual_with_client_async_runs_sections_with_concurrency_
         client,
     )
 
-    assert result == payload
+    for key in payload:
+        assert result[key] == payload[key]
+    assert "industry_signal_coverage" in result
     assert len(client.calls) == 5
     assert client.max_seen == 3
 
@@ -916,7 +1013,9 @@ async def test_extract_with_client_async_extracts_facts_then_summarizes_validate
         AsyncFakeClient(),
     )
 
-    assert result == payload
+    for key in payload:
+        assert result[key] == payload[key]
+    assert "industry_signal_coverage" in result
     assert "June 2026 ISM report text" not in seen["summary_prompt"]
     assert "at_a_glance_rows" in seen["summary_prompt"]
 
@@ -949,7 +1048,9 @@ def test_assemble_factual_payload_from_sections_validates_complete_set():
 
     result = ism_ai_extraction.assemble_factual_payload_from_sections(sections)
 
-    assert result == factual
+    for key in factual:
+        assert result[key] == factual[key]
+    assert result["industry_signal_coverage"] == []
 
 
 def test_assemble_factual_payload_from_sections_rejects_missing_section():

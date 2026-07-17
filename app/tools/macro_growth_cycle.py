@@ -477,7 +477,7 @@ ISM_MANUFACTURING_SERIES_TO_PAYLOAD_KEY = {
 }
 
 
-def _ism_at_a_glance_tone(row):
+def ism_at_a_glance_tone(row):
     series_id = row.get("series_id", "")
     direction = row.get("direction", "")
     rate_of_change = row.get("rate_of_change", "")
@@ -515,7 +515,7 @@ def _ism_at_a_glance_by_key(rows):
             "direction": row["direction"],
             "rate_of_change": row["rate_of_change"],
             "trend_months": row["trend_months"],
-            "tone": _ism_at_a_glance_tone(row),
+            "tone": ism_at_a_glance_tone(row),
         }
     return result
 
@@ -844,6 +844,7 @@ def build_ism_manufacturing_detail_payload(
     ism_industry_breadth=None,
     ism_at_a_glance=None,
     ism_official_summary=None,
+    ism_industry_analysis=None,
 ):
     points_by_key = _ism_points_by_payload_key(points_by_series_id)
     all_keys = list(ISM_MANUFACTURING_DETAIL_LABELS)
@@ -908,6 +909,8 @@ def build_ism_manufacturing_detail_payload(
         result["latest_metadata"] = _ism_at_a_glance_by_key(ism_at_a_glance)
     if ism_official_summary:
         result["official_report_summary"] = ism_official_summary
+    if ism_industry_analysis:
+        result["industry_analysis"] = ism_industry_analysis
     return result
 
 

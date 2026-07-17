@@ -1960,6 +1960,348 @@ def test_growth_cycle_api_returns_ism_manufacturing_detail(monkeypatch):
     assert calls[-1] == ("close",)
 
 
+def test_growth_cycle_api_ism_detail_includes_industry_analysis(monkeypatch):
+    from app import api
+
+    def fake_connect():
+        return _FakeConStubs()
+
+    def fake_load_macro_indicator_points_for_series(con, series_ids):
+        return {
+            "ism_manufacturing_pmi": [
+                {"date": "2026-06-01", "value": 52.6, "source": "test"}
+            ],
+        }
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points_for_series",
+        fake_load_macro_indicator_points_for_series,
+    )
+    monkeypatch.setattr(
+        api.gdp_market_relationships, "connect", lambda: _FakeConStubs()
+    )
+    monkeypatch.setattr(api.benchmark_market_data, "connect", lambda: _FakeConStubs())
+    monkeypatch.setattr(
+        api.gdp_market_relationships, "load_quad_rows", lambda con, rid: []
+    )
+    monkeypatch.setattr(
+        api.benchmark_market_data, "load_price_rows", lambda con, bid: []
+    )
+    monkeypatch.setattr(
+        api.growth_cycle, "load_latest_ism_industry_rankings", lambda con: []
+    )
+    monkeypatch.setattr(
+        api.growth_cycle, "load_latest_ism_at_a_glance_rows", lambda con: []
+    )
+
+    report = {
+        "report_id": "ism_manufacturing_2026_06",
+        "report_month": "2026-06-01",
+        "title": "June 2026 Report",
+        "source_url": "https://example.com/june-2026",
+        "source_name": "ismworld",
+    }
+
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: report,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_source_snapshot",
+        lambda con, url: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_industry_signals",
+        lambda con, rid: _default_signals(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_industry_signal_coverage",
+        lambda con, rid: _default_coverage(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_at_a_glance_rows",
+        lambda con, rid: _default_at_a_glance(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_comments",
+        lambda con, rid: _default_comments(),
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle/ism_manufacturing")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "industry_analysis" in payload
+    ia = payload["industry_analysis"]
+    assert ia["status"] == "available"
+    assert ia["report_id"] == "ism_manufacturing_2026_06"
+    assert len(ia["industries"]) > 0
+    printing = next(
+        i
+        for i in ia["industries"]
+        if i["industry"] == "Printing & Related Support Activities"
+    )
+    assert printing["overall_signal"]["rank"] == 1
+    assert printing["core_signals"]["new_orders"]["rank"] == 3
+    assert printing["core_signals"]["production"]["rank"] == 1
+    assert printing["core_signals"]["backlog"]["status"] == "not_reported"
+    assert printing["comments"] == []
+
+
+def _default_signals():
+    from app.tools.ism_industry_analysis import CANONICAL_INDUSTRIES
+
+    growth_industries = [
+        "Printing & Related Support Activities",
+        "Machinery",
+        "Chemical Products",
+        "Computer & Electronic Products",
+        "Electrical Equipment, Appliances & Components",
+        "Food, Beverage & Tobacco Products",
+        "Fabricated Metal Products",
+        "Primary Metals",
+        "Paper Products",
+        "Miscellaneous Manufacturing",
+        "Furniture & Related Products",
+        "Transportation Equipment",
+        "Plastics & Rubber Products",
+        "Wood Products",
+    ]
+    signals = []
+    for rank, ind in enumerate(growth_industries, start=1):
+        signals.append(
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "industry": ind,
+                "rank": rank,
+                "evidence_text": "The 14 manufacturing industries reporting growth in June.",
+                "report_id": "ism_manufacturing_2026_06",
+                "report_month": "2026-06-01",
+                "source_url": "https://example.com/june-2026",
+                "source_hash": "abc",
+            }
+        )
+    for ind in [
+        "Nonmetallic Mineral Products",
+        "Apparel, Leather & Allied Products",
+        "Petroleum & Coal Products",
+    ]:
+        r = [
+            "Nonmetallic Mineral Products",
+            "Apparel, Leather & Allied Products",
+            "Petroleum & Coal Products",
+        ].index(ind) + 1
+        signals.append(
+            {
+                "signal_type": "overall_contraction",
+                "direction": "contraction",
+                "industry": ind,
+                "rank": r,
+                "evidence_text": "The three industries reporting contraction in June.",
+                "report_id": "ism_manufacturing_2026_06",
+                "report_month": "2026-06-01",
+                "source_url": "https://example.com/june-2026",
+                "source_hash": "abc",
+            }
+        )
+    no_list = [
+        "Chemical Products",
+        "Computer & Electronic Products",
+        "Printing & Related Support Activities",
+        "Machinery",
+        "Electrical Equipment, Appliances & Components",
+        "Food, Beverage & Tobacco Products",
+        "Fabricated Metal Products",
+        "Primary Metals",
+        "Paper Products",
+        "Miscellaneous Manufacturing",
+        "Furniture & Related Products",
+    ]
+    for rank, ind in enumerate(no_list, start=1):
+        signals.append(
+            {
+                "signal_type": "new_orders",
+                "direction": "growth",
+                "industry": ind,
+                "rank": rank,
+                "evidence_text": "The 11 industries reporting growth in new orders.",
+                "report_id": "ism_manufacturing_2026_06",
+                "report_month": "2026-06-01",
+                "source_url": "https://example.com/june-2026",
+                "source_hash": "abc",
+            }
+        )
+    prod_list = [
+        "Printing & Related Support Activities",
+        "Chemical Products",
+        "Computer & Electronic Products",
+        "Machinery",
+        "Electrical Equipment, Appliances & Components",
+        "Food, Beverage & Tobacco Products",
+        "Fabricated Metal Products",
+        "Paper Products",
+    ]
+    for rank, ind in enumerate(prod_list, start=1):
+        signals.append(
+            {
+                "signal_type": "production",
+                "direction": "growth",
+                "industry": ind,
+                "rank": rank,
+                "evidence_text": "The eight industries reporting production growth.",
+                "report_id": "ism_manufacturing_2026_06",
+                "report_month": "2026-06-01",
+                "source_url": "https://example.com/june-2026",
+                "source_hash": "abc",
+            }
+        )
+    bh_list = [
+        "Machinery",
+        "Computer & Electronic Products",
+        "Chemical Products",
+        "Electrical Equipment, Appliances & Components",
+        "Food, Beverage & Tobacco Products",
+    ]
+    for rank, ind in enumerate(bh_list, start=1):
+        signals.append(
+            {
+                "signal_type": "backlog",
+                "direction": "higher",
+                "industry": ind,
+                "rank": rank,
+                "evidence_text": "The five industries reporting higher order backlogs.",
+                "report_id": "ism_manufacturing_2026_06",
+                "report_month": "2026-06-01",
+                "source_url": "https://example.com/june-2026",
+                "source_hash": "abc",
+            }
+        )
+    return signals
+
+
+def _default_coverage():
+    return [
+        {
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "list_present": True,
+            "declared_count": 14,
+            "extracted_count": 14,
+            "validation_status": "complete",
+            "evidence_text": "The 14 manufacturing industries reporting growth in June.",
+        },
+        {
+            "signal_type": "overall_contraction",
+            "direction": "contraction",
+            "list_present": True,
+            "declared_count": 3,
+            "extracted_count": 3,
+            "validation_status": "complete",
+            "evidence_text": "The three industries reporting contraction in June.",
+        },
+        {
+            "signal_type": "new_orders",
+            "direction": "growth",
+            "list_present": True,
+            "declared_count": 11,
+            "extracted_count": 11,
+            "validation_status": "complete",
+            "evidence_text": "The 11 industries reporting growth in new orders.",
+        },
+        {
+            "signal_type": "new_orders",
+            "direction": "decrease",
+            "list_present": True,
+            "declared_count": 0,
+            "extracted_count": 0,
+            "validation_status": "complete",
+            "evidence_text": "No industries reported a decrease in new orders in June.",
+        },
+        {
+            "signal_type": "production",
+            "direction": "growth",
+            "list_present": True,
+            "declared_count": 8,
+            "extracted_count": 8,
+            "validation_status": "complete",
+            "evidence_text": "The eight industries reporting production growth.",
+        },
+        {
+            "signal_type": "production",
+            "direction": "decrease",
+            "list_present": True,
+            "declared_count": 0,
+            "extracted_count": 0,
+            "validation_status": "complete",
+            "evidence_text": "No industries reported a decrease in production in June.",
+        },
+        {
+            "signal_type": "backlog",
+            "direction": "higher",
+            "list_present": True,
+            "declared_count": 5,
+            "extracted_count": 5,
+            "validation_status": "complete",
+            "evidence_text": "The five industries reporting higher order backlogs.",
+        },
+        {
+            "signal_type": "backlog",
+            "direction": "lower",
+            "list_present": True,
+            "declared_count": 0,
+            "extracted_count": 0,
+            "validation_status": "complete",
+            "evidence_text": "No industries reported lower order backlogs in June.",
+        },
+    ]
+
+
+def _default_at_a_glance():
+    return [
+        {
+            "series_id": "ism_manufacturing_new_orders",
+            "current_value": 56.0,
+            "direction": "Growing",
+            "rate_of_change": "Slower",
+            "label": "New Orders",
+            "report_id": "ism_manufacturing_2026_06",
+        },
+        {
+            "series_id": "ism_manufacturing_production",
+            "current_value": 52.2,
+            "direction": "Growing",
+            "rate_of_change": "Slower",
+            "label": "Production",
+            "report_id": "ism_manufacturing_2026_06",
+        },
+    ]
+
+
+def _default_comments():
+    return [
+        {
+            "industry": "Chemical Products",
+            "comment_text": "Input costs remain elevated.",
+            "report_id": "ism_manufacturing_2026_06",
+            "comment_index": 0,
+        }
+    ]
+
+
 def test_growth_cycle_api_returns_ism_industry_breadth(monkeypatch):
     from app import api
 

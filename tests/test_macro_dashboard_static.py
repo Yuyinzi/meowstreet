@@ -1400,3 +1400,557 @@ def test_macro_dashboard_static_assets_render_ism_trend_metadata():
     assert ".ism-trend-chip-green" in css
     assert ".ism-trend-chip-amber" in css
     assert ".ism-trend-chip-red" in css
+
+
+def test_macro_dashboard_js_has_industry_analysis_renderers():
+    js = STATIC_JS.read_text()
+    css = STATIC_CSS.read_text()
+
+    assert "selectedIsmIndustry" in js
+    assert "function ismScoreLabelClass(" in js
+    assert "function ismSignalBadgeClass(" in js
+    assert "function ismSignalRowClass(" in js
+    assert "function ismSignalLabel(" in js
+    assert "function ismTrendStatusAbbr(" in js
+    assert "function renderIsmSignalBadge(" in js
+    assert "function renderIsmRankText(" in js
+    assert "function renderIsmIndustryAnalysisSection(" in js
+    assert "function renderIsmIndustryDetailView(" in js
+    assert "function renderIsmCoreSignalRow(" in js
+    assert "function renderIsmScoreComponentDetail(" in js
+    assert "function renderIsmMacroContext(" in js
+    assert "function renderIsmIndustryTrend(" in js
+    assert "function bindIsmIndustrySelector(" in js
+    assert "data-ism-industry-select" in js
+    assert "data-ism-industry-detail" in js
+    assert "ISM signal configuration, not an investment recommendation" in js
+    assert "No respondent comment in this report" in js
+    assert "Score Components" in js
+    assert "ism-demand" in js
+    assert "Macro Demand Context" in js
+    assert "Signal Trend" in js
+    assert "Historical coverage unavailable" in js
+    assert ".ism-industry-analysis" in css
+    assert ".ism-industry-select" in css
+    assert ".ism-industry-detail" in css
+    assert ".ism-score-value" in css
+    assert ".ism-score-label" in css
+    assert ".ism-score-strong" in css
+    assert ".ism-score-improving" in css
+    assert ".ism-score-mixed" in css
+    assert ".ism-score-weakening" in css
+    assert ".ism-score-weak" in css
+    assert ".ism-score-unavailable" in css
+    assert ".ism-signal-badge" in css
+    assert ".ism-signal-positive" in css
+    assert ".ism-signal-negative" in css
+    assert ".ism-signal-not-reported" in css
+    assert ".ism-signal-unavailable" in css
+    assert ".ism-signal-row-positive" in css
+    assert ".ism-signal-row-negative" in css
+    assert ".ism-signal-row-not-reported" in css
+    assert ".ism-signal-row-unavailable" in css
+    assert ".ism-component-bar" in css
+    assert ".ism-trend-table" in css
+    assert ".ism-industry-component" in css
+    assert ".ism-demand-wrap" in css
+    assert ".ism-demand-row" in css
+    assert ".ism-demand-right" in css
+    assert ".ism-industry-source" in css
+
+
+def test_macro_dashboard_js_industry_analysis_renderers_produce_correct_html():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        // Test helper functions
+        console.log(JSON.stringify({
+          scoreLabelStrong: hooks.ismScoreLabelClass("strong"),
+          scoreLabelWeak: hooks.ismScoreLabelClass("weak"),
+          scoreLabelUnknown: hooks.ismScoreLabelClass("unknown"),
+          signalBadgePositive: hooks.ismSignalBadgeClass("positive"),
+          signalBadgeNotReported: hooks.ismSignalBadgeClass("not_reported"),
+          signalBadgeUnavailable: hooks.ismSignalBadgeClass("unavailable"),
+          signalRowPositive: hooks.ismSignalRowClass("positive"),
+          signalRowNegative: hooks.ismSignalRowClass("negative"),
+          signalLabelPositive: hooks.ismSignalLabel("positive"),
+          signalLabelNotReported: hooks.ismSignalLabel("not_reported"),
+          signalLabelUnavailable: hooks.ismSignalLabel("unavailable"),
+          trendAbbrPositive: hooks.ismTrendStatusAbbr("positive"),
+          trendAbbrNegative: hooks.ismTrendStatusAbbr("negative"),
+          trendAbbrNotReported: hooks.ismTrendStatusAbbr("not_reported"),
+          trendAbbrUnavailable: hooks.ismTrendStatusAbbr("unavailable"),
+          rankTextNormal: hooks.renderIsmRankText(11, 3),
+          rankTextNull: hooks.renderIsmRankText(null, null),
+          signalBadgeHtml: hooks.renderIsmSignalBadge({ status: "positive", rank: 3, list_size: 11, component_score: 90.9 }),
+          signalBadgeUnavailableHtml: hooks.renderIsmSignalBadge({}),
+          coreSignalRowHtml: hooks.renderIsmCoreSignalRow("new_orders", { status: "positive", rank: 3, list_size: 11, component_score: 90.9 }, "New Orders"),
+          coreSignalRowNotReported: hooks.renderIsmCoreSignalRow("backlog", { status: "not_reported", rank: null, list_size: null, component_score: 50.0 }, "Backlog"),
+          unavailableSection: hooks.renderIsmIndustryAnalysisSection({ status: "unavailable", reason: "latest ISM report is unavailable", industries: [] }, null),
+          noAnalysis: hooks.renderIsmIndustryAnalysisSection(null, null),
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["scoreLabelStrong"] == "ism-score-strong"
+    assert payload["scoreLabelWeak"] == "ism-score-weak"
+    assert payload["scoreLabelUnknown"] == "ism-score-unavailable"
+    assert payload["signalBadgePositive"] == "ism-signal-positive"
+    assert payload["signalBadgeNotReported"] == "ism-signal-not-reported"
+    assert payload["signalBadgeUnavailable"] == "ism-signal-unavailable"
+    assert payload["signalRowPositive"] == "ism-signal-row-positive"
+    assert payload["signalRowNegative"] == "ism-signal-row-negative"
+    assert payload["signalLabelPositive"] == "Positive"
+    assert payload["signalLabelNotReported"] == "Not reported"
+    assert payload["signalLabelUnavailable"] == "Unavailable"
+    assert payload["trendAbbrPositive"] == "P"
+    assert payload["trendAbbrNegative"] == "N"
+    assert payload["trendAbbrNotReported"] == "\u2014"
+    assert payload["trendAbbrUnavailable"] == "?"
+    assert payload["rankTextNormal"] == "#3 of 11"
+    assert payload["rankTextNull"] == "\u2014"
+    assert "ism-signal-positive" in payload["signalBadgeHtml"]
+    assert "Positive" in payload["signalBadgeHtml"]
+    assert "ism-signal-unavailable" in payload["signalBadgeUnavailableHtml"]
+    assert "ism-signal-row-positive" in payload["coreSignalRowHtml"]
+    assert "New Orders" in payload["coreSignalRowHtml"]
+    assert "#3 of 11" in payload["coreSignalRowHtml"]
+    assert "90.9" in payload["coreSignalRowHtml"]
+    assert "ism-signal-row-not-reported" in payload["coreSignalRowNotReported"]
+    assert "Not reported" in payload["coreSignalRowNotReported"]
+    assert "\u2014" in payload["coreSignalRowNotReported"]
+    assert "ISM report is unavailable" in payload["unavailableSection"]
+    assert payload["noAnalysis"] == ""
+
+
+def test_macro_dashboard_js_renders_industry_analysis_detail_view():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const analysis = {
+          status: "available",
+          score_version: "ism_industry_signal_v1",
+          score_weights: { new_orders: 0.40, production: 0.30, backlog: 0.20, overall: 0.10 },
+          coverage_summary: { complete_components: 4, unavailable_components: 0 },
+          report_id: "ism_manufacturing_2026_06",
+          period: "2026-06-01",
+          source_url: "https://example.com/report",
+          macro_context: {
+            new_orders: { value: 56.0, direction: "Growing", rate_of_change: "Slower", point_change: -1.5, trend_months: 8, tone: "amber" },
+            production: { value: 52.2, direction: "Growing", rate_of_change: "Slower", point_change: -0.8, trend_months: 6, tone: "amber" },
+            backlog: { value: 50.5, direction: "Growing", rate_of_change: "Slower", point_change: -2.1, trend_months: 4, tone: "amber" },
+            inventories: { value: 51.4, direction: "Growing", rate_of_change: "From Contracting", point_change: 3.2, trend_months: 2, tone: "amber" },
+            customer_inventories: { value: 42.3, direction: "Too Low", rate_of_change: "Faster", point_change: -4.1, trend_months: 5, tone: "amber" },
+          },
+          industries: [
+            {
+              industry: "Printing & Related Support Activities",
+              overall_signal: { status: "positive", direction: "growth", rank: 1, list_size: 14, component_score: 100.0 },
+              score: 86.4,
+              score_coverage: 100.0,
+              score_label: "strong",
+              summary: "New Orders and Production are strong; Backlog was not reported.",
+              core_signals: {
+                new_orders: { status: "positive", direction: "growth", rank: 3, list_size: 11, component_score: 90.9, evidence_text: null },
+                production: { status: "positive", direction: "growth", rank: 1, list_size: 8, component_score: 100.0, evidence_text: null },
+                backlog: { status: "not_reported", direction: null, rank: null, list_size: null, component_score: 50.0, evidence_text: null },
+              },
+              secondary_signals: {},
+              comments: [],
+              trend: [
+                { period: "2026-05-01", score: 71.2, score_coverage: 100.0, overall_rank: 4, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 5 }, production: { status: "positive", rank: 3 }, backlog: { status: "not_reported", rank: null } },
+                { period: "2026-06-01", score: 86.4, score_coverage: 100.0, overall_rank: 1, overall_direction: "growth", positive_confirmation_count: 2, new_orders: { status: "positive", rank: 3 }, production: { status: "positive", rank: 1 }, backlog: { status: "not_reported", rank: null } },
+              ],
+            },
+          ],
+        };
+
+        const sectionHtml = hooks.renderIsmIndustryAnalysisSection(analysis, analysis.industries[0]);
+        const detailHtml = hooks.renderIsmIndustryDetailView(analysis.industries[0], analysis);
+
+        console.log(JSON.stringify({
+          sectionHasIndustry: sectionHtml.indexOf("Printing &amp; Related Support Activities") !== -1,
+          sectionHasVersion: sectionHtml.indexOf("ism_industry_signal_v1") !== -1,
+          sectionHasSelector: sectionHtml.indexOf("data-ism-industry-select") !== -1,
+          sectionHasDetailContainer: sectionHtml.indexOf("data-ism-industry-detail") !== -1,
+          sectionHasSourceLink: sectionHtml.indexOf("https://example.com/report") !== -1,
+          sectionHasScoreExplanation: sectionHtml.indexOf("ISM signal configuration") !== -1,
+          detailHasScore: detailHtml.indexOf("86.4") !== -1,
+          detailHasScoreLabel: detailHtml.indexOf("ism-score-strong") !== -1,
+          detailHasSummary: detailHtml.indexOf("New Orders and Production are strong") !== -1,
+          detailHasNewOrdersRow: detailHtml.indexOf("New Orders") !== -1,
+          detailHasProductionRow: detailHtml.indexOf("Production") !== -1,
+          detailHasBacklogRow: detailHtml.indexOf("Backlog") !== -1,
+          detailHasOverallRow: detailHtml.indexOf("Overall") !== -1,
+          detailHasRank3Of11: detailHtml.indexOf("#3 of 11") !== -1,
+          detailHasRank1Of8: detailHtml.indexOf("#1 of 8") !== -1,
+          detailHasPositiveBadge: (detailHtml.match(/class="[^"]*ism-signal-positive[^"]*"/g) || []).length >= 1,
+          detailHasNotReportedBadge: detailHtml.indexOf("Not reported") !== -1,
+          detailHasScoreComponents: detailHtml.indexOf("Score Components") !== -1,
+          sectionHasMacroContextBeforeSelector: sectionHtml.indexOf("ism-demand-wrap") !== -1 && sectionHtml.indexOf("ism-demand-wrap") < sectionHtml.indexOf("data-ism-industry-select"),
+          detailHasNoComment: detailHtml.indexOf("No respondent comment in this report") !== -1,
+          detailHasTrend: detailHtml.indexOf("Signal Trend") !== -1,
+          detailHasTrendRow: detailHtml.indexOf("May 2026") !== -1 && detailHtml.indexOf("Jun 2026") !== -1,
+          detailHasTrendScore: detailHtml.indexOf("71.2") !== -1 && detailHtml.indexOf("86.4") !== -1,
+          detailHasOfficialLink: detailHtml.indexOf("Official ISM Report") !== -1,
+          scoreComponentNewOrders: hooks.renderIsmScoreComponentDetail(analysis.industries[0].core_signals, analysis.industries[0].overall_signal, analysis.score_weights),
+          macroContextHtml: hooks.renderIsmMacroContext(analysis.macro_context),
+          trendHtml: hooks.renderIsmIndustryTrend(analysis.industries[0].trend),
+          emptyTrendHtml: hooks.renderIsmIndustryTrend([]),
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["sectionHasIndustry"] is True
+    assert payload["sectionHasVersion"] is True
+    assert payload["sectionHasSelector"] is True
+    assert payload["sectionHasDetailContainer"] is True
+    assert payload["sectionHasSourceLink"] is True
+    assert payload["sectionHasScoreExplanation"] is True
+    assert payload["detailHasScore"] is True
+    assert payload["detailHasScoreLabel"] is True
+    assert payload["detailHasSummary"] is True
+    assert payload["detailHasNewOrdersRow"] is True
+    assert payload["detailHasProductionRow"] is True
+    assert payload["detailHasBacklogRow"] is True
+    assert payload["detailHasOverallRow"] is True
+    assert payload["detailHasRank3Of11"] is True
+    assert payload["detailHasRank1Of8"] is True
+    assert payload["detailHasPositiveBadge"] is True
+    assert payload["detailHasNotReportedBadge"] is True
+    assert payload["detailHasScoreComponents"] is True
+    assert payload["sectionHasMacroContextBeforeSelector"] is True
+    assert payload["detailHasNoComment"] is True
+    assert payload["detailHasTrend"] is True
+    assert payload["detailHasTrendRow"] is True
+    assert payload["detailHasTrendScore"] is True
+    assert payload["detailHasOfficialLink"] is True
+    assert "ism-component-bar" in payload["scoreComponentNewOrders"]
+    assert "40%" in payload["scoreComponentNewOrders"]
+    assert "90.9" in payload["scoreComponentNewOrders"]
+    assert "ism-demand-row" in payload["macroContextHtml"]
+    assert "New Orders" in payload["macroContextHtml"]
+    assert "56.0" in payload["macroContextHtml"]
+    assert "ism-trend-chip" in payload["macroContextHtml"]
+    assert "ism-trend-table" in payload["trendHtml"]
+    assert "May 2026" in payload["trendHtml"]
+    assert "P" in payload["trendHtml"]
+    assert "Historical coverage unavailable" in payload["emptyTrendHtml"]
+
+
+def test_macro_dashboard_js_industry_analysis_evidence_section():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const coreSignals = {
+          new_orders: { status: "positive", evidence_text: "The 11 manufacturing industries reporting growth in New Orders in June, in rank order, are..." },
+          production: { status: "positive", evidence_text: null },
+          backlog: { status: "not_reported", evidence_text: null },
+        };
+        const evidenceHtml = hooks.renderIsmEvidenceDetail(coreSignals);
+        const evidenceEmpty = hooks.renderIsmEvidenceDetail({});
+
+        console.log(JSON.stringify({
+          hasEvidence: evidenceHtml.indexOf("Source Evidence") !== -1,
+          hasNewOrdersEvidence: evidenceHtml.indexOf("11 manufacturing industries") !== -1,
+          hasSummaryTag: evidenceHtml.indexOf("<summary>") !== -1,
+          emptyReturnsEmpty: evidenceEmpty === "",
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasEvidence"] is True
+    assert payload["hasNewOrdersEvidence"] is True
+    assert payload["hasSummaryTag"] is True
+    assert payload["emptyReturnsEmpty"] is True
+
+
+def test_macro_dashboard_js_industry_list_renders_buttons():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const growthItems = [
+          { industry: "Printing & Related Support Activities" },
+          { industry: "Machinery" },
+        ];
+        const contractionItems = [
+          { industry: "Primary Metals" },
+        ];
+
+        const growthHtml = hooks.renderIsmIndustryList(growthItems, "growth", "No growth");
+        const contractionHtml = hooks.renderIsmIndustryList(contractionItems, "contraction", "No contraction");
+        const emptyHtml = hooks.renderIsmIndustryList([], "growth", "No industries");
+
+        console.log(JSON.stringify({
+          growthIsButtons: growthHtml.indexOf("<button") !== -1 && growthHtml.indexOf("</button>") !== -1,
+          growthHasDataAttribute: growthHtml.indexOf('data-ism-industry="Printing') !== -1,
+          growthHasIndustryName: growthHtml.indexOf("Printing") !== -1,
+          growthHasMedal: growthHtml.indexOf("\\ud83e\\udd47") !== -1,
+          contractionIsButton: contractionHtml.indexOf("<button") !== -1 && contractionHtml.indexOf("</button>") !== -1,
+          contractionHasRedTriangle: contractionHtml.indexOf("\\ud83d\\udd3b") !== -1,
+          emptyFallsBack: emptyHtml.indexOf("No industries") !== -1,
+          emptyIsParagraph: emptyHtml.indexOf("<p") !== -1,
+          growthButtonCount: (growthHtml.match(/data-ism-industry/g) || []).length,
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["growthIsButtons"] is True
+    assert payload["growthHasDataAttribute"] is True
+    assert payload["growthHasIndustryName"] is True
+    assert payload["growthHasMedal"] is True
+    assert payload["contractionIsButton"] is True
+    assert payload["contractionHasRedTriangle"] is True
+    assert payload["emptyFallsBack"] is True
+    assert payload["emptyIsParagraph"] is True
+    assert payload["growthButtonCount"] == 2
+
+
+def test_macro_dashboard_js_industry_selection_interaction():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const relationshipHead = { outerHTML: '<div class="relationship-head"></div>' };
+        const bodyEventHandlers = {};
+        const elements = {
+          dashboardStatus: {},
+          macroDashboardApp: {
+            classList: { add: () => {}, remove: () => {}, toggle: () => {} },
+            insertAdjacentHTML: () => {},
+          },
+          detailPanel: {
+            innerHTML: "",
+            querySelector: (sel) => {
+              if (sel === ".detail-panel-close") return { addEventListener: () => {} };
+              if (sel === ".detail-panel-expand") return { addEventListener: () => {} };
+              if (sel === ".detail-panel-body") return { innerHTML: "", scrollTop: 0, querySelectorAll: () => [], addEventListener: () => {} };
+              return null;
+            },
+            querySelectorAll: () => [],
+          },
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          growthCycle: { innerHTML: '<div class="relationship-head"></div>', querySelector: (sel) => sel === ".relationship-head" ? relationshipHead : null, querySelectorAll: () => [] },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [], headline: [], sections: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = global.window.__macroDashboardTestHooks;
+
+        const analysis = {
+          status: "available",
+          industries: [
+            { industry: "Printing & Related Support Activities", overall_signal: { status: "positive", rank: 1, list_size: 14, component_score: 100.0 }, score: 86.4, score_coverage: 100.0, score_label: "strong", core_signals: { new_orders: { status: "positive", rank: 3, list_size: 11, component_score: 90.9 }, production: { status: "positive", rank: 1, list_size: 8, component_score: 100.0 }, backlog: { status: "not_reported", component_score: 50.0 } }, secondary_signals: {}, comments: [], trend: [] },
+            { industry: "Machinery", overall_signal: { status: "positive", rank: 2, list_size: 14, component_score: 85.0 }, score: 75.0, score_coverage: 100.0, score_label: "strong", core_signals: { new_orders: { status: "positive", rank: 5, list_size: 11, component_score: 81.8 }, production: { status: "positive", rank: 3, list_size: 8, component_score: 87.5 }, backlog: { status: "not_reported", component_score: 50.0 } }, secondary_signals: {}, comments: [], trend: [] },
+          ],
+        };
+
+        // Build a body mock that tracks event listeners as arrays to detect duplicates
+        const listenerArrays = { change: [], click: [] };
+        let detailContainer = { outerHTML: "", dataset: {} };
+        let buttons = [
+          { dataset: { ismIndustry: "Printing & Related Support Activities" }, classList: { toggle: () => {} } },
+          { dataset: { ismIndustry: "Machinery" }, classList: { toggle: () => {} } },
+        ];
+        let selectEl = { value: "Printing & Related Support Activities", dataset: {}, closest: (sel) => sel === "[data-ism-industry-select]" ? selectEl : null };
+        Object.defineProperty(detailContainer, "outerHTML", {
+          set(val) { body.innerHtml = val; },
+          get() { return body.innerHtml || ""; },
+          configurable: true,
+        });
+
+        const body = {
+          innerHtml: "",
+          dataset: {},
+          addEventListener: (evt, fn) => { listenerArrays[evt].push(fn); },
+          querySelector: (sel) => {
+            if (sel === "[data-ism-industry-detail]") return detailContainer;
+            if (sel === "[data-ism-industry-select]") return selectEl;
+            return null;
+          },
+          querySelectorAll: (sel) => {
+            if (sel === "[data-ism-industry]") return buttons;
+            return [];
+          },
+        };
+
+        // Set initial detail HTML for Printing
+        body.innerHtml = hooks.renderIsmIndustryDetailView(analysis.industries[0], analysis);
+        hooks.state.selectedIsmIndustry = null;
+
+        // Call bindIsmIndustrySelector twice to verify no duplicate listener accumulation
+        hooks.bindIsmIndustrySelector(body, analysis);
+        hooks.bindIsmIndustrySelector(body, analysis);
+        const listenerCount = listenerArrays.change.length + listenerArrays.click.length;
+
+        // Bind again with a different analysis payload to verify refreshed data
+        const analysis2 = JSON.parse(JSON.stringify(analysis));
+        analysis2.industries[0].industry = "Updated Printing";
+        hooks.bindIsmIndustrySelector(body, analysis2);
+        // Verify second bind still no duplication
+        const listenerCountAfterFresh = listenerArrays.change.length + listenerArrays.click.length;
+
+        // Dispatch change event and verify it uses latest analysis
+        selectEl.value = "Updated Printing";
+        listenerArrays.change[0]({ target: selectEl });
+        const afterChangeState = hooks.state.selectedIsmIndustry;
+
+        // Dispatch click event via a button
+        hooks.state.selectedIsmIndustry = null;
+        const buttonTarget = { closest: (sel) => sel === "[data-ism-industry]" ? { dataset: { ismIndustry: "Machinery" } } : null };
+        listenerArrays.click[0]({ target: buttonTarget });
+        const afterClickState = hooks.state.selectedIsmIndustry;
+
+        console.log(JSON.stringify({
+          listenerCount: listenerCount,
+          noExtraListeners: listenerCountAfterFresh === listenerCount,
+          afterChangeUsesLatest: afterChangeState === "Updated Printing",
+          afterClickIsMachinery: afterClickState === "Machinery",
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["listenerCount"] == 2
+    assert payload["noExtraListeners"] is True
+    assert payload["afterChangeUsesLatest"] is True
+    assert payload["afterClickIsMachinery"] is True

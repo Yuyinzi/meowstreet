@@ -132,3 +132,235 @@ def test_fresh_db_with_m2_only_does_not_crash_on_growth_cycle_ism_reads(tmp_path
     rankings = growth_cycle.load_latest_ism_industry_rankings(con)
     assert rankings == []
     con.close()
+
+
+def test_replace_ism_report_industry_signal_coverage_saves_rows(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+
+    saved = growth_cycle.replace_ism_report_industry_signal_coverage(
+        con,
+        "ism_manufacturing_2026_06",
+        "2026-06-01",
+        [
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "list_present": True,
+                "declared_count": 14,
+                "extracted_count": 14,
+                "validation_status": "complete",
+                "evidence_text": "The 14 manufacturing industries reporting growth.",
+            },
+            {
+                "signal_type": "new_orders",
+                "direction": "growth",
+                "list_present": True,
+                "declared_count": 11,
+                "extracted_count": 11,
+                "validation_status": "complete",
+                "evidence_text": "The 11 industries reporting growth in new orders.",
+            },
+        ],
+        "https://example.com/report.html",
+        "abc123",
+    )
+
+    assert saved == {"industry_signal_coverage": 2}
+
+    rows = growth_cycle.load_ism_report_industry_signal_coverage(
+        con, "ism_manufacturing_2026_06"
+    )
+
+    assert len(rows) == 2
+    assert rows[0]["signal_type"] == "new_orders"
+    assert rows[0]["validation_status"] == "complete"
+    assert rows[0]["list_present"] is True
+    assert rows[1]["signal_type"] == "overall_growth"
+    assert rows[1]["declared_count"] == 14
+
+
+def test_load_ism_report_industry_signal_coverage_returns_empty_for_missing(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+
+    rows = growth_cycle.load_ism_report_industry_signal_coverage(
+        con, "ism_manufacturing_2026_06"
+    )
+
+    assert rows == []
+
+
+def test_replace_ism_report_industry_signal_coverage_replaces_existing(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+
+    growth_cycle.replace_ism_report_industry_signal_coverage(
+        con,
+        "ism_manufacturing_2026_06",
+        "2026-06-01",
+        [
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "list_present": True,
+                "declared_count": 14,
+                "extracted_count": 14,
+                "validation_status": "complete",
+                "evidence_text": "old evidence",
+            },
+        ],
+        "https://example.com/report.html",
+        "abc123",
+    )
+
+    growth_cycle.replace_ism_report_industry_signal_coverage(
+        con,
+        "ism_manufacturing_2026_06",
+        "2026-06-01",
+        [
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "list_present": True,
+                "declared_count": 15,
+                "extracted_count": 15,
+                "validation_status": "complete",
+                "evidence_text": "updated evidence",
+            },
+        ],
+        "https://example.com/report.html",
+        "def456",
+    )
+
+    rows = growth_cycle.load_ism_report_industry_signal_coverage(
+        con, "ism_manufacturing_2026_06"
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["declared_count"] == 15
+    assert rows[0]["evidence_text"] == "updated evidence"
+
+
+def test_ism_report_signal_coverage_is_isolated_by_report_id(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+
+    growth_cycle.replace_ism_report_industry_signal_coverage(
+        con,
+        "ism_manufacturing_2026_06",
+        "2026-06-01",
+        [
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "list_present": True,
+                "declared_count": 14,
+                "extracted_count": 14,
+                "validation_status": "complete",
+                "evidence_text": "The 14 industries reporting growth.",
+            },
+        ],
+        "https://example.com/june.html",
+        "abc123",
+    )
+
+    rows_a = growth_cycle.load_ism_report_industry_signal_coverage(
+        con, "ism_manufacturing_2026_06"
+    )
+    rows_b = growth_cycle.load_ism_report_industry_signal_coverage(
+        con, "ism_manufacturing_2026_05"
+    )
+
+    assert len(rows_a) == 1
+    assert len(rows_b) == 0
+
+
+def test_load_ism_at_a_glance_rows_by_report_id(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    series_ids = [
+        "ism_manufacturing_pmi",
+        "ism_manufacturing_new_orders",
+        "ism_manufacturing_production",
+    ]
+    rows = [
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "series_id": sid,
+            "label": f"Label {sid}",
+            "current_value": 50.0 + i,
+            "previous_value": 49.0 + i,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+            "source_url": "https://example.com/report.html",
+            "source_hash": "abc123",
+        }
+        for i, sid in enumerate(series_ids)
+    ]
+
+    growth_cycle.replace_ism_at_a_glance_rows(con, rows)
+
+    result = growth_cycle.load_ism_at_a_glance_rows(con, "ism_manufacturing_2026_06")
+
+    assert len(result) == 3
+    assert result[0]["series_id"] == "ism_manufacturing_new_orders"
+
+
+def test_load_ism_at_a_glance_rows_returns_empty_for_missing_report(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+
+    result = growth_cycle.load_ism_at_a_glance_rows(con, "ism_manufacturing_2026_06")
+
+    assert result == []
+
+
+def test_replace_ism_ai_extraction_deletes_stale_coverage(tmp_path):
+    from tests.test_ism_ai_extraction import valid_extraction
+
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    payload = valid_extraction()
+
+    growth_cycle.replace_ism_report_industry_signal_coverage(
+        con,
+        "ism_manufacturing_2026_06",
+        "2026-06-01",
+        [
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "list_present": True,
+                "declared_count": 14,
+                "extracted_count": 14,
+                "validation_status": "complete",
+                "evidence_text": "stale evidence",
+            },
+        ],
+        "https://example.com/stale.html",
+        "stalehash",
+    )
+
+    saved = growth_cycle.replace_ism_ai_extraction(
+        con,
+        {
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+            "source_url": "https://example.com/report.html",
+            "source_hash": "abc123",
+            "extractor": "llm",
+            "model": "test",
+            "prompt_version": "ism-rich-v1",
+            "validation_status": "ok",
+            "validation_error": None,
+            "extraction_json": payload,
+        },
+    )
+
+    rows = growth_cycle.load_ism_report_industry_signal_coverage(
+        con, "ism_manufacturing_2026_06"
+    )
+
+    assert "old evidence" not in [r["evidence_text"] for r in rows]
+    assert saved["ai_extractions"] == 1
+    assert saved["industry_signal_coverage"] == 2
+    coverage_by_key = {(r["signal_type"], r["direction"]): r for r in rows}
+    assert ("overall_growth", "growth") in coverage_by_key
+    assert ("new_orders", "growth") in coverage_by_key

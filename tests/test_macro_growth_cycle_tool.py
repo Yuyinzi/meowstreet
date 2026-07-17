@@ -1661,7 +1661,7 @@ def test_build_ism_detail_payload_skips_small_multiple_without_existing_sources(
 
 def test_ism_at_a_glance_tone_growing_faster_is_green():
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_pmi",
                 "direction": "Growing",
@@ -1674,7 +1674,7 @@ def test_ism_at_a_glance_tone_growing_faster_is_green():
 
 def test_ism_at_a_glance_tone_growing_slower_is_amber():
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_pmi",
                 "direction": "Growing",
@@ -1687,7 +1687,7 @@ def test_ism_at_a_glance_tone_growing_slower_is_amber():
 
 def test_ism_at_a_glance_tone_contracting_is_red():
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_pmi",
                 "direction": "Contracting",
@@ -1700,7 +1700,7 @@ def test_ism_at_a_glance_tone_contracting_is_red():
 
 def test_ism_at_a_glance_tone_prices_series_is_amber():
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_prices",
                 "direction": "Increasing",
@@ -1713,7 +1713,7 @@ def test_ism_at_a_glance_tone_prices_series_is_amber():
 
 def test_ism_at_a_glance_tone_supplier_deliveries_is_amber():
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_supplier_deliveries",
                 "direction": "Growing",
@@ -1726,7 +1726,7 @@ def test_ism_at_a_glance_tone_supplier_deliveries_is_amber():
 
 def test_ism_at_a_glance_tone_customer_inventories_too_low_or_high_is_amber():
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_customer_inventories",
                 "direction": "Too Low",
@@ -1736,7 +1736,7 @@ def test_ism_at_a_glance_tone_customer_inventories_too_low_or_high_is_amber():
         == "amber"
     )
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_customer_inventories",
                 "direction": "Too High",
@@ -1749,7 +1749,7 @@ def test_ism_at_a_glance_tone_customer_inventories_too_low_or_high_is_amber():
 
 def test_ism_at_a_glance_tone_missing_or_unknown_direction_is_muted():
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_pmi",
                 "direction": "",
@@ -1759,7 +1759,7 @@ def test_ism_at_a_glance_tone_missing_or_unknown_direction_is_muted():
         == "muted"
     )
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_pmi",
                 "direction": "N/A",
@@ -1772,7 +1772,7 @@ def test_ism_at_a_glance_tone_missing_or_unknown_direction_is_muted():
 
 def test_ism_at_a_glance_tone_transition_direction_is_amber():
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_pmi",
                 "direction": "From Contracting",
@@ -1782,7 +1782,7 @@ def test_ism_at_a_glance_tone_transition_direction_is_amber():
         == "amber"
     )
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_pmi",
                 "direction": "From Growing",
@@ -1795,7 +1795,7 @@ def test_ism_at_a_glance_tone_transition_direction_is_amber():
 
 def test_ism_at_a_glance_tone_mixed_direction_is_amber():
     assert (
-        macro_growth_cycle._ism_at_a_glance_tone(
+        macro_growth_cycle.ism_at_a_glance_tone(
             {
                 "series_id": "ism_manufacturing_pmi",
                 "direction": "Mixed",

@@ -1527,7 +1527,11 @@ def test_replace_ism_ai_extraction_saves_payload_and_signals(tmp_path):
         },
     )
 
-    assert saved == {"ai_extractions": 1, "industry_signals": 2}
+    assert saved == {
+        "ai_extractions": 1,
+        "industry_signals": 2,
+        "industry_signal_coverage": 2,
+    }
     assert (
         len(
             growth_cycle.load_ism_report_industry_signals(
