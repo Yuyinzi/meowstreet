@@ -1261,6 +1261,25 @@ def build_gdp_expectations_headline(growth_cycle, ism_macro_signal=None):
             ],
             "evidence": [],
         }
+    if ism_macro_signal.get("status") == "unavailable":
+        return {
+            **base,
+            "status": "pending_inputs",
+            "status_label": "Pending Inputs",
+            "components": [
+                {"id": "ism_manufacturing", "status": "unavailable"},
+                {"id": "ism_services", "status": "pending"},
+                {"id": "labor_trend", "status": "pending"},
+                {"id": "consumer_indicators", "status": "pending"},
+            ],
+            "missing_inputs": [
+                "ISM Manufacturing",
+                "ISM Services",
+                "Labor trend",
+                "Consumer indicators",
+            ],
+            "evidence": [],
+        }
     return {
         **base,
         "status": "partial_inputs",
@@ -1785,11 +1804,18 @@ def build_growth_cycle_dashboard_payload(
     fomc_card = build_fomc_calendar_headline(next_fomc_meeting)
     if fomc_card["status"] != "missing":
         headline.append(fomc_card)
-    ism_policy_context = (
-        ism_macro_signal.get("policy_context") if ism_macro_signal else None
-    )
+    ism_policy_block = None
+    if ism_macro_signal:
+        context = ism_macro_signal.get("policy_context", {})
+        ism_policy_block = {
+            **context,
+            "period": ism_macro_signal.get("period"),
+            "version": ism_macro_signal.get("version", "ism_macro_signal_v1"),
+            "source_url": ism_macro_signal.get("source_url", ""),
+            "source_hash": ism_macro_signal.get("source_hash", ""),
+        }
     tone_card = build_fomc_tone_headline(
-        fomc_latest_tone, ism_policy_context=ism_policy_context
+        fomc_latest_tone, ism_policy_context=ism_policy_block
     )
     if tone_card["status"] != "missing":
         headline.append(tone_card)
@@ -1799,7 +1825,9 @@ def build_growth_cycle_dashboard_payload(
     sections = build_growth_cycle_sections(growth_cycle, headline)
     evidence = build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal)
     growth_cycle["growth_cycle_bias_evidence"] = evidence
-    if evidence["status"] == "pending_inputs":
+    if evidence["status"] == "available":
+        growth_cycle["growth_cycle_bias"] = evidence["bias"]
+    else:
         growth_cycle["growth_cycle_bias"] = None
     return {
         "headline": headline,
@@ -1896,7 +1924,12 @@ def build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal):
     if not has_labor:
         missing_inputs.append("Labor trend")
 
-    if ism_macro_signal is None or ism_macro_signal.get("status") == "unavailable":
+    if (
+        ism_macro_signal is None
+        or ism_macro_signal.get("status") == "unavailable"
+        or ism_macro_signal.get("status") == "partial"
+        or ism_macro_signal.get("growth_impulse") == "unavailable"
+    ):
         ism_manufacturing_component = "unavailable"
         ism_contribution = "unavailable"
         if ism_macro_signal is None:

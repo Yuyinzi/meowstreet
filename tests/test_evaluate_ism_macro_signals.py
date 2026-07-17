@@ -118,7 +118,7 @@ def test_evaluate_empty_db(tmp_path, capsys):
 def test_evaluate_insufficient_usable_signals(tmp_path, capsys):
     db_path = tmp_path / "market_data.sqlite"
     con = growth_cycle.connect(db_path)
-    for m in ["2026-01-01", "2026-02-01", "2026-03-01"]:
+    for m in ["2026-01-01", "2026-02-01"]:
         _seed_month(con, m)
     con.commit()
     con.close()

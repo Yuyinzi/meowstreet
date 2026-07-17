@@ -1006,10 +1006,10 @@ def test_build_gdp_expectations_headline_with_unavailable_ism():
         ism_macro_signal=signal,
     )
 
-    assert card["status"] == "partial_inputs"
-    assert card["status_label"] == "Partial Inputs"
+    assert card["status"] == "pending_inputs"
+    assert card["status_label"] == "Pending Inputs"
     assert card["components"][0]["status"] == "unavailable"
-    assert card["components"][0]["direction"] is None
+    assert "ISM Manufacturing" in card["missing_inputs"]
     assert card["evidence"] == []
 
 

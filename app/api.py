@@ -329,6 +329,49 @@ def macro_dashboard_growth_cycle():
                 )
             except ValueError:
                 logging.warning("ism macro signal build failed", exc_info=True)
+                ism_macro_signal_result = {
+                    "version": ism_macro_signal.ISM_MACRO_SIGNAL_VERSION,
+                    "status": "invalid_data",
+                    "report_id": None,
+                    "period": None,
+                    "source_url": None,
+                    "source_hash": None,
+                    "phase": "unavailable",
+                    "momentum": "unavailable",
+                    "cycle_state": "unavailable",
+                    "growth_impulse": "unavailable",
+                    "confidence": "unavailable",
+                    "continuity": {
+                        "months_loaded": 0,
+                        "adjacent_months": 0,
+                        "has_gap": False,
+                        "latest_momentum_streak": 0,
+                    },
+                    "trend": [],
+                    "metrics": {},
+                    "confirmations": {},
+                    "policy_context": {
+                        "growth_pressure": "unavailable",
+                        "inflation_pressure": "unavailable",
+                        "supply_pressure": "unavailable",
+                        "combined_pressure": "unavailable",
+                    },
+                    "coverage": {
+                        "required_metrics": ["pmi", "new_orders"],
+                        "available_required_metrics": [],
+                        "optional_metrics": [
+                            "production",
+                            "inventories",
+                            "prices",
+                            "supplier_deliveries",
+                        ],
+                        "available_optional_metrics": [],
+                        "missing_metrics": [],
+                    },
+                    "evidence": [
+                        "ISM macro signal could not be built from stored data"
+                    ],
+                }
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(
             dashboard,
             next_fomc_meeting=next_fomc_meeting,

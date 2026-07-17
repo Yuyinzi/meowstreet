@@ -398,7 +398,7 @@ def build_ism_macro_signal(reports, at_a_glance_rows, industry_breadth=None):
     )
 
     trend = []
-    for report in reports_sorted[:6]:
+    for report in reports_sorted[-6:]:
         rid = report["report_id"]
         period = report["report_month"]
         report_rows = rows_by_report.get(rid, [])
@@ -453,11 +453,16 @@ def build_ism_macro_signal(reports, at_a_glance_rows, industry_breadth=None):
     available_required_names = []
     for m in _REQUIRED_METRICS:
         sid = _SERIES_IDS[m]
-        if any(row["series_id"] == sid for row in latest_rows):
+        has_current = _get_value(latest_rows, sid, "current_value") is not None
+        has_previous = _get_value(latest_rows, sid, "previous_value") is not None
+        if has_current or has_previous:
             available_required_names.append(m)
 
     available_optional = []
     missing_metrics = []
+    missing_metrics.extend(
+        m for m in _REQUIRED_METRICS if m not in available_required_names
+    )
     for m in _OPTIONAL_METRICS:
         sid = _SERIES_IDS[m]
         if any(row["series_id"] == sid for row in latest_rows):

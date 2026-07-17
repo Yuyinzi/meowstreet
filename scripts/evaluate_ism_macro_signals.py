@@ -12,37 +12,47 @@ from app.tools.ism_macro_signal import ISM_MACRO_SIGNAL_VERSION, build_ism_macro
 
 
 _ALLOWED_TRANSITIONS = {
-    "expansion_rising": {"expansion_slowing", "peaking", "stable", "unavailable"},
+    "expansion_rising": {
+        "expansion_rising",
+        "expansion_slowing",
+        "peaking",
+        "stable",
+        "unavailable",
+    },
     "expansion_slowing": {
         "expansion_rising",
+        "expansion_slowing",
         "slowdown",
         "contraction_deepening",
         "stable",
         "unavailable",
     },
-    "peaking": {"expansion_slowing", "stable", "unavailable"},
+    "peaking": {"peaking", "expansion_slowing", "stable", "unavailable"},
     "slowdown": {
         "expansion_rising",
         "expansion_slowing",
+        "slowdown",
         "contraction_deepening",
         "contraction_improving",
         "stable",
         "unavailable",
     },
     "contraction_deepening": {
+        "contraction_deepening",
         "contraction_improving",
         "slowdown",
         "stable",
         "unavailable",
     },
     "contraction_improving": {
+        "contraction_improving",
         "expansion_rising",
         "slowdown",
         "troughing",
         "stable",
         "unavailable",
     },
-    "troughing": {"expansion_rising", "stable", "unavailable"},
+    "troughing": {"troughing", "expansion_rising", "stable", "unavailable"},
     "stable": {
         "expansion_rising",
         "expansion_slowing",
@@ -51,6 +61,7 @@ _ALLOWED_TRANSITIONS = {
         "contraction_improving",
         "peaking",
         "troughing",
+        "stable",
         "unavailable",
     },
     "unavailable": {
@@ -62,6 +73,7 @@ _ALLOWED_TRANSITIONS = {
         "peaking",
         "troughing",
         "stable",
+        "unavailable",
     },
 }
 
@@ -105,7 +117,7 @@ def evaluate(db_path, since=None):
             aag_by_report.setdefault(row["report_id"], []).append(row)
 
         results = []
-        for i in range(1, len(reports)):
+        for i in range(len(reports)):
             window_start = max(0, i - 5)
             window_reports = reports[window_start : i + 1]
             window_rows = []
