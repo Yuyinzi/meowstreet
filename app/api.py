@@ -569,7 +569,7 @@ def macro_dashboard_market_setup():
                 logging.warning(
                     "ism macro signal build failed for market setup", exc_info=True
                 )
-        growth_cycle_data = dashboard
+        growth_cycle_data = dashboard.get("macro", {}).get("growth_cycle", {})
         fomc_tone_headline = macro_growth_cycle.build_fomc_tone_headline(
             fomc_latest_tone
         )

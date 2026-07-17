@@ -3814,11 +3814,73 @@ h2 {
   color: #8B7E74;
 }
 
-.market-setup-card-value {
-  font-size: 0.9rem;
+.market-setup-card-label-sub {
+  font-size: 0.7rem;
   font-weight: 600;
-  color: #3B3530;
-  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #A89B91;
+  margin-top: 2px;
+}
+
+.market-setup-card-value {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.market-setup-card-value.positive {
+  background: #E0F0E4;
+  color: #2B6B3E;
+}
+
+.market-setup-card-value.negative {
+  background: #F0E0E0;
+  color: #8B3B3B;
+}
+
+.market-setup-card-value.caution {
+  background: #F0E8D0;
+  color: #8B7B3B;
+}
+
+.market-setup-card-value.neutral {
+  background: #F0EAE4;
+  color: #6B6258;
+}
+
+.market-setup-card-gdp-direction {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.market-setup-card-gdp-direction.positive {
+  background: #EEF9F3;
+  color: #2F9E74;
+}
+
+.market-setup-card-gdp-direction.negative {
+  background: #FDF2EE;
+  color: #B85C38;
+}
+
+.market-setup-card-gdp-direction.caution {
+  background: #F8F4EA;
+  color: #7A5D21;
+}
+
+.market-setup-card-gdp-direction.neutral {
+  background: #F4F1EE;
+  color: #8B7E74;
 }
 
 .market-setup-card-reason {
@@ -3830,21 +3892,23 @@ h2 {
 
 .market-setup-policy-detail {
   font-size: 0.75rem;
-  color: #8B7E74;
+  color: #6B6258;
   line-height: 1.4;
   margin-top: 2px;
+  font-weight: 500;
 }
 
 .market-setup-implications {
   background: #FFFFFF;
-  border: 1px solid #E8E0D6;
+  border: 1px solid #D0D8CC;
   border-radius: 10px;
   padding: 12px;
   margin: 10px 0 0;
+  border-left: 3px solid #7AAD8B;
 }
 
 .market-setup-implications h3 {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 700;
   margin: 0 0 4px;
   color: #3B3530;
@@ -3853,15 +3917,15 @@ h2 {
 }
 
 .market-setup-implications ul {
-  margin: 0;
+  margin: 4px 0 0;
   padding-left: 16px;
-  color: #5B5349;
+  color: #3B3530;
   font-size: 0.82rem;
   line-height: 1.5;
 }
 
 .market-setup-implications li + li {
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .market-setup-evidence {
@@ -3873,12 +3937,30 @@ h2 {
 }
 
 .market-setup-evidence h3 {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
   margin: 0 0 6px;
-  color: #3B3530;
+  color: #8B7E74;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+}
+
+.market-setup-evidence-agreement {
+  border-color: #C8E0D0;
+  background: #F5FCF7;
+}
+
+.market-setup-evidence-agreement h3 {
+  color: #3C8A5A;
+}
+
+.market-setup-evidence-conflict {
+  border-color: #E0C8C8;
+  background: #FCF5F5;
+}
+
+.market-setup-evidence-conflict h3 {
+  color: #B85C38;
 }
 
 .market-setup-evidence-list {
@@ -3891,15 +3973,10 @@ h2 {
 }
 
 .market-setup-evidence-list li {
-  font-size: 0.75rem;
-  color: #5B5349;
-  line-height: 1.4;
-}
-
-.market-setup-evidence-list li::before {
-  content: "·";
-  margin-right: 4px;
-  color: #A89B91;
+  font-size: 0.78rem;
+  color: #3B3530;
+  line-height: 1.45;
+  width: 100%;
 }
 
 .market-setup-evidence-link {
@@ -3915,10 +3992,37 @@ h2 {
   border-bottom-color: #5D7FA8;
 }
 
+.market-setup-conflict {
+  color: #B94B4B;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.market-setup-agreement {
+  color: #2F9E74;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.market-setup-clue-long {
+  color: #2F9E74;
+}
+
+.market-setup-clue-short {
+  color: #B85C38;
+}
+
+.market-setup-clue-warning {
+  font-size: 0.72rem;
+  color: #8B7E74;
+  margin: 4px 0 0;
+  font-style: italic;
+}
+
 .market-setup-pending {
   margin: 10px 0 0;
   font-size: 0.78rem;
-  color: #8B7E74;
+  color: #6B6258;
   line-height: 1.4;
   padding: 10px 12px;
   background: #FDFAF7;
@@ -3926,94 +4030,99 @@ h2 {
   border-radius: 10px;
 }
 
-.market-setup-conflict {
-  font-size: 0.75rem;
-  color: #B94B4B;
-  line-height: 1.4;
-  margin-top: 2px;
+.market-setup-pending strong {
+  color: #3B3530;
+  font-weight: 700;
 }
 
-.market-setup-agreement {
-  font-size: 0.75rem;
-  color: #5C9C73;
-  line-height: 1.4;
-  margin-top: 2px;
+.market-setup-pending-missing {
+  border-color: #E0C8C8;
+  background: #FCF5F5;
+  color: #8B4B4B;
 }
 
 .market-setup-posture-badge {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
+  margin-top: auto;
 }
 
 .market-setup-posture-badge.posture-long {
-  background: #E0F0E4;
-  color: #2B6B3E;
+  background: #D4ECD9;
+  color: #1E5A32;
+  border: 1px solid #A8CDB2;
 }
 
 .market-setup-posture-badge.posture-short_or_neutral {
-  background: #F0E0E0;
-  color: #8B3B3B;
+  background: #ECD4D4;
+  color: #7A2E2E;
+  border: 1px solid #D4A8A8;
 }
 
 .market-setup-posture-badge.posture-neutral_to_long {
-  background: #E8F0DC;
-  color: #5B7B3B;
+  background: #E0ECD4;
+  color: #4A6B2E;
+  border: 1px solid #BCD4A8;
 }
 
 .market-setup-posture-badge.posture-neutral {
-  background: #F0EAE4;
-  color: #6B6258;
+  background: #ECEAE4;
+  color: #5B534A;
+  border: 1px solid #D4CFC8;
 }
 
 .market-setup-posture-badge.posture-cautious {
-  background: #F0E8D8;
-  color: #8B7B3B;
+  background: #ECECD4;
+  color: #7A7A2E;
+  border: 1px solid #D4D4A8;
 }
 
 .setup-type-badge {
   display: inline-flex;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 6px;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
 }
 
 .setup-type-badge.setup-growth_and_conditions_aligned {
-  background: #E0F0E4;
-  color: #2B6B3E;
+  background: #D4ECD9;
+  color: #1E5A32;
 }
 
 .setup-type-badge.setup-contraction_risk_aligned {
-  background: #F0E0E0;
-  color: #8B3B3B;
+  background: #ECD4D4;
+  color: #7A2E2E;
 }
 
 .setup-type-badge.setup-weak_growth_with_policy_support {
-  background: #E8F0DC;
-  color: #5B7B3B;
+  background: #E0ECD4;
+  color: #4A6B2E;
 }
 
 .setup-type-badge.setup-growth_liquidity_conflict {
-  background: #F0E8D0;
-  color: #8B7B3B;
+  background: #ECECD4;
+  color: #7A7A2E;
 }
 
 .setup-type-badge.setup-unresolved_macro_conflict {
-  background: #F0EAE4;
-  color: #6B6258;
+  background: #ECEAE4;
+  color: #5B534A;
 }
 
 .setup-type-badge.setup-insufficient_data {
-  background: #F0EAE4;
+  background: #ECEAE4;
   color: #8B7E74;
 }
 

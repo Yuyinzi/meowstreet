@@ -636,6 +636,69 @@ def test_build_m2_money_supply_headline_groups_state_change_and_shock():
     }
 
 
+def test_build_m2_money_supply_headline_produces_non_missing_when_growth_cycle_has_m2_fields():
+    scenarios = [
+        {
+            "m2_yoy_pct_change": 0.042,
+            "m2_3m_momentum": 0.011,
+            "m2_mom_percent_rank": 0.63,
+            "expected": "expanding",
+        },
+        {
+            "m2_yoy_pct_change": -0.01,
+            "m2_3m_momentum": -0.005,
+            "m2_mom_percent_rank": 0.40,
+            "expected": "contracting",
+        },
+        {
+            "m2_yoy_pct_change": 0.01,
+            "m2_3m_momentum": -0.005,
+            "m2_mom_percent_rank": 0.40,
+            "expected": "contracting",
+        },
+        {
+            "m2_yoy_pct_change": -0.01,
+            "m2_3m_momentum": 0.005,
+            "m2_mom_percent_rank": 0.40,
+            "expected": "contracting",
+        },
+        {
+            "m2_yoy_pct_change": 0.01,
+            "m2_3m_momentum": 0.0,
+            "m2_mom_percent_rank": 0.50,
+            "expected": "mixed",
+        },
+        {
+            "m2_yoy_pct_change": 0.042,
+            "m2_3m_momentum": 0.011,
+            "m2_mom_percent_rank": 0.96,
+            "expected": "shock",
+        },
+        {
+            "m2_yoy_pct_change": 0.042,
+            "m2_3m_momentum": 0.011,
+            "m2_mom_percent_rank": 0.04,
+            "expected": "shock",
+        },
+    ]
+    for scenario in scenarios:
+        growth_cycle = {
+            "m2_period": "2026-06-01",
+            "m2_money_stock": 21210.0,
+            "m2_yoy_pct_change": scenario["m2_yoy_pct_change"],
+            "m2_3m_momentum": scenario["m2_3m_momentum"],
+            "m2_mom_pct_change": 0.004,
+            "m2_mom_percent_rank": scenario["m2_mom_percent_rank"],
+        }
+        headline = macro_growth_cycle.build_m2_money_supply_headline(growth_cycle)
+        assert headline["status"] == scenario["expected"], (
+            f"expected {scenario['expected']}, got {headline['status']} "
+            f"for yoy={scenario['m2_yoy_pct_change']} "
+            f"momentum={scenario['m2_3m_momentum']} "
+            f"mom_rank={scenario['m2_mom_percent_rank']}"
+        )
+
+
 def test_build_growth_cycle_dashboard_payload_wraps_headline():
     growth_cycle = {
         "m2_period": "2026-06-01",
@@ -2434,9 +2497,7 @@ def test_build_growth_cycle_bias_evidence_contraction_easing_maps_to_conflicting
         "services_new_orders": 52.0,
         "labor_trend": "stable",
     }
-    signal = _bias_ism_signal(
-        "contraction_easing", cycle_state="contraction_improving"
-    )
+    signal = _bias_ism_signal("contraction_easing", cycle_state="contraction_improving")
     result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
     assert result["ism_contribution"] == "conflicting"
     assert result["bias"] == "short"

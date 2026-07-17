@@ -1493,6 +1493,9 @@
     "Partial": "部分确认",
     "Long": "做多",
     "Short": "做空",
+    "GDP direction": "GDP方向",
+    "Long clues": "做多线索",
+    "Short clues": "做空线索",
     "Manufacturing": "制造业",
     "Services": "服务业",
     "Labor": "就业",
@@ -1790,6 +1793,18 @@
     return titleCaseToken(posture || "neutral");
   }
 
+  function setupStateSentiment(state) {
+    if (!state) return "neutral";
+    const s = String(state).toLowerCase();
+    const positive = ["bull_market", "expansion", "rising", "confirms_expansion", "support_confirmed", "support_possible", "available"];
+    const negative = ["bear_market", "contraction", "falling", "confirms_contraction_risk", "restrictive_confirmed", "contracting", "shock"];
+    const caution = ["slow", "peak", "trough", "improving", "transition", "mixed", "constrain", "conflict", "rebound", "flat", "inverted", "unresolved"];
+    if (positive.some((p) => s.includes(p))) return "positive";
+    if (negative.some((n) => s.includes(n))) return "negative";
+    if (caution.some((c) => s.includes(c))) return "caution";
+    return "neutral";
+  }
+
   function renderMarketSetupEvidenceLink(link) {
     return `<span class="market-setup-evidence-link" data-evidence-link="${escapeHtml(link)}">${escapeHtml(titleCaseToken(link))}</span>`;
   }
@@ -1835,6 +1850,11 @@
       ...(pr.reasons || []),
     ];
 
+    const meSentiment = setupStateSentiment(me.state);
+    const egSentiment = setupStateSentiment(eg.state);
+    const fcSentiment = setupStateSentiment(fc.state);
+    const prSentiment = setupStateSentiment(pr.state);
+
     section.innerHTML = `
       <div class="market-setup-head">
         <div>
@@ -1846,23 +1866,25 @@
       <div class="market-setup-grid">
         <div class="market-setup-card">
           <span class="market-setup-card-label">${bilingualLabel("Market Environment")}</span>
-          <span class="market-setup-card-value">${escapeHtml(setupStateLabel(me.state))}</span>
+          <span class="market-setup-card-value ${meSentiment}" data-state="${escapeHtml(me.state || "")}">${escapeHtml(setupStateLabel(me.state))}</span>
           <span class="market-setup-card-reason">${escapeHtml(me.reason || "")}</span>
           <span class="market-setup-posture-badge posture-${escapeHtml(posture)}">${escapeHtml(posture)}</span>
         </div>
         <div class="market-setup-card">
           <span class="market-setup-card-label">${bilingualLabel("Expected Growth")}</span>
-          <span class="market-setup-card-value">${escapeHtml(setupStateLabel(eg.state))}</span>
-          <span class="market-setup-card-reason">GDP direction: ${escapeHtml(setupStateLabel(eg.expected_gdp_direction))}</span>
+          <span class="market-setup-card-value ${egSentiment}" data-state="${escapeHtml(eg.state || "")}">${escapeHtml(setupStateLabel(eg.state))}</span>
+          <span class="market-setup-card-label-sub">${bilingualLabel("GDP direction")}</span>
+          <span class="market-setup-card-gdp-direction ${setupStateSentiment(eg.expected_gdp_direction)}">${escapeHtml(setupStateLabel(eg.expected_gdp_direction))}</span>
+          <span class="market-setup-card-reason">${escapeHtml(eg.reason || "")}</span>
         </div>
         <div class="market-setup-card">
           <span class="market-setup-card-label">${bilingualLabel("Financial Conditions")}</span>
-          <span class="market-setup-card-value">${escapeHtml(setupStateLabel(fc.state))}</span>
+          <span class="market-setup-card-value ${fcSentiment}" data-state="${escapeHtml(fc.state || "")}">${escapeHtml(setupStateLabel(fc.state))}</span>
           ${fc.reasons ? fc.reasons.slice(0, 2).map((r) => `<span class="market-setup-card-reason">${escapeHtml(r)}</span>`).join("") : ""}
         </div>
         <div class="market-setup-card">
           <span class="market-setup-card-label">${bilingualLabel("Policy Response")}</span>
-          <span class="market-setup-card-value">${escapeHtml(setupStateLabel(pr.state))}</span>
+          <span class="market-setup-card-value ${prSentiment}" data-state="${escapeHtml(pr.state || "")}">${escapeHtml(setupStateLabel(pr.state))}</span>
           ${(pr.details?.fomc_tone) ? `<span class="market-setup-policy-detail">FOMC: ${escapeHtml(pr.details.fomc_tone)} · M2: ${escapeHtml(pr.details.m2_status)}</span>` : ""}
           ${pr.reasons ? pr.reasons.slice(0, 1).map((r) => `<span class="market-setup-card-reason">${escapeHtml(r)}</span>`).join("") : ""}
         </div>
@@ -1885,7 +1907,7 @@
       </div>` : ""}
 
       ${agreements.length ? `
-      <div class="market-setup-evidence">
+      <div class="market-setup-evidence market-setup-evidence-agreement">
         <h3>${bilingualLabel("Agreements")}</h3>
         <ul class="market-setup-evidence-list">
           ${agreements.map((a) => `<li class="market-setup-agreement">${escapeHtml(a)}</li>`).join("")}
@@ -1893,7 +1915,7 @@
       </div>` : ""}
 
       ${conflicts.length ? `
-      <div class="market-setup-evidence">
+      <div class="market-setup-evidence market-setup-evidence-conflict">
         <h3>${bilingualLabel("Conflicts")}</h3>
         <ul class="market-setup-evidence-list">
           ${conflicts.map((c) => `<li class="market-setup-conflict">${escapeHtml(c)}</li>`).join("")}
@@ -1905,13 +1927,13 @@
         <h3>${bilingualLabel("Industry Research Clues")}</h3>
         <ul class="market-setup-evidence-list">
           ${setup.idea_generation.industry_long_clues?.length ? `
-            <li><strong>${bilingualLabel("Long clues")}:</strong> ${escapeHtml(setup.idea_generation.industry_long_clues.join(", "))}</li>
+            <li class="market-setup-clue-long"><strong>${bilingualLabel("Long clues")}:</strong> ${escapeHtml(setup.idea_generation.industry_long_clues.join(", "))}</li>
           ` : ""}
           ${setup.idea_generation.industry_short_clues?.length ? `
-            <li><strong>${bilingualLabel("Short clues")}:</strong> ${escapeHtml(setup.idea_generation.industry_short_clues.join(", "))}</li>
+            <li class="market-setup-clue-short"><strong>${bilingualLabel("Short clues")}:</strong> ${escapeHtml(setup.idea_generation.industry_short_clues.join(", "))}</li>
           ` : ""}
         </ul>
-        <p style="font-size:0.72rem;color:#8B7E74;margin:4px 0 0;">${escapeHtml(setup.idea_generation.warning || "")}</p>
+        <p class="market-setup-clue-warning">${escapeHtml(setup.idea_generation.warning || "")}</p>
       </div>` : ""}
 
       ${uniqueLinks.length ? `
@@ -1928,7 +1950,7 @@
       </div>` : ""}
 
       ${missing.length ? `
-      <div class="market-setup-pending">
+      <div class="market-setup-pending market-setup-pending-missing">
         <strong>${bilingualLabel("Missing Inputs")}:</strong> ${escapeHtml(missing.join(" · "))}
       </div>` : ""}
     `;
