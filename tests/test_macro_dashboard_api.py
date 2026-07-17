@@ -2821,3 +2821,57 @@ def test_growth_cycle_api_ism_detail_includes_at_a_glance_metadata(monkeypatch):
     assert "latest_metadata" in payload
     assert payload["latest_metadata"]["pmi"]["point_change"] == -0.7
     assert payload["latest_metadata"]["pmi"]["tone"] == "amber"
+
+
+def test_growth_cycle_api_returns_bias_evidence(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "growth_cycle_bias_evidence" in payload["growth_cycle"]
+    evidence = payload["growth_cycle"]["growth_cycle_bias_evidence"]
+    assert evidence["version"] == "growth_cycle_bias_v2"
+    assert evidence["status"] == "pending_inputs"
+    assert evidence["bias"] is None

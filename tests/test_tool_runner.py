@@ -141,3 +141,84 @@ def test_apply_tools_merges_macro_dashboard_observations():
     )
 
     assert enriched["macro"]["growth_cycle"]["growth_cycle_bias"] == "long"
+
+
+def test_apply_tools_merges_growth_cycle_bias_evidence():
+    def fetch_macro_dashboard():
+        return {
+            "macro": {
+                "growth_cycle": {
+                    "growth_cycle_bias": None,
+                    "growth_cycle_bias_evidence": {
+                        "version": "growth_cycle_bias_v2",
+                        "status": "pending_inputs",
+                        "bias": None,
+                        "ism_contribution": "unavailable",
+                        "components": {
+                            "ism_manufacturing": "unavailable",
+                            "ism_services": "unavailable",
+                            "labor": "unavailable",
+                        },
+                        "missing_inputs": ["ISM Manufacturing"],
+                        "reasons": ["ISM Manufacturing data is unavailable"],
+                    },
+                }
+            }
+        }
+
+    enriched = tool_runner.apply_tools(
+        method_with_macro_dashboard_hook(),
+        {"symbol": "AAPL", "observations": {}},
+        macro_dashboard_fetcher=fetch_macro_dashboard,
+    )
+
+    assert (
+        enriched["macro"]["growth_cycle"]["growth_cycle_bias_evidence"]["version"]
+        == "growth_cycle_bias_v2"
+    )
+    assert enriched["macro"]["growth_cycle"]["growth_cycle_bias"] is None
+
+
+def test_apply_tools_does_not_overwrite_user_observations_with_bias_evidence():
+    def fetch_macro_dashboard():
+        return {
+            "macro": {
+                "growth_cycle": {
+                    "growth_cycle_bias": "long",
+                    "growth_cycle_bias_evidence": {
+                        "version": "growth_cycle_bias_v2",
+                        "status": "available",
+                        "bias": "long",
+                        "ism_contribution": "supports_long",
+                        "components": {
+                            "ism_manufacturing": "supports_growth",
+                            "ism_services": "available",
+                            "labor": "stable",
+                        },
+                        "missing_inputs": [],
+                        "reasons": ["Manufacturing and services both expanding"],
+                    },
+                }
+            }
+        }
+
+    enriched = tool_runner.apply_tools(
+        method_with_macro_dashboard_hook(),
+        {
+            "symbol": "AAPL",
+            "observations": {
+                "macro": {
+                    "growth_cycle": {
+                        "growth_cycle_bias": "user_override",
+                    }
+                }
+            },
+        },
+        macro_dashboard_fetcher=fetch_macro_dashboard,
+    )
+
+    assert enriched["macro"]["growth_cycle"]["growth_cycle_bias"] == "user_override"
+    assert (
+        enriched["macro"]["growth_cycle"]["growth_cycle_bias_evidence"]["version"]
+        == "growth_cycle_bias_v2"
+    )

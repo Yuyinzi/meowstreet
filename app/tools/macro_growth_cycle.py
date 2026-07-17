@@ -247,6 +247,12 @@ GROWTH_CYCLE_DASHBOARD_FIELDS = [
         "kind": "compute",
     },
     {
+        "id": "growth_cycle_bias_evidence",
+        "title": "Growth Cycle Bias Evidence",
+        "field": "macro.growth_cycle.growth_cycle_bias_evidence",
+        "kind": "compute",
+    },
+    {
         "id": "fed_total_assets",
         "title": "Fed Total Assets",
         "field": "macro.growth_cycle.fed_total_assets",
@@ -1791,6 +1797,10 @@ def build_growth_cycle_dashboard_payload(
         build_gdp_expectations_headline(growth_cycle, ism_macro_signal=ism_macro_signal)
     )
     sections = build_growth_cycle_sections(growth_cycle, headline)
+    evidence = build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal)
+    growth_cycle["growth_cycle_bias_evidence"] = evidence
+    if evidence["status"] == "pending_inputs":
+        growth_cycle["growth_cycle_bias"] = None
     return {
         "headline": headline,
         "growth_cycle": growth_cycle,
@@ -1857,6 +1867,133 @@ def _above_50(value):
 
 def _below_50(value):
     return value is not None and value < 50
+
+
+_ISM_CONTRIBUTION_MAP = {
+    "supports_growth": "supports_long",
+    "turning_supportive": "supports_long",
+    "supports_contraction": "supports_short",
+    "growth_caution": "conflicting",
+    "contraction_easing": "conflicting",
+    "mixed": "conflicting",
+}
+
+
+def build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal):
+    services_pmi = growth_cycle.get("services_pmi")
+    services_business_activity = growth_cycle.get("services_business_activity")
+    services_new_orders = growth_cycle.get("services_new_orders")
+    labor_trend = growth_cycle.get("labor_trend")
+
+    has_services = services_pmi is not None and (
+        services_business_activity is not None or services_new_orders is not None
+    )
+    has_labor = labor_trend is not None and labor_trend != "unknown"
+
+    missing_inputs = []
+    if not has_services:
+        missing_inputs.append("ISM Services")
+    if not has_labor:
+        missing_inputs.append("Labor trend")
+
+    if ism_macro_signal is None or ism_macro_signal.get("status") == "unavailable":
+        ism_manufacturing_component = "unavailable"
+        ism_contribution = "unavailable"
+        if ism_macro_signal is None:
+            missing_inputs.insert(0, "ISM Manufacturing")
+        return {
+            "version": "growth_cycle_bias_v2",
+            "status": "pending_inputs",
+            "bias": None,
+            "ism_contribution": ism_contribution,
+            "components": {
+                "ism_manufacturing": ism_manufacturing_component,
+                "ism_services": "available" if has_services else "unavailable",
+                "labor": labor_trend if has_labor else "unavailable",
+            },
+            "missing_inputs": missing_inputs,
+            "reasons": ["ISM Manufacturing data is unavailable"],
+        }
+
+    growth_impulse = ism_macro_signal.get("growth_impulse")
+    ism_manufacturing_component = growth_impulse or "unavailable"
+    ism_contribution = _ISM_CONTRIBUTION_MAP.get(growth_impulse, "unavailable")
+    cycle_state = ism_macro_signal.get("cycle_state")
+
+    if not has_services or not has_labor:
+        reasons = []
+        if not has_services:
+            reasons.append("Services PMI data is missing")
+        if not has_labor:
+            reasons.append("Labor trend data is missing")
+        return {
+            "version": "growth_cycle_bias_v2",
+            "status": "pending_inputs",
+            "bias": None,
+            "ism_contribution": ism_contribution,
+            "components": {
+                "ism_manufacturing": ism_manufacturing_component,
+                "ism_services": "available" if has_services else "unavailable",
+                "labor": labor_trend if has_labor else "unavailable",
+            },
+            "missing_inputs": missing_inputs,
+            "reasons": reasons,
+        }
+
+    services_expanding = _above_50(services_pmi) and (
+        _above_50(services_business_activity) or _above_50(services_new_orders)
+    )
+    services_contracting = _below_50(services_pmi) and (
+        _below_50(services_business_activity) or _below_50(services_new_orders)
+    )
+
+    reasons = []
+
+    if cycle_state == "peaking":
+        bias = "neutral"
+        reasons.append(
+            "ISM cycle state is peaking, bias is neutral pending cross-validation"
+        )
+    elif cycle_state == "troughing":
+        bias = "neutral"
+        reasons.append(
+            "ISM cycle state is troughing, bias is neutral pending cross-validation"
+        )
+    elif (
+        growth_impulse in ("supports_growth", "turning_supportive")
+        and services_expanding
+        and labor_trend in ("stable", "strengthening")
+    ):
+        bias = "long"
+        reasons.append(
+            "Manufacturing and services both expanding with supportive labor trend"
+        )
+    elif (
+        growth_impulse == "supports_contraction"
+        and services_contracting
+        and labor_trend == "weakening"
+    ):
+        bias = "short"
+        reasons.append(
+            "Manufacturing and services both contracting with weakening labor trend"
+        )
+    else:
+        bias = "neutral"
+        reasons.append("Growth cycle signals are mixed or conflicting")
+
+    return {
+        "version": "growth_cycle_bias_v2",
+        "status": "available",
+        "bias": bias,
+        "ism_contribution": ism_contribution,
+        "components": {
+            "ism_manufacturing": ism_manufacturing_component,
+            "ism_services": "available",
+            "labor": labor_trend,
+        },
+        "missing_inputs": [],
+        "reasons": reasons,
+    }
 
 
 def compute_growth_cycle_bias(growth_cycle):

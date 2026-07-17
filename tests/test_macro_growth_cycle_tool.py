@@ -2293,3 +2293,193 @@ def test_build_growth_cycle_dashboard_payload_skips_trend_when_not_provided():
         card for card in result["headline"] if card["id"] == "ism_manufacturing"
     )
     assert "trend" not in card["segments"]["business_cycle"]
+
+
+def _bias_growth_cycle(**overrides):
+    base = {}
+    base.update(overrides)
+    return base
+
+
+def _bias_ism_signal(
+    growth_impulse="supports_growth", cycle_state="expansion_rising", status="available"
+):
+    return {
+        "status": status,
+        "growth_impulse": growth_impulse,
+        "cycle_state": cycle_state,
+        "version": "ism_macro_signal_v1",
+    }
+
+
+def test_build_growth_cycle_bias_evidence_long_scenario():
+    growth_cycle = {
+        "services_pmi": 53.0,
+        "services_business_activity": 54.0,
+        "services_new_orders": 52.0,
+        "labor_trend": "stable",
+    }
+    signal = _bias_ism_signal("supports_growth")
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    assert result["version"] == "growth_cycle_bias_v2"
+    assert result["status"] == "available"
+    assert result["bias"] == "long"
+    assert result["ism_contribution"] == "supports_long"
+    assert result["components"]["ism_manufacturing"] == "supports_growth"
+    assert result["components"]["ism_services"] == "available"
+    assert result["components"]["labor"] == "stable"
+    assert result["missing_inputs"] == []
+
+
+def test_build_growth_cycle_bias_evidence_short_scenario():
+    growth_cycle = {
+        "services_pmi": 48.0,
+        "services_business_activity": 47.0,
+        "services_new_orders": 47.5,
+        "labor_trend": "weakening",
+    }
+    signal = _bias_ism_signal("supports_contraction")
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    assert result["status"] == "available"
+    assert result["bias"] == "short"
+    assert result["ism_contribution"] == "supports_short"
+    assert result["missing_inputs"] == []
+
+
+def test_build_growth_cycle_bias_evidence_peaking_is_neutral():
+    growth_cycle = {
+        "services_pmi": 53.0,
+        "services_business_activity": 54.0,
+        "services_new_orders": 52.0,
+        "labor_trend": "stable",
+    }
+    signal = _bias_ism_signal("supports_growth", cycle_state="peaking")
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    assert result["status"] == "available"
+    assert result["bias"] == "neutral"
+    assert "peaking" in result["reasons"][0]
+
+
+def test_build_growth_cycle_bias_evidence_troughing_is_neutral_not_short():
+    growth_cycle = {
+        "services_pmi": 48.0,
+        "services_business_activity": 47.0,
+        "services_new_orders": 47.5,
+        "labor_trend": "weakening",
+    }
+    signal = _bias_ism_signal("supports_contraction", cycle_state="troughing")
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    assert result["status"] == "available"
+    assert result["bias"] == "neutral"
+    assert "troughing" in result["reasons"][0]
+
+
+def test_build_growth_cycle_bias_evidence_contraction_deepening_is_short():
+    growth_cycle = {
+        "services_pmi": 48.0,
+        "services_business_activity": 47.0,
+        "services_new_orders": 47.5,
+        "labor_trend": "weakening",
+    }
+    signal = _bias_ism_signal(
+        "supports_contraction", cycle_state="contraction_deepening"
+    )
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    assert result["status"] == "available"
+    assert result["bias"] == "short"
+
+
+def test_build_growth_cycle_bias_evidence_pending_inputs_when_services_missing():
+    growth_cycle = {
+        "labor_trend": "stable",
+    }
+    signal = _bias_ism_signal("supports_growth")
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    assert result["status"] == "pending_inputs"
+    assert result["bias"] is None
+    assert "ISM Services" in result["missing_inputs"]
+
+
+def test_build_growth_cycle_bias_evidence_pending_inputs_when_labor_missing():
+    growth_cycle = {
+        "services_pmi": 53.0,
+        "services_business_activity": 54.0,
+        "services_new_orders": 52.0,
+    }
+    signal = _bias_ism_signal("supports_growth")
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    assert result["status"] == "pending_inputs"
+    assert result["bias"] is None
+    assert "Labor trend" in result["missing_inputs"]
+
+
+def test_build_growth_cycle_bias_evidence_unavailable_signal_is_pending():
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence({}, None)
+    assert result["version"] == "growth_cycle_bias_v2"
+    assert result["status"] == "pending_inputs"
+    assert result["bias"] is None
+    assert result["ism_contribution"] == "unavailable"
+    assert result["components"]["ism_manufacturing"] == "unavailable"
+    assert "ISM Manufacturing" in result["missing_inputs"]
+
+
+def test_build_growth_cycle_bias_evidence_status_unavailable_is_pending():
+    signal = _bias_ism_signal(status="unavailable")
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence({}, signal)
+    assert result["status"] == "pending_inputs"
+    assert result["bias"] is None
+    assert result["ism_contribution"] == "unavailable"
+
+
+def test_build_growth_cycle_bias_evidence_expansion_slowing_missing_services():
+    growth_cycle = {}
+    signal = _bias_ism_signal("growth_caution", cycle_state="expansion_slowing")
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    assert result["status"] == "pending_inputs"
+    assert result["bias"] is None
+    assert "ISM Services" in result["missing_inputs"]
+
+
+def test_build_growth_cycle_dashboard_payload_includes_bias_evidence():
+    dashboard = macro_growth_cycle.build_growth_cycle_dashboard()
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+    assert "growth_cycle_bias_evidence" in payload["growth_cycle"]
+    assert (
+        payload["growth_cycle"]["growth_cycle_bias_evidence"]["version"]
+        == "growth_cycle_bias_v2"
+    )
+
+
+def test_build_growth_cycle_bias_evidence_turning_supportive_maps_to_supports_long():
+    growth_cycle = {
+        "services_pmi": 53.0,
+        "services_business_activity": 54.0,
+        "services_new_orders": 52.0,
+        "labor_trend": "strengthening",
+    }
+    signal = _bias_ism_signal("turning_supportive")
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    assert result["ism_contribution"] == "supports_long"
+    assert result["bias"] == "long"
+
+
+def test_build_growth_cycle_bias_evidence_contraction_easing_maps_to_conflicting():
+    growth_cycle = {
+        "services_pmi": 53.0,
+        "services_business_activity": 54.0,
+        "services_new_orders": 52.0,
+        "labor_trend": "stable",
+    }
+    signal = _bias_ism_signal("contraction_easing")
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    assert result["ism_contribution"] == "conflicting"
+
+
+def test_build_growth_cycle_bias_evidence_sets_scalar_to_none_when_pending():
+    dashboard = {"macro": {"growth_cycle": {"growth_cycle_bias": "long"}}}
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+    assert payload["growth_cycle"]["growth_cycle_bias"] is None
+    assert (
+        payload["growth_cycle"]["growth_cycle_bias_evidence"]["status"]
+        == "pending_inputs"
+    )
