@@ -207,12 +207,12 @@ def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
     assert "GDP YoY" in js
     assert "series[0].label || series[0].date" in js
     assert "Quadnomial distribution" in js
-    assert "Method Coverage" in js
+    assert "Scenario Coverage" in js
     assert "M lag A + B + C" in js
     assert "M lag A + B" in js
     assert "M lag rate" in js
     assert "Quadnomial distribution defines A as index down/GDP down" in js
-    assert "Method coverage combines A, B, and C" in js
+    assert "Scenario coverage combines A, B, and C" in js
     assert js.index("${renderQuadBars(payload)}") < js.index(
         "${renderYoyComparison(payload)}"
     )
@@ -745,6 +745,10 @@ def test_macro_dashboard_js_renders_gdp_expectations_placeholder_card():
     assert "GDP预期" in js
     assert "Pending Inputs" in js
     assert "待输入" in js
+    assert "ISM-Implied Direction" in js
+    assert "Macro Portfolio Bias" in js
+    assert "Method 07" not in js
+    assert "Not Loaded" in js
     assert "componentStatusBadge(" in js
     assert "componentLabel(" in js
     assert "gdp-component-row" in js
@@ -813,16 +817,15 @@ def test_macro_dashboard_static_includes_fomc_tone_card():
     assert "tone-neutral" in js
     assert "No scheduled meeting" in js
     assert "Tone unavailable" in js
-    assert "ism_policy_context" in js
     assert "formatPressureValue" in js
-    assert "ISM Policy Context" in js
+    assert "Policy Pressure" in js
     assert "Combined Pressure" in js
     assert "Growth Pressure" in js
     assert "Inflation Pressure" in js
     assert "Supply Pressure" in js
     assert "inflation_caution" in js
     assert "less_easing_pressure" in js
-    assert "ism-policy-context" in js
+    assert "ism-policy-pressure" in js
 
 
 def test_macro_dashboard_renders_fomc_minutes_policy_read_rows():
@@ -2059,11 +2062,11 @@ def test_macro_dashboard_css_has_gdp_expectations_component_styles():
     assert ".component-status-unavailable" in css
 
 
-def test_macro_dashboard_css_has_ism_policy_context_styles():
+def test_macro_dashboard_css_has_ism_policy_pressure_styles():
     css = STATIC_CSS.read_text()
 
-    assert ".ism-policy-context" in css
-    assert ".ism-policy-context-head" in css
+    assert ".ism-policy-pressure" in css
+    assert ".ism-policy-pressure-head" in css
 
 
 def test_macro_dashboard_css_has_bias_evidence_strip_styles():
@@ -2107,17 +2110,17 @@ def test_macro_dashboard_js_renders_gdp_expectations_card_with_components():
         const card = {
           id: "gdp_expectations",
           label: "GDP Expectations",
-          status: "partial_inputs",
-          status_label: "Partial Inputs",
+          status: "available",
+          status_label: "ISM Outlook",
           components: [
             { id: "ism_manufacturing", status: "available", direction: "supports_growth", period: "2026-06-01" },
-            { id: "ism_services", status: "pending" },
-            { id: "labor_trend", status: "pending" },
-            { id: "consumer_indicators", status: "unavailable" },
+            { id: "ism_services", status: "not_loaded", role: "confirmation" },
+            { id: "labor_trend", status: "not_loaded", role: "confirmation" },
+            { id: "consumer_indicators", status: "not_loaded", role: "confirmation" },
           ],
           evidence: ["Manufacturing PMI is above 50 and rising"],
           supporting_context: "GDP direction matters for market correlation.",
-          expected_direction: null,
+          expected_direction: "rising",
         };
 
         const html = hooks.renderGdpExpectationsCard(card);
@@ -2129,11 +2132,11 @@ def test_macro_dashboard_js_renders_gdp_expectations_card_with_components():
           laborTrendLabel: html.indexOf("Labor Trend") !== -1,
           consumerIndicatorsLabel: html.indexOf("Consumer Indicators") !== -1,
           availableBadge: html.indexOf("Available") !== -1,
-          pendingBadge: html.indexOf("Pending") !== -1,
-          unavailableBadge: html.indexOf("Unavailable") !== -1,
+          notLoadedBadge: html.indexOf("Not Loaded") !== -1,
           supportsGrowth: html.indexOf("Supports Growth") !== -1,
           evidenceText: html.indexOf("Manufacturing PMI") !== -1,
-          notReady: html.indexOf("Not Ready") !== -1,
+          impliedDirection: html.indexOf("ISM-Implied Direction") !== -1,
+          risingDirection: html.indexOf("Rising") !== -1,
           oldRequiredInputs: html.indexOf("Required Inputs") === -1,
           componentStatusAvailable: html.indexOf("component-status-available") !== -1,
           componentStatusPending: html.indexOf("component-status-pending") !== -1,
@@ -2157,18 +2160,18 @@ def test_macro_dashboard_js_renders_gdp_expectations_card_with_components():
     assert payload["laborTrendLabel"] is True
     assert payload["consumerIndicatorsLabel"] is True
     assert payload["availableBadge"] is True
-    assert payload["pendingBadge"] is True
-    assert payload["unavailableBadge"] is True
+    assert payload["notLoadedBadge"] is True
     assert payload["supportsGrowth"] is True
     assert payload["evidenceText"] is True
-    assert payload["notReady"] is True
+    assert payload["impliedDirection"] is True
+    assert payload["risingDirection"] is True
     assert payload["oldRequiredInputs"] is True
     assert payload["componentStatusAvailable"] is True
     assert payload["componentStatusPending"] is True
-    assert payload["componentStatusUnavailable"] is True
+    assert payload["componentStatusUnavailable"] is False
 
 
-def test_macro_dashboard_js_renders_fomc_tone_card_with_ism_policy_context():
+def test_macro_dashboard_js_keeps_ism_policy_pressure_out_of_fomc_card():
     script = textwrap.dedent(
         """
         const fs = require("fs");
@@ -2259,19 +2262,19 @@ def test_macro_dashboard_js_renders_fomc_tone_card_with_ism_policy_context():
     assert payload["hasLanguage"] is True
     assert payload["hasBias"] is True
     assert payload["hasChange"] is True
-    assert payload["hasIsmPolicyContext"] is True
-    assert payload["hasCombinedPressure"] is True
-    assert payload["hasGrowthPressure"] is True
-    assert payload["hasInflationPressure"] is True
-    assert payload["hasSupplyPressure"] is True
-    assert payload["hasInflationCaution"] is True
-    assert payload["hasLessEasing"] is True
-    assert payload["hasElevated"] is True
-    assert payload["hasNormal"] is True
+    assert payload["hasIsmPolicyContext"] is False
+    assert payload["hasCombinedPressure"] is False
+    assert payload["hasGrowthPressure"] is False
+    assert payload["hasInflationPressure"] is False
+    assert payload["hasSupplyPressure"] is False
+    assert payload["hasInflationCaution"] is False
+    assert payload["hasLessEasing"] is False
+    assert payload["hasElevated"] is False
+    assert payload["hasNormal"] is False
     assert payload["hasMinutesBlock"] is True
 
 
-def test_macro_dashboard_js_renders_fomc_tone_card_with_ism_context_no_tone():
+def test_macro_dashboard_js_does_not_use_ism_context_as_fomc_fallback():
     script = textwrap.dedent(
         """
         const fs = require("fs");
@@ -2323,7 +2326,7 @@ def test_macro_dashboard_js_renders_fomc_tone_card_with_ism_context_no_tone():
           noToneUnavailable: html.indexOf("Tone unavailable") === -1,
           noToneBadge: html.indexOf("fomc-tone-badge") === -1,
           notMissingCard: html.indexOf("m2-card-missing") === -1,
-          isContextCard: html.indexOf("m2-card-context") !== -1,
+          isContextCard: html.indexOf("m2-card m2-card-context") !== -1,
         }));
         """
     )
@@ -2337,16 +2340,67 @@ def test_macro_dashboard_js_renders_fomc_tone_card_with_ism_context_no_tone():
     )
     payload = json.loads(result.stdout)
 
-    assert payload["hasIsmPolicyContext"] is True
-    assert payload["hasCombinedPressure"] is True
-    assert payload["hasGrowthPressure"] is True
-    assert payload["hasInflationPressure"] is True
-    assert payload["hasSupplyPressure"] is True
-    assert payload["hasInflationCaution"] is True
-    assert payload["noToneUnavailable"] is True
+    assert payload["hasIsmPolicyContext"] is False
+    assert payload["hasCombinedPressure"] is False
+    assert payload["hasGrowthPressure"] is False
+    assert payload["hasInflationPressure"] is False
+    assert payload["hasSupplyPressure"] is False
+    assert payload["hasInflationCaution"] is False
+    assert payload["noToneUnavailable"] is False
     assert payload["noToneBadge"] is True
-    assert payload["notMissingCard"] is True
-    assert payload["isContextCard"] is True
+    assert payload["notMissingCard"] is False
+    assert payload["isContextCard"] is False
+
+
+def test_macro_dashboard_js_renders_policy_pressure_in_ism_card():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = { getElementById: (id) => elements[id] };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const html = window.__macroDashboardTestHooks.renderIsmPolicyPressure({
+          combined_pressure: "inflation_caution",
+          growth_pressure: "less_easing_pressure",
+          inflation_pressure: "elevated",
+          supply_pressure: "normal",
+        });
+
+        console.log(JSON.stringify({
+          hasContainer: html.indexOf("ism-policy-pressure") !== -1,
+          hasTitle: html.indexOf("Policy Pressure") !== -1,
+          hasCombined: html.indexOf("Combined Pressure") !== -1,
+          hasGrowth: html.indexOf("Growth Pressure") !== -1,
+          hasInflation: html.indexOf("Inflation Pressure") !== -1,
+          hasSupply: html.indexOf("Supply Pressure") !== -1,
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert all(payload.values())
 
 
 def test_macro_dashboard_js_renders_bias_evidence_strip():
@@ -2389,9 +2443,11 @@ def test_macro_dashboard_js_renders_bias_evidence_strip():
         };
 
         const availableEvidence = {
-          version: "growth_cycle_bias_v2",
+          version: "growth_cycle_bias_v3",
           status: "available",
           bias: "long",
+          scope: "ism_manufacturing",
+          confirmation_status: "partial",
           ism_contribution: "supports_long",
           components: {
             ism_manufacturing: "supports_growth",
@@ -2422,6 +2478,8 @@ def test_macro_dashboard_js_renders_bias_evidence_strip():
           pendingIsBiasPending: pendingHtml.indexOf("bias-pending") !== -1,
           availableShowsLong: availableHtml.indexOf("Long") !== -1,
           availableIsBiasAvailable: availableHtml.indexOf("bias-available") !== -1,
+          availableShowsMacroBias: availableHtml.indexOf("Macro Portfolio Bias") !== -1,
+          availableShowsConfirmation: availableHtml.indexOf("Confirmation Status") !== -1,
         }));
         """
     )
@@ -2451,3 +2509,5 @@ def test_macro_dashboard_js_renders_bias_evidence_strip():
     assert payload["pendingIsBiasPending"] is True
     assert payload["availableShowsLong"] is True
     assert payload["availableIsBiasAvailable"] is True
+    assert payload["availableShowsMacroBias"] is True
+    assert payload["availableShowsConfirmation"] is True

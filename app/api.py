@@ -584,9 +584,6 @@ def macro_dashboard_market_setup():
         )
         market_phase_payload = _load_market_phase_for_setup()
         rates_liquidity_payload = _load_rates_liquidity_for_setup(con)
-        ism_industry_analysis_payload = _load_ism_industry_analysis_for_setup(
-            con, ism_reports[-1] if ism_reports else None, ism_at_a_glance
-        )
         payload = market_setup.build_market_setup(
             market_phase_payload=market_phase_payload,
             ism_macro_signal=ism_macro_signal_result,
@@ -598,9 +595,12 @@ def macro_dashboard_market_setup():
             m2_headline=m2_headline,
             inflation_context=inflation_context,
             fed_balance_sheet=fed_balance_sheet,
-            ism_industry_analysis=ism_industry_analysis_payload,
         )
-        return payload
+        return {
+            k: v
+            for k, v in payload.items()
+            if k not in ("idea_generation", "limitations")
+        }
     finally:
         con.close()
 

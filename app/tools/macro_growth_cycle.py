@@ -1139,18 +1139,8 @@ def build_fomc_calendar_headline(next_meeting):
     }
 
 
-def build_fomc_tone_headline(latest_tone, ism_policy_context=None):
+def build_fomc_tone_headline(latest_tone):
     if not latest_tone:
-        if ism_policy_context:
-            return {
-                "id": "fomc_tone",
-                "label": "FOMC Policy Read",
-                "period": ism_policy_context.get("period"),
-                "status": "context",
-                "status_label": "ISM Policy Context",
-                "latest_tone": None,
-                "ism_policy_context": ism_policy_context,
-            }
         return {
             "id": "fomc_tone",
             "label": "FOMC Policy Read",
@@ -1196,8 +1186,6 @@ def build_fomc_tone_headline(latest_tone, ism_policy_context=None):
             "minutes_reason": latest_tone.get("minutes_reason"),
         },
     }
-    if ism_policy_context:
-        result["ism_policy_context"] = ism_policy_context
     return result
 
 
@@ -1242,6 +1230,20 @@ def _ism_signal_usable(signal):
     )
 
 
+def _ism_implied_gdp_direction(signal):
+    cycle_state = signal.get("cycle_state")
+    directions = {
+        "expansion_rising": "rising",
+        "expansion_slowing": "slowing",
+        "peaking": "slowing",
+        "contraction_deepening": "falling",
+        "contraction_improving": "improving",
+        "troughing": "turning_up",
+        "stable": "stable",
+    }
+    return directions.get(cycle_state, "mixed")
+
+
 def build_gdp_expectations_headline(growth_cycle, ism_macro_signal=None):
     period = growth_cycle.get("gdp_expectations_period")
     base = {
@@ -1249,7 +1251,7 @@ def build_gdp_expectations_headline(growth_cycle, ism_macro_signal=None):
         "label": "GDP Expectations",
         "period": period,
         "expected_direction": None,
-        "supporting_context": "GDP / Market Relationship validates why GDP direction matters, but it does not replace a forward GDP expectation signal.",
+        "supporting_context": "ISM Manufacturing provides a leading GDP-direction signal. Services, labor, and consumer data confirm or challenge the outlook when available.",
     }
     if ism_macro_signal is None:
         return {
@@ -1263,6 +1265,7 @@ def build_gdp_expectations_headline(growth_cycle, ism_macro_signal=None):
                 {"id": "consumer_indicators", "status": "pending"},
             ],
             "missing_inputs": [
+                "ISM Manufacturing",
                 "ISM Services",
                 "Labor trend",
                 "Consumer indicators",
@@ -1290,8 +1293,11 @@ def build_gdp_expectations_headline(growth_cycle, ism_macro_signal=None):
         }
     return {
         **base,
-        "status": "partial_inputs",
-        "status_label": "Partial Inputs",
+        "period": ism_macro_signal.get("period") or period,
+        "status": "available",
+        "status_label": "ISM Outlook",
+        "expected_direction": _ism_implied_gdp_direction(ism_macro_signal),
+        "direction_basis": "ism_manufacturing",
         "components": [
             {
                 "id": "ism_manufacturing",
@@ -1301,11 +1307,16 @@ def build_gdp_expectations_headline(growth_cycle, ism_macro_signal=None):
                 "version": ism_macro_signal.get("version", "ism_macro_signal_v1"),
                 "growth_impulse": ism_macro_signal.get("growth_impulse"),
             },
-            {"id": "ism_services", "status": "pending"},
-            {"id": "labor_trend", "status": "pending"},
-            {"id": "consumer_indicators", "status": "pending"},
+            {"id": "ism_services", "status": "not_loaded", "role": "confirmation"},
+            {"id": "labor_trend", "status": "not_loaded", "role": "confirmation"},
+            {
+                "id": "consumer_indicators",
+                "status": "not_loaded",
+                "role": "confirmation",
+            },
         ],
-        "missing_inputs": [
+        "missing_inputs": [],
+        "pending_confirmations": [
             "ISM Services",
             "Labor trend",
             "Consumer indicators",
@@ -1742,7 +1753,10 @@ def build_growth_cycle_sections(growth_cycle, headline):
 
 
 def _build_ism_manufacturing_headline(
-    growth_cycle, ism_industry_breadth=None, ism_at_a_glance=None
+    growth_cycle,
+    ism_industry_breadth=None,
+    ism_at_a_glance=None,
+    policy_context=None,
 ):
     pmi = growth_cycle.get("ism_pmi")
     growth_fields = [
@@ -1785,6 +1799,8 @@ def _build_ism_manufacturing_headline(
     }
     if by_key:
         result["segments"]["business_cycle"]["trend"] = by_key.get("pmi")
+    if policy_context:
+        result["policy_context"] = policy_context
     return result
 
 
@@ -1797,9 +1813,22 @@ def build_growth_cycle_dashboard_payload(
     ism_macro_signal=None,
 ):
     growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
+    policy_context = None
+    if ism_macro_signal:
+        context = ism_macro_signal.get("policy_context", {})
+        policy_context = {
+            **context,
+            "period": ism_macro_signal.get("period"),
+            "version": ism_macro_signal.get("version", "ism_macro_signal_v1"),
+            "source_url": ism_macro_signal.get("source_url", ""),
+            "source_hash": ism_macro_signal.get("source_hash", ""),
+        }
     headline = [
         _build_ism_manufacturing_headline(
-            growth_cycle, ism_industry_breadth, ism_at_a_glance
+            growth_cycle,
+            ism_industry_breadth,
+            ism_at_a_glance,
+            policy_context=policy_context,
         ),
         build_m2_money_supply_headline(growth_cycle),
     ]
@@ -1812,19 +1841,7 @@ def build_growth_cycle_dashboard_payload(
     fomc_card = build_fomc_calendar_headline(next_fomc_meeting)
     if fomc_card["status"] != "missing":
         headline.append(fomc_card)
-    ism_policy_block = None
-    if ism_macro_signal:
-        context = ism_macro_signal.get("policy_context", {})
-        ism_policy_block = {
-            **context,
-            "period": ism_macro_signal.get("period"),
-            "version": ism_macro_signal.get("version", "ism_macro_signal_v1"),
-            "source_url": ism_macro_signal.get("source_url", ""),
-            "source_hash": ism_macro_signal.get("source_hash", ""),
-        }
-    tone_card = build_fomc_tone_headline(
-        fomc_latest_tone, ism_policy_context=ism_policy_block
-    )
+    tone_card = build_fomc_tone_headline(fomc_latest_tone)
     if tone_card["status"] != "missing":
         headline.append(tone_card)
     headline.append(
@@ -1915,6 +1932,67 @@ _ISM_CONTRIBUTION_MAP = {
 }
 
 
+def _ism_manufacturing_bias(ism_macro_signal):
+    cycle_state = ism_macro_signal.get("cycle_state")
+    phase = ism_macro_signal.get("phase")
+    growth_impulse = ism_macro_signal.get("growth_impulse")
+    if cycle_state in ("peaking", "troughing", "expansion_slowing"):
+        return "neutral"
+    if growth_impulse == "supports_growth":
+        return "long"
+    if growth_impulse in ("supports_contraction", "contraction_easing"):
+        return "short"
+    if cycle_state == "expansion_rising":
+        return "long"
+    if cycle_state in ("contraction_deepening", "contraction_improving"):
+        return "short"
+    if cycle_state == "stable" and phase in ("slowdown", "contraction"):
+        return "short"
+    return "neutral"
+
+
+def _services_confirmation(
+    has_services, services_pmi, services_business_activity, services_new_orders
+):
+    if not has_services:
+        return "unavailable"
+    if _above_50(services_pmi) and (
+        _above_50(services_business_activity) or _above_50(services_new_orders)
+    ):
+        return "supports_long"
+    if _below_50(services_pmi) and (
+        _below_50(services_business_activity) or _below_50(services_new_orders)
+    ):
+        return "supports_short"
+    return "conflicting"
+
+
+def _labor_confirmation(has_labor, labor_trend):
+    if not has_labor:
+        return "unavailable"
+    if labor_trend == "weakening":
+        return "supports_short"
+    if labor_trend in ("stable", "strengthening"):
+        return "supports_long"
+    return "conflicting"
+
+
+def _confirmation_status(bias, confirmations):
+    available = [value for value in confirmations if value != "unavailable"]
+    has_missing = len(available) != len(confirmations)
+    if not available:
+        return "pending"
+    expected = f"supports_{bias}" if bias in ("long", "short") else None
+    if expected and all(value == expected for value in available):
+        return "partial" if has_missing else "confirmed"
+    if expected and any(
+        value in ("supports_long", "supports_short") and value != expected
+        for value in available
+    ):
+        return "conflicting"
+    return "mixed"
+
+
 def build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal):
     services_pmi = growth_cycle.get("services_pmi")
     services_business_activity = growth_cycle.get("services_business_activity")
@@ -1938,7 +2016,7 @@ def build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal):
         if ism_macro_signal is None:
             missing_inputs.insert(0, "ISM Manufacturing")
         return {
-            "version": "growth_cycle_bias_v2",
+            "version": "growth_cycle_bias_v3",
             "status": "pending_inputs",
             "bias": None,
             "ism_contribution": ism_contribution,
@@ -1952,82 +2030,50 @@ def build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal):
         }
 
     growth_impulse = ism_macro_signal.get("growth_impulse")
+    cycle_state = ism_macro_signal.get("cycle_state")
     ism_manufacturing_component = growth_impulse or "unavailable"
     ism_contribution = _ISM_CONTRIBUTION_MAP.get(growth_impulse, "unavailable")
-    cycle_state = ism_macro_signal.get("cycle_state")
-
-    if not has_services or not has_labor:
-        reasons = []
-        if not has_services:
-            reasons.append("Services PMI data is missing")
-        if not has_labor:
-            reasons.append("Labor trend data is missing")
-        return {
-            "version": "growth_cycle_bias_v2",
-            "status": "pending_inputs",
-            "bias": None,
-            "ism_contribution": ism_contribution,
-            "components": {
-                "ism_manufacturing": ism_manufacturing_component,
-                "ism_services": "available" if has_services else "unavailable",
-                "labor": labor_trend if has_labor else "unavailable",
-            },
-            "missing_inputs": missing_inputs,
-            "reasons": reasons,
-        }
-
-    services_expanding = _above_50(services_pmi) and (
-        _above_50(services_business_activity) or _above_50(services_new_orders)
+    bias = _ism_manufacturing_bias(ism_macro_signal)
+    services_confirmation = _services_confirmation(
+        has_services,
+        services_pmi,
+        services_business_activity,
+        services_new_orders,
     )
-    services_contracting = _below_50(services_pmi) and (
-        _below_50(services_business_activity) or _below_50(services_new_orders)
+    labor_confirmation = _labor_confirmation(has_labor, labor_trend)
+    confirmation_status = _confirmation_status(
+        bias, (services_confirmation, labor_confirmation)
     )
-
-    reasons = []
-
     if cycle_state == "peaking":
-        bias = "neutral"
-        reasons.append(
-            "ISM cycle state is peaking, bias is neutral pending cross-validation"
-        )
+        bias_reason = "Peaking ISM momentum supports a neutral portfolio bias"
     elif cycle_state == "troughing":
-        bias = "neutral"
-        reasons.append(
-            "ISM cycle state is troughing, bias is neutral pending cross-validation"
-        )
-    elif (
-        growth_impulse in ("supports_growth", "turning_supportive")
-        and services_expanding
-        and labor_trend in ("stable", "strengthening")
-    ):
-        bias = "long"
-        reasons.append(
-            "Manufacturing and services both expanding with supportive labor trend"
-        )
-    elif (
-        growth_impulse == "supports_contraction"
-        and services_contracting
-        and labor_trend == "weakening"
-    ):
-        bias = "short"
-        reasons.append(
-            "Manufacturing and services both contracting with weakening labor trend"
-        )
+        bias_reason = "Troughing ISM momentum supports a neutral portfolio bias"
     else:
-        bias = "neutral"
-        reasons.append("Growth cycle signals are mixed or conflicting")
+        bias_reason = {
+            "long": "ISM level and momentum support a long portfolio bias",
+            "short": "ISM level and momentum support a short portfolio bias",
+            "neutral": "ISM level and momentum support a neutral portfolio bias",
+        }[bias]
+    reasons = [bias_reason]
+    if missing_inputs:
+        reasons.append(
+            "Services and labor confirmation are not loaded and do not block the ISM conclusion"
+        )
 
     return {
-        "version": "growth_cycle_bias_v2",
+        "version": "growth_cycle_bias_v3",
         "status": "available",
         "bias": bias,
+        "scope": "ism_manufacturing",
+        "confirmation_status": confirmation_status,
         "ism_contribution": ism_contribution,
         "components": {
             "ism_manufacturing": ism_manufacturing_component,
-            "ism_services": "available",
-            "labor": labor_trend,
+            "ism_services": services_confirmation,
+            "labor": labor_confirmation,
         },
         "missing_inputs": [],
+        "pending_confirmations": missing_inputs,
         "reasons": reasons,
     }
 

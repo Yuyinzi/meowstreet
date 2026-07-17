@@ -902,12 +902,13 @@ def test_build_gdp_expectations_headline_returns_pending_inputs_card():
             {"id": "consumer_indicators", "status": "pending"},
         ],
         "missing_inputs": [
+            "ISM Manufacturing",
             "ISM Services",
             "Labor trend",
             "Consumer indicators",
         ],
         "evidence": [],
-        "supporting_context": "GDP / Market Relationship validates why GDP direction matters, but it does not replace a forward GDP expectation signal.",
+        "supporting_context": "ISM Manufacturing provides a leading GDP-direction signal. Services, labor, and consumer data confirm or challenge the outlook when available.",
     }
 
 
@@ -917,6 +918,7 @@ def test_build_gdp_expectations_headline_with_supportive_ism():
         "period": "2026-06-01",
         "version": "ism_macro_signal_v1",
         "growth_impulse": "supports_growth",
+        "cycle_state": "expansion_rising",
         "evidence": [
             "PMI is above 50 and rising month over month",
             "New Orders are above 50 and rising month over month",
@@ -929,9 +931,10 @@ def test_build_gdp_expectations_headline_with_supportive_ism():
     )
 
     assert card["id"] == "gdp_expectations"
-    assert card["status"] == "partial_inputs"
-    assert card["status_label"] == "Partial Inputs"
-    assert card["expected_direction"] is None
+    assert card["status"] == "available"
+    assert card["status_label"] == "ISM Outlook"
+    assert card["expected_direction"] == "rising"
+    assert card["direction_basis"] == "ism_manufacturing"
     assert card["components"][0] == {
         "id": "ism_manufacturing",
         "status": "available",
@@ -941,13 +944,18 @@ def test_build_gdp_expectations_headline_with_supportive_ism():
         "growth_impulse": "supports_growth",
     }
     assert card["components"][1:] == [
-        {"id": "ism_services", "status": "pending"},
-        {"id": "labor_trend", "status": "pending"},
-        {"id": "consumer_indicators", "status": "pending"},
+        {"id": "ism_services", "status": "not_loaded", "role": "confirmation"},
+        {"id": "labor_trend", "status": "not_loaded", "role": "confirmation"},
+        {
+            "id": "consumer_indicators",
+            "status": "not_loaded",
+            "role": "confirmation",
+        },
     ]
     assert "PMI is above 50" in card["evidence"][0]
     assert "Growth impulse supports continued expansion" in card["evidence"][2]
-    assert "ISM Services" in card["missing_inputs"]
+    assert card["missing_inputs"] == []
+    assert "ISM Services" in card["pending_confirmations"]
 
 
 def test_build_gdp_expectations_headline_with_cautionary_ism():
@@ -956,6 +964,7 @@ def test_build_gdp_expectations_headline_with_cautionary_ism():
         "period": "2026-06-01",
         "version": "ism_macro_signal_v1",
         "growth_impulse": "growth_caution",
+        "cycle_state": "expansion_slowing",
         "evidence": [
             "PMI is above 50 but falling month over month",
             "Growth impulse signals caution in expansion",
@@ -966,7 +975,8 @@ def test_build_gdp_expectations_headline_with_cautionary_ism():
         ism_macro_signal=signal,
     )
 
-    assert card["status"] == "partial_inputs"
+    assert card["status"] == "available"
+    assert card["expected_direction"] == "slowing"
     assert card["components"][0]["direction"] == "growth_caution"
     assert card["components"][0]["growth_impulse"] == "growth_caution"
     assert "Growth impulse signals caution" in card["evidence"][1]
@@ -978,6 +988,7 @@ def test_build_gdp_expectations_headline_with_contraction_ism():
         "period": "2026-06-01",
         "version": "ism_macro_signal_v1",
         "growth_impulse": "supports_contraction",
+        "cycle_state": "contraction_deepening",
         "evidence": [
             "PMI is below 50 and falling month over month",
             "Growth impulse supports continued contraction",
@@ -988,7 +999,8 @@ def test_build_gdp_expectations_headline_with_contraction_ism():
         ism_macro_signal=signal,
     )
 
-    assert card["status"] == "partial_inputs"
+    assert card["status"] == "available"
+    assert card["expected_direction"] == "falling"
     assert card["components"][0]["direction"] == "supports_contraction"
     assert "supports continued contraction" in card["evidence"][1]
 
@@ -1272,7 +1284,7 @@ def test_build_fomc_tone_headline_includes_minutes_structure_when_available():
     assert card["latest_tone"]["policy_conviction"] == "moderate"
 
 
-def test_build_fomc_tone_headline_with_ism_policy_context():
+def test_build_fomc_tone_headline_contains_only_fomc_data():
     tone = {
         "event_id": "fomc_2026_06_16",
         "start_date": "2026-06-16",
@@ -1286,26 +1298,16 @@ def test_build_fomc_tone_headline_with_ism_policy_context():
         "statement_confidence": "medium",
         "statement_reason": "statement reason",
     }
-    ism_context = {
-        "combined_pressure": "inflation_caution",
-        "growth_pressure": "less_easing_pressure",
-        "inflation_pressure": "elevated",
-        "supply_pressure": "normal",
-        "period": "2026-06-01",
-        "version": "ism_macro_signal_v1",
-        "source_url": "https://example.com/june",
-    }
-    card = macro_growth_cycle.build_fomc_tone_headline(
-        tone, ism_policy_context=ism_context
-    )
+    card = macro_growth_cycle.build_fomc_tone_headline(tone)
 
     assert card["id"] == "fomc_tone"
     assert card["latest_tone"]["marker_tone"] == "hawkish"
     assert card["latest_tone"]["minutes_status"] == "pending"
-    assert card["ism_policy_context"] == ism_context
+    assert "policy_context" not in card
+    assert "ism_policy_context" not in card
 
 
-def test_build_fomc_tone_headline_without_ism_context_is_unchanged():
+def test_build_fomc_tone_headline_is_deterministic():
     tone = {
         "event_id": "fomc_2026_06_16",
         "start_date": "2026-06-16",
@@ -1313,57 +1315,17 @@ def test_build_fomc_tone_headline_without_ism_context_is_unchanged():
         "statement_marker_tone": "dovish",
         "statement_policy_action": "cut",
     }
-    card_with = macro_growth_cycle.build_fomc_tone_headline(
-        tone, ism_policy_context=None
-    )
-    card_without = macro_growth_cycle.build_fomc_tone_headline(tone)
+    first = macro_growth_cycle.build_fomc_tone_headline(tone)
+    second = macro_growth_cycle.build_fomc_tone_headline(tone)
 
-    assert card_with == card_without
-    assert "ism_policy_context" not in card_with
+    assert first == second
 
 
-def test_build_fomc_tone_missing_with_ism_context_stays_visible():
-    ism_context = {
-        "combined_pressure": "inflation_caution",
-        "growth_pressure": "less_easing_pressure",
-        "inflation_pressure": "elevated",
-        "supply_pressure": "normal",
-        "period": "2026-06-01",
-        "version": "ism_macro_signal_v1",
-        "source_url": "https://example.com/june",
-    }
-    card = macro_growth_cycle.build_fomc_tone_headline(
-        None, ism_policy_context=ism_context
-    )
+def test_build_fomc_tone_missing_stays_missing():
+    card = macro_growth_cycle.build_fomc_tone_headline(None)
 
-    assert card["status"] == "context"
-    assert card["status_label"] == "ISM Policy Context"
-    assert card["latest_tone"] is None
-    assert card["ism_policy_context"] == ism_context
-
-
-def test_build_fomc_tone_ism_context_does_not_change_marker_tone():
-    tone = {
-        "event_id": "fomc_2026_06_16",
-        "start_date": "2026-06-16",
-        "end_date": "2026-06-17",
-        "statement_marker_tone": "hawkish",
-        "statement_policy_action": "hold",
-    }
-    ism_context = {
-        "combined_pressure": "stagflationary_tension",
-        "growth_pressure": "more_easing_pressure",
-        "inflation_pressure": "elevated",
-        "supply_pressure": "elevated",
-        "period": "2026-06-01",
-        "version": "ism_macro_signal_v1",
-    }
-    card = macro_growth_cycle.build_fomc_tone_headline(
-        tone, ism_policy_context=ism_context
-    )
-
-    assert card["latest_tone"]["marker_tone"] == "hawkish"
-    assert card["ism_policy_context"]["combined_pressure"] == "stagflationary_tension"
+    assert card["status"] == "missing"
+    assert card["status_label"] == "Missing"
 
 
 def test_m2_fomc_chart_events_use_reviewed_statement_tone():
@@ -2320,13 +2282,14 @@ def test_build_growth_cycle_bias_evidence_long_scenario():
     }
     signal = _bias_ism_signal("supports_growth")
     result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["version"] == "growth_cycle_bias_v2"
+    assert result["version"] == "growth_cycle_bias_v3"
     assert result["status"] == "available"
     assert result["bias"] == "long"
     assert result["ism_contribution"] == "supports_long"
     assert result["components"]["ism_manufacturing"] == "supports_growth"
-    assert result["components"]["ism_services"] == "available"
-    assert result["components"]["labor"] == "stable"
+    assert result["components"]["ism_services"] == "supports_long"
+    assert result["components"]["labor"] == "supports_long"
+    assert result["confirmation_status"] == "confirmed"
     assert result["missing_inputs"] == []
 
 
@@ -2356,7 +2319,7 @@ def test_build_growth_cycle_bias_evidence_peaking_is_neutral():
     result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
     assert result["status"] == "available"
     assert result["bias"] == "neutral"
-    assert "peaking" in result["reasons"][0]
+    assert "peaking" in result["reasons"][0].lower()
 
 
 def test_build_growth_cycle_bias_evidence_troughing_is_neutral_not_short():
@@ -2370,7 +2333,7 @@ def test_build_growth_cycle_bias_evidence_troughing_is_neutral_not_short():
     result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
     assert result["status"] == "available"
     assert result["bias"] == "neutral"
-    assert "troughing" in result["reasons"][0]
+    assert "troughing" in result["reasons"][0].lower()
 
 
 def test_build_growth_cycle_bias_evidence_contraction_deepening_is_short():
@@ -2388,18 +2351,19 @@ def test_build_growth_cycle_bias_evidence_contraction_deepening_is_short():
     assert result["bias"] == "short"
 
 
-def test_build_growth_cycle_bias_evidence_pending_inputs_when_services_missing():
+def test_build_growth_cycle_bias_evidence_is_usable_when_services_missing():
     growth_cycle = {
         "labor_trend": "stable",
     }
     signal = _bias_ism_signal("supports_growth")
     result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["status"] == "pending_inputs"
-    assert result["bias"] is None
-    assert "ISM Services" in result["missing_inputs"]
+    assert result["status"] == "available"
+    assert result["bias"] == "long"
+    assert result["confirmation_status"] == "partial"
+    assert "ISM Services" in result["pending_confirmations"]
 
 
-def test_build_growth_cycle_bias_evidence_pending_inputs_when_labor_missing():
+def test_build_growth_cycle_bias_evidence_is_usable_when_labor_missing():
     growth_cycle = {
         "services_pmi": 53.0,
         "services_business_activity": 54.0,
@@ -2407,14 +2371,15 @@ def test_build_growth_cycle_bias_evidence_pending_inputs_when_labor_missing():
     }
     signal = _bias_ism_signal("supports_growth")
     result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["status"] == "pending_inputs"
-    assert result["bias"] is None
-    assert "Labor trend" in result["missing_inputs"]
+    assert result["status"] == "available"
+    assert result["bias"] == "long"
+    assert result["confirmation_status"] == "partial"
+    assert "Labor trend" in result["pending_confirmations"]
 
 
 def test_build_growth_cycle_bias_evidence_unavailable_signal_is_pending():
     result = macro_growth_cycle.build_growth_cycle_bias_evidence({}, None)
-    assert result["version"] == "growth_cycle_bias_v2"
+    assert result["version"] == "growth_cycle_bias_v3"
     assert result["status"] == "pending_inputs"
     assert result["bias"] is None
     assert result["ism_contribution"] == "unavailable"
@@ -2434,9 +2399,9 @@ def test_build_growth_cycle_bias_evidence_expansion_slowing_missing_services():
     growth_cycle = {}
     signal = _bias_ism_signal("growth_caution", cycle_state="expansion_slowing")
     result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["status"] == "pending_inputs"
-    assert result["bias"] is None
-    assert "ISM Services" in result["missing_inputs"]
+    assert result["status"] == "available"
+    assert result["bias"] == "neutral"
+    assert "ISM Services" in result["pending_confirmations"]
 
 
 def test_build_growth_cycle_dashboard_payload_includes_bias_evidence():
@@ -2445,7 +2410,7 @@ def test_build_growth_cycle_dashboard_payload_includes_bias_evidence():
     assert "growth_cycle_bias_evidence" in payload["growth_cycle"]
     assert (
         payload["growth_cycle"]["growth_cycle_bias_evidence"]["version"]
-        == "growth_cycle_bias_v2"
+        == "growth_cycle_bias_v3"
     )
 
 
@@ -2456,10 +2421,10 @@ def test_build_growth_cycle_bias_evidence_turning_supportive_maps_to_supports_lo
         "services_new_orders": 52.0,
         "labor_trend": "strengthening",
     }
-    signal = _bias_ism_signal("turning_supportive")
+    signal = _bias_ism_signal("turning_supportive", cycle_state="troughing")
     result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
     assert result["ism_contribution"] == "supports_long"
-    assert result["bias"] == "long"
+    assert result["bias"] == "neutral"
 
 
 def test_build_growth_cycle_bias_evidence_contraction_easing_maps_to_conflicting():
@@ -2469,9 +2434,12 @@ def test_build_growth_cycle_bias_evidence_contraction_easing_maps_to_conflicting
         "services_new_orders": 52.0,
         "labor_trend": "stable",
     }
-    signal = _bias_ism_signal("contraction_easing")
+    signal = _bias_ism_signal(
+        "contraction_easing", cycle_state="contraction_improving"
+    )
     result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
     assert result["ism_contribution"] == "conflicting"
+    assert result["bias"] == "short"
 
 
 def test_build_growth_cycle_bias_evidence_sets_scalar_to_none_when_pending():

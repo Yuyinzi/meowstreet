@@ -1420,10 +1420,16 @@ def test_growth_cycle_api_includes_ism_macro_signal_in_gdp(monkeypatch):
     gdp_card = next(
         card for card in payload["headline"] if card["id"] == "gdp_expectations"
     )
-    assert gdp_card["status"] == "partial_inputs"
+    assert gdp_card["status"] == "available"
+    assert gdp_card["expected_direction"] == "rising"
     assert gdp_card["components"][0]["status"] == "available"
     assert gdp_card["components"][0]["period"] == "2026-06-01"
     assert gdp_card["components"][0]["version"] == "ism_macro_signal_v1"
+    ism_card = next(
+        card for card in payload["headline"] if card["id"] == "ism_manufacturing"
+    )
+    assert ism_card["policy_context"]["growth_pressure"] == "less_easing_pressure"
+    assert not any(card["id"] == "fomc_tone" for card in payload["headline"])
 
 
 def test_growth_cycle_api_propagates_source_url_and_hash(monkeypatch):
@@ -2872,6 +2878,6 @@ def test_growth_cycle_api_returns_bias_evidence(monkeypatch):
     payload = response.json()
     assert "growth_cycle_bias_evidence" in payload["growth_cycle"]
     evidence = payload["growth_cycle"]["growth_cycle_bias_evidence"]
-    assert evidence["version"] == "growth_cycle_bias_v2"
+    assert evidence["version"] == "growth_cycle_bias_v3"
     assert evidence["status"] == "pending_inputs"
     assert evidence["bias"] is None
