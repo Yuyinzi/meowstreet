@@ -1026,10 +1026,9 @@ def test_build_gdp_expectations_headline_with_partial_ism():
         ism_macro_signal=signal,
     )
 
-    assert card["status"] == "partial_inputs"
-    assert card["components"][0]["status"] == "partial"
-    assert card["components"][0]["direction"] == "mixed"
-    assert "New Orders are missing" in card["evidence"][0]
+    assert card["status"] == "pending_inputs"
+    assert card["components"][0]["status"] == "unavailable"
+    assert "ISM Manufacturing" in card["missing_inputs"]
 
 
 def test_normalize_fed_balance_sheet_computes_card_metrics_without_status():

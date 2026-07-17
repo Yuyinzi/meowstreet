@@ -368,9 +368,7 @@ def macro_dashboard_growth_cycle():
                         "available_optional_metrics": [],
                         "missing_metrics": [],
                     },
-                    "evidence": [
-                        "ISM macro signal could not be built from stored data"
-                    ],
+                    "evidence": [],
                 }
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(
             dashboard,

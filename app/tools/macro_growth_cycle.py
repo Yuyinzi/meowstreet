@@ -1234,6 +1234,14 @@ def _fomc_chart_events(events, available_dates):
     ]
 
 
+def _ism_signal_usable(signal):
+    return (
+        signal is not None
+        and signal.get("status") == "available"
+        and signal.get("growth_impulse") not in (None, "unavailable")
+    )
+
+
 def build_gdp_expectations_headline(growth_cycle, ism_macro_signal=None):
     period = growth_cycle.get("gdp_expectations_period")
     base = {
@@ -1261,7 +1269,7 @@ def build_gdp_expectations_headline(growth_cycle, ism_macro_signal=None):
             ],
             "evidence": [],
         }
-    if ism_macro_signal.get("status") == "unavailable":
+    if not _ism_signal_usable(ism_macro_signal):
         return {
             **base,
             "status": "pending_inputs",
@@ -1924,12 +1932,7 @@ def build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal):
     if not has_labor:
         missing_inputs.append("Labor trend")
 
-    if (
-        ism_macro_signal is None
-        or ism_macro_signal.get("status") == "unavailable"
-        or ism_macro_signal.get("status") == "partial"
-        or ism_macro_signal.get("growth_impulse") == "unavailable"
-    ):
+    if not _ism_signal_usable(ism_macro_signal):
         ism_manufacturing_component = "unavailable"
         ism_contribution = "unavailable"
         if ism_macro_signal is None:
