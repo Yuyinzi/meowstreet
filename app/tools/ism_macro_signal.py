@@ -1,10 +1,10 @@
+from datetime import date, datetime
+
 ISM_MACRO_SIGNAL_VERSION = "ism_macro_signal_v1"
 
 _REQUIRED_METRICS = ["pmi", "new_orders"]
 _OPTIONAL_METRICS = ["production", "inventories", "prices", "supplier_deliveries"]
 _ALL_METRICS = _REQUIRED_METRICS + _OPTIONAL_METRICS
-
-from datetime import date, datetime
 
 _SERIES_IDS = {
     "pmi": "ism_manufacturing_pmi",

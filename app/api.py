@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import date
 from pathlib import Path
 
@@ -327,7 +328,7 @@ def macro_dashboard_growth_cycle():
                     industry_breadth=ism_industry_breadth,
                 )
             except ValueError:
-                pass
+                logging.warning("ism macro signal build failed", exc_info=True)
         return macro_growth_cycle.build_growth_cycle_dashboard_payload(
             dashboard,
             next_fomc_meeting=next_fomc_meeting,
