@@ -513,7 +513,7 @@ def test_macro_dashboard_js_lazy_loads_us_rates_detail_charts():
     assert "nominalComparisonDate" in js
     assert "realCurrentDate" in js
     assert "realComparisonDate" in js
-    assert 'class="rates-signal-card${selected}"' in js
+    assert 'class="rates-signal-card${selected}${targetId ? " evidence-target" : ""}"' in js
     assert "data-rates-detail-id" in js
     assert "state.selectedRatesDetailId === button.dataset.ratesDetailId" in js
     assert '$("detailPanel")' in js
@@ -3155,6 +3155,172 @@ def test_market_setup_hero_compute_signal_agreement():
     assert payload["conflicting"] == "conflicting"
     assert payload["incomplete"] == "incomplete"
     assert payload["mixed"] == "mixed"
+
+
+def test_market_setup_evidence_links_are_semantic_deep_links():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const evidenceTypes = [
+          "market_phase",
+          "ism_manufacturing",
+          "yield_curve",
+          "credit_conditions",
+          "real_rate_risk",
+          "vix",
+          "fomc_policy",
+          "m2_money_supply",
+        ];
+
+        console.log(JSON.stringify({
+          targetIds: evidenceTypes.map((link) => hooks.evidenceTargetId(link)),
+          anchor: hooks.renderEvidenceLink("yield_curve"),
+          unknownTarget: hooks.evidenceTargetId("unknown_evidence"),
+          unknownLink: hooks.renderEvidenceLink("unknown_evidence"),
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, text=True
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["targetIds"] == [
+        "evidence-market-phase",
+        "evidence-ism-manufacturing",
+        "evidence-yield-curve",
+        "evidence-credit-conditions",
+        "evidence-real-rate-risk",
+        "evidence-vix",
+        "evidence-fomc-policy",
+        "evidence-m2-money-supply",
+    ]
+    assert payload["anchor"] == (
+        '<a class="ms-evidence-link" href="#evidence-yield-curve" '
+        'data-evidence-target="evidence-yield-curve">Yield Curve</a>'
+    )
+    assert payload["unknownTarget"] is None
+    assert payload["unknownLink"] == ""
+
+
+def test_market_setup_evidence_navigation_updates_hash_and_respects_motion():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const target = {
+          scrollCalls: [],
+          classList: { add: () => {}, remove: () => {} },
+          scrollIntoView(options) { this.scrollCalls.push(options); },
+        };
+        const link = {
+          dataset: { evidenceTarget: "evidence-vix" },
+          addEventListener(name, callback) { this.listener = callback; },
+        };
+        const section = { querySelectorAll: () => [link] };
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+          "evidence-vix": target,
+        };
+        let reduceMotion = false;
+        const hashes = [];
+
+        global.window = {
+          __MEOWSTREET_TEST__: true,
+          matchMedia: () => ({ matches: reduceMotion }),
+        };
+        global.history = {
+          replaceState: (_state, _title, hash) => hashes.push(hash),
+        };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        hooks.bindEvidenceLinks(section);
+        let prevented = 0;
+        link.listener({ preventDefault: () => { prevented += 1; } });
+        reduceMotion = true;
+        link.listener({ preventDefault: () => { prevented += 1; } });
+
+        console.log(JSON.stringify({
+          hashes,
+          prevented,
+          scrollCalls: target.scrollCalls,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, text=True
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["hashes"] == ["#evidence-vix", "#evidence-vix"]
+    assert payload["prevented"] == 2
+    assert payload["scrollCalls"] == [
+        {"behavior": "smooth", "block": "start"},
+        {"behavior": "auto", "block": "start"},
+    ]
+
+
+def test_macro_dashboard_renders_stable_evidence_target_ids():
+    js = STATIC_JS.read_text()
+    target_ids = {
+        "evidence-market-phase",
+        "evidence-ism-manufacturing",
+        "evidence-yield-curve",
+        "evidence-credit-conditions",
+        "evidence-real-rate-risk",
+        "evidence-vix",
+        "evidence-fomc-policy",
+        "evidence-m2-money-supply",
+    }
+
+    assert all(js.count(target_id) >= 2 for target_id in target_ids)
+    assert '<span class="ms-evidence-link"' not in js
+
+
+def test_market_setup_css_styles_evidence_link_layout_and_keyboard_focus():
+    css = STATIC_CSS.read_text()
+
+    assert ".ms-evidence-links" in css
+    assert ".ms-evidence-link:focus-visible" in css
+    assert "outline: 2px solid #3B5F85;" in css
 
 
 def test_market_setup_css_has_hero_styles():

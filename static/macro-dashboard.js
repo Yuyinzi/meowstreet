@@ -489,8 +489,9 @@
     grid.innerHTML = markets
       .map((market) => {
         const selected = market.benchmark_id === currentMarket?.benchmark_id ? " selected" : "";
+        const targetId = market.benchmark_id === "us_sp500" ? "evidence-market-phase" : "";
         return `
-          <button class="market-card market-card-${statusClass(market)}${selected}" type="button" data-benchmark-id="${escapeHtml(market.benchmark_id)}">
+          <button class="market-card market-card-${statusClass(market)}${selected}${targetId ? " evidence-target" : ""}" type="button" data-benchmark-id="${escapeHtml(market.benchmark_id)}"${targetId ? ` id="${escapeHtml(targetId)}"` : ""}>
             <span class="market-region">${escapeHtml(market.region)}</span>
             <strong>${escapeHtml(market.title)}</strong>
             <span class="market-status">${escapeHtml(fmtStatus(market.latest.market_phase_status))}</span>
@@ -1572,27 +1573,30 @@
       ? "credit_conditions_diagnostics"
       : CREDIT_DETAIL_MAP[card.id] || card.id;
     const selected = state.selectedRatesDetailId === detailId ? " selected" : "";
+    const targetId = card.id === "credit_conditions"
+      ? "evidence-credit-conditions"
+      : card.id === "tips_10y" ? "evidence-real-rate-risk" : "";
     if (card.id === "credit_conditions") {
       const currentValue = card.value || "missing";
       const meta = creditStatusMeta(currentValue);
       return `
-        <button class="rates-signal-card rates-signal-card-wide${selected}" type="button" data-rates-detail-id="${escapeHtml(detailId)}">
+        <button class="rates-signal-card rates-signal-card-wide${selected}${targetId ? " evidence-target" : ""}" type="button" data-rates-detail-id="${escapeHtml(detailId)}"${targetId ? ` id="${escapeHtml(targetId)}"` : ""}>
           <span>${bilingualLabel(card.label)}</span>
           <strong>${escapeHtml(meta.label)}<br><small>${escapeHtml(meta.zh)}</small></strong>
         </button>
       `;
     }
     return `
-      <button class="rates-signal-card${selected}" type="button" data-rates-detail-id="${escapeHtml(detailId)}">
+      <button class="rates-signal-card${selected}${targetId ? " evidence-target" : ""}" type="button" data-rates-detail-id="${escapeHtml(detailId)}"${targetId ? ` id="${escapeHtml(targetId)}"` : ""}>
         <span>${bilingualLabel(card.label)}</span>
         <strong>${escapeHtml(fmtRate(card.value))}</strong>
       </button>
     `;
   }
 
-  function renderSupportCard(label, value) {
+  function renderSupportCard(label, value, targetId = "") {
     return `
-      <span class="rates-signal-card">
+      <span class="rates-signal-card${targetId ? " evidence-target" : ""}"${targetId ? ` id="${escapeHtml(targetId)}"` : ""}>
         <span>${bilingualLabel(label)}</span>
         <strong>${escapeHtml(value)}</strong>
       </span>
@@ -1603,7 +1607,7 @@
     const colorClass = `rates-signal-card-${curveStatus || "missing"}`;
     const label = (curveStatus || "missing").toUpperCase();
     return `
-      <span class="rates-signal-card rates-signal-card-wide ${colorClass}">
+      <span class="rates-signal-card rates-signal-card-wide evidence-target ${colorClass}" id="evidence-yield-curve">
         <span>${bilingualLabel("Curve Status")}</span>
         <strong>${escapeHtml(fmtStatus(label))}</strong>
         <span class="rates-interpretation-text">${escapeHtml(interpretation || "")}</span>
@@ -1677,7 +1681,7 @@
         </div>
         <span class="mock-pill">${escapeHtml(payload.as_of ? `As of ${fmtDate(payload.as_of)}` : "Import needed")}</span>
       </div>
-      ${rateCards.length ? `<div class="rates-signal-grid">${rateCards.map(renderRateCard).join("")}${renderSupportCard("Breakeven", fmtRate(payload.derived?.ten_year_breakeven_inflation))}${renderSupportCard("VIX", fmtNumber(payload.derived?.vix))}${renderCurveStatusCard(curveStatus, interpretation)}</div>` : ""}
+      ${rateCards.length ? `<div class="rates-signal-grid">${rateCards.map(renderRateCard).join("")}${renderSupportCard("Breakeven", fmtRate(payload.derived?.ten_year_breakeven_inflation))}${renderSupportCard("VIX", fmtNumber(payload.derived?.vix), "evidence-vix")}${renderCurveStatusCard(curveStatus, interpretation)}</div>` : ""}
       ${creditCards.length ? `
         <div class="rates-detail gdp-detail">
           <div class="rates-chart-subtitle">
@@ -2006,6 +2010,29 @@
     return html;
   }
 
+  const EVIDENCE_TARGET_IDS = Object.freeze({
+    market_phase: "evidence-market-phase",
+    ism_manufacturing: "evidence-ism-manufacturing",
+    yield_curve: "evidence-yield-curve",
+    credit_conditions: "evidence-credit-conditions",
+    real_rate_risk: "evidence-real-rate-risk",
+    vix: "evidence-vix",
+    fomc_policy: "evidence-fomc-policy",
+    m2_money_supply: "evidence-m2-money-supply",
+  });
+
+  function evidenceTargetId(link) {
+    return EVIDENCE_TARGET_IDS[link] || null;
+  }
+
+  function renderEvidenceLink(link) {
+    var targetId = evidenceTargetId(link);
+    if (!targetId) return "";
+    return '<a class="ms-evidence-link" href="#' + escapeHtml(targetId) +
+      '" data-evidence-target="' + escapeHtml(targetId) + '">' +
+      escapeHtml(titleCaseToken(link)) + '</a>';
+  }
+
   function renderDetailedReasoning(pr) {
     if (!pr) return "";
     var html = '<div class="ms-detailed">';
@@ -2027,9 +2054,9 @@
           html += '</ul>';
         }
         if (item.links.length) {
-          html += '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">';
+          html += '<div class="ms-evidence-links">';
           item.links.forEach(function(link) {
-            html += '<span class="ms-evidence-link" data-evidence-link="' + escapeHtml(link) + '">' + escapeHtml(titleCaseToken(link)) + '</span>';
+            html += renderEvidenceLink(link);
           });
           html += '</div>';
         }
@@ -2129,26 +2156,22 @@
 
   function bindEvidenceLinks(section) {
     if (!section) return;
-    section.querySelectorAll("[data-evidence-link]").forEach(function(el) {
-      el.addEventListener("click", function() {
-        var link = el.dataset.evidenceLink;
-        var TARGET_MAP = {
-          market_phase: "marketGrid",
-          ism_manufacturing: "growthCycle",
-          yield_curve: "usRatesLiquidity",
-          real_rate_risk: "usRatesLiquidity",
-          credit_conditions: "usRatesLiquidity",
-          vix: "usRatesLiquidity",
-          fomc_policy: "growthCycle",
-          m2_money_supply: "growthCycle",
-        };
-        var targetId = TARGET_MAP[link] || "growthCycle";
+    section.querySelectorAll("[data-evidence-target]").forEach(function(link) {
+      link.addEventListener("click", function(event) {
+        var targetId = link.dataset.evidenceTarget;
         var target = $(targetId);
-        if (target) {
-          target.scrollIntoView({ behavior: "smooth" });
-          target.classList.add("evidence-target-highlight");
-          setTimeout(function() { target.classList.remove("evidence-target-highlight"); }, 1500);
+        if (!target) return;
+        event.preventDefault();
+        if (typeof history !== "undefined" && history.replaceState) {
+          history.replaceState(null, "", "#" + targetId);
         }
+        var reduceMotion = typeof window !== "undefined" && window.matchMedia &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+        target.classList.add("evidence-target-highlight");
+        setTimeout(function() {
+          target.classList.remove("evidence-target-highlight");
+        }, 1500);
       });
     });
   }
@@ -3435,7 +3458,7 @@
     const ib = segments.industry_breadth || {};
     const selected = state.selectedGrowthCycleDetailId === "ism_manufacturing";
     return `
-      <button class="m2-card ism-card ism-card-button ism-card-${escapeHtml(ismBadgeClass(card.status))}${selected ? " selected" : ""}" type="button" data-growth-cycle-detail-id="ism_manufacturing">
+      <button class="m2-card ism-card ism-card-button evidence-target ism-card-${escapeHtml(ismBadgeClass(card.status))}${selected ? " selected" : ""}" id="evidence-ism-manufacturing" type="button" data-growth-cycle-detail-id="ism_manufacturing">
         <div class="ism-metric-band">
           <div>
             <span>Business Cycle<br><small>${escapeHtml(zhLabel("Business Cycle") || "商业周期")}</small></span>
@@ -3654,7 +3677,7 @@
     const cardLabel = card.label || "FOMC Policy Read";
     if (!hasTone) {
       return `
-        <article class="m2-card m2-card-missing fomc-card">
+        <article class="m2-card m2-card-missing fomc-card evidence-target" id="evidence-fomc-policy">
           <div class="m2-card-head">
             <span>${bilingualTitle(cardLabel)}</span>
           </div>
@@ -3676,7 +3699,7 @@
       : `
           <div class="m2-level-row"><span>${bilingualLabel("Minutes Confirmation")}</span><strong>${bilingualLabel("Pending")}</strong></div>`;
     return `
-      <article class="m2-card m2-card-context fomc-card fomc-tone-card">
+      <article class="m2-card m2-card-context fomc-card fomc-tone-card evidence-target" id="evidence-fomc-policy">
         <div class="m2-card-head">
           <div>
             <span>${bilingualTitle(cardLabel)}</span>
@@ -3713,7 +3736,7 @@
 
   function renderM2MoneySupplyCard(card) {
     return `
-      <button class="m2-card m2-card-button m2-card-${escapeHtml(card.status || "missing")}${state.selectedGrowthCycleDetailId === card.id ? " selected" : ""}" type="button" data-growth-cycle-detail-id="${escapeHtml(card.id)}">
+      <button class="m2-card m2-card-button evidence-target m2-card-${escapeHtml(card.status || "missing")}${state.selectedGrowthCycleDetailId === card.id ? " selected" : ""}" id="evidence-m2-money-supply" type="button" data-growth-cycle-detail-id="${escapeHtml(card.id)}">
         <div class="m2-metric-band">
           <div>
             <span>${bilingualLabel("YoY Growth")}</span>
@@ -4864,6 +4887,8 @@
       renderStateCell,
       renderDecisionHero,
       renderDetailedReasoning,
+      evidenceTargetId,
+      renderEvidenceLink,
       renderMarketSetupLoading,
       renderMarketSetupError,
       renderMarketSetup,

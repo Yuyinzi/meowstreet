@@ -4368,6 +4368,13 @@ h2 {
 
 /* Evidence navigation */
 
+.ms-evidence-links {
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .ms-evidence-link {
   color: #5D7FA8;
   font-weight: 600;
@@ -4380,6 +4387,12 @@ h2 {
 .ms-evidence-link:hover {
   color: #3B5F85;
   border-bottom-color: #5D7FA8;
+}
+
+.ms-evidence-link:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid #3B5F85;
+  outline-offset: 3px;
 }
 
 .evidence-target {
