@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/macro-dashboard.css" />
 </head>
 <body>
+  <a href="#macroDashboardApp" class="skip-link">Skip to main content</a>
   <nav class="topnav">
     <a href="/" class="nav-brand">Meowstreet</a>
     <a href="/method-system.html" class="nav-link">Trade Workflow</a>
@@ -21,22 +22,23 @@
       <header class="macro-header">
         <div>
           <p class="eyebrow">Macro Dashboard</p>
-          <h1>Benchmark Indices</h1>
-          <p class="subtitle">Market phase status and drawdown across major indices.</p>
+          <h1>Market Dashboard</h1>
+          <p class="subtitle">Market environment, portfolio posture, and macro decision support.</p>
         </div>
         <a class="workflow-link" href="/method-system.html">Ticker Workflow</a>
       </header>
-      <section class="dashboard-status" id="dashboardStatus">Loading market phase data...</section>
-      <section class="market-grid" id="marketGrid" aria-label="Benchmark market phase overview"></section>
-      <section class="market-setup" id="marketSetup" aria-label="Market setup connections">
+      <div id="marketSetupStatus" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+      <section class="market-setup" id="marketSetup" aria-label="Market setup decision hero">
         <div class="market-setup-head">
           <div>
             <h2>Market Setup</h2>
             <p class="subtitle">Connected view of market environment, growth path, financial conditions, and policy response.</p>
           </div>
         </div>
-        <div class="market-setup-loading">Loading market setup...</div>
+        <div class="market-setup-loading" aria-busy="true">Loading market setup…</div>
       </section>
+      <section class="dashboard-status" id="dashboardStatus">Loading market phase data...</section>
+      <section class="market-grid" id="marketGrid" aria-label="Benchmark market phase overview"></section>
       <section class="growth-cycle" id="growthCycle" aria-label="Growth cycle indicators">
         <div class="relationship-head">
           <div>

@@ -513,7 +513,10 @@ def test_macro_dashboard_js_lazy_loads_us_rates_detail_charts():
     assert "nominalComparisonDate" in js
     assert "realCurrentDate" in js
     assert "realComparisonDate" in js
-    assert 'class="rates-signal-card${selected}${targetId ? " evidence-target" : ""}"' in js
+    assert (
+        'class="rates-signal-card${selected}${targetId ? " evidence-target" : ""}"'
+        in js
+    )
     assert "data-rates-detail-id" in js
     assert "state.selectedRatesDetailId === button.dataset.ratesDetailId" in js
     assert '$("detailPanel")' in js
@@ -3339,6 +3342,39 @@ def test_market_setup_css_has_hero_styles():
     assert ".ms-evidence-link" in css
     assert ".ms-retry-btn" in css
     assert ".skip-link" in css
-    assert ".skip-link:focus" in css
+    assert ".skip-link:focus-visible" in css
     assert ".evidence-target" in css
     assert "@media (prefers-reduced-motion: reduce)" in css
+
+
+def test_macro_dashboard_html_has_skip_link():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+    assert 'class="skip-link"' in html
+    assert 'href="#macroDashboardApp"' in html
+    assert "Skip to main content" in html
+
+
+def test_macro_dashboard_html_loading_copy_uses_ellipsis_character():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+    assert "Loading market setup\N{HORIZONTAL ELLIPSIS}" in html
+    assert "Loading market setup..." not in html
+
+
+def test_market_setup_load_lifecycle_has_explicit_loading_state():
+    js = STATIC_JS.read_text()
+    assert "marketSetupLoading: false" in js
+    assert "state.marketSetupLoading = true" in js
+    assert "state.marketSetupLoading = false" in js
+    assert "if (state.marketSetupLoading)" in js
+
+
+def test_market_setup_detailed_reasoning_uses_css_classes_not_inline_styles():
+    js = STATIC_JS.read_text()
+    source = js[
+        js.index("function renderDetailedReasoning") : js.index(
+            "function renderMarketSetupLoading"
+        )
+    ]
+    assert 'style="' not in source
+    assert "ms-evidence-links" in source
+    assert "ms-missing-inputs" in source

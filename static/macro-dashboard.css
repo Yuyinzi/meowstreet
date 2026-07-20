@@ -41,7 +41,7 @@ button {
   text-decoration: none;
 }
 
-.skip-link:focus {
+.skip-link:focus-visible {
   top: 0;
 }
 
@@ -3841,6 +3841,8 @@ h2 {
   line-height: 1.2;
   color: #3B3530;
   margin: 0;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 
 .ms-hero-date {
@@ -3850,6 +3852,7 @@ h2 {
   font-size: 13px;
   font-weight: 500;
   color: #8B7E74;
+  font-variant-numeric: tabular-nums;
 }
 
 .ms-hero-summary {
@@ -3906,6 +3909,7 @@ h2 {
   font-weight: 700;
   color: #3B3530;
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .ms-state-value.constructive { color: #2D7A4A; }
@@ -4241,6 +4245,7 @@ h2 {
   flex-wrap: wrap;
   font-size: 12px;
   line-height: 1.4;
+  font-variant-numeric: tabular-nums;
 }
 
 .ms-conviction-finding { color: #3B3530; }
@@ -4270,6 +4275,16 @@ h2 {
   color: #6B6258;
   line-height: 1.4;
   margin: 0;
+}
+
+.ms-missing-inputs {
+  border-color: #E0C8C8;
+  background: #FCF5F5;
+}
+
+.ms-missing-inputs h3,
+.ms-missing-inputs p {
+  color: #8B4B4B;
 }
 
 /* Component data */
@@ -4326,12 +4341,29 @@ h2 {
   border-radius: 4px;
   font-size: 12px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .ms-component-value.constructive { background: #E0F0E4; color: #2B6B3E; }
 .ms-component-value.caution { background: #F0E8D0; color: #8B7B3B; }
 .ms-component-value.defensive { background: #F0E0E0; color: #8B3B3B; }
 .ms-component-value.neutral-state { background: #F0EAE4; color: #6B6258; }
+
+.ms-state-cell,
+.ms-conflict-col,
+.ms-guidance-do,
+.ms-guidance-avoid,
+.ms-evidence-card-body,
+.ms-component-cell {
+  min-width: 0;
+}
+
+.ms-evidence-card summary:focus-visible,
+.ms-component-summary:focus-visible,
+.ms-retry-btn:focus-visible {
+  outline: 2px solid #3B3530;
+  outline-offset: 3px;
+}
 
 /* Error state */
 

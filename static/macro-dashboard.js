@@ -17,6 +17,7 @@
     selectedGrowthCycleDetailId: null,
     selectedGrowthCycleChartRange: "1y",
     growthCycleDetailsById: {},
+    marketSetupLoading: false,
     selectedIsmIndustry: null,
     selectedNominalCurrentDate: null,
     selectedNominalComparisonDate: null,
@@ -1787,16 +1788,21 @@
   }
 
   async function loadMarketSetup() {
+    state.marketSetupLoading = true;
+    state.marketSetupError = null;
+    renderMarketSetup();
+    announceStatus("Loading market setup");
     try {
       const response = await fetch("/api/macro-dashboard/market-setup");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       state.marketSetup = await response.json();
-      state.marketSetupError = null;
     } catch (error) {
       state.marketSetup = null;
       state.marketSetupError = error.message;
+    } finally {
+      state.marketSetupLoading = false;
+      renderMarketSetup();
     }
-    renderMarketSetup();
   }
 
   function setupStateLabel(state) {
@@ -2105,9 +2111,9 @@
       html += '</div>';
     }
     if (pr.missingInputs.length && pr.status !== "insufficient") {
-      html += '<div class="ms-pending-confirmations" style="border-color:#E0C8C8;background:#FCF5F5;">';
-      html += '<h3 style="color:#8B4B4B;">Missing Inputs</h3>';
-      html += '<p style="color:#8B4B4B;">' + escapeHtml(pr.missingInputs.join(" \u00B7 ")) + '</p>';
+      html += '<div class="ms-pending-confirmations ms-missing-inputs">';
+      html += '<h3>Missing Inputs</h3>';
+      html += '<p>' + escapeHtml(pr.missingInputs.join(" \u00B7 ")) + '</p>';
       html += '</div>';
     }
     var comps = pr.components;
@@ -2179,6 +2185,10 @@
   function renderMarketSetup() {
     var section = $("marketSetup");
     if (!section) return;
+    if (state.marketSetupLoading) {
+      section.innerHTML = renderMarketSetupLoading();
+      return;
+    }
     var setup = state.marketSetup;
     if (state.marketSetupError) {
       section.innerHTML = renderMarketSetupError(state.marketSetupError);
