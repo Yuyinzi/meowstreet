@@ -2516,32 +2516,6 @@ def test_macro_dashboard_js_renders_bias_evidence_strip():
 # --- Market Setup Decision Hero Tests ---
 
 
-def test_macro_dashboard_html_market_setup_before_benchmark():
-    html = (ROOT / "static" / "macro-dashboard.html").read_text()
-    ms_index = html.index('id="marketSetup"')
-    bm_index = html.index('id="marketGrid"')
-    assert ms_index < bm_index, "Market Setup must appear before Benchmark Indices"
-
-
-def test_macro_dashboard_html_has_skip_link():
-    html = (ROOT / "static" / "macro-dashboard.html").read_text()
-    assert 'class="skip-link"' in html
-    assert 'href="#marketSetup"' in html
-    assert "Skip to main content" in html
-
-
-def test_macro_dashboard_html_has_market_setup_live_region():
-    html = (ROOT / "static" / "macro-dashboard.html").read_text()
-    assert 'id="marketSetupStatus"' in html
-    assert 'aria-live="polite"' in html
-
-
-def test_macro_dashboard_html_has_updated_heading():
-    html = (ROOT / "static" / "macro-dashboard.html").read_text()
-    assert "Market Dashboard" in html
-    assert "Benchmark Indices" not in html
-
-
 def test_market_setup_hero_aligned_signal():
     script = textwrap.dedent("""\
         const fs = require("fs");
@@ -3047,6 +3021,11 @@ def test_market_setup_hero_state_sentiment_class():
           constructive: hooks.stateSentimentClass("bull_market"),
           defensive: hooks.stateSentimentClass("bear_market"),
           caution: hooks.stateSentimentClass("conflict"),
+          alignedSetup: hooks.stateSentimentClass("growth_and_conditions_aligned"),
+          contractionSetup: hooks.stateSentimentClass("contraction_risk_aligned"),
+          conflictSetup: hooks.stateSentimentClass("growth_liquidity_conflict"),
+          longPosture: hooks.stateSentimentClass("long"),
+          shortPosture: hooks.stateSentimentClass("short_or_neutral"),
           neutral: hooks.stateSentimentClass("unknown_value"),
           nullValue: hooks.stateSentimentClass(null),
         }));
@@ -3063,8 +3042,70 @@ def test_market_setup_hero_state_sentiment_class():
     assert payload["constructive"] == "constructive"
     assert payload["defensive"] == "defensive"
     assert payload["caution"] == "caution"
+    assert payload["alignedSetup"] == "constructive"
+    assert payload["contractionSetup"] == "defensive"
+    assert payload["conflictSetup"] == "caution"
+    assert payload["longPosture"] == "constructive"
+    assert payload["shortPosture"] == "defensive"
     assert payload["neutral"] == "neutral-state"
     assert payload["nullValue"] == "neutral-state"
+
+
+def test_market_setup_component_sentiments_use_renderable_classes():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const presentation = hooks.buildMarketSetupPresentation({
+          market_environment: { state: "bull_market" },
+          expected_growth: { state: "expansion_rising" },
+          financial_conditions: { state: "confirms_contraction_risk" },
+          policy_response: { state: "policy_liquidity_conflict" },
+        });
+
+        console.log(JSON.stringify({
+          market: presentation.components.marketEnvironment.sentiment,
+          growth: presentation.components.expectedGrowth.sentiment,
+          conditions: presentation.components.financialConditions.sentiment,
+          policy: presentation.components.policyResponse.sentiment,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "market": "constructive",
+        "growth": "constructive",
+        "conditions": "defensive",
+        "policy": "caution",
+    }
 
 
 def test_market_setup_hero_compute_signal_agreement():

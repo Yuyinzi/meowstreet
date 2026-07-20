@@ -1803,18 +1803,6 @@
     return titleCaseToken(posture || "neutral");
   }
 
-  function setupStateSentiment(state) {
-    if (!state) return "neutral";
-    const s = String(state).toLowerCase();
-    const positive = ["bull_market", "expansion", "rising", "confirms_expansion", "support_confirmed", "support_possible", "available"];
-    const negative = ["bear_market", "contraction", "falling", "confirms_contraction_risk", "restrictive_confirmed", "contracting", "shock"];
-    const caution = ["slow", "peak", "trough", "improving", "transition", "mixed", "constrain", "conflict", "rebound", "flat", "inverted", "unresolved"];
-    if (positive.some((p) => s.includes(p))) return "positive";
-    if (negative.some((n) => s.includes(n))) return "negative";
-    if (caution.some((c) => s.includes(c))) return "caution";
-    return "neutral";
-  }
-
   function computeSignalAgreement(setup) {
     if (!setup) return "incomplete";
     var missing = setup.missing_inputs || [];
@@ -1826,16 +1814,54 @@
     return "mixed";
   }
 
+  var MARKET_SETUP_SENTIMENT_CLASSES = {
+    bull_market: "constructive",
+    growth_and_conditions_aligned: "constructive",
+    long: "constructive",
+    neutral_to_long: "constructive",
+    aligned: "constructive",
+    expansion_rising: "constructive",
+    confirms_expansion: "constructive",
+    support_confirmed: "constructive",
+    support_possible: "constructive",
+    rising: "constructive",
+    bear_market: "defensive",
+    contraction_risk_aligned: "defensive",
+    short: "defensive",
+    short_or_neutral: "defensive",
+    contraction_deepening: "defensive",
+    confirms_contraction_risk: "defensive",
+    restrictive_confirmed: "defensive",
+    falling: "defensive",
+    reject: "defensive",
+    transition: "caution",
+    weak_growth_with_policy_support: "caution",
+    growth_liquidity_conflict: "caution",
+    unresolved_macro_conflict: "caution",
+    insufficient_data: "caution",
+    neutral: "caution",
+    cautious: "caution",
+    conflicting: "caution",
+    conflict: "caution",
+    incomplete: "caution",
+    mixed: "caution",
+    expansion_slowing: "caution",
+    peaking: "caution",
+    contraction_improving: "caution",
+    troughing: "caution",
+    stable: "caution",
+    unresolved: "caution",
+    transition_warning: "caution",
+    support_constrained: "caution",
+    policy_liquidity_conflict: "caution",
+    no_clear_response: "caution",
+    unavailable: "caution",
+    wait_for_timing: "caution",
+  };
+
   function stateSentimentClass(value) {
     if (!value) return "neutral-state";
-    var s = String(value).toLowerCase();
-    var pos = ["bull", "expansion", "rising", "growth", "aligned", "constructive"];
-    var neg = ["bear", "contraction", "falling", "declining", "defensive", "reject"];
-    var caut = ["caution", "conflict", "mixed", "neutral", "wait", "unresolved", "insufficient", "incomplete"];
-    if (pos.some(function(p) { return s.indexOf(p) !== -1; })) return "constructive";
-    if (neg.some(function(n) { return s.indexOf(n) !== -1; })) return "defensive";
-    if (caut.some(function(c) { return s.indexOf(c) !== -1; })) return "caution";
-    return "neutral-state";
+    return MARKET_SETUP_SENTIMENT_CLASSES[String(value).toLowerCase()] || "neutral-state";
   }
 
   function buildMarketSetupPresentation(setup) {
@@ -1880,10 +1906,10 @@
       pendingConfirmations: setup.pending_confirmations || [],
       missingInputs: setup.missing_inputs || [],
       components: {
-        marketEnvironment: { state: me.state || null, sentiment: setupStateSentiment(me.state) },
-        expectedGrowth: { state: (setup.expected_growth || {}).state || null, sentiment: setupStateSentiment((setup.expected_growth || {}).state) },
-        financialConditions: { state: (setup.financial_conditions || {}).state || null, sentiment: setupStateSentiment((setup.financial_conditions || {}).state) },
-        policyResponse: { state: (setup.policy_response || {}).state || null, sentiment: setupStateSentiment((setup.policy_response || {}).state) },
+        marketEnvironment: { state: me.state || null, sentiment: stateSentimentClass(me.state) },
+        expectedGrowth: { state: (setup.expected_growth || {}).state || null, sentiment: stateSentimentClass((setup.expected_growth || {}).state) },
+        financialConditions: { state: (setup.financial_conditions || {}).state || null, sentiment: stateSentimentClass((setup.financial_conditions || {}).state) },
+        policyResponse: { state: (setup.policy_response || {}).state || null, sentiment: stateSentimentClass((setup.policy_response || {}).state) },
       },
     };
   }
