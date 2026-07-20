@@ -2511,3 +2511,627 @@ def test_macro_dashboard_js_renders_bias_evidence_strip():
     assert payload["availableIsBiasAvailable"] is True
     assert payload["availableShowsMacroBias"] is True
     assert payload["availableShowsConfirmation"] is True
+
+
+# --- Market Setup Decision Hero Tests ---
+
+
+def test_macro_dashboard_html_market_setup_before_benchmark():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+    ms_index = html.index('id="marketSetup"')
+    bm_index = html.index('id="marketGrid"')
+    assert ms_index < bm_index, "Market Setup must appear before Benchmark Indices"
+
+
+def test_macro_dashboard_html_has_skip_link():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+    assert 'class="skip-link"' in html
+    assert 'href="#marketSetup"' in html
+    assert "Skip to main content" in html
+
+
+def test_macro_dashboard_html_has_market_setup_live_region():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+    assert 'id="marketSetupStatus"' in html
+    assert 'aria-live="polite"' in html
+
+
+def test_macro_dashboard_html_has_updated_heading():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+    assert "Market Dashboard" in html
+    assert "Benchmark Indices" not in html
+
+
+def test_market_setup_hero_aligned_signal():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const setup = {
+          version: "market_setup_v1",
+          status: "available",
+          as_of: "2026-06-17",
+          market_environment: { state: "bull_market" },
+          expected_growth: { state: "expansion" },
+          financial_conditions: { state: "accommodative" },
+          policy_response: { state: "restrictive" },
+          setup_type: "growth_and_conditions_aligned",
+          portfolio_posture: "long",
+          agreements: ["Growth and conditions are aligned"],
+          conflicts: [],
+          missing_inputs: [],
+          pending_confirmations: ["ISM Services", "Labor trend"],
+          market_conclusion: {
+            code: "qualified_long_candidate",
+            title: "Qualified Long Candidate",
+            summary: "Growth is slowing but conditions remain supportive.",
+          },
+          portfolio_guidance: {
+            posture: "long",
+            summary: "Maintain long posture",
+            actions: ["Maintain broad-market long exposure"],
+            avoid: ["Avoid adding defensive positions"],
+          },
+          evidence_chain: [{
+            title: "Growth Trend",
+            finding: "Growth is slowing but above trend",
+            implication: "Supports moderate long exposure",
+            tone: "constructive",
+            evidence: ["ISM Manufacturing at 52.3"],
+            evidence_links: ["ism_manufacturing"],
+          }],
+          conviction_limits: {
+            summary: "Some offsets limit conviction",
+            offsets: [{ finding: "Bull market intact", effect: "Offset" }],
+          },
+          confirmation_conditions: {
+            more_defensive: ["ISM drops below 50"],
+            more_constructive: ["Services sector confirms expansion"],
+          },
+        };
+
+        const pr = hooks.buildMarketSetupPresentation(setup);
+
+        console.log(JSON.stringify({
+          signalAgreement: pr.signalAgreement,
+          conclusionTitle: pr.conclusionTitle,
+          asOf: pr.asOf,
+          hasEvidence: pr.primaryEvidence.length === 1,
+          hasOffsets: pr.offsets.length === 1,
+          hasDoActions: pr.doActions.length === 1,
+          hasAvoidActions: pr.avoidActions.length === 1,
+          hasPending: pr.pendingConfirmations.length === 2,
+          marketPhaseSentiment: hooks.stateSentimentClass(pr.marketPhase),
+          heroHtml: hooks.renderDecisionHero(pr),
+          detailedHtml: hooks.renderDetailedReasoning(pr),
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["signalAgreement"] == "aligned"
+    assert payload["conclusionTitle"] == "Qualified Long Candidate"
+    assert payload["asOf"] == "2026-06-17"
+    assert payload["hasEvidence"] is True
+    assert payload["hasOffsets"] is True
+    assert payload["hasDoActions"] is True
+    assert payload["hasAvoidActions"] is True
+    assert payload["hasPending"] is True
+    assert payload["marketPhaseSentiment"] == "constructive"
+    assert "ms-hero" in payload["heroHtml"]
+    assert "ms-state-strip" in payload["heroHtml"]
+    assert "ms-state-cell" in payload["heroHtml"]
+    assert "Qualified Long Candidate" in payload["heroHtml"]
+    assert "Evidence through" in payload["heroHtml"]
+    assert "Practical Guidance" in payload["heroHtml"]
+    assert "Conviction limited by 1 offset" in payload["heroHtml"]
+    assert "Bull Market" in payload["heroHtml"]
+    assert "bull_market" not in payload["heroHtml"]
+    assert "ms-detailed" in payload["detailedHtml"]
+    assert "ms-evidence-card" in payload["detailedHtml"]
+    assert "ms-change-view" in payload["detailedHtml"]
+    assert "ms-conviction" in payload["detailedHtml"]
+    assert "ms-pending-confirmations" in payload["detailedHtml"]
+    assert "ms-component-data" in payload["detailedHtml"]
+
+
+def test_market_setup_hero_preserves_compound_macro_conclusion():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const presentation = hooks.buildMarketSetupPresentation({
+          status: "available",
+          as_of: "2026-06-01",
+          market_environment: { state: "bull_market" },
+          setup_type: "contraction_risk_aligned",
+          portfolio_posture: "neutral",
+          agreements: [],
+          conflicts: ["Bull market conflicts with contraction risk"],
+          missing_inputs: [],
+          market_conclusion: {
+            code: "macro_risk_rising_bull_intact",
+            title: "Macro risk rising; bull market intact",
+            summary: "Macro risk is rising, but the bull phase remains intact."
+          },
+          portfolio_guidance: { actions: ["Maintain balanced exposure"], avoid: [] },
+          evidence_chain: [],
+          conviction_limits: {},
+          confirmation_conditions: {}
+        });
+        const html = hooks.renderDecisionHero(presentation);
+        console.log(JSON.stringify({
+          headline: html.includes("Macro risk rising; bull market intact"),
+          phase: html.includes("Bull Market"),
+          setup: html.includes("Contraction Risk Aligned"),
+          posture: html.includes("Neutral")
+        }));
+    """)
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+    assert all(json.loads(result.stdout).values())
+
+
+def test_market_setup_hero_conflicting_signal():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const pr = hooks.buildMarketSetupPresentation({
+          status: "available",
+          as_of: "2026-06-17",
+          market_environment: { state: "bull_market" },
+          setup_type: "conflicting_evidence",
+          portfolio_posture: "neutral",
+          agreements: [],
+          conflicts: ["Growth slowing but conditions supportive"],
+          missing_inputs: [],
+          pending_confirmations: [],
+          market_conclusion: { code: "conflicting_evidence", title: "Conflicting Evidence", summary: "Mixed signals" },
+          portfolio_guidance: { actions: ["Be selective"] },
+          evidence_chain: [{ title: "Risk", finding: "Mixed signals", tone: "caution" }],
+          conviction_limits: {},
+          confirmation_conditions: {},
+        });
+
+        const heroHtml = hooks.renderDecisionHero(pr);
+
+        console.log(JSON.stringify({
+          signalAgreement: pr.signalAgreement,
+          hasConflicts: heroHtml.indexOf("Offsets &amp; Conflicts") !== -1,
+          hasPrimary: heroHtml.indexOf("Primary Evidence") !== -1,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["signalAgreement"] == "conflicting"
+    assert payload["hasConflicts"] is True
+    assert payload["hasPrimary"] is True
+
+
+def test_market_setup_hero_incomplete_state():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const pr = hooks.buildMarketSetupPresentation({
+          status: "partial",
+          as_of: "2026-06-17",
+          market_environment: { state: "bull_market" },
+          setup_type: "insufficient_data",
+          portfolio_posture: "neutral",
+          agreements: [],
+          conflicts: [],
+          missing_inputs: ["ISM manufacturing signal", "US rates data"],
+          pending_confirmations: [],
+          market_conclusion: { code: "insufficient_evidence", title: "Insufficient Evidence", summary: "Partial data" },
+          portfolio_guidance: {
+            posture: "neutral",
+            summary: "Conflicting signals or insufficient evidence support a neutral posture",
+            actions: ["Maintain balanced exposure with no net directional bias"],
+            avoid: ["Building large directional positions without clearer alignment"],
+          },
+          evidence_chain: [],
+          conviction_limits: {},
+          confirmation_conditions: {},
+        });
+
+        const heroHtml = hooks.renderDecisionHero(pr);
+
+        console.log(JSON.stringify({
+          signalAgreement: pr.signalAgreement,
+          hasInsufficientBadge: heroHtml.indexOf("Insufficient Data") !== -1,
+          hasMissingInputs: heroHtml.indexOf("ISM manufacturing signal") !== -1,
+          hasNoGuidance: heroHtml.indexOf("Practical Guidance") === -1,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["signalAgreement"] == "incomplete"
+    assert payload["hasInsufficientBadge"] is True
+    assert payload["hasMissingInputs"] is True
+    assert payload["hasNoGuidance"] is True
+
+
+def test_market_setup_hero_insufficient_state():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const pr = hooks.buildMarketSetupPresentation({
+          status: "insufficient",
+          market_environment: {},
+          setup_type: "insufficient_data",
+          portfolio_posture: null,
+          agreements: [],
+          conflicts: [],
+          missing_inputs: ["All inputs unavailable"],
+          pending_confirmations: [],
+          market_conclusion: { code: "insufficient_evidence" },
+          portfolio_guidance: {},
+          evidence_chain: [],
+          conviction_limits: {},
+          confirmation_conditions: {},
+        });
+
+        const heroHtml = hooks.renderDecisionHero(pr);
+
+        console.log(JSON.stringify({
+          signalAgreement: pr.signalAgreement,
+          hasInsufficientBadge: heroHtml.indexOf("Insufficient Data") !== -1,
+          hasRequiredInputs: heroHtml.indexOf("Required Inputs") !== -1,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["signalAgreement"] == "incomplete"
+    assert payload["hasInsufficientBadge"] is True
+    assert payload["hasRequiredInputs"] is True
+
+
+def test_market_setup_hero_error_state():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const errorHtml = hooks.renderMarketSetupError("Network error");
+
+        console.log(JSON.stringify({
+          hasError: errorHtml.indexOf("ms-error") !== -1,
+          hasRetryBtn: errorHtml.indexOf("Retry Market Setup") !== -1,
+          hasErrorMessage: errorHtml.indexOf("Network error") !== -1,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasError"] is True
+    assert payload["hasRetryBtn"] is True
+    assert payload["hasErrorMessage"] is True
+
+
+def test_market_setup_hero_loading_state():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const loadingHtml = hooks.renderMarketSetupLoading();
+
+        console.log(JSON.stringify({
+          hasLoading: loadingHtml.indexOf("Loading market setup") !== -1,
+          hasBusy: loadingHtml.indexOf("aria-busy") !== -1,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasLoading"] is True
+    assert payload["hasBusy"] is True
+
+
+def test_market_setup_hero_state_sentiment_class():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        console.log(JSON.stringify({
+          constructive: hooks.stateSentimentClass("bull_market"),
+          defensive: hooks.stateSentimentClass("bear_market"),
+          caution: hooks.stateSentimentClass("conflict"),
+          neutral: hooks.stateSentimentClass("unknown_value"),
+          nullValue: hooks.stateSentimentClass(null),
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["constructive"] == "constructive"
+    assert payload["defensive"] == "defensive"
+    assert payload["caution"] == "caution"
+    assert payload["neutral"] == "neutral-state"
+    assert payload["nullValue"] == "neutral-state"
+
+
+def test_market_setup_hero_compute_signal_agreement():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        console.log(JSON.stringify({
+          aligned: hooks.computeSignalAgreement({ agreements: ["ok"], conflicts: [], missing_inputs: [], status: "available" }),
+          conflicting: hooks.computeSignalAgreement({ agreements: ["ok"], conflicts: ["bad"], missing_inputs: [], status: "available" }),
+          incomplete: hooks.computeSignalAgreement({ agreements: [], conflicts: [], missing_inputs: ["x"], status: "partial" }),
+          mixed: hooks.computeSignalAgreement({ agreements: [], conflicts: [], missing_inputs: [], status: "available" }),
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["aligned"] == "aligned"
+    assert payload["conflicting"] == "conflicting"
+    assert payload["incomplete"] == "incomplete"
+    assert payload["mixed"] == "mixed"
+
+
+def test_market_setup_css_has_hero_styles():
+    css = STATIC_CSS.read_text()
+    assert ".ms-hero" in css
+    assert ".ms-state-strip" in css
+    assert ".ms-state-cell" in css
+    assert ".ms-conflict-row" in css
+    assert ".ms-evidence-item" in css
+    assert ".ms-evidence-card" in css
+    assert ".ms-detailed" in css
+    assert ".ms-change-view" in css
+    assert ".ms-conviction" in css
+    assert ".ms-component-data" in css
+    assert ".ms-error" in css
+    assert ".ms-evidence-link" in css
+    assert ".ms-retry-btn" in css
+    assert ".skip-link" in css
+    assert ".skip-link:focus" in css
+    assert ".evidence-target" in css
+    assert "@media (prefers-reduced-motion: reduce)" in css
