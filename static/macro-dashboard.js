@@ -89,6 +89,8 @@
     } else if (state.selectedGrowthCycleDetailId) {
       if (state.selectedGrowthCycleDetailId === "ism_manufacturing") {
         title = "ISM Manufacturing";
+      } else if (state.selectedGrowthCycleDetailId === "ism_services") {
+        title = "ISM Services";
       } else {
         title = "M2 Money Supply";
       }
@@ -2708,6 +2710,10 @@
           renderIsmDetailInPanel(body, payload);
           return;
         }
+        if (payload.detail_id === "ism_services") {
+          window.ismServicesUi.renderDetail(body, payload, { renderServicesDetail: renderIsmDetailInPanel });
+          return;
+        }
         const filteredCharts = payload.charts.map((chart) => (
           filterChartForRange(chart, state.selectedGrowthCycleChartRange)
         ));
@@ -2742,6 +2748,8 @@
     const scrollTop = body.scrollTop;
     if (payload.detail_id === "ism_manufacturing") {
       renderIsmDetailInPanel(body, payload);
+    } else if (payload.detail_id === "ism_services") {
+      window.ismServicesUi.renderDetail(body, payload, { renderServicesDetail: renderIsmDetailInPanel });
     } else {
       const filteredCharts = payload.charts.map((chart) => (
         filterChartForRange(chart, state.selectedGrowthCycleChartRange)
@@ -3736,6 +3744,7 @@
 
   function renderCard(card) {
     if (card.id === "ism_manufacturing") return renderIsmManufacturingCard(card);
+    if (card.id === "ism_services") return window.ismServicesUi.renderCard(card, { escapeHtml, formatIndex: fmtIsmIndex });
     if (card.id === "m2_money_supply") return renderM2MoneySupplyCard(card);
     if (card.id === "inflation_context") return renderInflationContextCard(card);
     if (card.id === "gdp_expectations") return renderGdpExpectationsCard(card);

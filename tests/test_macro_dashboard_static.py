@@ -3387,3 +3387,99 @@ def test_market_setup_detailed_reasoning_uses_css_classes_not_inline_styles():
     assert 'style="' not in source
     assert "ms-evidence-links" in source
     assert "ms-missing-inputs" in source
+
+
+def test_macro_dashboard_html_loads_ism_services_assets():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+
+    assert '<script src="/ism-services.js"></script>' in html
+    assert '<link rel="stylesheet" href="/ism-services.css" />' in html
+
+
+def test_macro_dashboard_js_delegates_ism_services_card():
+    js = STATIC_JS.read_text()
+
+    assert 'card.id === "ism_services"' in js
+    assert 'ism_services"' in js
+
+
+def test_macro_dashboard_js_routes_ism_services_detail():
+    js = STATIC_JS.read_text()
+
+    assert 'payload.detail_id === "ism_services"' in js
+
+
+def test_ism_services_js_no_peak_trough_text():
+    services_js = (ROOT / "static" / "ism-services.js").read_text()
+
+    assert "possible peak" not in services_js.lower()
+    assert "possible trough" not in services_js.lower()
+
+
+def test_ism_services_js_renders_card_with_node():
+    script = textwrap.dedent("""\
+        const vm = require("vm");
+
+        global.window = {};
+
+        vm.runInThisContext(require("fs").readFileSync("static/ism-services.js", "utf8"));
+
+        const card = {
+            id: "ism_services",
+            segments: {
+                services_cycle: { value: 51.2, label: "Expansion" },
+                business_activity: { value: 53.5, trend: "Rising" },
+                new_orders: { value: 52.8, trend: "Stable" },
+                industry_breadth: { growth_count: 12, total_count: 18 },
+            },
+        };
+
+        const helpers = {
+            escapeHtml: (s) => String(s || "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;"),
+            formatIndex: (v) => v !== null && v !== undefined && !Number.isNaN(Number(v)) ? Number(v).toFixed(1) : "n/a",
+        };
+
+        const html = window.ismServicesUi.renderCard(card, helpers);
+
+        console.log(JSON.stringify({
+            containsServicesCycle: html.indexOf("Services Cycle") !== -1,
+            containsBusinessActivity: html.indexOf("Business Activity") !== -1,
+            containsNewOrders: html.indexOf("New Orders") !== -1,
+            containsIndustryBreadth: html.indexOf("Industry Breadth") !== -1,
+            containsExpansion: html.indexOf("Expansion") !== -1,
+            containsRising: html.indexOf("Rising") !== -1,
+            containsStable: html.indexOf("Stable") !== -1,
+            containsGrowing: html.indexOf("Growing") !== -1,
+            contains12of18: html.indexOf("12/18") !== -1,
+            isButton: html.indexOf('<button') !== -1,
+            hasDetailId: html.indexOf('data-growth-cycle-detail-id="ism_services"') !== -1,
+            hasIsmCardButton: html.indexOf("ism-card-button") !== -1,
+            hasM2Card: html.indexOf("m2-card") !== -1,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["containsServicesCycle"] is True
+    assert payload["containsBusinessActivity"] is True
+    assert payload["containsNewOrders"] is True
+    assert payload["containsIndustryBreadth"] is True
+    assert payload["containsExpansion"] is True
+    assert payload["containsRising"] is True
+    assert payload["containsStable"] is True
+    assert payload["containsGrowing"] is True
+    assert payload["contains12of18"] is True
+    assert payload["isButton"] is True
+    assert payload["hasDetailId"] is True
+    assert payload["hasIsmCardButton"] is True
+    assert payload["hasM2Card"] is True
