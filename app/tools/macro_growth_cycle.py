@@ -1688,6 +1688,26 @@ def build_ism_industry_breadth_headline(growth_cycle):
 def build_growth_cycle_sections(growth_cycle, headline):
     card_ids = _headline_card_ids(headline)
     ism_status = "available" if growth_cycle.get("ism_pmi") is not None else "missing"
+    services_section = (
+        _growth_cycle_section(
+            "ism_services",
+            "ISM Services",
+            "Services survey growth signal and heat-map inputs.",
+            ["ism_services"],
+            status="available",
+            period=growth_cycle.get("services_period"),
+        )
+        if "ism_services" in card_ids
+        else _growth_cycle_section(
+            "services_labor",
+            "Services / Labor",
+            "Services survey and labor confirmation inputs.",
+            [],
+            status="pending_inputs",
+            period=growth_cycle.get("services_period")
+            or growth_cycle.get("jobless_claims_period"),
+        )
+    )
     return [
         _growth_cycle_section(
             "ism_manufacturing",
@@ -1712,15 +1732,7 @@ def build_growth_cycle_sections(growth_cycle, headline):
             status="available" if "inflation_context" in card_ids else "missing",
             period=growth_cycle.get("inflation_context_period"),
         ),
-        _growth_cycle_section(
-            "services_labor",
-            "Services / Labor",
-            "Services survey and labor confirmation inputs.",
-            [],
-            status="pending_inputs",
-            period=growth_cycle.get("services_period")
-            or growth_cycle.get("jobless_claims_period"),
-        ),
+        services_section,
         _growth_cycle_section(
             "gdp_expectations",
             "GDP Expectations",
@@ -1811,6 +1823,7 @@ def build_growth_cycle_dashboard_payload(
     ism_industry_breadth=None,
     ism_at_a_glance=None,
     ism_macro_signal=None,
+    ism_services_card=None,
 ):
     growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
     policy_context = None
@@ -1830,8 +1843,10 @@ def build_growth_cycle_dashboard_payload(
             ism_at_a_glance,
             policy_context=policy_context,
         ),
-        build_m2_money_supply_headline(growth_cycle),
     ]
+    if ism_services_card:
+        headline.append(ism_services_card)
+    headline.append(build_m2_money_supply_headline(growth_cycle))
     inflation_card = build_inflation_context_headline(growth_cycle)
     if inflation_card["status"] != "missing":
         headline.append(inflation_card)
