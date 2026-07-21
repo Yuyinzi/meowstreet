@@ -202,7 +202,8 @@ def replace_ism_industry_rankings(con, rows, survey_type="manufacturing"):
 
 
 def load_latest_ism_industry_rankings(con, survey_type="manufacturing"):
-    return ism_surveys.load_industry_rankings(con, survey_type, limit_months=1)
+    rows = ism_surveys.load_industry_rankings(con, survey_type, limit_months=1)
+    return [{k: v for k, v in row.items() if k != "survey_type"} for row in rows]
 
 
 def replace_ism_report_snapshot(con, report, comments, survey_type="manufacturing"):
