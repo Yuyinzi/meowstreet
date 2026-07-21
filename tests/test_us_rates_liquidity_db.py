@@ -1339,6 +1339,7 @@ def test_replace_ism_industry_rankings_saves_and_loads_latest_rows(tmp_path):
     assert saved == 3
     assert growth_cycle.load_latest_ism_industry_rankings(con) == [
         {
+            "survey_type": "manufacturing",
             "date": "2026-06-01",
             "industry": "Computer & Electronic Products",
             "direction": "growth",
@@ -1346,6 +1347,7 @@ def test_replace_ism_industry_rankings_saves_and_loads_latest_rows(tmp_path):
             "source": "ISM_Manufacturing_Index.xlsx",
         },
         {
+            "survey_type": "manufacturing",
             "date": "2026-06-01",
             "industry": "Furniture & Related Products",
             "direction": "contraction",
@@ -1376,6 +1378,7 @@ def test_replace_ism_report_snapshot_saves_metadata_and_comments(tmp_path):
         "next_report_period": "2026-07-01",
         "next_release_at": "2026-08-03T10:00:00-04:00",
         "next_release_label": "Monday, August 3, 2026 at 10:00 a.m. ET",
+        "survey_type": "manufacturing",
     }
     comments = [
         {
