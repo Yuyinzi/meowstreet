@@ -12,6 +12,7 @@ from app.db import benchmark_market_data, gdp_market_relationships
 from app.db import growth_cycle
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
+from app.services import ism_services_dashboard
 from app.tools import (
     gdp_market_relationship,
     ism_industry_analysis,
@@ -380,8 +381,10 @@ def macro_dashboard_growth_cycle():
             if any(ism_points.values())
             else None
         )
+        ism_services_data = ism_services_dashboard.load_overview(con)
         dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
             ism_manufacturing=ism_manufacturing,
+            ism_services=ism_services_data["payload"],
             m2_money_stock=m2_money_stock,
             core_pce_price_index=core_pce_price_index if core_pce_rows else None,
             fed_total_assets=fed_total_assets if fed_total_assets_rows else None,
@@ -471,6 +474,7 @@ def macro_dashboard_growth_cycle():
             ism_industry_breadth=ism_industry_breadth,
             ism_at_a_glance=ism_at_a_glance,
             ism_macro_signal=ism_macro_signal_result,
+            ism_services_card=ism_services_data["card"],
         )
         return growth_cycle_payload
     finally:
@@ -607,7 +611,7 @@ def macro_dashboard_market_setup():
 
 @app.get("/api/macro-dashboard/growth-cycle/{detail_id}")
 def macro_dashboard_growth_cycle_detail(detail_id):
-    if detail_id not in {"m2_money_supply", "ism_manufacturing"}:
+    if detail_id not in {"m2_money_supply", "ism_manufacturing", "ism_services"}:
         raise HTTPException(
             status_code=400,
             detail=f"growth cycle detail is unknown: {detail_id}",
@@ -615,6 +619,8 @@ def macro_dashboard_growth_cycle_detail(detail_id):
     con = us_rates_liquidity_db.connect()
     growth_cycle.init_db(con)
     try:
+        if detail_id == "ism_services":
+            return ism_services_dashboard.load_detail(con)
         if detail_id == "ism_manufacturing":
             ism_points = us_rates_liquidity_db.load_macro_indicator_points_for_series(
                 con,

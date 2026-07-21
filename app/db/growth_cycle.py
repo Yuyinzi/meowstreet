@@ -2,6 +2,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+from app.db import ism_surveys
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = ROOT / "data" / "local_system" / "market_data.sqlite"
@@ -192,128 +194,28 @@ def init_db(con):
         """
     )
     con.commit()
+    ism_surveys.init_db(con)
 
 
-def replace_ism_industry_rankings(con, rows):
-    con.execute("delete from ism_industry_rankings")
-    for row in rows:
-        con.execute(
-            """
-            insert into ism_industry_rankings(date, industry, direction, rank, source)
-            values (?, ?, ?, ?, ?)
-            """,
-            (
-                row["date"],
-                row["industry"],
-                row["direction"],
-                row["rank"],
-                row["source"],
-            ),
-        )
-    con.commit()
-    return len(rows)
+def replace_ism_industry_rankings(con, rows, survey_type="manufacturing"):
+    return ism_surveys.replace_industry_rankings(con, survey_type, rows)
 
 
-def load_latest_ism_industry_rankings(con):
-    latest = con.execute(
-        "select max(date) as latest_date from ism_industry_rankings"
-    ).fetchone()["latest_date"]
-    if latest is None:
-        return []
-    rows = con.execute(
-        """
-        select date, industry, direction, rank, source
-        from ism_industry_rankings
-        where date = ?
-        order by direction desc, rank desc, industry
-        """,
-        (latest,),
-    ).fetchall()
-    return [
-        {
-            "date": row["date"],
-            "industry": row["industry"],
-            "direction": row["direction"],
-            "rank": row["rank"],
-            "source": row["source"],
-        }
-        for row in rows
-    ]
+def load_latest_ism_industry_rankings(con, survey_type="manufacturing"):
+    rows = ism_surveys.load_industry_rankings(con, survey_type, limit_months=1)
+    return [{k: v for k, v in row.items() if k != "survey_type"} for row in rows]
 
 
-def replace_ism_report_snapshot(con, report, comments):
-    con.execute(
-        """
-        insert into ism_report_snapshots(
-            report_id, report_month, title, source_url, source_hash, fetched_at,
-            parse_status, next_report_period, next_release_at, next_release_label
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        on conflict(report_id) do update set
-            report_month = excluded.report_month,
-            title = excluded.title,
-            source_url = excluded.source_url,
-            source_hash = excluded.source_hash,
-            fetched_at = excluded.fetched_at,
-            parse_status = excluded.parse_status,
-            next_report_period = excluded.next_report_period,
-            next_release_at = excluded.next_release_at,
-            next_release_label = excluded.next_release_label
-        """,
-        (
-            report["report_id"],
-            report["report_month"],
-            report["title"],
-            report["source_url"],
-            report["source_hash"],
-            report["fetched_at"],
-            report.get("parse_status", ""),
-            report.get("next_report_period"),
-            report.get("next_release_at"),
-            report.get("next_release_label", ""),
-        ),
-    )
-    con.execute(
-        "delete from ism_report_comments where report_id = ?",
-        (report["report_id"],),
-    )
-    for comment in comments:
-        con.execute(
-            """
-            insert into ism_report_comments(
-                report_id, comment_index, report_month, industry, comment_text,
-                source_url, source_hash
-            ) values (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                comment["report_id"],
-                comment["comment_index"],
-                comment["report_month"],
-                comment["industry"],
-                comment["comment_text"],
-                comment["source_url"],
-                comment["source_hash"],
-            ),
-        )
-    con.commit()
-    return {"reports": 1, "comments": len(comments)}
+def replace_ism_report_snapshot(con, report, comments, survey_type="manufacturing"):
+    return ism_surveys.replace_report_snapshot(con, survey_type, report, comments)
 
 
-def load_existing_ism_report_months(con):
-    rows = con.execute("select report_month from ism_report_snapshots").fetchall()
-    return {row["report_month"] for row in rows}
+def load_existing_ism_report_months(con, survey_type="manufacturing"):
+    return ism_surveys.load_existing_report_months(con, survey_type)
 
 
-def load_latest_ism_report_snapshot(con):
-    rows = con.execute(
-        """
-        select report_id, report_month, title, source_url, source_hash, fetched_at,
-               parse_status, next_report_period, next_release_at, next_release_label
-        from ism_report_snapshots
-        order by report_month desc
-        limit 1
-        """
-    ).fetchall()
-    return dict(rows[0]) if rows else None
+def load_latest_ism_report_snapshot(con, survey_type="manufacturing"):
+    return ism_surveys.load_latest_report_snapshot(con, survey_type)
 
 
 def load_all_ism_report_snapshots(con):
@@ -665,20 +567,8 @@ def load_ism_at_a_glance_rows(con, report_id):
     return [dict(row) for row in rows]
 
 
-def load_recent_ism_report_snapshots(con, limit=6):
-    rows = con.execute(
-        """
-        select report_id, report_month, title, source_url, source_hash, fetched_at,
-               parse_status, next_report_period, next_release_at, next_release_label
-        from ism_report_snapshots
-        order by report_month desc
-        limit ?
-        """,
-        (limit,),
-    ).fetchall()
-    result = [dict(row) for row in rows]
-    result.reverse()
-    return result
+def load_recent_ism_report_snapshots(con, limit=6, survey_type="manufacturing"):
+    return ism_surveys.load_recent_report_snapshots(con, survey_type, limit)
 
 
 def load_ism_report_industry_signals_for_reports(con, report_ids):

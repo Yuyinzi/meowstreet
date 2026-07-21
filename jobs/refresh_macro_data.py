@@ -7,9 +7,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts import fetch_ism_official_reports
+from scripts import fetch_ism_services_reports
 from scripts import import_fomc_calendar
 from scripts import import_gdp_market_relationships
 from scripts import import_ism_manufacturing
+from scripts import import_ism_services
 from scripts import import_m2_money_supply
 from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
@@ -49,6 +51,8 @@ def _planned_tasks(
     m2_main,
     ism_main,
     ism_official_main,
+    ism_services_main,
+    ism_services_official_main,
     gdp_main,
     fomc_main=import_fomc_calendar.main,
 ):
@@ -63,6 +67,8 @@ def _planned_tasks(
     if not args.skip_ism:
         tasks.append(("ism_manufacturing", ism_main, []))
         tasks.append(("ism_official_report", ism_official_main, []))
+        tasks.append(("ism_services", ism_services_main, []))
+        tasks.append(("ism_services_official_report", ism_services_official_main, []))
     if not args.skip_gdp:
         tasks.append(("gdp_fred_fetch", gdp_main, ["--fetch-fred-csv"]))
         tasks.append(("gdp_fred_merge", gdp_main, ["--us-csv-merge"]))
@@ -89,6 +95,8 @@ def main(
     m2_main=import_m2_money_supply.main,
     ism_main=import_ism_manufacturing.main,
     ism_official_main=fetch_ism_official_reports.main,
+    ism_services_main=import_ism_services.main,
+    ism_services_official_main=fetch_ism_services_reports.main,
     gdp_main=import_gdp_market_relationships.main,
     fomc_main=import_fomc_calendar.main,
 ):
@@ -115,6 +123,8 @@ def main(
         m2_main,
         ism_main,
         ism_official_main,
+        ism_services_main,
+        ism_services_official_main,
         gdp_main,
         fomc_main,
     ):

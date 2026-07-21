@@ -1376,6 +1376,7 @@ def test_replace_ism_report_snapshot_saves_metadata_and_comments(tmp_path):
         "next_report_period": "2026-07-01",
         "next_release_at": "2026-08-03T10:00:00-04:00",
         "next_release_label": "Monday, August 3, 2026 at 10:00 a.m. ET",
+        "survey_type": "manufacturing",
     }
     comments = [
         {

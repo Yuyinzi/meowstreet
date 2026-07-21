@@ -40,6 +40,46 @@ The same inputs and the same method method version should produce the same class
 
 Method concepts become executable workflow nodes only when they affect trading decisions: continue, wait, reject, downgrade, support long/short bias, require input, affect timing, position sizing, portfolio fit, risk, or final synthesis. Concepts that are only mindset or background should remain supporting documentation attached to relevant nodes.
 
+## Operational Product Rules
+
+Meowstreet is a trading decision system, not a presentation of source material. Implement only information that helps a user assess the market, evaluate a ticker, or take the next step in the trade workflow.
+
+Before implementing a concept or metric from the source notes, document its operational contract:
+
+- The precise trading question it answers
+- Whether it is a primary signal, confirmation, context, or supporting evidence
+- The user decision or deterministic runtime result it can change
+- The input, threshold, comparison, trend, or relationship explicitly supported by the source notes
+- The behavior when the input is missing, stale, conflicting, or ambiguous
+
+A concept is operational only when it can affect at least one of the following:
+
+- Market regime or portfolio posture
+- Long-side or short-side candidate support
+- Continue, wait, reject, or downgrade decisions
+- Entry or exit timing
+- Risk, position sizing, or portfolio fit
+- Process readiness, missing inputs, or next actions
+- Ticker, industry, or sector research evidence used by a defined decision rule
+
+Do not add runtime metrics, database fields, API fields, workflow nodes, or dashboard components solely because the source material mentions them. Historical illustrations, vocabulary, background theory, mindset guidance, worked examples, method-validation steps, and educational comparisons remain supporting documentation unless a deterministic decision rule consumes them.
+
+Preserve source fidelity:
+
+- Do not invent formulas, thresholds, weights, composite scores, correlations, mappings, or fallback rules
+- Do not convert qualitative guidance into a numeric rule unless the source notes define that conversion
+- Do not imply predictive certainty or causality that the source notes do not establish
+- When guidance is incomplete, expose the raw evidence, mark the result ambiguous or insufficient, or require the missing input
+- Keep the same inputs and method version deterministic; do not use an LLM to fill gaps at runtime
+
+Dashboard output must favor decision clarity over source completeness. Summary cards should answer a small set of high-value market or ticker questions and provide a clear general impression. Put diagnostics, secondary evidence, provenance, and historical detail in focused detail views rather than expanding the summary card. Do not show a label, conclusion, or warning unless its calculation and decision meaning are supported by the source notes.
+
+Frontend additions must look and behave like existing Meowstreet interfaces. Reuse established design tokens, components, layouts, spacing, colors, typography, badges, labels, interaction patterns, responsive behavior, and accessibility conventions. Keep equivalent metrics and states visually consistent across dashboards. Create a new shared component only when the pattern is genuinely reusable.
+
+Reuse stable parsing, normalization, persistence, API, and presentation helpers where their contracts match. Do not force different survey universes or domain semantics through a shared formula merely to reduce code. Create focused modules or frontend files when adding another responsibility would make an existing file unwieldy or mix unrelated concerns.
+
+Tests for operational features must verify the metric-to-decision linkage, supported source rule, deterministic result, missing-data behavior, and the absence of invented logic. A successful import or rendered value alone does not establish that a feature belongs in the trading system.
+
 ## Method Data Sources
 
 The source material for the method graph lives in `method_notes/*.md`. These markdown files use repeated sections:
