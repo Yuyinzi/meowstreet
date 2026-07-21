@@ -16,7 +16,7 @@ REPORT_HTML = """
 """
 
 
-def test_parse_report_extracts_operational_metrics_and_evidence():
+def test_parse_report_extracts_only_operational_metrics_and_evidence():
     result = ism_services_report.parse_report(
         REPORT_HTML,
         "https://example.test/services/june/",

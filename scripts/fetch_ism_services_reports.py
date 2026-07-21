@@ -12,6 +12,7 @@ from app.db import ism_surveys
 from app.db import us_rates_liquidity
 from app.tools import ism_services_report
 from scripts import fetch_ism_official_reports
+from scripts.fetch_ism_official_reports import fetched_at_now
 
 
 BASE_URL = "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/services/{month}/"
@@ -32,15 +33,6 @@ MONTHS = [
 ]
 
 _SURVEY_TYPE = "services"
-
-
-def fetched_at_now():
-    return (
-        datetime.now(timezone.utc)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
 
 
 def report_url(month):
@@ -173,7 +165,7 @@ def main(argv=None, fetch=None):
                 f"{result['report_id']}: source=ismworld metrics={result['metrics']} "
                 f"rankings={result['rankings']} comments={result['comments']}"
             )
-        except (ValueError, Exception) as exc:
+        except Exception as exc:
             print(
                 f"ism_services_report/{url}: failed - {exc}",
                 file=sys.stderr,

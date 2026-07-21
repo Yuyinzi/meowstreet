@@ -104,12 +104,14 @@ def parse_rankings(text, report_month):
     )
     if not growth_match or not contraction_match:
         raise ValueError("ism services report industry rankings are missing")
-    growth_industries = split_industries(growth_match.group(1))
-    for name in growth_industries:
+    growth_industries = [
         ism_services_industry.normalize_industry(name)
-    contraction_industries = split_industries(contraction_match.group(1))
-    for name in contraction_industries:
+        for name in split_industries(growth_match.group(1))
+    ]
+    contraction_industries = [
         ism_services_industry.normalize_industry(name)
+        for name in split_industries(contraction_match.group(1))
+    ]
     rows = ranking_rows(report_month, growth_industries, "growth")
     rows.extend(ranking_rows(report_month, contraction_industries, "contraction"))
     return rows
@@ -130,11 +132,12 @@ def parse_comments(text, report, source_url):
         re.finditer(r"[“\"]([^”\"]+)[”\"]\s+\[([^\]]+)\]", section_match.group(1)),
         start=1,
     ):
+        industry = ism_services_industry.normalize_industry(match.group(2).strip())
         comments.append(
             {
                 "report_id": report["report_id"],
                 "report_month": report["report_month"],
-                "industry": match.group(2).strip(),
+                "industry": industry,
                 "comment_index": index,
                 "comment_text": clean_comment_text(match.group(1)),
                 "source_url": source_url,
@@ -143,6 +146,10 @@ def parse_comments(text, report, source_url):
             }
         )
     return comments
+
+
+def prepare_report(html, source_url, fetched_at):
+    return parse_report(html, source_url, fetched_at, "ismworld")
 
 
 def parse_report(html, source_url, fetched_at, source_name="ismworld"):
