@@ -1,15 +1,13 @@
 import argparse
 import sys
-from datetime import date, datetime
 from pathlib import Path
-
-from openpyxl import load_workbook
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import growth_cycle
 from app.db import us_rates_liquidity
+from app.tools import ism_workbook
 
 DEFAULT_WORKBOOK_PATH = (
     ROOT / "data" / "materials" / "Video 07" / "ISM_Manufacturing_Index.xlsx"
@@ -73,122 +71,32 @@ SERIES_CONFIG = {
     },
 }
 
-
-def _iso_date(value):
-    if isinstance(value, datetime):
-        return value.date().isoformat()
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return str(value)
-
-
-SECTORS_SHEET = "Sectors"
-
-
-def _sector_direction(value):
-    if value == "Growth":
-        return "growth"
-    if value == "Contraction":
-        return "contraction"
-    return None
-
-
-def _is_date(value):
-    if isinstance(value, (datetime, date)):
-        return True
-    if isinstance(value, str):
-        try:
-            datetime.fromisoformat(value)
-            return True
-        except (ValueError, TypeError):
-            return False
-    return False
+MANUFACTURING_RANKING_LAYOUT = ism_workbook.RankingLayout(
+    sheet="Sectors",
+    header_row=3,
+    data_row=6,
+    industry_column=2,
+    first_status_column=3,
+)
 
 
 def parse_workbook(workbook_path=DEFAULT_WORKBOOK_PATH):
-    workbook_path = Path(workbook_path)
-    if not workbook_path.exists():
-        raise ValueError(f"ism manufacturing workbook is missing: {workbook_path}")
-    workbook = load_workbook(workbook_path, read_only=True, data_only=True)
-    results = []
-    for series_id, config in SERIES_CONFIG.items():
-        sheet_name = config["sheet"]
-        if sheet_name not in workbook.sheetnames:
-            raise ValueError(f"ism manufacturing sheet is missing: {sheet_name}")
-        sheet = workbook[sheet_name]
-        points = [
-            {
-                "date": _iso_date(date_value),
-                "value": float(level_value),
-                "source": workbook_path.name,
-            }
-            for date_value, level_value in sheet.iter_rows(
-                min_row=2,
-                min_col=1,
-                max_col=2,
-                values_only=True,
-            )
-            if date_value is not None
-            and level_value not in (None, "")
-            and _is_date(date_value)
-        ]
-        results.append(
-            {
-                "series": {
-                    "series_id": series_id,
-                    "title": config["title"],
-                    "units": config["units"],
-                    "source": workbook_path.name,
-                },
-                "points": points,
-            }
-        )
-    return results
+    return ism_workbook.parse_series_workbook(
+        workbook_path, "ism manufacturing", SERIES_CONFIG
+    )
 
 
 def parse_sector_rankings(workbook_path=DEFAULT_WORKBOOK_PATH):
-    workbook_path = Path(workbook_path)
-    if not workbook_path.exists():
-        raise ValueError(f"ism manufacturing workbook is missing: {workbook_path}")
-    workbook = load_workbook(workbook_path, read_only=True, data_only=True)
-    if SECTORS_SHEET not in workbook.sheetnames:
-        raise ValueError(f"ism manufacturing sheet is missing: {SECTORS_SHEET}")
-    sheet = workbook[SECTORS_SHEET]
-    month_columns = [
-        (column, _iso_date(sheet.cell(row=3, column=column).value))
-        for column in range(3, sheet.max_column + 1, 2)
-        if _is_date(sheet.cell(row=3, column=column).value)
+    rows = ism_workbook.parse_ranking_workbook(
+        workbook_path,
+        "manufacturing",
+        "ism manufacturing",
+        MANUFACTURING_RANKING_LAYOUT,
+    )
+    return [
+        {key: value for key, value in row.items() if key != "survey_type"}
+        for row in rows
     ]
-    rows = []
-    for row_index in range(6, sheet.max_row + 1):
-        industry = sheet.cell(row=row_index, column=2).value
-        if not industry:
-            continue
-        for status_column, month in month_columns:
-            direction = _sector_direction(
-                sheet.cell(row=row_index, column=status_column).value
-            )
-            rank = sheet.cell(row=row_index, column=status_column + 1).value
-            if direction is None or rank in (None, ""):
-                continue
-            rows.append(
-                {
-                    "date": month,
-                    "industry": str(industry),
-                    "direction": direction,
-                    "rank": int(rank),
-                    "source": workbook_path.name,
-                }
-            )
-    seen = set()
-    deduplicated = []
-    for row in rows:
-        key = (row["date"], row["industry"])
-        if key in seen:
-            continue
-        seen.add(key)
-        deduplicated.append(row)
-    return deduplicated
 
 
 def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
