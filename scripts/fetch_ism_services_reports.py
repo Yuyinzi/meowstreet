@@ -75,7 +75,7 @@ def metric_points(parsed):
     }
 
 
-def merge_metrics(con, parsed):
+def merge_metrics(con, parsed, commit=True):
     count = 0
     for series_id, points in metric_points(parsed).items():
         series = {
@@ -84,7 +84,9 @@ def merge_metrics(con, parsed):
             "units": "index",
             "source": "ISM official report",
         }
-        saved = us_rates_liquidity.merge_macro_indicator_points(con, series, points)
+        saved = us_rates_liquidity.merge_macro_indicator_points(
+            con, series, points, commit=commit
+        )
         count += saved["points"]
     return count
 
@@ -125,27 +127,59 @@ def main(argv=None, fetch=None):
                     f"ism services report month mismatch: requested {report_month}, got {parsed['report']['report_month']}"
                 )
 
-            growth_cycle.replace_ism_report_source_snapshot(
-                con,
-                {
-                    "source_url": url,
-                    "source_name": "ismworld",
-                    "source_hash": source_hash,
-                    "fetched_at": fetched_at,
-                    "raw_html": html,
-                    "parse_status": "parsed",
-                    "parse_error": None,
-                    "report_id": parsed["report"]["report_id"],
-                    "report_month": parsed["report"]["report_month"],
-                },
-            )
-
-            metric_count = merge_metrics(con, parsed)
-            ism_surveys.replace_report_snapshot(
-                con, _SURVEY_TYPE, parsed["report"], parsed["comments"]
-            )
-            ism_surveys.merge_industry_rankings(con, _SURVEY_TYPE, parsed["rankings"])
-            ism_surveys.merge_industry_comments(con, _SURVEY_TYPE, parsed["comments"])
+            con.execute("begin")
+            try:
+                growth_cycle.replace_ism_report_source_snapshot(
+                    con,
+                    {
+                        "source_url": url,
+                        "source_name": "ismworld",
+                        "source_hash": source_hash,
+                        "fetched_at": fetched_at,
+                        "raw_html": html,
+                        "parse_status": "parsed",
+                        "parse_error": None,
+                        "report_id": parsed["report"]["report_id"],
+                        "report_month": parsed["report"]["report_month"],
+                    },
+                    commit=False,
+                )
+                con.execute(
+                    "delete from macro_indicator_points where series_id in (?, ?, ?, ?) and date = ?",
+                    (
+                        "ism_services_pmi",
+                        "ism_services_business_activity",
+                        "ism_services_new_orders",
+                        "ism_services_order_backlog",
+                        parsed["report"]["report_month"],
+                    ),
+                )
+                metric_count = merge_metrics(con, parsed, commit=False)
+                ism_surveys.replace_report_snapshot(
+                    con,
+                    _SURVEY_TYPE,
+                    parsed["report"],
+                    parsed["comments"],
+                    commit=False,
+                )
+                con.execute(
+                    "delete from ism_industry_rankings where survey_type = ? and date = ?",
+                    (_SURVEY_TYPE, parsed["report"]["report_month"]),
+                )
+                ism_surveys.merge_industry_rankings(
+                    con, _SURVEY_TYPE, parsed["rankings"], commit=False
+                )
+                con.execute(
+                    "delete from ism_industry_comments where survey_type = ? and report_month = ?",
+                    (_SURVEY_TYPE, parsed["report"]["report_month"]),
+                )
+                ism_surveys.merge_industry_comments(
+                    con, _SURVEY_TYPE, parsed["comments"], commit=False
+                )
+                con.commit()
+            except BaseException:
+                con.rollback()
+                raise
 
             result = {
                 "report_id": parsed["report"]["report_id"],

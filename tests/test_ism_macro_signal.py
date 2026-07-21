@@ -1036,3 +1036,43 @@ def test_single_report_latest_only():
     assert result["continuity"]["months_loaded"] == 1
     assert result["continuity"]["adjacent_months"] == 0
     assert result["continuity"]["has_gap"] is False
+
+
+def test_persisted_report_month_mismatch_caught_after_db_roundtrip():
+    import sqlite3
+    from app.db import growth_cycle
+
+    con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
+    growth_cycle.init_db(con)
+    growth_cycle.replace_ism_report_snapshot(
+        con,
+        _snapshot(
+            report_month="2026-06-01",
+            fetched_at="2026-06-15T12:00:00",
+            parse_status="ok",
+            next_report_period="2026-07-01",
+            next_release_at="2026-07-15T10:00:00",
+            next_release_label="July 2026",
+        ),
+        [],
+        survey_type="manufacturing",
+    )
+    growth_cycle.replace_ism_at_a_glance_rows(
+        con,
+        [
+            _pmi_row(report_month="2026-05-01"),
+            _no_row(report_month="2026-05-01"),
+        ],
+    )
+    con.commit()
+
+    reports = growth_cycle.load_recent_ism_report_snapshots(
+        con, limit=6, survey_type="manufacturing"
+    )
+    report_ids = [r["report_id"] for r in reports]
+    aag_rows = growth_cycle.load_ism_at_a_glance_rows_for_reports(con, report_ids)
+
+    with pytest.raises(ValueError, match="report_month mismatch"):
+        build_ism_macro_signal(reports, aag_rows)
+    con.close()

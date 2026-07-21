@@ -97,7 +97,7 @@ def insert_industry_rankings(con, survey_type, rows, commit=True):
     return len(rows)
 
 
-def merge_industry_rankings(con, survey_type, rows):
+def merge_industry_rankings(con, survey_type, rows, commit=True):
     for row in rows:
         con.execute(
             """
@@ -117,39 +117,68 @@ def merge_industry_rankings(con, survey_type, rows):
                 row["source"],
             ),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return len(rows)
 
 
-def load_industry_rankings(con, survey_type, limit_months=None):
+def load_industry_rankings(con, survey_type, limit_months=None, max_date=None):
     if limit_months is not None:
-        latest = con.execute(
-            "select distinct date from ism_industry_rankings where survey_type = ? order by date desc limit ?",
-            (survey_type, limit_months),
-        ).fetchall()
+        if max_date is not None:
+            latest = con.execute(
+                "select distinct date from ism_industry_rankings where survey_type = ? and date <= ? order by date desc limit ?",
+                (survey_type, max_date, limit_months),
+            ).fetchall()
+        else:
+            latest = con.execute(
+                "select distinct date from ism_industry_rankings where survey_type = ? order by date desc limit ?",
+                (survey_type, limit_months),
+            ).fetchall()
         if not latest:
             return []
         dates = {row["date"] for row in latest}
         placeholders = ",".join("?" for _ in dates)
-        rows = con.execute(
-            f"""
-            select survey_type, date, industry, direction, rank, source
-            from ism_industry_rankings
-            where survey_type = ? and date in ({placeholders})
-            order by date desc, direction desc, rank desc, industry
-            """,
-            (survey_type, *dates),
-        ).fetchall()
+        if max_date is not None:
+            rows = con.execute(
+                f"""
+                select survey_type, date, industry, direction, rank, source
+                from ism_industry_rankings
+                where survey_type = ? and date in ({placeholders}) and date <= ?
+                order by date desc, direction desc, rank desc, industry
+                """,
+                (survey_type, *dates, max_date),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                f"""
+                select survey_type, date, industry, direction, rank, source
+                from ism_industry_rankings
+                where survey_type = ? and date in ({placeholders})
+                order by date desc, direction desc, rank desc, industry
+                """,
+                (survey_type, *dates),
+            ).fetchall()
     else:
-        rows = con.execute(
-            """
-            select survey_type, date, industry, direction, rank, source
-            from ism_industry_rankings
-            where survey_type = ?
-            order by date desc, direction desc, rank desc, industry
-            """,
-            (survey_type,),
-        ).fetchall()
+        if max_date is not None:
+            rows = con.execute(
+                """
+                select survey_type, date, industry, direction, rank, source
+                from ism_industry_rankings
+                where survey_type = ? and date <= ?
+                order by date desc, direction desc, rank desc, industry
+                """,
+                (survey_type, max_date),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                """
+                select survey_type, date, industry, direction, rank, source
+                from ism_industry_rankings
+                where survey_type = ?
+                order by date desc, direction desc, rank desc, industry
+                """,
+                (survey_type,),
+            ).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -193,7 +222,7 @@ def insert_industry_comments(con, survey_type, rows, commit=True):
     return len(rows)
 
 
-def merge_industry_comments(con, survey_type, rows):
+def merge_industry_comments(con, survey_type, rows, commit=True):
     for row in rows:
         con.execute(
             """
@@ -212,7 +241,8 @@ def merge_industry_comments(con, survey_type, rows):
                 row["source"],
             ),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return len(rows)
 
 
@@ -240,7 +270,7 @@ def load_industry_comments(con, survey_type, report_month=None):
     return [dict(row) for row in rows]
 
 
-def replace_report_snapshot(con, survey_type, report, comments):
+def replace_report_snapshot(con, survey_type, report, comments, commit=True):
     con.execute(
         """
         insert into ism_report_snapshots(
@@ -296,7 +326,8 @@ def replace_report_snapshot(con, survey_type, report, comments):
                 comment["source_hash"],
             ),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return {"reports": 1, "comments": len(comments)}
 
 

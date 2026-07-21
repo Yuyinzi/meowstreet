@@ -2515,3 +2515,77 @@ def test_build_growth_cycle_bias_evidence_sets_scalar_to_none_when_pending():
         payload["growth_cycle"]["growth_cycle_bias_evidence"]["status"]
         == "pending_inputs"
     )
+
+
+def _services_card(state):
+    return {
+        "id": "ism_services",
+        "segments": {
+            "services_cycle": {"state": state},
+        },
+    }
+
+
+def test_services_section_pending_inputs():
+    dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+        m2_money_stock={
+            "series": [
+                {"date": "2025-06-01", "value": 100},
+                {"date": "2026-06-01", "value": 112},
+            ]
+        },
+    )
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        dashboard,
+        ism_services_card=_services_card("pending_inputs"),
+    )
+    sections = {s["id"]: s for s in payload["sections"]}
+    assert sections["ism_services"]["status"] == "pending_inputs"
+
+
+def test_services_section_stale_periods():
+    dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+        m2_money_stock={
+            "series": [
+                {"date": "2025-06-01", "value": 100},
+                {"date": "2026-06-01", "value": 112},
+            ]
+        },
+    )
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        dashboard,
+        ism_services_card=_services_card("stale_periods"),
+    )
+    sections = {s["id"]: s for s in payload["sections"]}
+    assert sections["ism_services"]["status"] == "stale_periods"
+
+
+def test_services_section_available_for_valid_state():
+    dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+        m2_money_stock={
+            "series": [
+                {"date": "2025-06-01", "value": 100},
+                {"date": "2026-06-01", "value": 112},
+            ]
+        },
+    )
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        dashboard,
+        ism_services_card=_services_card("supports_growth"),
+    )
+    sections = {s["id"]: s for s in payload["sections"]}
+    assert sections["ism_services"]["status"] == "available"
+
+
+def test_services_section_falls_back_to_services_labor_without_card():
+    dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+        m2_money_stock={
+            "series": [
+                {"date": "2025-06-01", "value": 100},
+                {"date": "2026-06-01", "value": 112},
+            ]
+        },
+    )
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+    sections = {s["id"]: s for s in payload["sections"]}
+    assert sections["services_labor"]["status"] == "pending_inputs"

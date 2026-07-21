@@ -43,6 +43,7 @@ RANKING_LAYOUT = ism_workbook.RankingLayout(
     data_row=6,
     industry_column=1,
     first_status_column=2,
+    end_row=23,
 )
 
 
@@ -96,6 +97,14 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
                     "services comment row has content but no preceding industry assignment"
                 )
             continue
+        if (
+            industry_raw is not None
+            and date_val is None
+            and (comment_raw is None or not str(comment_raw).strip())
+        ):
+            raise ValueError(
+                f"services comment row {row_index} has industry {last_industry} but no date or comment"
+            )
         if not ism_workbook.is_date(date_val):
             if date_val is not None:
                 raise ValueError(
@@ -108,7 +117,7 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
             continue
         report_month = ism_workbook.iso_date(date_val)
         if not comment_raw or not str(comment_raw).strip():
-            raise ValueError(f"services comment row {row_index} has empty comment")
+            continue
         comment_text = str(comment_raw).strip()
         key = (last_industry, report_month)
         index_by_key[key] = index_by_key.get(key, -1) + 1

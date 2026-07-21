@@ -12,6 +12,7 @@ class RankingLayout:
     data_row: int
     industry_column: int
     first_status_column: int
+    end_row: int | None = None
 
 
 def iso_date(value):
@@ -41,6 +42,8 @@ def _parse_series_points(sheet, source):
     points = []
     seen_dates = set()
     for row_index, (date_value, level_value) in enumerate(rows, start=2):
+        if date_value is None and level_value in (None, ""):
+            continue
         if not is_date(date_value):
             raise ValueError(f"row {row_index} has invalid date: {date_value!r}")
         if level_value in (None, ""):
@@ -56,6 +59,8 @@ def _parse_series_points(sheet, source):
                 "source": source,
             }
         )
+    if not points:
+        raise ValueError("sheet has no valid data points")
     return points
 
 
@@ -112,10 +117,11 @@ def parse_ranking_workbook(workbook_path, survey_type, survey_label, layout):
         raise ValueError(
             f"{survey_label} ranking sheet has no date headers starting at column {layout.first_status_column}"
         )
+    max_data_row = sheet.max_row if layout.end_row is None else layout.end_row
     rows = []
     seen = set()
     known_industry_names = set()
-    for row_index in range(layout.data_row, sheet.max_row + 1):
+    for row_index in range(layout.data_row, max_data_row + 1):
         industry = sheet.cell(row_index, layout.industry_column).value
         if not industry:
             continue

@@ -1685,16 +1685,23 @@ def build_ism_industry_breadth_headline(growth_cycle):
     }
 
 
-def build_growth_cycle_sections(growth_cycle, headline):
+def _section_status_from_signal_state(state):
+    if state in ("pending_inputs", "stale_periods"):
+        return state
+    return "available"
+
+
+def build_growth_cycle_sections(growth_cycle, headline, services_signal_state=None):
     card_ids = _headline_card_ids(headline)
     ism_status = "available" if growth_cycle.get("ism_pmi") is not None else "missing"
+    services_status = _section_status_from_signal_state(services_signal_state)
     services_section = (
         _growth_cycle_section(
             "ism_services",
             "ISM Services",
             "Services survey growth signal and heat-map inputs.",
             ["ism_services"],
-            status="available",
+            status=services_status,
             period=growth_cycle.get("services_period"),
         )
         if "ism_services" in card_ids
@@ -1717,6 +1724,7 @@ def build_growth_cycle_sections(growth_cycle, headline):
             status=ism_status,
             period=growth_cycle.get("ism_period"),
         ),
+        services_section,
         _growth_cycle_section(
             "m2_liquidity",
             "M2 Liquidity",
@@ -1732,7 +1740,6 @@ def build_growth_cycle_sections(growth_cycle, headline):
             status="available" if "inflation_context" in card_ids else "missing",
             period=growth_cycle.get("inflation_context_period"),
         ),
-        services_section,
         _growth_cycle_section(
             "gdp_expectations",
             "GDP Expectations",
@@ -1862,11 +1869,13 @@ def build_growth_cycle_dashboard_payload(
     headline.append(
         build_gdp_expectations_headline(growth_cycle, ism_macro_signal=ism_macro_signal)
     )
-    sections = build_growth_cycle_sections(growth_cycle, headline)
     services_signal_state = (
         ism_services_card.get("segments", {}).get("services_cycle", {}).get("state")
         if ism_services_card
         else None
+    )
+    sections = build_growth_cycle_sections(
+        growth_cycle, headline, services_signal_state=services_signal_state
     )
     evidence = build_growth_cycle_bias_evidence(
         growth_cycle, ism_macro_signal, services_signal_state=services_signal_state

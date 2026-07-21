@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 from openpyxl import Workbook
 
-from app.db import us_rates_liquidity
+from app.db import ism_surveys, us_rates_liquidity
 from scripts import import_ism_services
 
 
@@ -103,14 +103,42 @@ def test_import_workbook_rolls_back_on_failure(tmp_path):
     finally:
         con.close()
 
+    series_ids = [
+        "ism_services_pmi",
+        "ism_services_business_activity",
+        "ism_services_new_orders",
+        "ism_services_order_backlog",
+    ]
     check_con = us_rates_liquidity.connect(db_path)
     try:
-        points = us_rates_liquidity.load_macro_indicator_points(
-            check_con, "ism_services_pmi"
-        )
+        for sid in series_ids:
+            points = us_rates_liquidity.load_macro_indicator_points(check_con, sid)
+            assert len(points) == 0, f"{sid} not empty after rollback"
+        rankings = ism_surveys.load_industry_rankings(check_con, "services")
+        assert len(rankings) == 0
+        comments = ism_surveys.load_industry_comments(check_con, "services")
+        assert len(comments) == 0
     finally:
         check_con.close()
-    assert len(points) == 0
+
+
+def test_import_real_workbook(tmp_path):
+    real_path = import_ism_services.DEFAULT_WORKBOOK_PATH
+    if not real_path.exists():
+        pytest.skip(f"real workbook not found: {real_path}")
+    db_path = tmp_path / "market.sqlite"
+    con = us_rates_liquidity.connect(db_path)
+    try:
+        inserted = import_ism_services.import_workbook(con, real_path)
+    finally:
+        con.close()
+
+    assert inserted["ism_services_pmi"] > 0
+    assert inserted["ism_services_business_activity"] > 0
+    assert inserted["ism_services_new_orders"] > 0
+    assert inserted["ism_services_order_backlog"] > 0
+    assert inserted["ism_services_industry_rankings"] > 0
+    assert inserted["ism_services_industry_comments"] > 0
 
 
 def test_parse_industry_comments_rejects_orphan_continuation_row(tmp_path):
@@ -138,6 +166,33 @@ def test_parse_industry_comments_allows_trailing_empty_rows(tmp_path):
 
     rows = import_ism_services.parse_industry_comments(path)
     assert len(rows) == 1
+
+
+def test_parse_industry_comments_skips_empty_comments(tmp_path):
+    path = tmp_path / "services.xlsx"
+    workbook = Workbook()
+    _write_base_sheets(workbook)
+    comments = workbook["Industry Comments"]
+    comments.append(["Construction", datetime(2026, 5, 1), "Real comment"])
+    comments.append([None, datetime(2026, 4, 1), ""])
+    comments.append([None, datetime(2026, 4, 1), None])
+    workbook.save(path)
+
+    rows = import_ism_services.parse_industry_comments(path)
+
+    assert len(rows) == 1
+    assert rows[0]["comment_text"] == "Real comment"
+
+
+def test_parse_industry_comments_rejects_industry_without_date_or_comment(tmp_path):
+    path = tmp_path / "services.xlsx"
+    workbook = Workbook()
+    _write_base_sheets(workbook)
+    workbook["Industry Comments"].append(["Construction", None, None])
+    workbook.save(path)
+
+    with pytest.raises(ValueError, match="no date or comment"):
+        import_ism_services.parse_industry_comments(path)
 
 
 def test_parse_industry_comments_rejects_comment_without_date(tmp_path):

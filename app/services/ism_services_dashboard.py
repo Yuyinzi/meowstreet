@@ -9,11 +9,13 @@ def load_overview(con):
         con, SERVICES_SERIES_IDS
     )
     signal = ism_services.build_signal(points)
-    rankings = ism_surveys.load_industry_rankings(con, "services", limit_months=6)
     signal_period = (
         signal.get("period")
         if signal.get("state") not in ("pending_inputs", "stale_periods")
         else None
+    )
+    rankings = ism_surveys.load_industry_rankings(
+        con, "services", limit_months=6, max_date=signal_period
     )
     comments = ism_surveys.load_industry_comments(
         con, "services", report_month=signal_period
@@ -32,11 +34,13 @@ def load_detail(con):
         con, SERVICES_SERIES_IDS
     )
     signal = ism_services.build_signal(points)
-    rankings = ism_surveys.load_industry_rankings(con, "services", limit_months=6)
     signal_period = (
         signal.get("period")
         if signal.get("state") not in ("pending_inputs", "stale_periods")
         else None
+    )
+    rankings = ism_surveys.load_industry_rankings(
+        con, "services", limit_months=6, max_date=signal_period
     )
     comments = ism_surveys.load_industry_comments(
         con, "services", report_month=signal_period

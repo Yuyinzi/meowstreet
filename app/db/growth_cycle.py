@@ -298,7 +298,7 @@ def load_latest_ism_at_a_glance_rows(con):
     return [dict(row) for row in rows]
 
 
-def replace_ism_report_source_snapshot(con, snapshot):
+def replace_ism_report_source_snapshot(con, snapshot, commit=True):
     con.execute(
         """
         insert into ism_report_source_snapshots(
@@ -327,7 +327,8 @@ def replace_ism_report_source_snapshot(con, snapshot):
             snapshot.get("report_month"),
         ),
     )
-    con.commit()
+    if commit:
+        con.commit()
     return {"source_snapshots": 1}
 
 

@@ -283,7 +283,7 @@ def replace_macro_indicator_points(con, series, points):
     return {"series": 1, "points": len(points)}
 
 
-def merge_macro_indicator_points(con, series, points):
+def merge_macro_indicator_points(con, series, points, commit=True):
     sid = normalize_series_id(series["series_id"])
     con.execute(
         """
@@ -307,7 +307,8 @@ def merge_macro_indicator_points(con, series, points):
             """,
             (sid, point["date"], point["value"], point["source"]),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return {"series": 1, "points": len(points)}
 
 
