@@ -2699,6 +2699,48 @@
     }
   }
 
+  function renderServicesDetailInPanel(body, payload) {
+    const charts = (payload.charts || []).map((chart) => (
+      filterChartForRange(chart, state.selectedGrowthCycleChartRange)
+    ));
+    const renderedCharts = charts.map((chart, index) => (
+      renderIsmDetailChart(chart, index, null)
+    ));
+    const latest = payload.latest || {};
+    const signal = payload.signal || {};
+    const industries = payload.industries || {};
+
+    body.innerHTML = `
+      ${renderGrowthCycleRangeControl()}
+      <div class="relationship-chart-grid">
+        ${renderedCharts.join("")}
+      </div>
+      <div class="ism-latest-values">
+        <h3>ISM Services</h3>
+        <p class="ism-signal-badge ism-signal-${signal.state || "unknown"}">${escapeHtml(signal.state_label || signal.state || "Unknown")}</p>
+        <table class="ism-latest-table">
+          ${Object.entries(latest).filter(([k]) => k !== "period").map(([key, value]) =>
+            `<tr><td>${escapeHtml(key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))}</td><td>${escapeHtml(formatIndex(value))}</td></tr>`
+          ).join("")}
+        </table>
+      </div>
+      <div class="ism-industry-breadth">
+        <h4>Industries</h4>
+        <div class="ism-industry-list">
+          ${(industries.industries || []).map((ind) =>
+            `<div class="ism-industry-row">
+              <span class="ism-industry-name">${escapeHtml(ind.industry)}</span>
+              <span class="ism-industry-direction ism-direction-${ind.direction}">${escapeHtml(ind.direction)}</span>
+              <span class="ism-industry-rank">${escapeHtml(String(ind.rank))}</span>
+            </div>`
+          ).join("")}
+        </div>
+      </div>
+    `;
+    bindGrowthCycleRangeControl(body);
+    attachRatesChartTooltips(body, charts);
+  }
+
   function renderGrowthCycleDetailInPanel(body) {
     const detailId = state.selectedGrowthCycleDetailId;
     if (!detailId) return;
@@ -2711,7 +2753,7 @@
           return;
         }
         if (payload.detail_id === "ism_services") {
-          window.ismServicesUi.renderDetail(body, payload, { renderServicesDetail: renderIsmDetailInPanel });
+          window.ismServicesUi.renderDetail(body, payload, { renderServicesDetail: renderServicesDetailInPanel });
           return;
         }
         const filteredCharts = payload.charts.map((chart) => (
@@ -2749,7 +2791,7 @@
     if (payload.detail_id === "ism_manufacturing") {
       renderIsmDetailInPanel(body, payload);
     } else if (payload.detail_id === "ism_services") {
-      window.ismServicesUi.renderDetail(body, payload, { renderServicesDetail: renderIsmDetailInPanel });
+      window.ismServicesUi.renderDetail(body, payload, { renderServicesDetail: renderServicesDetailInPanel });
     } else {
       const filteredCharts = payload.charts.map((chart) => (
         filterChartForRange(chart, state.selectedGrowthCycleChartRange)

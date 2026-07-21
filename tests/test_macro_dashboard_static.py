@@ -3443,12 +3443,13 @@ def test_ism_services_js_renders_card_with_node():
         };
 
         const html = window.ismServicesUi.renderCard(card, helpers);
+        const count = (s) => html.split(s).length - 1;
 
         console.log(JSON.stringify({
-            containsServicesCycle: html.indexOf("Services Cycle") !== -1,
-            containsBusinessActivity: html.indexOf("Business Activity") !== -1,
-            containsNewOrders: html.indexOf("New Orders") !== -1,
-            containsIndustryBreadth: html.indexOf("Industry Breadth") !== -1,
+            servicesCycleCount: count("Services Cycle"),
+            businessActivityCount: count("Business Activity"),
+            newOrdersCount: count("New Orders"),
+            industryBreadthCount: count("Industry Breadth"),
             containsExpansion: html.indexOf("Expansion") !== -1,
             containsRising: html.indexOf("Rising") !== -1,
             containsStable: html.indexOf("Stable") !== -1,
@@ -3470,10 +3471,10 @@ def test_ism_services_js_renders_card_with_node():
     )
     payload = json.loads(result.stdout)
 
-    assert payload["containsServicesCycle"] is True
-    assert payload["containsBusinessActivity"] is True
-    assert payload["containsNewOrders"] is True
-    assert payload["containsIndustryBreadth"] is True
+    assert payload["servicesCycleCount"] == 1
+    assert payload["businessActivityCount"] == 1
+    assert payload["newOrdersCount"] == 1
+    assert payload["industryBreadthCount"] == 1
     assert payload["containsExpansion"] is True
     assert payload["containsRising"] is True
     assert payload["containsStable"] is True
