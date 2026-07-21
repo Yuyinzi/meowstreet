@@ -934,6 +934,13 @@ def test_growth_cycle_api_includes_ism_manufacturing_values(monkeypatch):
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
+    import app.db.macro_indicators as _macro_indicators
+
+    monkeypatch.setattr(
+        _macro_indicators,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
         "load_next_macro_event",
@@ -1010,9 +1017,16 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
     class FakeCon(_FakeConStubs):
         pass
 
+    import app.db.macro_indicators as _macro_indicators
+
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+    monkeypatch.setattr(
+        _macro_indicators,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -2076,9 +2090,16 @@ def test_growth_cycle_api_returns_ism_overview_cards_in_ism_section(monkeypatch)
     class FakeCon(_FakeConStubs):
         pass
 
+    import app.db.macro_indicators as _macro_indicators
+
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
         api.us_rates_liquidity_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+    monkeypatch.setattr(
+        _macro_indicators,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -2898,3 +2919,43 @@ def test_growth_cycle_api_returns_bias_evidence(monkeypatch):
     assert evidence["version"] == "growth_cycle_bias_v3"
     assert evidence["status"] == "pending_inputs"
     assert evidence["bias"] is None
+
+
+def test_consumer_sentiment_page_routes_are_served():
+    response = client.get("/consumer-sentiment.js")
+    assert response.status_code == 200
+
+    response = client.get("/consumer-sentiment.css")
+    assert response.status_code == 200
+
+
+def test_consumer_sentiment_api_returns_summary(monkeypatch):
+    from app import api
+
+    def fake_connect():
+        return _FakeConStubs()
+
+    monkeypatch.setattr(api.consumer_sentiment, "connect", fake_connect)
+
+    response = client.get("/api/macro-dashboard/consumer-sentiment")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "version" in payload
+    assert "evidence_state" in payload
+    assert payload["evidence_state"] == "insufficient_data"
+
+
+def test_consumer_sentiment_detail_api_returns_detail(monkeypatch):
+    from app import api
+
+    def fake_connect():
+        return _FakeConStubs()
+
+    monkeypatch.setattr(api.consumer_sentiment, "connect", fake_connect)
+
+    response = client.get("/api/macro-dashboard/consumer-sentiment/detail")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "detail_id" in payload

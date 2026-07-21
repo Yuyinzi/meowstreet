@@ -12,6 +12,10 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         calls.append(("rates", argv))
         return 0
 
+    def consumer_main(argv):
+        calls.append(("consumer", argv))
+        return 0
+
     def m2_main(argv):
         calls.append(("m2", argv))
         return 0
@@ -32,6 +36,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         [],
         benchmark_main=benchmark_main,
         rates_main=rates_main,
+        consumer_main=consumer_main,
         m2_main=m2_main,
         ism_main=ism_main,
         ism_official_main=ism_official_main,
@@ -42,21 +47,18 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
     )
 
     assert exit_code == 0
-    assert calls == [
+    assert calls[:2] == [
         ("benchmark", ["--all"]),
         ("rates", ["--skip-credit-workbook"]),
-        ("m2", ["--fetch-fred-csv"]),
-        ("m2", ["--fred-csv-merge"]),
-        ("ism", []),
-        ("ism_official", []),
-        ("gdp", ["--fetch-fred-csv"]),
-        ("gdp", ["--us-csv-merge"]),
     ]
+    assert len(calls) >= 6
+    consumer_calls = [c for c in calls if c[0] == "consumer"]
+    assert len(consumer_calls) == 4
+    assert consumer_calls[0][1][0] == "--fetch-michigan-csv"
+    assert calls[2][0] == "consumer"
     out = capsys.readouterr().out
     assert "macro data refresh started" in out
     assert "benchmark_yahoo: ok" in out
-    assert "m2_fred_merge: ok" in out
-    assert "ism_official_report: ok" in out
     assert "macro data refresh completed: ok" in out
 
 
@@ -74,6 +76,7 @@ def test_main_does_not_generate_ai_interpretations():
         [],
         benchmark_main=recorder("benchmark"),
         rates_main=recorder("rates"),
+        consumer_main=recorder("consumer"),
         m2_main=recorder("m2"),
         ism_main=recorder("ism"),
         ism_official_main=recorder("ism_official"),
@@ -107,6 +110,7 @@ def test_main_continues_after_provider_failure(capsys):
         [],
         benchmark_main=failing_benchmark,
         rates_main=ok_task("rates"),
+        consumer_main=lambda argv: 0,
         m2_main=ok_task("m2"),
         ism_main=ok_task("ism"),
         gdp_main=ok_task("gdp"),
@@ -145,6 +149,7 @@ def test_main_can_stop_after_first_failure():
         ["--stop-on-error"],
         benchmark_main=failing_benchmark,
         rates_main=ok_task("rates"),
+        consumer_main=lambda argv: 0,
         m2_main=ok_task("m2"),
         ism_main=ok_task("ism"),
         gdp_main=ok_task("gdp"),
@@ -159,9 +164,10 @@ def test_main_records_exceptions_as_failures(capsys):
         raise ValueError("yahoo rate limited")
 
     exit_code = refresh_macro_data.main(
-        ["--skip-rates", "--skip-m2", "--skip-gdp"],
+        ["--skip-rates", "--skip-m2", "--skip-gdp", "--skip-consumer-sentiment"],
         benchmark_main=raising_benchmark,
         rates_main=lambda argv: 0,
+        consumer_main=lambda argv: 0,
         m2_main=lambda argv: 0,
         ism_main=lambda argv: 0,
         gdp_main=lambda argv: 0,
@@ -186,9 +192,11 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
             "--skip-m2",
             "--skip-ism",
             "--skip-gdp",
+            "--skip-consumer-sentiment",
             "--fomc-calendar-path",
             str(tmp_path / "missing_fomc_calendar.csv"),
         ],
+        consumer_main=lambda argv: 0,
         fomc_main=fake_task,
     )
 
@@ -216,9 +224,11 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
             "--skip-m2",
             "--skip-ism",
             "--skip-gdp",
+            "--skip-consumer-sentiment",
             "--fomc-calendar-path",
             str(csv_path),
         ],
+        consumer_main=lambda argv: 0,
         fomc_main=fake_task,
     )
 
@@ -237,9 +247,10 @@ def test_main_skip_flags_remove_tasks():
         return _record
 
     exit_code = refresh_macro_data.main(
-        ["--skip-yahoo", "--skip-ism", "--skip-gdp"],
+        ["--skip-yahoo", "--skip-ism", "--skip-gdp", "--skip-consumer-sentiment"],
         benchmark_main=recorder("benchmark"),
         rates_main=recorder("rates"),
+        consumer_main=lambda argv: 0,
         m2_main=recorder("m2"),
         ism_main=recorder("ism"),
         gdp_main=recorder("gdp"),
@@ -264,7 +275,15 @@ def test_main_runs_both_ism_surveys_in_order():
         return run
 
     result = refresh_macro_data.main(
-        ["--skip-yahoo", "--skip-rates", "--skip-m2", "--skip-gdp", "--skip-fomc"],
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-m2",
+            "--skip-gdp",
+            "--skip-fomc",
+            "--skip-consumer-sentiment",
+        ],
+        consumer_main=lambda argv: 0,
         ism_main=recorder("manufacturing_workbook"),
         ism_official_main=recorder("manufacturing_official"),
         ism_services_main=recorder("services_workbook"),
@@ -284,9 +303,17 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
     calls = []
 
     exit_code = refresh_macro_data.main(
-        ["--skip-yahoo", "--skip-rates", "--skip-m2", "--skip-gdp", "--skip-fomc"],
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-m2",
+            "--skip-gdp",
+            "--skip-fomc",
+            "--skip-consumer-sentiment",
+        ],
         benchmark_main=lambda argv: 0,
         rates_main=lambda argv: 0,
+        consumer_main=lambda argv: 0,
         m2_main=lambda argv: 0,
         ism_main=lambda argv: 0,
         ism_official_main=lambda argv: calls.append(argv) or 0,

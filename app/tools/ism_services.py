@@ -64,11 +64,7 @@ def build_signal(points_by_series_id):
             "state": "stale_periods",
             "period": max(periods),
             "metrics": metrics,
-            "backlog_confirmation": metrics["order_backlog"]["level"]
-            .replace("expanding", "supports_growth")
-            .replace("contracting", "supports_contraction")
-            if metrics["order_backlog"]
-            else "unavailable",
+            "backlog_confirmation": "unavailable",
             "missing_inputs": [],
             "note": f"required metrics span multiple periods: {', '.join(sorted(periods))}",
         }

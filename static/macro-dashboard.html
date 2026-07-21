@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/macro-dashboard.css" />
   <link rel="stylesheet" href="/ism-services.css" />
+  <link rel="stylesheet" href="/consumer-sentiment.css" />
 </head>
 <body>
   <a href="#macroDashboardApp" class="skip-link">Skip to main content</a>
@@ -52,6 +53,15 @@
         </div>
         <div class="growth-loading">Loading growth cycle data...</div>
       </section>
+      <section class="consumer-sentiment" id="consumerSentiment" aria-label="Consumer sentiment indicators">
+        <div class="relationship-head">
+          <div>
+            <h2>Consumer Sentiment</h2>
+            <p class="subtitle">UMCSI aggregate, expectations, and consumer capacity context.</p>
+          </div>
+        </div>
+        <div class="consumer-loading">Loading consumer sentiment data...</div>
+      </section>
       <section class="rates-liquidity" id="usRatesLiquidity" aria-label="US rates and liquidity indicators">
         <div class="relationship-head">
           <div>
@@ -66,6 +76,7 @@
     <aside class="detail-panel" id="detailPanel" aria-label="Detail panel"></aside>
   </main>
   <script src="/ism-services.js"></script>
+  <script src="/consumer-sentiment.js"></script>
   <script src="/macro-dashboard.js"></script>
 </body>
 </html>

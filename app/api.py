@@ -8,11 +8,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import tool_runner, workflow_engine
-from app.db import benchmark_market_data, gdp_market_relationships
+from app.db import benchmark_market_data, consumer_sentiment, gdp_market_relationships
 from app.db import growth_cycle
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
-from app.services import ism_services_dashboard
+from app.services import consumer_sentiment_dashboard, ism_services_dashboard
 from app.tools import (
     gdp_market_relationship,
     ism_industry_analysis,
@@ -239,6 +239,38 @@ def macro_dashboard_js():
     return FileResponse(
         STATIC_DIR / "macro-dashboard.js", media_type="application/javascript"
     )
+
+
+@app.get("/consumer-sentiment.js")
+def consumer_sentiment_js():
+    return FileResponse(
+        STATIC_DIR / "consumer-sentiment.js", media_type="application/javascript"
+    )
+
+
+@app.get("/consumer-sentiment.css")
+def consumer_sentiment_css():
+    return FileResponse(STATIC_DIR / "consumer-sentiment.css", media_type="text/css")
+
+
+@app.get("/api/macro-dashboard/consumer-sentiment")
+def macro_dashboard_consumer_sentiment():
+    con = consumer_sentiment.connect()
+    try:
+        return consumer_sentiment_dashboard.load_overview(con)
+    finally:
+        con.close()
+
+
+@app.get("/api/macro-dashboard/consumer-sentiment/detail")
+def macro_dashboard_consumer_sentiment_detail():
+    con = consumer_sentiment.connect()
+    try:
+        return consumer_sentiment_dashboard.load_detail(con)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        con.close()
 
 
 @app.get("/api/macro-dashboard/market-phase")

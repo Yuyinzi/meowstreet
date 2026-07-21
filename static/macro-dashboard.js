@@ -12,6 +12,9 @@
     usRatesDetailsById: {},
     growthCycle: null,
     growthCycleError: null,
+    consumerSentiment: null,
+    consumerSentimentError: null,
+    selectedConsumerDetailId: null,
     marketSetup: null,
     marketSetupError: null,
     selectedGrowthCycleDetailId: null,
@@ -46,6 +49,7 @@
     state.selectedRelationshipId = null;
     state.selectedRatesDetailId = null;
     state.selectedGrowthCycleDetailId = null;
+    state.selectedConsumerDetailId = null;
     state.selectedIsmIndustry = null;
     state.selectedNominalCurrentDate = null;
     state.selectedNominalComparisonDate = null;
@@ -61,7 +65,7 @@
     const panel = $("detailPanel");
     if (!panel) return;
 
-    const anySelected = state.selectedBenchmarkId || state.selectedRelationshipId || state.selectedRatesDetailId || state.selectedGrowthCycleDetailId;
+    const anySelected = state.selectedBenchmarkId || state.selectedRelationshipId || state.selectedRatesDetailId || state.selectedGrowthCycleDetailId || state.selectedConsumerDetailId;
     if (!anySelected) {
       shell.classList.remove("panel-open");
       syncDetailPanelWidthClass();
@@ -86,6 +90,8 @@
       if (state.selectedRatesDetailId === "yield_curve_shape") {
         title = "Yield Curve Analysis";
       }
+    } else if (state.selectedConsumerDetailId) {
+      title = "Consumer Sentiment";
     } else if (state.selectedGrowthCycleDetailId) {
       if (state.selectedGrowthCycleDetailId === "ism_manufacturing") {
         title = "ISM Manufacturing";
@@ -131,6 +137,8 @@
       renderRatesDetailInPanel(body);
     } else if (state.selectedRelationshipId) {
       renderGdpDetailInPanel(body);
+    } else if (state.selectedConsumerDetailId) {
+      renderConsumerDetailInPanel(body);
     } else if (state.selectedGrowthCycleDetailId) {
       renderGrowthCycleDetailInPanel(body);
     }
@@ -2710,6 +2718,7 @@
     const signal = payload.signal || {};
     const metrics = signal.metrics || {};
     const industries = payload.industries || {};
+
     const stateLabels = {
       supports_growth: "Growth",
       growth_caution: "Caution",
@@ -2728,19 +2737,41 @@
       return `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td><td>${escapeHtml(m.level || "")}</td><td>${escapeHtml(change)}</td><td>${escapeHtml(m.momentum || "")}</td></tr>`;
     }
 
-    function renderIndustryRow(ind) {
-      const dc = ind.direction_change || "—";
-      const rc = ind.rank_change != null ? (ind.rank_change > 0 ? "+" : "") + ind.rank_change : "—";
-      const streak = ind.positive_streak ? ind.positive_streak + "m+" : ind.negative_streak ? ind.negative_streak + "m-" : "—";
-      const firstComment = (ind.comments || []).length > 0 ? ind.comments[0] : null;
-      return `<div class="ism-industry-row">
-        <span class="ism-industry-name">${escapeHtml(ind.industry)}</span>
-        <span class="ism-industry-direction ism-direction-${ind.direction}">${escapeHtml(ind.direction)}</span>
-        <span class="ism-industry-rank">${escapeHtml(String(ind.rank))}</span>
-        <span class="ism-industry-dir-change">${escapeHtml(dc)}</span>
-        <span class="ism-industry-rank-change">${escapeHtml(rc)}</span>
-        <span class="ism-industry-streak">${escapeHtml(streak)}</span>
-        ${firstComment != null ? `<span class="ism-industry-comment">${escapeHtml(firstComment)}</span>` : ""}
+    const industryList = industries.industries || [];
+    const selectedIndustry = state.selectedServicesIndustry;
+    const currentIndustry = selectedIndustry && industryList.some((i) => i.industry === selectedIndustry)
+      ? industryList.find((i) => i.industry === selectedIndustry)
+      : industryList.length > 0 ? industryList[0] : null;
+
+    if (currentIndustry && (!state.selectedServicesIndustry || !industryList.some((i) => i.industry === state.selectedServicesIndustry))) {
+      state.selectedServicesIndustry = currentIndustry.industry;
+    }
+
+    function renderIndustrySelector() {
+      return `<select class="ism-industry-selector" data-services-industry-selector>
+        ${industryList.map((ind) =>
+          `<option value="${escapeHtml(ind.industry)}"${ind.industry === state.selectedServicesIndustry ? " selected" : ""}>
+            ${escapeHtml(ind.industry)} (${escapeHtml(ind.direction)}, rank ${String(ind.rank)})
+          </option>`
+        ).join("")}
+      </select>`;
+    }
+
+    function renderSelectedIndustryDetail() {
+      if (!currentIndustry) return '<p class="status">No industry data available.</p>';
+      const allComments = currentIndustry.comments || [];
+      return `<div class="ism-selected-industry-detail">
+        <h4>${escapeHtml(currentIndustry.industry)}</h4>
+        <div class="ism-industry-meta">
+          <span class="ism-industry-direction ism-direction-${currentIndustry.direction}">${escapeHtml(currentIndustry.direction)}</span>
+          <span>Rank: ${escapeHtml(String(currentIndustry.rank))}</span>
+          <span>Dir change: ${escapeHtml(currentIndustry.direction_change || "—")}</span>
+          <span>Rank change: ${currentIndustry.rank_change != null ? (currentIndustry.rank_change > 0 ? "+" : "") + currentIndustry.rank_change : "—"}</span>
+          <span>Streak: ${currentIndustry.positive_streak ? currentIndustry.positive_streak + "m+" : currentIndustry.negative_streak ? currentIndustry.negative_streak + "m-" : "—"}</span>
+        </div>
+        ${allComments.length > 0 ? `<div class="ism-industry-comments-section"><h5>Comments</h5>${allComments.map((c) =>
+          `<p class="ism-industry-comment">${escapeHtml(c)}</p>`
+        ).join("")}</div>` : ""}
       </div>`;
     }
 
@@ -2768,14 +2799,27 @@
         </div>
         <div class="ism-industry-breadth">
           <h4>Industries (${escapeHtml(String(breadth.growth_count ?? 0))} growing / ${escapeHtml(String(breadth.total_count ?? 0))} total) <span class="ism-breadth-status ism-breadth-${breadth.status || "unknown"}">${escapeHtml(breadth.status || "unavailable")}</span></h4>
-          <div class="ism-industry-list">
-            ${(industries.industries || []).map(renderIndustryRow).join("")}
-          </div>
+          ${renderIndustrySelector()}
+          ${renderSelectedIndustryDetail()}
         </div>
       </div>
     `;
     bindGrowthCycleRangeControl(body);
     attachRatesChartTooltips(body, charts);
+    bindServicesIndustrySelector(body);
+  }
+
+  function bindServicesIndustrySelector(body) {
+    const sel = body.querySelector("[data-services-industry-selector]");
+    if (!sel) return;
+    sel.addEventListener("change", function () {
+      state.selectedServicesIndustry = this.value;
+      const detailBody = body.closest(".detail-panel-body") || body;
+      const payload = state.growthCycleDetailsById && state.growthCycleDetailsById.ism_services;
+      if (payload) {
+        renderServicesDetailInPanel(detailBody, payload);
+      }
+    });
   }
 
   function renderGrowthCycleDetailInPanel(body) {
@@ -2844,6 +2888,88 @@
       attachRatesChartTooltips(body, filteredCharts);
     }
     body.scrollTop = scrollTop;
+  }
+
+  async function loadConsumerSentiment() {
+    try {
+      const response = await fetch("/api/macro-dashboard/consumer-sentiment");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      state.consumerSentiment = await response.json();
+      state.consumerSentimentError = null;
+    } catch (error) {
+      state.consumerSentiment = null;
+      state.consumerSentimentError = error.message;
+    }
+    renderConsumerSentiment();
+  }
+
+  function renderConsumerSentiment() {
+    const section = $("consumerSentiment");
+    if (!section) return;
+    const head = section.querySelector(".relationship-head");
+    if (state.consumerSentimentError) {
+      section.innerHTML = `${head.outerHTML}<p class="growth-empty">Failed to load consumer sentiment data.</p>`;
+      return;
+    }
+    if (!state.consumerSentiment) {
+      section.innerHTML = `${head.outerHTML}<div class="consumer-loading">Loading consumer sentiment data...</div>`;
+      return;
+    }
+    const cardHtml = window.consumerSentimentUi.renderCard(state.consumerSentiment, {
+      escapeHtml: escapeHtml,
+      formatIndex: fmtNumber,
+    });
+    section.innerHTML = `
+      ${head.outerHTML}
+      <div class="growth-section-card-grid">
+        ${cardHtml}
+      </div>
+    `;
+    section.querySelectorAll("[data-consumer-detail-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.selectedConsumerDetailId = state.selectedConsumerDetailId === button.dataset.consumerDetailId
+          ? null
+          : button.dataset.consumerDetailId;
+        state.selectedBenchmarkId = null;
+        state.selectedRelationshipId = null;
+        state.selectedRatesDetailId = null;
+        state.selectedGrowthCycleDetailId = null;
+        renderOverview();
+        renderGdpRelationshipOverview();
+        renderUsRatesLiquidity();
+        renderConsumerSentiment();
+        renderDetailPanel();
+      });
+    });
+  }
+
+  function renderConsumerDetailInPanel(body) {
+    const detailId = state.selectedConsumerDetailId;
+    if (!detailId) return;
+    body.innerHTML = `<p class="status">Loading consumer detail...</p>`;
+    loadConsumerSentimentDetail()
+      .then((payload) => {
+        body.innerHTML = `
+          <div class="ism-detail-sections">
+            <h3>Consumer Sentiment Detail</h3>
+            <p>Evidence: ${escapeHtml(payload.summary.evidence_state)}</p>
+            <p>As of: ${escapeHtml(payload.summary.as_of || "N/A")}</p>
+            <p>Aggregate: ${escapeHtml(payload.summary.aggregate.value)}</p>
+            <p>Expectations: ${escapeHtml(payload.summary.expectations.value)}</p>
+            <p>Current Conditions: ${escapeHtml(payload.summary.current_conditions.value)}</p>
+            <p>Capacity: ${escapeHtml(payload.summary.capacity_completeness)}</p>
+          </div>
+        `;
+      })
+      .catch((error) => {
+        body.innerHTML = `<p class="status">Failed to load consumer detail.</p>`;
+      });
+  }
+
+  async function loadConsumerSentimentDetail() {
+    const response = await fetch("/api/macro-dashboard/consumer-sentiment/detail");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
   }
 
   function fmtIsmIndex(value) {
@@ -5000,6 +5126,7 @@
   }
 
   loadGrowthCycle();
+  loadConsumerSentiment();
   loadMarketSetup();
 
   loadDashboard().catch((error) => {

@@ -34,15 +34,29 @@ def is_date(value):
     return True
 
 
-def _validate_series_sheet(series_id, sheet):
+def _parse_series_points(sheet, source):
     rows = list(sheet.iter_rows(min_row=2, min_col=1, max_col=2, values_only=True))
-    valid = sum(1 for dv, lv in rows if is_date(dv) and lv not in (None, ""))
     if not rows:
-        raise ValueError(f"ISM {series_id} sheet has no data rows")
-    if not valid:
-        raise ValueError(
-            f"ISM {series_id} sheet has no valid date-value pairs in its data rows"
+        raise ValueError("sheet has no data rows")
+    points = []
+    seen_dates = set()
+    for row_index, (date_value, level_value) in enumerate(rows, start=2):
+        if not is_date(date_value):
+            raise ValueError(f"row {row_index} has invalid date: {date_value!r}")
+        if level_value in (None, ""):
+            raise ValueError(f"row {row_index} has empty level value")
+        date = iso_date(date_value)
+        if date in seen_dates:
+            raise ValueError(f"row {row_index} has duplicate date: {date!r}")
+        seen_dates.add(date)
+        points.append(
+            {
+                "date": date,
+                "value": float(level_value),
+                "source": source,
+            }
         )
+    return points
 
 
 def parse_series_workbook(workbook_path, survey_label, series_config):
@@ -56,18 +70,7 @@ def parse_series_workbook(workbook_path, survey_label, series_config):
         if sheet_name not in workbook.sheetnames:
             raise ValueError(f"{survey_label} sheet is missing: {sheet_name}")
         sheet = workbook[sheet_name]
-        _validate_series_sheet(series_id, sheet)
-        points = [
-            {
-                "date": iso_date(date_value),
-                "value": float(level_value),
-                "source": path.name,
-            }
-            for date_value, level_value in sheet.iter_rows(
-                min_row=2, min_col=1, max_col=2, values_only=True
-            )
-            if is_date(date_value) and level_value not in (None, "")
-        ]
+        points = _parse_series_points(sheet, path.name)
         results.append(
             {
                 "series": {
@@ -98,38 +101,51 @@ def parse_ranking_workbook(workbook_path, survey_type, survey_label, layout):
     month_columns = []
     for column in range(layout.first_status_column, sheet.max_column + 1, 2):
         header = sheet.cell(layout.header_row, column).value
+        if header is None:
+            break
         if not is_date(header):
-            continue
+            raise ValueError(
+                f"{survey_label} ranking column {column} header is not a date: {header!r}"
+            )
         month_columns.append((column, iso_date(header)))
     if not month_columns:
         raise ValueError(
-            f"{survey_label} ranking sheet has no valid date headers starting at column {layout.first_status_column}"
+            f"{survey_label} ranking sheet has no date headers starting at column {layout.first_status_column}"
         )
     rows = []
     seen = set()
+    known_industry_names = set()
     for row_index in range(layout.data_row, sheet.max_row + 1):
         industry = sheet.cell(row_index, layout.industry_column).value
         if not industry:
             continue
+        name = str(industry).strip()
         for status_column, month in month_columns:
             raw_direction = sheet.cell(row_index, status_column).value
             rank = sheet.cell(row_index, status_column + 1).value
             direction = _direction(raw_direction)
-            if direction is None and isinstance(raw_direction, str):
+            if direction is None:
+                if isinstance(raw_direction, str):
+                    raise ValueError(
+                        f"{survey_label} ranking has unknown direction {raw_direction!r} for {name} in {month}"
+                    )
+                continue
+            if rank in (None, ""):
                 raise ValueError(
-                    f"{survey_label} ranking has unknown direction {raw_direction!r} for {str(industry).strip()} in {month}"
+                    f"{survey_label} ranking has missing rank for {name} in {month}"
                 )
-            if direction is None or rank in (None, ""):
-                continue
-            key = (survey_type, month, str(industry))
+            key = (survey_type, month, name)
             if key in seen:
-                continue
+                raise ValueError(
+                    f"{survey_label} ranking has duplicate row for {name} in {month}"
+                )
             seen.add(key)
+            known_industry_names.add(name)
             rows.append(
                 {
                     "survey_type": survey_type,
                     "date": month,
-                    "industry": str(industry),
+                    "industry": name,
                     "direction": direction,
                     "rank": int(rank),
                     "source": path.name,

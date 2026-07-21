@@ -1,0 +1,23 @@
+.consumer-card {
+  grid-column: span 1;
+}
+
+.consumer-card-button {
+  cursor: pointer;
+}
+
+.consumer-state-badge-supportive { background: #d1fae5; color: #065f46; }
+.consumer-state-badge-adverse { background: #fee2e2; color: #991b1b; }
+.consumer-state-badge-conflicting { background: #fef3c7; color: #92400e; }
+.consumer-state-badge-ambiguous { background: #f3f4f6; color: #374151; }
+.consumer-state-badge-insufficient_data { background: #e5e7eb; color: #6b7280; }
+
+.consumer-decline-warning {
+  font-size: 0.75rem;
+  color: #991b1b;
+  background: #fee2e2;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  margin-top: 0.25rem;
+  font-weight: 600;
+}

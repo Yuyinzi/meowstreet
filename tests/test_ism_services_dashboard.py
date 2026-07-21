@@ -1,12 +1,13 @@
 import pytest
 
-from app.db import ism_surveys, us_rates_liquidity
+from app.db import ism_surveys, macro_indicators, us_rates_liquidity
 from app.db import growth_cycle as growth_cycle_db
 from app.services import ism_services_dashboard
 
 
 @pytest.fixture
 def services_connection(tmp_path):
+    macro_indicators.connect(tmp_path / "market.sqlite").close()
     con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
     growth_cycle_db.init_db(con)
     ism_surveys.init_db(con)

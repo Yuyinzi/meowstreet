@@ -50,20 +50,34 @@ def _direction_change(prev_direction, curr_direction):
     return f"{prev_direction}_to_{curr_direction}"
 
 
+def _month_diff(date1, date2):
+    y1, m1, _ = date1.split("-")
+    y2, m2, _ = date2.split("-")
+    return (int(y1) * 12 + int(m1)) - (int(y2) * 12 + int(m2))
+
+
 def _positive_streak(rows):
     streak = 0
+    prev_date = None
     for row in reversed(rows):
         if row["direction"] != "growth":
             break
+        if prev_date is not None and _month_diff(prev_date, row["date"]) != 1:
+            break
+        prev_date = row["date"]
         streak += 1
     return streak
 
 
 def _negative_streak(rows):
     streak = 0
+    prev_date = None
     for row in reversed(rows):
         if row["direction"] != "contraction":
             break
+        if prev_date is not None and _month_diff(prev_date, row["date"]) != 1:
+            break
+        prev_date = row["date"]
         streak += 1
     return streak
 

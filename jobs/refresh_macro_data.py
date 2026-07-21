@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts import fetch_ism_official_reports
 from scripts import fetch_ism_services_reports
+from scripts import import_consumer_sentiment
 from scripts import import_fomc_calendar
 from scripts import import_gdp_market_relationships
 from scripts import import_ism_manufacturing
@@ -44,10 +45,15 @@ def _fomc_calendar_path(args):
     return path if path.exists() else None
 
 
+def _consumer_cache_dir():
+    return ROOT / "data" / "local_system" / "consumer_cache"
+
+
 def _planned_tasks(
     args,
     benchmark_main,
     rates_main,
+    consumer_main,
     m2_main,
     ism_main,
     ism_official_main,
@@ -61,6 +67,34 @@ def _planned_tasks(
         tasks.append(("benchmark_yahoo", benchmark_main, ["--all"]))
     if not args.skip_rates:
         tasks.append(("rates_fred", rates_main, ["--skip-credit-workbook"]))
+    if not args.skip_consumer_sentiment:
+        cache_dir = _consumer_cache_dir()
+        tasks.append(
+            (
+                "consumer_michigan_fetch",
+                consumer_main,
+                ["--fetch-michigan-csv", str(cache_dir)],
+            )
+        )
+        table_1 = cache_dir / "table_1.csv"
+        table_5 = cache_dir / "table_5.csv"
+        tasks.append(
+            (
+                "consumer_michigan_import",
+                consumer_main,
+                ["--michigan-csv-import", str(table_1), str(table_5)],
+            )
+        )
+        tasks.append(
+            ("consumer_fred_fetch", consumer_main, ["--fetch-fred-csv", str(cache_dir)])
+        )
+        tasks.append(
+            (
+                "consumer_fred_import",
+                consumer_main,
+                ["--fred-csv-import", str(cache_dir)],
+            )
+        )
     if not args.skip_m2:
         tasks.append(("m2_fred_fetch", m2_main, ["--fetch-fred-csv"]))
         tasks.append(("m2_fred_merge", m2_main, ["--fred-csv-merge"]))
@@ -92,6 +126,7 @@ def main(
     argv=None,
     benchmark_main=refresh_benchmark_market_data.main,
     rates_main=refresh_us_rates_liquidity.main,
+    consumer_main=import_consumer_sentiment.main,
     m2_main=import_m2_money_supply.main,
     ism_main=import_ism_manufacturing.main,
     ism_official_main=fetch_ism_official_reports.main,
@@ -103,6 +138,7 @@ def main(
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
     parser.add_argument("--skip-rates", action="store_true")
+    parser.add_argument("--skip-consumer-sentiment", action="store_true")
     parser.add_argument("--skip-m2", action="store_true")
     parser.add_argument("--skip-ism", action="store_true")
     parser.add_argument("--skip-gdp", action="store_true")
@@ -120,6 +156,7 @@ def main(
         args,
         benchmark_main,
         rates_main,
+        consumer_main,
         m2_main,
         ism_main,
         ism_official_main,

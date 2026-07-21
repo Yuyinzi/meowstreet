@@ -102,6 +102,55 @@
 .ism-breadth-warning { background: #fee2e2; color: #991b1b; }
 .ism-breadth-mixed { background: #fef3c7; color: #92400e; }
 
+.ism-industry-selector {
+  width: 100%;
+  margin: 0.5rem 0;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 0.25rem;
+  background: var(--bg-card, #fff);
+  color: var(--text, #111827);
+}
+
+.ism-selected-industry-detail {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 0.375rem;
+  background: var(--bg-subtle, #f9fafb);
+}
+
+.ism-selected-industry-detail h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.ism-industry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  align-items: center;
+}
+
+.ism-industry-comments-section h5 {
+  margin: 0.75rem 0 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #6b7280);
+}
+
+.ism-industry-comments-section .ism-industry-comment {
+  margin: 0.25rem 0;
+  font-style: italic;
+  font-size: 0.8125rem;
+  max-width: 100%;
+}
+
 .ism-signal-badge {
   display: inline-block;
   padding: 0.125rem 0.5rem;

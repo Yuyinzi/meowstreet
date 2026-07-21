@@ -155,20 +155,25 @@ def main(argv=None, fetch=None):
             )
         except Exception as exc:
             if html is not None:
-                growth_cycle.replace_ism_report_source_snapshot(
-                    con,
-                    {
-                        "source_url": url,
-                        "source_name": "ismworld",
-                        "source_hash": source_hash,
-                        "fetched_at": fetched_at,
-                        "raw_html": html,
-                        "parse_status": "failed",
-                        "parse_error": str(exc),
-                        "report_id": None,
-                        "report_month": None,
-                    },
-                )
+                existing = con.execute(
+                    "select parse_status from ism_report_source_snapshots where source_url = ?",
+                    (url,),
+                ).fetchone()
+                if existing is None or existing["parse_status"] != "parsed":
+                    growth_cycle.replace_ism_report_source_snapshot(
+                        con,
+                        {
+                            "source_url": url,
+                            "source_name": "ismworld",
+                            "source_hash": source_hash,
+                            "fetched_at": fetched_at,
+                            "raw_html": html,
+                            "parse_status": "failed",
+                            "parse_error": str(exc),
+                            "report_id": None,
+                            "report_month": None,
+                        },
+                    )
             print(
                 f"ism_services_report/{url}: failed - {exc}",
                 file=sys.stderr,
