@@ -134,6 +134,11 @@ def parse_ranking_workbook(workbook_path, survey_type, survey_label, layout):
                 raise ValueError(
                     f"{survey_label} ranking has missing rank for {name} in {month}"
                 )
+            rank_int = int(rank)
+            if float(rank_int) != float(rank):
+                raise ValueError(
+                    f"{survey_label} ranking has non-integer rank {rank!r} for {name} in {month}"
+                )
             key = (survey_type, month, name)
             if key in seen:
                 raise ValueError(

@@ -10,11 +10,13 @@ def load_overview(con):
     )
     signal = ism_services.build_signal(points)
     rankings = ism_surveys.load_industry_rankings(con, "services", limit_months=6)
-    comments = ism_surveys.load_industry_comments(con, "services")
     signal_period = (
         signal.get("period")
         if signal.get("state") not in ("pending_inputs", "stale_periods")
         else None
+    )
+    comments = ism_surveys.load_industry_comments(
+        con, "services", report_month=signal_period
     )
     breadth = ism_services_industry.build_breadth(rankings, max_date=signal_period)
     return {
@@ -31,13 +33,15 @@ def load_detail(con):
     )
     signal = ism_services.build_signal(points)
     rankings = ism_surveys.load_industry_rankings(con, "services", limit_months=6)
-    comments = ism_surveys.load_industry_comments(con, "services")
-    industries = ism_services_industry.build_industry_payload(rankings, comments)
     signal_period = (
         signal.get("period")
         if signal.get("state") not in ("pending_inputs", "stale_periods")
         else None
     )
+    comments = ism_surveys.load_industry_comments(
+        con, "services", report_month=signal_period
+    )
+    industries = ism_services_industry.build_industry_payload(rankings, comments)
     industries["breadth"] = ism_services_industry.build_breadth(
         rankings, max_date=signal_period
     )

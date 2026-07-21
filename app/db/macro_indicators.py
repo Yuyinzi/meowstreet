@@ -42,7 +42,7 @@ def _normalize_series_id(series_id):
     return normalized
 
 
-def replace_macro_indicator_points(con, series, points):
+def _replace_single(con, series, points):
     sid = _normalize_series_id(series["series_id"])
     con.execute("delete from macro_indicator_points where series_id = ?", (sid,))
     con.execute("delete from macro_indicator_series where series_id = ?", (sid,))
@@ -61,6 +61,10 @@ def replace_macro_indicator_points(con, series, points):
             """,
             (sid, point["date"], point["value"], point["source"]),
         )
+
+
+def replace_macro_indicator_points(con, series, points):
+    _replace_single(con, series, points)
     con.commit()
     return {"series": 1, "points": len(points)}
 
@@ -160,4 +164,5 @@ def load_macro_indicator_points_for_series(con, series_ids):
 
 def replace_macro_indicator_points_batch(con, series_points_list):
     for item in series_points_list:
-        replace_macro_indicator_points(con, item["series"], item["points"])
+        _replace_single(con, item["series"], item["points"])
+    con.commit()

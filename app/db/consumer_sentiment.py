@@ -31,10 +31,7 @@ def replace_michigan_series(con, series_points_list):
         sid = item["series"]["series_id"]
         if sid not in MICHIGAN_SERIES_IDS:
             raise ValueError(f"series {sid} is not a valid michigan series id")
-    for item in series_points_list:
-        macro_indicators.replace_macro_indicator_points(
-            con, item["series"], item["points"]
-        )
+    macro_indicators.replace_macro_indicator_points_batch(con, series_points_list)
 
 
 def replace_capacity_series(con, series_points_list):
@@ -42,10 +39,7 @@ def replace_capacity_series(con, series_points_list):
         sid = item["series"]["series_id"]
         if sid not in CAPACITY_SERIES_IDS:
             raise ValueError(f"series {sid} is not a valid capacity series id")
-    for item in series_points_list:
-        macro_indicators.replace_macro_indicator_points(
-            con, item["series"], item["points"]
-        )
+    macro_indicators.replace_macro_indicator_points_batch(con, series_points_list)
 
 
 def load_overview_series(con):

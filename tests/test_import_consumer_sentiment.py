@@ -12,18 +12,20 @@ from app.db import consumer_sentiment, macro_indicators
 
 
 TABLE_1_CSV = (
-    "Month,Year,Index,Title,University of Michigan Consumer Sentiment Index\n"
-    "1,1978,80.0\n"
-    "2,1978,78.5\n"
-    "6,2026,70.2\n"
+    "Table 1: The Index of Consumer Sentiment\n"
+    "Month,Year,Index,\n"
+    "1,1978,80.0,\n"
+    "2,1978,78.5,\n"
+    "6,2026,70.2,\n"
 )
 
 
 TABLE_5_CSV = (
-    "Month,Year,Current Index,Expected Index\n"
-    "1,1978,85.0,95.1\n"
-    "2,1978,84.2,94.8\n"
-    "6,2026,68.5,71.0\n"
+    "Table 5: Components of the Index of Consumer Sentiment\n"
+    "Month,Year,Personal Finance Current,Personal Finance Expected,Business Condition 12 Months,Business Condition 5 Years,Buying Conditions,Current Index,Expected Index,\n"
+    "1,1978,105,114,106,80,142,85.0,95.1,\n"
+    "2,1978,106,109,108,89,139,84.2,94.8,\n"
+    "6,2026,100,102,95,75,140,68.5,71.0,\n"
 )
 
 

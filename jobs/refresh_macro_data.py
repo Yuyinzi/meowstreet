@@ -49,6 +49,21 @@ def _consumer_cache_dir():
     return ROOT / "data" / "local_system" / "consumer_cache"
 
 
+def _combined_consumer_refresh(consumer_main, cache_dir, db_path):
+    fetch_exit = consumer_main(["--fetch-michigan-csv", str(cache_dir)])
+    if fetch_exit:
+        return fetch_exit
+    table_1 = cache_dir / "table_1.csv"
+    table_5 = cache_dir / "table_5.csv"
+    import_exit = consumer_main(["--michigan-csv-import", str(table_1), str(table_5), "--db-path", str(db_path)])
+    if import_exit:
+        return import_exit
+    fred_fetch_exit = consumer_main(["--fetch-fred-csv", str(cache_dir)])
+    if fred_fetch_exit:
+        return fred_fetch_exit
+    return consumer_main(["--fred-csv-import", str(cache_dir), "--db-path", str(db_path)])
+
+
 def _planned_tasks(
     args,
     benchmark_main,
@@ -69,12 +84,12 @@ def _planned_tasks(
         tasks.append(("rates_fred", rates_main, ["--skip-credit-workbook"]))
     if not args.skip_consumer_sentiment:
         cache_dir = _consumer_cache_dir()
-        tasks.append(
-            (
-                "consumer_michigan_fetch",
-                consumer_main,
-                ["--fetch-michigan-csv", str(cache_dir)],
-            )
+        consumer_db_path = ROOT / "data" / "local_system" / "market_data.sqlite"
+        tasks.append((
+            "consumer_sentiment",
+            lambda argv: _combined_consumer_refresh(consumer_main, cache_dir, consumer_db_path),
+            [],
+        ))
         )
         table_1 = cache_dir / "table_1.csv"
         table_5 = cache_dir / "table_5.csv"

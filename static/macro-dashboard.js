@@ -2793,7 +2793,7 @@
               ${metricDetail("pmi", "Services PMI")}
               ${metricDetail("business_activity", "Business Activity")}
               ${metricDetail("new_orders", "New Orders")}
-              ${metricDetail("order_backlog", "Order Backlog")}
+              ${signal.backlog_confirmation === "unavailable" ? "" : metricDetail("order_backlog", "Order Backlog")}
             </tbody>
           </table>
         </div>

@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT))
 from app.db import ism_surveys
 from app.db import us_rates_liquidity
 from app.tools import ism_workbook
+from app.tools import ism_services_industry
 
 DEFAULT_WORKBOOK_PATH = (
     ROOT / "data" / "materials" / "Video 08" / "ISM_NonManufacturing_Index.xlsx"
@@ -72,7 +73,9 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
     rows = []
     last_industry = None
     index_by_key = {}
-    for row in sheet.iter_rows(min_row=2, values_only=True):
+    for row_index, row in enumerate(
+        sheet.iter_rows(min_row=2, values_only=True), start=2
+    ):
         industry_raw = row[0]
         date_val = row[1]
         comment_raw = row[2]
@@ -81,11 +84,21 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
         if not last_industry:
             continue
         if not ism_workbook.is_date(date_val):
-            continue
+            raise ValueError(
+                f"services comment row {row_index} has invalid date: {date_val!r}"
+            )
         report_month = ism_workbook.iso_date(date_val)
+        try:
+            ism_services_industry.normalize_industry(last_industry)
+        except ValueError as exc:
+            raise ValueError(
+                f"services comment row {row_index} has non-services industry: {last_industry}"
+            ) from exc
+        if not comment_raw or not str(comment_raw).strip():
+            raise ValueError(f"services comment row {row_index} has empty comment")
+        comment_text = str(comment_raw).strip()
         key = (last_industry, report_month)
         index_by_key[key] = index_by_key.get(key, -1) + 1
-        comment_text = str(comment_raw).strip() if comment_raw is not None else ""
         rows.append(
             {
                 "survey_type": "services",
@@ -102,6 +115,15 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
 def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
     ism_surveys.init_db(con)
     parsed_list = parse_workbook(workbook_path)
+    rankings = parse_sector_rankings(workbook_path)
+    comments = parse_industry_comments(workbook_path)
+    for ranking in rankings:
+        try:
+            ism_services_industry.normalize_industry(ranking["industry"])
+        except ValueError as exc:
+            raise ValueError(
+                f"services ranking has non-services industry: {ranking['industry']}"
+            ) from exc
     results = {}
     for parsed in parsed_list:
         sid = parsed["series"]["series_id"]
@@ -111,11 +133,9 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
             parsed["points"],
         )
         results[sid] = saved["points"]
-    rankings = parse_sector_rankings(workbook_path)
     results["ism_services_industry_rankings"] = ism_surveys.insert_industry_rankings(
         con, "services", rankings
     )
-    comments = parse_industry_comments(workbook_path)
     results["ism_services_industry_comments"] = ism_surveys.insert_industry_comments(
         con, "services", comments
     )

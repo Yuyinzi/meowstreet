@@ -120,6 +120,11 @@ def main(argv=None, fetch=None):
 
             parsed = ism_services_report.parse_report(html, url, fetched_at, "ismworld")
 
+            if parsed["report"]["report_month"] != report_month:
+                raise ValueError(
+                    f"ism services report month mismatch: requested {report_month}, got {parsed['report']['report_month']}"
+                )
+
             growth_cycle.replace_ism_report_source_snapshot(
                 con,
                 {
