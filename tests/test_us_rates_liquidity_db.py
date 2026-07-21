@@ -1339,7 +1339,6 @@ def test_replace_ism_industry_rankings_saves_and_loads_latest_rows(tmp_path):
     assert saved == 3
     assert growth_cycle.load_latest_ism_industry_rankings(con) == [
         {
-            "survey_type": "manufacturing",
             "date": "2026-06-01",
             "industry": "Computer & Electronic Products",
             "direction": "growth",
@@ -1347,7 +1346,6 @@ def test_replace_ism_industry_rankings_saves_and_loads_latest_rows(tmp_path):
             "source": "ISM_Manufacturing_Index.xlsx",
         },
         {
-            "survey_type": "manufacturing",
             "date": "2026-06-01",
             "industry": "Furniture & Related Products",
             "direction": "contraction",
