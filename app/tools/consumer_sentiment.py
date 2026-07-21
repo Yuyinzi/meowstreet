@@ -231,9 +231,17 @@ def build_detail(points_by_id, policy_context=None):
     ):
         pts = points_by_id.get(series_key, [])
         changes = []
-        for i in range(1, len(pts)):
-            change = round(pts[i]["value"] - pts[i - 1]["value"], 1)
-            changes.append({"date": pts[i]["date"], "point_change": change})
+        for i, pt in enumerate(pts):
+            if i == 0:
+                continue
+            expected_prior = _previous_calendar_month(pt["date"])
+            prior_match = next(
+                (p for p in reversed(pts[:i]) if p["date"] == expected_prior),
+                None,
+            )
+            if prior_match:
+                change = round(pt["value"] - prior_match["value"], 1)
+                changes.append({"date": pt["date"], "point_change": change})
         point_changes[series_key] = changes
     capacity = {}
     for sid in CAPACITY_SERIES_IDS:

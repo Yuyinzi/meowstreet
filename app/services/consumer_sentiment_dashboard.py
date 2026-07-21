@@ -13,20 +13,24 @@ def load_overview(con):
 def _real_rate(treasury_points, cpi_points):
     if not treasury_points or not cpi_points:
         return None
-    treasury_latest = treasury_points[-1]
-    cpi_latest = cpi_points[-1]
-    return round(treasury_latest["value"] - cpi_latest["value"], 2)
+    return round(treasury_points[-1]["value"] - cpi_points[-1]["value"], 2)
+
+
+def _load_fomc_tone(con):
+    try:
+        return us_rates_liquidity.load_latest_combined_fomc_policy_read(
+            con, date.today().isoformat()
+        )
+    except Exception:
+        return None
 
 
 def load_detail(con):
     points = consumer_sentiment.load_detail_series(con)
-    treasury_points = macro_indicators.load_macro_indicator_points(con, "treasury_10y")
+    treasury_points = us_rates_liquidity.load_rate_points(con, "treasury_10y")
     cpi_points = macro_indicators.load_macro_indicator_points(con, "cpi_yoy")
-    tips_points = macro_indicators.load_macro_indicator_points(con, "tips_10y")
-    as_of_date = date.today().isoformat()
-    fomc_tone = us_rates_liquidity.load_latest_combined_fomc_policy_read(
-        con, as_of_date
-    )
+    tips_points = us_rates_liquidity.load_rate_points(con, "tips_10y")
+    fomc_tone = _load_fomc_tone(con)
     context = {
         "treasury_10y": treasury_points,
         "cpi_yoy": cpi_points,

@@ -163,6 +163,10 @@ def load_macro_indicator_points_for_series(con, series_ids):
 
 
 def replace_macro_indicator_points_batch(con, series_points_list):
-    for item in series_points_list:
-        _replace_single(con, item["series"], item["points"])
-    con.commit()
+    try:
+        for item in series_points_list:
+            _replace_single(con, item["series"], item["points"])
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise

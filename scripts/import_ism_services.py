@@ -88,11 +88,20 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
                     f"services comment row {row_index} has non-services industry: {raw_name}"
                 ) from exc
         if not last_industry:
+            has_content = date_val is not None or (
+                comment_raw is not None and str(comment_raw).strip()
+            )
+            if has_content:
+                raise ValueError(
+                    "services comment row has content but no preceding industry assignment"
+                )
             continue
         if not ism_workbook.is_date(date_val):
-            raise ValueError(
-                f"services comment row {row_index} has invalid date: {date_val!r}"
-            )
+            if date_val is not None:
+                raise ValueError(
+                    f"services comment row {row_index} has invalid date: {date_val!r}"
+                )
+            continue
         report_month = ism_workbook.iso_date(date_val)
         if not comment_raw or not str(comment_raw).strip():
             raise ValueError(f"services comment row {row_index} has empty comment")
@@ -126,6 +135,14 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
             raise ValueError(
                 f"services ranking has non-services industry: {ranking['industry']}"
             ) from exc
+    seen_ranking = set()
+    for ranking in rankings:
+        key = (ranking["date"], ranking["industry"])
+        if key in seen_ranking:
+            raise ValueError(
+                f"services ranking has duplicate industry {ranking['industry']} for {ranking['date']} after normalization"
+            )
+        seen_ranking.add(key)
     con.execute("begin")
     try:
         results = {}
