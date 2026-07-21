@@ -110,25 +110,13 @@ def main(argv=None, fetch=None):
     for report_month in report_months:
         month = month_name(report_month)
         url = report_url(month)
+        html = None
+        source_hash = None
+        fetched_at = None
         try:
             fetched_at = fetched_at_now()
             html = fetch(url)
             source_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
-
-            growth_cycle.replace_ism_report_source_snapshot(
-                con,
-                {
-                    "source_url": url,
-                    "source_name": "ismworld",
-                    "source_hash": source_hash,
-                    "fetched_at": fetched_at,
-                    "raw_html": html,
-                    "parse_status": "fetched",
-                    "parse_error": None,
-                    "report_id": None,
-                    "report_month": None,
-                },
-            )
 
             parsed = ism_services_report.parse_report(html, url, fetched_at, "ismworld")
 
@@ -166,20 +154,21 @@ def main(argv=None, fetch=None):
                 f"rankings={result['rankings']} comments={result['comments']}"
             )
         except Exception as exc:
-            growth_cycle.replace_ism_report_source_snapshot(
-                con,
-                {
-                    "source_url": url,
-                    "source_name": "ismworld",
-                    "source_hash": source_hash,
-                    "fetched_at": fetched_at,
-                    "raw_html": html,
-                    "parse_status": "failed",
-                    "parse_error": str(exc),
-                    "report_id": None,
-                    "report_month": None,
-                },
-            )
+            if html is not None:
+                growth_cycle.replace_ism_report_source_snapshot(
+                    con,
+                    {
+                        "source_url": url,
+                        "source_name": "ismworld",
+                        "source_hash": source_hash,
+                        "fetched_at": fetched_at,
+                        "raw_html": html,
+                        "parse_status": "failed",
+                        "parse_error": str(exc),
+                        "report_id": None,
+                        "report_month": None,
+                    },
+                )
             print(
                 f"ism_services_report/{url}: failed - {exc}",
                 file=sys.stderr,

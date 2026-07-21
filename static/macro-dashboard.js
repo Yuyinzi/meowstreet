@@ -2720,12 +2720,31 @@
       stale_periods: "Stale",
     };
 
-    function metricDetail(key) {
+    function metricDetail(key, label) {
       const m = metrics[key];
       if (!m) return "";
+      const value = m.value != null ? m.value.toFixed(1) : "n/a";
       const change = m.point_change != null ? (m.point_change > 0 ? "+" : "") + m.point_change.toFixed(1) : "n/a";
-      return `<tr><td>${escapeHtml(m.level || key)}</td><td>${escapeHtml(change)}</td><td>${escapeHtml(m.momentum || "")}</td></tr>`;
+      return `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td><td>${escapeHtml(m.level || "")}</td><td>${escapeHtml(change)}</td><td>${escapeHtml(m.momentum || "")}</td></tr>`;
     }
+
+    function renderIndustryRow(ind) {
+      const dc = ind.direction_change || "—";
+      const rc = ind.rank_change != null ? (ind.rank_change > 0 ? "+" : "") + ind.rank_change : "—";
+      const streak = ind.positive_streak ? ind.positive_streak + "m+" : ind.negative_streak ? ind.negative_streak + "m-" : "—";
+      const firstComment = (ind.comments || []).length > 0 ? ind.comments[0] : null;
+      return `<div class="ism-industry-row">
+        <span class="ism-industry-name">${escapeHtml(ind.industry)}</span>
+        <span class="ism-industry-direction ism-direction-${ind.direction}">${escapeHtml(ind.direction)}</span>
+        <span class="ism-industry-rank">${escapeHtml(String(ind.rank))}</span>
+        <span class="ism-industry-dir-change">${escapeHtml(dc)}</span>
+        <span class="ism-industry-rank-change">${escapeHtml(rc)}</span>
+        <span class="ism-industry-streak">${escapeHtml(streak)}</span>
+        ${firstComment != null ? `<span class="ism-industry-comment">${escapeHtml(firstComment)}</span>` : ""}
+      </div>`;
+    }
+
+    const breadth = industries.breadth || {};
 
     body.innerHTML = `
       ${renderGrowthCycleRangeControl()}
@@ -2738,30 +2757,19 @@
           <p class="ism-signal-badge ism-signal-${signal.state || "unknown"}">${escapeHtml(stateLabels[signal.state] || signal.state || "Unknown")}</p>
           <p class="ism-signal-backlog">Backlog: ${escapeHtml(signal.backlog_confirmation || "unavailable")}</p>
           <table class="ism-latest-table">
-            <thead><tr><th>Metric</th><th>Change</th><th>Momentum</th></tr></thead>
+            <thead><tr><th>Metric</th><th>Value</th><th>Level</th><th>Change</th><th>Momentum</th></tr></thead>
             <tbody>
-              ${metricDetail("pmi")}
-              ${metricDetail("business_activity")}
-              ${metricDetail("new_orders")}
-              ${metricDetail("order_backlog")}
+              ${metricDetail("pmi", "Services PMI")}
+              ${metricDetail("business_activity", "Business Activity")}
+              ${metricDetail("new_orders", "New Orders")}
+              ${metricDetail("order_backlog", "Order Backlog")}
             </tbody>
           </table>
         </div>
         <div class="ism-industry-breadth">
-          <h4>Industries (${escapeHtml(String(industries.breadth ? industries.breadth.growth_count : 0))} growing / ${escapeHtml(String(industries.breadth ? industries.breadth.total_count : 0))} total)</h4>
+          <h4>Industries (${escapeHtml(String(breadth.growth_count ?? 0))} growing / ${escapeHtml(String(breadth.total_count ?? 0))} total) <span class="ism-breadth-status ism-breadth-${breadth.status || "unknown"}">${escapeHtml(breadth.status || "unavailable")}</span></h4>
           <div class="ism-industry-list">
-            ${(industries.industries || []).map((ind) =>
-              `<div class="ism-industry-row">
-                <span class="ism-industry-name">${escapeHtml(ind.industry)}</span>
-                <span class="ism-industry-direction ism-direction-${ind.direction}">${escapeHtml(ind.direction)}</span>
-                <span class="ism-industry-rank">${escapeHtml(String(ind.rank))}</span>
-                <span class="ism-industry-change">${ind.rank_change != null ? (ind.rank_change > 0 ? "+" : "") + ind.rank_change : "—"}</span>
-                <span class="ism-industry-streak">${ind.positive_streak ? ind.positive_streak + "m+" : ind.negative_streak ? ind.negative_streak + "m-" : "—"}</span>
-                ${(ind.comments || []).slice(0, 1).map((c) =>
-                  `<span class="ism-industry-comment">${escapeHtml(c.comment_text)}</span>`
-                ).join("")}
-              </div>`
-            ).join("")}
+            ${(industries.industries || []).map(renderIndustryRow).join("")}
           </div>
         </div>
       </div>

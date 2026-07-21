@@ -87,13 +87,13 @@ def build_signal(points_by_series_id):
     else:
         state = "mixed"
     backlog = metrics["order_backlog"]
-    backlog_state = (
-        backlog["level"]
-        .replace("expanding", "supports_growth")
-        .replace("contracting", "supports_contraction")
-        if backlog
-        else "unavailable"
-    )
+    backlog_state = "unavailable"
+    if backlog and backlog["period"] == pmi["period"]:
+        backlog_state = (
+            backlog["level"]
+            .replace("expanding", "supports_growth")
+            .replace("contracting", "supports_contraction")
+        )
     return {
         "version": "ism_services_signal_v1",
         "state": state,

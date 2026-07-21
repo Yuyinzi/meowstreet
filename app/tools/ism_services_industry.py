@@ -124,9 +124,11 @@ def _latest_month_date(rankings):
     return max(row["date"] for row in rankings) if rankings else None
 
 
-def build_breadth(rankings):
-    latest = _latest_month_date(rankings)
-    if latest is None:
+def build_breadth(rankings, max_date=None):
+    latest = max_date or _latest_month_date(rankings)
+    if latest is None or (
+        max_date and not any(row["date"] == max_date for row in rankings)
+    ):
         return {
             "growth_count": 0,
             "contraction_count": 0,
