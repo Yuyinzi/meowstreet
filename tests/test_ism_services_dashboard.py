@@ -291,3 +291,170 @@ def test_load_detail_empty_for_stale_signal(tmp_path):
 
     assert result["signal"]["state"] == "stale_periods"
     assert result["industries"]["industries"] == []
+
+
+def test_load_detail_caps_rankings_at_signal_period(tmp_path):
+    macro_indicators.connect(tmp_path / "market.sqlite").close()
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    growth_cycle_db.init_db(con)
+    for series_id, value in {
+        "ism_services_pmi": 54.0,
+        "ism_services_business_activity": 55.0,
+        "ism_services_new_orders": 55.1,
+        "ism_services_order_backlog": 52.0,
+    }.items():
+        us_rates_liquidity.replace_macro_indicator_points(
+            con,
+            {
+                "series_id": series_id,
+                "title": series_id,
+                "units": "index",
+                "source": "test",
+            },
+            [{"date": "2026-06-01", "value": value, "source": "test"}],
+        )
+    ism_surveys.replace_industry_rankings(
+        con,
+        "services",
+        [
+            {
+                "date": "2026-05-01",
+                "industry": "Construction",
+                "direction": "contraction",
+                "rank": -2,
+                "source": "test",
+            },
+            {
+                "date": "2026-06-01",
+                "industry": "Construction",
+                "direction": "growth",
+                "rank": 12,
+                "source": "test",
+            },
+            {
+                "date": "2026-07-01",
+                "industry": "Construction",
+                "direction": "growth",
+                "rank": 15,
+                "source": "test",
+            },
+        ],
+    )
+    result = ism_services_dashboard.load_detail(con)
+    con.close()
+
+    industries = {ind["industry"]: ind for ind in result["industries"]["industries"]}
+    construction = industries["Construction"]
+    assert construction["latest_date"] == "2026-06-01"
+    assert construction["direction_change"] == "contraction_to_growth"
+    assert construction["rank_change"] == 14
+    assert construction["positive_streak"] == 1
+
+
+def test_load_detail_excludes_future_rankings(tmp_path):
+    macro_indicators.connect(tmp_path / "market.sqlite").close()
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    growth_cycle_db.init_db(con)
+    for series_id, values in {
+        "ism_services_pmi": [54.0],
+        "ism_services_business_activity": [55.0],
+        "ism_services_new_orders": [55.1],
+        "ism_services_order_backlog": [52.0],
+    }.items():
+        us_rates_liquidity.replace_macro_indicator_points(
+            con,
+            {
+                "series_id": series_id,
+                "title": series_id,
+                "units": "index",
+                "source": "test",
+            },
+            [{"date": "2026-06-01", "value": values[0], "source": "test"}],
+        )
+    ism_surveys.replace_industry_rankings(
+        con,
+        "services",
+        [
+            {
+                "date": "2026-06-01",
+                "industry": "Construction",
+                "direction": "growth",
+                "rank": 1,
+                "source": "test",
+            },
+            {
+                "date": "2026-07-01",
+                "industry": "Retail Trade",
+                "direction": "growth",
+                "rank": 2,
+                "source": "test",
+            },
+        ],
+    )
+    result = ism_services_dashboard.load_detail(con)
+    con.close()
+
+    assert result["signal"]["period"] == "2026-06-01"
+    industries = {ind["industry"] for ind in result["industries"]["industries"]}
+    assert "Construction" in industries
+    assert "Retail Trade" not in industries
+
+
+def test_load_detail_scopes_comments_to_signal_period(tmp_path):
+    macro_indicators.connect(tmp_path / "market.sqlite").close()
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    growth_cycle_db.init_db(con)
+    for series_id, values in {
+        "ism_services_pmi": [54.0],
+        "ism_services_business_activity": [55.0],
+        "ism_services_new_orders": [55.1],
+        "ism_services_order_backlog": [52.0],
+    }.items():
+        us_rates_liquidity.replace_macro_indicator_points(
+            con,
+            {
+                "series_id": series_id,
+                "title": series_id,
+                "units": "index",
+                "source": "test",
+            },
+            [{"date": "2026-06-01", "value": values[0], "source": "test"}],
+        )
+    ism_surveys.replace_industry_rankings(
+        con,
+        "services",
+        [
+            {
+                "date": "2026-06-01",
+                "industry": "Construction",
+                "direction": "growth",
+                "rank": 1,
+                "source": "test",
+            }
+        ],
+    )
+    ism_surveys.insert_industry_comments(
+        con,
+        "services",
+        [
+            {
+                "report_month": "2026-05-01",
+                "industry": "Construction",
+                "comment_index": 0,
+                "comment_text": "May comment",
+                "source": "test",
+            },
+            {
+                "report_month": "2026-06-01",
+                "industry": "Construction",
+                "comment_index": 0,
+                "comment_text": "June comment",
+                "source": "test",
+            },
+        ],
+    )
+    result = ism_services_dashboard.load_detail(con)
+    con.close()
+
+    construction = result["industries"]["industries"][0]
+    assert construction["comments"] == ["June comment"]

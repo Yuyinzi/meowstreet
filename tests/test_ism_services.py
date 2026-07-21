@@ -94,3 +94,14 @@ def test_build_detail_contains_expected_keys():
     assert "latest" in detail
     assert "signal" in detail
     assert "industries" in detail
+
+
+def test_build_signal_backlog_stale_when_period_differs():
+    by_series = {
+        "ism_services_pmi": [{"date": "2026-06-01", "value": 54.0}],
+        "ism_services_business_activity": [{"date": "2026-06-01", "value": 55.0}],
+        "ism_services_new_orders": [{"date": "2026-06-01", "value": 55.1}],
+        "ism_services_order_backlog": [{"date": "2026-05-01", "value": 52.0}],
+    }
+    signal = ism_services.build_signal(by_series)
+    assert signal["backlog_confirmation"] == "unavailable"

@@ -101,6 +101,10 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
                 raise ValueError(
                     f"services comment row {row_index} has invalid date: {date_val!r}"
                 )
+            if comment_raw is not None and str(comment_raw).strip():
+                raise ValueError(
+                    "services comment row has no date but has comment text"
+                )
             continue
         report_month = ism_workbook.iso_date(date_val)
         if not comment_raw or not str(comment_raw).strip():
