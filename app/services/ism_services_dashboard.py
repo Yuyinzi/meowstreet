@@ -41,7 +41,13 @@ def load_detail(con):
     comments = ism_surveys.load_industry_comments(
         con, "services", report_month=signal_period
     )
-    industries = ism_services_industry.build_industry_payload(rankings, comments)
+    if signal_period is None:
+        industries = {"industries": []}
+    else:
+        period_rankings = [r for r in rankings if r["date"] == signal_period]
+        industries = ism_services_industry.build_industry_payload(
+            period_rankings, comments
+        )
     industries["breadth"] = ism_services_industry.build_breadth(
         rankings, max_date=signal_period
     )

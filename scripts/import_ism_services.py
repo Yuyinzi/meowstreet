@@ -80,7 +80,13 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
         date_val = row[1]
         comment_raw = row[2]
         if industry_raw is not None:
-            last_industry = str(industry_raw).strip()
+            raw_name = str(industry_raw).strip()
+            try:
+                last_industry = ism_services_industry.normalize_industry(raw_name)
+            except ValueError as exc:
+                raise ValueError(
+                    f"services comment row {row_index} has non-services industry: {raw_name}"
+                ) from exc
         if not last_industry:
             continue
         if not ism_workbook.is_date(date_val):
@@ -88,12 +94,6 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
                 f"services comment row {row_index} has invalid date: {date_val!r}"
             )
         report_month = ism_workbook.iso_date(date_val)
-        try:
-            ism_services_industry.normalize_industry(last_industry)
-        except ValueError as exc:
-            raise ValueError(
-                f"services comment row {row_index} has non-services industry: {last_industry}"
-            ) from exc
         if not comment_raw or not str(comment_raw).strip():
             raise ValueError(f"services comment row {row_index} has empty comment")
         comment_text = str(comment_raw).strip()
@@ -119,26 +119,39 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
     comments = parse_industry_comments(workbook_path)
     for ranking in rankings:
         try:
-            ism_services_industry.normalize_industry(ranking["industry"])
+            ranking["industry"] = ism_services_industry.normalize_industry(
+                ranking["industry"]
+            )
         except ValueError as exc:
             raise ValueError(
                 f"services ranking has non-services industry: {ranking['industry']}"
             ) from exc
-    results = {}
-    for parsed in parsed_list:
-        sid = parsed["series"]["series_id"]
-        saved = us_rates_liquidity.insert_macro_indicator_points(
-            con,
-            parsed["series"],
-            parsed["points"],
+    con.execute("begin")
+    try:
+        results = {}
+        for parsed in parsed_list:
+            sid = parsed["series"]["series_id"]
+            saved = us_rates_liquidity.insert_macro_indicator_points(
+                con,
+                parsed["series"],
+                parsed["points"],
+                commit=False,
+            )
+            results[sid] = saved["points"]
+        results["ism_services_industry_rankings"] = (
+            ism_surveys.insert_industry_rankings(
+                con, "services", rankings, commit=False
+            )
         )
-        results[sid] = saved["points"]
-    results["ism_services_industry_rankings"] = ism_surveys.insert_industry_rankings(
-        con, "services", rankings
-    )
-    results["ism_services_industry_comments"] = ism_surveys.insert_industry_comments(
-        con, "services", comments
-    )
+        results["ism_services_industry_comments"] = (
+            ism_surveys.insert_industry_comments(
+                con, "services", comments, commit=False
+            )
+        )
+        con.commit()
+    except BaseException:
+        con.rollback()
+        raise
     return results
 
 

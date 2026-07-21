@@ -79,7 +79,7 @@ def replace_industry_rankings(con, survey_type, rows):
     return len(rows)
 
 
-def insert_industry_rankings(con, survey_type, rows):
+def insert_industry_rankings(con, survey_type, rows, commit=True):
     for row in rows:
         con.execute(
             "insert or ignore into ism_industry_rankings(survey_type, date, industry, direction, rank, source) values (?, ?, ?, ?, ?, ?)",
@@ -92,7 +92,8 @@ def insert_industry_rankings(con, survey_type, rows):
                 row["source"],
             ),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return len(rows)
 
 
@@ -174,7 +175,7 @@ def replace_industry_comments(con, survey_type, rows):
     return len(rows)
 
 
-def insert_industry_comments(con, survey_type, rows):
+def insert_industry_comments(con, survey_type, rows, commit=True):
     for row in rows:
         con.execute(
             "insert or ignore into ism_industry_comments(survey_type, report_month, industry, comment_index, comment_text, source) values (?, ?, ?, ?, ?, ?)",
@@ -187,7 +188,8 @@ def insert_industry_comments(con, survey_type, rows):
                 row["source"],
             ),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return len(rows)
 
 

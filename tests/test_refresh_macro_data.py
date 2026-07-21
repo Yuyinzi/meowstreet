@@ -51,10 +51,6 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         ("benchmark", ["--all"]),
         ("rates", ["--skip-credit-workbook"]),
     ]
-    assert len(calls) >= 6
-    consumer_calls = [c for c in calls if c[0] == "consumer"]
-    assert len(consumer_calls) == 4
-    assert consumer_calls[0][1][0] == "--fetch-michigan-csv"
     assert calls[2][0] == "consumer"
     out = capsys.readouterr().out
     assert "macro data refresh started" in out

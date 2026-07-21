@@ -6,7 +6,9 @@ from app.services import consumer_sentiment_dashboard
 
 @pytest.fixture
 def consumer_con(tmp_path):
-    con = consumer_sentiment.connect(tmp_path / "market.sqlite")
+    db_path = tmp_path / "market.sqlite"
+    macro_indicators.connect(db_path).close()
+    con = us_rates_liquidity.connect(db_path)
     yield con
     con.close()
 

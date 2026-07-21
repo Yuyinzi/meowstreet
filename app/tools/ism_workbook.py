@@ -125,6 +125,11 @@ def parse_ranking_workbook(workbook_path, survey_type, survey_label, layout):
             rank = sheet.cell(row_index, status_column + 1).value
             direction = _direction(raw_direction)
             if direction is None:
+                rank_present = rank not in (None, "")
+                if rank_present:
+                    raise ValueError(
+                        f"{survey_label} ranking has unknown direction {raw_direction!r} for {name} in {month} with rank {rank}"
+                    )
                 if isinstance(raw_direction, str):
                     raise ValueError(
                         f"{survey_label} ranking has unknown direction {raw_direction!r} for {name} in {month}"

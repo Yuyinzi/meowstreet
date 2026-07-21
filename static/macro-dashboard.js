@@ -2908,11 +2908,15 @@
     if (!section) return;
     const head = section.querySelector(".relationship-head");
     if (state.consumerSentimentError) {
-      section.innerHTML = `${head.outerHTML}<p class="growth-empty">Failed to load consumer sentiment data.</p>`;
+      section.innerHTML = `${head.outerHTML}<div class="growth-empty" aria-live="polite">
+        Failed to load consumer sentiment data.
+        <button type="button" class="retry-link" data-retry-consumer>Retry</button>
+      </div>`;
+      section.querySelector("[data-retry-consumer]")?.addEventListener("click", loadConsumerSentiment);
       return;
     }
     if (!state.consumerSentiment) {
-      section.innerHTML = `${head.outerHTML}<div class="consumer-loading">Loading consumer sentiment data...</div>`;
+      section.innerHTML = `${head.outerHTML}<div class="consumer-loading" aria-busy="true">Loading consumer sentiment data...</div>`;
       return;
     }
     const cardHtml = window.consumerSentimentUi.renderCard(state.consumerSentiment, {
@@ -2949,19 +2953,9 @@
     body.innerHTML = `<p class="status">Loading consumer detail...</p>`;
     loadConsumerSentimentDetail()
       .then((payload) => {
-        body.innerHTML = `
-          <div class="ism-detail-sections">
-            <h3>Consumer Sentiment Detail</h3>
-            <p>Evidence: ${escapeHtml(payload.summary.evidence_state)}</p>
-            <p>As of: ${escapeHtml(payload.summary.as_of || "N/A")}</p>
-            <p>Aggregate: ${escapeHtml(payload.summary.aggregate.value)}</p>
-            <p>Expectations: ${escapeHtml(payload.summary.expectations.value)}</p>
-            <p>Current Conditions: ${escapeHtml(payload.summary.current_conditions.value)}</p>
-            <p>Capacity: ${escapeHtml(payload.summary.capacity_completeness)}</p>
-          </div>
-        `;
+        window.consumerSentimentUi.renderDetailInPanel(body, payload);
       })
-      .catch((error) => {
+      .catch(() => {
         body.innerHTML = `<p class="status">Failed to load consumer detail.</p>`;
       });
   }

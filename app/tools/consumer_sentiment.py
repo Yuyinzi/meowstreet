@@ -12,17 +12,33 @@ CAPACITY_SERIES_IDS = [
 ]
 
 
+def _previous_calendar_month(date_str):
+    year_s, month_s, _ = date_str.split("-")
+    year = int(year_s)
+    month = int(month_s)
+    if month == 1:
+        return f"{year - 1:04d}-12-01"
+    return f"{year:04d}-{month - 1:02d}-01"
+
+
 def _latest_point(points):
     return points[-1] if points else None
 
 
-def _prior_point(points):
-    return points[-2] if len(points) >= 2 else None
+def _prior_calendar_month_point(points):
+    if len(points) < 2:
+        return None
+    current = points[-1]
+    expected_prior = _previous_calendar_month(current["date"])
+    for point in reversed(points[:-1]):
+        if point["date"] == expected_prior:
+            return point
+    return None
 
 
 def _point_change(points):
     current = _latest_point(points)
-    prior = _prior_point(points)
+    prior = _prior_calendar_month_point(points)
     if current is None or prior is None:
         return None
     return round(current["value"] - prior["value"], 1)
@@ -130,7 +146,9 @@ def build_summary(points_by_id, policy_context=None):
         if pts:
             latest_months.append(pts[-1]["date"])
     common_month = (
-        max(set(latest_months), key=latest_months.count) if latest_months else None
+        max(latest_months, key=lambda d: (latest_months.count(d), d))
+        if latest_months
+        else None
     )
 
     reasons = []
