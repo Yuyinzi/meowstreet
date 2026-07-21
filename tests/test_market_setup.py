@@ -496,3 +496,348 @@ class TestMissingAndPendingData:
             result.get("agreements", []) + result.get("conflicts", [])
         )
         assert "GDP" not in reasons_text
+
+
+class TestMarketConclusion:
+    def setup_method(self):
+        self.market_env_bull = market_setup.build_market_environment(
+            _market_phase_payload("bull_market")
+        )
+        self.market_env_bear = market_setup.build_market_environment(
+            _market_phase_payload("bear_market")
+        )
+        self.market_env_missing = market_setup.build_market_environment(None)
+
+    def _setup_result(self, setup_type):
+        return {
+            "setup_type": setup_type,
+            "portfolio_posture": "neutral",
+            "trade_implications": [],
+            "agreements": [],
+            "conflicts": [],
+        }
+
+    def test_contraction_risk_bull_market_produces_macro_risk_rising(self):
+        setup_result = self._setup_result("contraction_risk_aligned")
+        conclusion = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bull, "neutral"
+        )
+        assert conclusion["code"] == "macro_risk_rising_bull_intact"
+        assert conclusion["title"] == "Macro Risk Rising; Bull Market Intact"
+        assert "bull market" in conclusion["title"].lower()
+
+    def test_contraction_risk_bear_market_produces_market_confirmed(self):
+        setup_result = self._setup_result("contraction_risk_aligned")
+        conclusion = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bear, "short_or_neutral"
+        )
+        assert conclusion["code"] == "contraction_risk_market_confirmed"
+
+    def test_growth_aligned_bear_market_produces_macro_improving_trend_not_reversed(
+        self,
+    ):
+        setup_result = self._setup_result("growth_and_conditions_aligned")
+        conclusion = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bear, "neutral"
+        )
+        assert conclusion["code"] == "macro_improving_trend_not_reversed"
+        assert "bear market" in conclusion["title"].lower()
+
+    def test_growth_aligned_bull_market_produces_trend_aligned(self):
+        setup_result = self._setup_result("growth_and_conditions_aligned")
+        conclusion = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bull, "long"
+        )
+        assert conclusion["code"] == "growth_and_trend_aligned"
+        assert "long" in conclusion["summary"].lower()
+
+    def test_insufficient_data_produces_fallback_conclusion(self):
+        setup_result = self._setup_result("insufficient_data")
+        conclusion = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bull, "neutral"
+        )
+        assert conclusion["code"] == "insufficient_evidence"
+
+    def test_unresolved_macro_conflict_produces_evidence_unresolved(self):
+        setup_result = self._setup_result("unresolved_macro_conflict")
+        conclusion = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bull, "cautious"
+        )
+        assert conclusion["code"] == "evidence_unresolved"
+
+    def test_growth_liquidity_conflict_produces_mismatch(self):
+        setup_result = self._setup_result("growth_liquidity_conflict")
+        conclusion = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bull, "neutral"
+        )
+        assert conclusion["code"] == "growth_liquidity_mismatch"
+
+    def test_weak_growth_policy_support_bull_produces_policy_offset(self):
+        setup_result = self._setup_result("weak_growth_with_policy_support")
+        conclusion = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bull, "neutral_to_long"
+        )
+        assert conclusion["code"] == "weak_growth_policy_offset"
+
+    def test_weak_growth_policy_support_bear_produces_policy_support_bear_trend(self):
+        setup_result = self._setup_result("weak_growth_with_policy_support")
+        conclusion = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bear, "neutral"
+        )
+        assert conclusion["code"] == "policy_support_bear_trend"
+
+    def test_identical_inputs_produce_identical_conclusion(self):
+        setup_result = self._setup_result("contraction_risk_aligned")
+        c1 = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bull, "neutral"
+        )
+        c2 = market_setup.build_market_conclusion(
+            setup_result, self.market_env_bull, "neutral"
+        )
+        assert c1 == c2
+
+
+class TestPortfolioGuidance:
+    def test_long_posture(self):
+        guidance = market_setup.build_portfolio_guidance("long")
+        assert guidance["posture"] == "long"
+        assert len(guidance["actions"]) > 0
+        assert len(guidance["avoid"]) > 0
+        assert "short" not in " ".join(guidance["actions"]).lower()
+
+    def test_neutral_posture_does_not_recommend_short(self):
+        guidance = market_setup.build_portfolio_guidance("neutral")
+        assert guidance["posture"] == "neutral"
+        text = " ".join(guidance["actions"]).lower()
+        assert "short" not in text
+        assert "long" not in text
+
+    def test_cautious_posture(self):
+        guidance = market_setup.build_portfolio_guidance("cautious")
+        assert guidance["posture"] == "cautious"
+        assert any("selective" in a.lower() for a in guidance["actions"])
+
+    def test_short_or_neutral_posture(self):
+        guidance = market_setup.build_portfolio_guidance("short_or_neutral")
+        assert guidance["posture"] == "short_or_neutral"
+        text = " ".join(guidance["actions"] + guidance["avoid"]).lower()
+        assert "short" in text
+
+    def test_identical_inputs_produce_identical_guidance(self):
+        g1 = market_setup.build_portfolio_guidance("neutral")
+        g2 = market_setup.build_portfolio_guidance("neutral")
+        assert g1 == g2
+
+
+class TestEvidenceChain:
+    def _expected_growth(self, direction="rising", reason="ISM is above 50 and rising"):
+        return {
+            "state": "expansion_rising",
+            "expected_gdp_direction": direction,
+            "reason": reason,
+            "data_status": "available",
+            "evidence_links": ["ism_manufacturing"],
+        }
+
+    def _financial_conditions(self, state="confirms_expansion", vix=15.0):
+        return {
+            "state": state,
+            "reasons": ["Yield curve is steep"],
+            "evidence_links": ["yield_curve", "credit_conditions"],
+            "details": {"vix": vix, "credit_conditions_status": "healthy"},
+        }
+
+    def _policy_response(self, state="support_confirmed"):
+        return {
+            "state": state,
+            "reasons": ["Dovish FOMC tone with expanding M2"],
+            "evidence_links": ["fomc_policy"],
+            "details": {"m2_status": "expanding", "fomc_tone": "dovish"},
+        }
+
+    def test_growth_path_group_has_expected_structure(self):
+        eg = self._expected_growth("rising")
+        chain = market_setup.build_evidence_chain(
+            eg, self._financial_conditions(), self._policy_response()
+        )
+        growth = next(g for g in chain if g["id"] == "growth_path")
+        assert growth["id"] == "growth_path"
+        assert growth["finding"]
+        assert growth["implication"]
+        assert growth["tone"] == "constructive"
+        assert len(growth["evidence"]) > 0
+        assert "ism_manufacturing" in growth["evidence_links"]
+
+    def test_financial_group_has_expected_structure(self):
+        fc = self._financial_conditions("confirms_contraction_risk")
+        chain = market_setup.build_evidence_chain(
+            self._expected_growth(), fc, self._policy_response()
+        )
+        fin = next(g for g in chain if g["id"] == "financial_confirmation")
+        assert fin["tone"] == "defensive"
+        assert fin["finding"]
+        assert fin["implication"]
+
+    def test_policy_group_has_expected_structure(self):
+        pr = self._policy_response("restrictive_confirmed")
+        chain = market_setup.build_evidence_chain(
+            self._expected_growth(), self._financial_conditions(), pr
+        )
+        pol = next(g for g in chain if g["id"] == "policy_constraint")
+        assert pol["tone"] == "defensive"
+        assert pol["finding"]
+        assert pol["implication"]
+
+    def test_missing_input_does_not_produce_group(self):
+        eg = self._expected_growth()
+        eg["data_status"] = "missing"
+        chain = market_setup.build_evidence_chain(
+            eg, self._financial_conditions(), self._policy_response()
+        )
+        ids = [g["id"] for g in chain]
+        assert "growth_path" not in ids
+
+
+class TestConvictionLimits:
+    def _default_inputs(self):
+        return {
+            "market_environment": market_setup.build_market_environment(
+                _market_phase_payload("bull_market")
+            ),
+            "financial_conditions": market_setup.build_financial_conditions(
+                _rates_liquidity_payload("flat", "risk_rising", vix=12.0, real_rate=2.3)
+            ),
+            "policy_response": market_setup.build_policy_response(
+                _fomc_tone_headline("hawkish", "hold"),
+                _m2_headline("expanding"),
+                _inflation_context("above_target"),
+                _fed_balance_sheet(),
+            ),
+            "setup_type_result": {
+                "setup_type": "contraction_risk_aligned",
+                "portfolio_posture": "short_or_neutral",
+                "trade_implications": [],
+                "agreements": [],
+                "conflicts": [],
+            },
+        }
+
+    def test_expanding_m2_appears_as_conviction_limit(self):
+        inputs = self._default_inputs()
+        limits = market_setup.build_conviction_limits(**inputs)
+        assert limits is not None
+        findings = [o["finding"] for o in limits["offsets"]]
+        assert any("M2" in f for f in findings)
+
+    def test_low_vix_appears_as_offset_when_conditions_defensive(self):
+        inputs = self._default_inputs()
+        limits = market_setup.build_conviction_limits(**inputs)
+        assert limits is not None
+        findings = [o["finding"] for o in limits["offsets"]]
+        assert any("VIX" in f for f in findings)
+
+    def test_bull_market_appears_as_offset_for_contraction_setup(self):
+        inputs = self._default_inputs()
+        limits = market_setup.build_conviction_limits(**inputs)
+        assert limits is not None
+        findings = [o["finding"] for o in limits["offsets"]]
+        assert any("bull market" in f.lower() for f in findings)
+
+    def test_no_limits_when_all_aligned(self):
+        inputs = self._default_inputs()
+        inputs["policy_response"] = market_setup.build_policy_response(
+            _fomc_tone_headline("dovish", "cut"),
+            _m2_headline("expanding"),
+            _inflation_context("near_target"),
+            _fed_balance_sheet(),
+        )
+        inputs["setup_type_result"]["setup_type"] = "growth_and_conditions_aligned"
+        inputs["market_environment"] = market_setup.build_market_environment(
+            _market_phase_payload("bull_market")
+        )
+        limits = market_setup.build_conviction_limits(**inputs)
+        # Still may have M2 and VIX offsets, but no market-phase offset
+        phase_offsets = [
+            o
+            for o in (limits["offsets"] if limits else [])
+            if "bull market" in o.get("finding", "").lower()
+        ]
+        assert len(phase_offsets) == 0
+
+
+class TestConfirmationConditions:
+    def test_has_both_directions(self):
+        conditions = market_setup.build_confirmation_conditions(
+            {"setup_type": "contraction_risk_aligned"},
+            {"state": "bull_market"},
+        )
+        assert len(conditions["more_defensive"]) > 0
+        assert len(conditions["more_constructive"]) > 0
+
+    def test_more_defensive_includes_bear_market(self):
+        conditions = market_setup.build_confirmation_conditions(
+            {"setup_type": "contraction_risk_aligned"},
+            {"state": "bull_market"},
+        )
+        assert any("bear" in c.lower() for c in conditions["more_defensive"])
+
+    def test_more_constructive_includes_ism_improve(self):
+        conditions = market_setup.build_confirmation_conditions(
+            {"setup_type": "contraction_risk_aligned"},
+            {"state": "bull_market"},
+        )
+        assert any("ISM" in c for c in conditions["more_constructive"])
+
+    def test_identical_inputs_produce_identical_conditions(self):
+        c1 = market_setup.build_confirmation_conditions(
+            {"setup_type": "contraction_risk_aligned"},
+            {"state": "bull_market"},
+        )
+        c2 = market_setup.build_confirmation_conditions(
+            {"setup_type": "contraction_risk_aligned"},
+            {"state": "bull_market"},
+        )
+        assert c1 == c2
+
+
+class TestNarrativeDeterminism:
+    def test_identical_inputs_produce_identical_narrative_fields(self):
+        inputs = {
+            "market_phase_payload": _market_phase_payload("bull_market"),
+            "ism_macro_signal": _ism_macro_signal(
+                "expansion_rising", "supports_growth"
+            ),
+            "growth_cycle_bias_evidence": None,
+            "rates_liquidity_payload": _rates_liquidity_payload("steep", "healthy"),
+            "fomc_tone": _fomc_tone_headline("dovish", "cut"),
+            "m2_headline": _m2_headline("expanding"),
+            "inflation_context": _inflation_context("near_target"),
+            "fed_balance_sheet": _fed_balance_sheet(),
+        }
+        from copy import deepcopy
+
+        r1 = market_setup.build_market_setup(**deepcopy(inputs))
+        r2 = market_setup.build_market_setup(**deepcopy(inputs))
+        assert r1["market_conclusion"] == r2["market_conclusion"]
+        assert r1["portfolio_guidance"] == r2["portfolio_guidance"]
+        assert r1["evidence_chain"] == r2["evidence_chain"]
+        assert r1["confirmation_conditions"] == r2["confirmation_conditions"]
+
+    def test_narrative_fields_present_in_full_build(self):
+        result = market_setup.build_market_setup(
+            market_phase_payload=_market_phase_payload("bull_market"),
+            ism_macro_signal=_ism_macro_signal("expansion_rising", "supports_growth"),
+            rates_liquidity_payload=_rates_liquidity_payload("steep", "healthy"),
+            fomc_tone=_fomc_tone_headline("dovish", "cut"),
+            m2_headline=_m2_headline("expanding"),
+            inflation_context=_inflation_context("near_target"),
+            fed_balance_sheet=_fed_balance_sheet(),
+        )
+        assert "market_conclusion" in result
+        assert "portfolio_guidance" in result
+        assert "evidence_chain" in result
+        assert "conviction_limits" in result
+        assert "confirmation_conditions" in result
+        assert result["market_conclusion"]["code"]
+        assert result["portfolio_guidance"]["posture"] == "long"
+        assert len(result["evidence_chain"]) == 3

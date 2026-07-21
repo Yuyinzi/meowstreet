@@ -715,6 +715,401 @@ def build_idea_generation_clues(ism_industry_analysis):
     }
 
 
+_CONCLUSION_MAP = [
+    {
+        "setup_types": {"growth_and_conditions_aligned"},
+        "market_phase": "bull_market",
+        "code": "growth_and_trend_aligned",
+        "title": "Growth and market trend aligned",
+        "summary": "Manufacturing expansion, supportive financial conditions, and a bullish market trend all support broad-market long exposure.",
+    },
+    {
+        "setup_types": {"growth_and_conditions_aligned"},
+        "market_phase": "bear_market",
+        "code": "macro_improving_trend_not_reversed",
+        "title": "Macro improvement; bear market not reversed",
+        "summary": "Growth and conditions are improving, but the S&P 500 bear market has not yet reversed. Posture is neutral until the price trend confirms the macro improvement.",
+    },
+    {
+        "setup_types": {"contraction_risk_aligned"},
+        "market_phase": "bear_market",
+        "code": "contraction_risk_market_confirmed",
+        "title": "Contraction risk confirmed by market trend",
+        "summary": "Weakening growth, deteriorating financial conditions, and a bear market phase all confirm elevated downside risk.",
+    },
+    {
+        "setup_types": {"contraction_risk_aligned"},
+        "market_phase": "bull_market",
+        "code": "macro_risk_rising_bull_intact",
+        "title": "Macro Risk Rising; Bull Market Intact",
+        "summary": "Growth and financial conditions are deteriorating, but the S&P 500 bull phase and liquidity offsets do not confirm a broad-market short setup.",
+    },
+    {
+        "setup_types": {"weak_growth_with_policy_support"},
+        "market_phase": "bull_market",
+        "code": "weak_growth_policy_offset",
+        "title": "Weak growth offset by policy and liquidity support",
+        "summary": "Growth is weak but active policy support and liquidity offset the downside.",
+    },
+    {
+        "setup_types": {"weak_growth_with_policy_support"},
+        "market_phase": "bear_market",
+        "code": "policy_support_bear_trend",
+        "title": "Policy support present; bear trend not reversed",
+        "summary": "Policy and liquidity are supportive, but the bear market prevents a long-biased posture.",
+    },
+    {
+        "setup_types": {"growth_liquidity_conflict"},
+        "code": "growth_liquidity_mismatch",
+        "title": "Growth improving but liquidity remains restrictive",
+        "summary": "Growth direction is improving, but restrictive financial conditions and policy constrain the outlook.",
+    },
+    {
+        "setup_types": {"unresolved_macro_conflict"},
+        "code": "evidence_unresolved",
+        "title": "Evidence remains unresolved",
+        "summary": "Growth, financial conditions, and policy are sending conflicting signals.",
+    },
+    {
+        "setup_types": {"insufficient_data"},
+        "code": "insufficient_evidence",
+        "title": "Insufficient evidence for a directional posture",
+        "summary": "Key inputs are missing or unavailable. Posture is neutral until sufficient data is loaded.",
+    },
+]
+
+
+_GUIDANCE_TEMPLATES = {
+    "long": {
+        "actions": [
+            "Deploy broad-market long exposure with trend confirmation",
+            "Favor industries with persistent manufacturing growth",
+            "Monitor ISM, credit conditions, and market phase for deterioration",
+        ],
+        "avoid": [
+            "Aggressive short positioning while growth and conditions support expansion",
+        ],
+    },
+    "neutral": {
+        "actions": [
+            "Maintain balanced exposure with no net directional bias",
+            "Inspect individual positions for standalone merit",
+        ],
+        "avoid": [
+            "Building large directional positions without clearer alignment",
+        ],
+    },
+    "neutral_to_long": {
+        "actions": [
+            "Maintain a modest long bias while waiting for macro confirmation",
+            "Inspect growth-aligned industries for selective long candidates",
+        ],
+        "avoid": [
+            "Aggressive broad-market short positions",
+        ],
+    },
+    "short_or_neutral": {
+        "actions": [
+            "Favor short or market-neutral positioning",
+            "Research contracting manufacturing industries for short candidates",
+        ],
+        "avoid": [
+            "Aggressive broad-market long additions without clear macro improvement",
+        ],
+    },
+    "cautious": {
+        "actions": [
+            "Keep broad-market exposure selective and well-hedged",
+            "Balance long positions with relative shorts or hedges",
+            "Wait for clearer macro alignment before committing material capital",
+        ],
+        "avoid": [
+            "Aggressive directional bets while evidence is unresolved",
+        ],
+    },
+}
+
+_CONFIRMATION_MORE_DEFENSIVE = [
+    "S&P 500 enters a bear-market phase",
+    "ISM falls below 50 with weakening New Orders",
+    "Credit stress broadens or deteriorates further",
+    "VIX rises and confirms risk repricing",
+    "M2 or the Fed balance sheet turns restrictive",
+]
+
+_CONFIRMATION_MORE_CONSTRUCTIVE = [
+    "ISM and New Orders improve",
+    "Credit spreads stabilize or narrow",
+    "Real rates fall",
+    "Policy becomes less restrictive",
+]
+
+
+def _growth_path_evidence(expected_growth):
+    direction = expected_growth.get("expected_gdp_direction")
+    state = expected_growth.get("state", "unavailable")
+    if state == "unavailable" or expected_growth.get("data_status") == "missing":
+        return None
+    if direction == "rising":
+        finding = "Manufacturing expansion is confirmed"
+        implication = "GDP and earnings growth are likely to accelerate"
+        tone = "constructive"
+    elif direction == "slowing":
+        finding = "Manufacturing expansion is slowing"
+        implication = "GDP and earnings growth are more likely to slow than accelerate"
+        tone = "caution"
+    elif direction == "falling":
+        finding = "Manufacturing is contracting"
+        implication = "GDP and earnings are at risk of declining"
+        tone = "defensive"
+    elif direction == "improving":
+        finding = "Manufacturing contraction is showing early improvement"
+        implication = "The worst of the macro deterioration may be passing"
+        tone = "caution"
+    elif direction == "rebound_risk":
+        finding = "Manufacturing may be near a cyclical trough"
+        implication = "A rebound would challenge bearish positioning"
+        tone = "caution"
+    elif direction == "stable":
+        finding = "Manufacturing momentum is flat"
+        implication = "Growth path lacks a clear near-term catalyst"
+        tone = "caution"
+    else:
+        finding = "Manufacturing direction is unclear"
+        implication = "Growth path requires more data to assess"
+        tone = "caution"
+    evidence = [expected_growth.get("reason", "")]
+    impulse = expected_growth.get("growth_impulse")
+    if impulse:
+        evidence.append(f"Growth impulse: {impulse}")
+    return {
+        "id": "growth_path",
+        "title": "Growth path",
+        "finding": finding,
+        "implication": implication,
+        "tone": tone,
+        "evidence": [e for e in evidence if e],
+        "evidence_links": expected_growth.get("evidence_links", []),
+    }
+
+
+def _financial_evidence(financial_conditions):
+    state = financial_conditions.get("state", "unavailable")
+    if state == "unavailable":
+        return None
+    if state == "confirms_expansion":
+        finding = "Financial conditions support an expansion view"
+        implication = "Curve and credit are aligned with constructive risk-taking"
+        tone = "constructive"
+    elif state == "confirms_contraction_risk":
+        finding = "Financial conditions confirm rising downside risk"
+        implication = "The macro environment warrants defensive positioning"
+        tone = "defensive"
+    elif state == "transition_warning":
+        finding = "Financial conditions are flashing a transition warning"
+        implication = "The expansion cycle may be losing momentum"
+        tone = "caution"
+    elif state == "mixed":
+        finding = "Financial conditions are sending mixed signals"
+        implication = "Curve and credit disagree — selectivity is warranted"
+        tone = "caution"
+    else:
+        return None
+    return {
+        "id": "financial_confirmation",
+        "title": "Financial confirmation",
+        "finding": finding,
+        "implication": implication,
+        "tone": tone,
+        "evidence": list(financial_conditions.get("reasons", [])),
+        "evidence_links": financial_conditions.get("evidence_links", []),
+    }
+
+
+def _policy_evidence(policy_response):
+    state = policy_response.get("state", "unavailable")
+    if state == "unavailable":
+        return None
+    if state == "restrictive_confirmed":
+        finding = "Monetary policy is restrictive"
+        implication = "The Fed has less room to offset weaker growth"
+        tone = "defensive"
+    elif state == "support_constrained":
+        finding = "Policy support is constrained by above-target inflation"
+        implication = "Policy flexibility is limited while inflation remains elevated"
+        tone = "caution"
+    elif state in ("support_confirmed", "support_possible"):
+        finding = "Monetary policy is supportive"
+        implication = "Liquidity conditions are favorable for risk-taking"
+        tone = "constructive"
+    elif state == "policy_liquidity_conflict":
+        finding = "Policy tone and liquidity conditions are diverging"
+        implication = "The policy environment lacks clear directional alignment"
+        tone = "caution"
+    elif state == "no_clear_response":
+        finding = "Policy signal is unclear"
+        implication = "Policy direction needs more data"
+        tone = "caution"
+    else:
+        return None
+    return {
+        "id": "policy_constraint",
+        "title": "Policy constraint",
+        "finding": finding,
+        "implication": implication,
+        "tone": tone,
+        "evidence": list(policy_response.get("reasons", [])),
+        "evidence_links": policy_response.get("evidence_links", []),
+    }
+
+
+def build_evidence_chain(expected_growth, financial_conditions, policy_response):
+    groups = []
+    for fn in (_growth_path_evidence, _financial_evidence, _policy_evidence):
+        group = fn(
+            expected_growth
+            if fn is _growth_path_evidence
+            else financial_conditions
+            if fn is _financial_evidence
+            else policy_response
+        )
+        if group:
+            groups.append(group)
+    return groups
+
+
+def _conviction_limit_market_phase(market_environment, setup_type_result):
+    market_state = market_environment.get("state")
+    raw_setup = setup_type_result.get("setup_type")
+    if market_state == "bull_market" and raw_setup in (
+        "contraction_risk_aligned",
+        "unresolved_macro_conflict",
+    ):
+        return {
+            "finding": "S&P 500 remains in a bull market",
+            "effect": "Prevents an aggressive broad-market short posture",
+            "evidence_links": ["market_phase"],
+        }
+    if market_state == "bear_market" and raw_setup in (
+        "growth_and_conditions_aligned",
+        "weak_growth_with_policy_support",
+    ):
+        return {
+            "finding": "S&P 500 is in a bear market",
+            "effect": "Prevents an aggressive broad-market long posture",
+            "evidence_links": ["market_phase"],
+        }
+    return None
+
+
+def _conviction_limit_m2(policy_response):
+    m2_status = policy_response.get("details", {}).get("m2_status")
+    if m2_status in ("expanding", "shock"):
+        return {
+            "finding": "M2 money supply is expanding",
+            "effect": "Provides a liquidity offset to restrictive policy concerns",
+            "evidence_links": ["m2_money_supply"],
+        }
+    return None
+
+
+def _conviction_limit_vix(financial_conditions):
+    details = financial_conditions.get("details", {})
+    vix = details.get("vix")
+    fc_state = financial_conditions.get("state")
+    if (
+        vix is not None
+        and vix < 20
+        and fc_state in ("confirms_contraction_risk", "transition_warning", "mixed")
+    ):
+        return {
+            "finding": "VIX remains low",
+            "effect": "Acute market stress is not yet being priced",
+            "evidence_links": ["vix"],
+        }
+    return None
+
+
+def build_conviction_limits(
+    market_environment, financial_conditions, policy_response, setup_type_result
+):
+    offsets = []
+    offset = _conviction_limit_market_phase(market_environment, setup_type_result)
+    if offset:
+        offsets.append(offset)
+    offset = _conviction_limit_m2(policy_response)
+    if offset:
+        offsets.append(offset)
+    offset = _conviction_limit_vix(financial_conditions)
+    if offset:
+        offsets.append(offset)
+    if not offsets:
+        return None
+    limit_count = len(offsets)
+    if limit_count >= 2:
+        summary = "The macro warning is not fully confirmed by price, liquidity, or volatility"
+    elif any(o.get("evidence_links") == ["market_phase"] for o in offsets):
+        summary = "The market-phase trend does not confirm the macro warning"
+    elif any(o.get("evidence_links") == ["m2_money_supply"] for o in offsets):
+        summary = "Liquidity conditions do not uniformly confirm the macro view"
+    else:
+        summary = "Volatility conditions do not confirm acute stress"
+    return {
+        "title": "Why conviction is limited",
+        "summary": summary,
+        "offsets": offsets,
+    }
+
+
+def build_market_conclusion(setup_type_result, market_environment, reconciled_posture):
+    setup_type = setup_type_result.get("setup_type", "insufficient_data")
+    market_state = market_environment.get("state")
+    for entry in _CONCLUSION_MAP:
+        if setup_type not in entry["setup_types"]:
+            continue
+        market_match = entry.get("market_phase")
+        if market_match and market_state != market_match:
+            continue
+        return {
+            "code": entry["code"],
+            "title": entry["title"],
+            "summary": entry["summary"],
+        }
+    return {
+        "code": "unresolved",
+        "title": "Evidence is unresolved",
+        "summary": "The combination of inputs does not match a defined scenario. Posture is cautious.",
+    }
+
+
+def build_portfolio_guidance(reconciled_posture):
+    template = _GUIDANCE_TEMPLATES.get(
+        reconciled_posture, _GUIDANCE_TEMPLATES["neutral"]
+    )
+    summary_map = {
+        "long": "Broad long exposure is supported by aligned growth, conditions, and price trend",
+        "neutral": "Conflicting signals or insufficient evidence support a neutral posture",
+        "neutral_to_long": "A mildly long-biased posture is supported by policy and liquidity offsets",
+        "short_or_neutral": "A short-biased posture is supported by deteriorating macro conditions",
+        "cautious": "Avoid aggressive directional exposure while macro evidence is in conflict",
+    }
+    return {
+        "posture": reconciled_posture,
+        "summary": summary_map.get(reconciled_posture, "Maintain a selective posture"),
+        "actions": template["actions"],
+        "avoid": template["avoid"],
+    }
+
+
+def build_confirmation_conditions(setup_type_result, market_environment):
+    more_defensive = list(_CONFIRMATION_MORE_DEFENSIVE)
+    more_constructive = list(_CONFIRMATION_MORE_CONSTRUCTIVE)
+    return {
+        "more_defensive": more_defensive,
+        "more_constructive": more_constructive,
+    }
+
+
 def _oldest_period(*periods):
     candidates = [p for p in periods if p is not None]
     if not candidates:
@@ -759,6 +1154,20 @@ def build_market_setup(
     all_agreements = list(setup_type_result.get("agreements", [])) + posture_agreements
     all_conflicts = list(setup_type_result.get("conflicts", [])) + posture_conflicts
 
+    evidence_chain = build_evidence_chain(
+        expected_growth, financial_conditions, policy_response
+    )
+    conviction_limits = build_conviction_limits(
+        market_env, financial_conditions, policy_response, setup_type_result
+    )
+    market_conclusion = build_market_conclusion(
+        setup_type_result, market_env, reconciled_posture
+    )
+    portfolio_guidance = build_portfolio_guidance(reconciled_posture)
+    confirmation_conditions = build_confirmation_conditions(
+        setup_type_result, market_env
+    )
+
     missing_inputs = []
     if market_env.get("data_status") == "missing":
         missing_inputs.append("Market phase (S&P 500)")
@@ -791,6 +1200,11 @@ def build_market_setup(
         "idea_generation": idea_gen,
         "agreements": all_agreements,
         "conflicts": all_conflicts,
+        "market_conclusion": market_conclusion,
+        "portfolio_guidance": portfolio_guidance,
+        "evidence_chain": evidence_chain,
+        "conviction_limits": conviction_limits,
+        "confirmation_conditions": confirmation_conditions,
         "missing_inputs": missing_inputs,
         "pending_confirmations": ["ISM Services", "Labor trend", "Consumer indicators"],
         "limitations": [

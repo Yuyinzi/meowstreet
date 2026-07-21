@@ -2675,7 +2675,7 @@ def test_market_setup_hero_preserves_compound_macro_conclusion():
           missing_inputs: [],
           market_conclusion: {
             code: "macro_risk_rising_bull_intact",
-            title: "Macro risk rising; bull market intact",
+            title: "Macro Risk Rising; Bull Market Intact",
             summary: "Macro risk is rising, but the bull phase remains intact."
           },
           portfolio_guidance: { actions: ["Maintain balanced exposure"], avoid: [] },
@@ -2685,7 +2685,7 @@ def test_market_setup_hero_preserves_compound_macro_conclusion():
         });
         const html = hooks.renderDecisionHero(presentation);
         console.log(JSON.stringify({
-          headline: html.includes("Macro risk rising; bull market intact"),
+          headline: html.includes("Macro Risk Rising; Bull Market Intact"),
           phase: html.includes("Bull Market"),
           setup: html.includes("Contraction Risk Aligned"),
           posture: html.includes("Neutral")
