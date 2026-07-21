@@ -166,6 +166,20 @@ def main(argv=None, fetch=None):
                 f"rankings={result['rankings']} comments={result['comments']}"
             )
         except Exception as exc:
+            growth_cycle.replace_ism_report_source_snapshot(
+                con,
+                {
+                    "source_url": url,
+                    "source_name": "ismworld",
+                    "source_hash": source_hash,
+                    "fetched_at": fetched_at,
+                    "raw_html": html,
+                    "parse_status": "failed",
+                    "parse_error": str(exc),
+                    "report_id": None,
+                    "report_month": None,
+                },
+            )
             print(
                 f"ism_services_report/{url}: failed - {exc}",
                 file=sys.stderr,

@@ -434,7 +434,7 @@ def normalize_ism_services(payload):
                 "services_supplier_deliveries": _float_value(
                     payload, "supplier_deliveries"
                 ),
-                "services_backlog_orders": _float_value(payload, "backlog_orders"),
+                "services_backlog_orders": _float_value(payload, "order_backlog"),
             }
         }
     }
@@ -1863,7 +1863,14 @@ def build_growth_cycle_dashboard_payload(
         build_gdp_expectations_headline(growth_cycle, ism_macro_signal=ism_macro_signal)
     )
     sections = build_growth_cycle_sections(growth_cycle, headline)
-    evidence = build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal)
+    services_signal_state = (
+        ism_services_card.get("segments", {}).get("services_cycle", {}).get("state")
+        if ism_services_card
+        else None
+    )
+    evidence = build_growth_cycle_bias_evidence(
+        growth_cycle, ism_macro_signal, services_signal_state=services_signal_state
+    )
     growth_cycle["growth_cycle_bias_evidence"] = evidence
     if evidence["status"] == "available":
         growth_cycle["growth_cycle_bias"] = evidence["bias"]
@@ -1966,20 +1973,21 @@ def _ism_manufacturing_bias(ism_macro_signal):
     return "neutral"
 
 
-def _services_confirmation(
-    has_services, services_pmi, services_business_activity, services_new_orders
-):
-    if not has_services:
+_SERVICES_SIGNAL_TO_CONFIRMATION = {
+    "supports_growth": "supports_long",
+    "growth_caution": "conflicting",
+    "supports_contraction": "supports_short",
+    "contraction_easing": "conflicting",
+    "mixed": "conflicting",
+    "pending_inputs": "unavailable",
+    "stale_periods": "conflicting",
+}
+
+
+def _services_confirmation(services_signal_state=None):
+    if not services_signal_state or services_signal_state == "pending_inputs":
         return "unavailable"
-    if _above_50(services_pmi) and (
-        _above_50(services_business_activity) or _above_50(services_new_orders)
-    ):
-        return "supports_long"
-    if _below_50(services_pmi) and (
-        _below_50(services_business_activity) or _below_50(services_new_orders)
-    ):
-        return "supports_short"
-    return "conflicting"
+    return _SERVICES_SIGNAL_TO_CONFIRMATION.get(services_signal_state, "conflicting")
 
 
 def _labor_confirmation(has_labor, labor_trend):
@@ -2008,19 +2016,14 @@ def _confirmation_status(bias, confirmations):
     return "mixed"
 
 
-def build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal):
-    services_pmi = growth_cycle.get("services_pmi")
-    services_business_activity = growth_cycle.get("services_business_activity")
-    services_new_orders = growth_cycle.get("services_new_orders")
+def build_growth_cycle_bias_evidence(
+    growth_cycle, ism_macro_signal, services_signal_state=None
+):
     labor_trend = growth_cycle.get("labor_trend")
-
-    has_services = services_pmi is not None and (
-        services_business_activity is not None or services_new_orders is not None
-    )
     has_labor = labor_trend is not None and labor_trend != "unknown"
 
     missing_inputs = []
-    if not has_services:
+    if not services_signal_state or services_signal_state == "pending_inputs":
         missing_inputs.append("ISM Services")
     if not has_labor:
         missing_inputs.append("Labor trend")
@@ -2037,7 +2040,7 @@ def build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal):
             "ism_contribution": ism_contribution,
             "components": {
                 "ism_manufacturing": ism_manufacturing_component,
-                "ism_services": "available" if has_services else "unavailable",
+                "ism_services": services_signal_state or "unavailable",
                 "labor": labor_trend if has_labor else "unavailable",
             },
             "missing_inputs": missing_inputs,
@@ -2049,12 +2052,7 @@ def build_growth_cycle_bias_evidence(growth_cycle, ism_macro_signal):
     ism_manufacturing_component = growth_impulse or "unavailable"
     ism_contribution = _ISM_CONTRIBUTION_MAP.get(growth_impulse, "unavailable")
     bias = _ism_manufacturing_bias(ism_macro_signal)
-    services_confirmation = _services_confirmation(
-        has_services,
-        services_pmi,
-        services_business_activity,
-        services_new_orders,
-    )
+    services_confirmation = _services_confirmation(services_signal_state)
     labor_confirmation = _labor_confirmation(has_labor, labor_trend)
     confirmation_status = _confirmation_status(
         bias, (services_confirmation, labor_confirmation)

@@ -2,6 +2,86 @@
   grid-column: span 1;
 }
 
+.ism-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.ism-state-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ism-state-badge-supports_growth { background: #d1fae5; color: #065f46; }
+.ism-state-badge-growth_caution { background: #fef3c7; color: #92400e; }
+.ism-state-badge-supports_contraction { background: #fee2e2; color: #991b1b; }
+.ism-state-badge-contraction_easing { background: #fef3c7; color: #92400e; }
+.ism-state-badge-mixed { background: #f3f4f6; color: #374151; }
+.ism-state-badge-pending_inputs { background: #e5e7eb; color: #6b7280; }
+.ism-state-badge-stale_periods { background: #fef3c7; color: #92400e; }
+
+.ism-signal-backlog {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7280);
+  margin-top: 0.25rem;
+}
+
+.ism-detail-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem;
+}
+
+.ism-latest-table thead th {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #6b7280);
+  padding: 0.25rem 0.5rem;
+  border-bottom: 2px solid var(--border-color, #e5e7eb);
+  text-align: left;
+  font-weight: 600;
+}
+
+.ism-latest-table thead th:last-child,
+.ism-latest-table tbody td:last-child {
+  text-align: right;
+}
+
+.ism-industry-change {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  min-width: 2rem;
+  text-align: right;
+}
+
+.ism-industry-streak {
+  font-size: 0.6875rem;
+  color: var(--text-muted, #6b7280);
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+.ism-industry-comment {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7280);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 12rem;
+}
+
 .ism-signal-badge {
   display: inline-block;
   padding: 0.125rem 0.5rem;

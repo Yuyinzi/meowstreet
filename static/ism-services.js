@@ -7,9 +7,24 @@
     const activity = segments.business_activity || {};
     const orders = segments.new_orders || {};
     const breadth = segments.industry_breadth || {};
+    const state = cycle.state || "pending";
+    const stateLabels = {
+      supports_growth: "Growth",
+      growth_caution: "Caution",
+      supports_contraction: "Contraction",
+      contraction_easing: "Easing",
+      mixed: "Mixed",
+      pending_inputs: "Pending",
+      stale_periods: "Stale",
+    };
+    const stateLabel = stateLabels[state] || "Unknown";
     return `
-      <button class="m2-card ism-card ism-services-card ism-card-button"
-              type="button" data-growth-cycle-detail-id="ism_services">
+      <button class="m2-card ism-card ism-services-card ism-card-button ism-state-${escapeHtml(state)}"
+              type="button" data-growth-cycle-detail-id="ism_services" aria-label="ISM Services: ${escapeHtml(stateLabel)}">
+        <div class="ism-card-header">
+          <span class="ism-card-title">ISM Services</span>
+          <span class="ism-state-badge ism-state-badge-${escapeHtml(state)}">${escapeHtml(stateLabel)}</span>
+        </div>
         <div class="ism-metric-band">
           <div><span>Services Cycle</span><strong>${escapeHtml(formatIndex(cycle.value))}</strong><small>${escapeHtml(cycle.label || "Missing")}</small></div>
           <div><span>Business Activity</span><strong>${escapeHtml(formatIndex(activity.value))}</strong><small>${escapeHtml(activity.trend || "Unavailable")}</small></div>

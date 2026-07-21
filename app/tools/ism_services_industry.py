@@ -80,11 +80,12 @@ def _match_comments(industry, comments):
 
 
 def _direction_change_from_rows(rows):
-    for index in range(len(rows) - 1, 0, -1):
-        prev = rows[index - 1]
-        curr = rows[index]
-        if prev["direction"] != curr["direction"]:
-            return _direction_change(prev["direction"], curr["direction"])
+    if len(rows) < 2:
+        return None
+    prev = rows[-2]
+    curr = rows[-1]
+    if prev["direction"] != curr["direction"]:
+        return _direction_change(prev["direction"], curr["direction"])
     return None
 
 

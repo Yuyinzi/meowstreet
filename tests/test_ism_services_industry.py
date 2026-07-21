@@ -169,7 +169,7 @@ def test_build_industry_payload_streak_counted_from_latest():
     result = ism_services_industry.build_industry_payload(rankings, [])
     construction = result["industries"][0]
 
-    assert construction["direction_change"] == "contraction_to_growth"
+    assert construction["direction_change"] is None
     assert construction["rank_change"] == 7
     assert construction["positive_streak"] == 2
 

@@ -81,7 +81,7 @@ def test_normalize_ism_services_maps_components_to_growth_cycle_fields():
         "new_orders": "52.7",
         "employment": "50.6",
         "supplier_deliveries": "49.9",
-        "backlog_orders": "51.3",
+        "order_backlog": "51.3",
     }
 
     assert macro_growth_cycle.normalize_ism_services(payload) == {
@@ -2344,7 +2344,9 @@ def test_build_growth_cycle_bias_evidence_long_scenario():
         "labor_trend": "stable",
     }
     signal = _bias_ism_signal("supports_growth")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(
+        growth_cycle, signal, services_signal_state="supports_growth"
+    )
     assert result["version"] == "growth_cycle_bias_v3"
     assert result["status"] == "available"
     assert result["bias"] == "long"
@@ -2433,7 +2435,9 @@ def test_build_growth_cycle_bias_evidence_is_usable_when_labor_missing():
         "services_new_orders": 52.0,
     }
     signal = _bias_ism_signal("supports_growth")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
+    result = macro_growth_cycle.build_growth_cycle_bias_evidence(
+        growth_cycle, signal, services_signal_state="supports_growth"
+    )
     assert result["status"] == "available"
     assert result["bias"] == "long"
     assert result["confirmation_status"] == "partial"

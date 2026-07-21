@@ -33,6 +33,12 @@ METRIC_PATTERNS = {
     "ism_services_order_backlog": r"Backlog of Orders Index(?:\s+registered|.*?to)\s+(\d+(?:\.\d+)?)\s+percent",
 }
 
+_REQUIRED_METRICS = {
+    "ism_services_pmi",
+    "ism_services_business_activity",
+    "ism_services_new_orders",
+}
+
 
 def report_month_from_title(text):
     match = re.search(
@@ -61,10 +67,10 @@ def parse_metrics(text):
         match = re.search(pattern, text)
         if match:
             metrics[series_id] = float(match.group(1))
-    missing = [s for s in METRIC_PATTERNS if s not in metrics]
+    missing = [s for s in _REQUIRED_METRICS if s not in metrics]
     if missing:
         raise ValueError(
-            f"ism services report metrics are missing: {', '.join(sorted(set(missing)))}"
+            f"ism services report required metrics are missing: {', '.join(sorted(set(missing)))}"
         )
     return metrics
 
@@ -102,18 +108,19 @@ def parse_rankings(text, report_month):
         r"The\s+\w+\s+(?:services\s+)?industr(?:y|ies)(?:\s+in contraction|\s+reporting contraction(?:\s+in\s+[A-Za-z]+)?)\s+(?:is|are):?\s+(.*?)\.",
         text,
     )
-    if not growth_match or not contraction_match:
-        raise ValueError("ism services report industry rankings are missing")
-    growth_industries = [
-        ism_services_industry.normalize_industry(name)
-        for name in split_industries(growth_match.group(1))
-    ]
-    contraction_industries = [
-        ism_services_industry.normalize_industry(name)
-        for name in split_industries(contraction_match.group(1))
-    ]
-    rows = ranking_rows(report_month, growth_industries, "growth")
-    rows.extend(ranking_rows(report_month, contraction_industries, "contraction"))
+    rows = []
+    if growth_match:
+        growth_industries = [
+            ism_services_industry.normalize_industry(name)
+            for name in split_industries(growth_match.group(1))
+        ]
+        rows.extend(ranking_rows(report_month, growth_industries, "growth"))
+    if contraction_match:
+        contraction_industries = [
+            ism_services_industry.normalize_industry(name)
+            for name in split_industries(contraction_match.group(1))
+        ]
+        rows.extend(ranking_rows(report_month, contraction_industries, "contraction"))
     return rows
 
 
