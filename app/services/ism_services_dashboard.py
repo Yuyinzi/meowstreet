@@ -11,7 +11,6 @@ def load_overview(con):
     signal = ism_services.build_signal(points)
     rankings = ism_surveys.load_industry_rankings(con, "services", limit_months=6)
     comments = ism_surveys.load_industry_comments(con, "services")
-    industry_payload = ism_services_industry.build_industry_payload(rankings, comments)
     breadth = ism_services_industry.build_breadth(rankings)
     return {
         "payload": ism_services.build_latest_payload(points),

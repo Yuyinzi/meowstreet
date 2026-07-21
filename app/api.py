@@ -135,13 +135,6 @@ ISM_MANUFACTURING_SERIES_IDS = [
     "ism_manufacturing_imports",
 ]
 
-ISM_SERVICES_SERIES_IDS = [
-    "ism_services_pmi",
-    "ism_services_business_activity",
-    "ism_services_new_orders",
-    "ism_services_order_backlog",
-]
-
 app = FastAPI(title="Meowstreet")
 
 if STATIC_DIR.exists():
