@@ -2098,6 +2098,13 @@
           html += '<li class="ms-conviction-item">';
           html += '<span class="ms-conviction-finding">' + escapeHtml(offset.finding) + '</span>';
           if (offset.effect) html += '<span class="ms-conviction-effect">' + escapeHtml(offset.effect) + '</span>';
+          if (offset.links && offset.links.length) {
+            html += '<div class="ms-evidence-links">';
+            offset.links.forEach(function(link) {
+              html += renderEvidenceLink(link);
+            });
+            html += '</div>';
+          }
           html += '</li>';
         });
         html += '</ul>';
@@ -2153,8 +2160,6 @@
       btn.addEventListener("click", function() {
         state.marketSetup = null;
         state.marketSetupError = null;
-        renderMarketSetup();
-        announceStatus("Loading market setup");
         loadMarketSetup();
       });
     }

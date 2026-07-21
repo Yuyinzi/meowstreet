@@ -2581,7 +2581,7 @@ def test_market_setup_hero_aligned_signal():
           }],
           conviction_limits: {
             summary: "Some offsets limit conviction",
-            offsets: [{ finding: "Bull market intact", effect: "Offset" }],
+            offsets: [{ finding: "Bull market intact", effect: "Offset", evidence_links: ["market_phase"] }],
           },
           confirmation_conditions: {
             more_defensive: ["ISM drops below 50"],
@@ -2603,6 +2603,7 @@ def test_market_setup_hero_aligned_signal():
           marketPhaseSentiment: hooks.stateSentimentClass(pr.marketPhase),
           heroHtml: hooks.renderDecisionHero(pr),
           detailedHtml: hooks.renderDetailedReasoning(pr),
+          offsetLinks: pr.offsets[0].links,
         }));
     """)
 
@@ -2620,6 +2621,7 @@ def test_market_setup_hero_aligned_signal():
     assert payload["asOf"] == "2026-06-17"
     assert payload["hasEvidence"] is True
     assert payload["hasOffsets"] is True
+    assert payload["offsetLinks"] == ["market_phase"]
     assert payload["hasDoActions"] is True
     assert payload["hasAvoidActions"] is True
     assert payload["hasPending"] is True
@@ -2637,6 +2639,8 @@ def test_market_setup_hero_aligned_signal():
     assert "ms-evidence-card" in payload["detailedHtml"]
     assert "ms-change-view" in payload["detailedHtml"]
     assert "ms-conviction" in payload["detailedHtml"]
+    assert "ms-evidence-link" in payload["detailedHtml"]
+    assert "evidence-market-phase" in payload["detailedHtml"]
     assert "ms-pending-confirmations" in payload["detailedHtml"]
     assert "ms-component-data" in payload["detailedHtml"]
 
@@ -3345,6 +3349,11 @@ def test_market_setup_css_has_hero_styles():
     assert ".skip-link:focus-visible" in css
     assert ".evidence-target" in css
     assert "@media (prefers-reduced-motion: reduce)" in css
+
+
+def test_macro_dashboard_html_has_benchmark_indices_heading():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+    assert "<h2>Benchmark Indices</h2>" in html
 
 
 def test_macro_dashboard_html_has_skip_link():
