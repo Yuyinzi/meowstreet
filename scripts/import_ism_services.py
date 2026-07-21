@@ -80,11 +80,9 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
             last_industry = str(industry_raw).strip()
         if not last_industry:
             continue
-        if not ism_workbook._is_date(date_val):
+        if not ism_workbook.is_date(date_val):
             continue
-        if not comment_raw or not str(comment_raw).strip():
-            continue
-        report_month = ism_workbook._iso_date(date_val)
+        report_month = ism_workbook.iso_date(date_val)
         key = (last_industry, report_month)
         index_by_key[key] = index_by_key.get(key, -1) + 1
         rows.append(

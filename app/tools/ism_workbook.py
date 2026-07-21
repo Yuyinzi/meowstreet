@@ -14,7 +14,7 @@ class RankingLayout:
     first_status_column: int
 
 
-def _iso_date(value):
+def iso_date(value):
     if isinstance(value, datetime):
         return value.date().isoformat()
     if isinstance(value, date):
@@ -22,7 +22,7 @@ def _iso_date(value):
     return str(value)
 
 
-def _is_date(value):
+def is_date(value):
     if isinstance(value, (date, datetime)):
         return True
     if not isinstance(value, str):
@@ -47,14 +47,14 @@ def parse_series_workbook(workbook_path, survey_label, series_config):
         sheet = workbook[sheet_name]
         points = [
             {
-                "date": _iso_date(date_value),
+                "date": iso_date(date_value),
                 "value": float(level_value),
                 "source": path.name,
             }
             for date_value, level_value in sheet.iter_rows(
                 min_row=2, min_col=1, max_col=2, values_only=True
             )
-            if _is_date(date_value) and level_value not in (None, "")
+            if is_date(date_value) and level_value not in (None, "")
         ]
         results.append(
             {
@@ -84,9 +84,9 @@ def parse_ranking_workbook(workbook_path, survey_type, survey_label, layout):
         raise ValueError(f"{survey_label} sheet is missing: {layout.sheet}")
     sheet = workbook[layout.sheet]
     month_columns = [
-        (column, _iso_date(sheet.cell(layout.header_row, column).value))
+        (column, iso_date(sheet.cell(layout.header_row, column).value))
         for column in range(layout.first_status_column, sheet.max_column + 1, 2)
-        if _is_date(sheet.cell(layout.header_row, column).value)
+        if is_date(sheet.cell(layout.header_row, column).value)
     ]
     rows = []
     seen = set()

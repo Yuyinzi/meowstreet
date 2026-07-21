@@ -113,6 +113,8 @@ def build_card(signal, breadth):
         "id": "ism_services",
         "segments": {
             "services_cycle": {
+                "value": pmi.get("value"),
+                "label": pmi.get("level"),
                 "state": signal.get("state"),
                 "pmi": pmi.get("value"),
                 "level": pmi.get("level"),
@@ -121,11 +123,13 @@ def build_card(signal, breadth):
             },
             "business_activity": {
                 "value": activity.get("value"),
+                "trend": activity.get("momentum"),
                 "level": activity.get("level"),
                 "momentum": activity.get("momentum"),
             },
             "new_orders": {
                 "value": orders.get("value"),
+                "trend": orders.get("momentum"),
                 "level": orders.get("level"),
                 "momentum": orders.get("momentum"),
             },
