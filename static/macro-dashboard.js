@@ -2708,32 +2708,61 @@
     ));
     const latest = payload.latest || {};
     const signal = payload.signal || {};
+    const metrics = signal.metrics || {};
     const industries = payload.industries || {};
+    const stateLabels = {
+      supports_growth: "Growth",
+      growth_caution: "Caution",
+      supports_contraction: "Contraction",
+      contraction_easing: "Easing",
+      mixed: "Mixed",
+      pending_inputs: "Pending",
+      stale_periods: "Stale",
+    };
+
+    function metricDetail(key) {
+      const m = metrics[key];
+      if (!m) return "";
+      const change = m.point_change != null ? (m.point_change > 0 ? "+" : "") + m.point_change.toFixed(1) : "n/a";
+      return `<tr><td>${escapeHtml(m.level || key)}</td><td>${escapeHtml(change)}</td><td>${escapeHtml(m.momentum || "")}</td></tr>`;
+    }
 
     body.innerHTML = `
       ${renderGrowthCycleRangeControl()}
       <div class="relationship-chart-grid">
         ${renderedCharts.join("")}
       </div>
-      <div class="ism-latest-values">
-        <h3>ISM Services</h3>
-        <p class="ism-signal-badge ism-signal-${signal.state || "unknown"}">${escapeHtml(signal.state_label || signal.state || "Unknown")}</p>
-        <table class="ism-latest-table">
-          ${Object.entries(latest).filter(([k]) => k !== "period").map(([key, value]) =>
-            `<tr><td>${escapeHtml(key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))}</td><td>${escapeHtml(formatIndex(value))}</td></tr>`
-          ).join("")}
-        </table>
-      </div>
-      <div class="ism-industry-breadth">
-        <h4>Industries</h4>
-        <div class="ism-industry-list">
-          ${(industries.industries || []).map((ind) =>
-            `<div class="ism-industry-row">
-              <span class="ism-industry-name">${escapeHtml(ind.industry)}</span>
-              <span class="ism-industry-direction ism-direction-${ind.direction}">${escapeHtml(ind.direction)}</span>
-              <span class="ism-industry-rank">${escapeHtml(String(ind.rank))}</span>
-            </div>`
-          ).join("")}
+      <div class="ism-detail-sections">
+        <div class="ism-latest-values">
+          <h3>ISM Services</h3>
+          <p class="ism-signal-badge ism-signal-${signal.state || "unknown"}">${escapeHtml(stateLabels[signal.state] || signal.state || "Unknown")}</p>
+          <p class="ism-signal-backlog">Backlog: ${escapeHtml(signal.backlog_confirmation || "unavailable")}</p>
+          <table class="ism-latest-table">
+            <thead><tr><th>Metric</th><th>Change</th><th>Momentum</th></tr></thead>
+            <tbody>
+              ${metricDetail("pmi")}
+              ${metricDetail("business_activity")}
+              ${metricDetail("new_orders")}
+              ${metricDetail("order_backlog")}
+            </tbody>
+          </table>
+        </div>
+        <div class="ism-industry-breadth">
+          <h4>Industries (${escapeHtml(String(industries.breadth ? industries.breadth.growth_count : 0))} growing / ${escapeHtml(String(industries.breadth ? industries.breadth.total_count : 0))} total)</h4>
+          <div class="ism-industry-list">
+            ${(industries.industries || []).map((ind) =>
+              `<div class="ism-industry-row">
+                <span class="ism-industry-name">${escapeHtml(ind.industry)}</span>
+                <span class="ism-industry-direction ism-direction-${ind.direction}">${escapeHtml(ind.direction)}</span>
+                <span class="ism-industry-rank">${escapeHtml(String(ind.rank))}</span>
+                <span class="ism-industry-change">${ind.rank_change != null ? (ind.rank_change > 0 ? "+" : "") + ind.rank_change : "—"}</span>
+                <span class="ism-industry-streak">${ind.positive_streak ? ind.positive_streak + "m+" : ind.negative_streak ? ind.negative_streak + "m-" : "—"}</span>
+                ${(ind.comments || []).slice(0, 1).map((c) =>
+                  `<span class="ism-industry-comment">${escapeHtml(c.comment_text)}</span>`
+                ).join("")}
+              </div>`
+            ).join("")}
+          </div>
         </div>
       </div>
     `;

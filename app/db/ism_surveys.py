@@ -79,6 +79,23 @@ def replace_industry_rankings(con, survey_type, rows):
     return len(rows)
 
 
+def insert_industry_rankings(con, survey_type, rows):
+    for row in rows:
+        con.execute(
+            "insert or ignore into ism_industry_rankings(survey_type, date, industry, direction, rank, source) values (?, ?, ?, ?, ?, ?)",
+            (
+                survey_type,
+                row["date"],
+                row["industry"],
+                row["direction"],
+                row["rank"],
+                row["source"],
+            ),
+        )
+    con.commit()
+    return len(rows)
+
+
 def merge_industry_rankings(con, survey_type, rows):
     for row in rows:
         con.execute(
@@ -153,6 +170,23 @@ def replace_industry_comments(con, survey_type, rows):
             for row in rows
         ],
     )
+    con.commit()
+    return len(rows)
+
+
+def insert_industry_comments(con, survey_type, rows):
+    for row in rows:
+        con.execute(
+            "insert or ignore into ism_industry_comments(survey_type, report_month, industry, comment_index, comment_text, source) values (?, ?, ?, ?, ?, ?)",
+            (
+                survey_type,
+                row["report_month"],
+                row["industry"],
+                row["comment_index"],
+                row["comment_text"],
+                row["source"],
+            ),
+        )
     con.commit()
     return len(rows)
 

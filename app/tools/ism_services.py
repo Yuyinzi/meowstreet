@@ -57,6 +57,21 @@ def build_signal(points_by_series_id):
     pmi = metrics["pmi"]
     activity = metrics["business_activity"]
     orders = metrics["new_orders"]
+    periods = {pmi["period"], activity["period"], orders["period"]}
+    if len(periods) > 1:
+        return {
+            "version": "ism_services_signal_v1",
+            "state": "stale_periods",
+            "period": max(periods),
+            "metrics": metrics,
+            "backlog_confirmation": metrics["order_backlog"]["level"]
+            .replace("expanding", "supports_growth")
+            .replace("contracting", "supports_contraction")
+            if metrics["order_backlog"]
+            else "unavailable",
+            "missing_inputs": [],
+            "note": f"required metrics span multiple periods: {', '.join(sorted(periods))}",
+        }
     if all(metric["value"] > 50 for metric in (pmi, activity, orders)):
         state = "supports_growth"
     elif pmi["value"] > 50 and (activity["value"] <= 50 or orders["value"] <= 50):
@@ -82,7 +97,7 @@ def build_signal(points_by_series_id):
     return {
         "version": "ism_services_signal_v1",
         "state": state,
-        "period": max(metric["period"] for metric in (pmi, activity, orders)),
+        "period": pmi["period"],
         "metrics": metrics,
         "backlog_confirmation": backlog_state,
         "missing_inputs": [],

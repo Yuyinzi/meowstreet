@@ -85,13 +85,14 @@ def parse_industry_comments(workbook_path=DEFAULT_WORKBOOK_PATH):
         report_month = ism_workbook.iso_date(date_val)
         key = (last_industry, report_month)
         index_by_key[key] = index_by_key.get(key, -1) + 1
+        comment_text = str(comment_raw).strip() if comment_raw is not None else ""
         rows.append(
             {
                 "survey_type": "services",
                 "report_month": report_month,
                 "industry": last_industry,
                 "comment_index": index_by_key[key],
-                "comment_text": str(comment_raw).strip(),
+                "comment_text": comment_text,
                 "source": path.name,
             }
         )
@@ -104,18 +105,18 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
     results = {}
     for parsed in parsed_list:
         sid = parsed["series"]["series_id"]
-        saved = us_rates_liquidity.replace_macro_indicator_points(
+        saved = us_rates_liquidity.insert_macro_indicator_points(
             con,
             parsed["series"],
             parsed["points"],
         )
         results[sid] = saved["points"]
     rankings = parse_sector_rankings(workbook_path)
-    results["ism_services_industry_rankings"] = ism_surveys.replace_industry_rankings(
+    results["ism_services_industry_rankings"] = ism_surveys.insert_industry_rankings(
         con, "services", rankings
     )
     comments = parse_industry_comments(workbook_path)
-    results["ism_services_industry_comments"] = ism_surveys.replace_industry_comments(
+    results["ism_services_industry_comments"] = ism_surveys.insert_industry_comments(
         con, "services", comments
     )
     return results
