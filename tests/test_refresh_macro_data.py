@@ -35,6 +35,8 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         m2_main=m2_main,
         ism_main=ism_main,
         ism_official_main=ism_official_main,
+        ism_services_main=lambda argv: 0,
+        ism_services_official_main=lambda argv: 0,
         gdp_main=gdp_main,
         fomc_main=lambda argv: 0,
     )
@@ -75,6 +77,8 @@ def test_main_does_not_generate_ai_interpretations():
         m2_main=recorder("m2"),
         ism_main=recorder("ism"),
         ism_official_main=recorder("ism_official"),
+        ism_services_main=recorder("services_workbook"),
+        ism_services_official_main=recorder("services_official"),
         gdp_main=recorder("gdp"),
         fomc_main=recorder("fomc"),
     )
@@ -249,6 +253,33 @@ def test_main_skip_flags_remove_tasks():
     ]
 
 
+def test_main_runs_both_ism_surveys_in_order():
+    calls = []
+
+    def recorder(label):
+        def run(argv):
+            calls.append((label, argv))
+            return 0
+
+        return run
+
+    result = refresh_macro_data.main(
+        ["--skip-yahoo", "--skip-rates", "--skip-m2", "--skip-gdp", "--skip-fomc"],
+        ism_main=recorder("manufacturing_workbook"),
+        ism_official_main=recorder("manufacturing_official"),
+        ism_services_main=recorder("services_workbook"),
+        ism_services_official_main=recorder("services_official"),
+    )
+
+    assert result == 0
+    assert calls == [
+        ("manufacturing_workbook", []),
+        ("manufacturing_official", []),
+        ("services_workbook", []),
+        ("services_official", []),
+    ]
+
+
 def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
     calls = []
 
@@ -259,6 +290,8 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         m2_main=lambda argv: 0,
         ism_main=lambda argv: 0,
         ism_official_main=lambda argv: calls.append(argv) or 0,
+        ism_services_main=lambda argv: 0,
+        ism_services_official_main=lambda argv: 0,
         gdp_main=lambda argv: 0,
         fomc_main=lambda argv: 0,
     )
