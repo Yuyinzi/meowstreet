@@ -197,7 +197,9 @@ def init_db(con):
     con.commit()
     source_snap_columns = {
         row["name"]
-        for row in con.execute("pragma table_info(ism_report_source_snapshots)").fetchall()
+        for row in con.execute(
+            "pragma table_info(ism_report_source_snapshots)"
+        ).fetchall()
     }
     if "survey_type" not in source_snap_columns:
         con.execute(
@@ -706,17 +708,30 @@ def replace_ism_report_commodities(con, payload, source):
     return {"commodities": len(payload["commodities"])}
 
 
+def load_ism_report_commodities(con, report_id):
+    rows = con.execute(
+        """
+        select report_id, report_month, commodity, signal_type, months, source_hash
+        from ism_report_commodities
+        where report_id = ?
+        order by commodity
+        """,
+        (report_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def replace_ism_report_narrative_facts(con, payload, source):
     report = payload["report"]
-    con.execute(
-        "delete from ism_report_narrative_facts where report_id = ?",
-        (report["report_id"],),
-    )
     con.execute(
         """
         insert into ism_report_narrative_facts(
             report_id, report_month, facts_json, source_hash
         ) values (?, ?, ?, ?)
+        on conflict(report_id) do update set
+            report_month = excluded.report_month,
+            facts_json = excluded.facts_json,
+            source_hash = excluded.source_hash
         """,
         (
             report["report_id"],
@@ -726,6 +741,22 @@ def replace_ism_report_narrative_facts(con, payload, source):
         ),
     )
     return {"narrative_facts": 1}
+
+
+def load_ism_report_narrative_facts(con, report_id):
+    row = con.execute(
+        """
+        select report_id, report_month, facts_json, source_hash
+        from ism_report_narrative_facts
+        where report_id = ?
+        """,
+        (report_id,),
+    ).fetchone()
+    if not row:
+        return None
+    item = dict(row)
+    item["facts_json"] = json.loads(item["facts_json"])
+    return item
 
 
 def load_ism_report_ai_summary(con, report_id):

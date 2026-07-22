@@ -1,4 +1,4 @@
-from app.db import ism_surveys, us_rates_liquidity
+from app.db import growth_cycle, ism_surveys, us_rates_liquidity
 from app.tools import ism_services, ism_services_industry
 
 SERVICES_SERIES_IDS = list(ism_services.SERIES_TO_KEY)
@@ -26,6 +26,38 @@ def load_overview(con):
         "signal": signal,
         "card": ism_services.build_card(signal, breadth),
         "industry_breadth": breadth,
+    }
+
+
+def _load_rich_evidence(con, signal_period):
+    if signal_period is None:
+        return None
+    snapshot = ism_surveys.load_latest_report_snapshot(con, "services")
+    if not snapshot or snapshot["report_month"] != signal_period:
+        return None
+    rid = snapshot["report_id"]
+    glance = growth_cycle.load_ism_at_a_glance_rows(con, rid)
+    signals = growth_cycle.load_ism_report_industry_signals(con, rid)
+    commodities = growth_cycle.load_ism_report_commodities(con, rid)
+    narrative = growth_cycle.load_ism_report_narrative_facts(con, rid)
+    comments_rows = growth_cycle.load_ism_report_comments(con, rid)
+    component_industries = [
+        s
+        for s in signals
+        if s["signal_type"] not in ("overall_growth", "overall_contraction")
+    ]
+    return {
+        "at_a_glance_rows": glance or [],
+        "component_industries": component_industries,
+        "respondent_comments": [dict(r) for r in comments_rows]
+        if comments_rows
+        else [],
+        "commodities": commodities or [],
+        "narrative_facts": narrative["facts_json"] if narrative else {},
+        "source": {
+            "source_url": snapshot["source_url"],
+            "source_hash": snapshot["source_hash"],
+        },
     }
 
 
@@ -60,4 +92,6 @@ def load_detail(con):
     industries["breadth"] = ism_services_industry.build_breadth(
         rankings, max_date=signal_period
     )
-    return ism_services.build_detail(points, signal, industries)
+    detail = ism_services.build_detail(points, signal, industries)
+    detail["rich_evidence"] = _load_rich_evidence(con, signal_period)
+    return detail
