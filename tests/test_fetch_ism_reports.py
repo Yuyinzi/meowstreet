@@ -1,6 +1,7 @@
 """Tests for the canonical ISM report ingestion CLI."""
 
 import argparse
+from unittest.mock import patch
 
 import pytest
 
@@ -228,3 +229,85 @@ def test_services_report_month_via_ismworld(tmp_path, monkeypatch, capsys):
     assert exit_code == 0
     out = capsys.readouterr().out
     assert "ism_services_2026_06" in out
+
+
+def test_manufacturing_dispatches_to_existing_rich_importer(monkeypatch, tmp_path):
+    from scripts import fetch_ism_official_reports
+
+    db_path = tmp_path / "macro.db"
+    captured = {}
+
+    def fake_import(db_path_arg, targets, fetch, ai_client, model, report_concurrency):
+        captured["db_path"] = db_path_arg
+        captured["targets"] = targets
+        captured["fetch"] = fetch
+        captured["ai_client"] = ai_client
+        captured["model"] = model
+        captured["report_concurrency"] = report_concurrency
+        return [], 0
+
+    monkeypatch.setattr(fetch_ism_official_reports, "import_targets", fake_import)
+
+    exit_code = fetch_ism_reports.main(
+        ["--survey", "manufacturing", "--latest-only", "--db-path", str(db_path)],
+        fetch=lambda url: MANUFACTURING_HTML,
+        ai_client_factory=lambda config: "fake_ai_client",
+    )
+
+    assert exit_code == 0
+    assert captured["db_path"] == str(db_path)
+    assert captured["ai_client"] == "fake_ai_client"
+    assert captured["model"] == "test-model"
+    assert captured["report_concurrency"] == 1
+    assert len(captured["targets"]) > 0
+
+
+def test_client_construction_failure_returns_nonzero(tmp_path):
+    db_path = tmp_path / "macro.db"
+
+    def failing_factory(config):
+        raise ValueError("no api key")
+
+    exit_code = fetch_ism_reports.main(
+        ["--survey", "manufacturing", "--latest-only", "--db-path", str(db_path)],
+        fetch=lambda url: "",
+        ai_client_factory=failing_factory,
+    )
+
+    assert exit_code != 0
+
+
+def test_survey_all_constructs_one_client_invokes_both(monkeypatch, tmp_path):
+    from scripts import fetch_ism_official_reports
+
+    db_path = tmp_path / "macro.db"
+    factory_calls = []
+    importers_called = []
+
+    def mfg_import(db_path_arg, targets, fetch, ai_client, model, report_concurrency):
+        importers_called.append("manufacturing")
+        return [], 0
+
+    def svc_import(db_path_arg, targets, fetch, ai_client, model, report_concurrency):
+        importers_called.append("services")
+        return [], 0
+
+    monkeypatch.setattr(fetch_ism_official_reports, "import_targets", mfg_import)
+
+    def tracking_fetch(url):
+        if "pmi/" in url:
+            return MANUFACTURING_HTML
+        return SERVICES_HTML
+
+    with patch("app.services.ism_services_ai_ingestion.import_targets", svc_import):
+        exit_code = fetch_ism_reports.main(
+            ["--survey", "all", "--latest-only", "--db-path", str(db_path)],
+            fetch=tracking_fetch,
+            ai_client_factory=lambda config: (
+                factory_calls.append(config) or "shared_client"
+            ),
+        )
+
+    assert exit_code == 0
+    assert importers_called == ["manufacturing", "services"]
+    assert len(factory_calls) == 1
