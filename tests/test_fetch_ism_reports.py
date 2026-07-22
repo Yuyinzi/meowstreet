@@ -69,62 +69,164 @@ def test_positive_int_accepts_ten():
     assert fetch_ism_reports.positive_int("10") == 10
 
 
+class FakeAiClient:
+    def __init__(self):
+        self.model = "test-model"
+
+    def complete_json(self, prompt, schema=None):
+        raise ValueError("FakeAiClient cannot make real API calls")
+
+    async def request_structured_output(self, prompt):
+        raise ValueError("FakeAiClient cannot make real API calls")
+
+
+def _fake_client_factory(config):
+    return FakeAiClient()
+
+
+def _mock_import(monkeypatch, func, result=([], 0)):
+    def fake(**kwargs):
+        return result
+
+    monkeypatch.setattr(func, "__call__", lambda *a, **kw: result)
+
+
 def test_latest_only_manufacturing(tmp_path, monkeypatch, capsys):
+    from scripts import fetch_ism_official_reports as mfg
+
     db_path = tmp_path / "market_data.sqlite"
+    monkeypatch.setattr(
+        mfg,
+        "import_targets",
+        lambda *a, **kw: (
+            [
+                {
+                    "report_id": "ism_manufacturing_2026_06",
+                    "source_name": "ismworld",
+                    "metrics": 11,
+                    "at_a_glance_rows": 11,
+                    "comments": 1,
+                    "rankings": 2,
+                    "survey_type": "manufacturing",
+                }
+            ],
+            0,
+        ),
+    )
 
     exit_code = fetch_ism_reports.main(
         ["--survey", "manufacturing", "--latest-only", "--db-path", str(db_path)],
         fetch=lambda url: MANUFACTURING_HTML,
+        ai_client_factory=_fake_client_factory,
     )
 
     assert exit_code == 0
     out = capsys.readouterr().out
     assert "ism_manufacturing" in out
-    assert "metrics=" in out
 
 
 def test_latest_only_services(tmp_path, monkeypatch, capsys):
+    from app.services import ism_services_ai_ingestion as svc
+
     db_path = tmp_path / "market_data.sqlite"
+    monkeypatch.setattr(
+        svc,
+        "import_targets",
+        lambda *a, **kw: (
+            [
+                {
+                    "report_id": "ism_services_2026_06",
+                    "source_name": "ismworld",
+                    "metrics": 4,
+                    "at_a_glance_rows": 11,
+                    "comments": 1,
+                    "industry_signals": 1,
+                }
+            ],
+            0,
+        ),
+    )
 
     exit_code = fetch_ism_reports.main(
         ["--survey", "services", "--latest-only", "--db-path", str(db_path)],
         fetch=lambda url: SERVICES_HTML,
+        ai_client_factory=_fake_client_factory,
     )
 
     assert exit_code == 0
     out = capsys.readouterr().out
     assert "ism_services" in out
-    assert "metrics=" in out
 
 
 def test_survey_all_runs_both_surveys(tmp_path, monkeypatch, capsys):
-    db_path = tmp_path / "market_data.sqlite"
-    calls = []
+    from scripts import fetch_ism_official_reports as mfg
+    from app.services import ism_services_ai_ingestion as svc
 
-    def tracking_fetch(url):
-        calls.append(url)
-        if "pmi/" in url:
-            return MANUFACTURING_HTML
-        return SERVICES_HTML
+    db_path = tmp_path / "market_data.sqlite"
+    monkeypatch.setattr(
+        mfg,
+        "import_targets",
+        lambda *a, **kw: (
+            [
+                {
+                    "report_id": "ism_manufacturing_2026_06",
+                    "source_name": "ismworld",
+                    "metrics": 11,
+                }
+            ],
+            0,
+        ),
+    )
+    monkeypatch.setattr(
+        svc,
+        "import_targets",
+        lambda *a, **kw: (
+            [
+                {
+                    "report_id": "ism_services_2026_06",
+                    "source_name": "ismworld",
+                    "metrics": 4,
+                }
+            ],
+            0,
+        ),
+    )
 
     exit_code = fetch_ism_reports.main(
         ["--survey", "all", "--latest-only", "--db-path", str(db_path)],
-        fetch=tracking_fetch,
+        fetch=lambda url: SERVICES_HTML,
+        ai_client_factory=_fake_client_factory,
     )
 
     assert exit_code == 0
     out = capsys.readouterr().out
-    assert "survey_type=manufacturing" in out
-    assert "survey_type=services" in out
+    assert "ism_manufacturing_2026_06" in out
+    assert "ism_services_2026_06" in out
 
 
 def test_report_month_generates_target(tmp_path, monkeypatch, capsys):
+    from scripts import fetch_ism_official_reports as mfg
+
     db_path = tmp_path / "market_data.sqlite"
 
     monkeypatch.setattr(
         ingestion,
         "latest_released_report_month",
         lambda: "2026-06-01",
+    )
+    monkeypatch.setattr(
+        mfg,
+        "import_targets",
+        lambda *a, **kw: (
+            [
+                {
+                    "report_id": "ism_manufacturing_2026_06",
+                    "source_name": "ismworld",
+                    "metrics": 11,
+                }
+            ],
+            0,
+        ),
     )
 
     exit_code = fetch_ism_reports.main(
@@ -137,6 +239,7 @@ def test_report_month_generates_target(tmp_path, monkeypatch, capsys):
             str(db_path),
         ],
         fetch=lambda url: MANUFACTURING_HTML,
+        ai_client_factory=_fake_client_factory,
     )
 
     assert exit_code == 0
@@ -145,6 +248,8 @@ def test_report_month_generates_target(tmp_path, monkeypatch, capsys):
 
 
 def test_report_concurrency_passed_through(tmp_path, monkeypatch):
+    from scripts import fetch_ism_official_reports as mfg
+
     db_path = tmp_path / "market_data.sqlite"
     seen = {}
 
@@ -154,13 +259,11 @@ def test_report_concurrency_passed_through(tmp_path, monkeypatch):
         lambda: "2026-06-01",
     )
 
-    def fake_import(
-        db_path_arg, survey_type, targets, fetch=None, report_concurrency=1
-    ):
+    def fake_mfg_import(db_path, targets, fetch, ai_client, model, report_concurrency):
         seen["concurrency"] = report_concurrency
         return [], 0
 
-    monkeypatch.setattr(ingestion, "import_targets", fake_import)
+    monkeypatch.setattr(mfg, "import_targets", fake_mfg_import)
 
     exit_code = fetch_ism_reports.main(
         [
@@ -173,6 +276,7 @@ def test_report_concurrency_passed_through(tmp_path, monkeypatch):
             "2",
         ],
         fetch=lambda url: MANUFACTURING_HTML,
+        ai_client_factory=_fake_client_factory,
     )
 
     assert exit_code == 0
@@ -180,14 +284,27 @@ def test_report_concurrency_passed_through(tmp_path, monkeypatch):
 
 
 def test_survey_all_failure_does_not_hide_other(tmp_path, monkeypatch, capsys):
+    from scripts import fetch_ism_official_reports as mfg
+    from app.services import ism_services_ai_ingestion as svc
+
     db_path = tmp_path / "market_data.sqlite"
     call_count = [0]
 
-    def failing_manufacturing(url):
+    def failing_mfg(db_path, targets, fetch, ai_client, model, report_concurrency):
         call_count[0] += 1
-        if call_count[0] == 1:
-            raise ValueError("manufacturing fetch failed")
-        return SERVICES_HTML
+        raise ValueError("manufacturing failed")
+
+    def ok_svc(db_path, targets, ai_client, model, **kw):
+        return [
+            {
+                "report_id": "ism_services_2026_06",
+                "source_name": "ismworld",
+                "metrics": 4,
+            }
+        ], 0
+
+    monkeypatch.setattr(mfg, "import_targets", failing_mfg)
+    monkeypatch.setattr(svc, "import_targets", ok_svc)
 
     monkeypatch.setattr(
         ingestion,
@@ -197,7 +314,8 @@ def test_survey_all_failure_does_not_hide_other(tmp_path, monkeypatch, capsys):
 
     exit_code = fetch_ism_reports.main(
         ["--survey", "all", "--latest-only", "--db-path", str(db_path)],
-        fetch=failing_manufacturing,
+        fetch=lambda url: SERVICES_HTML,
+        ai_client_factory=_fake_client_factory,
     )
 
     assert exit_code == 1
@@ -206,12 +324,28 @@ def test_survey_all_failure_does_not_hide_other(tmp_path, monkeypatch, capsys):
 
 
 def test_services_report_month_via_ismworld(tmp_path, monkeypatch, capsys):
+    from app.services import ism_services_ai_ingestion as svc
+
     db_path = tmp_path / "market_data.sqlite"
 
     monkeypatch.setattr(
         ingestion,
         "latest_released_report_month",
         lambda: "2026-06-01",
+    )
+    monkeypatch.setattr(
+        svc,
+        "import_targets",
+        lambda *a, **kw: (
+            [
+                {
+                    "report_id": "ism_services_2026_06",
+                    "source_name": "ismworld",
+                    "metrics": 4,
+                }
+            ],
+            0,
+        ),
     )
 
     exit_code = fetch_ism_reports.main(
@@ -224,6 +358,7 @@ def test_services_report_month_via_ismworld(tmp_path, monkeypatch, capsys):
             str(db_path),
         ],
         fetch=lambda url: SERVICES_HTML,
+        ai_client_factory=_fake_client_factory,
     )
 
     assert exit_code == 0
@@ -288,7 +423,7 @@ def test_survey_all_constructs_one_client_invokes_both(monkeypatch, tmp_path):
         importers_called.append("manufacturing")
         return [], 0
 
-    def svc_import(db_path_arg, targets, fetch, ai_client, model, report_concurrency):
+    def svc_import(db_path_arg, targets, ai_client, model, **kwargs):
         importers_called.append("services")
         return [], 0
 

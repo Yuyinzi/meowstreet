@@ -36,6 +36,7 @@ def _services_ismworld_url(month_name):
 def _manufacturing_prnewswire_matcher(title):
     """Return True if *title* describes a Manufacturing PMI report on PR Newswire."""
     import re as _re
+
     normalized = _re.sub(r"\s+", " ", title)
     return (
         "Manufacturing PMI" in normalized
@@ -51,26 +52,30 @@ def _services_prnewswire_matcher(title):
     return "Services PMI" in title and "ISM" in title and "Report" in title
 
 
-_MANUFACTURING_METRICS = frozenset({
-    "ism_manufacturing_pmi",
-    "ism_manufacturing_new_orders",
-    "ism_manufacturing_production",
-    "ism_manufacturing_employment",
-    "ism_manufacturing_supplier_deliveries",
-    "ism_manufacturing_inventories",
-    "ism_manufacturing_customer_inventories",
-    "ism_manufacturing_prices",
-    "ism_manufacturing_order_backlog",
-    "ism_manufacturing_exports",
-    "ism_manufacturing_imports",
-})
+_MANUFACTURING_METRICS = frozenset(
+    {
+        "ism_manufacturing_pmi",
+        "ism_manufacturing_new_orders",
+        "ism_manufacturing_production",
+        "ism_manufacturing_employment",
+        "ism_manufacturing_supplier_deliveries",
+        "ism_manufacturing_inventories",
+        "ism_manufacturing_customer_inventories",
+        "ism_manufacturing_prices",
+        "ism_manufacturing_order_backlog",
+        "ism_manufacturing_exports",
+        "ism_manufacturing_imports",
+    }
+)
 
-_SERVICES_METRICS = frozenset({
-    "ism_services_pmi",
-    "ism_services_business_activity",
-    "ism_services_new_orders",
-    "ism_services_order_backlog",
-})
+_SERVICES_METRICS = frozenset(
+    {
+        "ism_services_pmi",
+        "ism_services_business_activity",
+        "ism_services_new_orders",
+        "ism_services_order_backlog",
+    }
+)
 
 
 def _manufacturing_parse_report(html, source_url, fetched_at, source_name="ismworld"):
@@ -100,7 +105,7 @@ _SURVEY_CONFIGS = {
         "parse_report": _services_parse_report,
         "allowed_metric_series": _SERVICES_METRICS,
         "normalize_industry": ism_services_industry.normalize_industry,
-        "has_ai_extraction": False,
+        "has_ai_extraction": True,
     },
 }
 

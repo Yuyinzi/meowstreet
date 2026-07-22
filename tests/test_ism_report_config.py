@@ -21,10 +21,6 @@ class TestLoadSurveyConfig:
         assert isinstance(cfg["allowed_metric_series"], frozenset)
         assert "ism_services_pmi" in cfg["allowed_metric_series"]
         assert "ism_manufacturing_pmi" not in cfg["allowed_metric_series"]
-        assert cfg["has_ai_extraction"] is False
-
-    def test_services_config_requires_ai_extraction(self):
-        cfg = config.load_survey_config("services")
         assert cfg["has_ai_extraction"] is True
 
     def test_manufacturing_config_builds_ismworld_url(self):

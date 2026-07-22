@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Canonical CLI for ISM report ingestion (parse-only, no AI extraction).
+"""Canonical CLI for ISM report ingestion with AI extraction.
 
 Supports manufacturing and services surveys with a unified interface
-for target selection, discovery, fetching, parsing, and persistence.
+for target selection, discovery, AI extraction, and persistence.
 
 Usage:
   fetch_ism_reports.py --survey manufacturing|services|all [options]
@@ -26,9 +26,9 @@ def positive_int(value):
     return ingestion.positive_int(value)
 
 
-def main(argv=None, fetch=None):
+def main(argv=None, fetch=None, ai_client_factory=None):
     parser = argparse.ArgumentParser(
-        description="Ingest ISM survey reports (parse-only, no AI extraction)."
+        description="Ingest ISM survey reports with AI extraction."
     )
     parser.add_argument(
         "--survey",
@@ -86,6 +86,36 @@ def main(argv=None, fetch=None):
     )
     args = parser.parse_args(argv)
 
+    if ai_client_factory is None:
+        from app import llm
+
+        try:
+            config = llm.load_openai_config(args, root=ROOT)
+        except Exception as exc:
+            print(f"failed to load AI config: {exc}", file=sys.stderr)
+            return 1
+        from scripts.extract_ism_report_ai import OpenAIJsonClient, llm_timeout
+
+        client = OpenAIJsonClient(
+            llm.build_async_client(
+                config,
+                max_retries=0,
+                timeout=llm_timeout(),
+                error_context="ISM extraction",
+            ),
+            config["model"],
+            progress=lambda msg: print(msg, file=sys.stderr, flush=True),
+        )
+        model = config["model"]
+    else:
+        config = {"model": "test-model"}
+        try:
+            client = ai_client_factory(config)
+        except Exception as exc:
+            print(f"failed to construct AI client: {exc}", file=sys.stderr)
+            return 1
+        model = config["model"]
+
     survey_types = (
         ["manufacturing", "services"] if args.survey == "all" else [args.survey]
     )
@@ -117,30 +147,37 @@ def main(argv=None, fetch=None):
             repair_urls=repair_urls,
         )
 
-        results, failed = ingestion.import_targets(
-            args_db,
-            st,
-            targets,
-            fetch=fetch,
-            report_concurrency=args.report_concurrency,
-        )
+        try:
+            if st == "manufacturing":
+                from scripts import fetch_ism_official_reports as mfg
+
+                results, failed = mfg.import_targets(
+                    args_db, targets, fetch, client, model, args.report_concurrency
+                )
+            else:
+                from app.services.ism_services_ai_ingestion import import_targets as svc
+
+                results, failed = svc(
+                    args_db,
+                    targets,
+                    client,
+                    model,
+                    fetch=fetch,
+                    report_concurrency=args.report_concurrency,
+                    section_concurrency=3,
+                )
+        except Exception as exc:
+            print(f"{st} import failed: {exc}", file=sys.stderr)
+            results, failed = [], 1
 
         for result in results:
             if result is not None:
                 all_results.append(result)
-                line = (
-                    f"{result['report_id']}: "
-                    f"source={result['source']} metrics={result['metrics']} "
-                    f"rankings={result['rankings']} comments={result['comments']}"
-                )
-                if args.survey == "all":
-                    line = (
-                        f"{result['report_id']}: "
-                        f"survey_type={result['survey_type']} "
-                        f"source={result['source']} metrics={result['metrics']} "
-                        f"rankings={result['rankings']} comments={result['comments']}"
-                    )
-                print(line)
+                rid = result.get("report_id", "unknown")
+                src = result.get("source_name", result.get("source", "unknown"))
+                metrics = result.get("metrics", result.get("at_a_glance_rows", 0))
+                comments = result.get("comments", 0)
+                print(f"{rid}: source={src} metrics={metrics} comments={comments}")
 
         total_failed += failed
 
