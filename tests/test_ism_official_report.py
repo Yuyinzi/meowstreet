@@ -1,3 +1,5 @@
+import pytest
+
 from app.tools import ism_official_report
 
 
@@ -166,6 +168,7 @@ def test_parse_report_extracts_metadata_metrics_rankings_comments_and_release():
             "comment_text": "Input costs remain elevated across key categories.",
             "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
             "source_hash": parsed["report"]["source_hash"],
+            "source": "ISM official report",
         },
         {
             "report_id": "ism_manufacturing_2026_06",
@@ -175,6 +178,7 @@ def test_parse_report_extracts_metadata_metrics_rankings_comments_and_release():
             "comment_text": "Conditions are optimistic but not yet booming.",
             "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
             "source_hash": parsed["report"]["source_hash"],
+            "source": "ISM official report",
         },
     ]
 
@@ -288,6 +292,69 @@ PRNEWSWIRE_HTML = """
 """
 
 
+HOSPITAL_HTML = """
+<html><body>
+<h1>June 2026 ISM Hospital PMI Report</h1>
+<p>Hospital PMI at 52.0 percent.</p>
+</body></html>
+"""
+
+GENERIC_ISM_HTML = """
+<html><body>
+<h1>ISM 2026 Annual Conference Announcement</h1>
+<p>The Institute for Supply Management will hold its annual conference.</p>
+</body></html>
+"""
+
+
+def test_parse_report_rejects_hospital_document():
+    with pytest.raises(ValueError, match="survey mismatch"):
+        ism_official_report.parse_report(
+            HOSPITAL_HTML,
+            "https://example.com/hospital.html",
+            "2026-07-15T10:00:00Z",
+        )
+
+
+def test_parse_report_rejects_generic_ism_release():
+    with pytest.raises(ValueError, match="survey mismatch"):
+        ism_official_report.parse_report(
+            GENERIC_ISM_HTML,
+            "https://example.com/generic.html",
+            "2026-07-15T10:00:00Z",
+        )
+
+
+def test_parse_report_accepts_all_caps_marker():
+    html = """
+    <html><body>
+    <h1>MANUFACTURING PMI AT 53.3%</h1>
+    <h1>June 2026 ISM Manufacturing PMI Report</h1>
+    <h3>MANUFACTURING AT A GLANCE</h3>
+    <p>Manufacturing PMI\u00ae 53.3 54.0 -0.7 Growing Slower 6</p>
+    <p>New Orders 56.0 56.8 -0.8 Growing Slower 6</p>
+    <p>Production 52.2 54.3 -2.1 Growing Slower 8</p>
+    <p>Employment 49.7 48.6 +1.1 Contracting Slower 33</p>
+    <p>Supplier Deliveries 57.4 60.6 -3.2 Slowing Slower 7</p>
+    <p>Inventories 51.4 49.9 +1.5 Growing From Contracting 1</p>
+    <p>Customers' Inventories 42.3 42.7 -0.4 Too Low Faster 21</p>
+    <p>Prices 73.0 82.1 -9.1 Increasing Slower 21</p>
+    <p>Backlog of Orders 45.2 48.0 -2.8 Contracting Faster 8</p>
+    <p>New Export Orders 48.1 51.2 -3.1 Contracting From Growing 1</p>
+    <p>Imports 49.8 51.0 -1.2 Contracting From Growing 1</p>
+    <p>The 2 manufacturing industries reporting growth in June are: Chemical Products; and Machinery.</p>
+    <p>The one industry reporting contraction in June is: Paper Products.</p>
+    <p>The next ISM Manufacturing PMI Report featuring July 2026 data will be released at 10:00 a.m. ET on Monday, August 3, 2026.</p>
+    </body></html>
+    """
+    parsed = ism_official_report.parse_report(
+        html,
+        "https://example.com/allcaps.html",
+        "2026-07-15T10:00:00Z",
+    )
+    assert parsed["report"]["report_id"] == "ism_manufacturing_2026_06"
+
+
 def test_parse_report_handles_prnewswire_article_body_table():
     parsed = ism_official_report.parse_report(
         PRNEWSWIRE_HTML,
@@ -321,6 +388,7 @@ def test_parse_report_extracts_prnewswire_straight_quote_comments():
             "comment_text": "Demand remains uneven.",
             "source_url": "https://www.prnewswire.com/news-releases/manufacturing-pmi-at-53-3-june-2026-ism-manufacturing-pmi-report-302814991.html",
             "source_hash": parsed["report"]["source_hash"],
+            "source": "ISM official report",
         }
     ]
 

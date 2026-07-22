@@ -9,6 +9,7 @@ def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
         {
             "source_url": "https://example.com/jan-2026.html",
             "source_name": "prnewswire",
+            "survey_type": "manufacturing",
             "source_hash": "abc123",
             "fetched_at": "2026-07-15T00:00:00Z",
             "raw_html": "<html>report</html>",
@@ -27,6 +28,116 @@ def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
     assert saved == {"source_snapshots": 1}
     assert row["report_id"] == "ism_manufacturing_2026_01"
     assert row["raw_html"] == "<html>report</html>"
+    assert row["survey_type"] == "manufacturing"
+
+
+def test_replace_ism_report_source_snapshot_survey_type_defaults_to_manufacturing(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    saved = growth_cycle.replace_ism_report_source_snapshot(
+        con,
+        {
+            "source_url": "https://example.com/legacy.html",
+            "source_name": "ismworld",
+            "source_hash": "def456",
+            "fetched_at": "2026-07-15T00:00:00Z",
+            "raw_html": "<html>legacy</html>",
+            "parse_status": "ok",
+            "parse_error": None,
+            "report_id": "ism_manufacturing_2026_06",
+            "report_month": "2026-06-01",
+        },
+    )
+    row = growth_cycle.load_ism_report_source_snapshot(con, "https://example.com/legacy.html")
+    assert row["survey_type"] == "manufacturing"
+
+
+def test_replace_ism_report_source_snapshot_services_survey_type(tmp_path):
+    con = growth_cycle.connect(tmp_path / "market_data.sqlite")
+    saved = growth_cycle.replace_ism_report_source_snapshot(
+        con,
+        {
+            "source_url": "https://example.com/services-june.html",
+            "source_name": "ismworld",
+            "survey_type": "services",
+            "source_hash": "ghi789",
+            "fetched_at": "2026-07-15T00:00:00Z",
+            "raw_html": "<html>services report</html>",
+            "parse_status": "ok",
+            "parse_error": None,
+            "report_id": "ism_services_2026_06",
+            "report_month": "2026-06-01",
+        },
+    )
+    row = growth_cycle.load_ism_report_source_snapshot(
+        con, "https://example.com/services-june.html"
+    )
+    assert row["survey_type"] == "services"
+    assert row["report_id"] == "ism_services_2026_06"
+
+
+def test_ism_report_source_snapshot_migration_adds_survey_type(tmp_path):
+    """Verify init_db() migration adds survey_type to legacy table."""
+    import sqlite3
+
+    db_path = tmp_path / "migrate.sqlite"
+    con = sqlite3.connect(str(db_path))
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL;")
+    con.executescript(
+        """
+        create table if not exists ism_report_source_snapshots (
+            source_url text primary key,
+            source_name text not null,
+            source_hash text not null,
+            fetched_at text not null,
+            raw_html text not null,
+            parse_status text not null,
+            parse_error text,
+            report_id text,
+            report_month text
+        );
+        """
+    )
+    con.execute(
+        "insert into ism_report_source_snapshots values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "https://example.com/old-manu.html",
+            "prnewswire",
+            "old",
+            "2026-01-01",
+            "<html>manu</html>",
+            "ok",
+            None,
+            "ism_manufacturing_2026_01",
+            "2026-01-01",
+        ),
+    )
+    con.execute(
+        "insert into ism_report_source_snapshots values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "https://example.com/old-svcs.html",
+            "prnewswire",
+            "old2",
+            "2026-06-01",
+            "<html>svcs</html>",
+            "ok",
+            None,
+            "ism_services_2026_06",
+            "2026-06-01",
+        ),
+    )
+    con.commit()
+
+    growth_cycle.init_db(con)
+
+    rows = {
+        row["source_url"]: dict(row)
+        for row in con.execute(
+            "select * from ism_report_source_snapshots"
+        ).fetchall()
+    }
+    assert rows["https://example.com/old-manu.html"]["survey_type"] == "manufacturing"
+    assert rows["https://example.com/old-svcs.html"]["survey_type"] == "services"
 
 
 def test_replace_ism_ai_section_extraction_saves_checkpoint(tmp_path):

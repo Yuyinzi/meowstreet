@@ -77,6 +77,7 @@ def init_db(con):
         create table if not exists ism_report_source_snapshots (
             source_url text primary key,
             source_name text not null,
+            survey_type text not null default 'manufacturing',
             source_hash text not null,
             fetched_at text not null,
             raw_html text not null,
@@ -194,6 +195,21 @@ def init_db(con):
         """
     )
     con.commit()
+    source_snap_columns = {
+        row["name"]
+        for row in con.execute("pragma table_info(ism_report_source_snapshots)").fetchall()
+    }
+    if "survey_type" not in source_snap_columns:
+        con.execute(
+            "alter table ism_report_source_snapshots add column survey_type text not null default 'manufacturing'"
+        )
+        con.execute(
+            "update ism_report_source_snapshots set survey_type = 'services' where report_id like 'ism_services_%'"
+        )
+    con.execute(
+        "create index if not exists idx_ism_report_source_snapshots_survey on ism_report_source_snapshots(survey_type)"
+    )
+    con.commit()
     ism_surveys.init_db(con)
 
 
@@ -244,7 +260,7 @@ def load_ism_report_comments(con, report_id):
     return [dict(row) for row in rows]
 
 
-def replace_ism_at_a_glance_rows(con, rows):
+def replace_ism_at_a_glance_rows(con, rows, commit=True):
     report_ids = sorted({row["report_id"] for row in rows})
     for report_id in report_ids:
         con.execute(
@@ -274,7 +290,8 @@ def replace_ism_at_a_glance_rows(con, rows):
                 row["source_hash"],
             ),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return {"at_a_glance_rows": len(rows)}
 
 
@@ -302,11 +319,12 @@ def replace_ism_report_source_snapshot(con, snapshot, commit=True):
     con.execute(
         """
         insert into ism_report_source_snapshots(
-            source_url, source_name, source_hash, fetched_at, raw_html,
+            source_url, source_name, survey_type, source_hash, fetched_at, raw_html,
             parse_status, parse_error, report_id, report_month
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         on conflict(source_url) do update set
             source_name = excluded.source_name,
+            survey_type = excluded.survey_type,
             source_hash = excluded.source_hash,
             fetched_at = excluded.fetched_at,
             raw_html = excluded.raw_html,
@@ -318,6 +336,7 @@ def replace_ism_report_source_snapshot(con, snapshot, commit=True):
         (
             snapshot["source_url"],
             snapshot["source_name"],
+            snapshot.get("survey_type", "manufacturing"),
             snapshot["source_hash"],
             snapshot["fetched_at"],
             snapshot["raw_html"],
@@ -335,7 +354,7 @@ def replace_ism_report_source_snapshot(con, snapshot, commit=True):
 def load_ism_report_source_snapshot(con, source_url):
     row = con.execute(
         """
-        select source_url, source_name, source_hash, fetched_at, raw_html,
+        select source_url, source_name, survey_type, source_hash, fetched_at, raw_html,
                parse_status, parse_error, report_id, report_month
         from ism_report_source_snapshots
         where source_url = ?

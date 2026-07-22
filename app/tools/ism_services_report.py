@@ -162,6 +162,12 @@ def prepare_report(html, source_url, fetched_at):
 def parse_report(html, source_url, fetched_at, source_name="ismworld"):
     text = extract_report_text(html, source_name)
     normalized = normalize_text(text)
+    lower_text = normalized.lower()
+    if "services pmi" not in lower_text:
+        raise ValueError(
+            "ism report survey mismatch: expected services, "
+            "document lacks Services PMI marker"
+        )
     source_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
     report_month, month_name, year = report_month_from_title(normalized)
     next_report_period, next_release_at, next_release_label = parse_next_release(
@@ -181,6 +187,7 @@ def parse_report(html, source_url, fetched_at, source_name="ismworld"):
         "next_release_label": next_release_label,
     }
     return {
+        "survey_type": "services",
         "report": report,
         "metrics": parse_metrics(normalized),
         "rankings": parse_rankings(normalized, report_month),

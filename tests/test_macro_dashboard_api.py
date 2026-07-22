@@ -1062,15 +1062,15 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
     sections = response.json()["sections"]
     assert [section["id"] for section in sections] == [
         "ism_manufacturing",
+        "ism_services",
         "m2_liquidity",
         "inflation_context",
-        "ism_services",
         "gdp_expectations",
         "fomc_context",
     ]
     assert sections[0]["title"] == "ISM Manufacturing"
     assert sections[0]["status"] == "available"
-    assert sections[1]["cards"] == ["m2_money_supply"]
+    assert sections[2]["cards"] == ["m2_money_supply"]
 
 
 def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):

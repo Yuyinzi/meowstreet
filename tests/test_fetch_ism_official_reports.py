@@ -5,6 +5,7 @@ from subprocess import CalledProcessError
 
 from app.db import growth_cycle
 from app.db import us_rates_liquidity
+from app.services import ism_report_ingestion as ingestion
 from scripts import fetch_ism_official_reports
 
 
@@ -283,9 +284,11 @@ def test_main_current_year_uses_prnewswire_for_history_and_official_for_latest(
     ]
 
     monkeypatch.setattr(
-        fetch_ism_official_reports,
+        ingestion,
         "discover_prnewswire_reports",
-        lambda since_year, fetch=None, pagesize=25, max_pages=100: archive_reports,
+        lambda since_year, survey_type, fetch=None, pagesize=25, max_pages=100: (
+            archive_reports
+        ),
     )
     monkeypatch.setattr(
         fetch_ism_official_reports,
@@ -560,7 +563,9 @@ def test_import_report_url_uses_factual_extraction_by_default(tmp_path):
     )
 
 
-def test_backfill_targets_use_prnewswire_for_history_and_official_for_latest():
+def test_backfill_targets_use_prnewswire_for_history_and_official_for_latest(
+    monkeypatch,
+):
     archive_reports = [
         {
             "url": "https://www.prnewswire.com/jan-2026.html",
@@ -576,18 +581,32 @@ def test_backfill_targets_use_prnewswire_for_history_and_official_for_latest():
         },
     ]
 
-    targets = fetch_ism_official_reports.backfill_targets(
-        archive_reports,
-        since_year=2026,
-        latest_report_month="2026-06-01",
-        existing_months={"2026-01-01"},
+    monkeypatch.setattr(
+        ingestion,
+        "discover_prnewswire_reports",
+        lambda since_year, survey_type, fetch=None, pagesize=25, max_pages=100: (
+            archive_reports
+        ),
+    )
+    monkeypatch.setattr(
+        ingestion,
+        "latest_released_report_month",
+        lambda: "2026-06-01",
+    )
+
+    targets = ingestion.build_targets(
+        "manufacturing",
+        backfill_since=2026,
         missing_only=True,
+        existing_months=frozenset({"2026-01-01"}),
+        force_latest=True,
     )
 
     assert targets == [
         {
+            "survey_type": "manufacturing",
             "source_name": "ismworld",
-            "url": fetch_ism_official_reports.report_url("june"),
+            "url": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
             "report_month": "2026-06-01",
             "report_id": "ism_manufacturing_2026_06",
         }
@@ -596,17 +615,15 @@ def test_backfill_targets_use_prnewswire_for_history_and_official_for_latest():
 
 def test_normalize_report_month_rejects_bad_format():
     with pytest.raises(ValueError, match="ism report month must be YYYY-MM"):
-        fetch_ism_official_reports.normalize_report_month("bad-date")
+        ingestion.normalize_report_month("bad-date")
 
 
 def test_normalize_report_month_adds_day():
-    assert fetch_ism_official_reports.normalize_report_month("2026-06") == "2026-06-01"
+    assert ingestion.normalize_report_month("2026-06") == "2026-06-01"
 
 
 def test_normalize_report_month_preserves_full_date():
-    assert (
-        fetch_ism_official_reports.normalize_report_month("2026-06-01") == "2026-06-01"
-    )
+    assert ingestion.normalize_report_month("2026-06-01") == "2026-06-01"
 
 
 def test_main_imports_one_report_month_with_ai(tmp_path, capsys):
@@ -656,8 +673,9 @@ def test_discover_prnewswire_reports_stops_after_since_year():
         """,
     }
 
-    reports = fetch_ism_official_reports.discover_prnewswire_reports(
+    reports = ingestion.discover_prnewswire_reports(
         since_year=2020,
+        survey_type="manufacturing",
         fetch=lambda url: pages[url],
         pagesize=25,
     )
@@ -678,12 +696,14 @@ def test_backfill_uses_import_targets_with_report_concurrency(tmp_path, monkeypa
     seen = {}
 
     monkeypatch.setattr(
-        fetch_ism_official_reports,
+        ingestion,
         "discover_prnewswire_reports",
-        lambda since_year, fetch=None, pagesize=25, max_pages=100: archive_reports,
+        lambda since_year, survey_type, fetch=None, pagesize=25, max_pages=100: (
+            archive_reports
+        ),
     )
     monkeypatch.setattr(
-        fetch_ism_official_reports,
+        ingestion,
         "latest_released_report_month",
         lambda: "2025-02-01",
     )
@@ -734,23 +754,34 @@ def test_main_current_year_uses_report_concurrency_for_target_imports(
     tmp_path, monkeypatch
 ):
     db_path = tmp_path / "market_data.sqlite"
+    month_names = {
+        1: "January",
+        2: "February",
+        3: "March",
+        4: "April",
+        5: "May",
+        6: "June",
+    }
     archive_reports = [
         {
-            "url": "https://www.prnewswire.com/jun-2026.html",
-            "title": "June 2026 ISM Manufacturing PMI Report",
-            "report_month": "2026-06-01",
-            "report_id": "ism_manufacturing_2026_06",
+            "url": f"https://www.prnewswire.com/{m}-2026.html",
+            "title": f"{month_names[m]} 2026 ISM Manufacturing PMI Report",
+            "report_month": f"2026-{m:02d}-01",
+            "report_id": f"ism_manufacturing_2026_{m:02d}",
         }
+        for m in range(1, 7)
     ]
     seen = {}
 
     monkeypatch.setattr(
-        fetch_ism_official_reports,
+        ingestion,
         "discover_prnewswire_reports",
-        lambda since_year, fetch=None, pagesize=25, max_pages=100: archive_reports,
+        lambda since_year, survey_type, fetch=None, pagesize=25, max_pages=100: (
+            archive_reports
+        ),
     )
     monkeypatch.setattr(
-        fetch_ism_official_reports,
+        ingestion,
         "latest_released_report_month",
         lambda: "2026-07-01",
     )
@@ -791,6 +822,11 @@ def test_main_current_year_uses_report_concurrency_for_target_imports(
     assert seen["db_path"] == db_path
     assert seen["report_concurrency"] == 3
     assert [target["report_month"] for target in seen["targets"]] == [
+        "2026-01-01",
+        "2026-02-01",
+        "2026-03-01",
+        "2026-04-01",
+        "2026-05-01",
         "2026-06-01",
         "2026-07-01",
     ]

@@ -1,100 +1,27 @@
-import re
-from html.parser import HTMLParser
-from urllib.parse import urljoin
+"""Manufacturing-only compatibility facade for ISM PR Newswire archive discovery.
 
+Deprecated: New code should use ``app.tools.ism_report_archive`` directly
+with an explicit ``survey_type`` parameter.
+"""
 
-MONTH_NUMBER_BY_NAME = {
-    "january": "01",
-    "february": "02",
-    "march": "03",
-    "april": "04",
-    "may": "05",
-    "june": "06",
-    "july": "07",
-    "august": "08",
-    "september": "09",
-    "october": "10",
-    "november": "11",
-    "december": "12",
-}
-
-
-BASE_URL = "https://www.prnewswire.com"
-ARCHIVE_URL = (
-    "https://www.prnewswire.com/news/institute-for-supply-management/"
-    "?page={page}&pagesize={pagesize}"
+from app.tools.ism_report_archive import (  # noqa: F401  — re-exported for compat
+    BASE_URL,
+    ARCHIVE_URL,
+    MONTH_NUMBER_BY_NAME,
+    LinkExtractor,
+    archive_listing_url,
+    extract_all_links,
+    report_month_from_title,
+    report_month_from_url,
 )
+from app.tools.ism_report_archive import report_id as _report_id
+from app.tools.ism_report_archive import parse_archive_listing as _parse_archive_listing
 
-
-class LinkExtractor(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.links = []
-        self.current_href = None
-        self.current_text = []
-
-    def handle_starttag(self, tag, attrs):
-        if tag != "a":
-            return
-        href = dict(attrs).get("href")
-        if href:
-            self.current_href = href
-            self.current_text = []
-
-    def handle_data(self, data):
-        if self.current_href:
-            text = data.strip()
-            if text:
-                self.current_text.append(text)
-
-    def handle_endtag(self, tag):
-        if tag != "a" or not self.current_href:
-            return
-        title = " ".join(self.current_text).strip()
-        if title:
-            self.links.append(
-                {"url": urljoin(BASE_URL, self.current_href), "title": title}
-            )
-        self.current_href = None
-        self.current_text = []
-
-
-def archive_listing_url(page, pagesize=25):
-    return ARCHIVE_URL.format(page=page, pagesize=pagesize)
-
-
-def report_month_from_title(title):
-    match = re.search(
-        r"\b(" + "|".join(MONTH_NUMBER_BY_NAME) + r")\s+(20\d{2})\b",
-        title,
-        re.IGNORECASE,
-    )
-    if not match:
-        raise ValueError(f"ism archive title report month is missing: {title}")
-    month_name = match.group(1).lower()
-    year = match.group(2)
-    return f"{year}-{MONTH_NUMBER_BY_NAME[month_name]}-01"
-
-
-def report_month_from_url(url):
-    match = re.search(
-        r"(?:^|[-/])(" + "|".join(MONTH_NUMBER_BY_NAME) + r")[-_](20\d{2})(?:[-_.]|$)",
-        url,
-        re.IGNORECASE,
-    )
-    if not match:
-        raise ValueError(f"ism archive url report month is missing: {url}")
-    month_name = match.group(1).lower()
-    year = match.group(2)
-    return f"{year}-{MONTH_NUMBER_BY_NAME[month_name]}-01"
-
-
-def report_id(report_month):
-    year, month, _day = report_month.split("-")
-    return f"ism_manufacturing_{year}_{month}"
+import re
 
 
 def is_manufacturing_report_title(title):
+    """Return True if *title* describes a Manufacturing PMI report on PR Newswire."""
     normalized = re.sub(r"\s+", " ", title)
     return (
         "Manufacturing PMI" in normalized
@@ -105,24 +32,9 @@ def is_manufacturing_report_title(title):
     )
 
 
+def report_id(report_month):
+    return _report_id(report_month, "manufacturing")
+
+
 def parse_archive_listing(html):
-    parser = LinkExtractor()
-    parser.feed(html)
-    result = []
-    seen = set()
-    for link in parser.links:
-        if link["url"] in seen:
-            continue
-        if not is_manufacturing_report_title(link["title"]):
-            continue
-        seen.add(link["url"])
-        try:
-            link["report_month"] = report_month_from_title(link["title"])
-        except ValueError:
-            try:
-                link["report_month"] = report_month_from_url(link["url"])
-            except ValueError:
-                continue
-        link["report_id"] = report_id(link["report_month"])
-        result.append(link)
-    return result
+    return _parse_archive_listing(html, "manufacturing")

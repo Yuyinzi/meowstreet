@@ -28,8 +28,8 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         calls.append(("ism", argv))
         return 0
 
-    def ism_official_main(argv):
-        calls.append(("ism_official", argv))
+    def ism_reports_main(argv):
+        calls.append(("ism_reports", argv))
         return 0
 
     exit_code = refresh_macro_data.main(
@@ -39,9 +39,8 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         consumer_main=consumer_main,
         m2_main=m2_main,
         ism_main=ism_main,
-        ism_official_main=ism_official_main,
         ism_services_main=lambda argv: 0,
-        ism_services_official_main=lambda argv: 0,
+        ism_reports_main=ism_reports_main,
         gdp_main=gdp_main,
         fomc_main=lambda argv: 0,
     )
@@ -75,9 +74,8 @@ def test_main_does_not_generate_ai_interpretations():
         consumer_main=recorder("consumer"),
         m2_main=recorder("m2"),
         ism_main=recorder("ism"),
-        ism_official_main=recorder("ism_official"),
         ism_services_main=recorder("services_workbook"),
-        ism_services_official_main=recorder("services_official"),
+        ism_reports_main=recorder("ism_reports"),
         gdp_main=recorder("gdp"),
         fomc_main=recorder("fomc"),
     )
@@ -109,6 +107,8 @@ def test_main_continues_after_provider_failure(capsys):
         consumer_main=lambda argv: 0,
         m2_main=ok_task("m2"),
         ism_main=ok_task("ism"),
+        ism_services_main=lambda argv: 0,
+        ism_reports_main=lambda argv: 0,
         gdp_main=ok_task("gdp"),
     )
 
@@ -148,6 +148,8 @@ def test_main_can_stop_after_first_failure():
         consumer_main=lambda argv: 0,
         m2_main=ok_task("m2"),
         ism_main=ok_task("ism"),
+        ism_services_main=lambda argv: 0,
+        ism_reports_main=lambda argv: 0,
         gdp_main=ok_task("gdp"),
     )
 
@@ -281,17 +283,16 @@ def test_main_runs_both_ism_surveys_in_order():
         ],
         consumer_main=lambda argv: 0,
         ism_main=recorder("manufacturing_workbook"),
-        ism_official_main=recorder("manufacturing_official"),
         ism_services_main=recorder("services_workbook"),
-        ism_services_official_main=recorder("services_official"),
+        ism_reports_main=recorder("ism_reports"),
     )
 
     assert result == 0
     assert calls == [
         ("manufacturing_workbook", []),
-        ("manufacturing_official", []),
+        ("ism_reports", ["--survey", "manufacturing", "--latest-only"]),
         ("services_workbook", []),
-        ("services_official", []),
+        ("ism_reports", ["--survey", "services", "--latest-only"]),
     ]
 
 
@@ -312,12 +313,14 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         consumer_main=lambda argv: 0,
         m2_main=lambda argv: 0,
         ism_main=lambda argv: 0,
-        ism_official_main=lambda argv: calls.append(argv) or 0,
         ism_services_main=lambda argv: 0,
-        ism_services_official_main=lambda argv: 0,
+        ism_reports_main=lambda argv: calls.append(argv) or 0,
         gdp_main=lambda argv: 0,
         fomc_main=lambda argv: 0,
     )
 
     assert exit_code == 0
-    assert calls == [[]]
+    assert calls == [
+        ["--survey", "manufacturing", "--latest-only"],
+        ["--survey", "services", "--latest-only"],
+    ]

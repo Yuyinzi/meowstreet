@@ -217,6 +217,7 @@ def parse_comments(text, report, source_url):
                 "comment_text": clean_comment_text(match.group(1)),
                 "source_url": source_url,
                 "source_hash": report["source_hash"],
+                "source": "ISM official report",
             }
         )
     return comments
@@ -373,6 +374,12 @@ def prepare_report_for_ai(html, source_url, fetched_at, source_name="ismworld"):
 def parse_report(html, source_url, fetched_at, source_name="ismworld"):
     text = extract_report_text(html, source_name)
     normalized = normalize_text(text)
+    lower_text = normalized.lower()
+    if "manufacturing pmi" not in lower_text:
+        raise ValueError(
+            "ism report survey mismatch: expected manufacturing, "
+            "document lacks Manufacturing PMI marker"
+        )
     source_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
     report_month, month_name, year = report_month_from_title(normalized)
     next_report_period, next_release_at, next_release_label = parse_next_release(
@@ -392,6 +399,7 @@ def parse_report(html, source_url, fetched_at, source_name="ismworld"):
         "next_release_label": next_release_label,
     }
     return {
+        "survey_type": "manufacturing",
         "report": report,
         "metrics": parse_metrics(normalized),
         "rankings": parse_rankings(normalized, report_month),

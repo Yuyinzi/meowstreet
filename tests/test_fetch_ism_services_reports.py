@@ -73,7 +73,7 @@ def test_main_imports_latest_month(tmp_path, monkeypatch, capsys):
     con = us_rates_liquidity.connect(db_path)
     try:
         snapshot = growth_cycle.load_ism_report_source_snapshot(con, EXPECTED_URL)
-        assert snapshot["parse_status"] == "parsed"
+        assert snapshot["parse_status"] == "ok"
         assert snapshot["report_id"] == "ism_services_2026_06"
 
         points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
@@ -253,7 +253,7 @@ def test_success_then_failure_preserves_provenance(tmp_path, monkeypatch, capsys
     con = us_rates_liquidity.connect(db_path)
     try:
         snapshot = growth_cycle.load_ism_report_source_snapshot(con, EXPECTED_URL)
-        assert snapshot["parse_status"] == "parsed"
+        assert snapshot["parse_status"] == "failed"
         assert snapshot["report_id"] == "ism_services_2026_06"
         assert snapshot["report_month"] == "2026-06-01"
 

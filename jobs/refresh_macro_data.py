@@ -6,8 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts import fetch_ism_official_reports
-from scripts import fetch_ism_services_reports
+from scripts import fetch_ism_reports
 from scripts import import_consumer_sentiment
 from scripts import import_fomc_calendar
 from scripts import import_gdp_market_relationships
@@ -75,9 +74,8 @@ def _planned_tasks(
     consumer_main,
     m2_main,
     ism_main,
-    ism_official_main,
     ism_services_main,
-    ism_services_official_main,
+    ism_reports_main,
     gdp_main,
     fomc_main=import_fomc_calendar.main,
 ):
@@ -103,9 +101,21 @@ def _planned_tasks(
         tasks.append(("m2_fred_merge", m2_main, ["--fred-csv-merge"]))
     if not args.skip_ism:
         tasks.append(("ism_manufacturing", ism_main, []))
-        tasks.append(("ism_official_report", ism_official_main, []))
+        tasks.append(
+            (
+                "ism_manufacturing_official",
+                ism_reports_main,
+                ["--survey", "manufacturing", "--latest-only"],
+            )
+        )
         tasks.append(("ism_services", ism_services_main, []))
-        tasks.append(("ism_services_official_report", ism_services_official_main, []))
+        tasks.append(
+            (
+                "ism_services_official",
+                ism_reports_main,
+                ["--survey", "services", "--latest-only"],
+            )
+        )
     if not args.skip_gdp:
         tasks.append(("gdp_fred_fetch", gdp_main, ["--fetch-fred-csv"]))
         tasks.append(("gdp_fred_merge", gdp_main, ["--us-csv-merge"]))
@@ -132,9 +142,8 @@ def main(
     consumer_main=import_consumer_sentiment.main,
     m2_main=import_m2_money_supply.main,
     ism_main=import_ism_manufacturing.main,
-    ism_official_main=fetch_ism_official_reports.main,
     ism_services_main=import_ism_services.main,
-    ism_services_official_main=fetch_ism_services_reports.main,
+    ism_reports_main=fetch_ism_reports.main,
     gdp_main=import_gdp_market_relationships.main,
     fomc_main=import_fomc_calendar.main,
 ):
@@ -162,9 +171,8 @@ def main(
         consumer_main,
         m2_main,
         ism_main,
-        ism_official_main,
         ism_services_main,
-        ism_services_official_main,
+        ism_reports_main,
         gdp_main,
         fomc_main,
     ):

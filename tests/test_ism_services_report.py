@@ -1,3 +1,5 @@
+import pytest
+
 from app.tools import ism_services_report
 
 
@@ -91,3 +93,54 @@ def test_parse_report_extracts_all_fields():
             "source": "ISM official report",
         }
     ]
+
+
+def test_parse_report_rejects_hospital_document():
+    html = """
+    <html><body>
+    <h1>June 2026 ISM Hospital PMI Report</h1>
+    <p>Hospital PMI at 52.0 percent.</p>
+    </body></html>
+    """
+    with pytest.raises(ValueError, match="survey mismatch"):
+        ism_services_report.parse_report(
+            html,
+            "https://example.com/hospital.html",
+            "2026-07-15T10:00:00Z",
+        )
+
+
+def test_parse_report_rejects_generic_ism_release():
+    html = """
+    <html><body>
+    <h1>ISM 2026 Annual Conference Announcement</h1>
+    <p>The Institute for Supply Management will hold its annual conference.</p>
+    </body></html>
+    """
+    with pytest.raises(ValueError, match="survey mismatch"):
+        ism_services_report.parse_report(
+            html,
+            "https://example.com/generic.html",
+            "2026-07-15T10:00:00Z",
+        )
+
+
+def test_parse_report_accepts_all_caps_marker():
+    html = """
+    <html><body>
+    <h1>SERVICES PMI AT 54%</h1>
+    <p>June 2026 ISM Services PMI Report</p>
+    <p>The 2 services industries reporting growth in June are: Construction; and Retail Trade.</p>
+    <p>The one industry reporting contraction in June is: Educational Services.</p>
+    <p>Services PMI registered 54 percent.</p>
+    <p>Business Activity Index at 55.4 percent.</p>
+    <p>New Orders Index registered 55.1 percent.</p>
+    <p>The next ISM Services PMI Report featuring July 2026 data will be released at 10:00 a.m. ET on Monday, August 3, 2026.</p>
+    </body></html>
+    """
+    parsed = ism_services_report.parse_report(
+        html,
+        "https://example.com/allcaps.html",
+        "2026-07-15T10:00:00Z",
+    )
+    assert parsed["report"]["report_id"] == "ism_services_2026_06"

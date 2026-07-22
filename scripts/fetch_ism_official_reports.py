@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 from app.db import growth_cycle
 from app.db import us_rates_liquidity
 from app.tools import ism_ai_extraction, ism_official_report, ism_prnewswire_archive
+from app.services import ism_report_ingestion as ingestion
 
 
 BASE_URL = (
@@ -505,101 +506,7 @@ def requested_urls(args, fetch=None):
     return result
 
 
-def month_name_from_report_month(report_month):
-    month_index = int(report_month[5:7]) - 1
-    return MONTHS[month_index]
 
-
-def latest_released_report_month(today=None):
-    if today is None:
-        today = datetime.now()
-    year = today.year
-    month = today.month - 1
-    if month == 0:
-        year -= 1
-        month = 12
-    return f"{year}-{month:02d}-01"
-
-
-def backfill_targets(
-    archive_reports,
-    since_year,
-    latest_report_month,
-    existing_months,
-    missing_only,
-):
-    since_month = f"{since_year}-01-01"
-    archive_by_month = {
-        item["report_month"]: item
-        for item in archive_reports
-        if since_month <= item["report_month"] < latest_report_month
-    }
-    targets = []
-    for report_month in sorted(archive_by_month):
-        if missing_only and report_month in existing_months:
-            continue
-        item = archive_by_month[report_month]
-        targets.append(
-            {
-                "source_name": "prnewswire",
-                "url": item["url"],
-                "report_month": item["report_month"],
-                "report_id": item["report_id"],
-            }
-        )
-    if not missing_only or latest_report_month not in existing_months:
-        targets.append(
-            {
-                "source_name": "ismworld",
-                "url": report_url(month_name_from_report_month(latest_report_month)),
-                "report_month": latest_report_month,
-                "report_id": ism_prnewswire_archive.report_id(latest_report_month),
-            }
-        )
-    return targets
-
-
-def positive_int(value):
-    parsed = int(value)
-    if parsed < 1:
-        raise argparse.ArgumentTypeError("report concurrency must be at least 1")
-    return parsed
-
-
-def normalize_report_month(value):
-    if re.fullmatch(r"20\d{2}-\d{2}", value):
-        return f"{value}-01"
-    if re.fullmatch(r"20\d{2}-\d{2}-01", value):
-        return value
-    raise ValueError(f"ism report month must be YYYY-MM: {value}")
-
-
-def discover_prnewswire_reports(since_year, fetch=None, pagesize=25, max_pages=100):
-    if fetch is None:
-        fetch = fetch_text
-    reports = []
-    seen = set()
-    since_month = f"{since_year}-01-01"
-    reached_before_since = False
-    for page in range(1, max_pages + 1):
-        listing_url = ism_prnewswire_archive.archive_listing_url(page, pagesize)
-        log_progress(f"archive page={page} fetching {listing_url}")
-        html = fetch(listing_url)
-        page_reports = ism_prnewswire_archive.parse_archive_listing(html)
-        log_progress(f"archive page={page} reports={len(page_reports)}")
-        if not page_reports:
-            break
-        for report in page_reports:
-            if report["url"] in seen:
-                continue
-            seen.add(report["url"])
-            if report["report_month"] < since_month:
-                reached_before_since = True
-                continue
-            reports.append(report)
-        if reached_before_since:
-            break
-    return sorted(reports, key=lambda item: item["report_month"])
 
 
 def main(argv=None, fetch=None, ai_client_factory=None):
@@ -616,7 +523,7 @@ def main(argv=None, fetch=None, ai_client_factory=None):
     parser.add_argument("--missing-only", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--latest-only", action="store_true")
-    parser.add_argument("--report-concurrency", type=positive_int, default=1)
+    parser.add_argument("--report-concurrency", type=ingestion.positive_int, default=1)
     parser.add_argument("--report-month")
     args = parser.parse_args(argv)
     con = us_rates_liquidity.connect(args.db_path)
@@ -634,34 +541,36 @@ def main(argv=None, fetch=None, ai_client_factory=None):
     results = []
     failed = 0
     if args.latest_only:
-        report_month = latest_released_report_month()
-        url = report_url(month_name_from_report_month(report_month))
-        try:
-            result = import_report_url(
-                con,
-                url,
-                source_name="ismworld",
-                fetch=fetch,
-                ai_client=ai_client,
-                model=model,
-            )
-            results.append(result)
-        except _IMPORT_ERRORS as exc:
-            print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
-            failed += 1
+        targets = ingestion.build_targets(
+            "manufacturing", force_latest=True, fetch=fetch,
+        )
+        for target in targets:
+            try:
+                result = import_report_url(
+                    con,
+                    target["url"],
+                    source_name=target["source_name"],
+                    fetch=fetch,
+                    ai_client=ai_client,
+                    model=model,
+                )
+                results.append(result)
+            except _IMPORT_ERRORS as exc:
+                print(f"ism_official_report/{target['url']}: failed - {exc}", file=sys.stderr)
+                failed += 1
     elif args.report_month:
-        normalized = normalize_report_month(args.report_month)
-        latest = latest_released_report_month()
+        normalized = ingestion.normalize_report_month(args.report_month)
+        latest = ingestion.latest_released_report_month()
         if normalized == latest:
             targets = [
                 {
                     "source_name": "ismworld",
-                    "url": report_url(month_name_from_report_month(normalized)),
+                    "url": report_url(ingestion.month_name(normalized)),
                 }
             ]
         else:
-            archive_reports = discover_prnewswire_reports(
-                since_year=int(normalized[:4]), fetch=fetch
+            archive_reports = ingestion.discover_prnewswire_reports(
+                since_year=int(normalized[:4]), survey_type="manufacturing", fetch=fetch,
             )
             targets = [
                 {"source_name": "prnewswire", "url": item["url"]}
@@ -692,16 +601,14 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                 )
                 failed += 1
     elif args.backfill_since:
-        archive_reports = discover_prnewswire_reports(
-            since_year=args.backfill_since, fetch=fetch
-        )
         existing_months = growth_cycle.load_existing_ism_report_months(con)
-        targets = backfill_targets(
-            archive_reports,
-            since_year=args.backfill_since,
-            latest_report_month=latest_released_report_month(),
-            existing_months=existing_months,
+        targets = ingestion.build_targets(
+            "manufacturing",
+            backfill_since=args.backfill_since,
             missing_only=args.missing_only,
+            existing_months=existing_months,
+            force_latest=True,
+            fetch=fetch,
         )
         target_results, target_failed = import_targets(
             args.db_path,
@@ -724,18 +631,14 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                 print(f"ism_official_report/{url}: failed - {exc}", file=sys.stderr)
                 failed += 1
         if args.current_year:
-            current_year = datetime.now().year
-            archive_reports = discover_prnewswire_reports(
-                since_year=current_year,
-                fetch=fetch,
-            )
             existing_months = growth_cycle.load_existing_ism_report_months(con)
-            targets = backfill_targets(
-                archive_reports,
-                since_year=current_year,
-                latest_report_month=latest_released_report_month(),
-                existing_months=existing_months,
+            targets = ingestion.build_targets(
+                "manufacturing",
+                current_year=datetime.now().year,
                 missing_only=not args.force,
+                existing_months=existing_months,
+                force_latest=True,
+                fetch=fetch,
             )
             target_results, target_failed = import_targets(
                 args.db_path,

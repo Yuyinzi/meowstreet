@@ -765,9 +765,9 @@ def test_build_growth_cycle_dashboard_payload_groups_headline_cards_into_section
     sections = {section["id"]: section for section in payload["sections"]}
     assert list(sections) == [
         "ism_manufacturing",
+        "services_labor",
         "m2_liquidity",
         "inflation_context",
-        "services_labor",
         "gdp_expectations",
         "fomc_context",
     ]

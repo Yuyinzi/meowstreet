@@ -1540,6 +1540,7 @@ def test_replace_ism_report_source_snapshot_saves_raw_html(tmp_path):
     snapshot = {
         "source_url": "https://www.prnewswire.com/news-releases/example.html",
         "source_name": "prnewswire",
+        "survey_type": "manufacturing",
         "source_hash": "abc123",
         "fetched_at": "2026-07-15T10:00:00Z",
         "raw_html": "<html><body>release</body></html>",
