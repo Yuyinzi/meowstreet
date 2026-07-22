@@ -159,6 +159,84 @@ def prepare_report(html, source_url, fetched_at):
     return parse_report(html, source_url, fetched_at, "ismworld")
 
 
+def _require_services_identity(text):
+    lower = text.lower()
+    if "services pmi" not in lower:
+        raise ValueError(
+            "ism report survey mismatch: expected services, "
+            "document lacks Services PMI marker"
+        )
+
+
+def prepare_report_for_ai(html, source_url, fetched_at, source_name="ismworld"):
+    source_text = extract_report_text(html, source_name)
+    _require_services_identity(source_text)
+    report_month, _month_name, _year = report_month_from_title(source_text)
+    return {
+        "report_id": report_id(report_month),
+        "report_month": report_month,
+        "source_url": source_url,
+        "source_name": source_name,
+        "fetched_at": fetched_at,
+        "source_text": source_text,
+    }
+
+
+def _extract_at_a_glance_region(source_text):
+    match = re.search(
+        r"SERVICES AT A GLANCE\s*(.*?)(?=\n\s*\n|INDUSTRY PERFORMANCE|WHAT RESPONDENTS|COMMODITIES REPORTED|$)",
+        source_text,
+        re.I | re.S,
+    )
+    if not match:
+        raise ValueError("ism services at a glance region not found")
+    return match.group(1).strip()
+
+
+def _extract_industry_signals_region(source_text):
+    match = re.search(
+        r"INDUSTRY PERFORMANCE\s*(.*?)(?=\n\s*\n|WHAT RESPONDENTS|COMMODITIES REPORTED|$)",
+        source_text,
+        re.I | re.S,
+    )
+    if not match:
+        raise ValueError("ism services industry signals region not found")
+    return match.group(1).strip()
+
+
+def _extract_comments_commodities_region(source_text):
+    match = re.search(
+        r"WHAT RESPONDENTS ARE SAYING\s*(.*?)(?=\n\s*\n|INDUSTRY PERFORMANCE|COMMODITIES REPORTED|SERVICES AT A GLANCE|$)",
+        source_text,
+        re.I | re.S,
+    )
+    comments_part = match.group(1).strip() if match else ""
+    commodities_match = re.search(
+        r"COMMODITIES REPORTED\s*(.*?)(?=\n\s*\n|The next ISM|Tempe|$)",
+        source_text,
+        re.I | re.S,
+    )
+    commodities_part = commodities_match.group(1).strip() if commodities_match else ""
+    if not comments_part and not commodities_part:
+        raise ValueError("ism services comments or commodities region not found")
+    parts = [p for p in [comments_part, commodities_part] if p]
+    return "\n\n".join(parts)
+
+
+def _extract_narrative_region(source_text):
+    after = source_text
+    after = re.split(r"(?i)\b(?:The next ISM|About This Report)\b", after, maxsplit=1)[
+        0
+    ]
+    commodity_marker = re.search(r"COMMODITIES REPORTED", after, re.I)
+    if commodity_marker:
+        after = after[commodity_marker.end() :]
+    after = after.strip()
+    if not after:
+        raise ValueError("ism services narrative region not found")
+    return after
+
+
 def parse_report(html, source_url, fetched_at, source_name="ismworld"):
     text = extract_report_text(html, source_name)
     normalized = normalize_text(text)

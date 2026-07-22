@@ -1,6 +1,10 @@
+from pathlib import Path
+
 import pytest
 
 from app.tools import ism_services_report
+
+FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
 REPORT_HTML = """
@@ -144,3 +148,150 @@ def test_parse_report_accepts_all_caps_marker():
         "2026-07-15T10:00:00Z",
     )
     assert parsed["report"]["report_id"] == "ism_services_2026_06"
+
+
+def test_prepare_report_for_ai_ismworld_fixture():
+    html = (FIXTURE_DIR / "ism_services_report.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html, "https://www.ismworld.org/services/june/", "2026-07-03T14:00:00Z"
+    )
+    assert prepared["report_id"] == "ism_services_2026_06"
+    assert prepared["report_month"] == "2026-06-01"
+    assert "Services PMI" in prepared["source_text"]
+    assert "Manufacturing PMI" not in prepared["source_text"]
+
+
+def test_prepare_report_for_ai_prnewswire_fixture():
+    html = (FIXTURE_DIR / "ism_services_prnewswire_report.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html,
+        "https://www.prnewswire.com/services/june/",
+        "2026-07-03T14:00:00Z",
+        source_name="prnewswire",
+    )
+    assert prepared["report_id"] == "ism_services_2026_06"
+    assert prepared["report_month"] == "2026-06-01"
+    assert "Services PMI" in prepared["source_text"]
+
+
+def test_prepare_report_for_ai_rejects_manufacturing():
+    html = "<html><body><h1>June 2026 Manufacturing PMI Report</h1><p>Manufacturing PMI at 53%</p></body></html>"
+    with pytest.raises(ValueError, match="survey mismatch"):
+        ism_services_report.prepare_report_for_ai(
+            html, "https://example.test/mfg/", "2026-07-03T14:00:00Z"
+        )
+
+
+def test_prepare_report_for_ai_rejects_hospital():
+    html = "<html><body><h1>June 2026 ISM Hospital PMI Report</h1><p>Hospital PMI at 52%</p></body></html>"
+    with pytest.raises(ValueError, match="survey mismatch"):
+        ism_services_report.prepare_report_for_ai(
+            html, "https://example.test/hospital/", "2026-07-03T14:00:00Z"
+        )
+
+
+def test_prepare_report_for_ai_rejects_generic_ism():
+    html = "<html><body><h1>ISM Annual Conference</h1><p>Some generic content.</p></body></html>"
+    with pytest.raises(ValueError, match="survey mismatch"):
+        ism_services_report.prepare_report_for_ai(
+            html, "https://example.test/generic/", "2026-07-03T14:00:00Z"
+        )
+
+
+def test_prepare_report_for_ai_rejects_marker_free():
+    html = "<html><body><h1>Random Page</h1><p>No ISM content here.</p></body></html>"
+    with pytest.raises(ValueError, match="survey mismatch"):
+        ism_services_report.prepare_report_for_ai(
+            html, "https://example.test/random/", "2026-07-03T14:00:00Z"
+        )
+
+
+def test_prepare_report_for_ai_prnewswire_strips_non_content():
+    html = """
+    <html><head><script>tracking code</script></head>
+    <body>
+    <nav>navigation links</nav>
+    <article>
+    <h1>June 2026 ISM Services PMI Report</h1>
+    <p>Services PMI at 54.0%</p>
+    </article>
+    </body></html>
+    """
+    prepared = ism_services_report.prepare_report_for_ai(
+        html,
+        "https://www.prnewswire.com/services/june/",
+        "2026-07-03T14:00:00Z",
+        source_name="prnewswire",
+    )
+    assert "tracking code" not in prepared["source_text"]
+    assert "navigation links" not in prepared["source_text"]
+    assert "Services PMI" in prepared["source_text"]
+
+
+def test_at_a_glance_region_contains_component_table():
+    html = (FIXTURE_DIR / "ism_services_report.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html, "https://example.test/services/", "2026-07-03T14:00:00Z"
+    )
+    region = ism_services_report._extract_at_a_glance_region(prepared["source_text"])
+    assert "Services PMI" in region
+    assert "Business Activity" in region
+    assert "New Orders" in region
+    assert "Employment" in region
+    assert "Supplier Deliveries" in region
+    assert "Inventories" in region
+    assert "Inventory Sentiment" in region
+    assert "Prices" in region
+    assert "Backlog of Orders" in region
+    assert "New Export Orders" in region
+    assert "Imports" in region
+
+
+def test_industry_signals_region_contains_industry_lists():
+    html = (FIXTURE_DIR / "ism_services_report.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html, "https://example.test/services/", "2026-07-03T14:00:00Z"
+    )
+    region = ism_services_report._extract_industry_signals_region(
+        prepared["source_text"]
+    )
+    assert "reporting growth" in region
+    assert "reporting contraction" in region
+    assert "Construction" in region
+    assert "Educational Services" in region
+
+
+def test_comments_commodities_region_contains_both():
+    html = (FIXTURE_DIR / "ism_services_report.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html, "https://example.test/services/", "2026-07-03T14:00:00Z"
+    )
+    region = ism_services_report._extract_comments_commodities_region(
+        prepared["source_text"]
+    )
+    assert "WHAT RESPONDENTS ARE SAYING" in region or "visitor spending" in region
+    assert "Commodities Up" in region or "Commodities Down" in region
+
+
+def test_narrative_region_contains_summary_paragraphs():
+    html = (FIXTURE_DIR / "ism_services_report.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html, "https://example.test/services/", "2026-07-03T14:00:00Z"
+    )
+    region = ism_services_report._extract_narrative_region(prepared["source_text"])
+    assert "Tempe, Arizona" in region
+    assert "Business activity" in region
+    assert "sixth consecutive month" in region
+    assert "Prices Index" in region
+
+
+def test_missing_at_a_glance_raises_value_error():
+    text = "Services PMI at 54% no at a glance section here"
+    with pytest.raises(ValueError, match="at a glance"):
+        ism_services_report._extract_at_a_glance_region(text)
+
+
+def test_missing_narrative_returns_available_text():
+    text = "Services PMI at 54% no narrative content with Tempe marker"
+    region = ism_services_report._extract_narrative_region(text)
+    assert "Services PMI" in region
