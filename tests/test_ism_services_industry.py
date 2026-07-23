@@ -798,6 +798,267 @@ def test_services_industry_analysis_coverage_is_unavailable_when_only_partial():
     assert industry["component_coverage"]["available_components"] is None
 
 
+SERVICES_COMPONENT_KEYS = {
+    "business_activity",
+    "new_orders",
+    "employment",
+    "supplier_deliveries",
+    "inventories",
+    "inventory_sentiment",
+    "prices",
+    "backlog",
+    "new_export_orders",
+    "imports",
+}
+
+
+def test_build_services_signal_trend_returns_one_point_per_report():
+    reports = [
+        {"report_id": "r1", "report_month": "2026-05-01"},
+        {"report_id": "r2", "report_month": "2026-06-01"},
+    ]
+    signals = [
+        {
+            "report_id": "r2",
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "industry": "Construction",
+            "rank": 1,
+            "source_excerpt": "growth",
+        },
+    ]
+    coverage = [
+        {
+            "report_id": "r2",
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "validation_status": "complete",
+            "list_present": True,
+            "declared_count": 14,
+            "extracted_count": 14,
+            "evidence_text": "",
+            "source_url": "",
+            "source_hash": "",
+        },
+    ]
+    trend = ism_services_industry.build_services_signal_trend(
+        reports, signals, coverage, "Construction"
+    )
+    assert len(trend) == 2
+    assert trend[0]["period"] == "2026-05-01"
+    assert trend[1]["period"] == "2026-06-01"
+
+
+def test_signal_trend_point_has_all_component_keys():
+    reports = [{"report_id": "r1", "report_month": "2026-06-01"}]
+    trend = ism_services_industry.build_services_signal_trend(
+        reports, [], [], "Construction"
+    )
+    point = trend[0]
+    assert set(point["components"].keys()) == SERVICES_COMPONENT_KEYS
+
+
+def test_signal_trend_listed_state_shows_direction_rank_and_list_size():
+    reports = [{"report_id": "r1", "report_month": "2026-06-01"}]
+    signals = [
+        {
+            "report_id": "r1",
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "industry": "Construction",
+            "rank": 1,
+            "source_excerpt": "growth",
+        },
+        {
+            "report_id": "r1",
+            "signal_type": "business_activity",
+            "direction": "increase",
+            "industry": "Construction",
+            "rank": 2,
+            "source_excerpt": "increase",
+        },
+    ]
+    coverage = [
+        {
+            "report_id": "r1",
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "validation_status": "complete",
+            "list_present": True,
+            "declared_count": 14,
+            "extracted_count": 14,
+            "evidence_text": "",
+            "source_url": "",
+            "source_hash": "",
+        },
+        {
+            "report_id": "r1",
+            "signal_type": "business_activity",
+            "direction": "increase",
+            "validation_status": "complete",
+            "list_present": True,
+            "declared_count": 8,
+            "extracted_count": 8,
+            "evidence_text": "",
+            "source_url": "",
+            "source_hash": "",
+        },
+    ]
+    trend = ism_services_industry.build_services_signal_trend(
+        reports, signals, coverage, "Construction"
+    )
+    point = trend[0]
+    assert point["overall"] == {
+        "status": "listed",
+        "direction": "growth",
+        "direction_label": "Growth",
+        "rank": 1,
+        "list_size": 14,
+    }
+    assert point["components"]["business_activity"] == {
+        "status": "listed",
+        "direction": "increase",
+        "direction_label": "Increase",
+        "rank": 2,
+        "list_size": 8,
+    }
+
+
+def test_signal_trend_not_listed_when_all_coverage_complete():
+    reports = [{"report_id": "r1", "report_month": "2026-06-01"}]
+    coverage = [
+        {
+            "report_id": "r1",
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "validation_status": "complete",
+            "list_present": True,
+            "declared_count": 14,
+            "extracted_count": 14,
+            "evidence_text": "",
+            "source_url": "",
+            "source_hash": "",
+        },
+        {
+            "report_id": "r1",
+            "signal_type": "overall_contraction",
+            "direction": "contraction",
+            "validation_status": "complete",
+            "list_present": True,
+            "declared_count": 3,
+            "extracted_count": 3,
+            "evidence_text": "",
+            "source_url": "",
+            "source_hash": "",
+        },
+    ]
+    trend = ism_services_industry.build_services_signal_trend(
+        reports, [], coverage, "Construction"
+    )
+    assert trend[0]["overall"]["status"] == "not_listed"
+    assert trend[0]["overall"]["direction"] is None
+    assert trend[0]["overall"]["direction_label"] == "Not listed"
+
+
+def test_signal_trend_unavailable_when_coverage_incomplete():
+    reports = [{"report_id": "r1", "report_month": "2026-06-01"}]
+    coverage = [
+        {
+            "report_id": "r1",
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "validation_status": "partial",
+            "list_present": True,
+            "declared_count": None,
+            "extracted_count": 5,
+            "evidence_text": "",
+            "source_url": "",
+            "source_hash": "",
+        },
+    ]
+    trend = ism_services_industry.build_services_signal_trend(
+        reports, [], coverage, "Construction"
+    )
+    assert trend[0]["overall"]["status"] == "unavailable"
+    assert trend[0]["overall"]["direction_label"] == "Unavailable"
+
+
+def test_signal_trend_conflicting_when_industry_in_both_directions():
+    reports = [{"report_id": "r1", "report_month": "2026-06-01"}]
+    signals = [
+        {
+            "report_id": "r1",
+            "signal_type": "business_activity",
+            "direction": "increase",
+            "industry": "Construction",
+            "rank": 1,
+            "source_excerpt": "increase",
+        },
+        {
+            "report_id": "r1",
+            "signal_type": "business_activity",
+            "direction": "decrease",
+            "industry": "Construction",
+            "rank": 1,
+            "source_excerpt": "decrease",
+        },
+    ]
+    trend = ism_services_industry.build_services_signal_trend(
+        reports, signals, [], "Construction"
+    )
+    assert trend[0]["components"]["business_activity"]["status"] == "conflicting"
+    assert (
+        trend[0]["components"]["business_activity"]["direction_label"] == "Conflicting"
+    )
+
+
+def test_signal_trend_no_score_or_composite_fields():
+    reports = [{"report_id": "r1", "report_month": "2026-06-01"}]
+    trend = ism_services_industry.build_services_signal_trend(
+        reports, [], [], "Construction"
+    )
+    point = trend[0]
+    assert "score" not in point
+    assert "score_coverage" not in point
+    assert "positive_confirmation_count" not in point
+
+
+def test_signal_trend_point_with_no_data_uses_unavailable_for_all():
+    reports = [{"report_id": "r1", "report_month": "2026-06-01"}]
+    trend = ism_services_industry.build_services_signal_trend(
+        reports, [], [], "Construction"
+    )
+    point = trend[0]
+    assert point["overall"]["status"] == "unavailable"
+    for key in SERVICES_COMPONENT_KEYS:
+        assert point["components"][key]["status"] == "unavailable"
+
+
+def test_signal_trend_missing_months_not_synthesized():
+    reports = [
+        {"report_id": "r1", "report_month": "2026-04-01"},
+        {"report_id": "r3", "report_month": "2026-06-01"},
+    ]
+    trend = ism_services_industry.build_services_signal_trend(
+        reports, [], [], "Construction"
+    )
+    assert len(trend) == 2
+    assert trend[0]["period"] == "2026-04-01"
+    assert trend[1]["period"] == "2026-06-01"
+
+
+def test_signal_trend_chronological_order():
+    reports = [
+        {"report_id": "r3", "report_month": "2026-06-01"},
+        {"report_id": "r1", "report_month": "2026-04-01"},
+        {"report_id": "r2", "report_month": "2026-05-01"},
+    ]
+    trend = ism_services_industry.build_services_signal_trend(
+        reports, [], [], "Construction"
+    )
+    assert [p["period"] for p in trend] == ["2026-04-01", "2026-05-01", "2026-06-01"]
+
+
 def test_services_industry_analysis_coverage_is_absent_when_all_rows_absent():
     result = ism_services_industry.build_services_industry_analysis(
         [

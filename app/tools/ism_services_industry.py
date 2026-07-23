@@ -337,6 +337,104 @@ def build_services_industry_analysis(
     }
 
 
+def _normalize_and_filter_signals(signals, industry, signal_type, alt_signal_type=None):
+    result = []
+    for sig in signals:
+        try:
+            sig_industry = normalize_industry(sig.get("industry", ""))
+        except ValueError:
+            continue
+        if sig_industry != industry:
+            continue
+        if sig.get("signal_type") in (signal_type, alt_signal_type):
+            result.append(sig)
+    return result
+
+
+def _signal_trend_list_size(coverage, signal_type, direction):
+    for c in coverage:
+        if c["signal_type"] == signal_type and c["direction"] == direction:
+            count = c.get("declared_count") or c.get("extracted_count")
+            return count
+    return None
+
+
+def _signal_trend_cell(signals, coverage, industry, signal_type, alt_signal_type=None):
+    matching = _normalize_and_filter_signals(
+        signals, industry, signal_type, alt_signal_type
+    )
+    if len(matching) == 1:
+        sig = matching[0]
+        direction = sig["direction"]
+        list_size = _signal_trend_list_size(coverage, sig["signal_type"], direction)
+        return {
+            "status": "listed",
+            "direction": direction,
+            "direction_label": SERVICES_DIRECTION_LABELS.get(
+                direction, str(direction or "").replace("_", " ").title()
+            ),
+            "rank": sig["rank"],
+            "list_size": list_size,
+        }
+    if len(matching) > 1:
+        return {
+            "status": "conflicting",
+            "direction": None,
+            "direction_label": "Conflicting",
+            "rank": None,
+            "list_size": None,
+        }
+    signal_types_to_check = {signal_type}
+    if alt_signal_type:
+        signal_types_to_check.add(alt_signal_type)
+    relevant = [c for c in coverage if c["signal_type"] in signal_types_to_check]
+    if relevant and all(c.get("validation_status") == "complete" for c in relevant):
+        return {
+            "status": "not_listed",
+            "direction": None,
+            "direction_label": "Not listed",
+            "rank": None,
+            "list_size": None,
+        }
+    return {
+        "status": "unavailable",
+        "direction": None,
+        "direction_label": "Unavailable",
+        "rank": None,
+        "list_size": None,
+    }
+
+
+def build_services_signal_trend(reports, industry_signals, signal_coverage, industry):
+    signals_by_report = {}
+    for sig in industry_signals:
+        signals_by_report.setdefault(sig["report_id"], []).append(sig)
+    coverage_by_report = {}
+    for cov in signal_coverage:
+        coverage_by_report.setdefault(cov["report_id"], []).append(cov)
+    sorted_reports = sorted(reports, key=lambda r: r["report_month"])
+    points = []
+    for report in sorted_reports:
+        rid = report["report_id"]
+        sigs = signals_by_report.get(rid, [])
+        covs = coverage_by_report.get(rid, [])
+        components = {}
+        for signal_type, label in SERVICES_COMPONENTS:
+            components[signal_type] = _signal_trend_cell(
+                sigs, covs, industry, signal_type
+            )
+        points.append(
+            {
+                "period": report["report_month"],
+                "overall": _signal_trend_cell(
+                    sigs, covs, industry, "overall_growth", "overall_contraction"
+                ),
+                "components": components,
+            }
+        )
+    return points
+
+
 def _direction_change_from_rows(rows):
     if len(rows) < 2:
         return None
