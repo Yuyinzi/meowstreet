@@ -455,6 +455,23 @@ Methodology text that must be excluded.
     assert "Methodology text" not in region
 
 
+def test_comments_commodities_region_stops_when_year_and_services_split():
+    source_text = """WHAT RESPONDENTS ARE SAYING
+"Demand remains stable." [Construction]
+COMMODITIES REPORTED UP/DOWN IN PRICE, AND IN SHORT SUPPLY
+Copper
+DECEMBER 2022
+SERVICES INDEX SUMMARIES
+Services PMI
+Methodology text that must be excluded.
+"""
+    region = ism_services_report._extract_comments_commodities_region(source_text)
+
+    assert "Copper" in region
+    assert "SERVICES INDEX SUMMARIES" not in region
+    assert "Methodology text" not in region
+
+
 @pytest.mark.parametrize(
     "heading",
     [

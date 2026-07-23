@@ -257,7 +257,8 @@ _COMMODITIES_RE = re.compile(
 )
 _INDEX_SUMMARIES_RE = re.compile(
     r"^[ \t]*[A-Z]+(?:[ \t]+|\r?\n[ \t]*)"
-    r"\d{4}[ \t]+SERVICES INDEX SUMMARIES[ \t]*$",
+    r"\d{4}(?:[ \t]+|\r?\n[ \t]*)"
+    r"SERVICES INDEX SUMMARIES[ \t]*$",
     re.I | re.M,
 )
 
