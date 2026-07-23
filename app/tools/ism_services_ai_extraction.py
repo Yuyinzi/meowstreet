@@ -414,7 +414,7 @@ class ServicesNarrativeFactsSectionModel(BaseModel):
 SECTION_PROMPT_VERSIONS = {
     "report": "ism-services-report-v3",
     "at_a_glance_rows": "ism-services-glance-v3",
-    "industry_signals": "ism-services-industries-v6",
+    "industry_signals": "ism-services-industries-v7",
     "comments_commodities": "ism-services-comments-v2",
     "narrative_facts": "ism-services-narrative-v3",
 }
@@ -627,7 +627,10 @@ def build_industry_signals_prompt(excerpt):
         + "Set declared_count to the explicit source count, or null when unstated.\n"
         + "Include explicit zero-industry lists with declared_count 0 and industries [].\n"
         + "Omit no-change statements. Do not add rank fields.\n"
-        + 'Include exact source text as "evidence_text" for each list.\n'
+        + 'For "evidence_text", use the shortest complete contiguous source sentence '
+        + "that contains the list. Copy it verbatim, including punctuation. "
+        + "Do not paraphrase or summarize. "
+        + "Do not combine text from separate sentences.\n"
         + '\n{"industry_signal_lists": [{"signal_type": "...", "direction": "growth|contraction|higher|lower|increase|decrease|slower|faster|too_low|too_high", "declared_count": 2, "industries": ["Construction", "Retail Trade"], "evidence_text": "..."}]}'
     )
 

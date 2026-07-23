@@ -57,7 +57,7 @@ def test_services_component_universe():
 def test_section_prompt_versions_are_independent():
     assert SECTION_PROMPT_VERSIONS["report"] == "ism-services-report-v3"
     assert SECTION_PROMPT_VERSIONS["at_a_glance_rows"] == "ism-services-glance-v3"
-    assert SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v6"
+    assert SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v7"
     assert SECTION_PROMPT_VERSIONS["comments_commodities"] == "ism-services-comments-v2"
     assert SECTION_PROMPT_VERSIONS["narrative_facts"] == "ism-services-narrative-v3"
     versions = list(SECTION_PROMPT_VERSIONS.values())
@@ -732,6 +732,93 @@ def _valid_factual_payload():
             "inflationary_pressure_mentioned": False,
         },
     }
+
+
+def test_industry_prompt_requires_contiguous_verbatim_evidence():
+    prompt = build_industry_signals_prompt("industry excerpt")
+
+    assert "shortest complete contiguous source sentence" in prompt
+    assert "Copy it verbatim" in prompt
+    assert "Do not paraphrase" in prompt
+    assert "Do not combine text from separate sentences" in prompt
+
+
+def test_august_backlog_lists_accept_verbatim_source_evidence():
+    increase = (
+        "The three industries reporting an increase in order backlogs in "
+        "August are: Educational Services; Information; and Professional, "
+        "Scientific & Technical Services."
+    )
+    decrease = (
+        "The 10 industries reporting a decrease in order backlogs in August "
+        "\u2014 in the following order \u2014 are: Agriculture, Forestry, Fishing & "
+        "Hunting; Real Estate, Rental & Leasing; Finance & Insurance; "
+        "Construction; Public Administration; Retail Trade; Wholesale Trade; "
+        "Management of Companies & Support Services; Health Care & Social "
+        "Assistance; and Utilities."
+    )
+    section_payloads = [
+        {"section_name": "report", "payload": {"report": _valid_report()}},
+        {
+            "section_name": "at_a_glance_rows",
+            "payload": {"at_a_glance_rows": _valid_at_a_glance_rows()},
+        },
+        {
+            "section_name": "industry_signals",
+            "payload": {
+                "industry_signal_lists": [
+                    {
+                        "signal_type": "backlog",
+                        "direction": "increase",
+                        "declared_count": 3,
+                        "industries": [
+                            "Educational Services",
+                            "Information",
+                            "Professional, Scientific & Technical Services",
+                        ],
+                        "evidence_text": increase,
+                    },
+                    {
+                        "signal_type": "backlog",
+                        "direction": "decrease",
+                        "declared_count": 10,
+                        "industries": [
+                            "Agriculture, Forestry, Fishing & Hunting",
+                            "Real Estate, Rental & Leasing",
+                            "Finance & Insurance",
+                            "Construction",
+                            "Public Administration",
+                            "Retail Trade",
+                            "Wholesale Trade",
+                            "Management of Companies & Support Services",
+                            "Health Care & Social Assistance",
+                            "Utilities",
+                        ],
+                        "evidence_text": decrease,
+                    },
+                ]
+            },
+        },
+        {
+            "section_name": "comments_commodities",
+            "payload": {"respondent_comments": [], "commodities": []},
+        },
+        {
+            "section_name": "narrative_facts",
+            "payload": {
+                "narrative_facts": {
+                    "consecutive_expansion_months": None,
+                    "services_economy_gdp_share_percent": None,
+                    "broad_based_expansion_mentioned": False,
+                    "inflationary_pressure_mentioned": False,
+                }
+            },
+        },
+    ]
+    result = assemble_factual_extraction(section_payloads)
+
+    assert len(result["industry_signals"]) == 13
+    assert result["industry_signal_coverage"][0]["validation_status"] == "complete"
 
 
 def _section_payloads():
