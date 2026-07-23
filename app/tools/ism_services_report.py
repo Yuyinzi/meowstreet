@@ -248,7 +248,9 @@ _COMMODITIES_RE = re.compile(
     re.I | re.M,
 )
 _INDEX_SUMMARIES_RE = re.compile(
-    r"^[ \t]*[A-Z]+ \d{4} SERVICES INDEX SUMMARIES[ \t]*$", re.I | re.M
+    r"^[ \t]*[A-Z]+(?:[ \t]+|\r?\n[ \t]*)"
+    r"\d{4}[ \t]+SERVICES INDEX SUMMARIES[ \t]*$",
+    re.I | re.M,
 )
 
 _SERVICES_COMPONENT_NAMES = [

@@ -400,3 +400,44 @@ def test_missing_narrative_returns_available_text():
     text = "Services PMI at 54% no narrative content with Tempe marker"
     region = ism_services_report._extract_narrative_region(text)
     assert "Services PMI" in region
+
+
+def test_comments_commodities_region_stops_at_split_index_summary_heading():
+    source_text = """WHAT RESPONDENTS ARE SAYING
+"Demand remains stable." [Construction]
+COMMODITIES REPORTED UP/DOWN IN PRICE, AND IN SHORT SUPPLY
+Copper
+JANUARY
+2026 SERVICES INDEX SUMMARIES
+Services PMI
+Methodology text that must be excluded.
+"""
+
+    region = ism_services_report._extract_comments_commodities_region(source_text)
+
+    assert "Copper" in region
+    assert "SERVICES INDEX SUMMARIES" not in region
+    assert "Methodology text" not in region
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "JANUARY 2026 SERVICES INDEX SUMMARIES",
+        "JANUARY\n2026 SERVICES INDEX SUMMARIES",
+        "JANUARY\r\n2026 SERVICES INDEX SUMMARIES",
+    ],
+)
+def test_component_industry_lists_accept_index_summary_heading_layouts(heading):
+    source_text = f"""INDUSTRY PERFORMANCE
+The industry reporting growth is Construction.
+WHAT RESPONDENTS ARE SAYING
+{heading}
+Business Activity
+The industry reporting an increase in business activity is: Construction.
+"""
+
+    region = ism_services_report._extract_industry_signals_region(source_text)
+
+    assert "Business Activity" in region
+    assert "increase in business activity" in region
