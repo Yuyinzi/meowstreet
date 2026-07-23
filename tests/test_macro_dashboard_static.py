@@ -3666,48 +3666,32 @@ def test_services_evidence_uses_readable_labels_without_schema_tokens():
     assert "Inflationary pressure was not mentioned" in payload["narrative"]
 
 
-def test_services_industry_detail_component_evidence_uses_labels():
+def test_services_signal_trend_renderer_is_defined():
     script = textwrap.dedent(
         """
         const fs = require("fs");
         const vm = require("vm");
-
-        const elements = {
-          dashboardStatus: {},
-          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
-          marketDetail: { innerHTML: "" },
-        };
-
         global.window = { __MEOWSTREET_TEST__: true };
-        global.document = {
-          getElementById: (id) => elements[id],
-        };
-        global.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ markets: [] }),
-        });
-
+        global.document = { getElementById: () => null };
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
+        global.$ = () => ({ textContent: "" });
+        global.loadUsRatesLiquidity = async () => {};
+        global.loadGdpRelationshipOverview = async () => {};
+        global.loadGrowthCycle = async () => {};
+        global.loadConsumerSentiment = async () => {};
+        global.loadMarketSetup = async () => {};
+        process.on("unhandledRejection", () => {});
+        global.loadUsRatesLiquidity = async () => {};
+        global.loadGdpRelationshipOverview = async () => {};
+        global.loadGrowthCycle = async () => {};
+        global.loadConsumerSentiment = async () => {};
+        global.loadMarketSetup = async () => {};
+        process.on("unhandledRejection", () => {});
         vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
-
-            const html = hooks.renderServicesComponentEvidence({
-              component_signals: [
-                { signal_type: "business_activity", label: "Business Activity", direction: "growth", direction_label: "Growth", rank: 3, list_size: 13 },
-                { signal_type: "supplier_deliveries", label: "Supplier Deliveries", direction: "slower", direction_label: "Slower", rank: 5, list_size: 14 },
-              ],
-              component_coverage: { listed_components: 2, available_components: 10, coverage_status: "available" },
-            });
-
         console.log(JSON.stringify({
-          hasBusinessActivity: html.indexOf("Business Activity") !== -1,
-          hasGrowth: html.indexOf("Growth") !== -1,
-          hasSupplierDeliveries: html.indexOf("Supplier Deliveries") !== -1,
-          hasSlower: html.indexOf("Slower") !== -1,
-          hasRank3of13: html.indexOf("#3 of 13") !== -1,
-          hasRank5of14: html.indexOf("#5 of 14") !== -1,
-          hasCoverage: html.indexOf("Listed in 2 of 10") !== -1,
-          hasComponentEvidence: html.indexOf("Component Evidence") !== -1,
+          hasSignalTrend: typeof hooks.renderServicesSignalTrend === "function",
+          hasCellRenderer: typeof hooks.renderSignalTrendCell === "function",
         }));
         """
     )
@@ -3719,15 +3703,333 @@ def test_services_industry_detail_component_evidence_uses_labels():
         text=True,
     )
     payload = json.loads(result.stdout)
+    assert payload["hasSignalTrend"] is True
+    assert payload["hasCellRenderer"] is True
 
-    assert payload["hasBusinessActivity"] is True
-    assert payload["hasGrowth"] is True
-    assert payload["hasSupplierDeliveries"] is True
-    assert payload["hasSlower"] is True
-    assert payload["hasRank3of13"] is True
-    assert payload["hasRank5of14"] is True
-    assert payload["hasCoverage"] is True
-    assert payload["hasComponentEvidence"] is True
+
+def test_services_signal_trend_renders_all_12_headers():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: () => null,
+        };
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
+        global.$ = () => ({ textContent: "" });
+        global.loadUsRatesLiquidity = async () => {};
+        global.loadGdpRelationshipOverview = async () => {};
+        global.loadGrowthCycle = async () => {};
+        global.loadConsumerSentiment = async () => {};
+        global.loadMarketSetup = async () => {};
+        process.on("unhandledRejection", () => {});
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const trend = [{
+          period: "2026-06-01",
+          overall: { status: "listed", direction: "growth", direction_label: "Growth", rank: 1, list_size: 14 },
+          components: {
+            business_activity: { status: "listed", direction: "increase", direction_label: "Increase", rank: 2, list_size: 8 },
+            new_orders: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            employment: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            supplier_deliveries: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            inventories: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            inventory_sentiment: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            prices: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            backlog: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            new_export_orders: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            imports: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+          },
+        }];
+
+        const html = hooks.renderServicesSignalTrend(trend);
+        console.log(JSON.stringify({
+          hasPeriod: html.indexOf("Period") !== -1,
+          hasOverall: html.indexOf("Overall") !== -1,
+          hasBusinessActivity: html.indexOf("Business Activity") !== -1,
+          hasNewOrders: html.indexOf("New Orders") !== -1,
+          hasEmployment: html.indexOf("Employment") !== -1,
+          hasSupplierDeliveries: html.indexOf("Supplier Deliveries") !== -1,
+          hasInventories: html.indexOf("Inventories") !== -1,
+          hasInventorySentiment: html.indexOf("Inventory Sentiment") !== -1,
+          hasPrices: html.indexOf("Prices") !== -1,
+          hasOrderBacklog: html.indexOf("Order Backlog") !== -1,
+          hasNewExportOrders: html.indexOf("New Export Orders") !== -1,
+          hasImports: html.indexOf("Imports") !== -1,
+          hasSignalTrend: html.indexOf("Signal Trend") !== -1,
+        }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    for key, val in payload.items():
+        assert val is True, f"{key} was false"
+
+
+def test_services_signal_trend_listed_cell_includes_direction_and_rank():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = { getElementById: () => null };
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
+        global.$ = () => ({ textContent: "" });
+        global.loadUsRatesLiquidity = async () => {};
+        global.loadGdpRelationshipOverview = async () => {};
+        global.loadGrowthCycle = async () => {};
+        global.loadConsumerSentiment = async () => {};
+        global.loadMarketSetup = async () => {};
+        process.on("unhandledRejection", () => {});
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const trend = [{
+          period: "2026-06-01",
+          overall: { status: "listed", direction: "growth", direction_label: "Growth", rank: 1, list_size: 14 },
+          components: {
+            business_activity: { status: "listed", direction: "increase", direction_label: "Increase", rank: 2, list_size: 8 },
+            new_orders: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            employment: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            supplier_deliveries: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            inventories: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            inventory_sentiment: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            prices: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            backlog: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            new_export_orders: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+            imports: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+          },
+        }];
+
+        const html = hooks.renderServicesSignalTrend(trend);
+        console.log(JSON.stringify({
+          hasGrowthRank: html.indexOf("Growth #1/14") !== -1,
+          hasIncreaseRank: html.indexOf("Increase #2/8") !== -1,
+        }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasGrowthRank"] is True
+    assert payload["hasIncreaseRank"] is True
+
+
+def test_services_signal_trend_unavailable_not_listed_conflicting_distinct():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = { getElementById: () => null };
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
+        global.$ = () => ({ textContent: "" });
+        global.loadUsRatesLiquidity = async () => {};
+        global.loadGdpRelationshipOverview = async () => {};
+        global.loadGrowthCycle = async () => {};
+        global.loadConsumerSentiment = async () => {};
+        global.loadMarketSetup = async () => {};
+        process.on("unhandledRejection", () => {});
+
+        function makeUnavailable() {
+          const result = {};
+          for (const k of ["business_activity","new_orders","employment","supplier_deliveries","inventories","inventory_sentiment","prices","backlog","new_export_orders","imports"]) {
+            result[k] = { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null };
+          }
+          return result;
+        }
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const trendNotListed = [{
+          period: "2026-06-01",
+          overall: { status: "not_listed", direction: null, direction_label: "Not listed", rank: null, list_size: null },
+          components: makeUnavailable(),
+        }];
+        const htmlNotListed = hooks.renderServicesSignalTrend(trendNotListed);
+
+        const trendConflicting = [{
+          period: "2026-06-01",
+          overall: { status: "conflicting", direction: null, direction_label: "Conflicting", rank: null, list_size: null },
+          components: makeUnavailable(),
+        }];
+        const htmlConflicting = hooks.renderServicesSignalTrend(trendConflicting);
+
+        const trendUnavailable = [{
+          period: "2026-06-01",
+          overall: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+          components: makeUnavailable(),
+        }];
+        const htmlUnavailable = hooks.renderServicesSignalTrend(trendUnavailable);
+
+        console.log(JSON.stringify({
+          hasNotListed: htmlNotListed.indexOf("Not listed") !== -1,
+          hasConflicting: htmlConflicting.indexOf("Conflicting") !== -1,
+          hasUnavailable: htmlUnavailable.indexOf("Unavailable") !== -1,
+        }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasNotListed"] is True
+    assert payload["hasConflicting"] is True
+    assert payload["hasUnavailable"] is True
+
+
+def test_services_signal_trend_shows_all_input_rows():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = { getElementById: () => null };
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
+        global.$ = () => ({ textContent: "" });
+        global.loadUsRatesLiquidity = async () => {};
+        global.loadGdpRelationshipOverview = async () => {};
+        global.loadGrowthCycle = async () => {};
+        global.loadConsumerSentiment = async () => {};
+        global.loadMarketSetup = async () => {};
+        process.on("unhandledRejection", () => {});
+
+        function makeUnavailable() {
+          const result = {};
+          for (const k of ["business_activity","new_orders","employment","supplier_deliveries","inventories","inventory_sentiment","prices","backlog","new_export_orders","imports"]) {
+            result[k] = { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null };
+          }
+          return result;
+        }
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const trend = [];
+        for (let m = 1; m <= 3; m++) {
+          const period = "2026-" + String(m).padStart(2, "0") + "-01";
+          trend.push({
+            period: period,
+            overall: { status: "listed", direction: "growth", direction_label: "Growth", rank: 1, list_size: 14 },
+            components: makeUnavailable(),
+          });
+        }
+
+        const html = hooks.renderServicesSignalTrend(trend);
+        const rows = html.split("<tbody>")[1] || "";
+        const rowCount = (rows.match(/<tr>/g) || []).length;
+        console.log(JSON.stringify({ rowCount: rowCount }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["rowCount"] == 3
+
+
+def test_services_signal_trend_returns_empty_for_no_data():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = { getElementById: () => null };
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
+        global.$ = () => ({ textContent: "" });
+        global.loadUsRatesLiquidity = async () => {};
+        global.loadGdpRelationshipOverview = async () => {};
+        global.loadGrowthCycle = async () => {};
+        global.loadConsumerSentiment = async () => {};
+        global.loadMarketSetup = async () => {};
+        process.on("unhandledRejection", () => {});
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const html = hooks.renderServicesSignalTrend([]);
+        console.log(JSON.stringify({ empty: html === "" }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["empty"] is True
+
+
+def test_services_component_evidence_and_rank_history_replaced_by_signal_trend():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = { getElementById: () => null };
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
+        global.$ = () => ({ textContent: "" });
+        global.loadUsRatesLiquidity = async () => {};
+        global.loadGdpRelationshipOverview = async () => {};
+        global.loadGrowthCycle = async () => {};
+        global.loadConsumerSentiment = async () => {};
+        global.loadMarketSetup = async () => {};
+        process.on("unhandledRejection", () => {});
+        global.loadUsRatesLiquidity = async () => {};
+        global.loadGdpRelationshipOverview = async () => {};
+        global.loadGrowthCycle = async () => {};
+        global.loadConsumerSentiment = async () => {};
+        global.loadMarketSetup = async () => {};
+        process.on("unhandledRejection", () => {});
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        console.log(JSON.stringify({
+          hasOldComponentEvidence: typeof hooks.renderServicesComponentEvidence === "function",
+          hasOldRankHistory: typeof hooks.renderServicesRankHistory === "function",
+        }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasOldComponentEvidence"] is False
+    assert payload["hasOldRankHistory"] is False
 
 
 def test_services_detail_follows_manufacturing_display_structure():
@@ -4011,60 +4313,74 @@ def test_services_industry_analysis_renders_ranked_master_detail():
         vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
+        function industry(name, direction, rank, comments = []) {
+          return {
+            industry: name,
+            direction,
+            rank,
+            direction_change: null,
+            rank_change: null,
+            streak: { direction, months: 1 },
+            trend: [{ period: "2026-06-01", direction, rank }],
+            component_signals: name === "Construction"
+              ? [{
+                  signal_type: "business_activity",
+                  label: "Business Activity",
+                  direction: "growth",
+                  direction_label: "Growth",
+                  rank: 3,
+                  list_size: 13,
+                }]
+              : [],
+            component_coverage: {
+              listed_components: name === "Construction" ? 1 : 0,
+              available_components: 10,
+              coverage_status: "available",
+            },
+            comments,
+          };
+        }
+
         const analysis = {
           status: "available",
           period: "2026-06-01",
           source_url: "https://example.com/services/june",
-          growing_industries: [{ industry: "Construction", rank: 1 }],
-          contracting_industries: [{ industry: "Educational Services", rank: 1 }],
+          growing_industries: [
+            { industry: "Construction", rank: 1 },
+            { industry: "Finance & Insurance", rank: 2 },
+            { industry: "Utilities", rank: 3 },
+            { industry: "Professional Services", rank: 4 },
+          ],
+          contracting_industries: [
+            { industry: "Educational Services", rank: 1 },
+            { industry: "Retail Trade", rank: 2 },
+            { industry: "Wholesale Trade", rank: 3 },
+            { industry: "Arts & Entertainment", rank: 4 },
+          ],
           industries: [
-            {
-              industry: "Construction",
-              direction: "growth",
-              rank: 1,
-              direction_change: null,
-              rank_change: -3,
-              streak: { direction: "growth", months: 2 },
-              trend: [
-                { period: "2026-05-01", direction: "growth", rank: 4 },
-                { period: "2026-06-01", direction: "growth", rank: 1 },
-              ],
-              component_signals: [
-                { signal_type: "business_activity", label: "Business Activity", direction: "growth", direction_label: "Growth", rank: 3, list_size: 13 },
-              ],
-              component_coverage: { listed_components: 1, available_components: 10 },
-              comments: ["Construction comment."],
-            },
-            {
-              industry: "Educational Services",
-              direction: "contraction",
-              rank: 1,
-              direction_change: null,
-              rank_change: null,
-              streak: { direction: "contraction", months: 1 },
-              trend: [{ period: "2026-06-01", direction: "contraction", rank: 1 }],
-              component_signals: [],
-              component_coverage: { listed_components: 0, available_components: 10 },
-              comments: ["Education comment."],
-            },
+            industry("Construction", "growth", 1, ["Construction comment."]),
+            industry("Finance & Insurance", "growth", 2),
+            industry("Utilities", "growth", 3),
+            industry("Professional Services", "growth", 4),
+            industry("Educational Services", "contraction", 1),
+            industry("Retail Trade", "contraction", 2),
+            industry("Wholesale Trade", "contraction", 3),
+            industry("Arts & Entertainment", "contraction", 4),
           ],
         };
 
         const html = hooks.renderServicesIndustryAnalysisSection(analysis);
 
         console.log(JSON.stringify({
-          hasGrowing: html.indexOf("Growing Industries") !== -1,
-          hasContracting: html.indexOf("Contracting Industries") !== -1,
-          hasConstructionButton: html.indexOf('data-services-industry="Construction"') !== -1,
-          hasConstructionSelected: html.indexOf('aria-pressed="true"') !== -1,
-          hasBusinessActivity: html.indexOf("Business Activity") !== -1,
-          hasGrowthLabel: html.indexOf("Growth") !== -1,
-          hasRank3of13: html.indexOf("#3 of 13") !== -1,
-          hasConstructionComment: html.indexOf("Construction comment.") !== -1,
-          hasEducationComment: html.indexOf("Education comment.") !== -1,
-          hasRankHistory: html.indexOf("Rank History") !== -1,
-          hasJun2026: html.indexOf("Jun 2026") !== -1,
-          hasScore: html.indexOf("Score") !== -1,
+          summaryButtonCount: (html.match(/data-services-industry="/g) || []).length,
+          selectorOptionCount: (html.match(/<option value=/g) || []).length,
+          hasSelector: html.includes("data-services-industry-select"),
+          hasFourthGrowthButton: html.includes('data-services-industry="Professional Services"'),
+          hasFourthGrowthOption: html.includes('<option value="Professional Services"'),
+          hasFourthContractionButton: html.includes('data-services-industry="Arts &amp; Entertainment"'),
+          hasFourthContractionOption: html.includes('<option value="Arts &amp; Entertainment"'),
+          hasConstructionSelectedOption: html.includes('<option value="Construction" selected>'),
+          hasConstructionComment: html.includes("Construction comment."),
         }));
         """
     )
@@ -4078,18 +4394,15 @@ def test_services_industry_analysis_renders_ranked_master_detail():
     )
     payload = json.loads(result.stdout)
 
-    assert payload["hasGrowing"] is True
-    assert payload["hasContracting"] is True
-    assert payload["hasConstructionButton"] is True
-    assert payload["hasConstructionSelected"] is True
-    assert payload["hasBusinessActivity"] is True
-    assert payload["hasGrowthLabel"] is True
-    assert payload["hasRank3of13"] is True
+    assert payload["summaryButtonCount"] == 6
+    assert payload["selectorOptionCount"] == 8
+    assert payload["hasSelector"] is True
+    assert payload["hasFourthGrowthButton"] is False
+    assert payload["hasFourthGrowthOption"] is True
+    assert payload["hasFourthContractionButton"] is False
+    assert payload["hasFourthContractionOption"] is True
+    assert payload["hasConstructionSelectedOption"] is True
     assert payload["hasConstructionComment"] is True
-    assert payload["hasEducationComment"] is False
-    assert payload["hasRankHistory"] is True
-    assert payload["hasJun2026"] is True
-    assert payload["hasScore"] is False
 
 
 def test_services_industry_selection_scopes_detail_and_comments():
@@ -4159,9 +4472,20 @@ def test_services_industry_selection_scopes_detail_and_comments():
           };
         }
         const detail = { innerHTML: "" };
+        const selector = {
+          value: "Construction",
+          addEventListener(type, handler) {
+            this.eventType = type;
+            this.handler = handler;
+          },
+        };
         const buttons = [fakeButton("Construction"), fakeButton("Educational Services")];
         const body = {
-          querySelector: (selector) => selector === "[data-services-industry-detail]" ? detail : null,
+          querySelector: (selectorName) => {
+            if (selectorName === "[data-services-industry-detail]") return detail;
+            if (selectorName === "[data-services-industry-select]") return selector;
+            return null;
+          },
           querySelectorAll: () => buttons,
         };
         hooks.selectServicesIndustry(body, analysis, "Educational Services");
@@ -4172,6 +4496,7 @@ def test_services_industry_selection_scopes_detail_and_comments():
           contractionPressed: buttons[1]["aria-pressed"],
           hasEducationComment: detail.innerHTML.indexOf("Education comment.") !== -1,
           hasConstructionComment: detail.innerHTML.indexOf("Construction comment.") !== -1,
+          selectorValue: selector.value,
         }));
         """
     )
@@ -4190,6 +4515,124 @@ def test_services_industry_selection_scopes_detail_and_comments():
     assert payload["contractionPressed"] == "true"
     assert payload["hasEducationComment"] is True
     assert payload["hasConstructionComment"] is False
+    assert payload["selectorValue"] == "Educational Services"
+
+
+def test_services_industry_selector_change_updates_detail_and_state():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const analysis = {
+          status: "available",
+          period: "2026-06-01",
+          source_url: "https://example.com/services/june",
+          growing_industries: [{ industry: "Construction", rank: 1 }],
+          contracting_industries: [{ industry: "Educational Services", rank: 1 }],
+          industries: [
+            {
+              industry: "Construction",
+              direction: "growth",
+              rank: 1,
+              direction_change: null,
+              rank_change: -3,
+              streak: { direction: "growth", months: 2 },
+              trend: [],
+              component_signals: [],
+              component_coverage: { listed_components: 0, available_components: 10 },
+              comments: ["Construction comment."],
+            },
+            {
+              industry: "Educational Services",
+              direction: "contraction",
+              rank: 1,
+              direction_change: null,
+              rank_change: null,
+              streak: { direction: "contraction", months: 1 },
+              trend: [],
+              component_signals: [],
+              component_coverage: { listed_components: 0, available_components: 10 },
+              comments: ["Education comment."],
+            },
+          ],
+        };
+
+        function fakeButton(industry) {
+          return {
+            dataset: { servicesIndustry: industry },
+            classList: { toggle: () => {} },
+            setAttribute(name, value) { this[name] = value; },
+            addEventListener: () => {},
+          };
+        }
+        const detail = { innerHTML: "" };
+        const selector = {
+          value: "Construction",
+          addEventListener(type, handler) {
+            this.eventType = type;
+            this.handler = handler;
+          },
+        };
+        const buttons = [fakeButton("Construction"), fakeButton("Educational Services")];
+        const body = {
+          querySelector: (selectorName) => {
+            if (selectorName === "[data-services-industry-detail]") return detail;
+            if (selectorName === "[data-services-industry-select]") return selector;
+            return null;
+          },
+          querySelectorAll: () => buttons,
+        };
+
+        hooks.bindServicesIndustrySelector(body, analysis);
+        selector.value = "Educational Services";
+        selector.handler();
+
+        console.log(JSON.stringify({
+          hasEducationComment: detail.innerHTML.indexOf("Education comment.") !== -1,
+          hasConstructionComment: detail.innerHTML.indexOf("Construction comment.") !== -1,
+          selectedServicesIndustry: hooks.state.selectedServicesIndustry,
+          button0AriaPressed: buttons[0]["aria-pressed"],
+          button1AriaPressed: buttons[1]["aria-pressed"],
+          selectorValue: selector.value,
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasEducationComment"] is True
+    assert payload["hasConstructionComment"] is False
+    assert payload["selectedServicesIndustry"] == "Educational Services"
+    assert payload["button0AriaPressed"] in ("false", False)
+    assert payload["button1AriaPressed"] in ("true", True)
+    assert payload["selectorValue"] == "Educational Services"
 
 
 def test_services_full_evidence_excludes_bulk_industry_content():
@@ -4272,7 +4715,92 @@ def test_services_full_evidence_excludes_bulk_industry_content():
     assert payload["hasBulkComment"] is False
 
 
-def test_services_component_evidence_shows_unavailable_when_coverage_is_none():
+def test_services_signal_trend_detail_view_replaces_old_sections():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = { getElementById: () => null };
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
+        global.$ = () => ({ textContent: "" });
+        global.loadUsRatesLiquidity = async () => {};
+        global.loadGdpRelationshipOverview = async () => {};
+        global.loadGrowthCycle = async () => {};
+        global.loadConsumerSentiment = async () => {};
+        global.loadMarketSetup = async () => {};
+        process.on("unhandledRejection", () => {});
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const industry = {
+          industry: "Construction",
+          direction: "growth",
+          rank: 1,
+          direction_change: null,
+          rank_change: 0,
+          streak: { direction: "growth", months: 2 },
+          comments: ["Pipeline remains healthy."],
+          signal_trend: [
+            {
+              period: "2026-06-01",
+              overall: { status: "listed", direction: "growth", direction_label: "Growth", rank: 1, list_size: 14 },
+              components: {
+                business_activity: { status: "listed", direction: "increase", direction_label: "Increase", rank: 2, list_size: 8 },
+                new_orders: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+                employment: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+                supplier_deliveries: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+                inventories: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+                inventory_sentiment: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+                prices: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+                backlog: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+                new_export_orders: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+                imports: { status: "unavailable", direction: null, direction_label: "Unavailable", rank: null, list_size: null },
+              },
+            },
+          ],
+        };
+        const analysis = {
+          status: "available",
+          period: "2026-06-01",
+          source_url: "https://example.com/services/june",
+        };
+
+        const html = hooks.renderServicesIndustryDetailView(industry, analysis);
+        console.log(JSON.stringify({
+          hasSignalTrend: html.indexOf("Signal Trend") !== -1,
+          hasGrowth: html.indexOf("Growth") !== -1,
+          hasIncrease: html.indexOf("Increase") !== -1,
+          hasRank1_14: html.indexOf("#1/14") !== -1,
+          hasRank2_8: html.indexOf("#2/8") !== -1,
+          hasComments: html.indexOf("Pipeline remains healthy.") !== -1,
+          hasSource: html.indexOf("Official ISM Report") !== -1,
+          hasComponentEvidence: html.indexOf("Component Evidence") === -1,
+          hasRankHistory: html.indexOf("Rank History") === -1,
+        }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasSignalTrend"] is True
+    assert payload["hasGrowth"] is True
+    assert payload["hasIncrease"] is True
+    assert payload["hasRank1_14"] is True
+    assert payload["hasRank2_8"] is True
+    assert payload["hasComments"] is True
+    assert payload["hasSource"] is True
+    assert payload["hasComponentEvidence"] is True
+    assert payload["hasRankHistory"] is True
+
+
+def test_services_industry_selector_preserves_valid_selection_and_escapes_names():
     script = textwrap.dedent(
         """
         const fs = require("fs");
@@ -4297,30 +4825,48 @@ def test_services_component_evidence_shows_unavailable_when_coverage_is_none():
         vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
-        function check(desc, condition) {
-          if (!condition) throw new Error("FAIL: " + desc);
-        }
-
-        const htmlUnavailable = hooks.renderServicesComponentEvidence({
+        const industry = {
+          industry: 'Health <Care> & "Social"',
+          direction: "contraction",
+          rank: 1,
+          direction_change: null,
+          rank_change: null,
+          streak: { direction: "contraction", months: 1 },
+          trend: [],
           component_signals: [],
-          component_coverage: { listed_components: 0, available_components: null, coverage_status: "unavailable" },
-        });
-        check("unavailable coverage text", htmlUnavailable.indexOf("Component coverage unavailable") !== -1);
-        check("no 0 of 0", htmlUnavailable.indexOf("0 of 0") === -1);
+          component_coverage: {
+            listed_components: 0,
+            available_components: null,
+            coverage_status: "unavailable",
+          },
+          comments: [],
+        };
+        const contractionOnly = {
+          status: "available",
+          period: "2026-06-01",
+          growing_industries: [],
+          contracting_industries: [{ industry: industry.industry, rank: 1 }],
+          industries: [industry],
+        };
 
-        const htmlAbsent = hooks.renderServicesComponentEvidence({
-          component_signals: [],
-          component_coverage: { listed_components: 0, available_components: 0, coverage_status: "absent" },
-        });
-        check("absent coverage text", htmlAbsent.indexOf("No component lists reported") !== -1);
+        hooks.state.selectedServicesIndustry = "Stale Industry";
+        const fallbackHtml = hooks.renderServicesIndustryAnalysisSection(contractionOnly);
+        const fallbackSelection = hooks.state.selectedServicesIndustry;
 
-            const htmlAvailable = hooks.renderServicesComponentEvidence({
-              component_signals: [{ signal_type: "business_activity", label: "Business Activity", direction: "growth", direction_label: "Growth", rank: 3, list_size: 13 }],
-              component_coverage: { listed_components: 1, available_components: 10, coverage_status: "available" },
-            });
-        check("available coverage text", htmlAvailable.indexOf("Listed in 1 of 10") !== -1);
+        hooks.state.selectedServicesIndustry = industry.industry;
+        const preservedHtml = hooks.renderServicesIndustryAnalysisSection(contractionOnly);
 
-        console.log(JSON.stringify({ ok: true }));
+        console.log(JSON.stringify({
+          fallbackSelection,
+          preservedSelection: hooks.state.selectedServicesIndustry,
+          escapedOption: preservedHtml.includes(
+            '<option value="Health &lt;Care&gt; &amp; &quot;Social&quot;" selected>'
+          ),
+          escapedButton: preservedHtml.includes(
+            'data-services-industry="Health &lt;Care&gt; &amp; &quot;Social&quot;"'
+          ),
+          hasEmptyGrowthMessage: fallbackHtml.includes("No growing industries"),
+        }));
         """
     )
 
@@ -4332,4 +4878,9 @@ def test_services_component_evidence_shows_unavailable_when_coverage_is_none():
         text=True,
     )
     payload = json.loads(result.stdout)
-    assert payload["ok"] is True
+
+    assert payload["fallbackSelection"] == 'Health <Care> & "Social"'
+    assert payload["preservedSelection"] == 'Health <Care> & "Social"'
+    assert payload["escapedOption"] is True
+    assert payload["escapedButton"] is True
+    assert payload["hasEmptyGrowthMessage"] is True

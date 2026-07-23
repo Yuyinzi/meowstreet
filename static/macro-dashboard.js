@@ -2782,51 +2782,53 @@
     return rows || `<p class="ism-industry-empty">${escapeHtml(emptyLabel)}</p>`;
   }
 
-  function renderServicesComponentEvidence(industry) {
-    const signals = industry.component_signals || [];
-    const coverage = industry.component_coverage || {};
-    const coverageStatus = coverage.coverage_status;
-    const coverageText = coverageStatus === "absent"
-      ? "No component lists reported"
-      : coverageStatus === "available"
-        ? `Listed in ${escapeHtml(String(coverage.listed_components || 0))} of ${escapeHtml(String(coverage.available_components))} available components`
-        : "Component coverage unavailable";
-    const rows = signals.map((signal) => `
-      <div class="ism-industry-signal-row ism-services-component-row">
-        <span class="ism-signal-name">${escapeHtml(signal.label || "")}</span>
-        <span class="ism-services-direction-chip">${escapeHtml(signal.direction_label || "")}</span>
-        <span class="ism-signal-rank">${signal.rank != null ? `#${escapeHtml(String(signal.rank))}${signal.list_size != null ? ` of ${escapeHtml(String(signal.list_size))}` : ""}` : "\u2014"}</span>
-      </div>
-    `).join("");
-    return `
-      <div class="ism-services-component-evidence">
-        <h6>${bilingualLabel("Component Evidence")}</h6>
-        <p class="ism-trend-meta">${coverageText}</p>
-        <div class="ism-industry-signals">${rows || `<p class="ism-industry-no-comment">Component evidence unavailable</p>`}</div>
-      </div>
-    `;
-  }
-
-  function renderServicesRankHistory(trend) {
-    const rows = (trend || []).map((point) => `
-      <tr>
-        <td>${escapeHtml(fmtMonthYear(point.period))}</td>
-        <td>${escapeHtml(readableServicesDirection(point.direction))}</td>
-        <td>#${escapeHtml(String(point.rank))}</td>
-      </tr>
-    `).join("");
-    if (!rows) return "";
+  function renderServicesSignalTrend(signalTrend) {
+    if (!signalTrend || !signalTrend.length) return "";
+    const sorted = [...signalTrend].sort((a, b) => a.period.localeCompare(b.period));
+    const headers = [
+      "Period", "Overall",
+      "Business Activity", "New Orders", "Employment",
+      "Supplier Deliveries", "Inventories", "Inventory Sentiment",
+      "Prices", "Order Backlog", "New Export Orders", "Imports",
+    ];
+    const componentKeys = [
+      "business_activity", "new_orders", "employment",
+      "supplier_deliveries", "inventories", "inventory_sentiment",
+      "prices", "backlog", "new_export_orders", "imports",
+    ];
+    const rows = sorted.map((point) => {
+      const cells = [fmtMonthYear(point.period), renderSignalTrendCell(point.overall)];
+      componentKeys.forEach((key) => {
+        const cell = (point.components || {})[key];
+        cells.push(renderSignalTrendCell(cell));
+      });
+      return `<tr>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`;
+    }).join("");
     return `
       <div class="ism-industry-trend">
-        <h6>${bilingualLabel("Rank History")}</h6>
+        <h6>${bilingualLabel("Signal Trend")}</h6>
         <div class="ism-trend-table-wrap">
           <table class="ism-trend-table">
-            <thead><tr><th>Period</th><th>Direction</th><th>Rank</th></tr></thead>
+            <thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
       </div>
     `;
+  }
+
+  function renderSignalTrendCell(cell) {
+    if (!cell) return "\u2014";
+    if (cell.status === "listed") {
+      const rankText = cell.list_size != null
+        ? `#${cell.rank}/${cell.list_size}`
+        : cell.rank != null ? `#${cell.rank}` : "";
+      return `${escapeHtml(cell.direction_label || "")} ${escapeHtml(rankText)}`;
+    }
+    if (cell.status === "conflicting" || cell.status === "not_listed" || cell.status === "unavailable") {
+      return escapeHtml(cell.direction_label || "");
+    }
+    return "\u2014";
   }
 
   function renderServicesSelectedComments(comments) {
@@ -2842,6 +2844,13 @@
 
   function servicesIndustryByName(analysis, industryName) {
     return (analysis.industries || []).find((row) => row.industry === industryName) || null;
+  }
+
+  function renderServicesIndustryOptions(industries) {
+    return (industries || []).map((industry) => {
+      const selected = industry.industry === state.selectedServicesIndustry ? " selected" : "";
+      return `<option value="${escapeHtml(industry.industry)}"${selected}>${escapeHtml(industry.industry)}</option>`;
+    }).join("");
   }
 
   function renderServicesIndustryDetailView(industry, analysis) {
@@ -2865,9 +2874,8 @@
         <span>${bilingualLabel("Direction Change")}: ${escapeHtml(directionChange)}</span>
         <span>${bilingualLabel("Streak")}: ${escapeHtml(String(streak.months || 0))} months ${escapeHtml(readableServicesDirection(streak.direction))}</span>
       </div>
-      ${renderServicesComponentEvidence(industry)}
       ${renderServicesSelectedComments(industry.comments)}
-      ${renderServicesRankHistory(industry.trend)}
+      ${renderServicesSignalTrend(industry.signal_trend)}
       ${analysis.source_url ? `<div class="ism-industry-source"><a href="${escapeHtml(analysis.source_url)}" target="_blank" rel="noopener noreferrer">${bilingualLabel("Official ISM Report")} &rarr;</a></div>` : ""}
     `;
   }
@@ -2882,6 +2890,9 @@
       state.selectedServicesIndustry = defaultIndustry ? defaultIndustry.industry : null;
     }
     const selected = servicesIndustryByName(analysis, state.selectedServicesIndustry);
+    const topGrowing = (analysis.growing_industries || []).slice(0, 3);
+    const topContracting = (analysis.contracting_industries || []).slice(0, 3);
+    const selectorOptions = renderServicesIndustryOptions(analysis.industries);
     return `
       <section class="ism-detail-group ism-industry-ranking">
         <div class="ism-industry-counts">
@@ -2890,8 +2901,14 @@
           <span><strong>${escapeHtml(String((analysis.industries || []).length))}</strong> Total</span>
         </div>
         <div class="ism-industry-columns">
-          <div><h5>${bilingualLabel("Growing Industries")}</h5><div class="ism-industry-list">${renderServicesRankedIndustryList(analysis.growing_industries, "growth", "No growing industries")}</div></div>
-          <div><h5>${bilingualLabel("Contracting Industries")}</h5><div class="ism-industry-list">${renderServicesRankedIndustryList(analysis.contracting_industries, "contraction", "No contracting industries")}</div></div>
+          <div><h5>${bilingualLabel("Growing Industries")}</h5><div class="ism-industry-list">${renderServicesRankedIndustryList(topGrowing, "growth", "No growing industries")}</div></div>
+          <div><h5>${bilingualLabel("Contracting Industries")}</h5><div class="ism-industry-list">${renderServicesRankedIndustryList(topContracting, "contraction", "No contracting industries")}</div></div>
+        </div>
+        <div class="ism-industry-selector-wrap">
+          <label for="ism-services-industry-select">${bilingualLabel("Select Industry")}</label>
+          <select id="ism-services-industry-select" class="ism-industry-select" data-services-industry-select>
+            ${selectorOptions}
+          </select>
         </div>
       </section>
       <section class="ism-detail-group ism-industry-analysis">
@@ -3059,6 +3076,8 @@
     });
     const detail = body.querySelector("[data-services-industry-detail]");
     if (detail) detail.innerHTML = renderServicesIndustryDetailView(selected, analysis);
+    const selector = body.querySelector("[data-services-industry-select]");
+    if (selector) selector.value = industryName;
   }
 
   function bindServicesIndustrySelector(body, analysis) {
@@ -3067,6 +3086,12 @@
         selectServicesIndustry(body, analysis, button.dataset.servicesIndustry);
       });
     });
+    const selector = body.querySelector("[data-services-industry-select]");
+    if (selector) {
+      selector.addEventListener("change", () => {
+        selectServicesIndustry(body, analysis, selector.value);
+      });
+    }
   }
 
   function renderGrowthCycleDetailInPanel(body) {
@@ -5342,11 +5367,13 @@
       renderServicesCommodityGroups,
       renderServicesNarrativeFacts,
       renderServicesFullEvidence,
+      renderServicesIndustryOptions,
       renderServicesIndustryAnalysisSection,
       renderServicesIndustryDetailView,
-      renderServicesComponentEvidence,
-      renderServicesRankHistory,
+      renderServicesSignalTrend,
+      renderSignalTrendCell,
       selectServicesIndustry,
+      bindServicesIndustrySelector,
       renderIsmIndustryTrend,
       renderIsmScoreTrendSvg,
       renderIsmIndustryList,
