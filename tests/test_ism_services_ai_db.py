@@ -97,12 +97,16 @@ def test_promote_services_extraction_replaces_metrics(tmp_path):
     result = promote_services_extraction(con, extraction, source)
 
     assert result["report_id"] == "ism_services_2026_06"
-    assert result["metrics"] == 4
+    assert result["metrics"] == 11
     assert result["at_a_glance_rows"] == 11
 
     pmi_points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
     assert len(pmi_points) == 1
     assert pmi_points[0]["value"] == 54.0
+    employment_points = us_rates_liquidity.load_macro_indicator_points(
+        con, "ism_services_employment"
+    )
+    assert len(employment_points) == 1
 
 
 def test_promote_services_extraction_stores_all_11_at_a_glance_rows(tmp_path):

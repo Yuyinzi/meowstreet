@@ -455,7 +455,7 @@ class ServicesNarrativeFactsSectionModel(BaseModel):
 
 SECTION_PROMPT_VERSIONS = {
     "report": "ism-services-report-v3",
-    "at_a_glance_rows": "ism-services-glance-v3",
+    "at_a_glance_rows": "ism-services-glance-v4",
     "industry_signals": "ism-services-industries-v8",
     "comments_commodities": "ism-services-comments-v3",
     "narrative_facts": "ism-services-narrative-v3",
@@ -474,6 +474,95 @@ FACTUAL_SECTION_NAMES = list(SECTION_PROMPT_VERSIONS.keys())
 
 def _normalized_in_source(text, normalized_source):
     return bool(text) and re.sub(r"\s+", " ", text).lower() in normalized_source
+
+
+_AT_A_GLANCE_DIRECTIONS = (
+    "From Contracting",
+    "From Growing",
+    "From Unchanged",
+    "Contracting",
+    "Contraction",
+    "Decreasing",
+    "Expanding",
+    "Increasing",
+    "Growing",
+    "Slowing",
+    "Too High",
+    "Too Low",
+    "Decrease",
+    "Faster",
+    "Higher",
+    "Increase",
+    "Lower",
+    "Same",
+    "Slower",
+    "Steady",
+    "Unchanged",
+)
+
+_AT_A_GLANCE_RATES = (
+    "From Contracting",
+    "From Growing",
+    "From Unchanged",
+    "From Faster",
+    "From Slower",
+    "From Slowing",
+    "From Too High",
+    "From Too Low",
+    "Decreasing",
+    "Increasing",
+    "Unchanged",
+    "Faster",
+    "Same",
+    "Slower",
+)
+
+
+def _at_a_glance_text_pattern(values):
+    return "|".join(
+        re.escape(value).replace(r"\ ", r"\s+")
+        for value in sorted(values, key=len, reverse=True)
+    )
+
+
+def _source_at_a_glance_rows(source_text):
+    normalized_source = re.sub(r"\s+", " ", source_text.replace("\xa0", " ")).strip()
+    number_pattern = r"[+-]?\s*\d+(?:\.\d+)?"
+    direction_pattern = _at_a_glance_text_pattern(_AT_A_GLANCE_DIRECTIONS)
+    rate_pattern = _at_a_glance_text_pattern(_AT_A_GLANCE_RATES)
+    rows = []
+    for label, series_id in SERVICES_AT_A_GLANCE_LABELS:
+        label_pattern = (
+            re.escape(label)
+            .replace(r"\ ", r"\s+")
+            .replace("/", r"\s*/\s*")
+        )
+        match = re.search(
+            rf"{label_pattern}(?:\s*®)?\s+"
+            rf"(?P<current>{number_pattern})\s+"
+            rf"(?P<previous>{number_pattern})\s+"
+            rf"(?P<change>{number_pattern})\s+"
+            rf"(?P<direction>{direction_pattern})\s+"
+            rf"(?P<rate>{rate_pattern})\s+"
+            r"(?P<trend>\d+)",
+            normalized_source,
+            re.I,
+        )
+        if match is None:
+            return None
+        rows.append(
+            {
+                "series_id": series_id,
+                "label": label,
+                "current_value": float(match.group("current").replace(" ", "")),
+                "previous_value": float(match.group("previous").replace(" ", "")),
+                "point_change": float(match.group("change").replace(" ", "")),
+                "direction": re.sub(r"\s+", " ", match.group("direction")),
+                "rate_of_change": re.sub(r"\s+", " ", match.group("rate")),
+                "trend_months": int(match.group("trend")),
+            }
+        )
+    return rows
 
 
 def _source_respondent_comments(source_text):
@@ -734,6 +823,10 @@ def validate_section_payload(section_name, payload, source_text):
     model_cls = SECTION_RESPONSE_MODELS.get(section_name)
     if model_cls is None:
         raise ValueError(f"unknown section: {section_name}")
+    if section_name == "at_a_glance_rows":
+        source_rows = _source_at_a_glance_rows(source_text)
+        if source_rows is not None:
+            payload = {"at_a_glance_rows": source_rows}
     try:
         validated = model_cls.model_validate(payload)
     except ValidationError as exc:
@@ -817,8 +910,8 @@ def build_at_a_glance_prompt(excerpt):
         "Before returning JSON, verify current_value - previous_value equals "
         "point_change to normal one-decimal rounding.\n\n"
         '{"at_a_glance_rows": [{"series_id": "...", "label": "...", '
-        '"current_value": 0.0, "previous_value": 0.0, "point_change": 0.0, '
-        '"direction": "...", "rate_of_change": "...", "trend_months": 0}]}'
+        '"current_value": 52.0, "previous_value": 51.0, "point_change": 1.0, '
+        '"direction": "Growing", "rate_of_change": "Faster", "trend_months": 2}]}'
     )
 
 

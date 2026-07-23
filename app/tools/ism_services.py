@@ -2,7 +2,24 @@ SERIES_TO_KEY = {
     "ism_services_pmi": "pmi",
     "ism_services_business_activity": "business_activity",
     "ism_services_new_orders": "new_orders",
+    "ism_services_employment": "employment",
+    "ism_services_supplier_deliveries": "supplier_deliveries",
+    "ism_services_inventories": "inventories",
+    "ism_services_prices": "prices",
     "ism_services_order_backlog": "order_backlog",
+    "ism_services_new_export_orders": "new_export_orders",
+    "ism_services_imports": "imports",
+    "ism_services_inventory_sentiment": "inventory_sentiment",
+}
+
+SIGNAL_SERIES_TO_KEY = {
+    series_id: SERIES_TO_KEY[series_id]
+    for series_id in [
+        "ism_services_pmi",
+        "ism_services_business_activity",
+        "ism_services_new_orders",
+        "ism_services_order_backlog",
+    ]
 }
 
 REQUIRED_LABELS = {
@@ -11,18 +28,20 @@ REQUIRED_LABELS = {
     "new_orders": "New Orders",
 }
 
-SERVICES_AT_A_GLANCE_TO_KEY = {
-    "ism_services_pmi": "pmi",
-    "ism_services_business_activity": "business_activity",
-    "ism_services_new_orders": "new_orders",
-    "ism_services_order_backlog": "order_backlog",
-    "ism_services_employment": "employment",
-    "ism_services_inventories": "inventories",
-    "ism_services_inventory_sentiment": "inventory_sentiment",
-    "ism_services_prices": "prices",
-    "ism_services_supplier_deliveries": "supplier_deliveries",
-    "ism_services_new_export_orders": "new_export_orders",
-    "ism_services_imports": "imports",
+SERVICES_AT_A_GLANCE_TO_KEY = dict(SERIES_TO_KEY)
+
+SERVICES_DETAIL_LABELS = {
+    "pmi": "Services PMI",
+    "business_activity": "Business Activity",
+    "new_orders": "New Orders",
+    "employment": "Employment",
+    "supplier_deliveries": "Supplier Deliveries",
+    "inventories": "Inventories",
+    "prices": "Prices",
+    "order_backlog": "Order Backlog",
+    "new_export_orders": "New Export Orders",
+    "imports": "Imports",
+    "inventory_sentiment": "Inventory Sentiment",
 }
 
 SERVICES_DETAIL_GROUPS = [
@@ -78,7 +97,7 @@ def _metric(rows):
 def build_signal(points_by_series_id):
     metrics = {
         key: _metric(points_by_series_id.get(series_id, []))
-        for series_id, key in SERIES_TO_KEY.items()
+        for series_id, key in SIGNAL_SERIES_TO_KEY.items()
     }
     missing = sorted(
         label for key, label in REQUIRED_LABELS.items() if metrics[key] is None
@@ -139,7 +158,7 @@ def build_signal(points_by_series_id):
 def build_latest_payload(points_by_series_id):
     period = None
     payload = {}
-    for series_id, key in SERIES_TO_KEY.items():
+    for series_id, key in SIGNAL_SERIES_TO_KEY.items():
         points = points_by_series_id.get(series_id, [])
         if not points:
             payload[key] = None
@@ -238,12 +257,6 @@ def build_card(signal, breadth):
 
 def build_detail(points_by_series_id, signal, industry_payload):
     all_keys = list(SERIES_TO_KEY.values())
-    labels = {
-        "pmi": "PMI",
-        "business_activity": "Business Activity",
-        "new_orders": "New Orders",
-        "order_backlog": "Order Backlog",
-    }
     rows_by_date = {}
     for series_id, key in SERIES_TO_KEY.items():
         for point in points_by_series_id.get(series_id, []):
@@ -264,7 +277,7 @@ def build_detail(points_by_series_id, signal, industry_payload):
                 "kind": "heat_map",
                 "title": "ISM Services Heat Map",
                 "keys": all_keys,
-                "labels": labels,
+                "labels": SERVICES_DETAIL_LABELS,
                 "series": all_rows,
             },
         ],

@@ -154,7 +154,7 @@ def _result_summary(extraction, call_counts):
         "report_id": extraction["report"]["report_id"],
         "source": extraction["report"]["source_name"],
         "section_calls": call_counts,
-        "metrics": 4,
+        "metrics": len(extraction["at_a_glance_rows"]),
         "at_a_glance_rows": len(extraction["at_a_glance_rows"]),
         "comments": len(extraction.get("respondent_comments", [])),
         "industry_signals": len(extraction.get("industry_signals", [])),

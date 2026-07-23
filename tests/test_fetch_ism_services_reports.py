@@ -231,7 +231,7 @@ def test_main_imports_latest_month(tmp_path, monkeypatch, capsys):
     captured = capsys.readouterr()
     out = captured.out
     assert (
-        "ism_services_2026_06: source=ismworld metrics=4 rankings=3 comments=1" in out
+        "ism_services_2026_06: source=ismworld metrics=11 rankings=3 comments=1" in out
     )
     assert "[1/1] services 2026-06 fetching source=ismworld" in captured.err
     assert "fetched chars=" in captured.err
@@ -525,7 +525,7 @@ def test_retry_reruns_extraction(tmp_path, monkeypatch, capsys):
         ai_client_factory=_fake_client_factory,
     )
     assert ec == 0
-    assert "metrics=4" in capsys.readouterr().out
+    assert "metrics=11" in capsys.readouterr().out
 
     capsys.readouterr()
 
@@ -535,7 +535,7 @@ def test_retry_reruns_extraction(tmp_path, monkeypatch, capsys):
         ai_client_factory=_fake_client_factory,
     )
     assert ec2 == 0
-    assert "metrics=4" in capsys.readouterr().out
+    assert "metrics=11" in capsys.readouterr().out
 
     con = us_rates_liquidity.connect(db_path)
     try:

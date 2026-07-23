@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.tools import ism_services_ai_extraction
 from app.tools.ism_services_ai_extraction import (
+    SERVICES_AT_A_GLANCE_LABELS,
     SERVICES_SERIES_IDS,
     SECTION_PROMPT_VERSIONS,
     FACTUAL_SECTION_NAMES,
@@ -56,7 +57,7 @@ def test_services_component_universe():
 
 def test_section_prompt_versions_are_independent():
     assert SECTION_PROMPT_VERSIONS["report"] == "ism-services-report-v3"
-    assert SECTION_PROMPT_VERSIONS["at_a_glance_rows"] == "ism-services-glance-v3"
+    assert SECTION_PROMPT_VERSIONS["at_a_glance_rows"] == "ism-services-glance-v4"
     assert SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v8"
     assert SECTION_PROMPT_VERSIONS["comments_commodities"] == "ism-services-comments-v3"
     assert SECTION_PROMPT_VERSIONS["narrative_facts"] == "ism-services-narrative-v3"
@@ -754,6 +755,58 @@ class TestPromptBuilders:
         ):
             assert field in prompt
         assert "Return exactly 11" in prompt
+
+
+def test_at_a_glance_validation_uses_complete_source_rows():
+    rows = []
+    source_rows = []
+    for index, (label, series_id) in enumerate(SERVICES_AT_A_GLANCE_LABELS):
+        current_value = 53.8 if index == 0 else 50.0 + index
+        previous_value = 53.8 if index == 0 else 49.0 + index
+        point_change = 0.0 if index == 0 else 1.0
+        rows.append(
+            {
+                "series_id": series_id,
+                "label": label,
+                "current_value": 0.0
+                if series_id
+                in {"ism_services_new_export_orders", "ism_services_imports"}
+                else current_value,
+                "previous_value": 0.0
+                if series_id
+                in {"ism_services_new_export_orders", "ism_services_imports"}
+                else previous_value,
+                "point_change": 0.0 if index == 0 else point_change,
+                "direction": "Same"
+                if series_id
+                in {"ism_services_new_export_orders", "ism_services_imports"}
+                else "Growing",
+                "rate_of_change": "Unchanged"
+                if series_id
+                in {"ism_services_new_export_orders", "ism_services_imports"}
+                else "Faster",
+                "trend_months": 0
+                if series_id
+                in {"ism_services_new_export_orders", "ism_services_imports"}
+                else 1,
+            }
+        )
+        source_rows.append(
+            f"{label} {current_value:.1f} {previous_value:.1f} "
+            f"{point_change:+.1f} Growing Faster 1"
+        )
+
+    result = validate_section_payload(
+        "at_a_glance_rows",
+        {"at_a_glance_rows": rows},
+        "\n".join(source_rows),
+    )
+
+    by_series = {row["series_id"]: row for row in result["at_a_glance_rows"]}
+    assert by_series["ism_services_new_export_orders"]["current_value"] == 58.0
+    assert by_series["ism_services_imports"]["current_value"] == 59.0
+    assert by_series["ism_services_imports"]["direction"] == "Growing"
+    assert by_series["ism_services_imports"]["trend_months"] == 1
 
 
 def test_excerpt_budgets_are_within_limits():

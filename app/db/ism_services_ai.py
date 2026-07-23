@@ -3,18 +3,12 @@ import json
 from app.db import growth_cycle, ism_surveys
 from app.db import us_rates_liquidity as usrl
 from app.tools.ism_services_ai_extraction import (
+    SERVICES_SERIES_IDS,
     ServicesFactualExtractionModel,
 )
 
 
-_OPERATIONAL_SERIES = frozenset(
-    {
-        "ism_services_pmi",
-        "ism_services_business_activity",
-        "ism_services_new_orders",
-        "ism_services_order_backlog",
-    }
-)
+_OPERATIONAL_SERIES = SERVICES_SERIES_IDS
 
 
 def _services_metric_points(payload):
@@ -296,7 +290,7 @@ def promote_services_extraction(con, extraction, source):
     source_hash = source["source_hash"]
 
     with con:
-        _replace_services_metrics(con, payload, commit=False)
+        metric_result = _replace_services_metrics(con, payload, commit=False)
 
         growth_cycle.replace_ism_at_a_glance_rows(
             con,
@@ -338,7 +332,7 @@ def promote_services_extraction(con, extraction, source):
 
     return {
         "report_id": report["report_id"],
-        "metrics": 4,
+        "metrics": metric_result["metrics"],
         "at_a_glance_rows": len(payload["at_a_glance_rows"]),
         "comments": len(comments),
         "industry_signals": len(payload.get("industry_signals", [])),

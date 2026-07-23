@@ -96,6 +96,51 @@ def test_build_detail_contains_expected_keys():
     assert "industries" in detail
 
 
+def test_build_detail_heat_map_includes_all_at_a_glance_series():
+    data = points(54.0, 55.4, 55.1)
+    for index, series_id in enumerate(
+        [
+            "ism_services_employment",
+            "ism_services_supplier_deliveries",
+            "ism_services_inventories",
+            "ism_services_inventory_sentiment",
+            "ism_services_prices",
+            "ism_services_new_export_orders",
+            "ism_services_imports",
+        ]
+    ):
+        data[series_id] = [
+            {
+                "date": "2026-06-01",
+                "value": 50.0 + index,
+                "source": "test",
+            }
+        ]
+
+    detail = ism_services.build_detail(
+        data,
+        ism_services.build_signal(data),
+        {"industries": []},
+    )
+
+    heat_map = detail["charts"][0]
+    assert heat_map["keys"] == [
+        "pmi",
+        "business_activity",
+        "new_orders",
+        "employment",
+        "supplier_deliveries",
+        "inventories",
+        "prices",
+        "order_backlog",
+        "new_export_orders",
+        "imports",
+        "inventory_sentiment",
+    ]
+    assert heat_map["labels"]["pmi"] == "Services PMI"
+    assert len(heat_map["series"][-1]) == 12
+
+
 def test_build_latest_presentation_returns_expected_structure():
     rows = [
         {
