@@ -101,16 +101,16 @@ def parse_sector_rankings(workbook_path=DEFAULT_WORKBOOK_PATH):
 
 def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
     parsed_list = parse_workbook(workbook_path)
+    rankings = parse_sector_rankings(workbook_path)
     results = {}
     for parsed in parsed_list:
         sid = parsed["series"]["series_id"]
-        saved = us_rates_liquidity.replace_macro_indicator_points(
+        saved = us_rates_liquidity.merge_macro_indicator_points(
             con,
             parsed["series"],
             parsed["points"],
         )
         results[sid] = saved["points"]
-    rankings = parse_sector_rankings(workbook_path)
     results["ism_industry_rankings"] = growth_cycle.replace_ism_industry_rankings(
         con, rankings
     )

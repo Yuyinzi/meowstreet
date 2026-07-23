@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from app.db import growth_cycle
 from app.db import us_rates_liquidity
@@ -228,6 +228,92 @@ def test_import_workbook_saves_all_series_to_macro_indicator_tables(tmp_path):
             "rank": -2,
             "source": "ISM_Manufacturing_Index.xlsx",
         },
+    ]
+
+
+def test_import_workbook_preserves_official_report_points(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    workbook_path = tmp_path / "ISM_Manufacturing_Index.xlsx"
+    write_ism_workbook(workbook_path)
+    con = us_rates_liquidity.connect(db_path)
+    growth_cycle.init_db(con)
+    us_rates_liquidity.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "ism_manufacturing_pmi",
+            "title": "ISM Manufacturing PMI",
+            "units": "index",
+            "source": "ISM AI extraction",
+        },
+        [
+            {
+                "date": "2026-05-01",
+                "value": 54.0,
+                "source": "ISM AI extraction",
+            }
+        ],
+    )
+
+    import_ism_manufacturing.import_workbook(con, workbook_path)
+
+    pmi_points = us_rates_liquidity.load_macro_indicator_points(
+        con, "ism_manufacturing_pmi"
+    )
+    assert pmi_points[-1] == {
+        "date": "2026-05-01",
+        "value": 54.0,
+        "source": "ISM AI extraction",
+    }
+
+
+def test_import_workbook_validation_failure_does_not_change_series(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    workbook_path = tmp_path / "ISM_Manufacturing_Index.xlsx"
+    write_ism_workbook(workbook_path)
+    workbook = load_workbook(workbook_path)
+    sectors = workbook["Sectors"]
+    sectors.append(
+        [
+            None,
+            "Machinery",
+            "Contraction",
+            -2,
+            "Contraction",
+            -3,
+        ]
+    )
+    workbook.save(workbook_path)
+    con = us_rates_liquidity.connect(db_path)
+    growth_cycle.init_db(con)
+    us_rates_liquidity.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "ism_manufacturing_pmi",
+            "title": "ISM Manufacturing PMI",
+            "units": "index",
+            "source": "ISM AI extraction",
+        },
+        [
+            {
+                "date": "2026-01-01",
+                "value": 99.0,
+                "source": "ISM AI extraction",
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="duplicate row"):
+        import_ism_manufacturing.import_workbook(con, workbook_path)
+
+    pmi_points = us_rates_liquidity.load_macro_indicator_points(
+        con, "ism_manufacturing_pmi"
+    )
+    assert pmi_points == [
+        {
+            "date": "2026-01-01",
+            "value": 99.0,
+            "source": "ISM AI extraction",
+        }
     ]
 
 
