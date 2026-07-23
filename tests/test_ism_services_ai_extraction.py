@@ -821,6 +821,63 @@ def test_august_backlog_lists_accept_verbatim_source_evidence():
     assert result["industry_signal_coverage"][0]["validation_status"] == "complete"
 
 
+def test_august_backlog_evidence_passes_source_grounding():
+    increase = (
+        "The three industries reporting an increase in order backlogs in "
+        "August are: Educational Services; Information; and Professional, "
+        "Scientific & Technical Services."
+    )
+    decrease = (
+        "The 10 industries reporting a decrease in order backlogs in August "
+        "\u2014 in the following order \u2014 are: Agriculture, Forestry, Fishing & "
+        "Hunting; Real Estate, Rental & Leasing; Finance & Insurance; "
+        "Construction; Public Administration; Retail Trade; Wholesale Trade; "
+        "Management of Companies & Support Services; Health Care & Social "
+        "Assistance; and Utilities."
+    )
+    payload = {
+        "industry_signal_lists": [
+            {
+                "signal_type": "backlog",
+                "direction": "increase",
+                "declared_count": 3,
+                "industries": [
+                    "Educational Services",
+                    "Information",
+                    "Professional, Scientific & Technical Services",
+                ],
+                "evidence_text": increase,
+            },
+            {
+                "signal_type": "backlog",
+                "direction": "decrease",
+                "declared_count": 10,
+                "industries": [
+                    "Agriculture, Forestry, Fishing & Hunting",
+                    "Real Estate, Rental & Leasing",
+                    "Finance & Insurance",
+                    "Construction",
+                    "Public Administration",
+                    "Retail Trade",
+                    "Wholesale Trade",
+                    "Management of Companies & Support Services",
+                    "Health Care & Social Assistance",
+                    "Utilities",
+                ],
+                "evidence_text": decrease,
+            },
+        ]
+    }
+
+    result = validate_section_payload(
+        "industry_signals",
+        payload,
+        f"Backlog of Orders\n{increase} {decrease}",
+    )
+
+    assert len(result["industry_signal_lists"]) == 2
+
+
 def _section_payloads():
     return [
         {"section_name": "report", "payload": {"report": _valid_report()}},
