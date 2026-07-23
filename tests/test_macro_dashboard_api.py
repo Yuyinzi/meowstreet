@@ -2440,6 +2440,79 @@ def test_growth_cycle_api_ism_detail_includes_industry_analysis(monkeypatch):
     assert printing["trend"][0]["period"] == "2026-06-01"
 
 
+def test_services_detail_returns_signal_trend(monkeypatch):
+    from app import api
+    from app.db import ism_surveys
+    from app.services import ism_services_dashboard
+    from tests.test_macro_dashboard_api import client
+
+    report = {
+        "report_id": "ism_services_2026_06",
+        "report_month": "2026-06-01",
+        "title": "June 2026 ISM Services PMI Report",
+        "source_url": "https://example.com/services/june",
+        "source_hash": "abc123",
+    }
+    monkeypatch.setattr(
+        ism_services_dashboard.ism_surveys,
+        "load_latest_report_snapshot",
+        lambda con, survey_type: report,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_industry_signals",
+        lambda con, report_id: [
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "industry": "Construction",
+                "rank": 1,
+                "source_excerpt": "growth excerpt",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_industry_signal_coverage",
+        lambda con, report_id: [
+            {
+                "signal_type": "overall_growth",
+                "direction": "growth",
+                "list_present": True,
+                "declared_count": 12,
+                "extracted_count": 12,
+                "validation_status": "complete",
+                "evidence_text": "",
+                "source_url": "",
+                "source_hash": "",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_recent_ism_report_snapshots",
+        lambda con, limit=6, survey_type="manufacturing": [report],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_industry_signals_for_reports",
+        lambda con, report_ids: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_ism_report_industry_signal_coverage_for_reports",
+        lambda con, report_ids: [],
+    )
+
+    resp = client.get("/api/macro-dashboard/growth-cycle/ism_services")
+    assert resp.status_code == 200
+    data = resp.json()
+    analysis = data.get("industry_analysis", {})
+    if analysis.get("industries"):
+        ind = analysis["industries"][0]
+        assert "signal_trend" in ind
+
+
 def _default_signals():
     from app.tools.ism_industry_analysis import CANONICAL_INDUSTRIES
 

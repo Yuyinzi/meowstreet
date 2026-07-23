@@ -598,6 +598,26 @@ def test_load_detail_attaches_services_industry_analysis(
             }
         ],
     )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_recent_ism_report_snapshots",
+        lambda con, limit=6, survey_type="manufacturing": [
+            {
+                "report_id": "ism_services_2026_06",
+                "report_month": "2026-06-01",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_ism_report_industry_signals_for_reports",
+        lambda con, report_ids: [],
+    )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_ism_report_industry_signal_coverage_for_reports",
+        lambda con, report_ids: [],
+    )
 
     result = ism_services_dashboard.load_detail(services_connection)
 
@@ -609,6 +629,105 @@ def test_load_detail_attaches_services_industry_analysis(
     )
     assert construction["component_signals"][0]["signal_type"] == "business_activity"
     assert "score" not in construction
+
+
+def test_load_detail_includes_signal_trend_on_each_industry(
+    services_connection,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        ism_surveys,
+        "load_latest_report_snapshot",
+        lambda con, survey_type: {
+            "report_id": "ism_services_2026_06",
+            "report_month": "2026-06-01",
+            "title": "June 2026 ISM Services PMI Report",
+            "source_url": "https://example.com/services/june",
+            "source_hash": "abc123",
+        },
+    )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_ism_report_industry_signals",
+        lambda con, report_id: [
+            {
+                "signal_type": "business_activity",
+                "direction": "increase",
+                "industry": "Construction",
+                "rank": 1,
+                "report_id": report_id,
+                "source_excerpt": "increase",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_ism_report_industry_signal_coverage",
+        lambda con, report_id: [
+            {
+                "signal_type": "business_activity",
+                "direction": "increase",
+                "list_present": True,
+                "declared_count": 8,
+                "extracted_count": 8,
+                "validation_status": "complete",
+                "evidence_text": "",
+                "source_url": "",
+                "source_hash": "",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_recent_ism_report_snapshots",
+        lambda con, limit=6, survey_type="manufacturing": [
+            {
+                "report_id": "ism_services_2026_06",
+                "report_month": "2026-06-01",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_ism_report_industry_signals_for_reports",
+        lambda con, report_ids: [
+            {
+                "report_id": report_ids[0],
+                "signal_type": "business_activity",
+                "direction": "increase",
+                "industry": "Construction",
+                "rank": 1,
+                "source_excerpt": "increase",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_ism_report_industry_signal_coverage_for_reports",
+        lambda con, report_ids: [
+            {
+                "report_id": report_ids[0],
+                "signal_type": "business_activity",
+                "direction": "increase",
+                "list_present": True,
+                "declared_count": 8,
+                "extracted_count": 8,
+                "validation_status": "complete",
+                "evidence_text": "",
+                "source_url": "",
+                "source_hash": "",
+            }
+        ],
+    )
+
+    result = ism_services_dashboard.load_detail(services_connection)
+
+    analysis = result["industry_analysis"]
+    assert analysis["status"] == "available"
+    for ind in analysis.get("industries", []):
+        assert "signal_trend" in ind, f"{ind['industry']} missing signal_trend"
+        assert len(ind["signal_trend"]) <= 6
+        assert all("overall" in p and "components" in p for p in ind["signal_trend"])
 
 
 def test_load_detail_attaches_latest_values_presentation(

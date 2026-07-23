@@ -55,7 +55,7 @@ def _load_industry_analysis(con, signal_period, rankings, comments):
         for row in growth_cycle.load_ism_report_industry_signal_coverage(con, report_id)
         if row["signal_type"] not in ("overall_growth", "overall_contraction")
     ]
-    return ism_services_industry.build_services_industry_analysis(
+    result = ism_services_industry.build_services_industry_analysis(
         rankings,
         component_signals,
         coverage_rows,
@@ -63,6 +63,27 @@ def _load_industry_analysis(con, signal_period, rankings, comments):
         period=signal_period,
         source_url=snapshot["source_url"],
     )
+    if result.get("industries"):
+        recent_reports = growth_cycle.load_recent_ism_report_snapshots(
+            con, limit=6, survey_type="services"
+        )
+        report_ids = [r["report_id"] for r in recent_reports]
+        hist_signals = growth_cycle.load_ism_report_industry_signals_for_reports(
+            con, report_ids
+        )
+        hist_coverage = (
+            growth_cycle.load_ism_report_industry_signal_coverage_for_reports(
+                con, report_ids
+            )
+        )
+        for ind in result["industries"]:
+            ind["signal_trend"] = ism_services_industry.build_services_signal_trend(
+                recent_reports,
+                hist_signals,
+                hist_coverage,
+                ind["industry"],
+            )
+    return result
 
 
 def _load_rich_evidence(con, signal_period):
