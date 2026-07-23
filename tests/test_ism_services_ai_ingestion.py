@@ -1,5 +1,6 @@
 import json
 import re
+from copy import deepcopy
 import sqlite3
 from pathlib import Path
 
@@ -375,6 +376,72 @@ class TestBackfillInvariants:
             )
         )
         assert client2.call_count == 1
+        con.close()
+
+    def test_repaired_at_a_glance_section_promotes_report_month(self, tmp_path):
+        from app.db.ism_services_ai import promote_services_extraction
+        from app.services.ism_ai_section_runner import extract_sections
+        from app.tools.ism_services_ai_extraction import (
+            FACTUAL_SECTION_NAMES,
+            SECTION_PROMPT_VERSIONS,
+            SECTION_RESPONSE_MODELS,
+            assemble_factual_extraction,
+            validate_section_payload,
+        )
+
+        class RepairingClient(FakeAiClient):
+            def __init__(self):
+                super().__init__()
+                self.at_a_glance_calls = 0
+
+            async def complete_json_async(self, prompt):
+                section = re.search(r"Section: (\w+)", prompt)
+                section_name = section.group(1) if section else "unknown"
+                self.call_count += 1
+                response = deepcopy(_response_for_section(section_name))
+                if section_name == "at_a_glance_rows":
+                    self.at_a_glance_calls += 1
+                    if self.at_a_glance_calls == 1:
+                        response["at_a_glance_rows"][0]["trend_months"] = None
+                return response
+
+        prepared = _prepare_for_test("ism_services_report.html")
+        prepared["source_text"] = _source_text_with_matching_values()
+        con = us_rates_liquidity.connect(tmp_path / "test.db")
+        growth_cycle.init_db(con)
+
+        def fake_build_prompt(section_name, source_text):
+            return f"Section: {section_name}\n{source_text}"
+
+        section_result = asyncio_run(
+            extract_sections(
+                con,
+                RepairingClient(),
+                prepared,
+                FACTUAL_SECTION_NAMES,
+                SECTION_PROMPT_VERSIONS,
+                fake_build_prompt,
+                lambda name: SECTION_RESPONSE_MODELS[name],
+                validate_section_payload,
+            )
+        )
+        extraction = assemble_factual_extraction(section_result["section_payloads"])
+        promoted = promote_services_extraction(
+            con,
+            extraction,
+            {
+                "source_url": prepared["source_url"],
+                "source_hash": "source-hash",
+                "model": "test-model",
+                "updated_at": prepared["fetched_at"],
+            },
+        )
+
+        assert section_result["call_counts"]["at_a_glance_rows"] == 2
+        assert promoted["at_a_glance_rows"] == 11
+        assert growth_cycle.load_existing_ism_report_months(con, "services") == {
+            "2026-06-01"
+        }
         con.close()
 
 

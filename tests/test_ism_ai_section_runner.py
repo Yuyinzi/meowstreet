@@ -1,6 +1,7 @@
 import asyncio
 import json
 import sqlite3
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,20 @@ class FakeAiClient:
             if key in prompt:
                 return response
         return {"error": "no matching response"}
+
+
+class SequenceAiClient:
+    def __init__(self, responses):
+        self.model = "test-model"
+        self.responses = list(responses)
+        self.prompts = []
+
+    async def complete_json_async(self, prompt):
+        self.prompts.append(prompt)
+        response = self.responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
 
 
 SERVICES_COMPONENTS = sorted(
@@ -268,7 +283,9 @@ async def test_section_progress_names_work_and_emits_heartbeats(
         heartbeat_interval=0.01,
     )
 
-    assert any("section extraction pending=1 reused=0 concurrency=1" in m for m in messages)
+    assert any(
+        "section extraction pending=1 reused=0 concurrency=1" in m for m in messages
+    )
     assert any("section report started prompt_chars=" in m for m in messages)
     assert any("section report running elapsed=" in m for m in messages)
     assert any("section report ok" in m for m in messages)
@@ -482,4 +499,87 @@ async def test_failed_call_preserves_successful_checkpoints_for_retry(
         section_concurrency=5,
     )
     assert len(result["section_payloads"]) == 5
-    assert client2.call_count == 1  # only retry narrative_facts
+    assert client2.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_schema_invalid_response_is_repaired_once(db_conn, prepared_report):
+    invalid = deepcopy(SECTION_RESPONSES["at_a_glance_rows"])
+    invalid["at_a_glance_rows"][0]["trend_months"] = None
+    client = SequenceAiClient([invalid, SECTION_RESPONSES["at_a_glance_rows"]])
+
+    result = await extract_sections(
+        db_conn,
+        client,
+        prepared_report,
+        ["at_a_glance_rows"],
+        {"at_a_glance_rows": PROMPT_VERSIONS["at_a_glance_rows"]},
+        _fake_build_prompt,
+        _fake_model_for_section,
+        _fake_validate,
+        section_concurrency=1,
+    )
+
+    assert len(client.prompts) == 2
+    assert "failed validation" in client.prompts[1]
+    assert "trend_months" in client.prompts[1]
+    assert result["call_counts"]["at_a_glance_rows"] == 2
+    checkpoint = db_conn.execute(
+        "select status, attempt_count from ism_ai_section_extractions "
+        "where section_name = 'at_a_glance_rows'"
+    ).fetchone()
+    assert dict(checkpoint) == {"status": "ok", "attempt_count": 2}
+
+
+@pytest.mark.asyncio
+async def test_valid_response_uses_one_attempt(db_conn, prepared_report):
+    client = SequenceAiClient([SECTION_RESPONSES["at_a_glance_rows"]])
+
+    result = await extract_sections(
+        db_conn,
+        client,
+        prepared_report,
+        ["at_a_glance_rows"],
+        {"at_a_glance_rows": PROMPT_VERSIONS["at_a_glance_rows"]},
+        _fake_build_prompt,
+        _fake_model_for_section,
+        _fake_validate,
+        section_concurrency=1,
+    )
+
+    assert len(client.prompts) == 1
+    assert result["call_counts"]["at_a_glance_rows"] == 1
+    checkpoint = db_conn.execute(
+        "select attempt_count from ism_ai_section_extractions "
+        "where section_name = 'at_a_glance_rows'"
+    ).fetchone()
+    assert checkpoint["attempt_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_provider_failure_is_not_retried_as_validation_repair(
+    db_conn, prepared_report
+):
+    client = SequenceAiClient([RuntimeError("provider unavailable")])
+
+    with pytest.raises(ValueError, match="section report extraction error"):
+        await extract_sections(
+            db_conn,
+            client,
+            prepared_report,
+            ["report"],
+            {"report": PROMPT_VERSIONS["report"]},
+            _fake_build_prompt,
+            _fake_model_for_section,
+            _fake_validate,
+            section_concurrency=1,
+        )
+
+    assert len(client.prompts) == 1
+    checkpoint = db_conn.execute(
+        "select status, attempt_count, error from ism_ai_section_extractions "
+        "where section_name = 'report'"
+    ).fetchone()
+    assert checkpoint["status"] == "failed"
+    assert checkpoint["attempt_count"] == 1
+    assert checkpoint["error"] == "provider unavailable"

@@ -27,6 +27,24 @@ def _checkpoint_key(checkpoint):
     )
 
 
+def _response_text(response):
+    if isinstance(response, str):
+        return response
+    return json.dumps(response, ensure_ascii=False, sort_keys=True)
+
+
+def _build_validation_repair_prompt(
+    section_name, original_prompt, previous_response, validation_error
+):
+    return (
+        f"Your previous JSON failed validation for section {section_name}.\n"
+        "Return only a corrected JSON object.\n\n"
+        f"Validation error:\n{validation_error}\n\n"
+        f"Previous response:\n{_response_text(previous_response)}\n\n"
+        f"Original extraction instructions:\n{original_prompt}"
+    )
+
+
 def _load_existing_checkpoints(
     con, report_id, source_url, prompt_versions, source_hash
 ):
@@ -105,7 +123,7 @@ async def extract_sections(
     async def process_section(section_name):
         if section_name in reusable:
             report_progress(f"section {section_name} reused checkpoint")
-            return section_name, reusable[section_name], False
+            return section_name, reusable[section_name], 0
 
         prompt_version = prompt_versions[section_name]
         prompt = build_prompt(section_name, source_text)
@@ -128,12 +146,32 @@ async def extract_sections(
             heartbeat = None
             if progress is not None and heartbeat_interval > 0:
                 heartbeat = asyncio.create_task(emit_heartbeats())
+            validated = None
+            error = None
+            attempt_count = 0
+            current_prompt = prompt
             try:
-                response = await client.complete_json_async(prompt)
-                parsed = json.loads(response) if isinstance(response, str) else response
-                validated = validate_section(section_name, parsed, source_text)
+                for attempt_count in range(1, 3):
+                    response = await client.complete_json_async(current_prompt)
+                    try:
+                        parsed = (
+                            json.loads(response)
+                            if isinstance(response, str)
+                            else response
+                        )
+                        validated = validate_section(section_name, parsed, source_text)
+                        break
+                    except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                        error = str(exc)
+                        if attempt_count == 2:
+                            raise
+                        current_prompt = _build_validation_repair_prompt(
+                            section_name,
+                            prompt,
+                            response,
+                            error,
+                        )
                 status = "ok"
-                error = None
             except BaseException as exc:
                 validated = None
                 status = "failed"
@@ -154,7 +192,7 @@ async def extract_sections(
                 "status": status,
                 "payload_json": validated if validated is not None else {},
                 "error": error,
-                "attempt_count": 1,
+                "attempt_count": attempt_count,
                 "model": model_name,
                 "prompt_version": prompt_version,
                 "updated_at": updated_at,
@@ -163,10 +201,9 @@ async def extract_sections(
 
             if validated is not None:
                 report_progress(f"section {section_name} ok {elapsed:.1f}s")
-                return section_name, validated, True
+                return section_name, validated, attempt_count
             report_progress(
-                f"section {section_name} failed {elapsed:.1f}s "
-                f"error={error[:300]}"
+                f"section {section_name} failed {elapsed:.1f}s error={error[:300]}"
             )
             raise ValueError(f"section {section_name} extraction failed: {error}")
 
@@ -178,9 +215,9 @@ async def extract_sections(
     for section_name, result in zip(section_names, results):
         if isinstance(result, BaseException):
             raise ValueError(f"section {section_name} extraction error") from result
-        sname, payload, called = result
+        sname, payload, calls = result
         section_payloads.append({"section_name": sname, "payload": payload})
-        call_counts[sname] = 1 if called else 0
+        call_counts[sname] = calls
 
     return {
         "section_payloads": section_payloads,
