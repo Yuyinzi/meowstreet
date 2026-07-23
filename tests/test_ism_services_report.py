@@ -247,6 +247,41 @@ def test_at_a_glance_region_contains_component_table():
     assert "Imports" in region
 
 
+def test_at_a_glance_region_accepts_split_survey_results_heading():
+    source_text = """December 2025 ISM Services PMI Report
+Narrative value 50.2 must not become table evidence.
+INDUSTRY PERFORMANCE
+The industries reporting growth are: Construction.
+ISM
+®
+SERVICES SURVEY
+RESULTS AT A GLANCE
+Services PMI
+54.4
+52.6
++1.8
+Growing
+Faster
+6
+New Export Orders
+54.2
+48.7
++5.5
+Growing
+From Contracting
+1
+COMMODITIES REPORTED UP/DOWN IN PRICE, AND IN SHORT SUPPLY
+Steel Products
+"""
+
+    region = ism_services_report._extract_at_a_glance_region(source_text)
+
+    assert "New Export Orders" in region
+    assert "54.2" in region
+    assert "Narrative value 50.2" not in region
+    assert "Steel Products" not in region
+
+
 def test_industry_signals_region_contains_industry_lists():
     html = (FIXTURE_DIR / "ism_services_report.html").read_text()
     prepared = ism_services_report.prepare_report_for_ai(

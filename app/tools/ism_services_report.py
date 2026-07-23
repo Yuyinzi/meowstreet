@@ -243,7 +243,8 @@ def prepare_report_for_ai(html, source_url, fetched_at, source_name="ismworld"):
 
 _TITLE_RE = re.compile(r"[A-Z][a-z]+ \d{4} ISM\s*(?:®\s*)?Services", re.I)
 _AT_A_GLANCE_RE = re.compile(
-    r"(?:ISM\s*(?:®\s*)?)?SERVICES(?:\s+SURVEY RESULTS)?\s+AT A GLANCE",
+    r"(?:ISM\s*(?:®\s*)?)?SERVICES"
+    r"(?:\s+SURVEY\s+RESULTS)?\s+AT A GLANCE",
     re.I,
 )
 _INDUSTRY_PERFORMANCE_RE = re.compile(
