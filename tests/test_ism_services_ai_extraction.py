@@ -57,8 +57,8 @@ def test_services_component_universe():
 def test_section_prompt_versions_are_independent():
     assert SECTION_PROMPT_VERSIONS["report"] == "ism-services-report-v3"
     assert SECTION_PROMPT_VERSIONS["at_a_glance_rows"] == "ism-services-glance-v3"
-    assert SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v7"
-    assert SECTION_PROMPT_VERSIONS["comments_commodities"] == "ism-services-comments-v2"
+    assert SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v8"
+    assert SECTION_PROMPT_VERSIONS["comments_commodities"] == "ism-services-comments-v3"
     assert SECTION_PROMPT_VERSIONS["narrative_facts"] == "ism-services-narrative-v3"
     versions = list(SECTION_PROMPT_VERSIONS.values())
     assert len(set(versions)) == 5
@@ -214,6 +214,7 @@ class TestIndustrySignalListSchema:
             ("business_activity", "increase"),
             ("new_orders", "increase"),
             ("employment", "increase"),
+            ("employment", "reduction"),
             ("inventories", "increase"),
             ("inventories", "decrease"),
             ("backlog", "increase"),
@@ -417,6 +418,111 @@ class TestValidateSectionPayload:
         )
         assert len(result["respondent_comments"]) == 1
 
+    def test_january_comment_grounding_accepts_complete_source_comment(self):
+        comment = (
+            "Many of our restaurant locations remain completely shut down to "
+            "on-site dining. We remain optimistic about business trends beyond "
+            "April/May 2021."
+        )
+        result = validate_section_payload(
+            "comments_commodities",
+            {
+                "respondent_comments": [
+                    {
+                        "industry": "Accommodation & Food Services",
+                        "comment_text": comment,
+                    }
+                ],
+                "commodities": [],
+            },
+            f'"{comment}" [Accommodation & Food Services]',
+        )
+
+        assert result["respondent_comments"][0]["comment_text"] == comment
+
+    def test_respondent_comments_are_anchored_to_complete_source_quotes(self):
+        source_comment = (
+            "Many of our restaurant locations remain completely shut down to "
+            "on-site dining. We remain optimistic about business trends."
+        )
+        result = validate_section_payload(
+            "comments_commodities",
+            {
+                "respondent_comments": [
+                    {
+                        "industry": "Accommodation & Food Services",
+                        "comment_text": (
+                            "Many of our restaurant locations remain completely "
+                            "shut down"
+                        ),
+                    }
+                ],
+                "commodities": [],
+            },
+            (
+                "Chair commentary without an industry attribution.\n"
+                "WHAT RESPONDENTS ARE SAYING\n"
+                f'"{source_comment}" [Accommodation & Food Services]\n'
+                "COMMODITIES REPORTED UP/DOWN IN PRICE, AND IN SHORT SUPPLY"
+            ),
+        )
+
+        assert result["respondent_comments"] == [
+            {
+                "industry": "Accommodation & Food Services",
+                "comment_text": source_comment,
+            }
+        ]
+
+    def test_all_source_respondent_comments_are_returned_when_model_omits_one(self):
+        result = validate_section_payload(
+            "comments_commodities",
+            {
+                "respondent_comments": [
+                    {
+                        "industry": "Construction",
+                        "comment_text": "Demand remains stable.",
+                    }
+                ],
+                "commodities": [],
+            },
+            (
+                "WHAT RESPONDENTS ARE SAYING\n"
+                '"Demand remains stable." [Construction]\n'
+                "“Supply constraints continue.” [Wholesale Trade]\n"
+                "COMMODITIES REPORTED"
+            ),
+        )
+
+        assert result["respondent_comments"] == [
+            {
+                "industry": "Construction",
+                "comment_text": "Demand remains stable.",
+            },
+            {
+                "industry": "Wholesale Trade",
+                "comment_text": "Supply constraints continue.",
+            },
+        ]
+
+    def test_parenthetical_source_comment_attribution_is_supported(self):
+        result = validate_section_payload(
+            "comments_commodities",
+            {"respondent_comments": [], "commodities": []},
+            (
+                "WHAT RESPONDENTS ARE SAYING\n"
+                '"Demand remains stable." (Construction)\n'
+                "COMMODITIES REPORTED"
+            ),
+        )
+
+        assert result["respondent_comments"] == [
+            {
+                "industry": "Construction",
+                "comment_text": "Demand remains stable.",
+            }
+        ]
+
     def test_commodity_name_grounding(self):
         with pytest.raises(ValueError, match="commodity name not found"):
             validate_section_payload(
@@ -442,6 +548,61 @@ class TestValidateSectionPayload:
             "Construction Labor is up in price.",
         )
         assert len(result["commodities"]) == 1
+
+    def test_exact_duplicate_commodity_signals_are_collapsed(self):
+        payload = {
+            "respondent_comments": [],
+            "commodities": [
+                {
+                    "commodity": "Plastic Pipe Fittings",
+                    "signal_type": "short_supply",
+                    "months": None,
+                },
+                {
+                    "commodity": "Plastic Pipe Fittings",
+                    "signal_type": "short_supply",
+                    "months": None,
+                },
+            ],
+        }
+
+        result = validate_section_payload(
+            "comments_commodities",
+            payload,
+            "Plastic Pipe Fittings",
+        )
+
+        assert result["commodities"] == [payload["commodities"][0]]
+
+    def test_duplicate_commodity_signals_with_conflicting_months_are_rejected(self):
+        payload = {
+            "respondent_comments": [],
+            "commodities": [
+                {
+                    "commodity": "Plastic Pipe Fittings",
+                    "signal_type": "short_supply",
+                    "months": 2,
+                },
+                {
+                    "commodity": "Plastic Pipe Fittings",
+                    "signal_type": "short_supply",
+                    "months": 3,
+                },
+            ],
+        }
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                "commodity signal Plastic Pipe Fittings short_supply "
+                "has conflicting months"
+            ),
+        ):
+            validate_section_payload(
+                "comments_commodities",
+                payload,
+                "Plastic Pipe Fittings",
+            )
 
 
 class TestAssembleFactualExtraction:
@@ -524,9 +685,8 @@ class TestPromptBuilders:
         assert "evidence_text" in prompt
         assert "production" not in prompt
         assert "Preserve the direction word used by the source" in prompt
-        assert (
-            "business_activity, new_orders, employment: increase or decrease" in prompt
-        )
+        assert "business_activity, new_orders: increase or decrease" in prompt
+        assert "employment: increase, decrease, or reduction" in prompt
         assert "inventories, backlog, imports: increase or decrease" in prompt
         assert "new_export_orders: increase or decrease" in prompt
         assert "Preserve industry order" in prompt
@@ -539,6 +699,9 @@ class TestPromptBuilders:
         assert "up_in_price" in prompt
         assert "down_in_price" in prompt
         assert "short_supply" in prompt
+        assert "complete quoted comment" in prompt
+        assert "contiguous source text" in prompt
+        assert "Do not shorten or paraphrase comments" in prompt
 
     def test_narrative_facts_prompt_has_services_fields(self):
         prompt = build_narrative_facts_prompt("narrative excerpt")
@@ -876,6 +1039,198 @@ def test_august_backlog_evidence_passes_source_grounding():
     )
 
     assert len(result["industry_signal_lists"]) == 2
+
+
+def test_august_backlog_evidence_is_anchored_to_matching_source_sentences():
+    increase = (
+        "The three industries reporting an increase in order backlogs in "
+        "August are: Educational Services; Information; and Professional, "
+        "Scientific & Technical Services."
+    )
+    decrease = (
+        "The 10 industries reporting a decrease in order backlogs in August "
+        "— in the following order — are: Agriculture, Forestry, Fishing & "
+        "Hunting; Real Estate, Rental & Leasing; Finance & Insurance; "
+        "Construction; Public Administration; Retail Trade; Wholesale Trade; "
+        "Management of Companies & Support Services; Health Care & Social "
+        "Assistance; and Utilities."
+    )
+    payload = {
+        "industry_signal_lists": [
+            {
+                "signal_type": "backlog",
+                "direction": "increase",
+                "declared_count": 3,
+                "industries": [
+                    "Educational Services",
+                    "Information",
+                    "Professional, Scientific & Technical Services",
+                ],
+                "evidence_text": "Three industries had larger backlogs.",
+            },
+            {
+                "signal_type": "backlog",
+                "direction": "decrease",
+                "declared_count": 10,
+                "industries": [
+                    "Agriculture, Forestry, Fishing & Hunting",
+                    "Real Estate, Rental & Leasing",
+                    "Finance & Insurance",
+                    "Construction",
+                    "Public Administration",
+                    "Retail Trade",
+                    "Wholesale Trade",
+                    "Management of Companies & Support Services",
+                    "Health Care & Social Assistance",
+                    "Utilities",
+                ],
+                "evidence_text": "Ten industries had smaller backlogs.",
+            },
+        ]
+    }
+
+    result = validate_section_payload(
+        "industry_signals",
+        payload,
+        f"Backlog of Orders\n{increase} {decrease}",
+    )
+
+    assert [
+        signal_list["evidence_text"]
+        for signal_list in result["industry_signal_lists"]
+    ] == [increase, decrease]
+
+
+def test_industry_evidence_anchoring_rejects_unlisted_industry():
+    evidence = (
+        "The two industries reporting an increase in order backlogs in "
+        "August are: Educational Services; and Information."
+    )
+    payload = {
+        "industry_signal_lists": [
+            {
+                "signal_type": "backlog",
+                "direction": "increase",
+                "declared_count": 2,
+                "industries": ["Educational Services", "Imaginary Services"],
+                "evidence_text": evidence,
+            }
+        ]
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="backlog increase list is not uniquely grounded in source text",
+    ):
+        validate_section_payload("industry_signals", payload, evidence)
+
+
+def test_exact_industry_evidence_disambiguates_repeated_methodology_industry():
+    evidence = (
+        "The only industry reporting contraction in February is "
+        "Real Estate, Rental & Leasing."
+    )
+    payload = {
+        "industry_signal_lists": [
+            {
+                "signal_type": "overall_contraction",
+                "direction": "contraction",
+                "declared_count": 1,
+                "industries": ["Real Estate, Rental & Leasing"],
+                "evidence_text": evidence,
+            }
+        ]
+    }
+    source_text = (
+        f"{evidence}\n"
+        "The industries reporting contraction include categories such as "
+        "Real Estate, Rental & Leasing."
+    )
+
+    result = validate_section_payload("industry_signals", payload, source_text)
+
+    assert result["industry_signal_lists"][0]["evidence_text"] == evidence
+
+
+def test_industry_evidence_reconstructs_source_sentence_split_across_html_nodes():
+    source_text = (
+        "The seven industries reporting a decrease in the month of January "
+        "— listed in order — are: Information\n"
+        ";\n"
+        "Retail Trade\n"
+        ";\n"
+        "Real Estate, Rental & Leasing\n"
+        ";\n"
+        "Mining\n"
+        ";\n"
+        "Arts, Entertainment & Recreation\n"
+        ";\n"
+        "Wholesale Trade\n"
+        ";\n"
+        "and Finance & Insurance."
+    )
+    payload = {
+        "industry_signal_lists": [
+            {
+                "signal_type": "overall_contraction",
+                "direction": "contraction",
+                "declared_count": 7,
+                "industries": [
+                    "Information",
+                    "Retail Trade",
+                    "Real Estate, Rental & Leasing",
+                    "Mining",
+                    "Arts, Entertainment & Recreation",
+                    "Wholesale Trade",
+                    "Finance & Insurance",
+                ],
+                "evidence_text": "Seven service industries contracted in January.",
+            }
+        ]
+    }
+
+    result = validate_section_payload("industry_signals", payload, source_text)
+
+    evidence = result["industry_signal_lists"][0]["evidence_text"]
+    assert evidence.startswith("The seven industries reporting a decrease")
+    assert evidence.endswith("and Finance & Insurance.")
+
+
+def test_component_evidence_uses_complete_source_instead_of_compact_excerpt():
+    source_text = (
+        "INDUSTRY PERFORMANCE\n"
+        "The only services industry reporting growth is Utilities.\n"
+        "WHAT RESPONDENTS ARE SAYING\n"
+        '"Demand remains stable." [Utilities]\n'
+        "JANUARY 2024 SERVICES INDEX SUMMARIES\n"
+        "Business Activity\n"
+        "The two industries reporting an increase in business activity are: "
+        "Construction\n"
+        ";\n"
+        "and Transportation & Warehousing.\n"
+        "Business Activity\n"
+        "%Higher"
+    )
+    payload = {
+        "industry_signal_lists": [
+            {
+                "signal_type": "business_activity",
+                "direction": "increase",
+                "declared_count": 2,
+                "industries": [
+                    "Construction",
+                    "Transportation & Warehousing",
+                ],
+                "evidence_text": "Two industries had increased activity.",
+            }
+        ]
+    }
+
+    result = validate_section_payload("industry_signals", payload, source_text)
+
+    evidence = result["industry_signal_lists"][0]["evidence_text"]
+    assert evidence.startswith("The two industries reporting an increase")
+    assert evidence.endswith("and Transportation & Warehousing.")
 
 
 def _section_payloads():

@@ -193,6 +193,38 @@ def test_promote_services_extraction_stores_commodities(tmp_path):
     assert len(rows) >= 1
     assert rows[0]["commodity"] == "Construction Labor"
 
+def test_promote_services_extraction_collapses_exact_duplicate_commodities(tmp_path):
+    con = _connect(tmp_path / "macro.db")
+    extraction = _valid_extraction()
+    extraction["commodities"] = [
+        {
+            "commodity": "Plastic Pipe Fittings",
+            "signal_type": "short_supply",
+            "months": None,
+        },
+        {
+            "commodity": "Plastic Pipe Fittings",
+            "signal_type": "short_supply",
+            "months": None,
+        },
+    ]
+
+    result = promote_services_extraction(con, extraction, _valid_source())
+
+    rows = con.execute(
+        "select commodity, signal_type, months from ism_report_commodities "
+        "where report_id = ?",
+        ("ism_services_2026_06",),
+    ).fetchall()
+    assert [dict(row) for row in rows] == [
+        {
+            "commodity": "Plastic Pipe Fittings",
+            "signal_type": "short_supply",
+            "months": None,
+        }
+    ]
+    assert result["commodities"] == 1
+
 
 def test_promote_services_extraction_stores_narrative_facts(tmp_path):
     con = _connect(tmp_path / "macro.db")

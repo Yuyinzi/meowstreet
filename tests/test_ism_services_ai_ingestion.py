@@ -361,10 +361,10 @@ class TestBackfillInvariants:
         )
 
         assert (
-            SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v7"
+            SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v8"
         )
         modified_versions = dict(SECTION_PROMPT_VERSIONS)
-        modified_versions["industry_signals"] = "ism-services-industries-v8"
+        modified_versions["industry_signals"] = "ism-services-industries-v9"
         client2 = FakeAiClient()
         result = asyncio_run(
             extract_sections(

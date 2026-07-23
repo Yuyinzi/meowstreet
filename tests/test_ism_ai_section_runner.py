@@ -525,10 +525,14 @@ async def test_schema_invalid_response_is_repaired_once(db_conn, prepared_report
     assert "trend_months" in client.prompts[1]
     assert result["call_counts"]["at_a_glance_rows"] == 2
     checkpoint = db_conn.execute(
-        "select status, attempt_count from ism_ai_section_extractions "
+        "select status, attempt_count, error from ism_ai_section_extractions "
         "where section_name = 'at_a_glance_rows'"
     ).fetchone()
-    assert dict(checkpoint) == {"status": "ok", "attempt_count": 2}
+    assert dict(checkpoint) == {
+        "status": "ok",
+        "attempt_count": 2,
+        "error": None,
+    }
 
 
 @pytest.mark.asyncio

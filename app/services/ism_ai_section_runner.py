@@ -172,6 +172,7 @@ async def extract_sections(
                             error,
                         )
                 status = "ok"
+                error = None
             except BaseException as exc:
                 validated = None
                 status = "failed"

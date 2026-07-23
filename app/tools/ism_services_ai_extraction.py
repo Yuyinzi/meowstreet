@@ -1,8 +1,14 @@
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 SERVICES_SERIES_IDS = frozenset(
     {
@@ -78,6 +84,7 @@ ServicesDirection = Literal[
     "too_low",
     "too_high",
     "no_change",
+    "reduction",
 ]
 
 ServicesCommodityDirection = Literal[
@@ -115,7 +122,7 @@ _SERVICES_GROUPED_DIRECTIONS_BY_SIGNAL_TYPE = {
     "overall_contraction": {"contraction"},
     "business_activity": {"growth", "increase", "decrease"},
     "new_orders": {"growth", "increase", "decrease"},
-    "employment": {"growth", "increase", "decrease"},
+    "employment": {"growth", "increase", "decrease", "reduction"},
     "supplier_deliveries": {"slower", "faster"},
     "inventories": {"higher", "lower", "increase", "decrease"},
     "inventory_sentiment": {"too_high", "too_low"},
@@ -292,6 +299,31 @@ class ServicesCommoditySignalModel(BaseModel):
     months: int | None = Field(default=None, ge=1)
 
 
+def _normalize_commodity_signals(value):
+    if not isinstance(value, list):
+        return value
+    normalized = []
+    months_by_key = {}
+    for commodity in value:
+        if not isinstance(commodity, dict):
+            normalized.append(commodity)
+            continue
+        key = (commodity.get("commodity"), commodity.get("signal_type"))
+        if None in key:
+            normalized.append(commodity)
+            continue
+        months = commodity.get("months")
+        if key not in months_by_key:
+            months_by_key[key] = months
+            normalized.append(commodity)
+            continue
+        if months_by_key[key] != months:
+            raise ValueError(
+                f"commodity signal {key[0]} {key[1]} has conflicting months"
+            )
+    return normalized
+
+
 class ServicesNarrativeFactsModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -311,6 +343,11 @@ class ServicesFactualExtractionModel(BaseModel):
     respondent_comments: list[ServicesRespondentCommentModel]
     commodities: list[ServicesCommoditySignalModel]
     narrative_facts: ServicesNarrativeFactsModel
+
+    @field_validator("commodities", mode="before")
+    @classmethod
+    def normalize_commodities(cls, value):
+        return _normalize_commodity_signals(value)
 
     @model_validator(mode="before")
     @classmethod
@@ -404,6 +441,11 @@ class ServicesCommentsCommoditiesSectionModel(BaseModel):
     respondent_comments: list[ServicesRespondentCommentModel]
     commodities: list[ServicesCommoditySignalModel]
 
+    @field_validator("commodities", mode="before")
+    @classmethod
+    def normalize_commodities(cls, value):
+        return _normalize_commodity_signals(value)
+
 
 class ServicesNarrativeFactsSectionModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -414,8 +456,8 @@ class ServicesNarrativeFactsSectionModel(BaseModel):
 SECTION_PROMPT_VERSIONS = {
     "report": "ism-services-report-v3",
     "at_a_glance_rows": "ism-services-glance-v3",
-    "industry_signals": "ism-services-industries-v7",
-    "comments_commodities": "ism-services-comments-v2",
+    "industry_signals": "ism-services-industries-v8",
+    "comments_commodities": "ism-services-comments-v3",
     "narrative_facts": "ism-services-narrative-v3",
 }
 
@@ -432,6 +474,171 @@ FACTUAL_SECTION_NAMES = list(SECTION_PROMPT_VERSIONS.keys())
 
 def _normalized_in_source(text, normalized_source):
     return bool(text) and re.sub(r"\s+", " ", text).lower() in normalized_source
+
+
+def _source_respondent_comments(source_text):
+    marker = re.search(r"WHAT RESPONDENTS ARE SAYING", source_text, re.I)
+    if marker is None:
+        return None
+    remainder = source_text[marker.end() :]
+    end_markers = [
+        re.search(pattern, remainder, re.I)
+        for pattern in (
+            r"COMMODITIES REPORTED",
+            r"SERVICES(?:\s+SURVEY\s+RESULTS)?\s+AT A GLANCE",
+            r"[A-Z]+\s+\d{4}\s+SERVICES INDEX SUMMARIES",
+        )
+    ]
+    ends = [match.start() for match in end_markers if match is not None]
+    region = remainder[: min(ends)] if ends else remainder
+    matches = re.finditer(
+        r'(?:“(?P<smart>.*?)”|"(?P<straight>.*?)")\s*'
+        r'(?:\[(?P<bracket>[^\]]+)\]|\((?P<parenthetical>[^)]+)\))',
+        region,
+        re.S,
+    )
+    return [
+        {
+            "industry": re.sub(
+                r"\s+",
+                " ",
+                match.group("bracket")
+                if match.group("bracket") is not None
+                else match.group("parenthetical"),
+            ).strip(),
+            "comment_text": re.sub(
+                r"\s+",
+                " ",
+                match.group("smart")
+                if match.group("smart") is not None
+                else match.group("straight"),
+            ).strip(),
+        }
+        for match in matches
+    ]
+
+
+_SIGNAL_SOURCE_TERMS = {
+    "overall_growth": ("industry", "industries"),
+    "overall_contraction": ("industry", "industries"),
+    "business_activity": ("business activity",),
+    "new_orders": ("new orders",),
+    "employment": ("employment",),
+    "supplier_deliveries": ("deliveries",),
+    "inventories": ("inventories",),
+    "inventory_sentiment": ("sentiment", "inventories were too"),
+    "prices": ("prices",),
+    "backlog": ("backlog",),
+    "new_export_orders": ("export",),
+    "imports": ("imports",),
+}
+
+_DIRECTION_SOURCE_TERMS = {
+    "growth": ("growth",),
+    "contraction": ("contraction", "decrease"),
+    "higher": ("higher",),
+    "lower": ("lower",),
+    "increase": ("increase",),
+    "decrease": ("decrease",),
+    "reduction": ("reduction",),
+    "slower": ("slower",),
+    "faster": ("faster",),
+    "too_low": ("too low",),
+    "too_high": ("too high",),
+}
+
+
+def _source_sentences(source_text):
+    sentences = []
+    for line in source_text.splitlines():
+        normalized_line = re.sub(r"\s+", " ", line).strip()
+        if not normalized_line:
+            continue
+        sentences.extend(
+            sentence.strip()
+            for sentence in re.split(
+                r"(?<=[.!?])\s+(?=[A-Z0-9])",
+                normalized_line,
+            )
+            if sentence.strip()
+        )
+    normalized_source = re.sub(r"\s+", " ", source_text).strip()
+    sentences.extend(
+        match.group(0)
+        for match in re.finditer(
+            r"\b(?:The|No)\s+[^.!?]{0,80}?\bindustr(?:y|ies)\b[^.!?]*[.!?]",
+            normalized_source,
+        )
+    )
+    return sentences
+
+
+def _normalized_grounding_text(value):
+    return re.sub(r"\s+", " ", value).lower().replace(
+        "professional, and scientific & technical services",
+        "professional, scientific & technical services",
+    )
+
+
+def _contains_industries_in_order(sentence, industries):
+    normalized_sentence = _normalized_grounding_text(sentence)
+    cursor = 0
+    for industry in industries:
+        normalized_industry = _normalized_grounding_text(industry)
+        position = normalized_sentence.find(normalized_industry, cursor)
+        if position < 0:
+            return False
+        cursor = position + len(normalized_industry)
+    return True
+
+
+def _anchor_industry_signal_evidence(payload, source_text):
+    signal_lists = payload.get("industry_signal_lists")
+    if signal_lists is None:
+        return
+    sentences = _source_sentences(source_text)
+    for signal_list in signal_lists:
+        signal_type = signal_list["signal_type"]
+        direction = signal_list["direction"]
+        signal_terms = _SIGNAL_SOURCE_TERMS.get(signal_type, ())
+        direction_terms = _DIRECTION_SOURCE_TERMS.get(direction, ())
+        normalized_evidence = _normalized_grounding_text(
+            signal_list["evidence_text"]
+        )
+        exact_candidates = []
+        for sentence in sentences:
+            if _normalized_grounding_text(sentence) != normalized_evidence:
+                continue
+            if not _contains_industries_in_order(
+                sentence,
+                signal_list["industries"],
+            ):
+                continue
+            if sentence not in exact_candidates:
+                exact_candidates.append(sentence)
+        if len(exact_candidates) == 1:
+            signal_list["evidence_text"] = exact_candidates[0]
+            continue
+        candidates = []
+        for sentence in sentences:
+            normalized_sentence = _normalized_grounding_text(sentence)
+            if not any(term in normalized_sentence for term in signal_terms):
+                continue
+            if not any(term in normalized_sentence for term in direction_terms):
+                continue
+            if not _contains_industries_in_order(
+                sentence,
+                signal_list["industries"],
+            ):
+                continue
+            if sentence not in candidates:
+                candidates.append(sentence)
+        if len(candidates) != 1:
+            raise ValueError(
+                f"{signal_type} {direction} list is not uniquely grounded "
+                f"in source text"
+            )
+        signal_list["evidence_text"] = candidates[0]
 
 
 def _ground_report(payload, normalized_source):
@@ -532,6 +739,12 @@ def validate_section_payload(section_name, payload, source_text):
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
     dumped = validated.model_dump()
+    if section_name == "comments_commodities":
+        source_comments = _source_respondent_comments(source_text)
+        if source_comments is not None:
+            dumped["respondent_comments"] = source_comments
+    if section_name == "industry_signals":
+        _anchor_industry_signal_evidence(dumped, source_text)
     normalized_source = re.sub(r"\s+", " ", source_text).lower()
     grounder = _SECTION_GROUNDERS.get(section_name)
     if grounder:
@@ -616,7 +829,8 @@ def build_industry_signals_prompt(excerpt):
         + "overall_growth, overall_contraction, business_activity, new_orders, employment, supplier_deliveries, inventories, inventory_sentiment, prices, backlog, new_export_orders, imports\n"
         + "Directions by signal_type:\n"
         + "overall_growth: growth; overall_contraction: contraction;\n"
-        + "business_activity, new_orders, employment: increase or decrease;\n"
+        + "business_activity, new_orders: increase or decrease;\n"
+        + "employment: increase, decrease, or reduction;\n"
         + "supplier_deliveries: slower or faster;\n"
         + "inventories, backlog, imports: increase or decrease;\n"
         + "inventory_sentiment: too_high or too_low; prices: increase or decrease;\n"
@@ -631,7 +845,7 @@ def build_industry_signals_prompt(excerpt):
         + "that contains the list. Copy it verbatim, including punctuation. "
         + "Do not paraphrase or summarize. "
         + "Do not combine text from separate sentences.\n"
-        + '\n{"industry_signal_lists": [{"signal_type": "...", "direction": "growth|contraction|higher|lower|increase|decrease|slower|faster|too_low|too_high", "declared_count": 2, "industries": ["Construction", "Retail Trade"], "evidence_text": "..."}]}'
+        + '\n{"industry_signal_lists": [{"signal_type": "...", "direction": "growth|contraction|higher|lower|increase|decrease|reduction|slower|faster|too_low|too_high", "declared_count": 2, "industries": ["Construction", "Retail Trade"], "evidence_text": "..."}]}'
     )
 
 
@@ -639,6 +853,8 @@ def build_comments_commodities_prompt(excerpt):
     return (
         _build_prompt_intro("comments_commodities", excerpt)
         + "\nExtract respondent comments and commodity signals:\n"
+        + "For each respondent comment, copy the complete quoted comment as "
+        + "contiguous source text. Do not shorten or paraphrase comments.\n"
         + '{"respondent_comments": [{"industry": "...", "comment_text": "..."}], "commodities": [{"commodity": "...", "signal_type": "up_in_price|down_in_price|short_supply", "months": null}]}'
     )
 

@@ -812,6 +812,10 @@ SERVICES_COMPONENT_KEYS = {
 }
 
 
+def test_services_direction_labels_preserve_reduction_wording():
+    assert ism_services_industry.SERVICES_DIRECTION_LABELS["reduction"] == "Reduction"
+
+
 def test_build_services_signal_trend_returns_one_point_per_report():
     reports = [
         {"report_id": "r1", "report_month": "2026-05-01"},

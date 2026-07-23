@@ -23,6 +23,7 @@ SERVICES_DIRECTION_LABELS = {
     "too_low": "Too Low",
     "too_high": "Too High",
     "no_change": "No Change",
+    "reduction": "Reduction",
 }
 
 _SERVICES_COMPONENT_LABELS = dict(SERVICES_COMPONENTS)
