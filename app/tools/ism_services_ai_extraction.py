@@ -113,16 +113,16 @@ class ServicesAtAGlanceRowModel(BaseModel):
 _SERVICES_GROUPED_DIRECTIONS_BY_SIGNAL_TYPE = {
     "overall_growth": {"growth"},
     "overall_contraction": {"contraction"},
-    "business_activity": {"growth", "decrease"},
-    "new_orders": {"growth", "decrease"},
-    "employment": {"growth", "decrease"},
+    "business_activity": {"growth", "increase", "decrease"},
+    "new_orders": {"growth", "increase", "decrease"},
+    "employment": {"growth", "increase", "decrease"},
     "supplier_deliveries": {"slower", "faster"},
-    "inventories": {"higher", "lower"},
+    "inventories": {"higher", "lower", "increase", "decrease"},
     "inventory_sentiment": {"too_high", "too_low"},
     "prices": {"increase", "decrease"},
-    "backlog": {"higher", "lower"},
-    "new_export_orders": {"growth", "decrease"},
-    "imports": {"higher", "lower"},
+    "backlog": {"higher", "lower", "increase", "decrease"},
+    "new_export_orders": {"growth", "increase", "decrease"},
+    "imports": {"higher", "lower", "increase", "decrease"},
 }
 
 
@@ -414,7 +414,7 @@ class ServicesNarrativeFactsSectionModel(BaseModel):
 SECTION_PROMPT_VERSIONS = {
     "report": "ism-services-report-v3",
     "at_a_glance_rows": "ism-services-glance-v3",
-    "industry_signals": "ism-services-industries-v5",
+    "industry_signals": "ism-services-industries-v6",
     "comments_commodities": "ism-services-comments-v2",
     "narrative_facts": "ism-services-narrative-v3",
 }
@@ -616,11 +616,13 @@ def build_industry_signals_prompt(excerpt):
         + "overall_growth, overall_contraction, business_activity, new_orders, employment, supplier_deliveries, inventories, inventory_sentiment, prices, backlog, new_export_orders, imports\n"
         + "Directions by signal_type:\n"
         + "overall_growth: growth; overall_contraction: contraction;\n"
-        + "business_activity, new_orders, employment: growth or decrease;\n"
+        + "business_activity, new_orders, employment: increase or decrease;\n"
         + "supplier_deliveries: slower or faster;\n"
-        + "inventories, backlog, imports: higher or lower;\n"
+        + "inventories, backlog, imports: increase or decrease;\n"
         + "inventory_sentiment: too_high or too_low; prices: increase or decrease;\n"
-        + "new_export_orders: growth or decrease.\n"
+        + "new_export_orders: increase or decrease.\n"
+        + "Preserve the direction word used by the source. Do not silently "
+        + "convert increase to growth or higher.\n"
         + "Return one grouped object per source list. Preserve industry order.\n"
         + "Set declared_count to the explicit source count, or null when unstated.\n"
         + "Include explicit zero-industry lists with declared_count 0 and industries [].\n"

@@ -57,7 +57,7 @@ def test_services_component_universe():
 def test_section_prompt_versions_are_independent():
     assert SECTION_PROMPT_VERSIONS["report"] == "ism-services-report-v3"
     assert SECTION_PROMPT_VERSIONS["at_a_glance_rows"] == "ism-services-glance-v3"
-    assert SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v5"
+    assert SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v6"
     assert SECTION_PROMPT_VERSIONS["comments_commodities"] == "ism-services-comments-v2"
     assert SECTION_PROMPT_VERSIONS["narrative_facts"] == "ism-services-narrative-v3"
     versions = list(SECTION_PROMPT_VERSIONS.values())
@@ -207,6 +207,35 @@ class TestIndustrySignalListSchema:
                 rank=1,
                 source_excerpt="test",
             )
+
+    @pytest.mark.parametrize(
+        ("signal_type", "direction"),
+        [
+            ("business_activity", "increase"),
+            ("new_orders", "increase"),
+            ("employment", "increase"),
+            ("inventories", "increase"),
+            ("inventories", "decrease"),
+            ("backlog", "increase"),
+            ("backlog", "decrease"),
+            ("new_export_orders", "increase"),
+            ("imports", "increase"),
+            ("imports", "decrease"),
+        ],
+    )
+    def test_accepts_literal_services_direction(self, signal_type, direction):
+        model = ism_services_ai_extraction.ServicesIndustrySignalListModel(
+            signal_type=signal_type,
+            direction=direction,
+            declared_count=1,
+            industries=["Construction"],
+            evidence_text=(
+                f"The industry reporting an {direction} for {signal_type} "
+                "is Construction."
+            ),
+        )
+
+        assert model.direction == direction
 
 
 class TestRespondentCommentSchema:
@@ -494,8 +523,12 @@ class TestPromptBuilders:
         assert "declared_count" in prompt
         assert "evidence_text" in prompt
         assert "production" not in prompt
-        assert "business_activity, new_orders, employment: growth or decrease" in prompt
-        assert "inventories, backlog, imports: higher or lower" in prompt
+        assert "Preserve the direction word used by the source" in prompt
+        assert (
+            "business_activity, new_orders, employment: increase or decrease" in prompt
+        )
+        assert "inventories, backlog, imports: increase or decrease" in prompt
+        assert "new_export_orders: increase or decrease" in prompt
         assert "Preserve industry order" in prompt
         assert "Do not add rank fields" in prompt
 
