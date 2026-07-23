@@ -361,7 +361,7 @@ class TestBackfillInvariants:
         )
 
         modified_versions = dict(SECTION_PROMPT_VERSIONS)
-        modified_versions["industry_signals"] = "ism-services-industries-v6"
+        modified_versions["industry_signals"] = "ism-services-industries-v7"
         client2 = FakeAiClient()
         result = asyncio_run(
             extract_sections(
