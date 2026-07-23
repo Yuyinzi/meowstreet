@@ -57,6 +57,43 @@ class TestNormalizeReportMonth:
             ingestion.normalize_report_month("invalid")
 
 
+class TestBuildTargetsMissingOnlyRetry:
+    def test_missing_only_skips_promoted_months_and_retries_failed_months(
+        self, monkeypatch
+    ):
+        discovered = [
+            {
+                "survey_type": "services",
+                "report_month": "2025-08-01",
+                "report_id": "ism_services_2025_08",
+                "source_name": "prnewswire",
+                "url": "https://example.test/august",
+            },
+            {
+                "survey_type": "services",
+                "report_month": "2025-09-01",
+                "report_id": "ism_services_2025_09",
+                "source_name": "prnewswire",
+                "url": "https://example.test/september",
+            },
+        ]
+        monkeypatch.setattr(
+            ingestion,
+            "discover_prnewswire_reports",
+            lambda *args, **kwargs: discovered,
+        )
+
+        targets = ingestion.build_targets(
+            "services",
+            backfill_since=2025,
+            missing_only=True,
+            existing_months={"2025-09-01"},
+            force_latest=False,
+        )
+
+        assert [target["report_month"] for target in targets] == ["2025-08-01"]
+
+
 class TestBuildTargetsLatestOnly:
     def test_default_returns_one_ismworld_target(self):
         targets = ingestion.build_targets("manufacturing")
