@@ -3474,6 +3474,10 @@ h2 {
 }
 
 /* Trend table */
+.ism-industry-trend {
+  overflow-x: auto;
+  max-width: 100%;
+}
 .ism-industry-trend h6 {
   margin: 0 0 6px;
   font-size: 0.75rem;
