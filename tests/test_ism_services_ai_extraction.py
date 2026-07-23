@@ -56,7 +56,7 @@ def test_services_component_universe():
 
 def test_section_prompt_versions_are_independent():
     assert SECTION_PROMPT_VERSIONS["report"] == "ism-services-report-v3"
-    assert SECTION_PROMPT_VERSIONS["at_a_glance_rows"] == "ism-services-glance-v2"
+    assert SECTION_PROMPT_VERSIONS["at_a_glance_rows"] == "ism-services-glance-v3"
     assert SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v5"
     assert SECTION_PROMPT_VERSIONS["comments_commodities"] == "ism-services-comments-v2"
     assert SECTION_PROMPT_VERSIONS["narrative_facts"] == "ism-services-narrative-v3"
@@ -531,6 +531,33 @@ class TestPromptBuilders:
         assert "commodities" not in prompt
         prompt2 = build_at_a_glance_prompt("excerpt")
         assert "report_id" not in prompt2
+
+    def test_at_a_glance_prompt_explains_interleaved_services_values(self):
+        prompt = build_at_a_glance_prompt("table excerpt")
+
+        assert "Extract only the Services value group" in prompt
+        assert "followed by three Manufacturing comparison values" in prompt
+        assert "Ignore the Manufacturing comparison values" in prompt
+        assert "Never return null" in prompt
+        assert "current_value - previous_value equals point_change" in prompt
+        assert (
+            "Business Activity/Production -> ism_services_business_activity" in prompt
+        )
+        assert "Backlog of Orders -> ism_services_order_backlog" in prompt
+
+    def test_at_a_glance_prompt_keeps_all_fields_required(self):
+        prompt = build_at_a_glance_prompt("table excerpt")
+
+        for field in (
+            "current_value",
+            "previous_value",
+            "point_change",
+            "direction",
+            "rate_of_change",
+            "trend_months",
+        ):
+            assert field in prompt
+        assert "Return exactly 11" in prompt
 
 
 def test_excerpt_budgets_are_within_limits():

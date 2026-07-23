@@ -20,6 +20,20 @@ SERVICES_SERIES_IDS = frozenset(
     }
 )
 
+SERVICES_AT_A_GLANCE_LABELS = (
+    ("Services PMI", "ism_services_pmi"),
+    ("Business Activity/Production", "ism_services_business_activity"),
+    ("New Orders", "ism_services_new_orders"),
+    ("Employment", "ism_services_employment"),
+    ("Supplier Deliveries", "ism_services_supplier_deliveries"),
+    ("Inventories", "ism_services_inventories"),
+    ("Prices", "ism_services_prices"),
+    ("Backlog of Orders", "ism_services_order_backlog"),
+    ("New Export Orders", "ism_services_new_export_orders"),
+    ("Imports", "ism_services_imports"),
+    ("Inventory Sentiment", "ism_services_inventory_sentiment"),
+)
+
 ServicesSignalType = Literal[
     "overall_growth",
     "overall_contraction",
@@ -224,9 +238,7 @@ def _normalize_grouped_industry_signals(signal_lists):
             "declared_count": signal_list["declared_count"],
             "extracted_count": len(signal_list["industries"]),
             "validation_status": (
-                "complete"
-                if signal_list["declared_count"] is not None
-                else "partial"
+                "complete" if signal_list["declared_count"] is not None else "partial"
             ),
             "evidence_text": signal_list["evidence_text"],
         }
@@ -401,7 +413,7 @@ class ServicesNarrativeFactsSectionModel(BaseModel):
 
 SECTION_PROMPT_VERSIONS = {
     "report": "ism-services-report-v3",
-    "at_a_glance_rows": "ism-services-glance-v2",
+    "at_a_glance_rows": "ism-services-glance-v3",
     "industry_signals": "ism-services-industries-v5",
     "comments_commodities": "ism-services-comments-v2",
     "narrative_facts": "ism-services-narrative-v3",
@@ -570,11 +582,30 @@ def build_report_prompt(excerpt):
 
 
 def build_at_a_glance_prompt(excerpt):
+    label_map = "\n".join(
+        f"- {label} -> {series_id}" for label, series_id in SERVICES_AT_A_GLANCE_LABELS
+    )
     return (
-        _build_prompt_intro("at_a_glance_rows", excerpt)
-        + "\nExtract all 11 at-a-glance rows. Allowed series_ids:\n"
-        + ", ".join(sorted(SERVICES_SERIES_IDS))
-        + '\n\n{"at_a_glance_rows": [{"series_id": "...", "label": "...", "current_value": 0.0, "previous_value": 0.0, "point_change": 0.0, "direction": "...", "rate_of_change": "...", "trend_months": 0}]}'
+        "You are extracting structured data from the ISM Services PMI "
+        "SERVICES SURVEY RESULTS AT A GLANCE table.\n"
+        "Extract only explicit facts found in the excerpt. Return only valid JSON.\n"
+        "Section: at_a_glance_rows\n\n"
+        f"Excerpt:\n{excerpt}\n\n"
+        "Return exactly 11 unique at_a_glance_rows using this label mapping:\n"
+        f"{label_map}\n\n"
+        "Each source row contains the Services value group in this order: "
+        "current value, previous value, point change, direction, rate of change, "
+        "and trend months, followed by three Manufacturing comparison values.\n"
+        "Extract only the Services value group. Ignore the Manufacturing "
+        "comparison values.\n"
+        "Never return null for current_value, previous_value, point_change, "
+        "direction, rate_of_change, or trend_months. Preserve the printed "
+        "direction and rate-of-change text. trend_months must be an integer.\n"
+        "Before returning JSON, verify current_value - previous_value equals "
+        "point_change to normal one-decimal rounding.\n\n"
+        '{"at_a_glance_rows": [{"series_id": "...", "label": "...", '
+        '"current_value": 0.0, "previous_value": 0.0, "point_change": 0.0, '
+        '"direction": "...", "rate_of_change": "...", "trend_months": 0}]}'
     )
 
 
