@@ -123,21 +123,35 @@ Minutes analysis does not replace statement tone. The statement remains the publ
 - `uncertainty_level`
 - `policy_conviction`
 
-### ISM official report import
+### Import official ISM reports
 
-Import historical ISM Manufacturing PMI reports from PRNewswire and ISM:
+Use the canonical importer for Institute for Supply Management (ISM) Manufacturing and Services reports. Both surveys use AI extraction at import time.
 
-```bash
-.venv/bin/python scripts/fetch_ism_official_reports.py --backfill-since 2025
-```
-
-Use `--missing-only` to skip already-imported report months:
+Fetch the latest Services report:
 
 ```bash
-.venv/bin/python scripts/fetch_ism_official_reports.py --backfill-since 2025 --missing-only --report-concurrency 2
+.venv/bin/python scripts/fetch_ism_reports.py --survey services --latest-only
 ```
 
-Use `--report-concurrency 2` for faster historical backfills. Each report still runs section-level extraction internally, so avoid high report concurrency unless the LLM provider and SQLite workload have been validated.
+Backfill Services reports from a year and skip months already stored:
+
+```bash
+.venv/bin/python scripts/fetch_ism_reports.py \
+  --survey services \
+  --backfill-since 2024 \
+  --missing-only
+```
+
+The backfill includes the latest released month. Historical reports use PR Newswire, while the latest report uses ISM World. Omit `--missing-only` to reprocess every discovered month, or add `--force` to replace an existing precise target.
+
+Import one report month or the current year:
+
+```bash
+.venv/bin/python scripts/fetch_ism_reports.py --survey services --report-month 2026-06
+.venv/bin/python scripts/fetch_ism_reports.py --survey services --current-year --missing-only
+```
+
+Use `--survey manufacturing` for Manufacturing or `--survey all` for both surveys. Use `--report-concurrency 2` only after validating the AI provider and SQLite workload at that concurrency.
 
 ## GDP Relationship Workbook Caveat
 

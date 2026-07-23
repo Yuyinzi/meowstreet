@@ -96,6 +96,178 @@ def test_build_detail_contains_expected_keys():
     assert "industries" in detail
 
 
+def test_build_latest_presentation_returns_expected_structure():
+    rows = [
+        {
+            "series_id": "ism_services_pmi",
+            "current_value": 54.0,
+            "label": "Services PMI",
+            "previous_value": 53.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_business_activity",
+            "current_value": 55.4,
+            "label": "Business Activity",
+            "previous_value": 54.0,
+            "point_change": 1.4,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_new_orders",
+            "current_value": 55.1,
+            "label": "New Orders",
+            "previous_value": 53.0,
+            "point_change": 2.1,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_order_backlog",
+            "current_value": 52.0,
+            "label": "Order Backlog",
+            "previous_value": 50.0,
+            "point_change": 2.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+        },
+        {
+            "series_id": "ism_services_employment",
+            "current_value": 51.0,
+            "label": "Employment",
+            "previous_value": 50.5,
+            "point_change": 0.5,
+            "direction": "Growing",
+            "rate_of_change": "Slower",
+            "trend_months": 3,
+        },
+        {
+            "series_id": "ism_services_inventories",
+            "current_value": 49.0,
+            "label": "Inventories",
+            "previous_value": 48.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+        },
+        {
+            "series_id": "ism_services_inventory_sentiment",
+            "current_value": 45.0,
+            "label": "Inventory Sentiment",
+            "previous_value": 44.0,
+            "point_change": 1.0,
+            "direction": "Contracting",
+            "rate_of_change": "Slower",
+            "trend_months": 4,
+        },
+        {
+            "series_id": "ism_services_prices",
+            "current_value": 65.0,
+            "label": "Prices",
+            "previous_value": 62.0,
+            "point_change": 3.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 6,
+        },
+        {
+            "series_id": "ism_services_supplier_deliveries",
+            "current_value": 52.0,
+            "label": "Supplier Deliveries",
+            "previous_value": 51.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_new_export_orders",
+            "current_value": 53.0,
+            "label": "New Export Orders",
+            "previous_value": 52.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+        },
+        {
+            "series_id": "ism_services_imports",
+            "current_value": 47.0,
+            "label": "Imports",
+            "previous_value": 48.0,
+            "point_change": -1.0,
+            "direction": "Contracting",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+    ]
+    presentation = ism_services.build_latest_presentation(rows)
+    assert presentation["detail_groups"] == [
+        {"label": "Business Cycle", "keys": ["pmi"]},
+        {
+            "label": "Demand & Activity",
+            "keys": [
+                "business_activity",
+                "new_orders",
+                "order_backlog",
+                "new_export_orders",
+                "imports",
+            ],
+        },
+        {
+            "label": "Labor & Inventories",
+            "keys": ["employment", "inventories", "inventory_sentiment"],
+        },
+        {"label": "Inflation & Supply", "keys": ["prices", "supplier_deliveries"]},
+    ]
+    assert len(presentation["latest"]) == 11
+    assert presentation["latest_metadata"]["order_backlog"]["tone"] == "green"
+    assert presentation["latest_metadata"]["imports"]["tone"] == "red"
+    assert presentation["latest_metadata"]["prices"]["tone"] == "amber"
+    assert presentation["latest_metadata"]["supplier_deliveries"]["tone"] == "amber"
+
+
+def test_build_latest_presentation_omits_absent_rows():
+    rows = [
+        {
+            "series_id": "ism_services_pmi",
+            "current_value": 54.0,
+            "label": "Services PMI",
+            "previous_value": 53.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_unknown",
+            "current_value": 99.0,
+            "label": "Unknown",
+            "previous_value": 98.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+        },
+    ]
+    presentation = ism_services.build_latest_presentation(rows)
+    assert len(presentation["latest"]) == 1
+    assert "pmi" in presentation["latest"]
+    assert len(presentation["detail_groups"]) == 1
+    assert presentation["detail_groups"][0] == {
+        "label": "Business Cycle",
+        "keys": ["pmi"],
+    }
+
+
 def test_build_signal_backlog_stale_when_period_differs():
     by_series = {
         "ism_services_pmi": [{"date": "2026-06-01", "value": 54.0}],

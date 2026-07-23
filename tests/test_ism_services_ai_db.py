@@ -140,6 +140,48 @@ def test_promote_services_extraction_stores_industry_signals(tmp_path):
     assert signals[0]["signal_type"] == "overall_growth"
 
 
+def test_promote_services_extraction_uses_grouped_declared_counts_for_coverage(
+    tmp_path,
+):
+    con = _connect(tmp_path / "macro.db")
+    extraction = _valid_extraction()
+    extraction.pop("industry_signals")
+    extraction["industry_signal_lists"] = [
+        {
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "declared_count": 1,
+            "industries": ["Construction"],
+            "evidence_text": (
+                "The one service industry reporting growth is: Construction."
+            ),
+        },
+        {
+            "signal_type": "prices",
+            "direction": "decrease",
+            "declared_count": 0,
+            "industries": [],
+            "evidence_text": "No industries reported a decrease in prices paid.",
+        },
+    ]
+
+    result = promote_services_extraction(con, extraction, _valid_source())
+
+    rows = con.execute(
+        "select signal_type, direction, list_present, declared_count, "
+        "extracted_count, validation_status "
+        "from ism_report_industry_signal_coverage where report_id = ? "
+        "order by signal_type, direction",
+        ("ism_services_2026_06",),
+    ).fetchall()
+    assert len(rows) == 12
+    growth = next(row for row in rows if row["signal_type"] == "overall_growth")
+    assert tuple(growth) == ("overall_growth", "growth", 1, 1, 1, "complete")
+    prices = next(row for row in rows if row["signal_type"] == "prices")
+    assert tuple(prices) == ("prices", "decrease", 1, 0, 0, "complete")
+    assert result["signal_coverage"] == 12
+
+
 def test_promote_services_extraction_stores_commodities(tmp_path):
     con = _connect(tmp_path / "macro.db")
     promote_services_extraction(con, _valid_extraction(), _valid_source())

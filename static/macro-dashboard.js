@@ -2546,7 +2546,10 @@
             </div>
           </div>
         ` : ""}
-        <div class="ism-official-summary-footer">${escapeHtml(summary.title || "")}</div>
+        <div class="ism-official-summary-footer">
+          <span>${escapeHtml(summary.title || "")}</span>
+          ${summary.source_url ? `<a href="${escapeHtml(summary.source_url)}" target="_blank" rel="noopener noreferrer">${bilingualLabel("Official ISM Report")} &rarr;</a>` : ""}
+        </div>
       </section>
     `;
   }
@@ -2707,19 +2710,244 @@
     }
   }
 
-  function renderServicesDetailInPanel(body, payload) {
-    const charts = (payload.charts || []).map((chart) => (
-      filterChartForRange(chart, state.selectedGrowthCycleChartRange)
-    ));
-    const renderedCharts = charts.map((chart, index) => (
-      renderIsmDetailChart(chart, index, null)
-    ));
-    const latest = payload.latest || {};
-    const signal = payload.signal || {};
-    const metrics = signal.metrics || {};
-    const industries = payload.industries || {};
+  const SERVICES_COMMODITY_GROUPS = Object.freeze([
+    { signalType: "up_in_price", label: "Prices increased", tone: "higher" },
+    { signalType: "down_in_price", label: "Prices decreased", tone: "lower" },
+    { signalType: "short_supply", label: "In short supply", tone: "shortage" },
+  ]);
 
-    const stateLabels = {
+  function renderServicesCommodityGroups(commodities) {
+    return SERVICES_COMMODITY_GROUPS.map((group) => {
+      const items = (commodities || []).filter((item) => item.signal_type === group.signalType);
+      if (!items.length) return "";
+      return `
+        <div class="ism-services-commodity-group ism-services-commodity-${escapeHtml(group.tone)}">
+          <h6>${escapeHtml(group.label)}</h6>
+          <ul>${items.map((item) => `
+            <li><strong>${escapeHtml(item.commodity || "")}</strong>${item.months != null ? ` <span>${escapeHtml(String(item.months))} months</span>` : ""}</li>
+          `).join("")}</ul>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderServicesNarrativeFacts(facts) {
+    if (!facts || !Object.keys(facts).length) return "";
+    const rows = [];
+    if (facts.consecutive_expansion_months != null) {
+      rows.push(`Services activity expanded for ${escapeHtml(String(facts.consecutive_expansion_months))} consecutive months.`);
+    }
+    if (facts.services_economy_gdp_share_percent != null) {
+      rows.push(`Services industries represent ${escapeHtml(String(facts.services_economy_gdp_share_percent))}% of U.S. GDP.`);
+    }
+    rows.push(facts.broad_based_expansion_mentioned
+      ? "Broad-based expansion was mentioned in the report."
+      : "Broad-based expansion was not mentioned in the report.");
+    rows.push(facts.inflationary_pressure_mentioned
+      ? "Inflationary pressure was mentioned in the report."
+      : "Inflationary pressure was not mentioned in the report.");
+    return `<ul class="ism-services-narrative-list">${rows.map((row) => `<li>${row}</li>`).join("")}</ul>`;
+  }
+
+  const SERVICES_COMPONENT_LABELS = Object.freeze({
+    business_activity: "Business Activity",
+    new_orders: "New Orders",
+    employment: "Employment",
+    supplier_deliveries: "Supplier Deliveries",
+    inventories: "Inventories",
+    inventory_sentiment: "Inventory Sentiment",
+    prices: "Prices",
+    backlog: "Order Backlog",
+    new_export_orders: "New Export Orders",
+    imports: "Imports",
+  });
+
+  function readableServicesDirection(direction) {
+    return String(direction || "")
+      .replaceAll("_", " ")
+      .replace(/^./, (character) => character.toUpperCase());
+  }
+
+  function renderServicesRankedIndustryList(items, direction, emptyLabel) {
+    const rows = (items || []).map((item, index) => {
+      const prefix = direction === "growth" ? MEDALS[index] || "" : "\uD83D\uDD3B";
+      const selected = state.selectedServicesIndustry === item.industry;
+      return `
+        <button type="button" class="ism-industry-list-button${selected ? " ism-industry-button-selected" : ""}" data-services-industry="${escapeHtml(item.industry)}" aria-pressed="${selected ? "true" : "false"}">
+          <span class="ism-industry-list-text">${prefix} ${escapeHtml(item.industry)}</span>
+          <small class="ism-industry-zh">#${escapeHtml(String(item.rank))}</small>
+        </button>
+      `;
+    }).join("");
+    return rows || `<p class="ism-industry-empty">${escapeHtml(emptyLabel)}</p>`;
+  }
+
+  function renderServicesComponentEvidence(industry) {
+    const signals = industry.component_signals || [];
+    const coverage = industry.component_coverage || {};
+    const coverageStatus = coverage.coverage_status;
+    const coverageText = coverageStatus === "absent"
+      ? "No component lists reported"
+      : coverageStatus === "available"
+        ? `Listed in ${escapeHtml(String(coverage.listed_components || 0))} of ${escapeHtml(String(coverage.available_components))} available components`
+        : "Component coverage unavailable";
+    const rows = signals.map((signal) => `
+      <div class="ism-industry-signal-row ism-services-component-row">
+        <span class="ism-signal-name">${escapeHtml(signal.label || "")}</span>
+        <span class="ism-services-direction-chip">${escapeHtml(signal.direction_label || "")}</span>
+        <span class="ism-signal-rank">${signal.rank != null ? `#${escapeHtml(String(signal.rank))}${signal.list_size != null ? ` of ${escapeHtml(String(signal.list_size))}` : ""}` : "\u2014"}</span>
+      </div>
+    `).join("");
+    return `
+      <div class="ism-services-component-evidence">
+        <h6>${bilingualLabel("Component Evidence")}</h6>
+        <p class="ism-trend-meta">${coverageText}</p>
+        <div class="ism-industry-signals">${rows || `<p class="ism-industry-no-comment">Component evidence unavailable</p>`}</div>
+      </div>
+    `;
+  }
+
+  function renderServicesRankHistory(trend) {
+    const rows = (trend || []).map((point) => `
+      <tr>
+        <td>${escapeHtml(fmtMonthYear(point.period))}</td>
+        <td>${escapeHtml(readableServicesDirection(point.direction))}</td>
+        <td>#${escapeHtml(String(point.rank))}</td>
+      </tr>
+    `).join("");
+    if (!rows) return "";
+    return `
+      <div class="ism-industry-trend">
+        <h6>${bilingualLabel("Rank History")}</h6>
+        <div class="ism-trend-table-wrap">
+          <table class="ism-trend-table">
+            <thead><tr><th>Period</th><th>Direction</th><th>Rank</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderServicesSelectedComments(comments) {
+    return `
+      <div class="ism-industry-comments">
+        <h6>${bilingualLabel("Respondent Comments")}</h6>
+        ${(comments || []).length
+          ? comments.map((text) => `<p class="ism-industry-comment-text">${escapeHtml(text)}</p>`).join("")
+          : `<p class="ism-industry-no-comment">${bilingualLabel("No respondent comment in this report")}</p>`}
+      </div>
+    `;
+  }
+
+  function servicesIndustryByName(analysis, industryName) {
+    return (analysis.industries || []).find((row) => row.industry === industryName) || null;
+  }
+
+  function renderServicesIndustryDetailView(industry, analysis) {
+    if (!industry) return `<p class="ism-industry-unavailable">Industry analysis unavailable</p>`;
+    const streak = industry.streak || {};
+    const directionChange = industry.direction_change
+      ? readableServicesDirection(industry.direction_change)
+      : "\u2014";
+    const rankChange = industry.rank_change != null
+      ? `${industry.rank_change > 0 ? "+" : ""}${industry.rank_change}`
+      : "\u2014";
+    return `
+      <div class="ism-industry-header">
+        <h5>${escapeHtml(industry.industry)}</h5>
+        <span class="ism-industry-period">${escapeHtml(fmtMonthYear(analysis.period || ""))}</span>
+      </div>
+      <div class="ism-industry-meta">
+        <span>${bilingualLabel("Direction")}: ${escapeHtml(readableServicesDirection(industry.direction))}</span>
+        <span>${bilingualLabel("Rank")}: #${escapeHtml(String(industry.rank))}</span>
+        <span>${bilingualLabel("Rank Change")}: ${escapeHtml(rankChange)}</span>
+        <span>${bilingualLabel("Direction Change")}: ${escapeHtml(directionChange)}</span>
+        <span>${bilingualLabel("Streak")}: ${escapeHtml(String(streak.months || 0))} months ${escapeHtml(readableServicesDirection(streak.direction))}</span>
+      </div>
+      ${renderServicesComponentEvidence(industry)}
+      ${renderServicesSelectedComments(industry.comments)}
+      ${renderServicesRankHistory(industry.trend)}
+      ${analysis.source_url ? `<div class="ism-industry-source"><a href="${escapeHtml(analysis.source_url)}" target="_blank" rel="noopener noreferrer">${bilingualLabel("Official ISM Report")} &rarr;</a></div>` : ""}
+    `;
+  }
+
+  function renderServicesIndustryAnalysisSection(analysis) {
+    if (!analysis || analysis.status !== "available") {
+      return `<section class="ism-detail-group ism-industry-analysis"><p class="ism-industry-unavailable">${escapeHtml((analysis && analysis.reason) || "Industry analysis unavailable")}</p></section>`;
+    }
+    const defaultIndustry = (analysis.growing_industries || [])[0] ||
+      (analysis.contracting_industries || [])[0] || null;
+    if (!state.selectedServicesIndustry || !servicesIndustryByName(analysis, state.selectedServicesIndustry)) {
+      state.selectedServicesIndustry = defaultIndustry ? defaultIndustry.industry : null;
+    }
+    const selected = servicesIndustryByName(analysis, state.selectedServicesIndustry);
+    return `
+      <section class="ism-detail-group ism-industry-ranking">
+        <div class="ism-industry-counts">
+          <span><strong>${escapeHtml(String((analysis.growing_industries || []).length))}</strong> Growing</span>
+          <span><strong>${escapeHtml(String((analysis.contracting_industries || []).length))}</strong> Contracting</span>
+          <span><strong>${escapeHtml(String((analysis.industries || []).length))}</strong> Total</span>
+        </div>
+        <div class="ism-industry-columns">
+          <div><h5>${bilingualLabel("Growing Industries")}</h5><div class="ism-industry-list">${renderServicesRankedIndustryList(analysis.growing_industries, "growth", "No growing industries")}</div></div>
+          <div><h5>${bilingualLabel("Contracting Industries")}</h5><div class="ism-industry-list">${renderServicesRankedIndustryList(analysis.contracting_industries, "contraction", "No contracting industries")}</div></div>
+        </div>
+      </section>
+      <section class="ism-detail-group ism-industry-analysis">
+        <div class="ism-industry-detail" data-services-industry-detail>
+          ${renderServicesIndustryDetailView(selected, analysis)}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderServicesFullEvidence(richEvidence) {
+    if (!richEvidence) return "";
+    const glance = richEvidence.at_a_glance_rows || [];
+    const commodities = richEvidence.commodities || [];
+    const narrative = richEvidence.narrative_facts || {};
+    const sourceUrl = (richEvidence.source || {}).source_url || "";
+    const hasData = glance.length || commodities.length ||
+      Object.keys(narrative).length || sourceUrl;
+    if (!hasData) return "";
+    return `
+      <details class="ism-section-collapse ism-services-full-evidence">
+        <summary>${bilingualLabel("Full Report Evidence")}</summary>
+        ${glance.length ? `
+        <section class="ism-detail-group">
+          <h5>${bilingualLabel("All Components")}</h5>
+          <table class="ism-latest-table">
+            <thead><tr><th>Component</th><th>Current</th><th>Previous</th><th>Change</th><th>Direction</th><th>Rate</th><th>Trend</th></tr></thead>
+            <tbody>${glance.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.label || row.series_id || "")}</td>
+                <td>${escapeHtml(row.current_value != null ? row.current_value.toFixed(1) : "")}</td>
+                <td>${escapeHtml(row.previous_value != null ? row.previous_value.toFixed(1) : "")}</td>
+                <td>${escapeHtml(row.point_change != null ? (row.point_change > 0 ? "+" : "") + row.point_change.toFixed(1) : "")}</td>
+                <td>${escapeHtml(row.direction || "")}</td>
+                <td>${escapeHtml(row.rate_of_change || "")}</td>
+                <td>${escapeHtml(row.trend_months != null ? String(row.trend_months) + "m" : "")}</td>
+              </tr>
+            `).join("")}</tbody>
+          </table>
+        </section>
+        ` : ""}
+        <section class="ism-detail-group">
+          <h5>${bilingualLabel("Commodities")}</h5>
+          <div class="ism-services-commodity-grid">${renderServicesCommodityGroups(commodities)}</div>
+        </section>
+        <section class="ism-detail-group">
+          <h5>${bilingualLabel("Narrative Facts")}</h5>
+          ${renderServicesNarrativeFacts(narrative)}
+        </section>
+        ${sourceUrl ? `<div class="ism-industry-source"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${bilingualLabel("Official ISM Report")} &rarr;</a></div>` : ""}
+      </details>
+    `;
+  }
+
+  function servicesStateLabel(state) {
+    const labels = {
       supports_growth: "Growth",
       growth_caution: "Caution",
       supports_contraction: "Contraction",
@@ -2728,7 +2956,11 @@
       pending_inputs: "Pending",
       stale_periods: "Stale",
     };
+    return labels[state] || state || "Unknown";
+  }
 
+  function renderServicesLegacyLatestTable(signal) {
+    const metrics = signal.metrics || {};
     function metricDetail(key, label) {
       const m = metrics[key];
       if (!m) return "";
@@ -2736,89 +2968,104 @@
       const change = m.point_change != null ? (m.point_change > 0 ? "+" : "") + m.point_change.toFixed(1) : "n/a";
       return `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td><td>${escapeHtml(m.level || "")}</td><td>${escapeHtml(change)}</td><td>${escapeHtml(m.momentum || "")}</td></tr>`;
     }
+    return `
+      <table class="ism-latest-table">
+        <thead><tr><th>Metric</th><th>Value</th><th>Level</th><th>Change</th><th>Momentum</th></tr></thead>
+        <tbody>
+          ${metricDetail("pmi", "Services PMI")}
+          ${metricDetail("business_activity", "Business Activity")}
+          ${metricDetail("new_orders", "New Orders")}
+          ${signal.backlog_confirmation === "unavailable" ? "" : metricDetail("order_backlog", "Order Backlog")}
+        </tbody>
+      </table>
+    `;
+  }
 
-    const industryList = industries.industries || [];
-    const selectedIndustry = state.selectedServicesIndustry;
-    const currentIndustry = selectedIndustry && industryList.some((i) => i.industry === selectedIndustry)
-      ? industryList.find((i) => i.industry === selectedIndustry)
-      : industryList.length > 0 ? industryList[0] : null;
-
-    if (currentIndustry && (!state.selectedServicesIndustry || !industryList.some((i) => i.industry === state.selectedServicesIndustry))) {
-      state.selectedServicesIndustry = currentIndustry.industry;
-    }
-
-    function renderIndustrySelector() {
-      return `<select class="ism-industry-selector" data-services-industry-selector>
-        ${industryList.map((ind) =>
-          `<option value="${escapeHtml(ind.industry)}"${ind.industry === state.selectedServicesIndustry ? " selected" : ""}>
-            ${escapeHtml(ind.industry)} (${escapeHtml(ind.direction)}, rank ${String(ind.rank)})
-          </option>`
-        ).join("")}
-      </select>`;
-    }
-
-    function renderSelectedIndustryDetail() {
-      if (!currentIndustry) return '<p class="status">No industry data available.</p>';
-      const allComments = currentIndustry.comments || [];
-      return `<div class="ism-selected-industry-detail">
-        <h4>${escapeHtml(currentIndustry.industry)}</h4>
-        <div class="ism-industry-meta">
-          <span class="ism-industry-direction ism-direction-${currentIndustry.direction}">${escapeHtml(currentIndustry.direction)}</span>
-          <span>Rank: ${escapeHtml(String(currentIndustry.rank))}</span>
-          <span>Dir change: ${escapeHtml(currentIndustry.direction_change || "—")}</span>
-          <span>Rank change: ${currentIndustry.rank_change != null ? (currentIndustry.rank_change > 0 ? "+" : "") + currentIndustry.rank_change : "—"}</span>
-          <span>Streak: ${currentIndustry.positive_streak ? currentIndustry.positive_streak + "m+" : currentIndustry.negative_streak ? currentIndustry.negative_streak + "m-" : "—"}</span>
+  function renderServicesLatestValues(payload) {
+    const latest = payload.latest || {};
+    const metadata = payload.latest_metadata || {};
+    const groups = payload.detail_groups || [];
+    const signal = payload.signal || {};
+    const summary = `
+      <div class="ism-industry-meta">
+        <span class="ism-signal-badge ism-signal-${escapeHtml(signal.state || "unknown")}">${escapeHtml(servicesStateLabel(signal.state))}</span>
+        <span>Backlog: ${escapeHtml(signal.backlog_confirmation || "unavailable")}</span>
+      </div>
+    `;
+    if (!groups.length) return `${summary}${renderServicesLegacyLatestTable(signal)}`;
+    return `${summary}${groups.map((group) => `
+      <div class="ism-latest-group">
+        <strong class="ism-latest-group-label">${escapeHtml(group.label || "")}</strong>
+        <div class="ism-latest-group-rows">
+          ${(group.keys || []).map((key) => `
+            <div class="ism-metric-row">
+              <span>${escapeHtml(metadata[key]?.label || key)}</span>
+              <div class="ism-metric-value">
+                <strong>${escapeHtml(fmtIsmIndex(latest[key]))}</strong>
+                ${metadata[key] ? renderIsmTrendChip(metadata[key]) : ""}
+              </div>
+            </div>
+          `).join("")}
         </div>
-        ${allComments.length > 0 ? `<div class="ism-industry-comments-section"><h5>Comments</h5>${allComments.map((c) =>
-          `<p class="ism-industry-comment">${escapeHtml(c)}</p>`
-        ).join("")}</div>` : ""}
-      </div>`;
-    }
+      </div>
+    `).join("")}`;
+  }
 
-    const breadth = industries.breadth || {};
+  function renderServicesDetailInPanel(body, payload) {
+    const charts = (payload.charts || []).map((chart) => (
+      filterChartForRange(chart, state.selectedGrowthCycleChartRange)
+    ));
+    const lineCharts = charts.filter((chart) => (
+      chart.kind !== "heat_map" && chart.kind !== "small_multiples"
+    ));
+    const renderedCharts = charts.map((chart, index) => (
+      renderIsmDetailChart(chart, index, null)
+    ));
+    const industryAnalysis = payload.industry_analysis || null;
 
     body.innerHTML = `
       ${renderGrowthCycleRangeControl()}
-      <div class="relationship-chart-grid">
-        ${renderedCharts.join("")}
-      </div>
-      <div class="ism-detail-sections">
-        <div class="ism-latest-values">
-          <h3>ISM Services</h3>
-          <p class="ism-signal-badge ism-signal-${signal.state || "unknown"}">${escapeHtml(stateLabels[signal.state] || signal.state || "Unknown")}</p>
-          <p class="ism-signal-backlog">Backlog: ${escapeHtml(signal.backlog_confirmation || "unavailable")}</p>
-          <table class="ism-latest-table">
-            <thead><tr><th>Metric</th><th>Value</th><th>Level</th><th>Change</th><th>Momentum</th></tr></thead>
-            <tbody>
-              ${metricDetail("pmi", "Services PMI")}
-              ${metricDetail("business_activity", "Business Activity")}
-              ${metricDetail("new_orders", "New Orders")}
-              ${signal.backlog_confirmation === "unavailable" ? "" : metricDetail("order_backlog", "Order Backlog")}
-            </tbody>
-          </table>
+      ${renderIsmOfficialReportSummary(payload.official_report_summary)}
+      <details class="ism-section-collapse">
+        <summary>${bilingualLabel("Charts & Heat Maps")}</summary>
+        <div class="relationship-chart-grid ism-detail-grid">${renderedCharts.join("")}</div>
+      </details>
+      <details class="ism-section-collapse" open>
+        <summary>${bilingualLabel("Latest Values")}</summary>
+        <div class="ism-detail-latest ism-detail-latest-collapsible">
+          ${renderServicesLatestValues(payload)}
         </div>
-        <div class="ism-industry-breadth">
-          <h4>Industries (${escapeHtml(String(breadth.growth_count ?? 0))} growing / ${escapeHtml(String(breadth.total_count ?? 0))} total) <span class="ism-breadth-status ism-breadth-${breadth.status || "unknown"}">${escapeHtml(breadth.status || "unavailable")}</span></h4>
-          ${renderIndustrySelector()}
-          ${renderSelectedIndustryDetail()}
-        </div>
-      </div>
+      </details>
+      <details class="ism-section-collapse" open>
+        <summary>${bilingualLabel("Industry Analysis (6 Month)")}</summary>
+        ${renderServicesIndustryAnalysisSection(industryAnalysis)}
+      </details>
+      ${renderServicesFullEvidence(payload.rich_evidence)}
     `;
     bindGrowthCycleRangeControl(body);
-    attachRatesChartTooltips(body, charts);
-    bindServicesIndustrySelector(body);
+    attachIsmOfficialSummaryHandlers(body);
+    attachRatesChartTooltips(body, lineCharts);
+    bindServicesIndustrySelector(body, industryAnalysis);
   }
 
-  function bindServicesIndustrySelector(body) {
-    const sel = body.querySelector("[data-services-industry-selector]");
-    if (!sel) return;
-    sel.addEventListener("change", function () {
-      state.selectedServicesIndustry = this.value;
-      const detailBody = body.closest(".detail-panel-body") || body;
-      const payload = state.growthCycleDetailsById && state.growthCycleDetailsById.ism_services;
-      if (payload) {
-        renderServicesDetailInPanel(detailBody, payload);
-      }
+  function selectServicesIndustry(body, analysis, industryName) {
+    const selected = servicesIndustryByName(analysis, industryName);
+    if (!selected) return;
+    state.selectedServicesIndustry = industryName;
+    body.querySelectorAll("[data-services-industry]").forEach((button) => {
+      const isSelected = button.dataset.servicesIndustry === industryName;
+      button.classList.toggle("ism-industry-button-selected", isSelected);
+      button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    });
+    const detail = body.querySelector("[data-services-industry-detail]");
+    if (detail) detail.innerHTML = renderServicesIndustryDetailView(selected, analysis);
+  }
+
+  function bindServicesIndustrySelector(body, analysis) {
+    body.querySelectorAll("[data-services-industry]").forEach((button) => {
+      button.addEventListener("click", () => {
+        selectServicesIndustry(body, analysis, button.dataset.servicesIndustry);
+      });
     });
   }
 
@@ -5067,6 +5314,10 @@
       renderDetailPanel,
       renderIsmTrendChip,
       renderIsmDetailInPanel,
+      renderServicesDetailInPanel,
+      servicesStateLabel,
+      renderServicesLegacyLatestTable,
+      renderServicesLatestValues,
       fmtIsmPointChange,
       toggleDetailPanelExpanded,
       xAt,
@@ -5088,6 +5339,14 @@
       renderIsmScoreComponentDetail,
       renderIsmEvidenceDetail,
       renderIsmMacroContext,
+      renderServicesCommodityGroups,
+      renderServicesNarrativeFacts,
+      renderServicesFullEvidence,
+      renderServicesIndustryAnalysisSection,
+      renderServicesIndustryDetailView,
+      renderServicesComponentEvidence,
+      renderServicesRankHistory,
+      selectServicesIndustry,
       renderIsmIndustryTrend,
       renderIsmScoreTrendSvg,
       renderIsmIndustryList,

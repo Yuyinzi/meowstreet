@@ -455,6 +455,211 @@ def test_build_breadth_skips_unknown_industry():
     assert result["growth_count"] == 1
 
 
+def test_build_services_industry_analysis_groups_rank_history_and_components():
+    rankings = [
+        {
+            "date": "2026-04-01",
+            "industry": "Construction",
+            "direction": "contraction",
+            "rank": 2,
+        },
+        {
+            "date": "2026-05-01",
+            "industry": "Construction",
+            "direction": "growth",
+            "rank": 4,
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Construction",
+            "direction": "growth",
+            "rank": 1,
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Educational Services",
+            "direction": "contraction",
+            "rank": 1,
+        },
+    ]
+    component_signals = [
+        {
+            "signal_type": "business_activity",
+            "direction": "growth",
+            "industry": "Construction",
+            "rank": 3,
+        },
+        {
+            "signal_type": "supplier_deliveries",
+            "direction": "slower",
+            "industry": "Construction",
+            "rank": 5,
+        },
+        {
+            "signal_type": "backlog",
+            "direction": "lower",
+            "industry": "Educational Services",
+            "rank": 2,
+        },
+    ]
+    coverage_rows = [
+        {
+            "signal_type": "business_activity",
+            "direction": "growth",
+            "list_present": True,
+            "declared_count": 13,
+            "extracted_count": 13,
+            "validation_status": "complete",
+        },
+        {
+            "signal_type": "supplier_deliveries",
+            "direction": "slower",
+            "list_present": True,
+            "declared_count": 14,
+            "extracted_count": 14,
+            "validation_status": "complete",
+        },
+        {
+            "signal_type": "backlog",
+            "direction": "lower",
+            "list_present": True,
+            "declared_count": 7,
+            "extracted_count": 7,
+            "validation_status": "complete",
+        },
+    ]
+    comments = [
+        {"industry": "Construction", "comment_text": "Construction comment."},
+        {"industry": "Educational Services", "comment_text": "Education comment."},
+    ]
+
+    result = ism_services_industry.build_services_industry_analysis(
+        rankings,
+        component_signals,
+        coverage_rows,
+        comments,
+        period="2026-06-01",
+        source_url="https://www.ismworld.org/services/june/",
+    )
+
+    assert result["status"] == "available"
+    assert result["period"] == "2026-06-01"
+    assert result["growing_industries"] == [{"industry": "Construction", "rank": 1}]
+    assert result["contracting_industries"] == [
+        {"industry": "Educational Services", "rank": 1}
+    ]
+    construction = next(
+        row for row in result["industries"] if row["industry"] == "Construction"
+    )
+    assert construction["direction"] == "growth"
+    assert construction["rank"] == 1
+    assert construction["direction_change"] is None
+    assert construction["rank_change"] == -3
+    assert construction["streak"] == {"direction": "growth", "months": 2}
+    assert construction["trend"] == [
+        {"period": "2026-04-01", "direction": "contraction", "rank": 2},
+        {"period": "2026-05-01", "direction": "growth", "rank": 4},
+        {"period": "2026-06-01", "direction": "growth", "rank": 1},
+    ]
+    assert construction["component_signals"] == [
+        {
+            "signal_type": "business_activity",
+            "label": "Business Activity",
+            "direction": "growth",
+            "direction_label": "Growth",
+            "rank": 3,
+            "list_size": 13,
+        },
+        {
+            "signal_type": "supplier_deliveries",
+            "label": "Supplier Deliveries",
+            "direction": "slower",
+            "direction_label": "Slower",
+            "rank": 5,
+            "list_size": 14,
+        },
+    ]
+    assert construction["component_coverage"] == {
+        "listed_components": 2,
+        "available_components": 3,
+        "coverage_status": "available",
+    }
+    assert construction["comments"] == ["Construction comment."]
+    assert "score" not in construction
+    assert "score_weights" not in result
+
+
+def test_services_industry_analysis_does_not_compare_ranks_across_directions():
+    result = ism_services_industry.build_services_industry_analysis(
+        [
+            {
+                "date": "2026-05-01",
+                "industry": "Construction",
+                "direction": "contraction",
+                "rank": 2,
+            },
+            {
+                "date": "2026-06-01",
+                "industry": "Construction",
+                "direction": "growth",
+                "rank": 12,
+            },
+        ],
+        [],
+        [],
+        [],
+        period="2026-06-01",
+        source_url="https://example.com",
+    )
+
+    industry = result["industries"][0]
+    assert industry["direction_change"] == "contraction_to_growth"
+    assert industry["rank_change"] is None
+
+
+def test_services_industry_analysis_does_not_forward_fill_missing_months():
+    result = ism_services_industry.build_services_industry_analysis(
+        [
+            {
+                "date": "2026-04-01",
+                "industry": "Construction",
+                "direction": "growth",
+                "rank": 2,
+            },
+            {
+                "date": "2026-06-01",
+                "industry": "Construction",
+                "direction": "growth",
+                "rank": 1,
+            },
+        ],
+        [],
+        [],
+        [],
+        period="2026-06-01",
+        source_url="https://example.com",
+    )
+
+    assert [row["period"] for row in result["industries"][0]["trend"]] == [
+        "2026-04-01",
+        "2026-06-01",
+    ]
+    assert result["industries"][0]["streak"] == {
+        "direction": "growth",
+        "months": 1,
+    }
+
+
+def test_services_industry_analysis_is_unavailable_without_current_rankings():
+    result = ism_services_industry.build_services_industry_analysis(
+        [], [], [], [], period="2026-06-01", source_url=None
+    )
+
+    assert result["status"] == "unavailable"
+    assert result["industries"] == []
+    assert "2026-06-01" in result["reason"]
+
+
 def test_build_industry_payload_rankings_normalized_before_grouping():
     rankings = [
         {
@@ -475,3 +680,151 @@ def test_build_industry_payload_rankings_normalized_before_grouping():
     result = ism_services_industry.build_industry_payload(rankings, [])
     assert len(result["industries"]) == 1
     assert result["industries"][0]["direction_change"] == "contraction_to_growth"
+
+
+def test_services_industry_analysis_excludes_rankings_older_than_six_months():
+    rankings = [
+        {
+            "date": "2020-08-01",
+            "industry": "Construction",
+            "direction": "growth",
+            "rank": 1,
+        },
+        {
+            "date": "2020-09-01",
+            "industry": "Construction",
+            "direction": "growth",
+            "rank": 2,
+        },
+        {
+            "date": "2020-10-01",
+            "industry": "Construction",
+            "direction": "growth",
+            "rank": 3,
+        },
+        {
+            "date": "2020-11-01",
+            "industry": "Construction",
+            "direction": "growth",
+            "rank": 4,
+        },
+        {
+            "date": "2020-12-01",
+            "industry": "Construction",
+            "direction": "growth",
+            "rank": 5,
+        },
+        {
+            "date": "2026-05-01",
+            "industry": "Construction",
+            "direction": "contraction",
+            "rank": 10,
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Construction",
+            "direction": "contraction",
+            "rank": 8,
+        },
+    ]
+    result = ism_services_industry.build_services_industry_analysis(
+        rankings,
+        [],
+        [],
+        [],
+        period="2026-06-01",
+        source_url="https://example.com",
+    )
+    industry = result["industries"][0]
+    assert [row["period"] for row in industry["trend"]] == [
+        "2026-05-01",
+        "2026-06-01",
+    ]
+    assert industry["rank_change"] == -2
+    assert industry["direction_change"] is None
+
+
+def test_services_industry_analysis_coverage_is_unavailable_when_no_coverage_rows():
+    result = ism_services_industry.build_services_industry_analysis(
+        [
+            {
+                "date": "2026-06-01",
+                "industry": "Construction",
+                "direction": "growth",
+                "rank": 1,
+            },
+        ],
+        [],
+        [],
+        [],
+        period="2026-06-01",
+        source_url="https://example.com",
+    )
+    industry = result["industries"][0]
+    assert industry["component_coverage"] == {
+        "listed_components": 0,
+        "available_components": None,
+        "coverage_status": "unavailable",
+    }
+
+
+def test_services_industry_analysis_coverage_is_unavailable_when_only_partial():
+    result = ism_services_industry.build_services_industry_analysis(
+        [
+            {
+                "date": "2026-06-01",
+                "industry": "Construction",
+                "direction": "growth",
+                "rank": 1,
+            },
+        ],
+        [],
+        [
+            {
+                "signal_type": "business_activity",
+                "direction": "growth",
+                "list_present": True,
+                "declared_count": 13,
+                "extracted_count": 13,
+                "validation_status": "partial",
+            },
+        ],
+        [],
+        period="2026-06-01",
+        source_url="https://example.com",
+    )
+    industry = result["industries"][0]
+    assert industry["component_coverage"]["coverage_status"] == "unavailable"
+    assert industry["component_coverage"]["available_components"] is None
+
+
+def test_services_industry_analysis_coverage_is_absent_when_all_rows_absent():
+    result = ism_services_industry.build_services_industry_analysis(
+        [
+            {
+                "date": "2026-06-01",
+                "industry": "Construction",
+                "direction": "growth",
+                "rank": 1,
+            },
+        ],
+        [],
+        [
+            {
+                "signal_type": "business_activity",
+                "direction": "growth",
+                "validation_status": "absent",
+            },
+            {
+                "signal_type": "new_orders",
+                "direction": "growth",
+                "validation_status": "absent",
+            },
+        ],
+        [],
+        period="2026-06-01",
+        source_url="https://example.com",
+    )
+    industry = result["industries"][0]
+    assert industry["component_coverage"]["coverage_status"] == "absent"
+    assert industry["component_coverage"]["available_components"] == 0

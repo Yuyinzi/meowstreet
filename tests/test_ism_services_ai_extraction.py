@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from pathlib import Path
 
+from app.tools import ism_services_ai_extraction
 from app.tools.ism_services_ai_extraction import (
     SERVICES_SERIES_IDS,
     SECTION_PROMPT_VERSIONS,
@@ -54,11 +55,11 @@ def test_services_component_universe():
 
 
 def test_section_prompt_versions_are_independent():
-    assert SECTION_PROMPT_VERSIONS["report"] == "ism-services-report-v1"
-    assert SECTION_PROMPT_VERSIONS["at_a_glance_rows"] == "ism-services-glance-v1"
-    assert SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v1"
-    assert SECTION_PROMPT_VERSIONS["comments_commodities"] == "ism-services-comments-v1"
-    assert SECTION_PROMPT_VERSIONS["narrative_facts"] == "ism-services-narrative-v1"
+    assert SECTION_PROMPT_VERSIONS["report"] == "ism-services-report-v3"
+    assert SECTION_PROMPT_VERSIONS["at_a_glance_rows"] == "ism-services-glance-v2"
+    assert SECTION_PROMPT_VERSIONS["industry_signals"] == "ism-services-industries-v5"
+    assert SECTION_PROMPT_VERSIONS["comments_commodities"] == "ism-services-comments-v2"
+    assert SECTION_PROMPT_VERSIONS["narrative_facts"] == "ism-services-narrative-v3"
     versions = list(SECTION_PROMPT_VERSIONS.values())
     assert len(set(versions)) == 5
 
@@ -134,6 +135,67 @@ class TestIndustrySignalSchema:
                 industry="Construction",
                 rank=1,
                 source_excerpt="test",
+            )
+
+
+class TestIndustrySignalListSchema:
+    def test_valid_grouped_list(self):
+        model = ism_services_ai_extraction.ServicesIndustrySignalListModel(
+            signal_type="business_activity",
+            direction="growth",
+            declared_count=2,
+            industries=["Construction", "Retail Trade"],
+            evidence_text=(
+                "The two industries reporting an increase in business activity "
+                "are: Construction; and Retail Trade."
+            ),
+        )
+        assert model.declared_count == 2
+
+    def test_declared_count_must_match_industries(self):
+        with pytest.raises(ValidationError, match="declared_count"):
+            ism_services_ai_extraction.ServicesIndustrySignalListModel(
+                signal_type="business_activity",
+                direction="growth",
+                declared_count=3,
+                industries=["Construction", "Retail Trade"],
+                evidence_text="Three industries reported an increase.",
+            )
+
+    def test_duplicate_industries_rejected(self):
+        with pytest.raises(ValidationError, match="duplicated"):
+            ism_services_ai_extraction.ServicesIndustrySignalListModel(
+                signal_type="new_orders",
+                direction="growth",
+                declared_count=2,
+                industries=["Construction", "Construction"],
+                evidence_text="Two industries reported an increase.",
+            )
+
+    def test_explicit_zero_list_is_valid(self):
+        model = ism_services_ai_extraction.ServicesIndustrySignalListModel(
+            signal_type="prices",
+            direction="decrease",
+            declared_count=0,
+            industries=[],
+            evidence_text="No industries reported a decrease in prices paid.",
+        )
+        assert model.industries == []
+
+    def test_duplicate_signal_type_direction_lists_rejected(self):
+        signal_list = {
+            "signal_type": "business_activity",
+            "direction": "growth",
+            "declared_count": 1,
+            "industries": ["Construction"],
+            "evidence_text": (
+                "The one industry reporting an increase in business activity "
+                "is: Construction."
+            ),
+        }
+        with pytest.raises(ValidationError, match="duplicated"):
+            ism_services_ai_extraction.ServicesIndustrySignalsSectionModel(
+                industry_signal_lists=[signal_list, signal_list]
             )
 
     def test_rejects_invalid_direction(self):
@@ -253,7 +315,7 @@ class TestValidateSectionPayload:
             validate_section_payload("unknown", {}, "")
 
     def test_source_grounding_excerpt_check(self):
-        with pytest.raises(ValueError, match="source excerpt"):
+        with pytest.raises(ValueError, match="source excerpt for overall_growth"):
             validate_section_payload(
                 "industry_signals",
                 {
@@ -269,6 +331,88 @@ class TestValidateSectionPayload:
                 },
                 "Some different source text here.",
             )
+
+    def test_report_title_grounding(self):
+        with pytest.raises(ValueError, match="report title not grounded"):
+            validate_section_payload(
+                "report",
+                {"report": _valid_report()},
+                "Some completely unrelated text without the PMI report title.",
+            )
+
+    def test_report_title_grounding_passes_when_found(self):
+        result = validate_section_payload(
+            "report",
+            {"report": _valid_report()},
+            "ISM Services PMI Report",
+        )
+        assert result["report"]["report_id"] == "ism_services_2026_06"
+
+    def test_report_title_grounding_accepts_trademark_symbol(self):
+        result = validate_section_payload(
+            "report",
+            {"report": _valid_report()},
+            "ISM® Services PMI® Report",
+        )
+        assert result["report"]["report_id"] == "ism_services_2026_06"
+
+    def test_comment_text_grounding(self):
+        with pytest.raises(ValueError, match="respondent comment not found"):
+            validate_section_payload(
+                "comments_commodities",
+                {
+                    "respondent_comments": [
+                        {
+                            "industry": "Construction",
+                            "comment_text": "This comment is not in source.",
+                        }
+                    ],
+                    "commodities": [],
+                },
+                "Some unrelated source text here.",
+            )
+
+    def test_comment_text_grounding_passes(self):
+        result = validate_section_payload(
+            "comments_commodities",
+            {
+                "respondent_comments": [
+                    {
+                        "industry": "Construction",
+                        "comment_text": "Pipeline remains healthy.",
+                    }
+                ],
+                "commodities": [],
+            },
+            "Pipeline remains healthy. Construction",
+        )
+        assert len(result["respondent_comments"]) == 1
+
+    def test_commodity_name_grounding(self):
+        with pytest.raises(ValueError, match="commodity name not found"):
+            validate_section_payload(
+                "comments_commodities",
+                {
+                    "respondent_comments": [],
+                    "commodities": [
+                        {"commodity": "NotInSource", "signal_type": "up_in_price"}
+                    ],
+                },
+                "Some unrelated text.",
+            )
+
+    def test_commodity_name_grounding_passes(self):
+        result = validate_section_payload(
+            "comments_commodities",
+            {
+                "respondent_comments": [],
+                "commodities": [
+                    {"commodity": "Construction Labor", "signal_type": "up_in_price"}
+                ],
+            },
+            "Construction Labor is up in price.",
+        )
+        assert len(result["commodities"]) == 1
 
 
 class TestAssembleFactualExtraction:
@@ -290,8 +434,48 @@ class TestAssembleFactualExtraction:
         with pytest.raises(ValueError, match="report_id must start with ism_services_"):
             assemble_factual_extraction(section_payloads)
 
+    def test_grouped_industry_lists_expand_to_rows_and_coverage(self):
+        section_payloads = _section_payloads()
+        section_payloads[2]["payload"] = {
+            "industry_signal_lists": [
+                {
+                    "signal_type": "overall_growth",
+                    "direction": "growth",
+                    "declared_count": 2,
+                    "industries": ["Construction", "Retail Trade"],
+                    "evidence_text": (
+                        "The two services industries reporting growth are: "
+                        "Construction; and Retail Trade."
+                    ),
+                }
+            ]
+        }
+
+        result = assemble_factual_extraction(section_payloads)
+
+        assert [row["rank"] for row in result["industry_signals"]] == [1, 2]
+        coverage = result["industry_signal_coverage"]
+        growth = next(row for row in coverage if row["signal_type"] == "overall_growth")
+        assert growth == {
+            "signal_type": "overall_growth",
+            "direction": "growth",
+            "list_present": True,
+            "declared_count": 2,
+            "extracted_count": 2,
+            "validation_status": "complete",
+            "evidence_text": (
+                "The two services industries reporting growth are: "
+                "Construction; and Retail Trade."
+            ),
+        }
+        assert len(coverage) == 12
+
 
 class TestPromptBuilders:
+    @pytest.mark.parametrize("builder", BUILD_PROMPT_FOR_SECTION.values())
+    def test_section_prompt_requests_json_output(self, builder):
+        assert "json" in builder("excerpt").lower()
+
     def test_report_prompt_contains_services_identity(self):
         prompt = build_report_prompt("June 2026 ISM Services PMI Report excerpt")
         assert "ism_services" in prompt
@@ -306,8 +490,14 @@ class TestPromptBuilders:
         prompt = build_industry_signals_prompt("industry excerpt")
         assert "overall_growth" in prompt
         assert "business_activity" in prompt
-        assert "source_excerpt" in prompt
+        assert "industry_signal_lists" in prompt
+        assert "declared_count" in prompt
+        assert "evidence_text" in prompt
         assert "production" not in prompt
+        assert "business_activity, new_orders, employment: growth or decrease" in prompt
+        assert "inventories, backlog, imports: higher or lower" in prompt
+        assert "Preserve industry order" in prompt
+        assert "Do not add rank fields" in prompt
 
     def test_comments_commodities_prompt_has_both(self):
         prompt = build_comments_commodities_prompt("comments excerpt")
@@ -323,6 +513,9 @@ class TestPromptBuilders:
         assert "services_economy_gdp_share_percent" in prompt
         assert "broad_based_expansion_mentioned" in prompt
         assert "inflationary_pressure_mentioned" in prompt
+        assert (
+            'true only when the exact phrase "inflationary pressure" appears' in prompt
+        )
 
     def test_prompt_includes_excerpt_not_raw_html(self):
         excerpt = "June 2026 ISM Services PMI Report"

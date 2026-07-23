@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import time
 from datetime import datetime, timezone
 
 
@@ -55,6 +56,8 @@ async def extract_sections(
     response_model_for_section,
     validate_section,
     section_concurrency=3,
+    progress=None,
+    heartbeat_interval=15.0,
 ):
     report_id = prepared_report["report_id"]
     report_month = prepared_report["report_month"]
@@ -67,33 +70,66 @@ async def extract_sections(
         con, report_id, source_url, prompt_versions, content_hash
     )
 
+    def report_progress(message):
+        if progress is not None:
+            progress(message)
+
+    reusable = {}
+    for section_name in section_names:
+        prompt_version = prompt_versions[section_name]
+        key = (report_id, source_url, prompt_version, section_name)
+        existing_checkpoint = existing.get(key)
+        if existing_checkpoint is None:
+            continue
+        if existing_checkpoint["status"] != "ok":
+            continue
+        if existing_checkpoint["source_hash"] != content_hash:
+            continue
+        try:
+            raw = existing_checkpoint["payload_json"]
+            payload = json.loads(raw) if isinstance(raw, str) else raw
+            reusable[section_name] = validate_section(
+                section_name, payload, source_text
+            )
+        except (ValueError, json.JSONDecodeError, TypeError):
+            report_progress(f"section {section_name} checkpoint rejected")
+
+    report_progress(
+        f"section extraction pending={len(section_names) - len(reusable)} "
+        f"reused={len(reusable)} concurrency={section_concurrency}"
+    )
+
     section_results = {}
     semaphore = asyncio.Semaphore(section_concurrency)
 
     async def process_section(section_name):
+        if section_name in reusable:
+            report_progress(f"section {section_name} reused checkpoint")
+            return section_name, reusable[section_name], False
+
         prompt_version = prompt_versions[section_name]
-        key = (report_id, source_url, prompt_version, section_name)
-        existing_chk = existing.get(key)
-
-        if existing_chk is not None:
-            if (
-                existing_chk["status"] == "ok"
-                and existing_chk["source_hash"] == content_hash
-            ):
-                try:
-                    raw = existing_chk["payload_json"]
-                    payload = json.loads(raw) if isinstance(raw, str) else raw
-                    validated = validate_section(section_name, payload, source_text)
-                    return section_name, validated, False
-                except (ValueError, json.JSONDecodeError, TypeError):
-                    pass
-
         prompt = build_prompt(section_name, source_text)
         model_name = getattr(client, "model", "default")
 
         async with semaphore:
+            started = time.perf_counter()
+            report_progress(
+                f"section {section_name} started prompt_chars={len(prompt)}"
+            )
+
+            async def emit_heartbeats():
+                while True:
+                    await asyncio.sleep(heartbeat_interval)
+                    elapsed = time.perf_counter() - started
+                    report_progress(
+                        f"section {section_name} running elapsed={elapsed:.1f}s"
+                    )
+
+            heartbeat = None
+            if progress is not None and heartbeat_interval > 0:
+                heartbeat = asyncio.create_task(emit_heartbeats())
             try:
-                response = await client.request_structured_output(prompt)
+                response = await client.complete_json_async(prompt)
                 parsed = json.loads(response) if isinstance(response, str) else response
                 validated = validate_section(section_name, parsed, source_text)
                 status = "ok"
@@ -102,6 +138,12 @@ async def extract_sections(
                 validated = None
                 status = "failed"
                 error = str(exc)
+            finally:
+                if heartbeat is not None:
+                    heartbeat.cancel()
+                    await asyncio.gather(heartbeat, return_exceptions=True)
+
+            elapsed = time.perf_counter() - started
 
             checkpoint = {
                 "report_id": report_id,
@@ -120,7 +162,12 @@ async def extract_sections(
             replace_ism_ai_section_extraction(con, checkpoint)
 
             if validated is not None:
+                report_progress(f"section {section_name} ok {elapsed:.1f}s")
                 return section_name, validated, True
+            report_progress(
+                f"section {section_name} failed {elapsed:.1f}s "
+                f"error={error[:300]}"
+            )
             raise ValueError(f"section {section_name} extraction failed: {error}")
 
     tasks = [process_section(name) for name in section_names]

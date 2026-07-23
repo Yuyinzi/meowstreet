@@ -1,9 +1,10 @@
 import hashlib
 import re
+from html.parser import HTMLParser
 
 from app.tools.ism_official_report import (
     IsmReportUnavailable,
-    extract_report_text,
+    extract_report_text as extract_shared_report_text,
     normalize_text,
     parse_next_release,
     split_industries,
@@ -40,11 +41,62 @@ _REQUIRED_METRICS = {
 }
 
 
+class ServicesArticleTextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+        self._active = False
+        self._div_depth = 0
+        self._skip_depth = 0
+        self.found = False
+
+    def handle_starttag(self, tag, attrs):
+        classes = dict(attrs).get("class", "").split()
+        if not self._active:
+            if tag == "div" and "richText__content" in classes:
+                self._active = True
+                self._div_depth = 1
+                self.found = True
+            return
+        if tag == "div":
+            self._div_depth += 1
+        if tag in ("script", "style"):
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag):
+        if not self._active:
+            return
+        if tag in ("script", "style") and self._skip_depth:
+            self._skip_depth -= 1
+        if tag == "div":
+            self._div_depth -= 1
+            if self._div_depth == 0:
+                self._active = False
+
+    def handle_data(self, data):
+        if not self._active or self._skip_depth:
+            return
+        text = data.strip()
+        if text:
+            self.parts.append(text)
+
+
+def extract_report_text(html, source_name):
+    if source_name == "ismworld":
+        parser = ServicesArticleTextExtractor()
+        parser.feed(html)
+        if parser.found and parser.parts:
+            return "\n".join(parser.parts)
+    return extract_shared_report_text(html, source_name)
+
+
+_ISM_SVC = r"ISM\s*(?:®\s*)?Services(?:\s+PMI)?\s*(?:®)?"
+
+
 def report_month_from_title(text):
-    match = re.search(
-        r"\b(" + "|".join(MONTHS) + r")\s+(\d{4})\s+ISM Services",
-        text,
-    )
+    pattern1 = r"\b(" + "|".join(MONTHS) + r")\s+(\d{4})\s+" + _ISM_SVC
+    pattern2 = _ISM_SVC + r"\s+Report for\s+(" + "|".join(MONTHS) + r")\s+(\d{4})"
+    match = re.search(pattern1, text) or re.search(pattern2, text)
     if not match:
         raise IsmReportUnavailable("no report page available")
     month_name, year = match.groups()
@@ -182,41 +234,130 @@ def prepare_report_for_ai(html, source_url, fetched_at, source_name="ismworld"):
     }
 
 
+_TITLE_RE = re.compile(r"[A-Z][a-z]+ \d{4} ISM\s*(?:®\s*)?Services", re.I)
+_AT_A_GLANCE_RE = re.compile(
+    r"(?:ISM\s*(?:®\s*)?)?SERVICES(?:\s+SURVEY RESULTS)?\s+AT A GLANCE",
+    re.I,
+)
+_INDUSTRY_PERFORMANCE_RE = re.compile(
+    r"^[ \t]*INDUSTRY PERFORMANCE[ \t]*$", re.I | re.M
+)
+_RESPONDENTS_RE = re.compile(r"^[ \t]*WHAT RESPONDENTS ARE SAYING[ \t]*$", re.I | re.M)
+_COMMODITIES_RE = re.compile(
+    r"^[ \t]*COMMODITIES REPORTED(?: UP/DOWN IN PRICE, AND IN SHORT SUPPLY)?[ \t]*$",
+    re.I | re.M,
+)
+_INDEX_SUMMARIES_RE = re.compile(
+    r"^[ \t]*[A-Z]+ \d{4} SERVICES INDEX SUMMARIES[ \t]*$", re.I | re.M
+)
+
+_SERVICES_COMPONENT_NAMES = [
+    "Business Activity",
+    "New Orders",
+    "Employment",
+    "Supplier Deliveries",
+    "Inventories",
+    "Inventory Sentiment",
+    "Prices",
+    "Backlog of Orders",
+    "New Export Orders",
+    "Imports",
+]
+
+_SERVICES_COMPONENT_HEADING_RE = re.compile(
+    r"^(?:" + "|".join(_SERVICES_COMPONENT_NAMES) + r")(?:\s+Index)?$", re.I
+)
+_INDUSTRY_LIST_LINE_RE = re.compile(
+    r"\bindustr(?:y|ies)\s+(?:reporting|reported)\b", re.I
+)
+
+
+def _first_marker(source_text, patterns, start):
+    matches = [pattern.search(source_text, start) for pattern in patterns]
+    present = [match for match in matches if match is not None]
+    return min(present, key=lambda match: match.start()) if present else None
+
+
 def _extract_at_a_glance_region(source_text):
-    match = re.search(
-        r"SERVICES AT A GLANCE\s*(.*?)(?=\n\s*\n|INDUSTRY PERFORMANCE|WHAT RESPONDENTS|COMMODITIES REPORTED|$)",
-        source_text,
-        re.I | re.S,
-    )
-    if not match:
+    match = _AT_A_GLANCE_RE.search(source_text)
+    if match:
+        end_m = _first_marker(
+            source_text,
+            [_COMMODITIES_RE, _INDUSTRY_PERFORMANCE_RE, _RESPONDENTS_RE],
+            match.end(),
+        )
+        end = end_m.start() if end_m else len(source_text)
+        region = source_text[match.end() : end].strip()
+        if region:
+            return region
+    end_m = _INDUSTRY_PERFORMANCE_RE.search(source_text)
+    if not end_m:
         raise ValueError("ism services at a glance region not found")
-    return match.group(1).strip()
+    region = source_text[: end_m.start()].strip()
+    if not region:
+        raise ValueError("ism services at a glance region not found")
+    return region
+
+
+def _extract_component_industry_lists(source_text):
+    match = _INDEX_SUMMARIES_RE.search(source_text)
+    if not match:
+        return ""
+    lines = source_text[match.end() :].split("\n")
+    result = []
+    heading = None
+    for line in lines:
+        s = line.strip()
+        if not s:
+            continue
+        heading_match = _SERVICES_COMPONENT_HEADING_RE.match(s)
+        if heading_match:
+            heading = s
+            continue
+        if _INDUSTRY_LIST_LINE_RE.search(s) and ":" in s:
+            if heading is not None:
+                result.append(heading)
+                heading = None
+            result.append(s)
+    return "\n".join(result)
 
 
 def _extract_industry_signals_region(source_text):
-    match = re.search(
-        r"INDUSTRY PERFORMANCE\s*(.*?)(?=\n\s*\n|WHAT RESPONDENTS|COMMODITIES REPORTED|$)",
-        source_text,
-        re.I | re.S,
-    )
+    match = _INDUSTRY_PERFORMANCE_RE.search(source_text)
     if not match:
         raise ValueError("ism services industry signals region not found")
-    return match.group(1).strip()
+    end_m = _first_marker(
+        source_text, [_RESPONDENTS_RE, _AT_A_GLANCE_RE, _COMMODITIES_RE], match.end()
+    )
+    end = end_m.start() if end_m else len(source_text)
+    region = source_text[match.end() : end].strip()
+    component_part = _extract_component_industry_lists(source_text)
+    if component_part:
+        region += "\n\n" + component_part
+    return region
 
 
 def _extract_comments_commodities_region(source_text):
-    match = re.search(
-        r"WHAT RESPONDENTS ARE SAYING\s*(.*?)(?=\n\s*\n|INDUSTRY PERFORMANCE|COMMODITIES REPORTED|SERVICES AT A GLANCE|$)",
-        source_text,
-        re.I | re.S,
-    )
-    comments_part = match.group(1).strip() if match else ""
-    commodities_match = re.search(
-        r"COMMODITIES REPORTED\s*(.*?)(?=\n\s*\n|The next ISM|Tempe|$)",
-        source_text,
-        re.I | re.S,
-    )
-    commodities_part = commodities_match.group(1).strip() if commodities_match else ""
+    match = _RESPONDENTS_RE.search(source_text)
+    comments_part = ""
+    if match:
+        comments_end_m = _first_marker(
+            source_text, [_AT_A_GLANCE_RE, _COMMODITIES_RE], match.end()
+        )
+        comments_end = comments_end_m.start() if comments_end_m else len(source_text)
+        comments_part = source_text[match.end() : comments_end].strip()
+    commodities_match = _COMMODITIES_RE.search(source_text)
+    commodities_part = ""
+    if commodities_match:
+        commodities_end_m = _INDEX_SUMMARIES_RE.search(
+            source_text, commodities_match.end()
+        )
+        commodities_end = (
+            commodities_end_m.start() if commodities_end_m else len(source_text)
+        )
+        commodities_part = source_text[
+            commodities_match.end() : commodities_end
+        ].strip()
     if not comments_part and not commodities_part:
         raise ValueError("ism services comments or commodities region not found")
     parts = [p for p in [comments_part, commodities_part] if p]
@@ -224,17 +365,12 @@ def _extract_comments_commodities_region(source_text):
 
 
 def _extract_narrative_region(source_text):
-    after = source_text
-    after = re.split(r"(?i)\b(?:The next ISM|About This Report)\b", after, maxsplit=1)[
-        0
-    ]
-    commodity_marker = re.search(r"COMMODITIES REPORTED", after, re.I)
-    if commodity_marker:
-        after = after[commodity_marker.end() :]
-    after = after.strip()
-    if not after:
+    end_m = _first_marker(source_text, [_AT_A_GLANCE_RE, _INDUSTRY_PERFORMANCE_RE], 0)
+    end = end_m.start() if end_m else len(source_text)
+    narrative = source_text[:end].strip()
+    if not narrative:
         raise ValueError("ism services narrative region not found")
-    return after
+    return narrative
 
 
 def parse_report(html, source_url, fetched_at, source_name="ismworld"):

@@ -16,6 +16,12 @@ from app.db import us_rates_liquidity
 from app.services.ism_services_ai_ingestion import import_report_url
 
 
+def _normalize_report_month(raw):
+    if raw and len(raw) == 7 and raw.count("-") == 1:
+        return f"{raw}-01"
+    return raw
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Extract ISM Services report sections using AI."
@@ -35,13 +41,15 @@ def main(argv=None):
         default=3,
         help="Number of concurrent AI section extractions (default: 3)",
     )
-    parser.add_argument("--report-month", help="Report month in YYYY-MM format")
+    parser.add_argument(
+        "--report-month", help="Report month in YYYY-MM or YYYY-MM-01 format"
+    )
     args = parser.parse_args(argv)
 
     target = {
         "url": args.source_url,
         "source_name": args.source_name,
-        "report_month": args.report_month,
+        "report_month": _normalize_report_month(args.report_month),
         "report_id": None,
     }
 

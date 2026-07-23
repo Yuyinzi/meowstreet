@@ -1,3 +1,35 @@
+SERVICES_COMPONENTS = (
+    ("business_activity", "Business Activity"),
+    ("new_orders", "New Orders"),
+    ("employment", "Employment"),
+    ("supplier_deliveries", "Supplier Deliveries"),
+    ("inventories", "Inventories"),
+    ("inventory_sentiment", "Inventory Sentiment"),
+    ("prices", "Prices"),
+    ("backlog", "Order Backlog"),
+    ("new_export_orders", "New Export Orders"),
+    ("imports", "Imports"),
+)
+
+SERVICES_DIRECTION_LABELS = {
+    "growth": "Growth",
+    "contraction": "Contraction",
+    "higher": "Higher",
+    "lower": "Lower",
+    "increase": "Increase",
+    "decrease": "Decrease",
+    "slower": "Slower",
+    "faster": "Faster",
+    "too_low": "Too Low",
+    "too_high": "Too High",
+    "no_change": "No Change",
+}
+
+_SERVICES_COMPONENT_LABELS = dict(SERVICES_COMPONENTS)
+_SERVICES_COMPONENT_INDEX = {
+    signal_type: index for index, (signal_type, label) in enumerate(SERVICES_COMPONENTS)
+}
+
 CANONICAL_INDUSTRIES = (
     "Accommodation & Food Services",
     "Agriculture, Forestry, Fishing & Hunting",
@@ -56,6 +88,16 @@ def _month_diff(date1, date2):
     return (int(y1) * 12 + int(m1)) - (int(y2) * 12 + int(m2))
 
 
+def _six_months_earlier(date_str):
+    year, month, day = date_str.split("-")
+    month_num = int(month) - 6
+    year_num = int(year)
+    if month_num <= 0:
+        month_num += 12
+        year_num -= 1
+    return f"{year_num:04d}-{month_num:02d}-{day}"
+
+
 def _positive_streak(rows):
     streak = 0
     prev_date = None
@@ -91,6 +133,208 @@ def _match_comments(industry, comments):
         except ValueError:
             pass
     return matched
+
+
+def _safe_normalize_industry(name):
+    try:
+        return normalize_industry(name)
+    except ValueError:
+        return None
+
+
+def _same_direction_rank_change(rows):
+    if len(rows) < 2 or rows[-2]["direction"] != rows[-1]["direction"]:
+        return None
+    return rows[-1]["rank"] - rows[-2]["rank"]
+
+
+def _latest_direction_change(rows):
+    if len(rows) < 2 or rows[-2]["direction"] == rows[-1]["direction"]:
+        return None
+    return f"{rows[-2]['direction']}_to_{rows[-1]['direction']}"
+
+
+def _direction_streak(rows):
+    if not rows:
+        return {"direction": None, "months": 0}
+    latest_direction = rows[-1]["direction"]
+    months = 0
+    previous_date = None
+    for row in reversed(rows):
+        if row["direction"] != latest_direction:
+            break
+        if previous_date is not None and _month_diff(previous_date, row["date"]) != 1:
+            break
+        previous_date = row["date"]
+        months += 1
+    return {"direction": latest_direction, "months": months}
+
+
+def _coverage_by_key(coverage_rows):
+    return {(row["signal_type"], row["direction"]): row for row in coverage_rows}
+
+
+def _component_list_size(coverage, signal_type, direction):
+    row = coverage.get((signal_type, direction))
+    if not row or row.get("validation_status") != "complete":
+        return None
+    declared_count = row.get("declared_count")
+    return declared_count if declared_count is not None else row.get("extracted_count")
+
+
+def _component_coverage_info(coverage_rows):
+    services_rows = [
+        row for row in coverage_rows if row["signal_type"] in _SERVICES_COMPONENT_LABELS
+    ]
+    if not services_rows:
+        return "unavailable", None
+    all_absent = all(row.get("validation_status") == "absent" for row in services_rows)
+    if all_absent:
+        return "absent", 0
+    known = {
+        row["signal_type"]
+        for row in services_rows
+        if row.get("validation_status") == "complete" and row.get("list_present")
+    }
+    status = "available" if known else "unavailable"
+    return status, len(known) if known else None
+
+
+def _component_signals_for_industry(industry, signals, coverage):
+    rows = []
+    for signal in signals:
+        signal_type = signal.get("signal_type")
+        if signal_type not in _SERVICES_COMPONENT_LABELS:
+            continue
+        if _safe_normalize_industry(signal.get("industry")) != industry:
+            continue
+        direction = signal.get("direction")
+        rows.append(
+            {
+                "signal_type": signal_type,
+                "label": _SERVICES_COMPONENT_LABELS[signal_type],
+                "direction": direction,
+                "direction_label": SERVICES_DIRECTION_LABELS.get(
+                    direction, str(direction or "").replace("_", " ").title()
+                ),
+                "rank": signal.get("rank"),
+                "list_size": _component_list_size(coverage, signal_type, direction),
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            _SERVICES_COMPONENT_INDEX[row["signal_type"]],
+            row["rank"] if row["rank"] is not None else 10_000,
+        )
+    )
+    return rows
+
+
+def build_services_industry_analysis(
+    rankings,
+    component_signals,
+    coverage_rows,
+    comments,
+    period,
+    source_url,
+):
+    if period is None:
+        return {
+            "status": "unavailable",
+            "reason": "Services report period is unavailable",
+            "period": None,
+            "source_url": source_url,
+            "growing_industries": [],
+            "contracting_industries": [],
+            "industries": [],
+        }
+    grouped_rankings = _group_rankings(
+        [row for row in rankings if row.get("date") <= period]
+    )
+    latest_rows = [
+        rows[-1]
+        for rows in grouped_rankings.values()
+        if rows and rows[-1]["date"] == period
+    ]
+    if not latest_rows:
+        return {
+            "status": "unavailable",
+            "reason": f"Services industry rankings are unavailable for {period}",
+            "period": period,
+            "source_url": source_url,
+            "growing_industries": [],
+            "contracting_industries": [],
+            "industries": [],
+        }
+    coverage = _coverage_by_key(coverage_rows)
+    coverage_status, available_components = _component_coverage_info(coverage_rows)
+    cutoff = _six_months_earlier(period)
+    industries = []
+    for latest in latest_rows:
+        industry = normalize_industry(latest["industry"])
+        recent = [row for row in grouped_rankings[industry] if row["date"] >= cutoff]
+        history_rows = recent[-6:]
+        industry_components = _component_signals_for_industry(
+            industry, component_signals, coverage
+        )
+        industries.append(
+            {
+                "industry": industry,
+                "direction": latest["direction"],
+                "rank": latest["rank"],
+                "direction_change": _latest_direction_change(history_rows),
+                "rank_change": _same_direction_rank_change(history_rows),
+                "streak": _direction_streak(history_rows),
+                "trend": [
+                    {
+                        "period": row["date"],
+                        "direction": row["direction"],
+                        "rank": row["rank"],
+                    }
+                    for row in history_rows
+                ],
+                "component_signals": industry_components,
+                "component_coverage": {
+                    "listed_components": len(
+                        {row["signal_type"] for row in industry_components}
+                    ),
+                    "available_components": available_components,
+                    "coverage_status": coverage_status,
+                },
+                "comments": _match_comments(industry, comments),
+            }
+        )
+    growing = sorted(
+        (
+            {"industry": row["industry"], "rank": row["rank"]}
+            for row in industries
+            if row["direction"] == "growth"
+        ),
+        key=lambda row: row["rank"],
+    )
+    contracting = sorted(
+        (
+            {"industry": row["industry"], "rank": row["rank"]}
+            for row in industries
+            if row["direction"] == "contraction"
+        ),
+        key=lambda row: row["rank"],
+    )
+    industries.sort(
+        key=lambda row: (
+            0 if row["direction"] == "growth" else 1,
+            row["rank"],
+            row["industry"],
+        )
+    )
+    return {
+        "status": "available",
+        "period": period,
+        "source_url": source_url,
+        "growing_industries": growing,
+        "contracting_industries": contracting,
+        "industries": industries,
+    }
 
 
 def _direction_change_from_rows(rows):

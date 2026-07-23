@@ -429,6 +429,126 @@ def test_macro_dashboard_chart_helpers_are_exercised_with_node():
     assert 'y="36"' in payload["relationshipMarkup"]
 
 
+def test_macro_dashboard_js_renders_services_latest_values():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const body = {
+          innerHTML: "",
+          querySelectorAll: () => [],
+          querySelector: () => null,
+        };
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+
+        const hooks = window.__macroDashboardTestHooks;
+
+        const latest = {
+          pmi: 52.0,
+          business_activity: 54.0,
+          new_orders: 55.0,
+          order_backlog: 48.0,
+          employment: 51.0,
+          inventories: 45.0,
+          inventory_sentiment: 47.5,
+          prices: 56.0,
+          supplier_deliveries: 49.0,
+          new_export_orders: 50.0,
+          imports: 51.5,
+        };
+
+        const latest_metadata = {
+          pmi: { tone: "green", point_change: 0.5, direction: "up", rate_of_change: "accelerating", trend_months: 3, label: "Services PMI" },
+          business_activity: { tone: "green", point_change: 0.3, direction: "up", rate_of_change: "steady", trend_months: 2, label: "Business Activity" },
+          new_orders: { tone: "green", point_change: 0.2, direction: "up", rate_of_change: "steady", trend_months: 1, label: "New Orders" },
+          order_backlog: { tone: "amber", point_change: -0.5, direction: "down", rate_of_change: "accelerating", trend_months: 2, label: "Order Backlog" },
+          employment: { tone: "green", point_change: 0.1, direction: "up", rate_of_change: "steady", trend_months: 4, label: "Employment" },
+          inventories: { tone: "red", point_change: -1.2, direction: "down", rate_of_change: "accelerating", trend_months: 2, label: "Inventories" },
+          inventory_sentiment: { tone: "amber", point_change: 0.0, direction: "flat", rate_of_change: "steady", trend_months: 1, label: "Inventory Sentiment" },
+          prices: { tone: "amber", point_change: 0.8, direction: "up", rate_of_change: "accelerating", trend_months: 3, label: "Prices" },
+          supplier_deliveries: { tone: "amber", point_change: -0.3, direction: "down", rate_of_change: "steady", trend_months: 2, label: "Supplier Deliveries" },
+          new_export_orders: { tone: "muted", point_change: null, direction: "n/a", rate_of_change: "n/a", trend_months: 0, label: "New Export Orders" },
+          imports: { tone: "green", point_change: 0.2, direction: "up", rate_of_change: "steady", trend_months: 2, label: "Imports" },
+        };
+
+        const detail_groups = [
+          { label: "Business Cycle", keys: ["pmi"] },
+          { label: "Demand & Activity", keys: ["business_activity", "new_orders", "order_backlog"] },
+          { label: "Labor & Inventories", keys: ["employment", "inventories", "inventory_sentiment"] },
+          { label: "Inflation & Supply", keys: ["prices", "supplier_deliveries", "new_export_orders", "imports"] },
+        ];
+
+        const payload = { latest, latest_metadata, detail_groups, signal: { state: "supports_growth", backlog_confirmation: "stable" } };
+
+        hooks.renderServicesDetailInPanel(body, payload);
+        const html = body.innerHTML;
+
+        const body2 = { innerHTML: "", querySelectorAll: () => [], querySelector: () => null };
+
+        const payload2 = {
+          latest,
+          latest_metadata,
+          signal: {
+            state: "supports_growth",
+            backlog_confirmation: "stable",
+            metrics: {
+              pmi: { value: 52.0, point_change: 0.5, level: "expansion", momentum: "accelerating" },
+              business_activity: { value: 54.0, point_change: 0.3, level: "expansion", momentum: "steady" },
+              new_orders: { value: 55.0, point_change: 0.2, level: "expansion", momentum: "steady" },
+              order_backlog: { value: 48.0, point_change: -0.5, level: "contraction", momentum: "accelerating" },
+            },
+          },
+        };
+
+        hooks.renderServicesDetailInPanel(body2, payload2);
+        const html2 = body2.innerHTML;
+
+        console.log(JSON.stringify({ html, html2 }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    html = payload["html"]
+    html2 = payload["html2"]
+
+    assert html.count('class="ism-metric-row"') == 11
+    assert "Business Cycle" in html
+    assert "Demand &amp; Activity" in html
+    assert "Labor &amp; Inventories" in html
+    assert "Inflation &amp; Supply" in html
+    assert "ism-trend-chip-green" in html
+    assert "ism-trend-chip-amber" in html
+    assert "ism-trend-chip-red" in html
+    assert "<th>Metric</th>" not in html
+
+    assert "ism-signal-badge" in html2
+    assert "<th>Metric</th>" in html2
+    assert "Backlog: stable" in html2
+
+
 def test_macro_dashboard_js_removes_dot_layer_and_keeps_mouse_tooltip():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 
@@ -3484,3 +3604,732 @@ def test_ism_services_js_renders_card_with_node():
     assert payload["hasDetailId"] is True
     assert payload["hasIsmCardButton"] is True
     assert payload["hasM2Card"] is True
+
+
+def test_services_evidence_uses_readable_labels_without_schema_tokens():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const commodities = hooks.renderServicesCommodityGroups([
+          { commodity: "Aluminum", signal_type: "up_in_price", months: 4 },
+          { commodity: "Beef", signal_type: "down_in_price", months: null },
+          { commodity: "Electrical Components", signal_type: "short_supply", months: 2 },
+        ]);
+        const narrative = hooks.renderServicesNarrativeFacts({
+          consecutive_expansion_months: 24,
+          services_economy_gdp_share_percent: 79,
+          broad_based_expansion_mentioned: true,
+          inflationary_pressure_mentioned: false,
+        });
+
+        console.log(JSON.stringify({ commodities, narrative }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert "Prices increased" in payload["commodities"]
+    assert "Aluminum" in payload["commodities"]
+    assert "4 months" in payload["commodities"]
+    assert "Prices decreased" in payload["commodities"]
+    assert "In short supply" in payload["commodities"]
+    assert "up_in_price" not in payload["commodities"]
+    assert "expanded for 24 consecutive months" in payload["narrative"]
+    assert "79% of U.S. GDP" in payload["narrative"]
+    assert "Broad-based expansion was mentioned" in payload["narrative"]
+    assert "Inflationary pressure was not mentioned" in payload["narrative"]
+
+
+def test_services_industry_detail_component_evidence_uses_labels():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+            const html = hooks.renderServicesComponentEvidence({
+              component_signals: [
+                { signal_type: "business_activity", label: "Business Activity", direction: "growth", direction_label: "Growth", rank: 3, list_size: 13 },
+                { signal_type: "supplier_deliveries", label: "Supplier Deliveries", direction: "slower", direction_label: "Slower", rank: 5, list_size: 14 },
+              ],
+              component_coverage: { listed_components: 2, available_components: 10, coverage_status: "available" },
+            });
+
+        console.log(JSON.stringify({
+          hasBusinessActivity: html.indexOf("Business Activity") !== -1,
+          hasGrowth: html.indexOf("Growth") !== -1,
+          hasSupplierDeliveries: html.indexOf("Supplier Deliveries") !== -1,
+          hasSlower: html.indexOf("Slower") !== -1,
+          hasRank3of13: html.indexOf("#3 of 13") !== -1,
+          hasRank5of14: html.indexOf("#5 of 14") !== -1,
+          hasCoverage: html.indexOf("Listed in 2 of 10") !== -1,
+          hasComponentEvidence: html.indexOf("Component Evidence") !== -1,
+        }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasBusinessActivity"] is True
+    assert payload["hasGrowth"] is True
+    assert payload["hasSupplierDeliveries"] is True
+    assert payload["hasSlower"] is True
+    assert payload["hasRank3of13"] is True
+    assert payload["hasRank5of14"] is True
+    assert payload["hasCoverage"] is True
+    assert payload["hasComponentEvidence"] is True
+
+
+def test_services_detail_follows_manufacturing_display_structure():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const payload = {
+          charts: [],
+          signal: {
+            state: "supports_growth",
+            backlog_confirmation: "confirmed",
+            metrics: {
+              pmi: { value: 54.0, point_change: 0.2, level: "Expansion", momentum: "Faster" },
+              business_activity: { value: 55.4, point_change: 0.9, level: "Expansion", momentum: "Faster" },
+              new_orders: { value: 55.1, point_change: 0.3, level: "Expansion", momentum: "Faster" },
+              order_backlog: { value: 54.9, point_change: 1.8, level: "Expansion", momentum: "Faster" },
+            },
+          },
+          industries: {
+            breadth: { growth_count: 12, total_count: 18, status: "broad" },
+            industries: [
+              { industry: "Construction", direction: "growth", rank: 1 },
+            ],
+          },
+          industry_analysis: {
+            status: "available",
+            period: "2026-06-01",
+            source_url: "https://www.ismworld.org/example",
+            growing_industries: [{ industry: "Construction", rank: 1 }],
+            contracting_industries: [],
+            industries: [
+              {
+                industry: "Construction",
+                direction: "growth",
+                rank: 1,
+                direction_change: null,
+                rank_change: 0,
+                streak: { direction: "growth", months: 3 },
+                trend: [],
+                component_signals: [],
+                component_coverage: { listed_components: 0, available_components: 10 },
+                comments: ["Demand strong."],
+              },
+            ],
+          },
+          official_report_summary: {
+            source_type: "report_extracted",
+            report_id: "ism_services_2026_06",
+            period: "2026-06-01",
+            title: "June 2026 ISM Services PMI Report",
+            source_url: "https://www.ismworld.org/example",
+            headline: "Services PMI 54.0, +0.2 points from prior month; Growing / Faster.",
+            major_changes: ["Prices: 61.2, +1.8 points; Increasing / Faster."],
+            respondent_comments: [],
+            comment_preview_count: 3,
+          },
+          rich_evidence: {
+            at_a_glance_rows: [
+              { series_id: "ism_services_pmi", label: "Services PMI", current_value: 54.0, previous_value: 53.8, point_change: 0.2, direction: "Growing", rate_of_change: "Faster", trend_months: 2 },
+              { series_id: "ism_services_business_activity", label: "Business Activity", current_value: 55.4, previous_value: 54.5, point_change: 0.9, direction: "Growing", rate_of_change: "Faster", trend_months: 2 },
+              { series_id: "ism_services_new_orders", label: "New Orders", current_value: 55.1, previous_value: 54.8, point_change: 0.3, direction: "Growing", rate_of_change: "Faster", trend_months: 2 },
+              { series_id: "ism_services_prices", label: "Prices", current_value: 61.2, previous_value: 59.4, point_change: 1.8, direction: "Increasing", rate_of_change: "Faster", trend_months: 3 },
+            ],
+            commodities: [{ commodity: "Aluminum", signal_type: "up_in_price", months: 4 }],
+            narrative_facts: { consecutive_expansion_months: 24, services_economy_gdp_share_percent: 79, broad_based_expansion_mentioned: true, inflationary_pressure_mentioned: false },
+            source: { source_url: "https://www.ismworld.org/example" },
+          },
+        };
+
+        const body = {
+          innerHTML: "",
+          querySelector: () => null,
+          querySelectorAll: () => [],
+        };
+        hooks.renderServicesDetailInPanel(body, payload);
+
+        console.log(JSON.stringify({ html: body.innerHTML }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    html = payload["html"]
+
+    assert html.index("Official Report Summary") < html.index("Charts &amp; Heat Maps")
+    assert html.index("Charts &amp; Heat Maps") < html.index("Latest Values")
+    assert html.index("Latest Values") < html.index("Industry Analysis (6 Month)")
+    assert "Full Report Evidence" in html
+    assert "Prices increased" in html
+    assert "Component Industry Lists" not in html
+    assert "Official ISM Report" in html
+    assert "AI Evidence" not in html
+    assert "up_in_price" not in html
+    assert "All Components" in html
+    assert "Services PMI" in html
+    assert "Business Activity" in html
+    assert "New Orders" in html
+    assert "Prices" in html
+    assert "trend_months" not in html
+    assert "54.0" in html
+    assert "55.4" in html
+    assert "55.1" in html
+    assert "+0.2" in html
+    assert "+0.9" in html
+    assert "2m" in html
+    assert "3m" in html
+    assert ">1<" in html
+    assert "Growing" in html
+    assert "Demand strong." in html
+
+
+def test_services_detail_edge_cases():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        function testEmptyEvidence() {
+          const html1 = hooks.renderServicesFullEvidence(null);
+          if (html1 !== "") throw new Error("null evidence should return empty");
+
+          const html2 = hooks.renderServicesFullEvidence({
+            at_a_glance_rows: [],
+            component_industries: [],
+            respondent_comments: [],
+            commodities: [],
+            narrative_facts: {},
+            source: {},
+          });
+          if (html2 !== "") throw new Error("empty evidence should return empty");
+        }
+
+        function testXssCommodity() {
+          const html = hooks.renderServicesFullEvidence({
+            at_a_glance_rows: [],
+            component_industries: [],
+            respondent_comments: [],
+            commodities: [{ commodity: '<img src=x onerror=alert(1)>', signal_type: "up_in_price", months: 0 }],
+            narrative_facts: {},
+            source: {},
+          });
+          if (html.indexOf("<img") !== -1) throw new Error("raw img tag should be escaped");
+          if (html.indexOf("&lt;img") === -1) throw new Error("escaped img tag should be present");
+          if (html.indexOf("0 months") === -1) throw new Error("months:0 should be rendered");
+        }
+
+        function testUnknownCommoditySignalType() {
+          const html = hooks.renderServicesFullEvidence({
+            at_a_glance_rows: [],
+            component_industries: [],
+            respondent_comments: [],
+            commodities: [{ commodity: "Widget", signal_type: "unknown_type", months: null }],
+            narrative_facts: {},
+            source: {},
+          });
+          if (html.indexOf("unknown_type") !== -1) throw new Error("unknown signal type should not appear");
+        }
+
+        function testNarrativeFactsRender() {
+          const html = hooks.renderServicesFullEvidence({
+            at_a_glance_rows: [],
+            commodities: [],
+            narrative_facts: { broad_based_expansion_mentioned: true },
+            source: {},
+          });
+          if (html.indexOf("Broad-based expansion") < 0) throw new Error("narrative facts should render");
+          if (html.indexOf("Component Industry Lists") >= 0) throw new Error("component industry lists should be absent");
+        }
+
+        function testMissingSummaryStillRenders() {
+          const payload = {
+            charts: [],
+            signal: { state: "supports_growth", backlog_confirmation: "confirmed", metrics: {} },
+            industries: { breadth: {}, industries: [] },
+            official_report_summary: null,
+            rich_evidence: null,
+          };
+          const body = { innerHTML: "", querySelector: () => null, querySelectorAll: () => [] };
+          hooks.renderServicesDetailInPanel(body, payload);
+          if (body.innerHTML.indexOf("Charts") < 0) throw new Error("Charts should still render");
+          if (body.innerHTML.indexOf("Latest") < 0) throw new Error("Latest should still render");
+        }
+
+        testEmptyEvidence();
+        testXssCommodity();
+        testUnknownCommoditySignalType();
+        testNarrativeFactsRender();
+        testMissingSummaryStillRenders();
+        console.log(JSON.stringify({ ok: true }));
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+
+
+def test_services_full_evidence_has_readable_responsive_styles():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "macro-dashboard.css").read_text(encoding="utf-8")
+
+    assert 'class="ism-services-commodity-grid"' in js
+    assert 'rel="noopener noreferrer"' in js
+    assert ".ism-services-commodity-grid" in css
+    assert "repeat(auto-fit, minmax(220px, 1fr))" in css
+    assert ".ism-services-commodity-higher" in css
+    assert ".ism-services-commodity-lower" in css
+    assert ".ism-services-commodity-shortage" in css
+
+
+def test_services_industry_analysis_renders_ranked_master_detail():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const analysis = {
+          status: "available",
+          period: "2026-06-01",
+          source_url: "https://example.com/services/june",
+          growing_industries: [{ industry: "Construction", rank: 1 }],
+          contracting_industries: [{ industry: "Educational Services", rank: 1 }],
+          industries: [
+            {
+              industry: "Construction",
+              direction: "growth",
+              rank: 1,
+              direction_change: null,
+              rank_change: -3,
+              streak: { direction: "growth", months: 2 },
+              trend: [
+                { period: "2026-05-01", direction: "growth", rank: 4 },
+                { period: "2026-06-01", direction: "growth", rank: 1 },
+              ],
+              component_signals: [
+                { signal_type: "business_activity", label: "Business Activity", direction: "growth", direction_label: "Growth", rank: 3, list_size: 13 },
+              ],
+              component_coverage: { listed_components: 1, available_components: 10 },
+              comments: ["Construction comment."],
+            },
+            {
+              industry: "Educational Services",
+              direction: "contraction",
+              rank: 1,
+              direction_change: null,
+              rank_change: null,
+              streak: { direction: "contraction", months: 1 },
+              trend: [{ period: "2026-06-01", direction: "contraction", rank: 1 }],
+              component_signals: [],
+              component_coverage: { listed_components: 0, available_components: 10 },
+              comments: ["Education comment."],
+            },
+          ],
+        };
+
+        const html = hooks.renderServicesIndustryAnalysisSection(analysis);
+
+        console.log(JSON.stringify({
+          hasGrowing: html.indexOf("Growing Industries") !== -1,
+          hasContracting: html.indexOf("Contracting Industries") !== -1,
+          hasConstructionButton: html.indexOf('data-services-industry="Construction"') !== -1,
+          hasConstructionSelected: html.indexOf('aria-pressed="true"') !== -1,
+          hasBusinessActivity: html.indexOf("Business Activity") !== -1,
+          hasGrowthLabel: html.indexOf("Growth") !== -1,
+          hasRank3of13: html.indexOf("#3 of 13") !== -1,
+          hasConstructionComment: html.indexOf("Construction comment.") !== -1,
+          hasEducationComment: html.indexOf("Education comment.") !== -1,
+          hasRankHistory: html.indexOf("Rank History") !== -1,
+          hasJun2026: html.indexOf("Jun 2026") !== -1,
+          hasScore: html.indexOf("Score") !== -1,
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasGrowing"] is True
+    assert payload["hasContracting"] is True
+    assert payload["hasConstructionButton"] is True
+    assert payload["hasConstructionSelected"] is True
+    assert payload["hasBusinessActivity"] is True
+    assert payload["hasGrowthLabel"] is True
+    assert payload["hasRank3of13"] is True
+    assert payload["hasConstructionComment"] is True
+    assert payload["hasEducationComment"] is False
+    assert payload["hasRankHistory"] is True
+    assert payload["hasJun2026"] is True
+    assert payload["hasScore"] is False
+
+
+def test_services_industry_selection_scopes_detail_and_comments():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const analysis = {
+          status: "available",
+          period: "2026-06-01",
+          source_url: "https://example.com/services/june",
+          growing_industries: [{ industry: "Construction", rank: 1 }],
+          contracting_industries: [{ industry: "Educational Services", rank: 1 }],
+          industries: [
+            {
+              industry: "Construction",
+              direction: "growth",
+              rank: 1,
+              direction_change: null,
+              rank_change: -3,
+              streak: { direction: "growth", months: 2 },
+              trend: [],
+              component_signals: [],
+              component_coverage: { listed_components: 0, available_components: 10 },
+              comments: ["Construction comment."],
+            },
+            {
+              industry: "Educational Services",
+              direction: "contraction",
+              rank: 1,
+              direction_change: null,
+              rank_change: null,
+              streak: { direction: "contraction", months: 1 },
+              trend: [],
+              component_signals: [],
+              component_coverage: { listed_components: 0, available_components: 10 },
+              comments: ["Education comment."],
+            },
+          ],
+        };
+
+        function fakeButton(industry) {
+          return {
+            dataset: { servicesIndustry: industry },
+            classList: { toggle: () => {} },
+            setAttribute(name, value) { this[name] = value; },
+          };
+        }
+        const detail = { innerHTML: "" };
+        const buttons = [fakeButton("Construction"), fakeButton("Educational Services")];
+        const body = {
+          querySelector: (selector) => selector === "[data-services-industry-detail]" ? detail : null,
+          querySelectorAll: () => buttons,
+        };
+        hooks.selectServicesIndustry(body, analysis, "Educational Services");
+
+        console.log(JSON.stringify({
+          selected: hooks.state.selectedServicesIndustry,
+          growthPressed: buttons[0]["aria-pressed"],
+          contractionPressed: buttons[1]["aria-pressed"],
+          hasEducationComment: detail.innerHTML.indexOf("Education comment.") !== -1,
+          hasConstructionComment: detail.innerHTML.indexOf("Construction comment.") !== -1,
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["selected"] == "Educational Services"
+    assert payload["growthPressed"] == "false"
+    assert payload["contractionPressed"] == "true"
+    assert payload["hasEducationComment"] is True
+    assert payload["hasConstructionComment"] is False
+
+
+def test_services_full_evidence_excludes_bulk_industry_content():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const evidence = {
+          at_a_glance_rows: [
+            { series_id: "ism_services_pmi", label: "Services PMI", current_value: 54.0, previous_value: 53.8, point_change: 0.2, direction: "Growing", rate_of_change: "Faster", trend_months: 2 },
+          ],
+          component_industries: [
+            { signal_type: "business_activity", direction: "growth", industry: "Construction", rank: 1 },
+          ],
+          respondent_comments: [
+            { industry: "Construction", comment_text: "Bulk report comment." },
+          ],
+          commodities: [
+            { commodity: "Aluminum", signal_type: "up_in_price", months: 4 },
+          ],
+          narrative_facts: { consecutive_expansion_months: 24 },
+          source: {
+            report_id: "ism_services_2026_06",
+            report_month: "2026-06-01",
+            title: "June 2026 ISM Services PMI Report",
+            source_url: "https://www.ismworld.org/example",
+            source_hash: "abc123",
+          },
+        };
+
+        const html = hooks.renderServicesFullEvidence(evidence);
+
+        console.log(JSON.stringify({
+          hasAllComponents: html.indexOf("All Components") !== -1,
+          hasServicesPMI: html.indexOf("Services PMI") !== -1,
+          hasPriceIncreased: html.indexOf("Prices increased") !== -1,
+          hasNarrativeFacts: html.indexOf("Narrative Facts") !== -1,
+          hasOfficialLink: html.indexOf("Official ISM Report") !== -1,
+          hasComponentLists: html.indexOf("Component Industry Lists") !== -1,
+          hasBulkComment: html.indexOf("Bulk report comment") !== -1,
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasAllComponents"] is True
+    assert payload["hasServicesPMI"] is True
+    assert payload["hasPriceIncreased"] is True
+    assert payload["hasNarrativeFacts"] is True
+    assert payload["hasOfficialLink"] is True
+    assert payload["hasComponentLists"] is False
+    assert payload["hasBulkComment"] is False
+
+
+def test_services_component_evidence_shows_unavailable_when_coverage_is_none():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        function check(desc, condition) {
+          if (!condition) throw new Error("FAIL: " + desc);
+        }
+
+        const htmlUnavailable = hooks.renderServicesComponentEvidence({
+          component_signals: [],
+          component_coverage: { listed_components: 0, available_components: null, coverage_status: "unavailable" },
+        });
+        check("unavailable coverage text", htmlUnavailable.indexOf("Component coverage unavailable") !== -1);
+        check("no 0 of 0", htmlUnavailable.indexOf("0 of 0") === -1);
+
+        const htmlAbsent = hooks.renderServicesComponentEvidence({
+          component_signals: [],
+          component_coverage: { listed_components: 0, available_components: 0, coverage_status: "absent" },
+        });
+        check("absent coverage text", htmlAbsent.indexOf("No component lists reported") !== -1);
+
+            const htmlAvailable = hooks.renderServicesComponentEvidence({
+              component_signals: [{ signal_type: "business_activity", label: "Business Activity", direction: "growth", direction_label: "Growth", rank: 3, list_size: 13 }],
+              component_coverage: { listed_components: 1, available_components: 10, coverage_status: "available" },
+            });
+        check("available coverage text", htmlAvailable.indexOf("Listed in 1 of 10") !== -1);
+
+        console.log(JSON.stringify({ ok: true }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True

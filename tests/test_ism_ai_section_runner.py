@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sqlite3
 from pathlib import Path
@@ -16,12 +17,12 @@ class FakeAiClient:
         self.call_count = 0
         self.responses = responses or {}
 
-    async def request_structured_output(self, prompt):
+    async def complete_json_async(self, prompt):
         self.call_count += 1
         for key, response in self.responses.items():
             if key in prompt:
-                return json.dumps(response)
-        return json.dumps({"error": "no matching response"})
+                return response
+        return {"error": "no matching response"}
 
 
 SERVICES_COMPONENTS = sorted(
@@ -156,29 +157,29 @@ def prepared_report():
         "fetched_at": "2026-07-03T14:00:00Z",
         "source_text": (
             "June 2026 ISM Services PMI Report "
-            "Services PMI registered 54.0 percent. "
-            "Business Activity Index at 55.4 percent. "
-            "New Orders Index at 55.1 percent. "
-            "Employment Index at 52.3 percent. "
-            "Supplier Deliveries Index at 51.0 percent. "
-            "Inventories Index at 50.2 percent. "
-            "Inventory Sentiment Index at 48.5 percent. "
-            "Prices Index at 58.4 percent. "
-            "Backlog of Orders Index at 54.9 percent. "
-            "New Export Orders Index at 53.2 percent. "
-            "Imports Index at 52.6 percent. "
+            "Services PMI registered 50.0 percent. "
+            "Business Activity Index at 51.0 percent. "
+            "New Orders Index at 52.0 percent. "
+            "Employment Index at 53.0 percent. "
+            "Supplier Deliveries Index at 54.0 percent. "
+            "Inventories Index at 55.0 percent. "
+            "Inventory Sentiment Index at 56.0 percent. "
+            "Prices Index at 57.0 percent. "
+            "Backlog of Orders Index at 58.0 percent. "
+            "New Export Orders Index at 59.0 percent. "
+            "Imports Index at 60.0 percent. "
             "SERVICES AT A GLANCE "
-            "Services PMI 54.0 53.8 +0.2 Growing Faster 2 "
-            "Business Activity 55.4 54.5 +0.9 Growing Faster 2 "
-            "New Orders 55.1 54.8 +0.3 Growing Faster 2 "
-            "Employment 52.3 51.0 +1.3 Growing Faster 1 "
-            "Supplier Deliveries 51.0 50.5 +0.5 Slowing Faster 1 "
-            "Inventories 50.2 49.8 +0.4 Growing From Contracting 1 "
-            "Inventory Sentiment 48.5 49.2 -0.7 Too Low Faster 1 "
-            "Prices 58.4 57.0 +1.4 Increasing Faster 1 "
-            "Backlog of Orders 54.9 53.1 +1.8 Growing Faster 2 "
-            "New Export Orders 53.2 52.0 +1.2 Growing Faster 1 "
-            "Imports 52.6 51.5 +1.1 Growing Faster 1 "
+            "Services PMI 50.0 49.0 +1.0 Growing Faster 1 "
+            "Business Activity 51.0 50.0 +1.0 Growing Faster 1 "
+            "New Orders 52.0 51.0 +1.0 Growing Faster 1 "
+            "Employment 53.0 52.0 +1.0 Growing Faster 1 "
+            "Supplier Deliveries 54.0 53.0 +1.0 Slowing Faster 1 "
+            "Inventories 55.0 54.0 +1.0 Growing From Contracting 1 "
+            "Inventory Sentiment 56.0 55.0 +1.0 Too Low Faster 1 "
+            "Prices 57.0 56.0 +1.0 Increasing Faster 1 "
+            "Backlog of Orders 58.0 57.0 +1.0 Growing Faster 2 "
+            "New Export Orders 59.0 58.0 +1.0 Growing Faster 1 "
+            "Imports 60.0 59.0 +1.0 Growing Faster 1 "
             "INDUSTRY PERFORMANCE "
             "The 2 services industries reporting growth in June are: "
             "Construction; and Retail Trade. "
@@ -240,6 +241,70 @@ async def test_second_run_makes_zero_calls(db_conn, prepared_report):
     )
     assert client2.call_count == 0
     assert len(result2["section_payloads"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_section_progress_names_work_and_emits_heartbeats(
+    db_conn, prepared_report
+):
+    messages = []
+
+    class SlowAiClient(FakeAiClient):
+        async def complete_json_async(self, prompt):
+            await asyncio.sleep(0.03)
+            return await super().complete_json_async(prompt)
+
+    await extract_sections(
+        db_conn,
+        SlowAiClient(SECTION_RESPONSES),
+        prepared_report,
+        ["report"],
+        {"report": PROMPT_VERSIONS["report"]},
+        _fake_build_prompt,
+        _fake_model_for_section,
+        _fake_validate,
+        section_concurrency=1,
+        progress=messages.append,
+        heartbeat_interval=0.01,
+    )
+
+    assert any("section extraction pending=1 reused=0 concurrency=1" in m for m in messages)
+    assert any("section report started prompt_chars=" in m for m in messages)
+    assert any("section report running elapsed=" in m for m in messages)
+    assert any("section report ok" in m for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_section_progress_reports_checkpoint_reuse(db_conn, prepared_report):
+    client = FakeAiClient(SECTION_RESPONSES)
+    await extract_sections(
+        db_conn,
+        client,
+        prepared_report,
+        ["report"],
+        {"report": PROMPT_VERSIONS["report"]},
+        _fake_build_prompt,
+        _fake_model_for_section,
+        _fake_validate,
+        section_concurrency=1,
+    )
+    messages = []
+
+    await extract_sections(
+        db_conn,
+        FakeAiClient(SECTION_RESPONSES),
+        prepared_report,
+        ["report"],
+        {"report": PROMPT_VERSIONS["report"]},
+        _fake_build_prompt,
+        _fake_model_for_section,
+        _fake_validate,
+        section_concurrency=1,
+        progress=messages.append,
+    )
+
+    assert "section extraction pending=0 reused=1 concurrency=1" in messages
+    assert "section report reused checkpoint" in messages
 
 
 @pytest.mark.asyncio

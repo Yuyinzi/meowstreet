@@ -11,6 +11,42 @@ REQUIRED_LABELS = {
     "new_orders": "New Orders",
 }
 
+SERVICES_AT_A_GLANCE_TO_KEY = {
+    "ism_services_pmi": "pmi",
+    "ism_services_business_activity": "business_activity",
+    "ism_services_new_orders": "new_orders",
+    "ism_services_order_backlog": "order_backlog",
+    "ism_services_employment": "employment",
+    "ism_services_inventories": "inventories",
+    "ism_services_inventory_sentiment": "inventory_sentiment",
+    "ism_services_prices": "prices",
+    "ism_services_supplier_deliveries": "supplier_deliveries",
+    "ism_services_new_export_orders": "new_export_orders",
+    "ism_services_imports": "imports",
+}
+
+SERVICES_DETAIL_GROUPS = [
+    {"label": "Business Cycle", "keys": ["pmi"]},
+    {
+        "label": "Demand & Activity",
+        "keys": [
+            "business_activity",
+            "new_orders",
+            "order_backlog",
+            "new_export_orders",
+            "imports",
+        ],
+    },
+    {
+        "label": "Labor & Inventories",
+        "keys": ["employment", "inventories", "inventory_sentiment"],
+    },
+    {
+        "label": "Inflation & Supply",
+        "keys": ["prices", "supplier_deliveries"],
+    },
+]
+
 
 def _metric(rows):
     clean = [row for row in rows if row.get("value") is not None]
@@ -113,6 +149,57 @@ def build_latest_payload(points_by_series_id):
         if period is None or latest["date"] > period:
             period = latest["date"]
     return {"period": period, **payload}
+
+
+def services_at_a_glance_tone(row):
+    series_id = row.get("series_id", "")
+    direction = row.get("direction", "")
+    rate = row.get("rate_of_change", "")
+    if series_id in {
+        "ism_services_prices",
+        "ism_services_supplier_deliveries",
+        "ism_services_inventory_sentiment",
+    }:
+        return "amber"
+    if direction == "Contracting":
+        return "red"
+    if direction == "Growing":
+        return "green" if rate == "Faster" else "amber"
+    if direction in {"From Contracting", "From Growing", "Mixed"}:
+        return "amber"
+    return "muted"
+
+
+def build_latest_presentation(at_a_glance_rows):
+    latest = {}
+    latest_metadata = {}
+    for row in at_a_glance_rows:
+        key = SERVICES_AT_A_GLANCE_TO_KEY.get(row.get("series_id"))
+        if key is None:
+            continue
+        latest[key] = row["current_value"]
+        latest_metadata[key] = {
+            "label": row["label"],
+            "current_value": row["current_value"],
+            "previous_value": row["previous_value"],
+            "point_change": row["point_change"],
+            "direction": row["direction"],
+            "rate_of_change": row["rate_of_change"],
+            "trend_months": row["trend_months"],
+            "tone": services_at_a_glance_tone(row),
+        }
+    detail_groups = [
+        {
+            "label": group["label"],
+            "keys": [key for key in group["keys"] if key in latest],
+        }
+        for group in SERVICES_DETAIL_GROUPS
+    ]
+    return {
+        "latest": latest,
+        "latest_metadata": latest_metadata,
+        "detail_groups": [group for group in detail_groups if group["keys"]],
+    }
 
 
 def build_card(signal, breadth):

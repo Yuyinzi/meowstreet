@@ -1,6 +1,8 @@
+from copy import deepcopy
+
 import pytest
 
-from app.db import ism_surveys, macro_indicators, us_rates_liquidity
+from app.db import growth_cycle, ism_surveys, macro_indicators, us_rates_liquidity
 from app.db import growth_cycle as growth_cycle_db
 from app.services import ism_services_dashboard
 
@@ -458,3 +460,462 @@ def test_load_detail_scopes_comments_to_signal_period(tmp_path):
 
     construction = result["industries"]["industries"][0]
     assert construction["comments"] == ["June comment"]
+
+
+def test_build_official_report_summary_preserves_services_evidence():
+    evidence = {
+        "at_a_glance_rows": [
+            {
+                "series_id": "ism_services_pmi",
+                "label": "Services PMI",
+                "current_value": 54.0,
+                "previous_value": 53.8,
+                "point_change": 0.2,
+                "direction": "Growing",
+                "rate_of_change": "Faster",
+                "trend_months": 2,
+            },
+            {
+                "series_id": "ism_services_prices",
+                "label": "Prices",
+                "current_value": 61.2,
+                "previous_value": 59.4,
+                "point_change": 1.8,
+                "direction": "Increasing",
+                "rate_of_change": "Faster",
+                "trend_months": 3,
+            },
+        ],
+        "component_industries": [
+            {
+                "signal_type": "business_activity",
+                "direction": "growth",
+                "industry": "Construction",
+                "rank": 1,
+            }
+        ],
+        "respondent_comments": [
+            {"industry": "Construction", "comment_text": "Demand improved."}
+        ],
+        "commodities": [
+            {"commodity": "Aluminum", "signal_type": "up_in_price", "months": 4}
+        ],
+        "narrative_facts": {"consecutive_expansion_months": 24},
+        "source": {
+            "report_id": "ism_services_2026_06",
+            "report_month": "2026-06-01",
+            "title": "June 2026 ISM Services PMI Report",
+            "source_url": "https://www.ismworld.org/example",
+            "source_hash": "abc123",
+        },
+    }
+    original = deepcopy(evidence)
+
+    summary = ism_services_dashboard._build_official_report_summary(evidence)
+
+    assert summary["source_type"] == "report_extracted"
+    assert summary["period"] == "2026-06-01"
+    assert summary["headline"] == (
+        "Services PMI 54.0, +0.2 points from prior month; Growing / Faster."
+    )
+    assert summary["major_changes"] == [
+        "Prices: 61.2, +1.8 points; Increasing / Faster."
+    ]
+    assert summary["comment_preview_count"] == 3
+    assert summary["source_url"] == evidence["source"]["source_url"]
+    assert summary["respondent_comments"] == evidence["respondent_comments"]
+    assert evidence == original
+
+
+def test_load_detail_attaches_summary_and_complete_rich_evidence(
+    services_connection,
+    monkeypatch,
+):
+    evidence = {
+        "at_a_glance_rows": [],
+        "component_industries": [],
+        "respondent_comments": [],
+        "commodities": [],
+        "narrative_facts": {},
+        "source": {
+            "report_id": "ism_services_2026_06",
+            "report_month": "2026-06-01",
+            "title": "June 2026 ISM Services PMI Report",
+            "source_url": "https://www.ismworld.org/example",
+            "source_hash": "abc123",
+        },
+    }
+    monkeypatch.setattr(
+        ism_services_dashboard,
+        "_load_rich_evidence",
+        lambda con, signal_period: evidence,
+    )
+
+    result = ism_services_dashboard.load_detail(services_connection)
+
+    assert result["rich_evidence"] is evidence
+    assert result["official_report_summary"]["report_id"] == "ism_services_2026_06"
+
+
+def test_load_detail_attaches_services_industry_analysis(
+    services_connection,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        ism_surveys,
+        "load_latest_report_snapshot",
+        lambda con, survey_type: {
+            "report_id": "ism_services_2026_06",
+            "report_month": "2026-06-01",
+            "title": "June 2026 ISM Services PMI Report",
+            "source_url": "https://example.com/services/june",
+            "source_hash": "abc123",
+        },
+    )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_ism_report_industry_signals",
+        lambda con, report_id: [
+            {
+                "signal_type": "business_activity",
+                "direction": "growth",
+                "industry": "Construction",
+                "rank": 1,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_ism_report_industry_signal_coverage",
+        lambda con, report_id: [
+            {
+                "signal_type": "business_activity",
+                "direction": "growth",
+                "list_present": True,
+                "declared_count": 12,
+                "extracted_count": 12,
+                "validation_status": "complete",
+            }
+        ],
+    )
+
+    result = ism_services_dashboard.load_detail(services_connection)
+
+    analysis = result["industry_analysis"]
+    assert analysis["status"] == "available"
+    assert analysis["period"] == "2026-06-01"
+    construction = next(
+        row for row in analysis["industries"] if row["industry"] == "Construction"
+    )
+    assert construction["component_signals"][0]["signal_type"] == "business_activity"
+    assert "score" not in construction
+
+
+def test_load_detail_attaches_latest_values_presentation(
+    services_connection,
+    monkeypatch,
+):
+    at_a_glance_rows = [
+        {
+            "series_id": "ism_services_pmi",
+            "label": "Services PMI",
+            "current_value": 54.0,
+            "previous_value": 53.8,
+            "point_change": 0.2,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_business_activity",
+            "label": "Business Activity",
+            "current_value": 55.0,
+            "previous_value": 54.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 3,
+        },
+        {
+            "series_id": "ism_services_new_orders",
+            "label": "New Orders",
+            "current_value": 55.1,
+            "previous_value": 53.5,
+            "point_change": 1.6,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 3,
+        },
+        {
+            "series_id": "ism_services_order_backlog",
+            "label": "Order Backlog",
+            "current_value": 52.0,
+            "previous_value": 50.0,
+            "point_change": 2.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_employment",
+            "label": "Employment",
+            "current_value": 52.0,
+            "previous_value": 51.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_inventories",
+            "label": "Inventories",
+            "current_value": 50.0,
+            "previous_value": 49.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+        },
+        {
+            "series_id": "ism_services_inventory_sentiment",
+            "label": "Inventory Sentiment",
+            "current_value": 48.0,
+            "previous_value": 47.0,
+            "point_change": 1.0,
+            "direction": "Contracting",
+            "rate_of_change": "Slower",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_prices",
+            "label": "Prices",
+            "current_value": 61.2,
+            "previous_value": 59.4,
+            "point_change": 1.8,
+            "direction": "Increasing",
+            "rate_of_change": "Faster",
+            "trend_months": 3,
+        },
+        {
+            "series_id": "ism_services_supplier_deliveries",
+            "label": "Supplier Deliveries",
+            "current_value": 54.0,
+            "previous_value": 53.0,
+            "point_change": 1.0,
+            "direction": "Slowing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_new_export_orders",
+            "label": "New Export Orders",
+            "current_value": 51.0,
+            "previous_value": 50.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+        },
+        {
+            "series_id": "ism_services_imports",
+            "label": "Imports",
+            "current_value": 50.5,
+            "previous_value": 49.5,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+        },
+    ]
+    monkeypatch.setattr(
+        ism_services_dashboard,
+        "_load_rich_evidence",
+        lambda con, signal_period: {
+            "at_a_glance_rows": at_a_glance_rows,
+            "source": {"report_month": signal_period},
+        },
+    )
+
+    detail = ism_services_dashboard.load_detail(services_connection)
+
+    assert len(detail["latest"]) == 11
+    assert len(detail["latest_metadata"]) == 11
+    assert [group["label"] for group in detail["detail_groups"]] == [
+        "Business Cycle",
+        "Demand & Activity",
+        "Labor & Inventories",
+        "Inflation & Supply",
+    ]
+    assert detail["signal"]["version"] == "ism_services_signal_v1"
+    assert set(detail["signal"]["metrics"]) == {
+        "pmi",
+        "business_activity",
+        "new_orders",
+        "order_backlog",
+    }
+
+
+def test_load_detail_stale_report_omits_presentation(
+    services_connection,
+    monkeypatch,
+):
+    at_a_glance_rows = [
+        {
+            "series_id": "ism_services_pmi",
+            "label": "Services PMI",
+            "current_value": 54.0,
+            "previous_value": 53.8,
+            "point_change": 0.2,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_business_activity",
+            "label": "Business Activity",
+            "current_value": 55.0,
+            "previous_value": 54.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 3,
+        },
+        {
+            "series_id": "ism_services_new_orders",
+            "label": "New Orders",
+            "current_value": 55.1,
+            "previous_value": 53.5,
+            "point_change": 1.6,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 3,
+        },
+        {
+            "series_id": "ism_services_order_backlog",
+            "label": "Order Backlog",
+            "current_value": 52.0,
+            "previous_value": 50.0,
+            "point_change": 2.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_employment",
+            "label": "Employment",
+            "current_value": 52.0,
+            "previous_value": 51.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_inventories",
+            "label": "Inventories",
+            "current_value": 50.0,
+            "previous_value": 49.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+        },
+        {
+            "series_id": "ism_services_inventory_sentiment",
+            "label": "Inventory Sentiment",
+            "current_value": 48.0,
+            "previous_value": 47.0,
+            "point_change": 1.0,
+            "direction": "Contracting",
+            "rate_of_change": "Slower",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_prices",
+            "label": "Prices",
+            "current_value": 61.2,
+            "previous_value": 59.4,
+            "point_change": 1.8,
+            "direction": "Increasing",
+            "rate_of_change": "Faster",
+            "trend_months": 3,
+        },
+        {
+            "series_id": "ism_services_supplier_deliveries",
+            "label": "Supplier Deliveries",
+            "current_value": 54.0,
+            "previous_value": 53.0,
+            "point_change": 1.0,
+            "direction": "Slowing",
+            "rate_of_change": "Faster",
+            "trend_months": 2,
+        },
+        {
+            "series_id": "ism_services_new_export_orders",
+            "label": "New Export Orders",
+            "current_value": 51.0,
+            "previous_value": 50.0,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+        },
+        {
+            "series_id": "ism_services_imports",
+            "label": "Imports",
+            "current_value": 50.5,
+            "previous_value": 49.5,
+            "point_change": 1.0,
+            "direction": "Growing",
+            "rate_of_change": "Faster",
+            "trend_months": 1,
+        },
+    ]
+    monkeypatch.setattr(
+        ism_services_dashboard,
+        "_load_rich_evidence",
+        lambda con, signal_period: {
+            "at_a_glance_rows": at_a_glance_rows,
+            "source": {"report_month": "2026-05-01"},
+        },
+    )
+
+    detail = ism_services_dashboard.load_detail(services_connection)
+
+    assert "latest_metadata" not in detail
+    assert "detail_groups" not in detail
+    assert len(detail["latest"]) == 4
+
+
+def test_load_detail_does_not_join_stale_services_component_evidence(
+    services_connection,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        ism_surveys,
+        "load_latest_report_snapshot",
+        lambda con, survey_type: {
+            "report_id": "ism_services_2026_05",
+            "report_month": "2026-05-01",
+            "title": "May 2026 ISM Services PMI Report",
+            "source_url": "https://example.com/services/may",
+            "source_hash": "abc123",
+        },
+    )
+    monkeypatch.setattr(
+        growth_cycle,
+        "load_ism_report_industry_signals",
+        lambda con, report_id: (_ for _ in ()).throw(
+            AssertionError("stale component signals must not load")
+        ),
+    )
+
+    result = ism_services_dashboard.load_detail(services_connection)
+
+    construction = next(
+        row
+        for row in result["industry_analysis"]["industries"]
+        if row["industry"] == "Construction"
+    )
+    assert construction["component_signals"] == []
+    assert result["industry_analysis"]["source_url"] is None

@@ -96,14 +96,18 @@ def main(argv=None, fetch=None, ai_client_factory=None):
             return 1
         from scripts.extract_ism_report_ai import OpenAIJsonClient, llm_timeout
 
-        client = OpenAIJsonClient(
-            llm.build_async_client(
+        def _client_factory():
+            return llm.build_async_client(
                 config,
                 max_retries=0,
                 timeout=llm_timeout(),
                 error_context="ISM extraction",
-            ),
+            )
+
+        client = OpenAIJsonClient(
+            _client_factory(),
             config["model"],
+            client_factory=_client_factory,
             progress=lambda msg: print(msg, file=sys.stderr, flush=True),
         )
         model = config["model"]

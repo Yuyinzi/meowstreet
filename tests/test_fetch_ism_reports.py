@@ -76,7 +76,7 @@ class FakeAiClient:
     def complete_json(self, prompt, schema=None):
         raise ValueError("FakeAiClient cannot make real API calls")
 
-    async def request_structured_output(self, prompt):
+    async def complete_json_async(self, prompt):
         raise ValueError("FakeAiClient cannot make real API calls")
 
 

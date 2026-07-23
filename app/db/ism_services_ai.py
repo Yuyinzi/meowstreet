@@ -187,6 +187,107 @@ def _replace_services_rich_outputs(con, payload, source, commit=True):
     }
 
 
+def _services_industry_rankings(payload):
+    report_month = payload["report"]["report_month"]
+    ranking_rows = []
+    for signal in payload.get("industry_signals", []):
+        if signal["signal_type"] == "overall_growth":
+            ranking_rows.append(
+                {
+                    "date": report_month,
+                    "industry": signal["industry"],
+                    "direction": "growth",
+                    "rank": signal["rank"],
+                    "source": "ISM AI extraction",
+                }
+            )
+        elif signal["signal_type"] == "overall_contraction":
+            ranking_rows.append(
+                {
+                    "date": report_month,
+                    "industry": signal["industry"],
+                    "direction": "contraction",
+                    "rank": signal["rank"],
+                    "source": "ISM AI extraction",
+                }
+            )
+    return ranking_rows
+
+
+def _replace_services_rankings(con, payload, commit=True):
+    report_month = payload["report"]["report_month"]
+    con.execute(
+        "delete from ism_industry_rankings where survey_type = 'services' and date = ?",
+        (report_month,),
+    )
+    ranking_rows = _services_industry_rankings(payload)
+    for row in ranking_rows:
+        con.execute(
+            "insert into ism_industry_rankings(survey_type, date, industry, direction, rank, source) "
+            "values ('services', ?, ?, ?, ?, ?)",
+            (
+                row["date"],
+                row["industry"],
+                row["direction"],
+                row["rank"],
+                row["source"],
+            ),
+        )
+    if commit:
+        con.commit()
+    return len(ranking_rows)
+
+
+def _services_signal_coverage(payload, source_url, source_hash):
+    report_id = payload["report"]["report_id"]
+    report_month = payload["report"]["report_month"]
+    return [
+        {
+            "report_id": report_id,
+            "report_month": report_month,
+            **coverage,
+            "source_url": source_url,
+            "source_hash": source_hash,
+        }
+        for coverage in payload.get("industry_signal_coverage", [])
+    ]
+
+
+def _replace_services_signal_coverage(con, payload, source):
+    source_url = source["source_url"]
+    source_hash = source["source_hash"]
+    report_id = payload["report"]["report_id"]
+    con.execute(
+        "delete from ism_report_industry_signal_coverage where report_id = ?",
+        (report_id,),
+    )
+    rows = _services_signal_coverage(payload, source_url, source_hash)
+    for row in rows:
+        con.execute(
+            """
+            insert into ism_report_industry_signal_coverage(
+                report_id, report_month, signal_type, direction,
+                list_present, declared_count, extracted_count,
+                validation_status, evidence_text, source_url, source_hash
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row["report_id"],
+                row["report_month"],
+                row["signal_type"],
+                row["direction"],
+                row["list_present"],
+                row["declared_count"],
+                row["extracted_count"],
+                row["validation_status"],
+                row["evidence_text"],
+                row["source_url"],
+                row["source_hash"],
+            ),
+        )
+    return len(rows)
+
+
 def promote_services_extraction(con, extraction, source):
     validated = ServicesFactualExtractionModel.model_validate(extraction)
     payload = validated.model_dump()
@@ -222,6 +323,10 @@ def promote_services_extraction(con, extraction, source):
 
         _replace_services_rich_outputs(con, payload, source, commit=False)
 
+        ranking_count = _replace_services_rankings(con, payload, commit=False)
+
+        coverage_count = _replace_services_signal_coverage(con, payload, source)
+
         con.execute(
             """
             update ism_report_source_snapshots
@@ -239,4 +344,6 @@ def promote_services_extraction(con, extraction, source):
         "industry_signals": len(payload.get("industry_signals", [])),
         "commodities": len(payload.get("commodities", [])),
         "narrative_facts": 1,
+        "rankings": ranking_count,
+        "signal_coverage": coverage_count,
     }

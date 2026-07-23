@@ -273,16 +273,121 @@ def test_comments_commodities_region_contains_both():
     assert "Commodities Up" in region or "Commodities Down" in region
 
 
-def test_narrative_region_contains_summary_paragraphs():
+def test_narrative_region_contains_headline_metrics():
     html = (FIXTURE_DIR / "ism_services_report.html").read_text()
     prepared = ism_services_report.prepare_report_for_ai(
         html, "https://example.test/services/", "2026-07-03T14:00:00Z"
     )
     region = ism_services_report._extract_narrative_region(prepared["source_text"])
-    assert "Tempe, Arizona" in region
-    assert "Business activity" in region
-    assert "sixth consecutive month" in region
+    assert "Services PMI at" in region
+    assert "Business Activity" in region
     assert "Prices Index" in region
+    assert "Tempe, Arizona" not in region
+
+
+def test_live_ismworld_article_excludes_boilerplate_and_slices_real_sections():
+    html = (FIXTURE_DIR / "ism_services_live_page.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html,
+        "https://www.ismworld.org/reports/services/june/",
+        "2026-07-03T14:00:00Z",
+    )
+
+    source_text = prepared["source_text"]
+    assert "Create an Account Navigation Marker" not in source_text
+    assert "Footer Privacy Marker" not in source_text
+    assert "must not appear" not in source_text
+
+    at_a_glance = ism_services_report._extract_at_a_glance_region(source_text)
+    industries = ism_services_report._extract_industry_signals_region(source_text)
+    comments_commodities = ism_services_report._extract_comments_commodities_region(
+        source_text
+    )
+    narrative = ism_services_report._extract_narrative_region(source_text)
+
+    assert "Services PMI" in at_a_glance
+    assert "Pipeline remains healthy" not in at_a_glance
+    assert "Construction" in industries
+    assert "Pipeline remains healthy" in comments_commodities
+    assert "Construction Labor" in comments_commodities
+    assert "24th consecutive month" in narrative
+    assert "INDUSTRY PERFORMANCE" not in narrative
+
+
+def test_component_industry_lists_included_in_industry_signals_region():
+    html = (FIXTURE_DIR / "ism_services_live_page.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html,
+        "https://www.ismworld.org/reports/services/june/",
+        "2026-07-03T14:00:00Z",
+    )
+    region = ism_services_report._extract_industry_signals_region(
+        prepared["source_text"]
+    )
+    assert "reporting growth in June" in region
+    assert "reporting a contraction in June" in region
+    assert "reporting growth in business activity" in region
+    assert "Construction" in region
+
+
+def test_component_industry_lists_excludes_methodology_text_and_tables():
+    html = (FIXTURE_DIR / "ism_services_live_page.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html,
+        "https://www.ismworld.org/reports/services/june/",
+        "2026-07-03T14:00:00Z",
+    )
+    region = ism_services_report._extract_industry_signals_region(
+        prepared["source_text"]
+    )
+    assert "Services PMI index details" not in region
+    assert "methodology" not in region
+
+
+def test_component_industry_lists_excludes_methodology_after_repeated_heading():
+    source_text = """INDUSTRY PERFORMANCE
+The industries reporting growth are: Construction.
+WHAT RESPONDENTS ARE SAYING
+JUNE 2026 SERVICES INDEX SUMMARIES
+Inventory Sentiment
+The industries reporting inventories were too high are: Retail Trade.
+Inventory Sentiment
+The survey divides responses into the following industry categories: Mining.
+"""
+
+    region = ism_services_report._extract_industry_signals_region(source_text)
+
+    assert "inventories were too high" in region
+    assert "divides responses" not in region
+
+
+def test_component_industry_lists_retains_all_component_types_in_fixture():
+    html = (FIXTURE_DIR / "ism_services_live_page.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html,
+        "https://www.ismworld.org/reports/services/june/",
+        "2026-07-03T14:00:00Z",
+    )
+    region = ism_services_report._extract_industry_signals_region(
+        prepared["source_text"]
+    )
+    assert "Business Activity" in region
+    assert "New Orders" in region
+    assert "Employment" in region
+
+
+def test_component_lists_unaffected_when_no_index_summaries_section():
+    html = (FIXTURE_DIR / "ism_services_report.html").read_text()
+    prepared = ism_services_report.prepare_report_for_ai(
+        html,
+        "https://example.test/services/",
+        "2026-07-03T14:00:00Z",
+    )
+    region = ism_services_report._extract_industry_signals_region(
+        prepared["source_text"]
+    )
+    assert "reporting growth in June" in region
+    assert "reporting contraction" in region
 
 
 def test_missing_at_a_glance_raises_value_error():

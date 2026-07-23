@@ -4520,3 +4520,71 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
+
+.ism-services-commodity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.ism-services-commodity-group {
+  border: 1px solid #E8E0D6;
+  border-radius: 8px;
+  background: #FFFFFF;
+  padding: 10px 12px;
+}
+
+.ism-services-commodity-group h6 {
+  margin: 0 0 8px;
+  color: #3B3530;
+  font-size: 0.78rem;
+}
+
+.ism-services-commodity-group ul,
+.ism-services-narrative-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.ism-services-commodity-group li,
+.ism-services-narrative-list li {
+  margin: 5px 0;
+  color: #5F574F;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.ism-services-commodity-group li span {
+  color: #8B7E74;
+}
+
+.ism-services-commodity-higher {
+  border-left: 3px solid #B85C38;
+}
+
+.ism-services-commodity-lower {
+  border-left: 3px solid #2F9E74;
+}
+
+.ism-services-commodity-shortage {
+  border-left: 3px solid #C58B2A;
+}
+
+.ism-services-component-evidence h6 {
+  margin: 0 0 6px;
+  color: #3B3530;
+  font-size: 0.75rem;
+}
+
+.ism-services-component-row {
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+}
+
+.ism-services-direction-chip {
+  border-radius: 999px;
+  background: #F1EDE8;
+  color: #5F574F;
+  padding: 3px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}

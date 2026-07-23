@@ -29,6 +29,42 @@ def load_overview(con):
     }
 
 
+def _load_industry_analysis(con, signal_period, rankings, comments):
+    snapshot = (
+        ism_surveys.load_latest_report_snapshot(con, "services")
+        if signal_period is not None
+        else None
+    )
+    if not snapshot or snapshot["report_month"] != signal_period:
+        return ism_services_industry.build_services_industry_analysis(
+            rankings,
+            [],
+            [],
+            comments,
+            period=signal_period,
+            source_url=None,
+        )
+    report_id = snapshot["report_id"]
+    component_signals = [
+        row
+        for row in growth_cycle.load_ism_report_industry_signals(con, report_id)
+        if row["signal_type"] not in ("overall_growth", "overall_contraction")
+    ]
+    coverage_rows = [
+        row
+        for row in growth_cycle.load_ism_report_industry_signal_coverage(con, report_id)
+        if row["signal_type"] not in ("overall_growth", "overall_contraction")
+    ]
+    return ism_services_industry.build_services_industry_analysis(
+        rankings,
+        component_signals,
+        coverage_rows,
+        comments,
+        period=signal_period,
+        source_url=snapshot["source_url"],
+    )
+
+
 def _load_rich_evidence(con, signal_period):
     if signal_period is None:
         return None
@@ -55,9 +91,63 @@ def _load_rich_evidence(con, signal_period):
         "commodities": commodities or [],
         "narrative_facts": narrative["facts_json"] if narrative else {},
         "source": {
+            "report_id": snapshot["report_id"],
+            "report_month": snapshot["report_month"],
+            "title": snapshot["title"],
             "source_url": snapshot["source_url"],
             "source_hash": snapshot["source_hash"],
         },
+    }
+
+
+def _format_point_change(value):
+    if value is None:
+        return "change unavailable"
+    prefix = "+" if value > 0 else ""
+    return f"{prefix}{value:.1f} points"
+
+
+def _format_at_a_glance_change(row):
+    return (
+        f"{row['label']}: {row['current_value']:.1f}, "
+        f"{_format_point_change(row.get('point_change'))}; "
+        f"{row.get('direction') or 'Direction unavailable'} / "
+        f"{row.get('rate_of_change') or 'rate unavailable'}."
+    )
+
+
+def _build_official_report_summary(rich_evidence):
+    if not rich_evidence:
+        return None
+    rows = rich_evidence.get("at_a_glance_rows") or []
+    source = rich_evidence.get("source") or {}
+    pmi = next(
+        (row for row in rows if row.get("series_id") == "ism_services_pmi"),
+        None,
+    )
+    headline = ""
+    if pmi:
+        headline = (
+            f"Services PMI {pmi['current_value']:.1f}, "
+            f"{_format_point_change(pmi.get('point_change'))} from prior month; "
+            f"{pmi.get('direction') or 'Direction unavailable'} / "
+            f"{pmi.get('rate_of_change') or 'rate unavailable'}."
+        )
+    changed_rows = sorted(
+        (row for row in rows if row is not pmi),
+        key=lambda row: abs(row.get("point_change") or 0),
+        reverse=True,
+    )
+    return {
+        "source_type": "report_extracted",
+        "report_id": source.get("report_id"),
+        "period": source.get("report_month"),
+        "title": source.get("title"),
+        "source_url": source.get("source_url"),
+        "headline": headline,
+        "major_changes": [_format_at_a_glance_change(row) for row in changed_rows[:5]],
+        "respondent_comments": rich_evidence.get("respondent_comments") or [],
+        "comment_preview_count": 3,
     }
 
 
@@ -93,5 +183,19 @@ def load_detail(con):
         rankings, max_date=signal_period
     )
     detail = ism_services.build_detail(points, signal, industries)
-    detail["rich_evidence"] = _load_rich_evidence(con, signal_period)
+    rich_evidence = _load_rich_evidence(con, signal_period)
+    detail["official_report_summary"] = _build_official_report_summary(rich_evidence)
+    detail["rich_evidence"] = rich_evidence
+    if rich_evidence:
+        report_month = (rich_evidence.get("source") or {}).get("report_month")
+        if report_month == signal_period:
+            presentation = ism_services.build_latest_presentation(
+                rich_evidence["at_a_glance_rows"]
+            )
+            detail["latest"].update(presentation["latest"])
+            detail["latest_metadata"] = presentation["latest_metadata"]
+            detail["detail_groups"] = presentation["detail_groups"]
+    detail["industry_analysis"] = _load_industry_analysis(
+        con, signal_period, rankings, comments
+    )
     return detail
