@@ -94,9 +94,16 @@ _ISM_SVC = r"ISM\s*(?:®\s*)?Services(?:\s+PMI)?\s*(?:®)?"
 
 
 def report_month_from_title(text):
-    pattern1 = r"\b(" + "|".join(MONTHS) + r")\s+(\d{4})\s+" + _ISM_SVC
-    pattern2 = _ISM_SVC + r"\s+Report for\s+(" + "|".join(MONTHS) + r")\s+(\d{4})"
-    match = re.search(pattern1, text) or re.search(pattern2, text)
+    month_year = r"(" + "|".join(MONTHS) + r")\s+(\d{4})"
+    patterns = [
+        month_year + r"\s+" + _ISM_SVC,
+        _ISM_SVC + r"\s+Report for\s+" + month_year,
+        month_year + r"\s+Services\s+ISM\s*(?:®)?\s+Report On Business",
+    ]
+    match = next(
+        (candidate for pattern in patterns if (candidate := re.search(pattern, text))),
+        None,
+    )
     if not match:
         raise IsmReportUnavailable("no report page available")
     month_name, year = match.groups()

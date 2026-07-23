@@ -441,3 +441,38 @@ The industry reporting an increase in business activity is: Construction.
 
     assert "Business Activity" in region
     assert "increase in business activity" in region
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        (
+            "Services PMI® at 48.8%; June 2024 Services ISM® Report On Business®",
+            ("2024-06-01", "June", "2024"),
+        ),
+        (
+            "Services PMI® at 55.3%; February 2021 Services ISM® Report On Business®",
+            ("2021-02-01", "February", "2021"),
+        ),
+        (
+            "September 2025 ISM® Services PMI® Report",
+            ("2025-09-01", "September", "2025"),
+        ),
+        (
+            "ISM® Services PMI® Report for June 2026",
+            ("2026-06-01", "June", "2026"),
+        ),
+    ],
+)
+def test_report_month_from_title_accepts_services_title_generations(title, expected):
+    assert ism_services_report.report_month_from_title(title) == expected
+
+
+def test_report_month_from_title_rejects_manufacturing_title():
+    with pytest.raises(
+        ism_services_report.IsmReportUnavailable,
+        match="no report page available",
+    ):
+        ism_services_report.report_month_from_title(
+            "Manufacturing PMI at 53.3%; June 2024 ISM Manufacturing Report"
+        )
