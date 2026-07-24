@@ -2189,7 +2189,7 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
           hasBroadExpansion: html.indexOf("Broad expansion") !== -1,
           hasDemandSlowing: html.indexOf("Demand slowing") !== -1,
           hasSurveySynthesisCard: html.indexOf("survey-synthesis-card") !== -1,
-          hasAvailableBadge: html.indexOf("Available") !== -1,
+          hasNoSummaryBadge: html.indexOf("survey-synthesis-summary") === -1,
           hasPendingInputsBadge: html.indexOf("Pending Inputs") === -1,
         }));
         """
@@ -2217,7 +2217,7 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
     assert payload["hasBroadExpansion"] is True
     assert payload["hasDemandSlowing"] is True
     assert payload["hasSurveySynthesisCard"] is True
-    assert payload["hasAvailableBadge"] is True
+    assert payload["hasNoSummaryBadge"] is True
     assert payload["hasPendingInputsBadge"] is True
 
 
@@ -2265,6 +2265,11 @@ def test_survey_synthesis_uses_ism_labels_and_dynamic_portfolio_bias_explanation
         const long = renderBias("long");
         const defensive = renderBias("short_or_neutral");
         const unavailable = renderBias(null, "partial");
+        const observing = hooks.renderSurveySynthesisCard({
+          ...baseCard,
+          survey_portfolio_implication: "long",
+          bias_confirmation: "awaiting_confirmation",
+        });
 
         console.log(JSON.stringify({
           hasIsmMomentum: neutral.includes("ISM Momentum") && neutral.includes("ISM动能"),
@@ -2275,6 +2280,7 @@ def test_survey_synthesis_uses_ism_labels_and_dynamic_portfolio_bias_explanation
           longExplanation: long.includes("ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture."),
           defensiveExplanation: defensive.includes("ISM signals support a neutral or more defensive posture, while Market Setup determines the final portfolio posture."),
           unavailableExplanation: unavailable.includes("Manufacturing and Services data are insufficient to form an ISM portfolio bias."),
+          observingChinese: observing.includes("继续观察") && !observing.includes("等待确认"),
         }));
         """
     )
@@ -2296,6 +2302,7 @@ def test_survey_synthesis_uses_ism_labels_and_dynamic_portfolio_bias_explanation
         "longExplanation": True,
         "defensiveExplanation": True,
         "unavailableExplanation": True,
+        "observingChinese": True,
     }
 
 

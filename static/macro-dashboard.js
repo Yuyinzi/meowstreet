@@ -1174,8 +1174,8 @@
     "ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture.": "ISM信号支持更积极的风险资产倾向，但最终仓位仍由Market Setup决定。",
     "Expansion remains intact; weaker one-period momentum is caution, not a confirmed reversal. Market Setup determines the final portfolio posture.": "扩张格局仍未改变；一期的动能转弱是警惕信号，并非已确认的反转。最终仓位仍由Market Setup决定。",
     "Bias confirmation": "倾向确认",
-    "awaiting_confirmation": "等待确认",
-    "Awaiting Confirmation": "等待确认",
+    "awaiting_confirmation": "继续观察",
+    "Awaiting Confirmation": "继续观察",
     "not_required": "无需确认",
     "Not Required": "无需确认",
     "Backlog confirmation": "订单积压确认",
@@ -3861,12 +3861,8 @@ html += '</div>';
       </div>
     `;
 
-    const status = card.status || "pending_inputs";
     return `
       <div class="survey-synthesis-card">
-        <div class="survey-synthesis-summary">
-          <span class="inflation-status-badge">${bilingualLabel(status === "available" ? "Available" : "Pending Inputs")}</span>
-        </div>
         <div class="survey-synthesis-grid">
           ${rowsHtml}
         </div>
