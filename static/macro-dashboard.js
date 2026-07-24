@@ -3798,8 +3798,7 @@ html += '</div>';
     return `
       <div class="survey-synthesis-card">
         <div class="survey-synthesis-summary">
-          <span>${bilingualTitle("Survey Synthesis")}</span>
-          <strong class="inflation-status-badge">${bilingualLabel(status === "available" ? "Available" : "Pending Inputs")}</strong>
+          <span class="inflation-status-badge">${bilingualLabel(status === "available" ? "Available" : "Pending Inputs")}</span>
         </div>
         <div class="survey-synthesis-grid">
           ${rowsHtml}
