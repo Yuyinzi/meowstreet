@@ -893,7 +893,6 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
         "ism_services",
         "m2_liquidity",
         "inflation_context",
-        "survey_synthesis",
         "fomc_context",
     ]
     assert sections[0]["title"] == "ISM Manufacturing"

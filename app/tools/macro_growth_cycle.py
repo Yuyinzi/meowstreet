@@ -1626,21 +1626,6 @@ def build_growth_cycle_sections(growth_cycle, headline, services_signal_state=No
             period=growth_cycle.get("inflation_context_period"),
         ),
         _growth_cycle_section(
-            "survey_synthesis",
-            "Survey Synthesis",
-            "Parallel Manufacturing and Services evidence for growth direction.",
-            ["survey_synthesis"] if "survey_synthesis" in card_ids else [],
-            status=next(
-                (
-                    card.get("status", "pending_inputs")
-                    for card in headline
-                    if card["id"] == "survey_synthesis"
-                ),
-                "pending_inputs",
-            ),
-            period=growth_cycle.get("survey_synthesis", {}).get("period"),
-        ),
-        _growth_cycle_section(
             "fomc_context",
             "FOMC",
             "Policy timing and latest policy-tone read.",

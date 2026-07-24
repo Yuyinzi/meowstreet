@@ -730,7 +730,6 @@ def test_build_growth_cycle_dashboard_payload_groups_headline_cards_into_section
         "services_labor",
         "m2_liquidity",
         "inflation_context",
-        "survey_synthesis",
         "fomc_context",
     ]
     assert sections["ism_manufacturing"]["status"] == "available"
@@ -738,7 +737,6 @@ def test_build_growth_cycle_dashboard_payload_groups_headline_cards_into_section
     assert sections["ism_manufacturing"]["cards"] == ["ism_manufacturing"]
     assert sections["m2_liquidity"]["cards"] == ["m2_money_supply"]
     assert sections["inflation_context"]["cards"] == ["inflation_context"]
-    assert sections["survey_synthesis"]["cards"] == ["survey_synthesis"]
     assert sections["fomc_context"]["cards"] == []
 
 
@@ -936,14 +934,42 @@ def test_growth_cycle_payload_exposes_survey_synthesis_as_headline_and_section()
     card = next(
         card for card in payload["headline"] if card["id"] == "survey_synthesis"
     )
-    section = next(
-        section
-        for section in payload["sections"]
-        if section["id"] == "survey_synthesis"
-    )
     assert card["economic_direction"] == "aligned_expansion"
-    assert section["cards"] == ["survey_synthesis"]
     assert payload["growth_cycle"]["survey_synthesis"] == synthesis
+
+
+def test_survey_synthesis_is_headline_only_not_growth_cycle_section():
+    synthesis = {
+        "version": "ism_survey_synthesis_v1",
+        "status": "available",
+        "period": "2026-06-01",
+        "economic_direction": "aligned_expansion",
+        "growth_momentum": "falling",
+        "survey_alignment": "aligned",
+        "demand_alignment": "aligned_falling",
+        "leading_side": "not_applicable",
+        "expected_gdp_direction": "slowing",
+        "survey_portfolio_implication": "neutral",
+        "components": {},
+        "agreements": [],
+        "conflicts": [],
+        "missing_inputs": [],
+        "pending_questions": [],
+        "reasons": [],
+    }
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        {"macro": {"growth_cycle": {}}},
+        survey_synthesis=synthesis,
+    )
+
+    assert "survey_synthesis" in [card["id"] for card in payload["headline"]]
+    assert [section["id"] for section in payload["sections"]] == [
+        "ism_manufacturing",
+        "services_labor",
+        "m2_liquidity",
+        "inflation_context",
+        "fomc_context",
+    ]
 
 
 def test_normalize_fed_balance_sheet_computes_card_metrics_without_status():
