@@ -44,7 +44,16 @@ def test_survey_synthesis_mount_is_between_market_setup_and_benchmarks():
 
     assert market_setup < survey_synthesis < benchmarks < growth_cycle
     assert 'aria-label="ISM survey synthesis decision layer"' in html
+    assert (
+        'aria-live="polite"'
+        in html[survey_synthesis : html.index(">", survey_synthesis)]
+    )
+    assert (
+        'aria-atomic="true"'
+        in html[survey_synthesis : html.index(">", survey_synthesis)]
+    )
     assert "Loading survey synthesis" in html
+    assert html.count("<h2>Survey Synthesis</h2>") == 1
 
 
 def test_macro_dashboard_js_fetches_us_rates_liquidity_api():
@@ -3595,6 +3604,8 @@ def test_ism_services_js_renders_card_with_node():
             contains12of18: html.indexOf("12/18") !== -1,
             isButton: html.indexOf('<button') !== -1,
             hasDetailId: html.indexOf('data-growth-cycle-detail-id="ism_services"') !== -1,
+            hasEvidenceId: html.indexOf('id="evidence-ism-services"') !== -1,
+            hasEvidenceTargetClass: html.indexOf("evidence-target") !== -1,
             hasIsmCardButton: html.indexOf("ism-card-button") !== -1,
             hasM2Card: html.indexOf("m2-card") !== -1,
         }));
@@ -3620,6 +3631,8 @@ def test_ism_services_js_renders_card_with_node():
     assert payload["contains12of18"] is True
     assert payload["isButton"] is True
     assert payload["hasDetailId"] is True
+    assert payload["hasEvidenceId"] is True
+    assert payload["hasEvidenceTargetClass"] is True
     assert payload["hasIsmCardButton"] is True
     assert payload["hasM2Card"] is True
 
