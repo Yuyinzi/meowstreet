@@ -1172,6 +1172,7 @@
     "GDP direction": "GDP方向",
     "ISM Portfolio Bias": "ISM组合倾向",
     "ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture.": "ISM信号支持更积极的风险资产倾向，但最终仓位仍由Market Setup决定。",
+    "Expansion remains intact; weaker one-period momentum is caution, not a confirmed reversal. Market Setup determines the final portfolio posture.": "扩张格局仍未改变；一期的动能转弱是警惕信号，并非已确认的反转。最终仓位仍由Market Setup决定。",
     "Bias confirmation": "倾向确认",
     "awaiting_confirmation": "等待确认",
     "Awaiting Confirmation": "等待确认",
@@ -1182,6 +1183,7 @@
     "Supports Contraction": "支持收缩",
     "ISM signals alone do not support materially increasing risk exposure or shifting to a short posture.": "仅凭ISM信号，不足以支持明显增加风险资产敞口，也不足以支持转向做空。",
     "ISM signals support a neutral or more defensive posture, while Market Setup determines the final portfolio posture.": "ISM信号支持保持中性或提高防御性，但最终仓位仍由Market Setup决定。",
+    "Contraction remains intact; one-period improvement awaits confirmation. Market Setup determines the final portfolio posture.": "收缩格局仍未改变；一期的改善尚未被确认。最终仓位仍由Market Setup决定。",
     "Manufacturing and Services data are insufficient to form an ISM portfolio bias.": "制造业和服务业数据尚不足，暂不形成ISM组合倾向。",
     "Rising": "上升",
     "Falling": "下降",
@@ -3800,13 +3802,29 @@ html += '</div>';
     return titleCaseToken(backlog);
   }
 
+  function _crossSectorEvidenceHtml(card) {
+    const mfg = (card.components || {}).manufacturing || {};
+    const svc = (card.components || {}).services || {};
+    const mfgLevel = mfg.demand_level;
+    const svcLevel = svc.activity_level;
+    if (!mfgLevel || !svcLevel) return "";
+    const mfgLabel = "Mfg New Orders: " + titleCaseToken(mfgLevel) + " \u00B7 " + titleCaseToken(mfg.demand_momentum || "unavailable");
+    const svcLabel = "Svcs Business Activity: " + titleCaseToken(svcLevel) + " \u00B7 " + titleCaseToken(svc.activity_momentum || "unavailable");
+    return '<span class="survey-synthesis-evidence-line">' + escapeHtml(mfgLabel) + '<br>' + escapeHtml(svcLabel) + '</span>';
+  }
+
   function renderSurveySynthesisCard(card) {
+    const crossLeadLabel = _crossSectorLeadLabel(card.leading_side);
+    const crossEvidence = _crossSectorEvidenceHtml(card);
+    const crossAnswer = crossEvidence
+      ? crossLeadLabel + crossEvidence
+      : crossLeadLabel;
     const rows = [
       { question: "Business surveys expanding?", answer: titleCaseToken(card.economic_direction || "unavailable") },
       { question: "ISM Momentum", answer: titleCaseToken(card.growth_momentum || "unavailable") },
       { question: "Surveys aligned?", answer: titleCaseToken(card.survey_alignment || "unavailable") },
       { question: "Demand aligned?", answer: titleCaseToken(card.demand_alignment || "unavailable") },
-      { question: "Cross-sector lead", answer: _crossSectorLeadLabel(card.leading_side) },
+      { question: "Cross-sector lead", answer: crossAnswer },
       { question: "GDP direction", answer: titleCaseToken(card.expected_gdp_direction || "unavailable") },
       { question: "ISM Portfolio Bias", answer: titleCaseToken(card.survey_portfolio_implication || "unavailable") },
       { question: "Bias confirmation", answer: titleCaseToken(card.bias_confirmation || "unavailable") },
@@ -3830,10 +3848,15 @@ html += '</div>';
 
     const biasExplanations = {
       long: "ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture.",
+      long_awaiting: "Expansion remains intact; weaker one-period momentum is caution, not a confirmed reversal. Market Setup determines the final portfolio posture.",
       neutral: "ISM signals alone do not support materially increasing risk exposure or shifting to a short posture.",
       short_or_neutral: "ISM signals support a neutral or more defensive posture, while Market Setup determines the final portfolio posture.",
+      short_or_neutral_awaiting: "Contraction remains intact; one-period improvement awaits confirmation. Market Setup determines the final portfolio posture.",
     };
-    const biasExplanation = biasExplanations[card.survey_portfolio_implication]
+    const biasKey = card.bias_confirmation === "awaiting_confirmation"
+      ? card.survey_portfolio_implication + "_awaiting"
+      : card.survey_portfolio_implication;
+    const biasExplanation = biasExplanations[biasKey]
       || "Manufacturing and Services data are insufficient to form an ISM portfolio bias.";
     const biasExplanationHtml = `
       <div class="survey-portfolio-bias-explanation">

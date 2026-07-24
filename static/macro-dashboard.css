@@ -4673,6 +4673,30 @@ h2 {
   text-align: right;
 }
 
+.survey-portfolio-bias-explanation {
+  padding: 10px 12px;
+  border-top: 1px solid #EBE4D8;
+  background: #F8F4ED;
+  color: #4F473F;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.survey-portfolio-bias-explanation small {
+  display: block;
+  margin-top: 3px;
+  color: #6F6257;
+  font-size: 0.74rem;
+}
+
+.survey-synthesis-evidence-line {
+  display: block;
+  margin-top: 4px;
+  color: #6F6257;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 .survey-synthesis-evidence,
 .survey-synthesis-conflicts {
   padding: 8px 12px;

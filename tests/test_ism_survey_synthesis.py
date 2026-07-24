@@ -123,6 +123,31 @@ def test_aligned_contraction_falling_maps_to_falling_and_short_or_neutral():
     assert result["bias_confirmation"] == "not_required"
 
 
+def test_contraction_demand_reason_matches_contracting_level():
+    result = ism_survey_synthesis.build_survey_synthesis(
+        manufacturing_signal(
+            pmi_level="contracting",
+            pmi_momentum="falling",
+            orders_level="contracting",
+            orders_momentum="falling",
+        ),
+        services_signal(
+            pmi_level="contracting",
+            pmi_momentum="falling",
+            orders_level="contracting",
+            orders_momentum="falling",
+            activity_level="contracting",
+            activity_momentum="falling",
+        ),
+    )
+    reasons = result["reasons"]
+    reason_text = " ".join(reasons)
+    assert "Demand remains expansionary" not in reason_text, f"got reasons: {reasons}"
+    assert any(
+        "contraction" in r or "slowing" in r or "weakens" in r for r in reasons
+    ), f"got reasons: {reasons}"
+
+
 def test_aligned_contraction_rising_maps_to_improving():
     result = ism_survey_synthesis.build_survey_synthesis(
         manufacturing_signal(

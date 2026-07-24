@@ -260,15 +260,26 @@ def _reasons(comp, direction, gdp_direction):
         result.append(
             "Manufacturing and Services surveys are sending conflicting signals"
         )
+    mfg_dl = comp["manufacturing"].get("demand_level")
+    svc_dl = comp["services"].get("demand_level")
     mfg_dm = comp["manufacturing"]["demand_momentum"]
     svc_dm = comp["services"]["demand_momentum"]
-    if mfg_dm and svc_dm and mfg_dm == svc_dm == "rising":
-        result.append("Demand momentum is accelerating across both surveys")
-    elif mfg_dm and svc_dm and mfg_dm == svc_dm == "falling":
-        result.append("Demand remains expansionary but is slowing across both surveys")
+    if mfg_dm and svc_dm and mfg_dm == svc_dm:
+        if mfg_dm == "rising":
+            result.append("Demand momentum is accelerating across both surveys")
+        elif mfg_dm == "falling":
+            if mfg_dl == "expanding" and svc_dl == "expanding":
+                result.append(
+                    "Demand remains expansionary but is slowing across both surveys"
+                )
+            elif mfg_dl == "contracting" and svc_dl == "contracting":
+                result.append(
+                    "Demand is contracting and continues to weaken across both surveys"
+                )
+            else:
+                result.append("Demand is slowing across both surveys")
     elif mfg_dm and svc_dm and mfg_dm != svc_dm:
         result.append("Demand momentum differs between surveys")
-    bias_confirm = _bias_confirmation(direction, _shared_momentum(comp))
     backlog_reason = _backlog_reason(
         comp.get("services", {}).get("backlog_confirmation")
     )
@@ -338,7 +349,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
             "bias_confirmation": None,
-            "backlog_confirmation": None,
+            "backlog_confirmation": comp["services"]["backlog_confirmation"],
             "components": comp,
             "agreements": [],
             "conflicts": [],

@@ -29,7 +29,7 @@
           <span class="ism-state-badge ism-state-badge-${escapeHtml(state)}">${escapeHtml(stateLabel)}</span>
         </div>
         <div class="ism-metric-band">
-          <div><span>Services Cycle</span><strong>${escapeHtml(formatIndex(cycle.value))}</strong><small>${escapeHtml(cycle.label || "Missing")}${compHtml}</small></div>
+          <div><span>Services Cycle</span><strong>${escapeHtml(formatIndex(cycle.value))}</strong><small>${escapeHtml(cycle.label || "Missing")}</small>${compHtml}</div>
           <div><span>Business Activity</span><strong>${escapeHtml(formatIndex(activity.value))}</strong><small>${escapeHtml(activity.trend || "Unavailable")}</small></div>
           <div><span>New Orders</span><strong>${escapeHtml(formatIndex(orders.value))}</strong><small>${escapeHtml(orders.trend || "Unavailable")}</small></div>
           <div><span>Industry Breadth</span><strong>${escapeHtml(String(breadth.growth_count ?? 0))}/${escapeHtml(String(breadth.total_count ?? 0))}</strong><small>Growing</small></div>
