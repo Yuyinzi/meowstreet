@@ -4670,6 +4670,7 @@ h2 {
   text-align: right;
 }
 
+.survey-synthesis-question small,
 .survey-synthesis-answer small {
   display: block;
 }
