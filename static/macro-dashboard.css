@@ -4667,10 +4667,11 @@ h2 {
 }
 
 .survey-synthesis-answer {
-  color: #2C2416;
-  font-weight: 600;
-  font-size: 0.8rem;
   text-align: right;
+}
+
+.survey-synthesis-answer small {
+  display: block;
 }
 
 .survey-portfolio-bias-explanation {
