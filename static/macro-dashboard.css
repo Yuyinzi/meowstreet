@@ -4375,6 +4375,24 @@ h2 {
   min-width: 0;
 }
 
+.ms-evidence-sources {
+  display: block;
+  margin-top: 4px;
+  color: #6F6257;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.ms-component-cell-growth {
+  gap: 4px;
+}
+
+.ms-component-meta {
+  color: #6F6257;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 .ms-evidence-card summary:focus-visible,
 .ms-component-summary:focus-visible,
 .ms-retry-btn:focus-visible {

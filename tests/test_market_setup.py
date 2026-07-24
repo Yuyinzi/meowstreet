@@ -237,6 +237,41 @@ class TestBuildExpectedGrowth:
         assert result["data_status"] == "missing"
         assert result["missing_inputs"] == ["ISM Services"]
 
+    def test_expected_growth_preserves_survey_components_and_alignment(self):
+        synthesis = _survey_synthesis(
+            economic_direction="aligned_expansion",
+            expected_gdp_direction="slowing",
+        )
+        synthesis.update(
+            {
+                "growth_momentum": "falling",
+                "survey_alignment": "aligned",
+                "demand_alignment": "aligned_falling",
+                "components": {
+                    "manufacturing": {
+                        "level": "expanding",
+                        "momentum": "falling",
+                        "demand_level": "expanding",
+                        "demand_momentum": "falling",
+                    },
+                    "services": {
+                        "level": "expanding",
+                        "momentum": "falling",
+                        "demand_level": "expanding",
+                        "demand_momentum": "falling",
+                    },
+                },
+            }
+        )
+
+        result = market_setup.build_expected_growth(synthesis)
+
+        assert result["growth_momentum"] == "falling"
+        assert result["survey_alignment"] == "aligned"
+        assert result["demand_alignment"] == "aligned_falling"
+        assert result["components"] == synthesis["components"]
+        assert result["evidence_links"] == ["ism_manufacturing", "ism_services"]
+
 
 class TestBuildFinancialConditions:
     def test_expansion_confirmed(self):

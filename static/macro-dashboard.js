@@ -1599,6 +1599,7 @@
       signalAgreement: computeSignalAgreement(setup),
       primaryEvidence: ec.map(function(g) {
         return {
+          id: g.id || "",
           title: g.title || "",
           finding: g.finding || "",
           implication: g.implication || "",
@@ -1620,7 +1621,16 @@
       missingInputs: setup.missing_inputs || [],
       components: {
         marketEnvironment: { state: me.state || null, sentiment: stateSentimentClass(me.state) },
-        expectedGrowth: { state: (setup.expected_growth || {}).state || null, sentiment: stateSentimentClass((setup.expected_growth || {}).state) },
+        expectedGrowth: {
+          state: (setup.expected_growth || {}).state || null,
+          direction: (setup.expected_growth || {}).expected_gdp_direction || null,
+          momentum: (setup.expected_growth || {}).growth_momentum || null,
+          surveyAlignment: (setup.expected_growth || {}).survey_alignment || null,
+          demandAlignment: (setup.expected_growth || {}).demand_alignment || null,
+          components: (setup.expected_growth || {}).components || {},
+          links: (setup.expected_growth || {}).evidence_links || [],
+          sentiment: stateSentimentClass((setup.expected_growth || {}).state),
+        },
         financialConditions: { state: (setup.financial_conditions || {}).state || null, sentiment: stateSentimentClass((setup.financial_conditions || {}).state) },
         policyResponse: { state: (setup.policy_response || {}).state || null, sentiment: stateSentimentClass((setup.policy_response || {}).state) },
       },
@@ -1665,7 +1675,13 @@
       html += '<div class="ms-conflict-col">';
       html += '<h3>Primary Evidence</h3>';
       pr.primaryEvidence.forEach(function(item) {
-        html += '<div class="ms-evidence-item ' + escapeHtml(item.tone) + '">' + escapeHtml(item.finding || item.title) + '</div>';
+        var sourceHtml = item.id === "growth_path"
+          ? '<span class="ms-evidence-sources">ISM Manufacturing + ISM Services</span>'
+          : "";
+        html += '<div class="ms-evidence-item ' + escapeHtml(item.tone) + '">' +
+          '<span>' + escapeHtml(item.finding || item.title) + '</span>' +
+          sourceHtml +
+          '</div>';
       });
       html += '</div>';
       if (hasOffsets || hasConflicts) {
@@ -1722,6 +1738,7 @@
   const EVIDENCE_TARGET_IDS = Object.freeze({
     market_phase: "evidence-market-phase",
     ism_manufacturing: "evidence-ism-manufacturing",
+    ism_services: "evidence-ism-services",
     yield_curve: "evidence-yield-curve",
     credit_conditions: "evidence-credit-conditions",
     real_rate_risk: "evidence-real-rate-risk",
@@ -1832,7 +1849,20 @@
       html += '<summary class="ms-component-summary">Component Data</summary>';
       html += '<div class="ms-component-grid">';
       html += '<div class="ms-component-cell"><span class="ms-component-label">Market Environment</span><span class="ms-component-value ' + comps.marketEnvironment.sentiment + '">' + escapeHtml(titleCaseToken(comps.marketEnvironment.state)) + '</span></div>';
-      html += '<div class="ms-component-cell"><span class="ms-component-label">Expected Growth</span><span class="ms-component-value ' + comps.expectedGrowth.sentiment + '">' + escapeHtml(titleCaseToken(comps.expectedGrowth.state)) + '</span></div>';
+      html += '<div class="ms-component-cell ms-component-cell-growth">';
+html += '<span class="ms-component-label">Expected Growth</span>';
+html += '<span class="ms-component-value ' + comps.expectedGrowth.sentiment + '">' +
+  escapeHtml(titleCaseToken(comps.expectedGrowth.state)) + '</span>';
+html += '<span class="ms-component-meta">GDP ' +
+  escapeHtml(titleCaseToken(comps.expectedGrowth.direction)) + ' · Momentum ' +
+  escapeHtml(titleCaseToken(comps.expectedGrowth.momentum)) + '</span>';
+html += '<span class="ms-component-meta">Surveys ' +
+  escapeHtml(titleCaseToken(comps.expectedGrowth.surveyAlignment)) + ' · Demand ' +
+  escapeHtml(titleCaseToken(comps.expectedGrowth.demandAlignment)) + '</span>';
+html += '<div class="ms-evidence-links">' +
+  comps.expectedGrowth.links.map(renderEvidenceLink).join("") +
+  '</div>';
+html += '</div>';
       html += '<div class="ms-component-cell"><span class="ms-component-label">Financial Conditions</span><span class="ms-component-value ' + comps.financialConditions.sentiment + '">' + escapeHtml(titleCaseToken(comps.financialConditions.state)) + '</span></div>';
       html += '<div class="ms-component-cell"><span class="ms-component-label">Policy Response</span><span class="ms-component-value ' + comps.policyResponse.sentiment + '">' + escapeHtml(titleCaseToken(comps.policyResponse.state)) + '</span></div>';
       html += '</div></details>';

@@ -3331,11 +3331,120 @@ def test_market_setup_evidence_navigation_updates_hash_and_respects_motion():
     ]
 
 
+def test_market_setup_hero_names_ism_survey_sources():
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const setup = {
+          version: "market_setup_v1",
+          status: "available",
+          as_of: "2026-06-17",
+          market_environment: { state: "bull_market" },
+          expected_growth: {
+            state: "aligned_expansion",
+            expected_gdp_direction: "slowing",
+            growth_momentum: "falling",
+            survey_alignment: "aligned",
+            demand_alignment: "aligned_falling",
+            evidence_links: ["ism_manufacturing", "ism_services"],
+            components: {
+              manufacturing: { level: "expanding", momentum: "falling" },
+              services: { level: "expanding", momentum: "falling" },
+            },
+          },
+          financial_conditions: { state: "accommodative" },
+          policy_response: { state: "restrictive" },
+          setup_type: "growth_and_conditions_aligned",
+          portfolio_posture: "long",
+          agreements: ["Growth and conditions are aligned"],
+          conflicts: [],
+          missing_inputs: [],
+          pending_confirmations: [],
+          market_conclusion: {
+            code: "qualified_long_candidate",
+            title: "Qualified Long Candidate",
+            summary: "Growth is slowing but conditions remain supportive.",
+          },
+          portfolio_guidance: {
+            posture: "long",
+            summary: "Maintain long posture",
+            actions: [],
+            avoid: [],
+          },
+          evidence_chain: [{
+            id: "growth_path",
+            title: "Growth Trend",
+            finding: "Growth is slowing but above trend",
+            implication: "Supports moderate long exposure",
+            tone: "constructive",
+            evidence: ["ISM Manufacturing at 52.3", "ISM Services at 54.1"],
+            evidence_links: ["ism_manufacturing", "ism_services"],
+          }],
+          conviction_limits: {},
+          confirmation_conditions: {},
+        };
+
+        const pr = hooks.buildMarketSetupPresentation(setup);
+        const hero = hooks.renderDecisionHero(pr);
+        const detail = hooks.renderDetailedReasoning(pr);
+
+        console.log(JSON.stringify({
+          heroNamesManufacturing: hero.indexOf("ISM Manufacturing") !== -1,
+          heroNamesServices: hero.indexOf("ISM Services") !== -1,
+          detailShowsGrowthDirection: detail.indexOf("Slowing") !== -1,
+          detailShowsSurveyAlignment: detail.indexOf("Aligned") !== -1,
+          manufacturingLinkExists: detail.indexOf("evidence-ism-manufacturing") !== -1,
+          servicesLinkExists: detail.indexOf("evidence-ism-services") !== -1,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "heroNamesManufacturing": True,
+        "heroNamesServices": True,
+        "detailShowsGrowthDirection": True,
+        "detailShowsSurveyAlignment": True,
+        "manufacturingLinkExists": True,
+        "servicesLinkExists": True,
+    }
+
+
 def test_macro_dashboard_renders_stable_evidence_target_ids():
     js = STATIC_JS.read_text()
     target_ids = {
         "evidence-market-phase",
         "evidence-ism-manufacturing",
+        "evidence-ism-services",
         "evidence-yield-curve",
         "evidence-credit-conditions",
         "evidence-real-rate-risk",
@@ -3344,7 +3453,10 @@ def test_macro_dashboard_renders_stable_evidence_target_ids():
         "evidence-m2-money-supply",
     }
 
-    assert all(js.count(target_id) >= 2 for target_id in target_ids)
+    assert all(
+        js.count(target_id) >= 2 for target_id in target_ids - {"evidence-ism-services"}
+    )
+    assert js.count("evidence-ism-services") >= 1
     assert '<span class="ms-evidence-link"' not in js
 
 

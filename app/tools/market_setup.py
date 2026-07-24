@@ -143,6 +143,10 @@ def build_expected_growth(survey_synthesis):
         "state": survey_synthesis["economic_direction"],
         "expected_gdp_direction": survey_synthesis["expected_gdp_direction"],
         "initial_bias": survey_synthesis["survey_portfolio_implication"],
+        "growth_momentum": survey_synthesis.get("growth_momentum"),
+        "survey_alignment": survey_synthesis.get("survey_alignment"),
+        "demand_alignment": survey_synthesis.get("demand_alignment"),
+        "components": survey_synthesis.get("components", {}),
         "reason": "; ".join(survey_synthesis.get("reasons", [])),
         "agreements": survey_synthesis.get("agreements", []),
         "conflicts": survey_synthesis.get("conflicts", []),
@@ -1205,6 +1209,6 @@ def build_market_setup(
         "pending_confirmations": ["Labor trend", "Consumer indicators"],
         "limitations": [
             "This is a deterministic connection layer over Methods P2-P7. It does not calculate a numeric confidence score.",
-            "Later-method indicators (ISM Services, labor, consumer) may change the outlook when implemented.",
+            "Later-method labor and consumer indicators may change the outlook when implemented.",
         ],
     }

@@ -20,7 +20,7 @@
     const stateLabel = stateLabels[state] || "Unknown";
     return `
       <button class="m2-card ism-card ism-services-card ism-card-button ism-state-${escapeHtml(state)}"
-              type="button" data-growth-cycle-detail-id="ism_services" aria-label="ISM Services: ${escapeHtml(stateLabel)}">
+              type="button" id="evidence-ism-services" data-growth-cycle-detail-id="ism_services" aria-label="ISM Services: ${escapeHtml(stateLabel)}">
         <div class="ism-card-header">
           <span class="ism-state-badge ism-state-badge-${escapeHtml(state)}">${escapeHtml(stateLabel)}</span>
         </div>
