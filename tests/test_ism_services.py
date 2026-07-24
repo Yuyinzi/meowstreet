@@ -23,14 +23,40 @@ def points(pmi, activity, orders, previous=(50.0, 50.0, 50.0), backlog=52.0):
     ("series", "expected"),
     [
         (points(54.0, 55.4, 55.1), "supports_growth"),
-        (points(54.0, 49.0, 55.1), "growth_caution"),
+        (points(54.0, 49.0, 55.1), "supports_growth"),
         (points(47.0, 48.0, 49.0, previous=(48.0, 49.0, 50.0)), "supports_contraction"),
-        (points(47.0, 48.0, 49.0, previous=(46.0, 47.0, 49.5)), "contraction_easing"),
-        (points(50.0, 50.0, 50.0), "mixed"),
+        (points(47.0, 48.0, 49.0, previous=(46.0, 47.0, 49.5)), "supports_contraction"),
+        (points(50.0, 50.0, 50.0), "neutral"),
     ],
 )
 def test_build_signal_states(series, expected):
     assert ism_services.build_signal(series)["state"] == expected
+
+
+def test_build_signal_uses_headline_pmi_for_services_direction():
+    signal = ism_services.build_signal(points(54.0, 49.0, 55.1))
+
+    assert signal["state"] == "supports_growth"
+    assert signal["headline_direction"] == "expanding"
+    assert signal["component_confirmation"]["status"] == "mixed"
+
+
+def test_build_signal_does_not_treat_one_period_improvement_as_a_reversal():
+    signal = ism_services.build_signal(
+        points(47.0, 48.0, 49.0, previous=(46.0, 47.0, 49.5))
+    )
+
+    assert signal["state"] == "supports_contraction"
+    assert signal["headline_direction"] == "contracting"
+    assert signal["component_confirmation"]["status"] == "aligned"
+
+
+def test_build_signal_marks_exact_50_as_neutral():
+    signal = ism_services.build_signal(points(50.0, 50.0, 50.0))
+
+    assert signal["state"] == "neutral"
+    assert signal["headline_direction"] == "neutral"
+    assert signal["component_confirmation"]["status"] == "aligned"
 
 
 def test_build_signal_reports_missing_required_series():

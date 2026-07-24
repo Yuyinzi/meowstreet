@@ -22,12 +22,18 @@
 }
 
 .ism-state-badge-supports_growth { background: #d1fae5; color: #065f46; }
-.ism-state-badge-growth_caution { background: #fef3c7; color: #92400e; }
 .ism-state-badge-supports_contraction { background: #fee2e2; color: #991b1b; }
-.ism-state-badge-contraction_easing { background: #fef3c7; color: #92400e; }
-.ism-state-badge-mixed { background: #f3f4f6; color: #374151; }
+.ism-state-badge-neutral { background: #f3f4f6; color: #374151; }
 .ism-state-badge-pending_inputs { background: #e5e7eb; color: #6b7280; }
 .ism-state-badge-stale_periods { background: #fef3c7; color: #92400e; }
+
+.ism-components-label {
+  display: block;
+  margin-top: 2px;
+  color: #6F6257;
+  font-size: 0.68rem;
+  font-weight: 500;
+}
 
 .ism-signal-backlog {
   font-size: 0.75rem;

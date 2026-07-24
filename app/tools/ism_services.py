@@ -94,6 +94,33 @@ def _metric(rows):
     }
 
 
+def _headline_direction(pmi):
+    if pmi["level"] == "expanding":
+        return "expanding"
+    if pmi["level"] == "contracting":
+        return "contracting"
+    return "neutral"
+
+
+def _component_confirmation(headline_direction, business_activity, new_orders):
+    component_directions = {
+        business_activity["level"],
+        new_orders["level"],
+    }
+    status = "aligned" if component_directions == {headline_direction} else "mixed"
+    return {
+        "status": status,
+        "business_activity": {
+            "level": business_activity["level"],
+            "momentum": business_activity["momentum"],
+        },
+        "new_orders": {
+            "level": new_orders["level"],
+            "momentum": new_orders["momentum"],
+        },
+    }
+
+
 def build_signal(points_by_series_id):
     metrics = {
         key: _metric(points_by_series_id.get(series_id, []))
@@ -123,20 +150,13 @@ def build_signal(points_by_series_id):
             "missing_inputs": [],
             "note": f"required metrics span multiple periods: {', '.join(sorted(periods))}",
         }
-    if all(metric["value"] > 50 for metric in (pmi, activity, orders)):
-        state = "supports_growth"
-    elif pmi["value"] > 50 and (activity["value"] <= 50 or orders["value"] <= 50):
-        state = "growth_caution"
-    elif (
-        pmi["value"] < 50
-        and pmi["momentum"] == "rising"
-        and "rising" in (activity["momentum"], orders["momentum"])
-    ):
-        state = "contraction_easing"
-    elif all(metric["value"] < 50 for metric in (pmi, activity, orders)):
-        state = "supports_contraction"
-    else:
-        state = "mixed"
+    headline_direction = _headline_direction(pmi)
+    state_by_direction = {
+        "expanding": "supports_growth",
+        "contracting": "supports_contraction",
+        "neutral": "neutral",
+    }
+    state = state_by_direction[headline_direction]
     backlog = metrics["order_backlog"]
     backlog_state = "unavailable"
     if backlog and backlog["period"] == pmi["period"]:
@@ -148,6 +168,10 @@ def build_signal(points_by_series_id):
     return {
         "version": "ism_services_signal_v1",
         "state": state,
+        "headline_direction": headline_direction,
+        "component_confirmation": _component_confirmation(
+            headline_direction, activity, orders
+        ),
         "period": pmi["period"],
         "metrics": metrics,
         "backlog_confirmation": backlog_state,
@@ -236,6 +260,8 @@ def build_card(signal, breadth):
                 "pmi": pmi.get("value"),
                 "level": pmi.get("level"),
                 "momentum": pmi.get("momentum"),
+                "headline_direction": signal.get("headline_direction"),
+                "component_confirmation": signal.get("component_confirmation"),
                 "backlog_confirmation": signal.get("backlog_confirmation"),
             },
             "business_activity": {
