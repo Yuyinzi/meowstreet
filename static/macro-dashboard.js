@@ -1172,6 +1172,11 @@
     "GDP direction": "GDP方向",
     "ISM Portfolio Bias": "ISM组合倾向",
     "ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture.": "ISM信号支持更积极的风险资产倾向，但最终仓位仍由Market Setup决定。",
+    "Bias confirmation": "倾向确认",
+    "awaiting_confirmation": "等待确认",
+    "Awaiting Confirmation": "等待确认",
+    "not_required": "无需确认",
+    "Not Required": "无需确认",
     "ISM signals alone do not support materially increasing risk exposure or shifting to a short posture.": "仅凭ISM信号，不足以支持明显增加风险资产敞口，也不足以支持转向做空。",
     "ISM signals support a neutral or more defensive posture, while Market Setup determines the final portfolio posture.": "ISM信号支持保持中性或提高防御性，但最终仓位仍由Market Setup决定。",
     "Manufacturing and Services data are insufficient to form an ISM portfolio bias.": "制造业和服务业数据尚不足，暂不形成ISM组合倾向。",
@@ -3793,6 +3798,7 @@ html += '</div>';
       { question: "Cross-sector lead", answer: _crossSectorLeadLabel(card.leading_side) },
       { question: "GDP direction", answer: titleCaseToken(card.expected_gdp_direction || "unavailable") },
       { question: "ISM Portfolio Bias", answer: titleCaseToken(card.survey_portfolio_implication || "unavailable") },
+      { question: "Bias confirmation", answer: titleCaseToken(card.bias_confirmation || "unavailable") },
     ];
 
     const rowsHtml = rows.map((row) => `

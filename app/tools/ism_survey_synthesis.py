@@ -154,14 +154,24 @@ def _expected_gdp_direction(comp):
     return "mixed"
 
 
-def _survey_portfolio_implication(gdp_direction):
-    if gdp_direction is None:
-        return None
-    if gdp_direction == "rising":
+def _survey_portfolio_implication(economic_direction):
+    if economic_direction == "aligned_expansion":
         return "long"
-    if gdp_direction == "falling":
+    if economic_direction == "aligned_contraction":
         return "short_or_neutral"
-    return "neutral"
+    if economic_direction in {"aligned_neutral", "divergent"}:
+        return "neutral"
+    return None
+
+
+def _bias_confirmation(economic_direction, shared_momentum):
+    if economic_direction == "aligned_expansion" and shared_momentum == "falling":
+        return "awaiting_confirmation"
+    if economic_direction == "aligned_contraction" and shared_momentum == "rising":
+        return "awaiting_confirmation"
+    if economic_direction:
+        return "not_required"
+    return None
 
 
 def _cross_sector_comparison(comp):
@@ -249,6 +259,16 @@ def _reasons(comp, direction, gdp_direction):
         result.append("Demand remains expansionary but is slowing across both surveys")
     elif mfg_dm and svc_dm and mfg_dm != svc_dm:
         result.append("Demand momentum differs between surveys")
+    bias_confirm = _bias_confirmation(direction, _shared_momentum(comp))
+    if bias_confirm == "awaiting_confirmation":
+        if direction == "aligned_expansion":
+            result.append(
+                "Expansion remains intact; weaker one-period momentum is caution, not a confirmed reversal"
+            )
+        elif direction == "aligned_contraction":
+            result.append(
+                "Contraction remains intact; one-period improvement awaits confirmation"
+            )
     return result
 
 
@@ -278,6 +298,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "cross_sector_comparison": None,
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
+            "bias_confirmation": None,
             "components": comp,
             "agreements": [],
             "conflicts": [],
@@ -300,6 +321,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "cross_sector_comparison": None,
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
+            "bias_confirmation": None,
             "components": comp,
             "agreements": [],
             "conflicts": [],
@@ -322,6 +344,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "cross_sector_comparison": None,
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
+            "bias_confirmation": None,
             "components": comp,
             "agreements": [],
             "conflicts": [],
@@ -345,6 +368,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "cross_sector_comparison": None,
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
+            "bias_confirmation": None,
             "components": comp,
             "agreements": [],
             "conflicts": ["Manufacturing and Services observation periods differ"],
@@ -358,7 +382,8 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
     alignment = _survey_alignment(comp)
     demand = _demand_alignment(comp)
     gdp_direction = _expected_gdp_direction(comp)
-    implication = _survey_portfolio_implication(gdp_direction)
+    implication = _survey_portfolio_implication(direction)
+    bias_confirm = _bias_confirmation(direction, momentum)
     leading = _leading_side(comp)
     cross = _cross_sector_comparison(comp)
 
@@ -374,6 +399,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
         "cross_sector_comparison": cross,
         "expected_gdp_direction": gdp_direction,
         "survey_portfolio_implication": implication,
+        "bias_confirmation": bias_confirm,
         "components": comp,
         "agreements": _agreements(comp, direction, demand),
         "conflicts": _conflicts(comp, direction),

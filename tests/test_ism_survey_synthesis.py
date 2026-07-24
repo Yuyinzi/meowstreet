@@ -89,7 +89,8 @@ def test_aligned_expansion_with_falling_momentum_is_slower_growth():
     assert result["survey_alignment"] == "aligned"
     assert result["demand_alignment"] == "aligned_falling"
     assert result["expected_gdp_direction"] == "slowing"
-    assert result["survey_portfolio_implication"] == "neutral"
+    assert result["survey_portfolio_implication"] == "long"
+    assert result["bias_confirmation"] == "awaiting_confirmation"
     assert result["leading_side"] == "not_applicable"
     assert "turning_point" not in result
 
@@ -101,6 +102,7 @@ def test_aligned_expansion_rising_maps_to_rising_and_long():
     )
     assert result["expected_gdp_direction"] == "rising"
     assert result["survey_portfolio_implication"] == "long"
+    assert result["bias_confirmation"] == "not_required"
 
 
 def test_aligned_contraction_falling_maps_to_falling_and_short_or_neutral():
@@ -117,9 +119,10 @@ def test_aligned_contraction_falling_maps_to_falling_and_short_or_neutral():
     assert result["economic_direction"] == "aligned_contraction"
     assert result["expected_gdp_direction"] == "falling"
     assert result["survey_portfolio_implication"] == "short_or_neutral"
+    assert result["bias_confirmation"] == "not_required"
 
 
-def test_aligned_contraction_rising_maps_to_improving_and_neutral():
+def test_aligned_contraction_rising_maps_to_improving():
     result = ism_survey_synthesis.build_survey_synthesis(
         manufacturing_signal(
             pmi_level="contracting",
@@ -134,8 +137,10 @@ def test_aligned_contraction_rising_maps_to_improving_and_neutral():
             orders_momentum="rising",
         ),
     )
+    assert result["economic_direction"] == "aligned_contraction"
     assert result["expected_gdp_direction"] == "improving"
-    assert result["survey_portfolio_implication"] == "neutral"
+    assert result["survey_portfolio_implication"] == "short_or_neutral"
+    assert result["bias_confirmation"] == "awaiting_confirmation"
 
 
 def test_cross_survey_divergence_is_not_averaged():
@@ -150,6 +155,7 @@ def test_cross_survey_divergence_is_not_averaged():
     assert result["survey_alignment"] == "divergent"
     assert result["expected_gdp_direction"] == "mixed"
     assert result["survey_portfolio_implication"] == "neutral"
+    assert result["bias_confirmation"] == "not_required"
     assert result["cross_sector_comparison"] == "services_stronger"
     assert result["conflicts"]
 
@@ -162,6 +168,7 @@ def test_one_missing_survey_is_partial_without_combined_direction():
     assert result["status"] == "partial"
     assert result["expected_gdp_direction"] is None
     assert result["survey_portfolio_implication"] is None
+    assert result["bias_confirmation"] is None
     assert result["cross_sector_comparison"] is None
     assert result["missing_inputs"] == ["ISM Services"]
 
@@ -220,6 +227,7 @@ def test_manufacturing_unavailable_is_partial():
     )
     assert result["status"] == "partial"
     assert result["cross_sector_comparison"] is None
+    assert result["bias_confirmation"] is None
     assert result["missing_inputs"] == ["ISM Manufacturing"]
 
 
@@ -227,6 +235,7 @@ def test_both_missing_is_not_available():
     result = ism_survey_synthesis.build_survey_synthesis(None, None)
     assert result["status"] == "partial"
     assert result["cross_sector_comparison"] is None
+    assert result["bias_confirmation"] is None
     assert result["missing_inputs"] == ["ISM Manufacturing", "ISM Services"]
     assert result["economic_direction"] is None
     assert result["expected_gdp_direction"] is None
@@ -250,6 +259,7 @@ def test_aligned_neutral_flat_maps_to_stable_and_neutral():
     assert result["economic_direction"] == "aligned_neutral"
     assert result["expected_gdp_direction"] == "stable"
     assert result["survey_portfolio_implication"] == "neutral"
+    assert result["bias_confirmation"] == "not_required"
 
 
 def test_demand_alignment_mixed_momentum():
@@ -333,6 +343,20 @@ def test_synthesis_cross_sector_unresolved_when_unclear():
     )
     assert result["cross_sector_comparison"] == "unresolved"
     assert result["leading_side"] == "unresolved"
+
+
+def test_expansion_with_one_period_slowing_keeps_long_bias_pending_confirmation():
+    result = ism_survey_synthesis.build_survey_synthesis(
+        manufacturing_signal(pmi_level="expanding", pmi_momentum="falling"),
+        services_signal(pmi_level="expanding", pmi_momentum="falling"),
+    )
+
+    assert result["expected_gdp_direction"] == "slowing"
+    assert result["survey_portfolio_implication"] == "long"
+    assert result["bias_confirmation"] == "awaiting_confirmation"
+    assert "turning_point" not in result
+    assert "peak" not in result
+    assert "trough" not in result
 
 
 def test_mixed_headline_momentum_when_surveys_disagree():

@@ -640,6 +640,25 @@ class TestMissingAndPendingData:
         )
         assert "GDP" not in reasons_text
 
+    def test_ism_long_bias_does_not_force_risk_on_posture(self):
+        result = market_setup.build_market_setup(
+            market_phase_payload=_market_phase_payload("bull_market"),
+            survey_synthesis=_survey_synthesis(
+                economic_direction="aligned_expansion",
+                expected_gdp_direction="slowing",
+                survey_portfolio_implication="long",
+                period="2026-06",
+            ),
+            rates_liquidity_payload=_rates_liquidity_payload(
+                "inverted", "crisis_stress"
+            ),
+            fomc_tone=_fomc_tone_headline("hawkish", "hold"),
+            m2_headline=_m2_headline("contracting"),
+            inflation_context=_inflation_context("above_target"),
+            fed_balance_sheet=_fed_balance_sheet(),
+        )
+        assert result["portfolio_posture"] != "risk_on"
+
 
 class TestMarketConclusion:
     def setup_method(self):
