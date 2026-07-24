@@ -20,7 +20,7 @@ def services_connection(tmp_path):
         "ism_services_order_backlog": [50.0, 52.0],
     }
     for series_id, values in series_values.items():
-        us_rates_liquidity.replace_macro_indicator_points(
+        macro_indicators.replace_macro_indicator_points(
             con,
             {
                 "series_id": series_id,
@@ -90,7 +90,7 @@ def test_load_detail_computes_history_based_metrics(tmp_path):
         "ism_services_order_backlog": [50.0, 52.0],
     }
     for series_id, values in series_values.items():
-        us_rates_liquidity.replace_macro_indicator_points(
+        macro_indicators.replace_macro_indicator_points(
             con,
             {
                 "series_id": series_id,
@@ -167,7 +167,7 @@ def test_load_detail_filters_stale_industries_without_signal_period(tmp_path):
         "ism_services_order_backlog": [50.0, 52.0],
     }
     for series_id, values in series_values.items():
-        us_rates_liquidity.replace_macro_indicator_points(
+        macro_indicators.replace_macro_indicator_points(
             con,
             {
                 "series_id": series_id,
@@ -207,7 +207,7 @@ def test_load_detail_empty_for_pending_signal(tmp_path):
     macro_indicators.connect(tmp_path / "market.sqlite").close()
     con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
     growth_cycle_db.init_db(con)
-    us_rates_liquidity.replace_macro_indicator_points(
+    macro_indicators.replace_macro_indicator_points(
         con,
         {
             "series_id": "ism_services_pmi",
@@ -245,7 +245,7 @@ def test_load_detail_empty_for_stale_signal(tmp_path):
     macro_indicators.connect(tmp_path / "market.sqlite").close()
     con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
     growth_cycle_db.init_db(con)
-    us_rates_liquidity.replace_macro_indicator_points(
+    macro_indicators.replace_macro_indicator_points(
         con,
         {
             "series_id": "ism_services_pmi",
@@ -255,7 +255,7 @@ def test_load_detail_empty_for_stale_signal(tmp_path):
         },
         [{"date": "2026-06-01", "value": 54.0, "source": "test"}],
     )
-    us_rates_liquidity.replace_macro_indicator_points(
+    macro_indicators.replace_macro_indicator_points(
         con,
         {
             "series_id": "ism_services_business_activity",
@@ -265,7 +265,7 @@ def test_load_detail_empty_for_stale_signal(tmp_path):
         },
         [{"date": "2026-05-01", "value": 55.0, "source": "test"}],
     )
-    us_rates_liquidity.replace_macro_indicator_points(
+    macro_indicators.replace_macro_indicator_points(
         con,
         {
             "series_id": "ism_services_new_orders",
@@ -305,7 +305,7 @@ def test_load_detail_caps_rankings_at_signal_period(tmp_path):
         "ism_services_new_orders": 55.1,
         "ism_services_order_backlog": 52.0,
     }.items():
-        us_rates_liquidity.replace_macro_indicator_points(
+        macro_indicators.replace_macro_indicator_points(
             con,
             {
                 "series_id": series_id,
@@ -363,7 +363,7 @@ def test_load_detail_excludes_future_rankings(tmp_path):
         "ism_services_new_orders": [55.1],
         "ism_services_order_backlog": [52.0],
     }.items():
-        us_rates_liquidity.replace_macro_indicator_points(
+        macro_indicators.replace_macro_indicator_points(
             con,
             {
                 "series_id": series_id,
@@ -412,7 +412,7 @@ def test_load_detail_scopes_comments_to_signal_period(tmp_path):
         "ism_services_new_orders": [55.1],
         "ism_services_order_backlog": [52.0],
     }.items():
-        us_rates_liquidity.replace_macro_indicator_points(
+        macro_indicators.replace_macro_indicator_points(
             con,
             {
                 "series_id": series_id,

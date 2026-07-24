@@ -6,15 +6,12 @@ from app.services import consumer_sentiment_dashboard
 
 @pytest.fixture
 def consumer_con(tmp_path):
-    db_path = tmp_path / "market.sqlite"
-    macro_indicators.connect(db_path).close()
-    con = us_rates_liquidity.connect(db_path)
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
     yield con
     con.close()
 
 
 def _seed_all_series(con):
-    # michigan series
     series_list = []
     for sid, title in [
         ("umcsi_aggregate", "UMCSI Aggregate"),
@@ -89,3 +86,46 @@ def test_load_detail_returns_history(consumer_con):
     assert "history" in result
     assert "capacity" in result
     assert len(result["history"]["umcsi_aggregate"]) == 2
+    assert "context" in result
+    assert "treasury_10y" in result["context"]
+    assert "tips_10y" in result["context"]
+    assert "cpi_yoy" in result["context"]
+    assert "real_rate" in result["context"]
+    assert "fomc_tone" in result["context"]
+
+
+def test_load_detail_preserves_rate_source_workbook(consumer_con):
+    us_rates_liquidity.replace_rate_series_points(
+        consumer_con,
+        {
+            "series_id": "treasury_10y",
+            "title": "10-Year Treasury",
+            "instrument_type": "nominal",
+            "maturity_months": 120,
+            "units": "percent",
+            "source_workbook": "Rates.xlsx",
+            "source_sheet": "Treasury",
+        },
+        [
+            {
+                "date": "2026-06-01",
+                "value": 4.25,
+                "source_workbook": "Rates.xlsx",
+                "source_sheet": "Treasury",
+            }
+        ],
+    )
+
+    result = consumer_sentiment_dashboard.load_detail(consumer_con)
+
+    assert result["context"]["treasury_10y"] == [
+        {"date": "2026-06-01", "value": 4.25, "source": "Rates.xlsx"}
+    ]
+
+
+def test_normalize_rate_source_does_not_invent_missing_source():
+    result = consumer_sentiment_dashboard._normalize_rate_source(
+        [{"date": "2026-06-01", "value": 4.25}]
+    )
+
+    assert result == [{"date": "2026-06-01", "value": 4.25, "source": None}]

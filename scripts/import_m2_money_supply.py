@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.data_sources.fred import FredClient
 from app.data_sources.fred import parse_fred_csv
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 
 DEFAULT_WORKBOOK_PATH = (
@@ -98,7 +99,7 @@ def parse_workbook(workbook_path=DEFAULT_WORKBOOK_PATH):
 
 def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
     payload = parse_workbook(workbook_path)
-    saved = us_rates_liquidity.replace_macro_indicator_points(
+    saved = macro_indicators.replace_macro_indicator_points(
         con,
         payload["series"],
         payload["points"],
@@ -108,7 +109,7 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
 
 def import_fred_csvs(con, fred_dir=DEFAULT_FRED_DIR):
     payload = build_fred_m2_payload(Path(fred_dir) / f"{FRED_M2_SERIES_ID}.csv")
-    saved = us_rates_liquidity.merge_macro_indicator_points(
+    saved = macro_indicators.merge_macro_indicator_points(
         con,
         payload["series"],
         payload["points"],

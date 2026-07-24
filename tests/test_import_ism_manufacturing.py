@@ -4,6 +4,7 @@ import pytest
 from openpyxl import Workbook, load_workbook
 
 from app.db import growth_cycle
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from scripts import import_ism_manufacturing
 
@@ -196,7 +197,7 @@ def test_import_workbook_saves_all_series_to_macro_indicator_tables(tmp_path):
     for sid in import_ism_manufacturing.SERIES_CONFIG:
         assert inserted[sid] == 4
     assert inserted["ism_industry_rankings"] == 6
-    pmi_points = us_rates_liquidity.load_macro_indicator_points(
+    pmi_points = macro_indicators.load_macro_indicator_points(
         con, "ism_manufacturing_pmi"
     )
     assert pmi_points == [
@@ -237,7 +238,7 @@ def test_import_workbook_preserves_official_report_points(tmp_path):
     write_ism_workbook(workbook_path)
     con = us_rates_liquidity.connect(db_path)
     growth_cycle.init_db(con)
-    us_rates_liquidity.merge_macro_indicator_points(
+    macro_indicators.merge_macro_indicator_points(
         con,
         {
             "series_id": "ism_manufacturing_pmi",
@@ -256,7 +257,7 @@ def test_import_workbook_preserves_official_report_points(tmp_path):
 
     import_ism_manufacturing.import_workbook(con, workbook_path)
 
-    pmi_points = us_rates_liquidity.load_macro_indicator_points(
+    pmi_points = macro_indicators.load_macro_indicator_points(
         con, "ism_manufacturing_pmi"
     )
     assert pmi_points[-1] == {
@@ -285,7 +286,7 @@ def test_import_workbook_validation_failure_does_not_change_series(tmp_path):
     workbook.save(workbook_path)
     con = us_rates_liquidity.connect(db_path)
     growth_cycle.init_db(con)
-    us_rates_liquidity.merge_macro_indicator_points(
+    macro_indicators.merge_macro_indicator_points(
         con,
         {
             "series_id": "ism_manufacturing_pmi",
@@ -305,7 +306,7 @@ def test_import_workbook_validation_failure_does_not_change_series(tmp_path):
     with pytest.raises(ValueError, match="duplicate row"):
         import_ism_manufacturing.import_workbook(con, workbook_path)
 
-    pmi_points = us_rates_liquidity.load_macro_indicator_points(
+    pmi_points = macro_indicators.load_macro_indicator_points(
         con, "ism_manufacturing_pmi"
     )
     assert pmi_points == [

@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import growth_cycle
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from app.tools import ism_ai_extraction, ism_official_report, ism_prnewswire_archive
 from app.services import ism_report_ingestion as ingestion
@@ -243,7 +244,7 @@ def merge_metrics(con, parsed):
             "units": "index",
             "source": "ISM official report",
         }
-        saved = us_rates_liquidity.merge_macro_indicator_points(con, series, points)
+        saved = macro_indicators.merge_macro_indicator_points(con, series, points)
         count += saved["points"]
     return count
 
@@ -271,7 +272,7 @@ def merge_ai_metrics(con, payload):
             "units": "index",
             "source": "ISM AI extraction",
         }
-        saved = us_rates_liquidity.merge_macro_indicator_points(
+        saved = macro_indicators.merge_macro_indicator_points(
             con,
             series,
             ai_metric_points(payload)[row["series_id"]],

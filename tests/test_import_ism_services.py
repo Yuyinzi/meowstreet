@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 from openpyxl import Workbook
 
-from app.db import ism_surveys, us_rates_liquidity
+from app.db import ism_surveys, macro_indicators, us_rates_liquidity
 from scripts import import_ism_services
 
 
@@ -112,7 +112,7 @@ def test_import_workbook_rolls_back_on_failure(tmp_path):
     check_con = us_rates_liquidity.connect(db_path)
     try:
         for sid in series_ids:
-            points = us_rates_liquidity.load_macro_indicator_points(check_con, sid)
+            points = macro_indicators.load_macro_indicator_points(check_con, sid)
             assert len(points) == 0, f"{sid} not empty after rollback"
         rankings = ism_surveys.load_industry_rankings(check_con, "services")
         assert len(rankings) == 0

@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -10,8 +11,12 @@ COMPONENTS_TABLE_ID = 5
 TABLE_1_HEADER = "Month,Year,Index"
 TABLE_5_HEADER = "Month,Year,Personal Finance Current,Personal Finance Expected,Business Condition 12 Months,Business Condition 5 Years,Buying Conditions,Current Index,Expected Index"
 
-_CURRENT_INDEX_OFFSET = 7
-_EXPECTED_INDEX_OFFSET = 8
+_AGGREGATE_REQUIRED_COLUMNS = ["Month", "Year", "Index"]
+_COMPONENTS_REQUIRED_COLUMNS = ["Month", "Year", "Current Index", "Expected Index"]
+_REQUIRED_COLUMNS_BY_TABLE = {
+    AGGREGATE_TABLE_ID: _AGGREGATE_REQUIRED_COLUMNS,
+    COMPONENTS_TABLE_ID: _COMPONENTS_REQUIRED_COLUMNS,
+}
 
 
 class MichiganConsumerSentimentClient:
@@ -27,6 +32,21 @@ class MichiganConsumerSentimentClient:
             raise ValueError(
                 f"failed to fetch michigan table {table_id}: {exc}"
             ) from exc
+        if not content.strip():
+            raise ValueError(f"michigan table {table_id} returned empty response body")
+        lines = content.splitlines()
+        if lines[0].lstrip().startswith("<"):
+            raise ValueError(
+                f"michigan table {table_id} returned non-csv response "
+                f"(starts with {lines[0][:30]!r})"
+            )
+        required = _REQUIRED_COLUMNS_BY_TABLE.get(table_id)
+        if required:
+            _find_header_index(
+                lines,
+                required,
+                f"michigan table {table_id} response missing required columns",
+            )
         output_path.write_text(content, encoding="utf-8")
         return output_path
 
@@ -46,108 +66,133 @@ def _build_post_body(table_id):
 
 def _read_lines(csv_path):
     path = Path(csv_path)
-    with path.open(newline="", encoding="utf-8") as handle:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
         return [line.rstrip("\r\n") for line in handle]
 
 
-def _extract_by_index(parts, index, name, line_num):
-    if index >= len(parts):
-        raise ValueError(
-            f"{name} column missing at line {line_num}: got {len(parts)} columns"
-        )
-    raw = parts[index].strip()
-    if not raw:
-        raise ValueError(f"csv has blank {name} at line {line_num}")
-    try:
-        return float(raw)
-    except ValueError as exc:
-        raise ValueError(
-            f"csv has non-numeric {name} at line {line_num}: {raw!r}"
-        ) from exc
+def _find_header_index(lines, required, error_prefix):
+    for index, line in enumerate(lines[:2]):
+        columns = [column.strip() for column in next(csv.reader([line]))]
+        if all(column in columns for column in required):
+            return index
+    received = lines[:2]
+    raise ValueError(f"{error_prefix}: got {received!r}")
 
 
-def _parse_date(parts, line_num):
-    month_str = parts[0].strip()
-    year_str = parts[1].strip()
-    if not month_str:
-        raise ValueError(f"csv has blank Month at line {line_num}")
-    if not year_str:
-        raise ValueError(f"csv has blank Year at line {line_num}")
+def _validate_month_value(value, line_num):
     try:
-        month = int(month_str)
+        month = int(value)
     except ValueError as exc:
         raise ValueError(
-            f"csv has non-numeric Month at line {line_num}: {month_str!r}"
-        ) from exc
-    try:
-        year = int(year_str)
-    except ValueError as exc:
-        raise ValueError(
-            f"csv has non-numeric Year at line {line_num}: {year_str!r}"
+            f"csv has non-numeric Month at line {line_num}: {value!r}"
         ) from exc
     if month < 1 or month > 12:
         raise ValueError(f"csv has invalid month at line {line_num}: {month}")
-    return f"{year:04d}-{month:02d}-01"
+    return month
+
+
+def _validate_year_value(value, line_num):
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"csv has non-numeric Year at line {line_num}: {value!r}"
+        ) from exc
+
+
+def _required_value(row, column, line_num):
+    value = row.get(column)
+    if value is None or not str(value).strip():
+        raise ValueError(f"csv has blank {column} at line {line_num}")
+    return str(value).strip()
+
+
+def _parse_rows(csv_path, required, label):
+    lines = _read_lines(csv_path)
+    if not lines:
+        raise ValueError(f"{label} csv is empty")
+    if lines[0].lstrip().startswith("<"):
+        raise ValueError(f"{label} csv has non-csv content")
+    if len(lines) < 2:
+        raise ValueError(
+            f"{label} csv has only {len(lines)} lines, expected header and data"
+        )
+    header_index = _find_header_index(
+        lines, required, f"{label} csv missing required header"
+    )
+    fieldnames = next(csv.reader([lines[header_index]]))
+    reader = csv.DictReader(lines[header_index + 1 :], fieldnames=fieldnames)
+    return reader, header_index + 2
 
 
 def parse_aggregate_csv(csv_path):
-    lines = _read_lines(csv_path)
-    if len(lines) < 3:
-        raise ValueError(
-            f"aggregate csv has only {len(lines)} lines, expected title + header + data"
-        )
-    header = lines[1].rstrip(",")
-    if not header.startswith(TABLE_1_HEADER):
-        raise ValueError(
-            f"aggregate csv missing required header {TABLE_1_HEADER!r}: got {header!r}"
-        )
+    reader, first_line_num = _parse_rows(
+        csv_path, _AGGREGATE_REQUIRED_COLUMNS, "aggregate"
+    )
     rows = []
     seen_dates = set()
-    for line_num, line in enumerate(lines[2:], start=3):
-        parts = line.split(",")
-        date = _parse_date(parts, line_num)
+    for line_num, row in enumerate(reader, start=first_line_num):
+        month_value = _required_value(row, "Month", line_num)
+        year_value = _required_value(row, "Year", line_num)
+        index_value = _required_value(row, "Index", line_num)
+        month = _validate_month_value(month_value, line_num)
+        year = _validate_year_value(year_value, line_num)
+        try:
+            value = float(index_value)
+        except ValueError as exc:
+            raise ValueError(
+                f"csv has non-numeric Index at line {line_num}: {index_value!r}"
+            ) from exc
+        date = f"{year:04d}-{month:02d}-01"
         if date in seen_dates:
             raise ValueError(
                 f"aggregate csv has duplicate date at line {line_num}: {date}"
             )
         seen_dates.add(date)
-        value = _extract_by_index(parts, 2, "Index", line_num)
         rows.append({"date": date, "value": value})
+    rows.sort(key=lambda row: row["date"])
     return rows
 
 
 def parse_components_csv(csv_path):
-    lines = _read_lines(csv_path)
-    if len(lines) < 3:
-        raise ValueError(
-            f"components csv has only {len(lines)} lines, expected title + header + data"
-        )
-    header = lines[1].rstrip(",")
-    if not header.startswith(TABLE_5_HEADER):
-        raise ValueError(
-            f"components csv missing required header {TABLE_5_HEADER!r}: got {header!r}"
-        )
+    reader, first_line_num = _parse_rows(
+        csv_path, _COMPONENTS_REQUIRED_COLUMNS, "components"
+    )
     rows = []
     seen_dates = set()
-    for line_num, line in enumerate(lines[2:], start=3):
-        parts = line.split(",")
-        date = _parse_date(parts, line_num)
+    for line_num, row in enumerate(reader, start=first_line_num):
+        month_value = _required_value(row, "Month", line_num)
+        year_value = _required_value(row, "Year", line_num)
+        current_value = _required_value(row, "Current Index", line_num)
+        expectations_value = _required_value(row, "Expected Index", line_num)
+        month = _validate_month_value(month_value, line_num)
+        year = _validate_year_value(year_value, line_num)
+        try:
+            current = float(current_value)
+        except ValueError as exc:
+            raise ValueError(
+                f"csv has non-numeric Current Index at line {line_num}: "
+                f"{current_value!r}"
+            ) from exc
+        try:
+            expectations = float(expectations_value)
+        except ValueError as exc:
+            raise ValueError(
+                f"csv has non-numeric Expected Index at line {line_num}: "
+                f"{expectations_value!r}"
+            ) from exc
+        date = f"{year:04d}-{month:02d}-01"
         if date in seen_dates:
             raise ValueError(
                 f"components csv has duplicate date at line {line_num}: {date}"
             )
         seen_dates.add(date)
-        current = _extract_by_index(
-            parts, _CURRENT_INDEX_OFFSET, "Current Index", line_num
-        )
-        expected = _extract_by_index(
-            parts, _EXPECTED_INDEX_OFFSET, "Expected Index", line_num
-        )
         rows.append(
             {
                 "date": date,
                 "current_conditions": current,
-                "expectations": expected,
+                "expectations": expectations,
             }
         )
+    rows.sort(key=lambda row: row["date"])
     return rows

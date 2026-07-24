@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.db import growth_cycle
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from app.tools import ism_ai_extraction
 from scripts import extract_ism_report_ai
@@ -270,7 +271,7 @@ def test_extract_snapshot_facts_only_saves_dashboard_metrics(tmp_path, monkeypat
         facts_only=True,
     )
 
-    points = us_rates_liquidity.load_macro_indicator_points(
+    points = macro_indicators.load_macro_indicator_points(
         con,
         "ism_manufacturing_pmi",
     )

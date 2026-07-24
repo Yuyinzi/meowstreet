@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app import llm
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from app.tools import us_rates_liquidity as us_rates_liquidity_tool
 
@@ -60,12 +61,12 @@ async def generate_with_openai(client, model, snapshot):
 
 def load_current_snapshot(con):
     latest_points = us_rates_liquidity.load_latest_points(con)
-    latest_macro = us_rates_liquidity.load_latest_macro_indicator_points(con)
+    latest_macro = macro_indicators.load_latest_macro_indicator_points(con)
     credit_rate_points = us_rates_liquidity.load_rate_points_for_series(
         con,
         ["treasury_10y"],
     )
-    credit_macro_points = us_rates_liquidity.load_macro_indicator_points_for_series(
+    credit_macro_points = macro_indicators.load_macro_indicator_points_for_series(
         con,
         ["aaa_corporate_yield", "bbb_corporate_yield", "ccc_corporate_yield"],
     )

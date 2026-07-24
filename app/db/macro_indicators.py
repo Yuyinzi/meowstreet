@@ -5,33 +5,36 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = ROOT / "data" / "local_system" / "market_data.sqlite"
 
+_MACRO_TABLES_DDL = """
+create table if not exists macro_indicator_series (
+    series_id text primary key,
+    title text not null,
+    units text not null,
+    source text not null
+);
+create table if not exists macro_indicator_points (
+    series_id text not null,
+    date text not null,
+    value real not null,
+    source text not null,
+    primary key(series_id, date),
+    foreign key(series_id) references macro_indicator_series(series_id)
+);
+create index if not exists idx_macro_indicator_points_series_date
+on macro_indicator_points(series_id, date);
+"""
+
+
+def init_macro_tables(con):
+    con.executescript(_MACRO_TABLES_DDL)
+
 
 def connect(db_path=DEFAULT_DB_PATH):
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(path)
     con.row_factory = sqlite3.Row
-    con.executescript(
-        """
-        pragma journal_mode = wal;
-        create table if not exists macro_indicator_series (
-            series_id text primary key,
-            title text not null,
-            units text not null,
-            source text not null
-        );
-        create table if not exists macro_indicator_points (
-            series_id text not null,
-            date text not null,
-            value real not null,
-            source text not null,
-            primary key(series_id, date),
-            foreign key(series_id) references macro_indicator_series(series_id)
-        );
-        create index if not exists idx_macro_indicator_points_series_date
-        on macro_indicator_points(series_id, date);
-        """
-    )
+    init_macro_tables(con)
     return con
 
 
@@ -69,7 +72,7 @@ def replace_macro_indicator_points(con, series, points):
     return {"series": 1, "points": len(points)}
 
 
-def merge_macro_indicator_points(con, series, points):
+def merge_macro_indicator_points(con, series, points, commit=True):
     sid = _normalize_series_id(series["series_id"])
     con.execute(
         """
@@ -93,11 +96,12 @@ def merge_macro_indicator_points(con, series, points):
             """,
             (sid, point["date"], point["value"], point["source"]),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return {"series": 1, "points": len(points)}
 
 
-def insert_macro_indicator_points(con, series, points):
+def insert_macro_indicator_points(con, series, points, commit=True):
     sid = _normalize_series_id(series["series_id"])
     con.execute(
         "insert or ignore into macro_indicator_series(series_id, title, units, source) values (?, ?, ?, ?)",
@@ -111,7 +115,8 @@ def insert_macro_indicator_points(con, series, points):
             """,
             (sid, point["date"], point["value"], point["source"]),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return {"series": 1, "points": len(points)}
 
 

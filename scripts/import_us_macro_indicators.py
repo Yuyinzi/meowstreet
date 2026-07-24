@@ -9,6 +9,7 @@ from app.data_sources.fred import FredClient
 from app.data_sources.fred import compute_yoy
 from app.data_sources.fred import parse_fred_csv
 from app.data_sources.fred import resample_to_weekly_sundays
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from scripts import import_benchmark_market_data
 
@@ -151,7 +152,7 @@ def import_fred_macro_csvs(
     }
     inserted = {}
     for series_id, points in payloads.items():
-        saved = us_rates_liquidity.replace_macro_indicator_points(
+        saved = macro_indicators.replace_macro_indicator_points(
             con,
             _fred_series_payload(series_id),
             points,
@@ -186,7 +187,7 @@ def import_csv(con, csv_path=DEFAULT_CSV_PATH):
     parsed = parse_csv(csv_path)
     inserted = {}
     for series_id, payload in parsed.items():
-        saved = us_rates_liquidity.replace_macro_indicator_points(
+        saved = macro_indicators.replace_macro_indicator_points(
             con,
             payload["series"],
             payload["points"],

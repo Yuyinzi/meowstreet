@@ -390,7 +390,7 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
         api.us_rates_liquidity_db, "load_latest_points", fake_load_latest_points
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_latest_macro_indicator_points",
         fake_load_latest_macro_indicator_points,
     )
@@ -400,7 +400,7 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
         fake_load_rate_points_for_series,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points_for_series",
         fake_load_macro_indicator_points_for_series,
     )
@@ -595,7 +595,7 @@ def test_credit_detail_endpoints_return_active_credit_charts(monkeypatch):
         api.us_rates_liquidity_db, "load_rate_points_for_series", lambda con, sids: {}
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points_for_series",
         lambda con, sids: {},
     )
@@ -658,7 +658,7 @@ def test_growth_cycle_api_returns_m2_money_supply_payload(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -758,7 +758,7 @@ def test_growth_cycle_api_includes_ism_manufacturing_values(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -849,7 +849,7 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -930,7 +930,7 @@ def test_growth_cycle_m2_detail_api_returns_chart_payload(monkeypatch):
         return rows
 
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load,
     )
@@ -995,7 +995,7 @@ def test_growth_cycle_m2_detail_api_attaches_stored_ai_interpretation(monkeypatc
         return rows
 
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load,
     )
@@ -1046,7 +1046,7 @@ def test_growth_cycle_api_includes_next_fomc_meeting(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeConnection())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         lambda con, series_id: (
             [
@@ -1124,7 +1124,7 @@ def test_growth_cycle_api_returns_dashboard_without_m2_data(
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         lambda con, series_id: [],
     )
@@ -1215,7 +1215,7 @@ def test_growth_cycle_api_includes_ism_macro_signal_in_gdp(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -1328,7 +1328,7 @@ def test_growth_cycle_api_propagates_source_url_and_hash(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -1403,7 +1403,7 @@ def test_growth_cycle_api_handles_no_ism_reports_gracefully(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -1510,7 +1510,7 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -1610,7 +1610,7 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -1686,7 +1686,7 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -1770,7 +1770,7 @@ def test_growth_cycle_m2_detail_api_includes_core_pce_comparison(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -1808,7 +1808,7 @@ def test_growth_cycle_api_includes_fomc_tone_card(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeConnection())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         lambda con, series_id: (
             [
@@ -1927,7 +1927,7 @@ def test_growth_cycle_api_returns_ism_overview_cards_in_ism_section(monkeypatch)
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -2068,7 +2068,7 @@ def test_growth_cycle_api_returns_ism_manufacturing_detail(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points_for_series",
         fake_load_macro_indicator_points_for_series,
     )
@@ -2160,7 +2160,7 @@ def test_growth_cycle_api_ism_detail_includes_industry_analysis(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", fake_connect)
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points_for_series",
         fake_load_macro_indicator_points_for_series,
     )
@@ -2647,7 +2647,7 @@ def test_growth_cycle_api_returns_ism_industry_breadth(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         fake_load_macro_indicator_points,
     )
@@ -2677,7 +2677,7 @@ def test_growth_cycle_api_returns_ism_industry_breadth(monkeypatch):
         lambda con: [],
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points_for_series",
         fake_load_macro_indicator_points_for_series,
     )
@@ -2747,7 +2747,7 @@ def test_growth_cycle_api_ism_detail_includes_at_a_glance_metadata(monkeypatch):
         lambda con: None,
     )
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points_for_series",
         fake_load_macro_indicator_points_for_series,
     )
@@ -2781,7 +2781,7 @@ def test_growth_cycle_api_returns_survey_synthesis(monkeypatch):
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
-        api.us_rates_liquidity_db,
+        api.macro_indicators_db,
         "load_macro_indicator_points",
         lambda con, series_id: [],
     )

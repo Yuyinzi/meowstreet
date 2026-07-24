@@ -2,6 +2,7 @@ from pathlib import Path
 
 import openpyxl
 
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from scripts import import_us_corporate_credit
 
@@ -98,10 +99,10 @@ def test_import_workbook_saves_to_macro_indicator_tables(tmp_path):
     assert inserted["aaa_corporate_yield"] == 2
     assert inserted["bbb_corporate_yield"] == 2
     assert inserted["ccc_corporate_yield"] == 1
-    points = us_rates_liquidity.load_macro_indicator_points(con, "aaa_corporate_yield")
+    points = macro_indicators.load_macro_indicator_points(con, "aaa_corporate_yield")
     assert points[-1]["value"] == 1.58
     assert points[-1]["source"] == "Corporate_Bond_Indices.xlsm"
-    series = us_rates_liquidity.load_macro_indicator_series(con)
+    series = macro_indicators.load_macro_indicator_series(con)
     series_ids = [s["series_id"] for s in series]
     assert "aaa_corporate_yield" in series_ids
     assert "bbb_corporate_yield" in series_ids
@@ -152,7 +153,7 @@ def test_import_fred_csvs_merges_with_existing_workbook_history(tmp_path):
         fred_dir,
         ["BAMLC0A1CAAAEY"],
     )
-    points = us_rates_liquidity.load_macro_indicator_points(con, "aaa_corporate_yield")
+    points = macro_indicators.load_macro_indicator_points(con, "aaa_corporate_yield")
 
     assert inserted == {"aaa_corporate_yield": 1}
     assert [row["date"] for row in points] == [

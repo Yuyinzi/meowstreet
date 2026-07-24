@@ -1,4 +1,4 @@
-from app.db import growth_cycle, us_rates_liquidity
+from app.db import growth_cycle, macro_indicators, us_rates_liquidity
 from app.db.ism_services_ai import (
     promote_services_extraction,
 )
@@ -100,10 +100,10 @@ def test_promote_services_extraction_replaces_metrics(tmp_path):
     assert result["metrics"] == 11
     assert result["at_a_glance_rows"] == 11
 
-    pmi_points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
+    pmi_points = macro_indicators.load_macro_indicator_points(con, "ism_services_pmi")
     assert len(pmi_points) == 1
     assert pmi_points[0]["value"] == 54.0
-    employment_points = us_rates_liquidity.load_macro_indicator_points(
+    employment_points = macro_indicators.load_macro_indicator_points(
         con, "ism_services_employment"
     )
     assert len(employment_points) == 1
@@ -251,7 +251,7 @@ def test_promote_services_extraction_replaces_previous_month(tmp_path):
     result2 = promote_services_extraction(con, modified, _valid_source())
 
     assert result2["report_id"] == "ism_services_2026_06"
-    pmi_points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
+    pmi_points = macro_indicators.load_macro_indicator_points(con, "ism_services_pmi")
     assert len(pmi_points) == 1
     assert pmi_points[0]["value"] == 55.0
 
@@ -293,13 +293,13 @@ def test_workbook_precedence_official_replaces_workbook(tmp_path):
     workbook_points = [
         {"date": "2026-06-01", "value": 49.0, "source": "ISM workbook"},
     ]
-    us_rates_liquidity.merge_macro_indicator_points(
+    macro_indicators.merge_macro_indicator_points(
         con, workbook_series, workbook_points
     )
 
     promote_services_extraction(con, _valid_extraction(), _valid_source())
 
-    pmi_points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
+    pmi_points = macro_indicators.load_macro_indicator_points(con, "ism_services_pmi")
     assert pmi_points[-1]["value"] == 54.0
     assert pmi_points[-1]["source"] == "ISM AI extraction"
 
@@ -316,7 +316,7 @@ def test_failed_extraction_leaves_workbook_unchanged(tmp_path):
     workbook_points = [
         {"date": "2026-06-01", "value": 49.0, "source": "ISM workbook"},
     ]
-    us_rates_liquidity.merge_macro_indicator_points(
+    macro_indicators.merge_macro_indicator_points(
         con, workbook_series, workbook_points
     )
 
@@ -327,6 +327,6 @@ def test_failed_extraction_leaves_workbook_unchanged(tmp_path):
     except ValueError:
         pass
 
-    pmi_points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
+    pmi_points = macro_indicators.load_macro_indicator_points(con, "ism_services_pmi")
     assert pmi_points[-1]["value"] == 49.0
     assert pmi_points[-1]["source"] == "ISM workbook"

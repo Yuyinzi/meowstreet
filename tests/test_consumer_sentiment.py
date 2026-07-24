@@ -202,6 +202,13 @@ def test_data_status_missing():
     assert summary["data_status"] == "missing"
 
 
+def test_data_status_missing_when_current_conditions_missing():
+    pts = _full_points()
+    pts["umcsi_current_conditions"] = []
+    summary = consumer_sentiment.build_summary(pts)
+    assert summary["data_status"] == "missing"
+
+
 def test_capacity_completeness_complete():
     pts = _full_points()
     summary = consumer_sentiment.build_summary(pts)
@@ -300,6 +307,14 @@ def test_evidence_state_insufficient_when_mixed_periods():
     pts["umcsi_expectations"] = _points((80.0,), "2026-04-01")
     summary = consumer_sentiment.build_summary(pts)
     assert summary["evidence_state"] == "insufficient_data"
+
+
+def test_evidence_state_supportive_when_only_current_conditions_mixed():
+    pts = _full_points()
+    pts["umcsi_current_conditions"] = _points((70.0, 72.0), "2026-04-01")
+    summary = consumer_sentiment.build_summary(pts)
+    assert summary["data_status"] == "mixed_periods"
+    assert summary["evidence_state"] == "supportive"
 
 
 def test_reasons_for_missing_data():

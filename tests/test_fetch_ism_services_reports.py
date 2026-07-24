@@ -3,6 +3,7 @@ import re
 
 from app.db import growth_cycle
 from app.db import ism_surveys
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from app.tools import ism_services
 from scripts import fetch_ism_services_reports
@@ -246,7 +247,7 @@ def test_main_imports_latest_month(tmp_path, monkeypatch, capsys):
         assert snapshot["parse_status"] == "ok"
         assert snapshot["report_id"] == "ism_services_2026_06"
 
-        points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
+        points = macro_indicators.load_macro_indicator_points(con, "ism_services_pmi")
         assert points[-1] == {
             "date": "2026-06-01",
             "value": 54.0,
@@ -315,7 +316,7 @@ def test_main_returns_1_on_report_month_mismatch(tmp_path, monkeypatch, capsys):
             "ism_services_new_orders",
             "ism_services_order_backlog",
         ]:
-            points = us_rates_liquidity.load_macro_indicator_points(con, sid)
+            points = macro_indicators.load_macro_indicator_points(con, sid)
             assert len(points) == 0, f"{sid} has points despite mismatch"
 
         report = ism_surveys.load_latest_report_snapshot(con, "services")
@@ -373,7 +374,7 @@ def test_main_returns_1_on_promotion_failure(tmp_path, monkeypatch, capsys):
             "ism_services_new_orders",
             "ism_services_order_backlog",
         ]:
-            points = us_rates_liquidity.load_macro_indicator_points(check_con, sid)
+            points = macro_indicators.load_macro_indicator_points(check_con, sid)
             assert len(points) == 0, f"{sid} persisted despite atomic write failure"
 
         report = ism_surveys.load_latest_report_snapshot(check_con, "services")
@@ -435,7 +436,7 @@ def test_success_then_failure_preserves_provenance(tmp_path, monkeypatch, capsys
         assert snapshot["report_id"] == "ism_services_2026_06"
         assert snapshot["report_month"] == "2026-06-01"
 
-        points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
+        points = macro_indicators.load_macro_indicator_points(con, "ism_services_pmi")
         assert len(points) > 0
         assert points[-1]["value"] == 54.0
 
@@ -500,7 +501,7 @@ def test_full_then_reduced_retry_replaces_rankings_and_comments(
         )
         assert len(report_comments) >= 1
 
-        points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
+        points = macro_indicators.load_macro_indicator_points(con, "ism_services_pmi")
         assert len(points) > 0
     finally:
         con.close()
@@ -539,7 +540,7 @@ def test_retry_reruns_extraction(tmp_path, monkeypatch, capsys):
 
     con = us_rates_liquidity.connect(db_path)
     try:
-        points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
+        points = macro_indicators.load_macro_indicator_points(con, "ism_services_pmi")
         june_points = [p for p in points if p["date"] == "2026-06-01"]
         assert len(june_points) == 1
 

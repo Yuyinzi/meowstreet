@@ -159,43 +159,48 @@ def main(argv=None):
     parser.add_argument(
         "--db-path", type=Path, default=consumer_sentiment.DEFAULT_DB_PATH
     )
-    parser.add_argument("--fetch-michigan-csv", type=Path, metavar="DESTINATION_DIR")
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--fetch-michigan-csv", type=Path, metavar="DESTINATION_DIR")
+    mode.add_argument(
         "--michigan-csv-import", nargs=2, metavar=("TABLE_1_PATH", "TABLE_5_PATH")
     )
-    parser.add_argument("--fetch-fred-csv", type=Path, metavar="DESTINATION_DIR")
-    parser.add_argument("--fred-csv-import", type=Path, metavar="DIRECTORY")
+    mode.add_argument("--fetch-fred-csv", type=Path, metavar="DESTINATION_DIR")
+    mode.add_argument("--fred-csv-import", type=Path, metavar="DIRECTORY")
     args = parser.parse_args(argv)
-    if args.fetch_michigan_csv:
-        client = MichiganConsumerSentimentClient()
-        paths = client.fetch_csvs(args.fetch_michigan_csv)
-        for table_id, path in paths.items():
-            print(f"table_{table_id}: {path}")
-        return 0
-    if args.michigan_csv_import:
-        table_1_path = Path(args.michigan_csv_import[0])
-        table_5_path = Path(args.michigan_csv_import[1])
-        result = import_michigan_csvs(table_1_path, table_5_path, args.db_path)
-        total = sum(len(item["points"]) for item in result)
-        print(f"db: {args.db_path}")
-        for item in result:
-            print(f"{item['series']['series_id']}: {len(item['points'])}")
-        print(f"total: {total}")
-        return 0
-    if args.fetch_fred_csv:
-        client = FredClient(args.fetch_fred_csv)
-        paths = client.fetch_csvs(list(FRED_CAPACITY_SERIES))
-        for series_id, path in paths.items():
-            print(f"{series_id}: {path}")
-        return 0
-    if args.fred_csv_import:
-        result = import_fred_csvs(args.fred_csv_import, args.db_path)
-        total = sum(len(item["points"]) for item in result)
-        print(f"db: {args.db_path}")
-        for item in result:
-            print(f"{item['series']['series_id']}: {len(item['points'])}")
-        print(f"total: {total}")
-        return 0
+    try:
+        if args.fetch_michigan_csv:
+            client = MichiganConsumerSentimentClient()
+            paths = client.fetch_csvs(args.fetch_michigan_csv)
+            for table_id, path in paths.items():
+                print(f"table_{table_id}: {path}")
+            return 0
+        if args.michigan_csv_import:
+            table_1_path = Path(args.michigan_csv_import[0])
+            table_5_path = Path(args.michigan_csv_import[1])
+            result = import_michigan_csvs(table_1_path, table_5_path, args.db_path)
+            total = sum(len(item["points"]) for item in result)
+            print(f"db: {args.db_path}")
+            for item in result:
+                print(f"{item['series']['series_id']}: {len(item['points'])}")
+            print(f"total: {total}")
+            return 0
+        if args.fetch_fred_csv:
+            client = FredClient(args.fetch_fred_csv)
+            paths = client.fetch_csvs(list(FRED_CAPACITY_SERIES))
+            for series_id, path in paths.items():
+                print(f"{series_id}: {path}")
+            return 0
+        if args.fred_csv_import:
+            result = import_fred_csvs(args.fred_csv_import, args.db_path)
+            total = sum(len(item["points"]) for item in result)
+            print(f"db: {args.db_path}")
+            for item in result:
+                print(f"{item['series']['series_id']}: {len(item['points'])}")
+            print(f"total: {total}")
+            return 0
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     parser.print_help()
     return 1
 

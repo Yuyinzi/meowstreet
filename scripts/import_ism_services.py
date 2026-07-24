@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import ism_surveys
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from app.tools import ism_workbook
 from app.tools import ism_services_industry
@@ -161,7 +162,7 @@ def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
         results = {}
         for parsed in parsed_list:
             sid = parsed["series"]["series_id"]
-            saved = us_rates_liquidity.insert_macro_indicator_points(
+            saved = macro_indicators.insert_macro_indicator_points(
                 con,
                 parsed["series"],
                 parsed["points"],

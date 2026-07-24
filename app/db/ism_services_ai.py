@@ -1,7 +1,6 @@
 import json
 
-from app.db import growth_cycle, ism_surveys
-from app.db import us_rates_liquidity as usrl
+from app.db import growth_cycle, ism_surveys, macro_indicators
 from app.tools.ism_services_ai_extraction import (
     SERVICES_SERIES_IDS,
     ServicesFactualExtractionModel,
@@ -42,7 +41,9 @@ def _replace_services_metrics(con, payload, commit=True):
             "units": "index",
             "source": "ISM AI extraction",
         }
-        saved = usrl.merge_macro_indicator_points(con, series, points, commit=False)
+        saved = macro_indicators.merge_macro_indicator_points(
+            con, series, points, commit=False
+        )
         count += saved["points"]
     if commit:
         con.commit()

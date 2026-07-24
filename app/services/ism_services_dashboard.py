@@ -1,11 +1,11 @@
-from app.db import growth_cycle, ism_surveys, us_rates_liquidity
+from app.db import growth_cycle, ism_surveys, macro_indicators
 from app.tools import ism_services, ism_services_industry
 
 SERVICES_SERIES_IDS = list(ism_services.SERIES_TO_KEY)
 
 
 def load_overview(con):
-    points = us_rates_liquidity.load_macro_indicator_points_for_series(
+    points = macro_indicators.load_macro_indicator_points_for_series(
         con, SERVICES_SERIES_IDS
     )
     signal = ism_services.build_signal(points)
@@ -173,7 +173,7 @@ def _build_official_report_summary(rich_evidence):
 
 
 def load_detail(con):
-    points = us_rates_liquidity.load_macro_indicator_points_for_series(
+    points = macro_indicators.load_macro_indicator_points_for_series(
         con, SERVICES_SERIES_IDS
     )
     signal = ism_services.build_signal(points)

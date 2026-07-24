@@ -3,6 +3,7 @@ from datetime import datetime
 import pytest
 from openpyxl import Workbook
 
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from scripts import import_m2_money_supply
 
@@ -54,7 +55,7 @@ def test_import_workbook_saves_m2_money_stock_to_macro_indicator_tables(tmp_path
     inserted = import_m2_money_supply.import_workbook(con, workbook_path)
 
     assert inserted == {"m2_money_stock": 3}
-    assert us_rates_liquidity.load_macro_indicator_series(con) == [
+    assert macro_indicators.load_macro_indicator_series(con) == [
         {
             "series_id": "m2_money_stock",
             "title": "M2 Money Stock",
@@ -62,7 +63,7 @@ def test_import_workbook_saves_m2_money_stock_to_macro_indicator_tables(tmp_path
             "source": "m2.xlsx",
         }
     ]
-    assert us_rates_liquidity.load_macro_indicator_points(con, "m2_money_stock") == [
+    assert macro_indicators.load_macro_indicator_points(con, "m2_money_stock") == [
         {"date": "2026-01-01", "value": 100.0, "source": "m2.xlsx"},
         {"date": "2026-02-01", "value": 101.5, "source": "m2.xlsx"},
         {"date": "2026-04-01", "value": 104.0, "source": "m2.xlsx"},
@@ -107,7 +108,7 @@ def test_import_fred_csvs_merges_m2sl_with_existing_workbook_history(tmp_path):
         encoding="utf-8",
     )
     con = us_rates_liquidity.connect(db_path)
-    us_rates_liquidity.replace_macro_indicator_points(
+    macro_indicators.replace_macro_indicator_points(
         con,
         {
             "series_id": "m2_money_stock",
@@ -124,7 +125,7 @@ def test_import_fred_csvs_merges_m2sl_with_existing_workbook_history(tmp_path):
     inserted = import_m2_money_supply.import_fred_csvs(con, fred_dir)
 
     assert inserted == {"m2_money_stock": 2}
-    assert us_rates_liquidity.load_macro_indicator_series(con) == [
+    assert macro_indicators.load_macro_indicator_series(con) == [
         {
             "series_id": "m2_money_stock",
             "title": "M2 Money Stock",
@@ -132,7 +133,7 @@ def test_import_fred_csvs_merges_m2sl_with_existing_workbook_history(tmp_path):
             "source": "P06 workbook + FRED",
         }
     ]
-    assert us_rates_liquidity.load_macro_indicator_points(con, "m2_money_stock") == [
+    assert macro_indicators.load_macro_indicator_points(con, "m2_money_stock") == [
         {"date": "2026-01-01", "value": 100.0, "source": "m2.xlsx"},
         {"date": "2026-02-01", "value": 102.5, "source": "M2SL.csv"},
         {"date": "2026-05-01", "value": 105.5, "source": "M2SL.csv"},
@@ -221,8 +222,9 @@ def test_main_can_generate_interpretation_after_fred_merge(monkeypatch, tmp_path
     monkeypatch.setattr(
         import_m2_money_supply,
         "import_fred_csvs",
-        lambda con, fred_dir: calls.append(("import_fred_csvs", fred_dir))
-        or {"m2_money_stock": 2},
+        lambda con, fred_dir: (
+            calls.append(("import_fred_csvs", fred_dir)) or {"m2_money_stock": 2}
+        ),
     )
 
     def fake_generate_interpretation(db_path):

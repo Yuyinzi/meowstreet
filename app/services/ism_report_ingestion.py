@@ -423,7 +423,7 @@ def persist_parsed_report(con, survey_type, parsed):
     """
     from app.db import growth_cycle
     from app.db import ism_surveys
-    from app.db import us_rates_liquidity as usrl
+    from app.db import macro_indicators
     from app.tools import ism_report_config
 
     cfg = ism_report_config.load_survey_config(survey_type)
@@ -449,7 +449,9 @@ def persist_parsed_report(con, survey_type, parsed):
                 "units": "index",
                 "source": "ISM official report",
             }
-            saved = usrl.merge_macro_indicator_points(con, series, points, commit=False)
+            saved = macro_indicators.merge_macro_indicator_points(
+                con, series, points, commit=False
+            )
             metrics_count += saved["points"]
 
         # Upsert report snapshot with report-level comments
