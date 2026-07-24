@@ -3815,17 +3815,13 @@ html += '</div>';
   }
 
   function renderSurveySynthesisCard(card) {
-    const crossLeadLabel = _crossSectorLeadLabel(card.cross_sector_comparison);
     const crossEvidence = _crossSectorEvidenceHtml(card);
-    const crossAnswer = crossEvidence
-      ? crossLeadLabel + crossEvidence
-      : crossLeadLabel;
     const rows = [
       { question: "Business surveys expanding?", answer: titleCaseToken(card.economic_direction || "unavailable") },
       { question: "ISM Momentum", answer: titleCaseToken(card.growth_momentum || "unavailable") },
       { question: "Surveys aligned?", answer: titleCaseToken(card.survey_alignment || "unavailable") },
       { question: "Demand aligned?", answer: titleCaseToken(card.demand_alignment || "unavailable") },
-      { question: "Cross-sector lead", answer: crossAnswer },
+      { question: "Cross-sector lead", answer: _crossSectorLeadLabel(card.cross_sector_comparison), evidenceHtml: crossEvidence },
       { question: "GDP direction", answer: titleCaseToken(card.expected_gdp_direction || "unavailable") },
       { question: "ISM Portfolio Bias", answer: titleCaseToken(card.survey_portfolio_implication || "unavailable") },
       { question: "Bias confirmation", answer: titleCaseToken(card.bias_confirmation || "unavailable") },
@@ -3835,7 +3831,7 @@ html += '</div>';
     const rowsHtml = rows.map((row) => `
       <div class="survey-synthesis-row">
         <span class="survey-synthesis-question">${bilingualLabel(row.question)}</span>
-        <strong class="survey-synthesis-answer">${bilingualLabel(row.answer)}</strong>
+        <strong class="survey-synthesis-answer">${bilingualLabel(row.answer)}${row.evidenceHtml || ""}</strong>
       </div>
     `).join("");
 

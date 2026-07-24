@@ -2180,7 +2180,10 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
             return idx2 !== -1;
           })(),
           hasAlignedFalling: html.indexOf("Aligned Falling") !== -1,
-          hasCrossSectorAligned: html.indexOf("Aligned") !== -1,
+          hasRawEvidenceHtml: html.indexOf('<span class="survey-synthesis-evidence-line">') !== -1,
+          hasNoEscapedEvidenceHtml: html.indexOf("&lt;span") === -1,
+          hasMfgNewOrders: html.indexOf("Mfg New Orders") !== -1,
+          hasSvcsBusinessActivity: html.indexOf("Svcs Business Activity") !== -1,
           hasSlowing: html.indexOf("Slowing") !== -1,
           hasNeutral: html.indexOf("Neutral") !== -1,
           hasBroadExpansion: html.indexOf("Broad expansion") !== -1,
@@ -2205,7 +2208,10 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
     assert payload["hasFalling"] is True
     assert payload["hasAligned"] is True
     assert payload["hasAlignedFalling"] is True
-    assert payload["hasCrossSectorAligned"] is True
+    assert payload["hasRawEvidenceHtml"] is True
+    assert payload["hasNoEscapedEvidenceHtml"] is True
+    assert payload["hasMfgNewOrders"] is True
+    assert payload["hasSvcsBusinessActivity"] is True
     assert payload["hasSlowing"] is True
     assert payload["hasNeutral"] is True
     assert payload["hasBroadExpansion"] is True
