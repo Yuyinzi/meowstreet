@@ -13,7 +13,7 @@ def test_growth_cycle_source_fields_are_grouped_by_source():
         "ism_services",
         "m2_money_stock",
         "inflation_context",
-        "gdp_expectations",
+        "survey_synthesis",
         "fed_balance_sheet",
         "jobless_claims",
     ]
@@ -33,7 +33,7 @@ def test_growth_cycle_source_fields_are_grouped_by_source():
     assert "macro.growth_cycle.services_business_activity" in fields
     assert "macro.growth_cycle.m2_money_stock" in fields
     assert "macro.growth_cycle.core_pce_yoy" in fields
-    assert "macro.growth_cycle.gdp_expectations" in fields
+    assert "macro.growth_cycle.survey_synthesis" in fields
     assert "macro.growth_cycle.initial_jobless_claims" in fields
 
 
@@ -360,32 +360,6 @@ def test_build_ism_manufacturing_payload_uses_latest_date_across_series():
     assert result["new_orders"] == 49.0
 
 
-def test_growth_cycle_bias_is_long_when_manufacturing_and_services_expand():
-    growth_cycle = {
-        "ism_pmi": 51.2,
-        "ism_new_orders": 52.0,
-        "services_pmi": 53.0,
-        "services_business_activity": 54.1,
-        "services_new_orders": 52.7,
-        "labor_trend": "stable",
-    }
-
-    assert macro_growth_cycle.compute_growth_cycle_bias(growth_cycle) == "long"
-
-
-def test_growth_cycle_bias_is_short_when_both_surveys_contract_and_labor_weakens():
-    growth_cycle = {
-        "ism_pmi": 48.0,
-        "ism_new_orders": 47.0,
-        "services_pmi": 49.0,
-        "services_business_activity": 48.5,
-        "services_new_orders": 48.0,
-        "labor_trend": "weakening",
-    }
-
-    assert macro_growth_cycle.compute_growth_cycle_bias(growth_cycle) == "short"
-
-
 def test_fetch_m2_money_stock_source_not_configured():
     with pytest.raises(ValueError, match="m2 money stock source is not configured"):
         macro_growth_cycle.fetch_m2_money_stock_from_source()
@@ -447,18 +421,6 @@ def test_fetch_growth_cycle_dashboard_uses_injected_fetchers():
         "jobless_claims",
     ]
     assert result["macro"]["growth_cycle"]["ism_pmi"] == 51.2
-
-
-def test_growth_cycle_bias_is_neutral_when_only_one_survey_expands():
-    growth_cycle = {
-        "ism_pmi": 51.0,
-        "ism_new_orders": 52.0,
-        "services_pmi": 49.0,
-        "services_business_activity": 48.0,
-        "labor_trend": "stable",
-    }
-    result = macro_growth_cycle.compute_growth_cycle_bias(growth_cycle)
-    assert result == "neutral"
 
 
 def test_normalize_jobless_claims_classifies_strengthening_labor_trend():
@@ -768,7 +730,7 @@ def test_build_growth_cycle_dashboard_payload_groups_headline_cards_into_section
         "services_labor",
         "m2_liquidity",
         "inflation_context",
-        "gdp_expectations",
+        "survey_synthesis",
         "fomc_context",
     ]
     assert sections["ism_manufacturing"]["status"] == "available"
@@ -776,7 +738,7 @@ def test_build_growth_cycle_dashboard_payload_groups_headline_cards_into_section
     assert sections["ism_manufacturing"]["cards"] == ["ism_manufacturing"]
     assert sections["m2_liquidity"]["cards"] == ["m2_money_supply"]
     assert sections["inflation_context"]["cards"] == ["inflation_context"]
-    assert sections["gdp_expectations"]["cards"] == ["gdp_expectations"]
+    assert sections["survey_synthesis"]["cards"] == ["survey_synthesis"]
     assert sections["fomc_context"]["cards"] == []
 
 
@@ -923,7 +885,7 @@ def test_build_inflation_context_headline_returns_card_shape():
     }
 
 
-def test_growth_cycle_dashboard_payload_includes_gdp_expectations_placeholder():
+def test_growth_cycle_dashboard_payload_includes_survey_synthesis_card():
     dashboard = {
         "macro": {
             "growth_cycle": {
@@ -943,167 +905,45 @@ def test_growth_cycle_dashboard_payload_includes_gdp_expectations_placeholder():
     assert [card["id"] for card in payload["headline"]] == [
         "ism_manufacturing",
         "m2_money_supply",
-        "gdp_expectations",
+        "survey_synthesis",
     ]
     assert payload["headline"][2]["status"] == "pending_inputs"
 
 
-def test_build_gdp_expectations_headline_returns_pending_inputs_card():
-    card = macro_growth_cycle.build_gdp_expectations_headline({})
-
-    assert card == {
-        "id": "gdp_expectations",
-        "label": "GDP Expectations",
-        "period": None,
-        "status": "pending_inputs",
-        "status_label": "Pending Inputs",
-        "expected_direction": None,
-        "components": [
-            {"id": "ism_manufacturing", "status": "pending"},
-            {"id": "ism_services", "status": "pending"},
-            {"id": "labor_trend", "status": "pending"},
-            {"id": "consumer_indicators", "status": "pending"},
-        ],
-        "missing_inputs": [
-            "ISM Manufacturing",
-            "ISM Services",
-            "Labor trend",
-            "Consumer indicators",
-        ],
-        "evidence": [],
-        "supporting_context": "ISM Manufacturing provides a leading GDP-direction signal. Services, labor, and consumer data confirm or challenge the outlook when available.",
-    }
-
-
-def test_build_gdp_expectations_headline_with_supportive_ism():
-    signal = {
+def test_growth_cycle_payload_exposes_survey_synthesis_as_headline_and_section():
+    synthesis = {
+        "version": "ism_survey_synthesis_v1",
         "status": "available",
         "period": "2026-06-01",
-        "version": "ism_macro_signal_v1",
-        "growth_impulse": "supports_growth",
-        "cycle_state": "expansion_rising",
-        "evidence": [
-            "PMI is above 50 and rising month over month",
-            "New Orders are above 50 and rising month over month",
-            "Growth impulse supports continued expansion",
-        ],
+        "economic_direction": "aligned_expansion",
+        "growth_momentum": "falling",
+        "survey_alignment": "aligned",
+        "demand_alignment": "aligned_falling",
+        "leading_side": "not_applicable",
+        "expected_gdp_direction": "slowing",
+        "survey_portfolio_implication": "neutral",
+        "components": {},
+        "agreements": [],
+        "conflicts": [],
+        "missing_inputs": [],
+        "pending_questions": [],
+        "reasons": [],
     }
-    card = macro_growth_cycle.build_gdp_expectations_headline(
-        {"gdp_expectations_period": "2026-06-01"},
-        ism_macro_signal=signal,
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        {"macro": {"growth_cycle": {}}},
+        survey_synthesis=synthesis,
     )
-
-    assert card["id"] == "gdp_expectations"
-    assert card["status"] == "available"
-    assert card["status_label"] == "ISM Outlook"
-    assert card["expected_direction"] == "rising"
-    assert card["direction_basis"] == "ism_manufacturing"
-    assert card["components"][0] == {
-        "id": "ism_manufacturing",
-        "status": "available",
-        "direction": "supports_growth",
-        "period": "2026-06-01",
-        "version": "ism_macro_signal_v1",
-        "growth_impulse": "supports_growth",
-    }
-    assert card["components"][1:] == [
-        {"id": "ism_services", "status": "not_loaded", "role": "confirmation"},
-        {"id": "labor_trend", "status": "not_loaded", "role": "confirmation"},
-        {
-            "id": "consumer_indicators",
-            "status": "not_loaded",
-            "role": "confirmation",
-        },
-    ]
-    assert "PMI is above 50" in card["evidence"][0]
-    assert "Growth impulse supports continued expansion" in card["evidence"][2]
-    assert card["missing_inputs"] == []
-    assert "ISM Services" in card["pending_confirmations"]
-
-
-def test_build_gdp_expectations_headline_with_cautionary_ism():
-    signal = {
-        "status": "available",
-        "period": "2026-06-01",
-        "version": "ism_macro_signal_v1",
-        "growth_impulse": "growth_caution",
-        "cycle_state": "expansion_slowing",
-        "evidence": [
-            "PMI is above 50 but falling month over month",
-            "Growth impulse signals caution in expansion",
-        ],
-    }
-    card = macro_growth_cycle.build_gdp_expectations_headline(
-        {},
-        ism_macro_signal=signal,
+    card = next(
+        card for card in payload["headline"] if card["id"] == "survey_synthesis"
     )
-
-    assert card["status"] == "available"
-    assert card["expected_direction"] == "slowing"
-    assert card["components"][0]["direction"] == "growth_caution"
-    assert card["components"][0]["growth_impulse"] == "growth_caution"
-    assert "Growth impulse signals caution" in card["evidence"][1]
-
-
-def test_build_gdp_expectations_headline_with_contraction_ism():
-    signal = {
-        "status": "available",
-        "period": "2026-06-01",
-        "version": "ism_macro_signal_v1",
-        "growth_impulse": "supports_contraction",
-        "cycle_state": "contraction_deepening",
-        "evidence": [
-            "PMI is below 50 and falling month over month",
-            "Growth impulse supports continued contraction",
-        ],
-    }
-    card = macro_growth_cycle.build_gdp_expectations_headline(
-        {},
-        ism_macro_signal=signal,
+    section = next(
+        section
+        for section in payload["sections"]
+        if section["id"] == "survey_synthesis"
     )
-
-    assert card["status"] == "available"
-    assert card["expected_direction"] == "falling"
-    assert card["components"][0]["direction"] == "supports_contraction"
-    assert "supports continued contraction" in card["evidence"][1]
-
-
-def test_build_gdp_expectations_headline_with_unavailable_ism():
-    signal = {
-        "status": "unavailable",
-        "period": "2026-06-01",
-        "version": "ism_macro_signal_v1",
-        "growth_impulse": None,
-        "evidence": [],
-    }
-    card = macro_growth_cycle.build_gdp_expectations_headline(
-        {},
-        ism_macro_signal=signal,
-    )
-
-    assert card["status"] == "pending_inputs"
-    assert card["status_label"] == "Pending Inputs"
-    assert card["components"][0]["status"] == "unavailable"
-    assert "ISM Manufacturing" in card["missing_inputs"]
-    assert card["evidence"] == []
-
-
-def test_build_gdp_expectations_headline_with_partial_ism():
-    signal = {
-        "status": "partial",
-        "period": "2026-06-01",
-        "version": "ism_macro_signal_v1",
-        "growth_impulse": "mixed",
-        "evidence": ["New Orders are missing or unavailable"],
-    }
-    card = macro_growth_cycle.build_gdp_expectations_headline(
-        {},
-        ism_macro_signal=signal,
-    )
-
-    assert card["status"] == "pending_inputs"
-    assert card["components"][0]["status"] == "unavailable"
-    assert "ISM Manufacturing" in card["missing_inputs"]
+    assert card["economic_direction"] == "aligned_expansion"
+    assert section["cards"] == ["survey_synthesis"]
+    assert payload["growth_cycle"]["survey_synthesis"] == synthesis
 
 
 def test_normalize_fed_balance_sheet_computes_card_metrics_without_status():
@@ -2319,202 +2159,20 @@ def test_build_growth_cycle_dashboard_payload_skips_trend_when_not_provided():
     assert "trend" not in card["segments"]["business_cycle"]
 
 
-def _bias_growth_cycle(**overrides):
-    base = {}
-    base.update(overrides)
-    return base
-
-
-def _bias_ism_signal(
-    growth_impulse="supports_growth", cycle_state="expansion_rising", status="available"
-):
-    return {
-        "status": status,
-        "growth_impulse": growth_impulse,
-        "cycle_state": cycle_state,
-        "version": "ism_macro_signal_v1",
-    }
-
-
-def test_build_growth_cycle_bias_evidence_long_scenario():
-    growth_cycle = {
-        "services_pmi": 53.0,
-        "services_business_activity": 54.0,
-        "services_new_orders": 52.0,
-        "labor_trend": "stable",
-    }
-    signal = _bias_ism_signal("supports_growth")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(
-        growth_cycle, signal, services_signal_state="supports_growth"
-    )
-    assert result["version"] == "growth_cycle_bias_v3"
-    assert result["status"] == "available"
-    assert result["bias"] == "long"
-    assert result["ism_contribution"] == "supports_long"
-    assert result["components"]["ism_manufacturing"] == "supports_growth"
-    assert result["components"]["ism_services"] == "supports_long"
-    assert result["components"]["labor"] == "supports_long"
-    assert result["confirmation_status"] == "confirmed"
-    assert result["missing_inputs"] == []
-
-
-def test_build_growth_cycle_bias_evidence_short_scenario():
-    growth_cycle = {
-        "services_pmi": 48.0,
-        "services_business_activity": 47.0,
-        "services_new_orders": 47.5,
-        "labor_trend": "weakening",
-    }
-    signal = _bias_ism_signal("supports_contraction")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["status"] == "available"
-    assert result["bias"] == "short"
-    assert result["ism_contribution"] == "supports_short"
-    assert result["missing_inputs"] == []
-
-
-def test_build_growth_cycle_bias_evidence_peaking_is_neutral():
-    growth_cycle = {
-        "services_pmi": 53.0,
-        "services_business_activity": 54.0,
-        "services_new_orders": 52.0,
-        "labor_trend": "stable",
-    }
-    signal = _bias_ism_signal("supports_growth", cycle_state="peaking")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["status"] == "available"
-    assert result["bias"] == "neutral"
-    assert "peaking" in result["reasons"][0].lower()
-
-
-def test_build_growth_cycle_bias_evidence_troughing_is_neutral_not_short():
-    growth_cycle = {
-        "services_pmi": 48.0,
-        "services_business_activity": 47.0,
-        "services_new_orders": 47.5,
-        "labor_trend": "weakening",
-    }
-    signal = _bias_ism_signal("supports_contraction", cycle_state="troughing")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["status"] == "available"
-    assert result["bias"] == "neutral"
-    assert "troughing" in result["reasons"][0].lower()
-
-
-def test_build_growth_cycle_bias_evidence_contraction_deepening_is_short():
-    growth_cycle = {
-        "services_pmi": 48.0,
-        "services_business_activity": 47.0,
-        "services_new_orders": 47.5,
-        "labor_trend": "weakening",
-    }
-    signal = _bias_ism_signal(
-        "supports_contraction", cycle_state="contraction_deepening"
-    )
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["status"] == "available"
-    assert result["bias"] == "short"
-
-
-def test_build_growth_cycle_bias_evidence_is_usable_when_services_missing():
-    growth_cycle = {
-        "labor_trend": "stable",
-    }
-    signal = _bias_ism_signal("supports_growth")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["status"] == "available"
-    assert result["bias"] == "long"
-    assert result["confirmation_status"] == "partial"
-    assert "ISM Services" in result["pending_confirmations"]
-
-
-def test_build_growth_cycle_bias_evidence_is_usable_when_labor_missing():
-    growth_cycle = {
-        "services_pmi": 53.0,
-        "services_business_activity": 54.0,
-        "services_new_orders": 52.0,
-    }
-    signal = _bias_ism_signal("supports_growth")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(
-        growth_cycle, signal, services_signal_state="supports_growth"
-    )
-    assert result["status"] == "available"
-    assert result["bias"] == "long"
-    assert result["confirmation_status"] == "partial"
-    assert "Labor trend" in result["pending_confirmations"]
-
-
-def test_build_growth_cycle_bias_evidence_unavailable_signal_is_pending():
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence({}, None)
-    assert result["version"] == "growth_cycle_bias_v3"
-    assert result["status"] == "pending_inputs"
-    assert result["bias"] is None
-    assert result["ism_contribution"] == "unavailable"
-    assert result["components"]["ism_manufacturing"] == "unavailable"
-    assert "ISM Manufacturing" in result["missing_inputs"]
-
-
-def test_build_growth_cycle_bias_evidence_status_unavailable_is_pending():
-    signal = _bias_ism_signal(status="unavailable")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence({}, signal)
-    assert result["status"] == "pending_inputs"
-    assert result["bias"] is None
-    assert result["ism_contribution"] == "unavailable"
-
-
-def test_build_growth_cycle_bias_evidence_expansion_slowing_missing_services():
-    growth_cycle = {}
-    signal = _bias_ism_signal("growth_caution", cycle_state="expansion_slowing")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["status"] == "available"
-    assert result["bias"] == "neutral"
-    assert "ISM Services" in result["pending_confirmations"]
-
-
-def test_build_growth_cycle_dashboard_payload_includes_bias_evidence():
+def test_build_growth_cycle_dashboard_payload_includes_survey_synthesis_payload():
     dashboard = macro_growth_cycle.build_growth_cycle_dashboard()
-    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
-    assert "growth_cycle_bias_evidence" in payload["growth_cycle"]
-    assert (
-        payload["growth_cycle"]["growth_cycle_bias_evidence"]["version"]
-        == "growth_cycle_bias_v3"
-    )
-
-
-def test_build_growth_cycle_bias_evidence_turning_supportive_maps_to_supports_long():
-    growth_cycle = {
-        "services_pmi": 53.0,
-        "services_business_activity": 54.0,
-        "services_new_orders": 52.0,
-        "labor_trend": "strengthening",
+    synthesis = {
+        "version": "ism_survey_synthesis_v1",
+        "status": "available",
+        "period": "2026-06-01",
+        "economic_direction": "aligned_expansion",
+        "expected_gdp_direction": "slowing",
     }
-    signal = _bias_ism_signal("turning_supportive", cycle_state="troughing")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["ism_contribution"] == "supports_long"
-    assert result["bias"] == "neutral"
-
-
-def test_build_growth_cycle_bias_evidence_contraction_easing_maps_to_conflicting():
-    growth_cycle = {
-        "services_pmi": 53.0,
-        "services_business_activity": 54.0,
-        "services_new_orders": 52.0,
-        "labor_trend": "stable",
-    }
-    signal = _bias_ism_signal("contraction_easing", cycle_state="contraction_improving")
-    result = macro_growth_cycle.build_growth_cycle_bias_evidence(growth_cycle, signal)
-    assert result["ism_contribution"] == "conflicting"
-    assert result["bias"] == "short"
-
-
-def test_build_growth_cycle_bias_evidence_sets_scalar_to_none_when_pending():
-    dashboard = {"macro": {"growth_cycle": {"growth_cycle_bias": "long"}}}
-    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
-    assert payload["growth_cycle"]["growth_cycle_bias"] is None
-    assert (
-        payload["growth_cycle"]["growth_cycle_bias_evidence"]["status"]
-        == "pending_inputs"
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
+        dashboard, survey_synthesis=synthesis
     )
+    assert "survey_synthesis" in payload["growth_cycle"]
+    assert payload["growth_cycle"]["survey_synthesis"] == synthesis
 
 
 def _services_card(state):
