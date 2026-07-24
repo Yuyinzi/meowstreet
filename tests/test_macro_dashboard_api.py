@@ -893,7 +893,7 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
         "ism_services",
         "m2_liquidity",
         "inflation_context",
-        "gdp_expectations",
+        "survey_synthesis",
         "fomc_context",
     ]
     assert sections[0]["title"] == "ISM Manufacturing"
@@ -1265,14 +1265,16 @@ def test_growth_cycle_api_includes_ism_macro_signal_in_gdp(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    gdp_card = next(
-        card for card in payload["headline"] if card["id"] == "gdp_expectations"
+    survey_card = next(
+        card for card in payload["headline"] if card["id"] == "survey_synthesis"
     )
-    assert gdp_card["status"] == "available"
-    assert gdp_card["expected_direction"] == "rising"
-    assert gdp_card["components"][0]["status"] == "available"
-    assert gdp_card["components"][0]["period"] == "2026-06-01"
-    assert gdp_card["components"][0]["version"] == "ism_macro_signal_v1"
+    assert survey_card["status"] == "partial"
+    assert survey_card["economic_direction"] is None
+    assert survey_card["expected_gdp_direction"] is None
+    assert survey_card["survey_portfolio_implication"] is None
+    assert survey_card["growth_momentum"] is None
+    assert survey_card["components"]["manufacturing"]["status"] == "available"
+    assert survey_card["components"]["manufacturing"]["period"] == "2026-06-01"
     ism_card = next(
         card for card in payload["headline"] if card["id"] == "ism_manufacturing"
     )
@@ -1376,11 +1378,14 @@ def test_growth_cycle_api_propagates_source_url_and_hash(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    gdp_card = next(
-        card for card in payload["headline"] if card["id"] == "gdp_expectations"
+    survey_card = next(
+        card for card in payload["headline"] if card["id"] == "survey_synthesis"
     )
-    assert gdp_card["components"][0]["period"] == "2026-06-01"
-    assert gdp_card["components"][0]["version"] == "ism_macro_signal_v1"
+    assert survey_card["components"]["manufacturing"]["period"] == "2026-06-01"
+    assert (
+        payload["growth_cycle"]["survey_synthesis"]["version"]
+        == "ism_survey_synthesis_v1"
+    )
 
 
 def test_growth_cycle_api_handles_no_ism_reports_gracefully(monkeypatch):
@@ -1438,11 +1443,12 @@ def test_growth_cycle_api_handles_no_ism_reports_gracefully(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    gdp_card = next(
-        card for card in payload["headline"] if card["id"] == "gdp_expectations"
+    survey_card = next(
+        card for card in payload["headline"] if card["id"] == "survey_synthesis"
     )
-    assert gdp_card["status"] == "pending_inputs"
-    assert gdp_card["components"][0]["status"] == "pending"
+    assert survey_card["status"] == "partial"
+    assert survey_card["components"]["manufacturing"]["status"] == "unavailable"
+    assert survey_card["components"]["services"]["status"] == "unavailable"
 
 
 def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
@@ -1546,7 +1552,7 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
         "m2_money_supply",
         "inflation_context",
         "fed_balance_sheet",
-        "gdp_expectations",
+        "survey_synthesis",
     ]
     inflation = payload["headline"][3]
     assert inflation["label"] == "Inflation Context"
@@ -1558,12 +1564,12 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
     )
     assert fed_card["label"] == "Fed Balance Sheet"
     assert fed_card["status"] == "context"
-    gdp_expectations = next(
-        card for card in payload["headline"] if card["id"] == "gdp_expectations"
+    survey_card = next(
+        card for card in payload["headline"] if card["id"] == "survey_synthesis"
     )
-    assert gdp_expectations["label"] == "GDP Expectations"
-    assert gdp_expectations["status"] == "pending_inputs"
-    assert gdp_expectations["expected_direction"] is None
+    assert survey_card["label"] == "Survey Synthesis"
+    assert survey_card["status"] == "partial"
+    assert survey_card["expected_gdp_direction"] is None
 
 
 def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch):
@@ -1642,7 +1648,7 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
         "ism_manufacturing",
         "ism_services",
         "m2_money_supply",
-        "gdp_expectations",
+        "survey_synthesis",
     ]
 
 
@@ -1720,7 +1726,7 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
         "ism_services",
         "m2_money_supply",
         "fed_balance_sheet",
-        "gdp_expectations",
+        "survey_synthesis",
     ]
     fed_card = next(card for card in cards if card["id"] == "fed_balance_sheet")
     assert fed_card["status"] == "context"
@@ -2768,7 +2774,7 @@ def test_growth_cycle_api_ism_detail_includes_at_a_glance_metadata(monkeypatch):
     assert payload["latest_metadata"]["pmi"]["tone"] == "amber"
 
 
-def test_growth_cycle_api_returns_bias_evidence(monkeypatch):
+def test_growth_cycle_api_returns_survey_synthesis(monkeypatch):
     from app import api
 
     class FakeCon(_FakeConStubs):
@@ -2815,11 +2821,11 @@ def test_growth_cycle_api_returns_bias_evidence(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    assert "growth_cycle_bias_evidence" in payload["growth_cycle"]
-    evidence = payload["growth_cycle"]["growth_cycle_bias_evidence"]
-    assert evidence["version"] == "growth_cycle_bias_v3"
-    assert evidence["status"] == "pending_inputs"
-    assert evidence["bias"] is None
+    assert "survey_synthesis" in payload["growth_cycle"]
+    synthesis = payload["growth_cycle"]["survey_synthesis"]
+    assert synthesis["version"] == "ism_survey_synthesis_v1"
+    assert synthesis["status"] == "partial"
+    assert synthesis["economic_direction"] is None
 
 
 def test_consumer_sentiment_page_routes_are_served():

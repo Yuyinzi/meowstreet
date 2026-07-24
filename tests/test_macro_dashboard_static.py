@@ -741,25 +741,31 @@ def test_macro_dashboard_js_renders_fed_balance_sheet_card():
     assert "美联储资产负债表13周构成" in js
 
 
-def test_macro_dashboard_js_renders_gdp_expectations_placeholder_card():
+def test_macro_dashboard_js_renders_survey_synthesis_placeholder_card():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 
-    assert "renderGdpExpectationsCard" in js
-    assert "GDP Expectations" in js
-    assert "GDP预期" in js
+    assert "renderSurveySynthesisCard" in js
+    assert "Survey Synthesis" in js
     assert "Pending Inputs" in js
     assert "待输入" in js
-    assert "ISM-Implied Direction" in js
-    assert "Macro Portfolio Bias" in js
-    assert "Method 07" not in js
-    assert "Not Loaded" in js
-    assert "componentStatusBadge(" in js
-    assert "componentLabel(" in js
-    assert "gdp-component-row" in js
-    assert "comp.id" in js
-    assert "comp.status" in js
-    assert "card.evidence" in js
-    assert "Expected Direction" in js
+    assert "Business surveys expanding?" in js
+    assert "Growth momentum" in js
+    assert "Surveys aligned?" in js
+    assert "Demand aligned?" in js
+    assert "Leading side" in js
+    assert "GDP direction" in js
+    assert "Survey implication" in js
+    assert "survey-synthesis-row" in js
+    assert "survey-synthesis-question" in js
+    assert "survey-synthesis-answer" in js
+    assert "survey-synthesis-grid" in js
+    assert "card.economic_direction" in js
+    assert "card.growth_momentum" in js
+    assert "card.survey_alignment" in js
+    assert "card.demand_alignment" in js
+    assert "card.leading_side" in js
+    assert "card.expected_gdp_direction" in js
+    assert "card.survey_portfolio_implication" in js
 
 
 def test_macro_dashboard_js_renders_inflation_context_card():
@@ -2086,7 +2092,7 @@ def test_macro_dashboard_css_has_bias_evidence_strip_styles():
     assert ".bias-pending" in css
 
 
-def test_macro_dashboard_js_renders_gdp_expectations_card_with_components():
+def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
     script = textwrap.dedent(
         """
         const fs = require("fs");
@@ -2112,39 +2118,39 @@ def test_macro_dashboard_js_renders_gdp_expectations_card_with_components():
         const hooks = window.__macroDashboardTestHooks;
 
         const card = {
-          id: "gdp_expectations",
-          label: "GDP Expectations",
+          id: "survey_synthesis",
           status: "available",
-          status_label: "ISM Outlook",
-          components: [
-            { id: "ism_manufacturing", status: "available", direction: "supports_growth", period: "2026-06-01" },
-            { id: "ism_services", status: "not_loaded", role: "confirmation" },
-            { id: "labor_trend", status: "not_loaded", role: "confirmation" },
-            { id: "consumer_indicators", status: "not_loaded", role: "confirmation" },
-          ],
-          evidence: ["Manufacturing PMI is above 50 and rising"],
-          supporting_context: "GDP direction matters for market correlation.",
-          expected_direction: "rising",
+          economic_direction: "aligned_expansion",
+          growth_momentum: "falling",
+          survey_alignment: "aligned",
+          demand_alignment: "aligned_falling",
+          leading_side: "not_applicable",
+          expected_gdp_direction: "slowing",
+          survey_portfolio_implication: "neutral",
+          agreements: ["Both surveys expanding"],
+          conflicts: [],
+          reasons: ["Broad expansion", "Demand slowing"],
         };
 
-        const html = hooks.renderGdpExpectationsCard(card);
+        const html = hooks.renderSurveySynthesisCard(card);
 
         console.log(JSON.stringify({
-          hasComponents: html.indexOf("gdp-component-row") !== -1,
-          ismManufacturingLabel: html.indexOf("ISM Manufacturing") !== -1,
-          ismServicesLabel: html.indexOf("ISM Services") !== -1,
-          laborTrendLabel: html.indexOf("Labor Trend") !== -1,
-          consumerIndicatorsLabel: html.indexOf("Consumer Indicators") !== -1,
-          availableBadge: html.indexOf("Available") !== -1,
-          notLoadedBadge: html.indexOf("Not Loaded") !== -1,
-          supportsGrowth: html.indexOf("Supports Growth") !== -1,
-          evidenceText: html.indexOf("Manufacturing PMI") !== -1,
-          impliedDirection: html.indexOf("ISM-Implied Direction") !== -1,
-          risingDirection: html.indexOf("Rising") !== -1,
-          oldRequiredInputs: html.indexOf("Required Inputs") === -1,
-          componentStatusAvailable: html.indexOf("component-status-available") !== -1,
-          componentStatusPending: html.indexOf("component-status-pending") !== -1,
-          componentStatusUnavailable: html.indexOf("component-status-unavailable") !== -1,
+          hasAlignedExpansion: html.indexOf("Aligned Expansion") !== -1,
+          hasFalling: html.indexOf("Falling") !== -1,
+          hasAligned: (function() {
+            const idx = html.indexOf("Aligned");
+            const idx2 = html.indexOf("Aligned", idx + 1);
+            return idx2 !== -1;
+          })(),
+          hasAlignedFalling: html.indexOf("Aligned Falling") !== -1,
+          hasNotApplicable: html.indexOf("Not Applicable") !== -1,
+          hasSlowing: html.indexOf("Slowing") !== -1,
+          hasNeutral: html.indexOf("Neutral") !== -1,
+          hasBroadExpansion: html.indexOf("Broad expansion") !== -1,
+          hasDemandSlowing: html.indexOf("Demand slowing") !== -1,
+          hasSurveySynthesisCard: html.indexOf("survey-synthesis-card") !== -1,
+          hasAvailableBadge: html.indexOf("Available") !== -1,
+          hasPendingInputsBadge: html.indexOf("Pending Inputs") === -1,
         }));
         """
     )
@@ -2158,21 +2164,18 @@ def test_macro_dashboard_js_renders_gdp_expectations_card_with_components():
     )
     payload = json.loads(result.stdout)
 
-    assert payload["hasComponents"] is True
-    assert payload["ismManufacturingLabel"] is True
-    assert payload["ismServicesLabel"] is True
-    assert payload["laborTrendLabel"] is True
-    assert payload["consumerIndicatorsLabel"] is True
-    assert payload["availableBadge"] is True
-    assert payload["notLoadedBadge"] is True
-    assert payload["supportsGrowth"] is True
-    assert payload["evidenceText"] is True
-    assert payload["impliedDirection"] is True
-    assert payload["risingDirection"] is True
-    assert payload["oldRequiredInputs"] is True
-    assert payload["componentStatusAvailable"] is True
-    assert payload["componentStatusPending"] is True
-    assert payload["componentStatusUnavailable"] is False
+    assert payload["hasAlignedExpansion"] is True
+    assert payload["hasFalling"] is True
+    assert payload["hasAligned"] is True
+    assert payload["hasAlignedFalling"] is True
+    assert payload["hasNotApplicable"] is True
+    assert payload["hasSlowing"] is True
+    assert payload["hasNeutral"] is True
+    assert payload["hasBroadExpansion"] is True
+    assert payload["hasDemandSlowing"] is True
+    assert payload["hasSurveySynthesisCard"] is True
+    assert payload["hasAvailableBadge"] is True
+    assert payload["hasPendingInputsBadge"] is True
 
 
 def test_macro_dashboard_js_keeps_ism_policy_pressure_out_of_fomc_card():
@@ -2407,7 +2410,7 @@ def test_macro_dashboard_js_renders_policy_pressure_in_ism_card():
     assert all(payload.values())
 
 
-def test_macro_dashboard_js_renders_bias_evidence_strip():
+def test_macro_dashboard_js_survey_synthesis_card_replaces_removed_features():
     script = textwrap.dedent(
         """
         const fs = require("fs");
@@ -2432,58 +2435,10 @@ def test_macro_dashboard_js_renders_bias_evidence_strip():
         vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
-        const evidence = {
-          version: "growth_cycle_bias_v2",
-          status: "pending_inputs",
-          bias: null,
-          ism_contribution: "supports_long",
-          components: {
-            ism_manufacturing: "supports_growth",
-            ism_services: "unavailable",
-            labor: "unavailable",
-          },
-          missing_inputs: ["ISM Services", "Labor trend"],
-          reasons: ["Manufacturing growth evidence is supportive but lacks cross-validation"],
-        };
-
-        const availableEvidence = {
-          version: "growth_cycle_bias_v3",
-          status: "available",
-          bias: "long",
-          scope: "ism_manufacturing",
-          confirmation_status: "partial",
-          ism_contribution: "supports_long",
-          components: {
-            ism_manufacturing: "supports_growth",
-            ism_services: "supports_growth",
-            labor: "supports_growth",
-          },
-          missing_inputs: [],
-          reasons: ["All three sectors support a long bias"],
-        };
-
-        const pendingHtml = hooks.renderBiasEvidenceStrip(evidence);
-        const availableHtml = hooks.renderBiasEvidenceStrip(availableEvidence);
-
         console.log(JSON.stringify({
-          pendingHasStrip: pendingHtml.indexOf("bias-evidence-strip") !== -1,
-          pendingShowsPending: pendingHtml.indexOf("Pending Inputs") !== -1,
-          pendingHasM2LevelRow: pendingHtml.indexOf("m2-level-row") !== -1,
-          pendingHasIsmContribution: pendingHtml.indexOf("ISM Contribution") !== -1,
-          pendingHasComponents: pendingHtml.indexOf("bias-components") !== -1,
-          pendingHasManufacturingSupport: pendingHtml.indexOf("Supports Growth") !== -1,
-          pendingHasManufacturingLabel: pendingHtml.indexOf("Manufacturing") !== -1,
-          pendingHasServices: pendingHtml.indexOf("Services") !== -1,
-          pendingHasLabor: pendingHtml.indexOf("Labor") !== -1,
-          pendingHasUnavailable: pendingHtml.indexOf("Unavailable") !== -1,
-          pendingHasReasons: pendingHtml.indexOf("bias-reasons") !== -1,
-          pendingHasReasonText: pendingHtml.indexOf("cross-validation") !== -1,
-          pendingNotBiasAvailable: pendingHtml.indexOf("bias-available") === -1,
-          pendingIsBiasPending: pendingHtml.indexOf("bias-pending") !== -1,
-          availableShowsLong: availableHtml.indexOf("Long") !== -1,
-          availableIsBiasAvailable: availableHtml.indexOf("bias-available") !== -1,
-          availableShowsMacroBias: availableHtml.indexOf("Macro Portfolio Bias") !== -1,
-          availableShowsConfirmation: availableHtml.indexOf("Confirmation Status") !== -1,
+          hasSurveySynthesis: typeof hooks.renderSurveySynthesisCard === "function",
+          hasBiasEvidenceStrip: typeof hooks.renderBiasEvidenceStrip === "undefined",
+          hasGdpExpectationsCard: typeof hooks.renderGdpExpectationsCard === "undefined",
         }));
         """
     )
@@ -2497,24 +2452,9 @@ def test_macro_dashboard_js_renders_bias_evidence_strip():
     )
     payload = json.loads(result.stdout)
 
-    assert payload["pendingHasStrip"] is True
-    assert payload["pendingShowsPending"] is True
-    assert payload["pendingHasM2LevelRow"] is True
-    assert payload["pendingHasIsmContribution"] is True
-    assert payload["pendingHasComponents"] is True
-    assert payload["pendingHasManufacturingSupport"] is True
-    assert payload["pendingHasManufacturingLabel"] is True
-    assert payload["pendingHasServices"] is True
-    assert payload["pendingHasLabor"] is True
-    assert payload["pendingHasUnavailable"] is True
-    assert payload["pendingHasReasons"] is True
-    assert payload["pendingHasReasonText"] is True
-    assert payload["pendingNotBiasAvailable"] is True
-    assert payload["pendingIsBiasPending"] is True
-    assert payload["availableShowsLong"] is True
-    assert payload["availableIsBiasAvailable"] is True
-    assert payload["availableShowsMacroBias"] is True
-    assert payload["availableShowsConfirmation"] is True
+    assert payload["hasSurveySynthesis"] is True
+    assert payload["hasBiasEvidenceStrip"] is True
+    assert payload["hasGdpExpectationsCard"] is True
 
 
 # --- Market Setup Decision Hero Tests ---

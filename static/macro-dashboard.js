@@ -1158,6 +1158,35 @@
     "Combined Pressure": "综合压力",
     "Inflation Caution": "通胀警惕",
     "Less Easing Pressure": "宽松减弱压力",
+    // Survey Synthesis
+    "Survey Synthesis": "调查综合",
+    "Business surveys expanding?": "商业调查在扩张？",
+    "Growth momentum": "增长动能",
+    "Surveys aligned?": "调查结果一致？",
+    "Demand aligned?": "需求一致？",
+    "Leading side": "领先方",
+    "GDP direction": "GDP方向",
+    "Survey implication": "调查含义",
+    "Rising": "上升",
+    "Falling": "下降",
+    "Flat": "持平",
+    "Mixed": "混杂",
+    "Slowing": "放缓",
+    "Improving": "改善",
+    "Stable": "稳定",
+    "Aligned expansion": "一致扩张",
+    "Aligned contraction": "一致收缩",
+    "Aligned neutral": "一致中性",
+    "Divergent": "分歧",
+    "Not applicable": "不适用",
+    "Unresolved": "未解决",
+    "Aligned": "一致",
+    "Aligned rising": "一致上升",
+    "Aligned falling": "一致下降",
+    "Mixed momentum": "混合动能",
+    "Long": "做多",
+
+
     // Bias Evidence
     "Bias Evidence": "偏向证据",
     "Macro Portfolio Bias": "宏观组合偏向",
@@ -1903,9 +1932,6 @@
     const cards = state.growthCycle.headline || [];
     const sections = state.growthCycle.sections || [];
     const sectionHtml = renderGrowthCycleSections(sections, cards);
-    const gc = state.growthCycle.growth_cycle || {};
-    const biasEvidence = gc.growth_cycle_bias_evidence;
-    const biasHtml = biasEvidence ? renderBiasEvidenceStrip(biasEvidence) : "";
     section.innerHTML = `
       ${head.outerHTML}
       ${sectionHtml ? `
@@ -1913,9 +1939,8 @@
           <div class="growth-section-list">
             ${sectionHtml}
           </div>
-          ${biasHtml}
         </div>
-      ` : biasHtml ? `<div class="rates-detail gdp-detail">${biasHtml}</div>` : ""}
+      ` : ""}
     `;
     section.querySelectorAll("[data-growth-cycle-detail-id]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -3687,46 +3712,44 @@
     `;
   }
 
-  function renderGdpExpectationsCard(card) {
-    const components = (card.components || []).map((comp) => {
-      const label = componentLabel(comp.id);
-      const badge = componentStatusBadge(comp.status);
-      const directionHtml = comp.status === "available" && comp.direction
-        ? `<small>${bilingualLabel(formatComponentDirection(comp.direction))}</small>`
-        : "";
-      const periodHtml = comp.period
-        ? `<small>${escapeHtml(fmtDate(comp.period))}</small>`
-        : "";
-      return `
-        <div class="gdp-component-row">
-          <span>${bilingualLabel(label)}</span>
-          <div class="gdp-component-row-right">
-            ${badge}
-            ${directionHtml}
-            ${periodHtml}
-          </div>
-        </div>
-      `;
-    }).join("");
-    const evidenceItems = (card.evidence || [])
-      .map((item) => `<li>${escapeHtml(item)}</li>`)
-      .join("");
+  function renderSurveySynthesisCard(card) {
+    const rows = [
+      { question: "Business surveys expanding?", answer: titleCaseToken(card.economic_direction || "unavailable") },
+      { question: "Growth momentum", answer: titleCaseToken(card.growth_momentum || "unavailable") },
+      { question: "Surveys aligned?", answer: titleCaseToken(card.survey_alignment || "unavailable") },
+      { question: "Demand aligned?", answer: titleCaseToken(card.demand_alignment || "unavailable") },
+      { question: "Leading side", answer: titleCaseToken(card.leading_side || "not_applicable") },
+      { question: "GDP direction", answer: titleCaseToken(card.expected_gdp_direction || "unavailable") },
+      { question: "Survey implication", answer: titleCaseToken(card.survey_portfolio_implication || "unavailable") },
+    ];
+
+    const rowsHtml = rows.map((row) => `
+      <div class="survey-synthesis-row">
+        <span class="survey-synthesis-question">${bilingualLabel(row.question)}</span>
+        <strong class="survey-synthesis-answer">${bilingualLabel(row.answer)}</strong>
+      </div>
+    `).join("");
+
+    const evidenceHtml = (card.reasons || []).length
+      ? `<div class="survey-synthesis-evidence"><strong>${bilingualLabel("Evidence")}</strong><ul>${(card.reasons || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul></div>`
+      : "";
+
+    const conflictsHtml = (card.conflicts || []).length
+      ? `<div class="survey-synthesis-conflicts"><strong>${bilingualLabel("Conflicts")}</strong><ul>${(card.conflicts || []).map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul></div>`
+      : "";
+
+    const status = card.status || "pending_inputs";
     return `
-      <div class="m2-card m2-card-${escapeHtml(card.status || "pending_inputs")} gdp-expectations-card">
-        <div class="m2-card-head">
-          <span>${escapeHtml(card.label || "GDP Expectations")}<br><small>${escapeHtml(zhLabel(card.label) || "GDP预期")}</small></span>
-          <strong class="inflation-status-badge">${bilingualLabel(card.status_label || "Pending Inputs")}</strong>
+      <div class="survey-synthesis-card">
+        <div class="survey-synthesis-summary">
+          <span>${bilingualTitle("Survey Synthesis")}</span>
+          <strong class="inflation-status-badge">${bilingualLabel(status === "available" ? "Available" : "Pending Inputs")}</strong>
         </div>
-        <div class="m2-metric-band">
-          <div>
-            <span>${bilingualLabel(card.expected_direction ? "ISM-Implied Direction" : "Expected Direction")}</span>
-            <strong>${bilingualLabel(card.expected_direction ? formatGdpDirection(card.expected_direction) : "Not Ready")}</strong>
-            <small>${card.expected_direction ? "Manufacturing leading signal" : "Wait for ISM Manufacturing"}<br><span>${card.expected_direction ? "制造业领先信号" : "等待ISM制造业数据"}</span></small>
-          </div>
+        <div class="survey-synthesis-grid">
+          ${rowsHtml}
         </div>
-        ${components ? `<div class="gdp-components">${components}</div>` : ""}
-        ${evidenceItems ? `<div class="gdp-expectations-context"><strong>${bilingualLabel("Evidence")}</strong><ul>${evidenceItems}</ul></div>` : ""}
-        <p class="m2-card-footnote gdp-expectations-support">${escapeHtml(card.supporting_context || "")}</p>
+        ${evidenceHtml}
+        ${conflictsHtml}
       </div>
     `;
   }
@@ -3877,7 +3900,7 @@
     if (card.id === "ism_services") return window.ismServicesUi.renderCard(card, { escapeHtml, formatIndex: fmtIsmIndex });
     if (card.id === "m2_money_supply") return renderM2MoneySupplyCard(card);
     if (card.id === "inflation_context") return renderInflationContextCard(card);
-    if (card.id === "gdp_expectations") return renderGdpExpectationsCard(card);
+    if (card.id === "survey_synthesis") return renderSurveySynthesisCard(card);
     if (card.id === "fed_balance_sheet") return renderFedBalanceSheetCard(card);
     return "";
   }
@@ -4081,38 +4104,6 @@
       labor: "Labor",
     };
     return map[key] || titleCaseToken(key);
-  }
-
-  function renderBiasEvidenceStrip(evidence) {
-    const isAvailable = evidence.status === "available";
-    const componentEntries = Object.entries(evidence.components || {});
-    const componentRows = componentEntries.map(([key, value]) => `
-      <span class="bias-component">
-        <span>${bilingualLabel(formatComponentLabel(key))}</span>
-        <strong class="bias-component-status-${escapeHtml(value || "unavailable")}">${bilingualLabel(formatBiasComponentValue(value))}</strong>
-      </span>
-    `).join("");
-    const reasonItems = (evidence.reasons || [])
-      .map((r) => `<li>${escapeHtml(r)}</li>`)
-      .join("");
-    return `
-      <div class="bias-evidence-strip">
-        <div class="bias-evidence-head">
-          <span>${bilingualLabel("Macro Portfolio Bias")}</span>
-          <strong class="${isAvailable ? "bias-available" : "bias-pending"}">${isAvailable ? bilingualLabel(formatBiasValue(evidence.bias)) : bilingualLabel("Pending Inputs")}</strong>
-        </div>
-        <div class="bias-evidence-body">
-          ${evidence.ism_contribution ? `
-            <div class="m2-level-row"><span>${bilingualLabel("ISM Contribution")}</span><strong>${bilingualLabel(formatBiasComponentValue(evidence.ism_contribution))}</strong></div>
-          ` : ""}
-          ${evidence.confirmation_status ? `
-            <div class="m2-level-row"><span>${bilingualLabel("Confirmation Status")}</span><strong>${bilingualLabel(titleCaseToken(evidence.confirmation_status))}</strong></div>
-          ` : ""}
-          ${componentRows ? `<div class="bias-components">${componentRows}</div>` : ""}
-          ${reasonItems ? `<ul class="bias-reasons">${reasonItems}</ul>` : ""}
-        </div>
-      </div>
-    `;
   }
 
   function trendGlyph(value) {
@@ -5039,8 +5030,7 @@
       formatComponentDirection,
       formatComponentLabel,
       renderIsmPolicyPressure,
-      renderBiasEvidenceStrip,
-      renderGdpExpectationsCard,
+      renderSurveySynthesisCard,
       renderFomcToneCard,
       computeSignalAgreement,
       buildMarketSetupPresentation,
