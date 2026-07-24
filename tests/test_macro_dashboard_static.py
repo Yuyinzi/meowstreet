@@ -795,7 +795,7 @@ def test_macro_dashboard_js_renders_survey_synthesis_placeholder_card():
     assert "card.growth_momentum" in js
     assert "card.survey_alignment" in js
     assert "card.demand_alignment" in js
-    assert "card.leading_side" in js
+    assert "card.cross_sector_comparison" in js
     assert "card.expected_gdp_direction" in js
     assert "card.survey_portfolio_implication" in js
 
@@ -2157,8 +2157,13 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
           survey_alignment: "aligned",
           demand_alignment: "aligned_falling",
           leading_side: "not_applicable",
+          cross_sector_comparison: "aligned",
           expected_gdp_direction: "slowing",
           survey_portfolio_implication: "neutral",
+          components: {
+            manufacturing: { demand_level: "expanding", demand_momentum: "falling" },
+            services: { activity_level: "expanding", activity_momentum: "falling" },
+          },
           agreements: ["Both surveys expanding"],
           conflicts: [],
           reasons: ["Broad expansion", "Demand slowing"],
@@ -2175,7 +2180,7 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
             return idx2 !== -1;
           })(),
           hasAlignedFalling: html.indexOf("Aligned Falling") !== -1,
-          hasNotApplicable: html.indexOf("Not Applicable") !== -1,
+          hasCrossSectorAligned: html.indexOf("Aligned") !== -1,
           hasSlowing: html.indexOf("Slowing") !== -1,
           hasNeutral: html.indexOf("Neutral") !== -1,
           hasBroadExpansion: html.indexOf("Broad expansion") !== -1,
@@ -2200,7 +2205,7 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
     assert payload["hasFalling"] is True
     assert payload["hasAligned"] is True
     assert payload["hasAlignedFalling"] is True
-    assert payload["hasNotApplicable"] is True
+    assert payload["hasCrossSectorAligned"] is True
     assert payload["hasSlowing"] is True
     assert payload["hasNeutral"] is True
     assert payload["hasBroadExpansion"] is True

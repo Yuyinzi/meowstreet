@@ -3786,12 +3786,13 @@ html += '</div>';
     `;
   }
 
-  function _crossSectorLeadLabel(leading) {
-    if (!leading || leading === "not_applicable") return "Not Applicable";
-    if (leading === "services") return "Services Leading";
-    if (leading === "manufacturing") return "Manufacturing Leading";
-    if (leading === "unresolved") return "Unresolved";
-    return titleCaseToken(leading);
+  function _crossSectorLeadLabel(comparison) {
+    if (!comparison) return "Unavailable";
+    if (comparison === "aligned") return "Aligned";
+    if (comparison === "services_stronger") return "Services Leading";
+    if (comparison === "manufacturing_stronger") return "Manufacturing Leading";
+    if (comparison === "unresolved") return "Unresolved";
+    return titleCaseToken(comparison);
   }
 
   function _backlogConfirmationLabel(backlog) {
@@ -3814,7 +3815,7 @@ html += '</div>';
   }
 
   function renderSurveySynthesisCard(card) {
-    const crossLeadLabel = _crossSectorLeadLabel(card.leading_side);
+    const crossLeadLabel = _crossSectorLeadLabel(card.cross_sector_comparison);
     const crossEvidence = _crossSectorEvidenceHtml(card);
     const crossAnswer = crossEvidence
       ? crossLeadLabel + crossEvidence
