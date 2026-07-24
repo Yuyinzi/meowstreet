@@ -1160,25 +1160,51 @@
     "Less Easing Pressure": "宽松减弱压力",
     // Survey Synthesis
     "Survey Synthesis": "调查综合",
-    "Business surveys expanding?": "商业调查在扩张？",
-    "ISM Momentum": "ISM动能",
-    "Surveys aligned?": "调查结果一致？",
-    "Demand aligned?": "需求一致？",
-    "Cross-sector lead": "跨行业领先",
+    "ISM Growth Direction": "ISM增长方向",
+    "Both Expanding": "制造业与服务业均扩张",
+    "Both Contracting": "制造业与服务业均收缩",
+    "Both Neutral": "制造业与服务业均中性",
+    "Diverging": "制造业与服务业分化",
+    "Manufacturing & Services PMI Trend": "制造业与服务业PMI走势",
+    "Both Lower Than Last Month": "两者均低于上月",
+    "Both Higher Than Last Month": "两者均高于上月",
+    "Both Unchanged From Last Month": "两者均与上月持平",
+    "New Orders Signal": "新订单信号",
+    "Expanding but Slowing": "仍在扩张，但正在放缓",
+    "Expanding and Improving": "扩张并改善",
+    "Expanding and Stable": "扩张且稳定",
+    "Contraction Deepening": "收缩加深",
+    "Contraction Easing": "收缩缓解",
+    "Contracting and Stable": "收缩且稳定",
+    "Mixed New Orders": "新订单信号混合",
+    "Leading Indicator Comparison": "领先指标对比",
+    "Slowing Together": "同步放缓",
+    "Improving Together": "同步改善",
+    "Stable Together": "同步稳定",
     "Services Leading": "服务业领先",
     "Manufacturing Leading": "制造业领先",
     "Not Applicable": "不适用",
     "Unresolved": "尚未确认",
-    "GDP direction": "GDP方向",
-    "ISM Portfolio Bias": "ISM组合倾向",
+    "ISM-implied GDP Growth": "ISM指向的GDP增长",
+    "Growth Accelerating": "增长可能加速",
+    "Growth Slowing": "增长速度可能放缓",
+    "Growth Contracting": "增长可能收缩",
+    "Growth Improving": "增长可能改善",
+    "ISM Portfolio Contribution": "ISM对组合倾向的影响",
+    "Supports Long Bias": "支持偏多倾向",
+    "Supports Neutral or Defensive Bias": "支持中性或防御倾向",
     "ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture.": "ISM信号支持更积极的风险资产倾向，但最终仓位仍由Market Setup决定。",
     "Expansion remains intact; weaker one-period momentum is caution, not a confirmed reversal. Market Setup determines the final portfolio posture.": "扩张格局仍未改变；一期的动能转弱是警惕信号，并非已确认的反转。最终仓位仍由Market Setup决定。",
-    "Bias confirmation": "倾向确认",
+    "Observation Status": "观察状态",
+    "Continue Observing": "继续观察",
+    "No Additional Observation Flag": "无需额外观察提示",
     "awaiting_confirmation": "继续观察",
     "Awaiting Confirmation": "继续观察",
     "not_required": "无需确认",
     "Not Required": "无需确认",
-    "Backlog confirmation": "订单积压确认",
+    "Services Backlog Signal": "服务业订单积压信号",
+    "Supports Continued Growth": "支持增长延续",
+    "Supports Weaker Demand": "支持需求走弱",
     "Supports Growth": "支持增长",
     "Supports Contraction": "支持收缩",
     "ISM signals alone do not support materially increasing risk exposure or shifting to a short posture.": "仅凭ISM信号，不足以支持明显增加风险资产敞口，也不足以支持转向做空。",
@@ -1188,6 +1214,8 @@
     "Rising": "上升",
     "Falling": "下降",
     "Flat": "持平",
+    "Expanding": "扩张中",
+    "Contracting": "收缩中",
     "Mixed": "混杂",
     "Slowing": "放缓",
     "Improving": "改善",
@@ -3786,19 +3814,96 @@ html += '</div>';
     `;
   }
 
-  function _crossSectorLeadLabel(comparison) {
+  function _crossSectorLeadLabel(card) {
+    const comparison = card.cross_sector_comparison;
     if (!comparison) return "Unavailable";
-    if (comparison === "aligned") return "Aligned";
+    if (comparison === "aligned") {
+      const mfg = (card.components || {}).manufacturing || {};
+      const svc = (card.components || {}).services || {};
+      if (mfg.demand_momentum === svc.activity_momentum) {
+        if (mfg.demand_momentum === "falling") return "Slowing Together";
+        if (mfg.demand_momentum === "rising") return "Improving Together";
+        if (mfg.demand_momentum === "flat") return "Stable Together";
+      }
+      return "Aligned";
+    }
     if (comparison === "services_stronger") return "Services Leading";
     if (comparison === "manufacturing_stronger") return "Manufacturing Leading";
     if (comparison === "unresolved") return "Unresolved";
     return titleCaseToken(comparison);
   }
 
+  function _economicDirectionLabel(direction) {
+    if (!direction) return "Unavailable";
+    if (direction === "aligned_expansion") return "Both Expanding";
+    if (direction === "aligned_contraction") return "Both Contracting";
+    if (direction === "aligned_neutral") return "Both Neutral";
+    if (direction === "divergent") return "Diverging";
+    return titleCaseToken(direction);
+  }
+
+  function _headlinePmiTrendLabel(momentum) {
+    if (!momentum) return "Unavailable";
+    if (momentum === "falling") return "Both Lower Than Last Month";
+    if (momentum === "rising") return "Both Higher Than Last Month";
+    if (momentum === "flat") return "Both Unchanged From Last Month";
+    if (momentum === "mixed") return "Mixed";
+    return titleCaseToken(momentum);
+  }
+
+  function _newOrdersSignalLabel(card) {
+    const mfg = (card.components || {}).manufacturing || {};
+    const svc = (card.components || {}).services || {};
+    if (!mfg.demand_level || !svc.demand_level) return "Unavailable";
+    if (mfg.demand_level !== svc.demand_level) return "Diverging";
+    if (mfg.demand_momentum !== svc.demand_momentum) return "Mixed New Orders";
+    if (mfg.demand_level === "expanding") {
+      if (mfg.demand_momentum === "falling") return "Expanding but Slowing";
+      if (mfg.demand_momentum === "rising") return "Expanding and Improving";
+      if (mfg.demand_momentum === "flat") return "Expanding and Stable";
+    }
+    if (mfg.demand_level === "contracting") {
+      if (mfg.demand_momentum === "falling") return "Contraction Deepening";
+      if (mfg.demand_momentum === "rising") return "Contraction Easing";
+      if (mfg.demand_momentum === "flat") return "Contracting and Stable";
+    }
+    return titleCaseToken(card.demand_alignment || "unavailable");
+  }
+
+  function _gdpGrowthLabel(direction) {
+    if (!direction) return "Unavailable";
+    if (direction === "rising") return "Growth Accelerating";
+    if (direction === "slowing") return "Growth Slowing";
+    if (direction === "falling") return "Growth Contracting";
+    if (direction === "improving") return "Growth Improving";
+    if (direction === "stable") return "Stable";
+    if (direction === "mixed") return "Mixed";
+    return titleCaseToken(direction);
+  }
+
+  function _portfolioContributionLabel(implication) {
+    if (!implication) return "Unavailable";
+    if (implication === "long") return "Supports Long Bias";
+    if (implication === "short_or_neutral") {
+      return "Supports Neutral or Defensive Bias";
+    }
+    if (implication === "neutral") return "Neutral";
+    return titleCaseToken(implication);
+  }
+
+  function _observationStatusLabel(confirmation) {
+    if (!confirmation) return "Unavailable";
+    if (confirmation === "awaiting_confirmation") return "Continue Observing";
+    if (confirmation === "not_required") {
+      return "No Additional Observation Flag";
+    }
+    return titleCaseToken(confirmation);
+  }
+
   function _backlogConfirmationLabel(backlog) {
     if (!backlog || backlog === "unavailable") return "Unavailable";
-    if (backlog === "supports_growth") return "Supports Growth";
-    if (backlog === "supports_contraction") return "Supports Contraction";
+    if (backlog === "supports_growth") return "Supports Continued Growth";
+    if (backlog === "supports_contraction") return "Supports Weaker Demand";
     if (backlog === "neutral") return "Neutral";
     return titleCaseToken(backlog);
   }
@@ -3809,23 +3914,31 @@ html += '</div>';
     const mfgLevel = mfg.demand_level;
     const svcLevel = svc.activity_level;
     if (!mfgLevel || !svcLevel) return "";
-    const mfgLabel = "Mfg New Orders: " + titleCaseToken(mfgLevel) + " \u00B7 " + titleCaseToken(mfg.demand_momentum || "unavailable");
-    const svcLabel = "Svcs Business Activity: " + titleCaseToken(svcLevel) + " \u00B7 " + titleCaseToken(svc.activity_momentum || "unavailable");
-    return '<span class="survey-synthesis-evidence-line">' + escapeHtml(mfgLabel) + '<br>' + escapeHtml(svcLabel) + '</span>';
+    const mfgMomentum = titleCaseToken(mfg.demand_momentum || "unavailable");
+    const svcMomentum = titleCaseToken(svc.activity_momentum || "unavailable");
+    const mfgLevelLabel = titleCaseToken(mfgLevel);
+    const svcLevelLabel = titleCaseToken(svcLevel);
+    const mfgLabel = "Manufacturing New Orders: " + mfgLevelLabel + " \u00B7 " + mfgMomentum;
+    const svcLabel = "Services Business Activity: " + svcLevelLabel + " \u00B7 " + svcMomentum;
+    const mfgZh = "制造业新订单：" + (zhLabel(mfgLevelLabel) || mfgLevelLabel) + " \u00B7 " + (zhLabel(mfgMomentum) || mfgMomentum);
+    const svcZh = "服务业商业活动：" + (zhLabel(svcLevelLabel) || svcLevelLabel) + " \u00B7 " + (zhLabel(svcMomentum) || svcMomentum);
+    return '<span class="survey-synthesis-evidence-line">'
+      + escapeHtml(mfgLabel) + '<small>' + escapeHtml(mfgZh) + '</small>'
+      + escapeHtml(svcLabel) + '<small>' + escapeHtml(svcZh) + '</small>'
+      + '</span>';
   }
 
   function renderSurveySynthesisCard(card) {
     const crossEvidence = _crossSectorEvidenceHtml(card);
     const rows = [
-      { question: "Business surveys expanding?", answer: titleCaseToken(card.economic_direction || "unavailable") },
-      { question: "ISM Momentum", answer: titleCaseToken(card.growth_momentum || "unavailable") },
-      { question: "Surveys aligned?", answer: titleCaseToken(card.survey_alignment || "unavailable") },
-      { question: "Demand aligned?", answer: titleCaseToken(card.demand_alignment || "unavailable") },
-      { question: "Cross-sector lead", answer: _crossSectorLeadLabel(card.cross_sector_comparison), evidenceHtml: crossEvidence },
-      { question: "GDP direction", answer: titleCaseToken(card.expected_gdp_direction || "unavailable") },
-      { question: "ISM Portfolio Bias", answer: titleCaseToken(card.survey_portfolio_implication || "unavailable") },
-      { question: "Bias confirmation", answer: titleCaseToken(card.bias_confirmation || "unavailable") },
-      { question: "Backlog confirmation", answer: _backlogConfirmationLabel(card.backlog_confirmation) },
+      { question: "ISM Growth Direction", answer: _economicDirectionLabel(card.economic_direction) },
+      { question: "Manufacturing & Services PMI Trend", answer: _headlinePmiTrendLabel(card.growth_momentum) },
+      { question: "New Orders Signal", answer: _newOrdersSignalLabel(card) },
+      { question: "Leading Indicator Comparison", answer: _crossSectorLeadLabel(card), evidenceHtml: crossEvidence },
+      { question: "ISM-implied GDP Growth", answer: _gdpGrowthLabel(card.expected_gdp_direction) },
+      { question: "ISM Portfolio Contribution", answer: _portfolioContributionLabel(card.survey_portfolio_implication) },
+      { question: "Observation Status", answer: _observationStatusLabel(card.bias_confirmation) },
+      { question: "Services Backlog Signal", answer: _backlogConfirmationLabel(card.backlog_confirmation) },
     ];
 
     const rowsHtml = rows.map((row) => `

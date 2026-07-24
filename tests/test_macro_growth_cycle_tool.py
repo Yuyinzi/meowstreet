@@ -2201,6 +2201,21 @@ def test_build_growth_cycle_dashboard_payload_includes_survey_synthesis_payload(
     assert payload["growth_cycle"]["survey_synthesis"] == synthesis
 
 
+def test_survey_synthesis_headline_preserves_confirmation_fields():
+    synthesis = {
+        "status": "available",
+        "cross_sector_comparison": "aligned",
+        "bias_confirmation": "awaiting_confirmation",
+        "backlog_confirmation": "supports_growth",
+    }
+
+    headline = macro_growth_cycle.build_survey_synthesis_headline(synthesis)
+
+    assert headline["cross_sector_comparison"] == "aligned"
+    assert headline["bias_confirmation"] == "awaiting_confirmation"
+    assert headline["backlog_confirmation"] == "supports_growth"
+
+
 def _services_card(state):
     return {
         "id": "ism_services",

@@ -1705,8 +1705,11 @@ def build_survey_synthesis_headline(survey_synthesis):
             "survey_alignment": "unresolved",
             "demand_alignment": None,
             "leading_side": "not_applicable",
+            "cross_sector_comparison": None,
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
+            "bias_confirmation": None,
+            "backlog_confirmation": None,
             "agreements": [],
             "conflicts": [],
             "missing_inputs": ["ISM Manufacturing", "ISM Services"],
@@ -1725,10 +1728,15 @@ def build_survey_synthesis_headline(survey_synthesis):
         "survey_alignment": survey_synthesis.get("survey_alignment"),
         "demand_alignment": survey_synthesis.get("demand_alignment"),
         "leading_side": survey_synthesis.get("leading_side"),
+        "cross_sector_comparison": survey_synthesis.get(
+            "cross_sector_comparison"
+        ),
         "expected_gdp_direction": survey_synthesis.get("expected_gdp_direction"),
         "survey_portfolio_implication": survey_synthesis.get(
             "survey_portfolio_implication"
         ),
+        "bias_confirmation": survey_synthesis.get("bias_confirmation"),
+        "backlog_confirmation": survey_synthesis.get("backlog_confirmation"),
         "agreements": survey_synthesis.get("agreements", []),
         "conflicts": survey_synthesis.get("conflicts", []),
         "missing_inputs": survey_synthesis.get("missing_inputs", []),

@@ -763,10 +763,11 @@ def test_macro_dashboard_js_renders_fed_balance_sheet_card():
     assert "美联储资产负债表13周构成" in js
 
 
-def test_survey_synthesis_contains_backlog_confirmation_row():
+def test_survey_synthesis_contains_services_backlog_signal_row():
     js = STATIC_JS.read_text()
 
-    assert "Backlog confirmation" in js
+    assert "Services Backlog Signal" in js
+    assert "服务业订单积压信号" in js
     assert "Supports Growth" in js
     assert "Supports Contraction" in js
 
@@ -778,22 +779,29 @@ def test_macro_dashboard_js_renders_survey_synthesis_placeholder_card():
     assert "Survey Synthesis" in js
     assert "Pending Inputs" in js
     assert "待输入" in js
-    assert "Business surveys expanding?" in js
-    assert "ISM Momentum" in js
-    assert "ISM动能" in js
-    assert "Surveys aligned?" in js
-    assert "Demand aligned?" in js
-    assert "Cross-sector lead" in js
-    assert "GDP direction" in js
-    assert "ISM Portfolio Bias" in js
-    assert "ISM组合倾向" in js
+    assert "ISM Growth Direction" in js
+    assert "ISM增长方向" in js
+    assert "Manufacturing & Services PMI Trend" in js
+    assert "制造业与服务业PMI走势" in js
+    assert "Surveys aligned?" not in js
+    assert "New Orders Signal" in js
+    assert "新订单信号" in js
+    assert "Leading Indicator Comparison" in js
+    assert "领先指标对比" in js
+    assert "ISM-implied GDP Growth" in js
+    assert "ISM指向的GDP增长" in js
+    assert "ISM Portfolio Contribution" in js
+    assert "ISM对组合倾向的影响" in js
+    assert "Observation Status" in js
+    assert "观察状态" in js
+    assert "Services Backlog Signal" in js
+    assert "服务业订单积压信号" in js
     assert "survey-synthesis-row" in js
     assert "survey-synthesis-question" in js
     assert "survey-synthesis-answer" in js
     assert "survey-synthesis-grid" in js
     assert "card.economic_direction" in js
     assert "card.growth_momentum" in js
-    assert "card.survey_alignment" in js
     assert "card.demand_alignment" in js
     assert "card.cross_sector_comparison" in js
     assert "card.expected_gdp_direction" in js
@@ -2159,10 +2167,17 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
           leading_side: "not_applicable",
           cross_sector_comparison: "aligned",
           expected_gdp_direction: "slowing",
-          survey_portfolio_implication: "neutral",
+          survey_portfolio_implication: "long",
+          bias_confirmation: "awaiting_confirmation",
+          backlog_confirmation: "supports_growth",
           components: {
             manufacturing: { demand_level: "expanding", demand_momentum: "falling" },
-            services: { activity_level: "expanding", activity_momentum: "falling" },
+            services: {
+              demand_level: "expanding",
+              demand_momentum: "falling",
+              activity_level: "expanding",
+              activity_momentum: "falling",
+            },
           },
           agreements: ["Both surveys expanding"],
           conflicts: [],
@@ -2172,20 +2187,46 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
         const html = hooks.renderSurveySynthesisCard(card);
 
         console.log(JSON.stringify({
-          hasAlignedExpansion: html.indexOf("Aligned Expansion") !== -1,
-          hasFalling: html.indexOf("Falling") !== -1,
-          hasAligned: (function() {
-            const idx = html.indexOf("Aligned");
-            const idx2 = html.indexOf("Aligned", idx + 1);
-            return idx2 !== -1;
-          })(),
-          hasAlignedFalling: html.indexOf("Aligned Falling") !== -1,
+          hasIsmGrowthDirection: html.indexOf("ISM Growth Direction") !== -1
+            && html.indexOf("ISM增长方向") !== -1,
+          hasBothExpanding: html.indexOf("Both Expanding") !== -1
+            && html.indexOf("制造业与服务业均扩张") !== -1,
+          hasPmiTrend: html.indexOf("Manufacturing &amp; Services PMI Trend") !== -1
+            && html.indexOf("制造业与服务业PMI走势") !== -1
+            && html.indexOf("Both Lower Than Last Month") !== -1
+            && html.indexOf("两者均低于上月") !== -1,
+          removedSurveyAlignment: html.indexOf("Surveys aligned?") === -1,
+          hasNewOrdersSignal: html.indexOf("New Orders Signal") !== -1
+            && html.indexOf("新订单信号") !== -1
+            && html.indexOf("Expanding but Slowing") !== -1
+            && html.indexOf("仍在扩张，但正在放缓") !== -1,
+          hasLeadingIndicatorComparison: html.indexOf("Leading Indicator Comparison") !== -1
+            && html.indexOf("领先指标对比") !== -1,
+          hasSlowingTogether: html.indexOf("Slowing Together") !== -1
+            && html.indexOf("同步放缓") !== -1,
+          hasIsmImpliedGdpGrowth: html.indexOf("ISM-implied GDP Growth") !== -1
+            && html.indexOf("ISM指向的GDP增长") !== -1
+            && html.indexOf("Growth Slowing") !== -1
+            && html.indexOf("增长速度可能放缓") !== -1,
+          hasPortfolioContribution: html.indexOf("ISM Portfolio Contribution") !== -1
+            && html.indexOf("ISM对组合倾向的影响") !== -1
+            && html.indexOf("Supports Long Bias") !== -1
+            && html.indexOf("支持偏多倾向") !== -1,
+          hasObservationStatus: html.indexOf("Observation Status") !== -1
+            && html.indexOf("观察状态") !== -1
+            && html.indexOf("Continue Observing") !== -1
+            && html.indexOf("继续观察") !== -1,
+          hasServicesBacklogSignal: html.indexOf("Services Backlog Signal") !== -1
+            && html.indexOf("服务业订单积压信号") !== -1
+            && html.indexOf("Supports Continued Growth") !== -1
+            && html.indexOf("支持增长延续") !== -1,
           hasRawEvidenceHtml: html.indexOf('<span class="survey-synthesis-evidence-line">') !== -1,
           hasNoEscapedEvidenceHtml: html.indexOf("&lt;span") === -1,
-          hasMfgNewOrders: html.indexOf("Mfg New Orders") !== -1,
-          hasSvcsBusinessActivity: html.indexOf("Svcs Business Activity") !== -1,
+          hasManufacturingNewOrders: html.indexOf("Manufacturing New Orders") !== -1
+            && html.indexOf("制造业新订单") !== -1,
+          hasServicesBusinessActivity: html.indexOf("Services Business Activity") !== -1
+            && html.indexOf("服务业商业活动") !== -1,
           hasSlowing: html.indexOf("Slowing") !== -1,
-          hasNeutral: html.indexOf("Neutral") !== -1,
           hasBroadExpansion: html.indexOf("Broad expansion") !== -1,
           hasDemandSlowing: html.indexOf("Demand slowing") !== -1,
           hasSurveySynthesisCard: html.indexOf("survey-synthesis-card") !== -1,
@@ -2204,16 +2245,22 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
     )
     payload = json.loads(result.stdout)
 
-    assert payload["hasAlignedExpansion"] is True
-    assert payload["hasFalling"] is True
-    assert payload["hasAligned"] is True
-    assert payload["hasAlignedFalling"] is True
+    assert payload["hasIsmGrowthDirection"] is True
+    assert payload["hasBothExpanding"] is True
+    assert payload["hasPmiTrend"] is True
+    assert payload["removedSurveyAlignment"] is True
+    assert payload["hasNewOrdersSignal"] is True
+    assert payload["hasLeadingIndicatorComparison"] is True
+    assert payload["hasSlowingTogether"] is True
+    assert payload["hasIsmImpliedGdpGrowth"] is True
+    assert payload["hasPortfolioContribution"] is True
+    assert payload["hasObservationStatus"] is True
+    assert payload["hasServicesBacklogSignal"] is True
     assert payload["hasRawEvidenceHtml"] is True
     assert payload["hasNoEscapedEvidenceHtml"] is True
-    assert payload["hasMfgNewOrders"] is True
-    assert payload["hasSvcsBusinessActivity"] is True
+    assert payload["hasManufacturingNewOrders"] is True
+    assert payload["hasServicesBusinessActivity"] is True
     assert payload["hasSlowing"] is True
-    assert payload["hasNeutral"] is True
     assert payload["hasBroadExpansion"] is True
     assert payload["hasDemandSlowing"] is True
     assert payload["hasSurveySynthesisCard"] is True
@@ -2272,9 +2319,13 @@ def test_survey_synthesis_uses_ism_labels_and_dynamic_portfolio_bias_explanation
         });
 
         console.log(JSON.stringify({
-          hasIsmMomentum: neutral.includes("ISM Momentum") && neutral.includes("ISM动能"),
-          hasIsmPortfolioBias: neutral.includes("ISM Portfolio Bias") && neutral.includes("ISM组合倾向"),
-          removedOldLabels: !neutral.includes("Growth momentum") && !neutral.includes("Survey implication"),
+          hasPmiTrend: neutral.includes("Manufacturing &amp; Services PMI Trend")
+            && neutral.includes("制造业与服务业PMI走势"),
+          hasPortfolioContribution: neutral.includes("ISM Portfolio Contribution") && neutral.includes("ISM对组合倾向的影响"),
+          removedOldLabels: !neutral.includes("Growth momentum")
+            && !neutral.includes("Survey implication")
+            && !neutral.includes("ISM Momentum")
+            && !neutral.includes("ISM Portfolio Bias"),
           neutralExplanation: neutral.includes("ISM signals alone do not support materially increasing risk exposure or shifting to a short posture."),
           neutralChinese: neutral.includes("仅凭ISM信号，不足以支持明显增加风险资产敞口，也不足以支持转向做空。"),
           longExplanation: long.includes("ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture."),
@@ -2294,8 +2345,8 @@ def test_survey_synthesis_uses_ism_labels_and_dynamic_portfolio_bias_explanation
     )
 
     assert json.loads(result.stdout) == {
-        "hasIsmMomentum": True,
-        "hasIsmPortfolioBias": True,
+        "hasPmiTrend": True,
+        "hasPortfolioContribution": True,
         "removedOldLabels": True,
         "neutralExplanation": True,
         "neutralChinese": True,
