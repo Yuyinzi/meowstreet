@@ -771,12 +771,14 @@ def test_macro_dashboard_js_renders_survey_synthesis_placeholder_card():
     assert "Pending Inputs" in js
     assert "待输入" in js
     assert "Business surveys expanding?" in js
-    assert "Growth momentum" in js
+    assert "ISM Momentum" in js
+    assert "ISM动能" in js
     assert "Surveys aligned?" in js
     assert "Demand aligned?" in js
-    assert "Leading side" in js
+    assert "Cross-sector lead" in js
     assert "GDP direction" in js
-    assert "Survey implication" in js
+    assert "ISM Portfolio Bias" in js
+    assert "ISM组合倾向" in js
     assert "survey-synthesis-row" in js
     assert "survey-synthesis-question" in js
     assert "survey-synthesis-answer" in js
@@ -2198,6 +2200,84 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
     assert payload["hasSurveySynthesisCard"] is True
     assert payload["hasAvailableBadge"] is True
     assert payload["hasPendingInputsBadge"] is True
+
+
+def test_survey_synthesis_uses_ism_labels_and_dynamic_portfolio_bias_explanations():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+        };
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const baseCard = {
+          id: "survey_synthesis",
+          status: "available",
+          economic_direction: "aligned_expansion",
+          growth_momentum: "falling",
+          survey_alignment: "aligned",
+          demand_alignment: "aligned_falling",
+          leading_side: "not_applicable",
+          expected_gdp_direction: "slowing",
+          reasons: [],
+          conflicts: [],
+        };
+        const renderBias = (bias, status = "available") =>
+          hooks.renderSurveySynthesisCard({
+            ...baseCard,
+            status,
+            survey_portfolio_implication: bias,
+          });
+
+        const neutral = renderBias("neutral");
+        const long = renderBias("long");
+        const defensive = renderBias("short_or_neutral");
+        const unavailable = renderBias(null, "partial");
+
+        console.log(JSON.stringify({
+          hasIsmMomentum: neutral.includes("ISM Momentum") && neutral.includes("ISM动能"),
+          hasIsmPortfolioBias: neutral.includes("ISM Portfolio Bias") && neutral.includes("ISM组合倾向"),
+          removedOldLabels: !neutral.includes("Growth momentum") && !neutral.includes("Survey implication"),
+          neutralExplanation: neutral.includes("ISM signals alone do not support materially increasing risk exposure or shifting to a short posture."),
+          neutralChinese: neutral.includes("仅凭ISM信号，不足以支持明显增加风险资产敞口，也不足以支持转向做空。"),
+          longExplanation: long.includes("ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture."),
+          defensiveExplanation: defensive.includes("ISM signals support a neutral or more defensive posture, while Market Setup determines the final portfolio posture."),
+          unavailableExplanation: unavailable.includes("Manufacturing and Services data are insufficient to form an ISM portfolio bias."),
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+
+    assert json.loads(result.stdout) == {
+        "hasIsmMomentum": True,
+        "hasIsmPortfolioBias": True,
+        "removedOldLabels": True,
+        "neutralExplanation": True,
+        "neutralChinese": True,
+        "longExplanation": True,
+        "defensiveExplanation": True,
+        "unavailableExplanation": True,
+    }
 
 
 def test_macro_dashboard_js_keeps_ism_policy_pressure_out_of_fomc_card():

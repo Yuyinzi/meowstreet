@@ -1161,12 +1161,20 @@
     // Survey Synthesis
     "Survey Synthesis": "调查综合",
     "Business surveys expanding?": "商业调查在扩张？",
-    "Growth momentum": "增长动能",
+    "ISM Momentum": "ISM动能",
     "Surveys aligned?": "调查结果一致？",
     "Demand aligned?": "需求一致？",
-    "Leading side": "领先方",
+    "Cross-sector lead": "跨行业领先",
+    "Services Leading": "服务业领先",
+    "Manufacturing Leading": "制造业领先",
+    "Not Applicable": "不适用",
+    "Unresolved": "尚未确认",
     "GDP direction": "GDP方向",
-    "Survey implication": "调查含义",
+    "ISM Portfolio Bias": "ISM组合倾向",
+    "ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture.": "ISM信号支持更积极的风险资产倾向，但最终仓位仍由Market Setup决定。",
+    "ISM signals alone do not support materially increasing risk exposure or shifting to a short posture.": "仅凭ISM信号，不足以支持明显增加风险资产敞口，也不足以支持转向做空。",
+    "ISM signals support a neutral or more defensive posture, while Market Setup determines the final portfolio posture.": "ISM信号支持保持中性或提高防御性，但最终仓位仍由Market Setup决定。",
+    "Manufacturing and Services data are insufficient to form an ISM portfolio bias.": "制造业和服务业数据尚不足，暂不形成ISM组合倾向。",
     "Rising": "上升",
     "Falling": "下降",
     "Flat": "持平",
@@ -3768,15 +3776,23 @@ html += '</div>';
     `;
   }
 
+  function _crossSectorLeadLabel(leading) {
+    if (!leading || leading === "not_applicable") return "Not Applicable";
+    if (leading === "services") return "Services Leading";
+    if (leading === "manufacturing") return "Manufacturing Leading";
+    if (leading === "unresolved") return "Unresolved";
+    return titleCaseToken(leading);
+  }
+
   function renderSurveySynthesisCard(card) {
     const rows = [
       { question: "Business surveys expanding?", answer: titleCaseToken(card.economic_direction || "unavailable") },
-      { question: "Growth momentum", answer: titleCaseToken(card.growth_momentum || "unavailable") },
+      { question: "ISM Momentum", answer: titleCaseToken(card.growth_momentum || "unavailable") },
       { question: "Surveys aligned?", answer: titleCaseToken(card.survey_alignment || "unavailable") },
       { question: "Demand aligned?", answer: titleCaseToken(card.demand_alignment || "unavailable") },
-      { question: "Leading side", answer: titleCaseToken(card.leading_side || "not_applicable") },
+      { question: "Cross-sector lead", answer: _crossSectorLeadLabel(card.leading_side) },
       { question: "GDP direction", answer: titleCaseToken(card.expected_gdp_direction || "unavailable") },
-      { question: "Survey implication", answer: titleCaseToken(card.survey_portfolio_implication || "unavailable") },
+      { question: "ISM Portfolio Bias", answer: titleCaseToken(card.survey_portfolio_implication || "unavailable") },
     ];
 
     const rowsHtml = rows.map((row) => `
@@ -3794,6 +3810,19 @@ html += '</div>';
       ? `<div class="survey-synthesis-conflicts"><strong>${bilingualLabel("Conflicts")}</strong><ul>${(card.conflicts || []).map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul></div>`
       : "";
 
+    const biasExplanations = {
+      long: "ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture.",
+      neutral: "ISM signals alone do not support materially increasing risk exposure or shifting to a short posture.",
+      short_or_neutral: "ISM signals support a neutral or more defensive posture, while Market Setup determines the final portfolio posture.",
+    };
+    const biasExplanation = biasExplanations[card.survey_portfolio_implication]
+      || "Manufacturing and Services data are insufficient to form an ISM portfolio bias.";
+    const biasExplanationHtml = `
+      <div class="survey-portfolio-bias-explanation">
+        ${bilingualLabel(biasExplanation)}
+      </div>
+    `;
+
     const status = card.status || "pending_inputs";
     return `
       <div class="survey-synthesis-card">
@@ -3803,6 +3832,7 @@ html += '</div>';
         <div class="survey-synthesis-grid">
           ${rowsHtml}
         </div>
+        ${biasExplanationHtml}
         ${evidenceHtml}
         ${conflictsHtml}
       </div>

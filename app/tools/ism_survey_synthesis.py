@@ -67,6 +67,8 @@ def _services_component(signal):
             "demand_momentum": None,
             "growth_impulse": None,
             "backlog_confirmation": None,
+            "activity_level": None,
+            "activity_momentum": None,
         }
     metrics = signal.get("metrics", {})
     return {
@@ -78,6 +80,8 @@ def _services_component(signal):
         "demand_momentum": metrics["new_orders"]["momentum"],
         "growth_impulse": signal.get("state"),
         "backlog_confirmation": signal.get("backlog_confirmation"),
+        "activity_level": metrics["business_activity"]["level"],
+        "activity_momentum": metrics["business_activity"]["momentum"],
     }
 
 
@@ -160,13 +164,41 @@ def _survey_portfolio_implication(gdp_direction):
     return "neutral"
 
 
-def _leading_side(comp):
-    alignment = _survey_alignment(comp)
-    if alignment == "aligned":
-        return "not_applicable"
-    if alignment == "divergent":
+def _cross_sector_comparison(comp):
+    mfg = comp["manufacturing"]
+    svc = comp["services"]
+    mfg_orders_level = mfg.get("demand_level")
+    mfg_orders_mom = mfg.get("demand_momentum")
+    svc_activity_level = svc.get("activity_level")
+    svc_activity_mom = svc.get("activity_momentum")
+    if mfg_orders_level is None or svc_activity_level is None:
+        return None
+    if mfg_orders_level == svc_activity_level:
+        if mfg_orders_mom == svc_activity_mom:
+            return "aligned"
+        if mfg_orders_mom == "falling" and svc_activity_mom == "rising":
+            return "services_stronger"
+        if mfg_orders_mom == "rising" and svc_activity_mom == "falling":
+            return "manufacturing_stronger"
         return "unresolved"
-    return "not_applicable"
+    if mfg_orders_level == "contracting" and svc_activity_level == "expanding":
+        return "services_stronger"
+    if mfg_orders_level == "expanding" and svc_activity_level == "contracting":
+        return "manufacturing_stronger"
+    return "unresolved"
+
+
+def _leading_side(comp):
+    comparison = _cross_sector_comparison(comp)
+    if comparison is None:
+        return "not_applicable"
+    leading_side_by_relationship = {
+        "aligned": "not_applicable",
+        "services_stronger": "services",
+        "manufacturing_stronger": "manufacturing",
+        "unresolved": "unresolved",
+    }
+    return leading_side_by_relationship.get(comparison, "not_applicable")
 
 
 def _agreements(comp, direction, demand):
@@ -243,6 +275,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "survey_alignment": "unresolved",
             "demand_alignment": None,
             "leading_side": "not_applicable",
+            "cross_sector_comparison": None,
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
             "components": comp,
@@ -264,6 +297,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "survey_alignment": "unresolved",
             "demand_alignment": None,
             "leading_side": "not_applicable",
+            "cross_sector_comparison": None,
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
             "components": comp,
@@ -285,6 +319,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "survey_alignment": "unresolved",
             "demand_alignment": None,
             "leading_side": "not_applicable",
+            "cross_sector_comparison": None,
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
             "components": comp,
@@ -307,6 +342,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "survey_alignment": "unresolved",
             "demand_alignment": None,
             "leading_side": "not_applicable",
+            "cross_sector_comparison": None,
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
             "components": comp,
@@ -324,6 +360,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
     gdp_direction = _expected_gdp_direction(comp)
     implication = _survey_portfolio_implication(gdp_direction)
     leading = _leading_side(comp)
+    cross = _cross_sector_comparison(comp)
 
     return {
         "version": SURVEY_SYNTHESIS_VERSION,
@@ -334,6 +371,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
         "survey_alignment": alignment,
         "demand_alignment": demand,
         "leading_side": leading,
+        "cross_sector_comparison": cross,
         "expected_gdp_direction": gdp_direction,
         "survey_portfolio_implication": implication,
         "components": comp,

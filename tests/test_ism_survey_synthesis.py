@@ -35,8 +35,12 @@ def services_signal(
     pmi_momentum="falling",
     orders_level="expanding",
     orders_momentum="falling",
+    activity_level=None,
+    activity_momentum=None,
     period="2026-06-01",
 ):
+    ba_level = activity_level if activity_level is not None else pmi_level
+    ba_momentum = activity_momentum if activity_momentum is not None else pmi_momentum
     return {
         "version": "ism_services_signal_v1",
         "state": "supports_growth",
@@ -51,8 +55,8 @@ def services_signal(
             "business_activity": {
                 "value": 55.4,
                 "previous_value": 56.0,
-                "level": pmi_level,
-                "momentum": pmi_momentum,
+                "level": ba_level,
+                "momentum": ba_momentum,
             },
             "new_orders": {
                 "value": 55.1,
@@ -146,7 +150,7 @@ def test_cross_survey_divergence_is_not_averaged():
     assert result["survey_alignment"] == "divergent"
     assert result["expected_gdp_direction"] == "mixed"
     assert result["survey_portfolio_implication"] == "neutral"
-    assert result["leading_side"] == "unresolved"
+    assert result["cross_sector_comparison"] == "services_stronger"
     assert result["conflicts"]
 
 
@@ -158,6 +162,7 @@ def test_one_missing_survey_is_partial_without_combined_direction():
     assert result["status"] == "partial"
     assert result["expected_gdp_direction"] is None
     assert result["survey_portfolio_implication"] is None
+    assert result["cross_sector_comparison"] is None
     assert result["missing_inputs"] == ["ISM Services"]
 
 
@@ -214,12 +219,14 @@ def test_manufacturing_unavailable_is_partial():
         services_signal(),
     )
     assert result["status"] == "partial"
+    assert result["cross_sector_comparison"] is None
     assert result["missing_inputs"] == ["ISM Manufacturing"]
 
 
 def test_both_missing_is_not_available():
     result = ism_survey_synthesis.build_survey_synthesis(None, None)
     assert result["status"] == "partial"
+    assert result["cross_sector_comparison"] is None
     assert result["missing_inputs"] == ["ISM Manufacturing", "ISM Services"]
     assert result["economic_direction"] is None
     assert result["expected_gdp_direction"] is None
@@ -259,6 +266,73 @@ def test_demand_alignment_divergent_levels():
         services_signal(orders_level="expanding", orders_momentum="falling"),
     )
     assert result["demand_alignment"] == "divergent"
+
+
+def test_synthesis_compares_manufacturing_new_orders_with_services_activity():
+    result = ism_survey_synthesis.build_survey_synthesis(
+        manufacturing_signal(
+            pmi_level="expanding",
+            orders_level="contracting",
+            orders_momentum="falling",
+        ),
+        services_signal(
+            pmi_level="expanding",
+            activity_level="expanding",
+            activity_momentum="rising",
+        ),
+    )
+
+    assert result["components"]["services"]["activity_level"] == "expanding"
+    assert result["components"]["services"]["activity_momentum"] == "rising"
+    assert result["cross_sector_comparison"] == "services_stronger"
+    assert result["leading_side"] == "services"
+
+
+def test_synthesis_cross_sector_aligned_when_same_level_and_momentum():
+    result = ism_survey_synthesis.build_survey_synthesis(
+        manufacturing_signal(
+            orders_level="expanding",
+            orders_momentum="falling",
+        ),
+        services_signal(
+            activity_level="expanding",
+            activity_momentum="falling",
+        ),
+    )
+    assert result["cross_sector_comparison"] == "aligned"
+    assert result["leading_side"] == "not_applicable"
+
+
+def test_synthesis_cross_sector_manufacturing_stronger():
+    result = ism_survey_synthesis.build_survey_synthesis(
+        manufacturing_signal(
+            orders_level="expanding",
+            orders_momentum="rising",
+        ),
+        services_signal(
+            pmi_level="expanding",
+            activity_level="expanding",
+            activity_momentum="falling",
+        ),
+    )
+    assert result["cross_sector_comparison"] == "manufacturing_stronger"
+    assert result["leading_side"] == "manufacturing"
+
+
+def test_synthesis_cross_sector_unresolved_when_unclear():
+    result = ism_survey_synthesis.build_survey_synthesis(
+        manufacturing_signal(
+            orders_level="contracting",
+            orders_momentum="rising",
+        ),
+        services_signal(
+            pmi_level="contracting",
+            activity_level="neutral",
+            activity_momentum="falling",
+        ),
+    )
+    assert result["cross_sector_comparison"] == "unresolved"
+    assert result["leading_side"] == "unresolved"
 
 
 def test_mixed_headline_momentum_when_surveys_disagree():
