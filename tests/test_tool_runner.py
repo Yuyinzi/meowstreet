@@ -129,38 +129,10 @@ def test_apply_tools_merges_macro_dashboard_observations():
         return {
             "macro": {
                 "growth_cycle": {
-                    "growth_cycle_bias": "long",
-                }
-            }
-        }
-
-    enriched = tool_runner.apply_tools(
-        method_with_macro_dashboard_hook(),
-        {"symbol": "AAPL", "observations": {}},
-        macro_dashboard_fetcher=fetch_macro_dashboard,
-    )
-
-    assert enriched["macro"]["growth_cycle"]["growth_cycle_bias"] == "long"
-
-
-def test_apply_tools_merges_growth_cycle_bias_evidence():
-    def fetch_macro_dashboard():
-        return {
-            "macro": {
-                "growth_cycle": {
-                    "growth_cycle_bias": None,
-                    "growth_cycle_bias_evidence": {
-                        "version": "growth_cycle_bias_v2",
-                        "status": "pending_inputs",
-                        "bias": None,
-                        "ism_contribution": "unavailable",
-                        "components": {
-                            "ism_manufacturing": "unavailable",
-                            "ism_services": "unavailable",
-                            "labor": "unavailable",
-                        },
-                        "missing_inputs": ["ISM Manufacturing"],
-                        "reasons": ["ISM Manufacturing data is unavailable"],
+                    "survey_synthesis": {
+                        "version": "ism_survey_synthesis_v1",
+                        "status": "available",
+                        "expected_gdp_direction": "slowing",
                     },
                 }
             }
@@ -173,30 +145,51 @@ def test_apply_tools_merges_growth_cycle_bias_evidence():
     )
 
     assert (
-        enriched["macro"]["growth_cycle"]["growth_cycle_bias_evidence"]["version"]
-        == "growth_cycle_bias_v2"
+        enriched["macro"]["growth_cycle"]["survey_synthesis"]["expected_gdp_direction"]
+        == "slowing"
     )
-    assert enriched["macro"]["growth_cycle"]["growth_cycle_bias"] is None
 
 
-def test_apply_tools_does_not_overwrite_user_observations_with_bias_evidence():
+def test_apply_tools_merges_survey_synthesis_data():
     def fetch_macro_dashboard():
         return {
             "macro": {
                 "growth_cycle": {
-                    "growth_cycle_bias": "long",
-                    "growth_cycle_bias_evidence": {
-                        "version": "growth_cycle_bias_v2",
+                    "survey_synthesis": {
+                        "version": "ism_survey_synthesis_v1",
+                        "status": "pending_inputs",
+                        "economic_direction": None,
+                        "missing_inputs": ["ISM Manufacturing", "ISM Services"],
+                        "reasons": [],
+                    },
+                }
+            }
+        }
+
+    enriched = tool_runner.apply_tools(
+        method_with_macro_dashboard_hook(),
+        {"symbol": "AAPL", "observations": {}},
+        macro_dashboard_fetcher=fetch_macro_dashboard,
+    )
+
+    assert (
+        enriched["macro"]["growth_cycle"]["survey_synthesis"]["version"]
+        == "ism_survey_synthesis_v1"
+    )
+
+
+def test_apply_tools_does_not_overwrite_user_observations_with_synthesis():
+    def fetch_macro_dashboard():
+        return {
+            "macro": {
+                "growth_cycle": {
+                    "survey_synthesis": {
+                        "version": "ism_survey_synthesis_v1",
                         "status": "available",
-                        "bias": "long",
-                        "ism_contribution": "supports_long",
-                        "components": {
-                            "ism_manufacturing": "supports_growth",
-                            "ism_services": "available",
-                            "labor": "stable",
-                        },
+                        "economic_direction": "aligned_expansion",
+                        "expected_gdp_direction": "slowing",
                         "missing_inputs": [],
-                        "reasons": ["Manufacturing and services both expanding"],
+                        "reasons": ["Business surveys indicate broad expansion"],
                     },
                 }
             }
@@ -209,7 +202,9 @@ def test_apply_tools_does_not_overwrite_user_observations_with_bias_evidence():
             "observations": {
                 "macro": {
                     "growth_cycle": {
-                        "growth_cycle_bias": "user_override",
+                        "survey_synthesis": {
+                            "expected_gdp_direction": "user_override",
+                        }
                     }
                 }
             },
@@ -217,8 +212,11 @@ def test_apply_tools_does_not_overwrite_user_observations_with_bias_evidence():
         macro_dashboard_fetcher=fetch_macro_dashboard,
     )
 
-    assert enriched["macro"]["growth_cycle"]["growth_cycle_bias"] == "user_override"
     assert (
-        enriched["macro"]["growth_cycle"]["growth_cycle_bias_evidence"]["version"]
-        == "growth_cycle_bias_v2"
+        enriched["macro"]["growth_cycle"]["survey_synthesis"]["expected_gdp_direction"]
+        == "user_override"
+    )
+    assert (
+        enriched["macro"]["growth_cycle"]["survey_synthesis"]["version"]
+        == "ism_survey_synthesis_v1"
     )

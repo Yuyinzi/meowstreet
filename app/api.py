@@ -17,6 +17,7 @@ from app.tools import (
     ism_industry_analysis,
     ism_macro_signal,
     ism_official_report,
+    ism_survey_synthesis,
     macro_growth_cycle,
     market_phase,
     market_setup,
@@ -466,6 +467,10 @@ def macro_dashboard_growth_cycle():
             ism_at_a_glance=ism_at_a_glance,
             ism_macro_signal=ism_macro_signal_result,
             ism_services_card=ism_services_data["card"],
+            survey_synthesis=ism_survey_synthesis.build_survey_synthesis(
+                ism_macro_signal_result,
+                ism_services_data["signal"],
+            ),
         )
         return growth_cycle_payload
     finally:
@@ -565,6 +570,11 @@ def macro_dashboard_market_setup():
                     "ism macro signal build failed for market setup", exc_info=True
                 )
         growth_cycle_data = dashboard.get("macro", {}).get("growth_cycle", {})
+        ism_services_data = ism_services_dashboard.load_overview(con)
+        survey_synthesis_result = ism_survey_synthesis.build_survey_synthesis(
+            ism_macro_signal_result,
+            ism_services_data["signal"],
+        )
         fomc_tone_headline = macro_growth_cycle.build_fomc_tone_headline(
             fomc_latest_tone
         )
@@ -579,12 +589,14 @@ def macro_dashboard_market_setup():
         )
         market_phase_payload = _load_market_phase_for_setup()
         rates_liquidity_payload = _load_rates_liquidity_for_setup(con)
+        if ism_reports and ism_macro_signal_result is None:
+            ism_macro_signal_result = {
+                "version": ism_macro_signal.ISM_MACRO_SIGNAL_VERSION,
+                "status": "invalid_data",
+            }
         payload = market_setup.build_market_setup(
             market_phase_payload=market_phase_payload,
-            ism_macro_signal=ism_macro_signal_result,
-            growth_cycle_bias_evidence=growth_cycle_data.get(
-                "growth_cycle_bias_evidence"
-            ),
+            survey_synthesis=survey_synthesis_result,
             rates_liquidity_payload=rates_liquidity_payload,
             fomc_tone=fomc_tone_headline,
             m2_headline=m2_headline,

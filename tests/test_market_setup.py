@@ -3,6 +3,36 @@ from copy import deepcopy
 from app.tools import market_setup
 
 
+def _survey_synthesis(
+    status="available",
+    economic_direction="aligned_expansion",
+    expected_gdp_direction="rising",
+    survey_portfolio_implication="long",
+    period="2026-06",
+    agreements=None,
+    conflicts=None,
+    reasons=None,
+):
+    return {
+        "version": "ism_survey_synthesis_v1",
+        "status": status,
+        "period": period,
+        "economic_direction": economic_direction,
+        "growth_momentum": "rising",
+        "survey_alignment": "aligned",
+        "demand_alignment": "aligned_rising",
+        "leading_side": "not_applicable",
+        "expected_gdp_direction": expected_gdp_direction,
+        "survey_portfolio_implication": survey_portfolio_implication,
+        "components": {},
+        "agreements": agreements or ["Manufacturing and Services are both expanding"],
+        "conflicts": conflicts or [],
+        "missing_inputs": [],
+        "pending_questions": [],
+        "reasons": reasons or ["Business surveys indicate broad expansion"],
+    }
+
+
 def _market_phase_payload(state="bull_market"):
     return {
         "markets": [
@@ -130,47 +160,82 @@ class TestBuildMarketEnvironment:
 
 
 class TestBuildExpectedGrowth:
-    def test_expansion_rising(self):
+    def test_aligned_expansion_slowing(self):
         result = market_setup.build_expected_growth(
-            _ism_macro_signal("expansion_rising", "supports_growth"), None
+            _survey_synthesis(
+                expected_gdp_direction="slowing",
+                survey_portfolio_implication="neutral",
+            )
         )
-        assert result["state"] == "expansion_rising"
-        assert result["expected_gdp_direction"] == "rising"
-        assert result["initial_bias"] == "long"
-
-    def test_contraction_deepening(self):
-        result = market_setup.build_expected_growth(
-            _ism_macro_signal("contraction_deepening", "supports_contraction"), None
-        )
-        assert result["state"] == "contraction_deepening"
-        assert result["expected_gdp_direction"] == "falling"
-        assert result["initial_bias"] == "short"
-
-    def test_peaking(self):
-        result = market_setup.build_expected_growth(
-            _ism_macro_signal("peaking", "growth_caution"), None
-        )
+        assert result["state"] == "aligned_expansion"
         assert result["expected_gdp_direction"] == "slowing"
         assert result["initial_bias"] == "neutral"
+        assert result["source_module"] == "ism_survey_synthesis"
+        assert result["data_status"] == "available"
 
-    def test_troughing(self):
+    def test_aligned_contraction_falling(self):
         result = market_setup.build_expected_growth(
-            _ism_macro_signal("troughing", "turning_supportive"), None
+            _survey_synthesis(
+                economic_direction="aligned_contraction",
+                expected_gdp_direction="falling",
+                survey_portfolio_implication="short_or_neutral",
+                agreements=["Manufacturing and Services are both contracting"],
+                reasons=["Business surveys indicate broad contraction"],
+                period="2026-06",
+            )
         )
-        assert result["expected_gdp_direction"] == "rebound_risk"
-        assert result["initial_bias"] == "neutral_to_long"
-
-    def test_contraction_improving(self):
-        result = market_setup.build_expected_growth(
-            _ism_macro_signal("contraction_improving", "contraction_easing"), None
-        )
-        assert result["expected_gdp_direction"] == "improving"
-        assert result["initial_bias"] == "short"
+        assert result["state"] == "aligned_contraction"
+        assert result["expected_gdp_direction"] == "falling"
+        assert result["initial_bias"] == "short_or_neutral"
+        assert result["source_module"] == "ism_survey_synthesis"
+        assert result["data_status"] == "available"
 
     def test_no_signal(self):
-        result = market_setup.build_expected_growth(None, None)
+        result = market_setup.build_expected_growth(None)
         assert result["state"] == "unavailable"
         assert result["data_status"] == "missing"
+
+    def test_partial_synthesis(self):
+        result = market_setup.build_expected_growth(
+            _survey_synthesis(
+                status="partial",
+                expected_gdp_direction=None,
+                survey_portfolio_implication=None,
+            )
+        )
+        assert result["state"] == "unavailable"
+        assert result["data_status"] == "missing"
+
+    def test_expected_growth_uses_survey_synthesis(self):
+        result = market_setup.build_expected_growth(
+            _survey_synthesis(
+                economic_direction="aligned_expansion",
+                expected_gdp_direction="slowing",
+                survey_portfolio_implication="neutral",
+                reasons=["Both surveys are expanding but slowing"],
+                agreements=["Both surveys are expanding"],
+                period="2026-06",
+            )
+        )
+        assert result["state"] == "aligned_expansion"
+        assert result["expected_gdp_direction"] == "slowing"
+        assert result["initial_bias"] == "neutral"
+        assert result["source_module"] == "ism_survey_synthesis"
+        assert result["data_status"] == "available"
+
+    def test_expected_growth_rejects_partial_synthesis(self):
+        result = market_setup.build_expected_growth(
+            {
+                "status": "partial",
+                "period": None,
+                "expected_gdp_direction": None,
+                "survey_portfolio_implication": None,
+                "missing_inputs": ["ISM Services"],
+            }
+        )
+        assert result["state"] == "unavailable"
+        assert result["data_status"] == "missing"
+        assert result["missing_inputs"] == ["ISM Services"]
 
 
 class TestBuildFinancialConditions:
@@ -269,7 +334,12 @@ class TestClassifySetupType:
             _market_phase_payload("bull_market")
         )
         expected_growth = market_setup.build_expected_growth(
-            _ism_macro_signal("expansion_rising", "supports_growth"), None
+            _survey_synthesis(
+                economic_direction="aligned_expansion",
+                expected_gdp_direction="rising",
+                survey_portfolio_implication="long",
+                period="2026-06",
+            )
         )
         fc = market_setup.build_financial_conditions(
             _rates_liquidity_payload("steep", "healthy", 12.0, 0.5)
@@ -289,7 +359,12 @@ class TestClassifySetupType:
             _market_phase_payload("bear_market")
         )
         expected_growth = market_setup.build_expected_growth(
-            _ism_macro_signal("contraction_deepening", "supports_contraction"), None
+            _survey_synthesis(
+                economic_direction="aligned_contraction",
+                expected_gdp_direction="falling",
+                survey_portfolio_implication="short_or_neutral",
+                period="2026-06",
+            )
         )
         fc = market_setup.build_financial_conditions(
             _rates_liquidity_payload("inverted", "crisis_stress", 35.0, 2.5)
@@ -308,7 +383,12 @@ class TestClassifySetupType:
             _market_phase_payload("bull_market")
         )
         expected_growth = market_setup.build_expected_growth(
-            _ism_macro_signal("contraction_improving", "contraction_easing"), None
+            _survey_synthesis(
+                economic_direction="aligned_contraction",
+                expected_gdp_direction="improving",
+                survey_portfolio_implication="neutral",
+                period="2026-06",
+            )
         )
         fc = market_setup.build_financial_conditions(
             _rates_liquidity_payload("flat", "healthy", 18.0, 1.0)
@@ -327,7 +407,12 @@ class TestClassifySetupType:
             _market_phase_payload("bull_market")
         )
         expected_growth = market_setup.build_expected_growth(
-            _ism_macro_signal("expansion_rising", "supports_growth"), None
+            _survey_synthesis(
+                economic_direction="aligned_expansion",
+                expected_gdp_direction="rising",
+                survey_portfolio_implication="long",
+                period="2026-06",
+            )
         )
         fc = market_setup.build_financial_conditions(
             _rates_liquidity_payload("inverted", "healthy", 20.0, 2.5)
@@ -346,7 +431,12 @@ class TestClassifySetupType:
             _market_phase_payload("bull_market")
         )
         expected_growth = market_setup.build_expected_growth(
-            _ism_macro_signal("stable", "mixed"), None
+            _survey_synthesis(
+                economic_direction="aligned_neutral",
+                expected_gdp_direction="mixed",
+                survey_portfolio_implication="neutral",
+                period="2026-06",
+            )
         )
         fc = market_setup.build_financial_conditions(
             _rates_liquidity_payload("steep", "healthy", 15.0, 0.5)
@@ -367,7 +457,12 @@ class TestReconcilePortfolioPosture:
             _market_phase_payload("bull_market")
         )
         expected_growth = market_setup.build_expected_growth(
-            _ism_macro_signal("contraction_deepening", "supports_contraction"), None
+            _survey_synthesis(
+                economic_direction="aligned_contraction",
+                expected_gdp_direction="falling",
+                survey_portfolio_implication="short_or_neutral",
+                period="2026-06",
+            )
         )
         fc = market_setup.build_financial_conditions(
             _rates_liquidity_payload("inverted", "crisis_stress", 35.0, 2.5)
@@ -393,7 +488,12 @@ class TestReconcilePortfolioPosture:
             _market_phase_payload("bear_market")
         )
         expected_growth = market_setup.build_expected_growth(
-            _ism_macro_signal("expansion_rising", "supports_growth"), None
+            _survey_synthesis(
+                economic_direction="aligned_expansion",
+                expected_gdp_direction="rising",
+                survey_portfolio_implication="long",
+                period="2026-06",
+            )
         )
         fc = market_setup.build_financial_conditions(
             _rates_liquidity_payload("steep", "healthy", 15.0, 0.5)
@@ -450,10 +550,12 @@ class TestDeterminism:
     def test_same_inputs_produce_same_setup(self):
         inputs = {
             "market_phase_payload": _market_phase_payload("bull_market"),
-            "ism_macro_signal": _ism_macro_signal(
-                "expansion_rising", "supports_growth"
+            "survey_synthesis": _survey_synthesis(
+                economic_direction="aligned_expansion",
+                expected_gdp_direction="rising",
+                survey_portfolio_implication="long",
+                period="2026-06",
             ),
-            "growth_cycle_bias_evidence": None,
             "rates_liquidity_payload": _rates_liquidity_payload("steep", "healthy"),
             "fomc_tone": _fomc_tone_headline("dovish", "cut"),
             "m2_headline": _m2_headline("expanding"),
@@ -476,13 +578,19 @@ class TestMissingAndPendingData:
     def test_pending_confirmations_are_later_method_items(self):
         result = market_setup.build_market_setup()
         pending = result.get("pending_confirmations", [])
-        assert "ISM Services" in pending
+        assert "Labor trend" in pending
+        assert "Consumer indicators" in pending
         assert all(isinstance(item, str) for item in pending)
 
     def test_gdp_not_a_current_signal(self):
         result = market_setup.build_market_setup(
             market_phase_payload=_market_phase_payload("bull_market"),
-            ism_macro_signal=_ism_macro_signal("expansion_rising", "supports_growth"),
+            survey_synthesis=_survey_synthesis(
+                economic_direction="aligned_expansion",
+                expected_gdp_direction="rising",
+                survey_portfolio_implication="long",
+                period="2026-06",
+            ),
             rates_liquidity_payload=_rates_liquidity_payload("steep", "healthy"),
             fomc_tone=_fomc_tone_headline("dovish", "cut"),
             m2_headline=_m2_headline("expanding"),
@@ -491,7 +599,7 @@ class TestMissingAndPendingData:
         )
         expected_growth = result.get("expected_growth", {})
         assert expected_growth.get("expected_gdp_direction") is not None
-        assert expected_growth.get("source_module") == "ism_macro_signal"
+        assert expected_growth.get("source_module") == "ism_survey_synthesis"
         reasons_text = " ".join(
             result.get("agreements", []) + result.get("conflicts", [])
         )
@@ -804,10 +912,12 @@ class TestNarrativeDeterminism:
     def test_identical_inputs_produce_identical_narrative_fields(self):
         inputs = {
             "market_phase_payload": _market_phase_payload("bull_market"),
-            "ism_macro_signal": _ism_macro_signal(
-                "expansion_rising", "supports_growth"
+            "survey_synthesis": _survey_synthesis(
+                economic_direction="aligned_expansion",
+                expected_gdp_direction="rising",
+                survey_portfolio_implication="long",
+                period="2026-06",
             ),
-            "growth_cycle_bias_evidence": None,
             "rates_liquidity_payload": _rates_liquidity_payload("steep", "healthy"),
             "fomc_tone": _fomc_tone_headline("dovish", "cut"),
             "m2_headline": _m2_headline("expanding"),
@@ -826,7 +936,12 @@ class TestNarrativeDeterminism:
     def test_narrative_fields_present_in_full_build(self):
         result = market_setup.build_market_setup(
             market_phase_payload=_market_phase_payload("bull_market"),
-            ism_macro_signal=_ism_macro_signal("expansion_rising", "supports_growth"),
+            survey_synthesis=_survey_synthesis(
+                economic_direction="aligned_expansion",
+                expected_gdp_direction="rising",
+                survey_portfolio_implication="long",
+                period="2026-06",
+            ),
             rates_liquidity_payload=_rates_liquidity_payload("steep", "healthy"),
             fomc_tone=_fomc_tone_headline("dovish", "cut"),
             m2_headline=_m2_headline("expanding"),

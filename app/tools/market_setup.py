@@ -113,46 +113,42 @@ def _ism_period(ism_macro_signal):
     return ism_macro_signal.get("period")
 
 
-def build_expected_growth(ism_macro_signal, growth_cycle_bias_evidence):
-    cycle_state = _ism_cycle_state(ism_macro_signal)
-    if cycle_state is None or cycle_state == "unavailable":
+def build_expected_growth(survey_synthesis):
+    if survey_synthesis is None:
         return {
             "state": "unavailable",
             "expected_gdp_direction": None,
             "initial_bias": "neutral",
-            "reason": "ISM macro signal is not available",
-            "evidence_links": ["ism_manufacturing"],
-            "source_module": "ism_macro_signal",
-            "observation_period": _ism_period(ism_macro_signal),
+            "reason": "Survey synthesis data is not available",
+            "evidence_links": ["ism_manufacturing", "ism_services"],
+            "source_module": "ism_survey_synthesis",
+            "observation_period": None,
             "data_status": "missing",
+            "missing_inputs": ["ISM Manufacturing", "ISM Services"],
         }
-    mapping = _ISM_EXPECTED_GDP_MAP.get(cycle_state)
-    if mapping is None:
+    status = survey_synthesis.get("status")
+    if status in ("partial", "mixed_periods"):
         return {
-            "state": "unresolved",
-            "expected_gdp_direction": "mixed",
+            "state": "unavailable",
+            "expected_gdp_direction": None,
             "initial_bias": "neutral",
-            "reason": f"ISM cycle state '{cycle_state}' does not map to a clear GDP direction",
-            "evidence_links": ["ism_manufacturing"],
-            "source_module": "ism_macro_signal",
-            "observation_period": _ism_period(ism_macro_signal),
-            "data_status": "partial",
+            "reason": "Survey synthesis is incomplete",
+            "evidence_links": ["ism_manufacturing", "ism_services"],
+            "source_module": "ism_survey_synthesis",
+            "observation_period": survey_synthesis.get("period"),
+            "data_status": "missing",
+            "missing_inputs": survey_synthesis.get("missing_inputs", []),
         }
-    direction, initial_bias, base_reason = mapping
-    growth_impulse = (
-        ism_macro_signal.get("growth_impulse", "unavailable")
-        if ism_macro_signal
-        else "unavailable"
-    )
     return {
-        "state": cycle_state,
-        "expected_gdp_direction": direction,
-        "initial_bias": initial_bias,
-        "growth_impulse": growth_impulse,
-        "reason": base_reason,
-        "evidence_links": ["ism_manufacturing"],
-        "source_module": "ism_macro_signal",
-        "observation_period": _ism_period(ism_macro_signal),
+        "state": survey_synthesis["economic_direction"],
+        "expected_gdp_direction": survey_synthesis["expected_gdp_direction"],
+        "initial_bias": survey_synthesis["survey_portfolio_implication"],
+        "reason": "; ".join(survey_synthesis.get("reasons", [])),
+        "agreements": survey_synthesis.get("agreements", []),
+        "conflicts": survey_synthesis.get("conflicts", []),
+        "evidence_links": ["ism_manufacturing", "ism_services"],
+        "source_module": "ism_survey_synthesis",
+        "observation_period": survey_synthesis.get("period"),
         "data_status": "available",
     }
 
@@ -851,37 +847,40 @@ def _growth_path_evidence(expected_growth):
     if state == "unavailable" or expected_growth.get("data_status") == "missing":
         return None
     if direction == "rising":
-        finding = "Manufacturing expansion is confirmed"
+        finding = "Business surveys indicate expansion is strengthening"
         implication = "GDP and earnings growth are likely to accelerate"
         tone = "constructive"
     elif direction == "slowing":
-        finding = "Manufacturing expansion is slowing"
+        finding = "Business survey expansion is slowing"
         implication = "GDP and earnings growth are more likely to slow than accelerate"
         tone = "caution"
     elif direction == "falling":
-        finding = "Manufacturing is contracting"
+        finding = "Business surveys indicate contraction"
         implication = "GDP and earnings are at risk of declining"
         tone = "defensive"
     elif direction == "improving":
-        finding = "Manufacturing contraction is showing early improvement"
+        finding = "Business survey contraction is showing early improvement"
         implication = "The worst of the macro deterioration may be passing"
         tone = "caution"
     elif direction == "rebound_risk":
-        finding = "Manufacturing may be near a cyclical trough"
+        finding = "Business surveys may be near a cyclical trough"
         implication = "A rebound would challenge bearish positioning"
         tone = "caution"
     elif direction == "stable":
-        finding = "Manufacturing momentum is flat"
+        finding = "Business survey momentum is flat"
         implication = "Growth path lacks a clear near-term catalyst"
         tone = "caution"
     else:
-        finding = "Manufacturing direction is unclear"
+        finding = "Business survey direction is unclear"
         implication = "Growth path requires more data to assess"
         tone = "caution"
     evidence = [expected_growth.get("reason", "")]
-    impulse = expected_growth.get("growth_impulse")
-    if impulse:
-        evidence.append(f"Growth impulse: {impulse}")
+    agreements = expected_growth.get("agreements", [])
+    if agreements:
+        evidence.extend(agreements)
+    conflicts = expected_growth.get("conflicts", [])
+    if conflicts:
+        evidence.extend(conflicts)
     return {
         "id": "growth_path",
         "title": "Growth path",
@@ -1126,8 +1125,7 @@ def _latest_period(*periods):
 
 def build_market_setup(
     market_phase_payload=None,
-    ism_macro_signal=None,
-    growth_cycle_bias_evidence=None,
+    survey_synthesis=None,
     rates_liquidity_payload=None,
     fomc_tone=None,
     m2_headline=None,
@@ -1136,9 +1134,7 @@ def build_market_setup(
     ism_industry_analysis=None,
 ):
     market_env = build_market_environment(market_phase_payload)
-    expected_growth = build_expected_growth(
-        ism_macro_signal, growth_cycle_bias_evidence
-    )
+    expected_growth = build_expected_growth(survey_synthesis)
     financial_conditions = build_financial_conditions(rates_liquidity_payload)
     policy_response = build_policy_response(
         fomc_tone, m2_headline, inflation_context, fed_balance_sheet
@@ -1172,7 +1168,7 @@ def build_market_setup(
     if market_env.get("data_status") == "missing":
         missing_inputs.append("Market phase (S&P 500)")
     if expected_growth.get("data_status") == "missing":
-        missing_inputs.append("ISM manufacturing signal")
+        missing_inputs.append("Survey synthesis (ISM Manufacturing and Services)")
     if financial_conditions.get("data_status") == "missing":
         missing_inputs.append("US rates and credit conditions")
     if policy_response.get("data_status") == "missing":
@@ -1206,7 +1202,7 @@ def build_market_setup(
         "conviction_limits": conviction_limits,
         "confirmation_conditions": confirmation_conditions,
         "missing_inputs": missing_inputs,
-        "pending_confirmations": ["ISM Services", "Labor trend", "Consumer indicators"],
+        "pending_confirmations": ["Labor trend", "Consumer indicators"],
         "limitations": [
             "This is a deterministic connection layer over Methods P2-P7. It does not calculate a numeric confidence score.",
             "Later-method indicators (ISM Services, labor, consumer) may change the outlook when implemented.",
