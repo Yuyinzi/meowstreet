@@ -4678,3 +4678,21 @@ h2 {
   color: #8B4513;
   background: #FFF8F0;
 }
+
+.survey-synthesis-layer {
+  margin-top: 24px;
+}
+
+.survey-synthesis-layer-body {
+  margin-top: 14px;
+  border: 1px solid #E0D6C8;
+  border-radius: 10px;
+  background: #FFFDFB;
+  padding: 14px;
+}
+
+.survey-synthesis-loading {
+  color: #8B7E74;
+  font-size: 14px;
+  margin: 12px 0 0;
+}

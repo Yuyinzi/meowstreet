@@ -1430,6 +1430,7 @@
       state.growthCycleError = error.message;
     }
     renderGrowthCycle();
+    renderSurveySynthesis();
   }
 
   function growthCycleCardsById(cards) {
@@ -1911,6 +1912,31 @@
     section.innerHTML = renderDecisionHero(presentation) + renderDetailedReasoning(presentation);
     announceStatus("Market setup \u2014 " + (presentation.portfolioPosture || "loaded"));
     bindEvidenceLinks(section);
+  }
+
+  function surveySynthesisHeadline() {
+    return ((state.growthCycle || {}).headline || [])
+      .find((card) => card.id === "survey_synthesis") || null;
+  }
+
+  function renderSurveySynthesis() {
+    const section = $("surveySynthesis");
+    if (!section) return;
+    const head = section.querySelector(".relationship-head");
+    if (state.growthCycleError) {
+      section.innerHTML = `${head.outerHTML}<p class="growth-empty">Failed to load survey synthesis.</p>`;
+      return;
+    }
+    if (!state.growthCycle) {
+      section.innerHTML = `${head.outerHTML}<div class="survey-synthesis-loading">Loading survey synthesis…</div>`;
+      return;
+    }
+    const card = surveySynthesisHeadline();
+    section.innerHTML = `${head.outerHTML}${
+      card
+        ? `<div class="survey-synthesis-layer-body">${renderSurveySynthesisCard(card)}</div>`
+        : '<p class="growth-empty">Survey synthesis data is not available.</p>'
+    }`;
   }
 
   function renderGrowthCycle() {
@@ -5031,6 +5057,8 @@
       formatComponentLabel,
       renderIsmPolicyPressure,
       renderSurveySynthesisCard,
+      surveySynthesisHeadline,
+      renderSurveySynthesis,
       renderFomcToneCard,
       computeSignalAgreement,
       buildMarketSetupPresentation,

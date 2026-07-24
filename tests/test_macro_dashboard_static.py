@@ -34,6 +34,19 @@ def test_macro_dashboard_html_embeds_growth_cycle_section():
     assert "M2 Money Supply" not in html
 
 
+def test_survey_synthesis_mount_is_between_market_setup_and_benchmarks():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+
+    market_setup = html.index('id="marketSetup"')
+    survey_synthesis = html.index('id="surveySynthesis"')
+    benchmarks = html.index('aria-label="Benchmark market phase overview"')
+    growth_cycle = html.index('id="growthCycle"')
+
+    assert market_setup < survey_synthesis < benchmarks < growth_cycle
+    assert 'aria-label="ISM survey synthesis decision layer"' in html
+    assert "Loading survey synthesis" in html
+
+
 def test_macro_dashboard_js_fetches_us_rates_liquidity_api():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 
@@ -2455,6 +2468,78 @@ def test_macro_dashboard_js_survey_synthesis_card_replaces_removed_features():
     assert payload["hasSurveySynthesis"] is True
     assert payload["hasBiasEvidenceStrip"] is True
     assert payload["hasGdpExpectationsCard"] is True
+
+
+def test_macro_dashboard_js_renders_survey_synthesis_as_standalone_layer():
+    script = textwrap.dedent(
+        """
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const surveyHead = {
+          outerHTML: '<div class="relationship-head"><h2>Survey Synthesis</h2></div>',
+        };
+        const elements = {
+          dashboardStatus: {},
+          surveySynthesis: {
+            innerHTML: "",
+            querySelector: () => surveyHead,
+            querySelectorAll: () => [],
+          },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const growthCycle = {
+          headline: [{
+            id: "survey_synthesis",
+            status: "available",
+            economic_direction: "aligned_expansion",
+            growth_momentum: "falling",
+            survey_alignment: "aligned",
+            demand_alignment: "aligned_falling",
+            leading_side: "not_applicable",
+            expected_gdp_direction: "slowing",
+            survey_portfolio_implication: "neutral",
+            reasons: ["Business surveys indicate broad expansion"],
+            conflicts: [],
+          }],
+        };
+
+        hooks.state.growthCycle = growthCycle;
+        hooks.renderSurveySynthesis();
+
+        console.log(JSON.stringify({
+          hasDecisionLayerTitle: elements.surveySynthesis.innerHTML.includes("Survey Synthesis"),
+          hasGdpDirection: elements.surveySynthesis.innerHTML.includes("Slowing"),
+          hasEvidence: elements.surveySynthesis.innerHTML.includes("Business surveys indicate broad expansion"),
+        }));
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasDecisionLayerTitle"] is True
+    assert payload["hasGdpDirection"] is True
+    assert payload["hasEvidence"] is True
 
 
 # --- Market Setup Decision Hero Tests ---
