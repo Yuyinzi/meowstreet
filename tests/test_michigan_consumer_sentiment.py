@@ -162,29 +162,108 @@ def test_parse_components_csv_rejects_nonnumeric_expectations(tmp_path):
 def test_michigan_client_fetch_csvs_returns_paths(tmp_path):
     client = MichiganConsumerSentimentClient()
 
-    def fake_urlopen(url, data=None, timeout=None):
-        class FakeResponse:
-            def read(self):
-                return b""
+    TABLE_1_RESPONSE = "Month,Year,Index,Title\n1,1978,80.0\n"
+    TABLE_5_RESPONSE = "Month,Year,Current Index,Expected Index\n1,1978,85.0,95.1\n"
 
-        return FakeResponse()
+    class FakeResponse:
+        def __init__(self, body):
+            self._body = body
+
+        def read(self):
+            return self._body
+
+    import unittest.mock
+
+    response_bodies = {}
+
+    def fake_urlopen(url, data=None, timeout=None):
+        body = response_bodies.get(url, b"")
+        return FakeResponse(body)
+
+    with unittest.mock.patch(
+        "app.data_sources.michigan_consumer_sentiment.urlopen",
+        side_effect=fake_urlopen,
+    ):
+        response_bodies.clear()
+        response_bodies[MICHIGAN_ARCHIVE_URL] = TABLE_1_RESPONSE.encode("utf-8")
+        result_table_1 = client.fetch_csv(tmp_path, AGGREGATE_TABLE_ID)
+        assert result_table_1.exists()
+        assert result_table_1.name == "table_1.csv"
+
+        response_bodies[MICHIGAN_ARCHIVE_URL] = TABLE_5_RESPONSE.encode("utf-8")
+        result_table_5 = client.fetch_csv(tmp_path, COMPONENTS_TABLE_ID)
+        assert result_table_5.exists()
+        assert result_table_5.name == "table_5.csv"
+
+
+def test_michigan_client_rejects_empty_response(tmp_path):
+    client = MichiganConsumerSentimentClient()
+
+    class FakeResponse:
+        def read(self):
+            return b""
 
     import unittest.mock
 
     with unittest.mock.patch(
         "app.data_sources.michigan_consumer_sentiment.urlopen",
-        side_effect=lambda url, data=None, timeout=None: fake_urlopen(
-            url, data, timeout
-        ),
+        side_effect=lambda url, data=None, timeout=None: FakeResponse(),
     ):
-        result = client.fetch_csvs(tmp_path)
+        with pytest.raises(ValueError, match="empty response body"):
+            client.fetch_csv(tmp_path, AGGREGATE_TABLE_ID)
 
-    assert AGGREGATE_TABLE_ID in result
-    assert COMPONENTS_TABLE_ID in result
-    assert result[AGGREGATE_TABLE_ID].exists()
-    assert result[COMPONENTS_TABLE_ID].exists()
-    assert result[AGGREGATE_TABLE_ID].name == "table_1.csv"
-    assert result[COMPONENTS_TABLE_ID].name == "table_5.csv"
+
+def test_fetch_csv_rejects_plain_text_response(tmp_path):
+    client = MichiganConsumerSentimentClient()
+
+    class FakeResponse:
+        def read(self):
+            return b"upstream temporarily unavailable"
+
+    import unittest.mock
+
+    with unittest.mock.patch(
+        "app.data_sources.michigan_consumer_sentiment.urlopen",
+        side_effect=lambda url, data=None, timeout=None: FakeResponse(),
+    ):
+        with pytest.raises(ValueError, match="missing required columns"):
+            client.fetch_csv(tmp_path, AGGREGATE_TABLE_ID)
+
+
+def test_fetch_csv_rejects_wrong_columns_for_table(tmp_path):
+    client = MichiganConsumerSentimentClient()
+
+    class FakeResponse:
+        def read(self):
+            return b"Date,Price\n1,100\n"
+
+    import unittest.mock
+
+    with unittest.mock.patch(
+        "app.data_sources.michigan_consumer_sentiment.urlopen",
+        side_effect=lambda url, data=None, timeout=None: FakeResponse(),
+    ):
+        with pytest.raises(ValueError, match="missing required columns"):
+            client.fetch_csv(tmp_path, COMPONENTS_TABLE_ID)
+
+
+def test_fetch_csv_rejects_html_response(tmp_path, monkeypatch):
+    from app.data_sources.michigan_consumer_sentiment import (
+        MichiganConsumerSentimentClient,
+    )
+
+    class FakeResponse:
+        def read(self):
+            return b"<html>upstream error</html>"
+
+    monkeypatch.setattr(
+        "app.data_sources.michigan_consumer_sentiment.urlopen",
+        lambda *a, **kw: FakeResponse(),
+    )
+
+    client = MichiganConsumerSentimentClient()
+    with pytest.raises(ValueError, match="non-csv"):
+        client.fetch_csv(tmp_path, 1)
 
 
 def test_michigan_client_parse_aggregate_round_trip(tmp_path):
@@ -201,6 +280,13 @@ def test_michigan_client_parse_components_round_trip(tmp_path):
     assert all(
         "date" in r and "current_conditions" in r and "expectations" in r for r in rows
     )
+
+
+def test_parse_aggregate_csv_rejects_html_content(tmp_path):
+    content = "<html><body>upstream error</body></html>"
+    path = _write_csv(tmp_path, "bad.csv", content)
+    with pytest.raises(ValueError, match="non-csv content"):
+        parse_aggregate_csv(path)
 
 
 def test_parse_components_csv_handles_trailing_blank_column(tmp_path):

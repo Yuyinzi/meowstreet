@@ -2908,11 +2908,19 @@
     if (!section) return;
     const head = section.querySelector(".relationship-head");
     if (state.consumerSentimentError) {
-      section.innerHTML = `${head.outerHTML}<p class="growth-empty">Failed to load consumer sentiment data.</p>`;
+      section.innerHTML = `${head.outerHTML}<div class="growth-empty" role="status">Failed to load consumer sentiment data. <button type="button" class="ms-retry-btn" data-consumer-retry>Retry</button></div>`;
+      const retryBtn = section.querySelector("[data-consumer-retry]");
+      if (retryBtn) {
+        retryBtn.addEventListener("click", () => {
+          state.consumerSentiment = null;
+          state.consumerSentimentError = null;
+          loadConsumerSentiment();
+        });
+      }
       return;
     }
     if (!state.consumerSentiment) {
-      section.innerHTML = `${head.outerHTML}<div class="consumer-loading">Loading consumer sentiment data...</div>`;
+      section.innerHTML = `${head.outerHTML}<div class="consumer-loading" aria-busy="true">Loading consumer sentiment data\u2026</div>`;
       return;
     }
     const cardHtml = window.consumerSentimentUi.renderCard(state.consumerSentiment, {
@@ -2946,23 +2954,19 @@
   function renderConsumerDetailInPanel(body) {
     const detailId = state.selectedConsumerDetailId;
     if (!detailId) return;
-    body.innerHTML = `<p class="status">Loading consumer detail...</p>`;
+    body.innerHTML = `<p class="status">Loading consumer detail\u2026</p>`;
     loadConsumerSentimentDetail()
       .then((payload) => {
-        body.innerHTML = `
-          <div class="ism-detail-sections">
-            <h3>Consumer Sentiment Detail</h3>
-            <p>Evidence: ${escapeHtml(payload.summary.evidence_state)}</p>
-            <p>As of: ${escapeHtml(payload.summary.as_of || "N/A")}</p>
-            <p>Aggregate: ${escapeHtml(payload.summary.aggregate.value)}</p>
-            <p>Expectations: ${escapeHtml(payload.summary.expectations.value)}</p>
-            <p>Current Conditions: ${escapeHtml(payload.summary.current_conditions.value)}</p>
-            <p>Capacity: ${escapeHtml(payload.summary.capacity_completeness)}</p>
-          </div>
-        `;
+        window.consumerSentimentUi.renderDetailInPanel(body, payload);
       })
       .catch((error) => {
-        body.innerHTML = `<p class="status">Failed to load consumer detail.</p>`;
+        body.innerHTML = `<p class="status" role="status">Failed to load consumer detail. <button type="button" class="ms-retry-btn" data-consumer-detail-retry>Retry</button></p>`;
+        const retryBtn = body.querySelector("[data-consumer-detail-retry]");
+        if (retryBtn) {
+          retryBtn.addEventListener("click", () => {
+            renderDetailPanel();
+          });
+        }
       });
   }
 
@@ -5049,6 +5053,10 @@
       }
       console.error(error);
     });
+  }
+
+  if (typeof window !== "undefined") {
+    window.__chartHelpers = { renderRelationshipLineChart };
   }
 
   if (typeof window !== "undefined" && window.__MEOWSTREET_TEST__) {

@@ -4,6 +4,7 @@ import pytest
 from subprocess import CalledProcessError
 
 from app.db import growth_cycle
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from scripts import fetch_ism_official_reports
 
@@ -166,7 +167,7 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
         "commodities": 1,
         "narrative_facts": 1,
     }
-    assert us_rates_liquidity.load_macro_indicator_points(con, "ism_manufacturing_pmi")[
+    assert macro_indicators.load_macro_indicator_points(con, "ism_manufacturing_pmi")[
         -1
     ] == {
         "date": "2026-06-01",

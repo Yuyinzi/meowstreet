@@ -3484,3 +3484,53 @@ def test_ism_services_js_renders_card_with_node():
     assert payload["hasDetailId"] is True
     assert payload["hasIsmCardButton"] is True
     assert payload["hasM2Card"] is True
+
+
+def test_macro_dashboard_js_has_consumer_sentiment_loading():
+    js = STATIC_JS.read_text()
+    assert "loadConsumerSentiment" in js
+    assert "renderConsumerSentiment" in js
+    assert "consumerSentimentError" in js
+    assert 'fetch("/api/macro-dashboard/consumer-sentiment")' in js
+
+
+def test_macro_dashboard_js_consumer_sentiment_card_has_detail_click():
+    js = STATIC_JS.read_text()
+    assert "selectedConsumerDetailId" in js
+    assert "data-consumer-detail-id" in js
+    assert "renderConsumerDetailInPanel" in js
+    assert 'fetch("/api/macro-dashboard/consumer-sentiment/detail")' in js
+
+
+def test_macro_dashboard_js_consumer_sentiment_error_has_retry():
+    js = STATIC_JS.read_text()
+    assert "data-consumer-retry" in js
+
+
+def test_macro_dashboard_js_consumer_sentiment_detail_error_has_retry():
+    js = STATIC_JS.read_text()
+    assert "data-consumer-detail-retry" in js
+
+
+def test_macro_dashboard_js_consumer_sentiment_error_uses_polite_live_region():
+    js = STATIC_JS.read_text()
+    assert 'role="status"' in js
+
+
+def test_consumer_sentiment_js_exposes_required_interfaces():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "renderLoading" in js
+    assert "renderCard" in js
+    assert "renderDetailInPanel" in js
+    assert "window.consumerSentimentUi" in js
+
+
+def test_consumer_sentiment_js_detail_includes_chart():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "__chartHelpers" in js
+    assert "renderRelationshipLineChart" in js
+
+
+def test_consumer_sentiment_js_does_not_invent_missing_provenance():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert '"FRED"' not in js

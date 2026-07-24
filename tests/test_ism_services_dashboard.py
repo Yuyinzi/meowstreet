@@ -18,7 +18,7 @@ def services_connection(tmp_path):
         "ism_services_order_backlog": [50.0, 52.0],
     }
     for series_id, values in series_values.items():
-        us_rates_liquidity.replace_macro_indicator_points(
+        macro_indicators.replace_macro_indicator_points(
             con,
             {
                 "series_id": series_id,

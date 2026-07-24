@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app import llm
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from app.tools import macro_growth_cycle
 
@@ -59,7 +60,7 @@ async def generate_with_openai(client, model, snapshot):
 
 
 def load_current_snapshot(con):
-    rows = us_rates_liquidity.load_macro_indicator_points(con, "m2_money_stock")
+    rows = macro_indicators.load_macro_indicator_points(con, "m2_money_stock")
     detail_payload = macro_growth_cycle.build_m2_money_supply_detail_payload(rows)
     dashboard_payload = macro_growth_cycle.build_growth_cycle_dashboard(
         m2_money_stock={"series": rows}

@@ -4,6 +4,7 @@ import pytest
 from openpyxl import Workbook
 
 from app.db import growth_cycle
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from scripts import import_ism_manufacturing
 
@@ -196,7 +197,7 @@ def test_import_workbook_saves_all_series_to_macro_indicator_tables(tmp_path):
     for sid in import_ism_manufacturing.SERIES_CONFIG:
         assert inserted[sid] == 4
     assert inserted["ism_industry_rankings"] == 6
-    pmi_points = us_rates_liquidity.load_macro_indicator_points(
+    pmi_points = macro_indicators.load_macro_indicator_points(
         con, "ism_manufacturing_pmi"
     )
     assert pmi_points == [

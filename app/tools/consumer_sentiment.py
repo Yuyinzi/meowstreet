@@ -97,6 +97,30 @@ def _large_expectations_decline(expectations_points):
     return change < -10
 
 
+def compute_real_rate(treasury_10y_points, cpi_yoy_points):
+    cpi_by_month = {}
+    for p in cpi_yoy_points:
+        month = p["date"][:7]
+        cpi_by_month.setdefault(month, []).append(p)
+    cpi_latest_by_month = {
+        month: pts[-1]["value"] for month, pts in cpi_by_month.items()
+    }
+    result = []
+    for p in treasury_10y_points:
+        month = p["date"][:7]
+        cpi_val = cpi_latest_by_month.get(month)
+        if cpi_val is not None:
+            result.append(
+                {
+                    "date": p["date"],
+                    "value": round(p["value"] - cpi_val, 2),
+                    "treasury_10y": p["value"],
+                    "cpi_yoy": cpi_val,
+                }
+            )
+    return result
+
+
 def build_summary(points_by_id, policy_context=None):
     aggregate_points = points_by_id.get("umcsi_aggregate", [])
     expectations_points = points_by_id.get("umcsi_expectations", [])
@@ -117,21 +141,25 @@ def build_summary(points_by_id, policy_context=None):
     aggregate_missing = not aggregate_points
     expectations_missing = not expectations_points
 
-    if aggregate_missing or expectations_missing or ds == "mixed_periods":
+    agg_date = aggregate_latest["date"] if aggregate_latest else None
+    exp_date = expectations_latest["date"] if expectations_latest else None
+    alignment_mixed = (
+        agg_date is not None and exp_date is not None and agg_date != exp_date
+    )
+
+    if aggregate_missing or expectations_missing or alignment_mixed:
         evidence = "insufficient_data"
     else:
         evidence = _evidence_state(agg_zone, exp_zone)
 
     capacity_completeness = _capacity_completeness(points_by_id)
 
-    latest_months = []
+    as_of = None
     for sid in ("umcsi_aggregate", "umcsi_expectations", "umcsi_current_conditions"):
         pts = points_by_id.get(sid)
         if pts:
-            latest_months.append(pts[-1]["date"])
-    common_month = (
-        max(set(latest_months), key=latest_months.count) if latest_months else None
-    )
+            if as_of is None or pts[-1]["date"] > as_of:
+                as_of = pts[-1]["date"]
 
     reasons = []
     if evidence == "insufficient_data":
@@ -139,8 +167,8 @@ def build_summary(points_by_id, policy_context=None):
             reasons.append("aggregate sentiment is missing")
         if expectations_missing:
             reasons.append("expectations are missing")
-        if ds == "mixed_periods":
-            reasons.append("umcsi observation months differ")
+        if alignment_mixed:
+            reasons.append("aggregate and expectations observation months differ")
     if ds == "mixed_periods":
         reasons.append("component periods are mixed")
     if evidence == "ambiguous":
@@ -160,7 +188,7 @@ def build_summary(points_by_id, policy_context=None):
 
     result = {
         "version": 1,
-        "as_of": common_month,
+        "as_of": as_of,
         "data_status": ds,
         "evidence_state": evidence,
         "aggregate": {
@@ -188,7 +216,7 @@ def build_summary(points_by_id, policy_context=None):
             sid: pts[-1]["date"] if pts else None for sid in CAPACITY_SERIES_IDS
         },
         "reasons": reasons,
-        "source_latest_final_month": common_month,
+        "source_latest_final_month": as_of,
     }
     return result
 

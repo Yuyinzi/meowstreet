@@ -1,5 +1,6 @@
 from app.db import growth_cycle
 from app.db import ism_surveys
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from scripts import fetch_ism_services_reports
 
@@ -51,7 +52,7 @@ def test_main_imports_latest_month(tmp_path, monkeypatch, capsys):
         assert snapshot["parse_status"] == "parsed"
         assert snapshot["report_id"] == "ism_services_2026_06"
 
-        points = us_rates_liquidity.load_macro_indicator_points(con, "ism_services_pmi")
+        points = macro_indicators.load_macro_indicator_points(con, "ism_services_pmi")
         assert points[-1] == {
             "date": "2026-06-01",
             "value": 54.0,

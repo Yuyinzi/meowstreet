@@ -26,26 +26,21 @@ def connect(db_path=DEFAULT_DB_PATH):
     return macro_indicators.connect(db_path)
 
 
-def replace_michigan_series(con, series_points_list):
+def _validate_series_ids(series_points_list, allowed_ids, label):
     for item in series_points_list:
         sid = item["series"]["series_id"]
-        if sid not in MICHIGAN_SERIES_IDS:
-            raise ValueError(f"series {sid} is not a valid michigan series id")
-    for item in series_points_list:
-        macro_indicators.replace_macro_indicator_points(
-            con, item["series"], item["points"]
-        )
+        if sid not in allowed_ids:
+            raise ValueError(f"series {sid} is not a valid {label} series id")
+
+
+def replace_michigan_series(con, series_points_list):
+    _validate_series_ids(series_points_list, MICHIGAN_SERIES_IDS, "michigan")
+    macro_indicators.replace_macro_indicator_points_batch(con, series_points_list)
 
 
 def replace_capacity_series(con, series_points_list):
-    for item in series_points_list:
-        sid = item["series"]["series_id"]
-        if sid not in CAPACITY_SERIES_IDS:
-            raise ValueError(f"series {sid} is not a valid capacity series id")
-    for item in series_points_list:
-        macro_indicators.replace_macro_indicator_points(
-            con, item["series"], item["points"]
-        )
+    _validate_series_ids(series_points_list, CAPACITY_SERIES_IDS, "capacity")
+    macro_indicators.replace_macro_indicator_points_batch(con, series_points_list)
 
 
 def load_overview_series(con):

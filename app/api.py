@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app import tool_runner, workflow_engine
 from app.db import benchmark_market_data, consumer_sentiment, gdp_market_relationships
 from app.db import growth_cycle
+from app.db import macro_indicators as macro_indicators_db
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.services import consumer_sentiment_dashboard, ism_services_dashboard
@@ -55,12 +56,12 @@ def _load_rates_liquidity_for_setup(con):
         latest_points = us_rates_liquidity_db.load_latest_points(con)
         if not latest_points:
             return None
-        latest_macro = us_rates_liquidity_db.load_latest_macro_indicator_points(con)
+        latest_macro = macro_indicators_db.load_latest_macro_indicator_points(con)
         credit_rate_points = us_rates_liquidity_db.load_rate_points_for_series(
             con, ["treasury_10y"]
         )
         credit_macro_points = (
-            us_rates_liquidity_db.load_macro_indicator_points_for_series(
+            macro_indicators_db.load_macro_indicator_points_for_series(
                 con,
                 ["aaa_corporate_yield", "bbb_corporate_yield", "ccc_corporate_yield"],
             )
@@ -258,6 +259,8 @@ def macro_dashboard_consumer_sentiment():
     con = consumer_sentiment.connect()
     try:
         return consumer_sentiment_dashboard.load_overview(con)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         con.close()
 
@@ -358,20 +361,20 @@ def macro_dashboard_growth_cycle():
     con = us_rates_liquidity_db.connect()
     growth_cycle.init_db(con)
     try:
-        rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
-        core_pce_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        rows = macro_indicators_db.load_macro_indicator_points(con, "m2_money_stock")
+        core_pce_rows = macro_indicators_db.load_macro_indicator_points(
             con,
             "core_pce_price_index",
         )
-        fed_total_assets_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        fed_total_assets_rows = macro_indicators_db.load_macro_indicator_points(
             con,
             "fed_total_assets",
         )
-        fed_treasury_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        fed_treasury_rows = macro_indicators_db.load_macro_indicator_points(
             con,
             "fed_treasury_holdings",
         )
-        fed_mbs_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        fed_mbs_rows = macro_indicators_db.load_macro_indicator_points(
             con,
             "fed_mbs_holdings",
         )
@@ -402,7 +405,7 @@ def macro_dashboard_growth_cycle():
                 {"date": row["date"], "value": row["value"]} for row in fed_mbs_rows
             ]
         }
-        ism_points = us_rates_liquidity_db.load_macro_indicator_points_for_series(
+        ism_points = macro_indicators_db.load_macro_indicator_points_for_series(
             con,
             ISM_MANUFACTURING_SERIES_IDS,
         )
@@ -518,17 +521,17 @@ def macro_dashboard_market_setup():
     con = us_rates_liquidity_db.connect()
     growth_cycle.init_db(con)
     try:
-        rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
-        core_pce_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        rows = macro_indicators_db.load_macro_indicator_points(con, "m2_money_stock")
+        core_pce_rows = macro_indicators_db.load_macro_indicator_points(
             con, "core_pce_price_index"
         )
-        fed_total_assets_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        fed_total_assets_rows = macro_indicators_db.load_macro_indicator_points(
             con, "fed_total_assets"
         )
-        fed_treasury_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        fed_treasury_rows = macro_indicators_db.load_macro_indicator_points(
             con, "fed_treasury_holdings"
         )
-        fed_mbs_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        fed_mbs_rows = macro_indicators_db.load_macro_indicator_points(
             con, "fed_mbs_holdings"
         )
         m2_money_stock = (
@@ -558,7 +561,7 @@ def macro_dashboard_market_setup():
                 {"date": row["date"], "value": row["value"]} for row in fed_mbs_rows
             ]
         }
-        ism_points = us_rates_liquidity_db.load_macro_indicator_points_for_series(
+        ism_points = macro_indicators_db.load_macro_indicator_points_for_series(
             con, ISM_MANUFACTURING_SERIES_IDS
         )
         ism_manufacturing = (
@@ -654,7 +657,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
         if detail_id == "ism_services":
             return ism_services_dashboard.load_detail(con)
         if detail_id == "ism_manufacturing":
-            ism_points = us_rates_liquidity_db.load_macro_indicator_points_for_series(
+            ism_points = macro_indicators_db.load_macro_indicator_points_for_series(
                 con,
                 ISM_MANUFACTURING_SERIES_IDS,
             )
@@ -751,20 +754,20 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 ism_industry_analysis=ism_industry_analysis_payload,
             )
 
-        rows = us_rates_liquidity_db.load_macro_indicator_points(con, "m2_money_stock")
-        core_pce_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        rows = macro_indicators_db.load_macro_indicator_points(con, "m2_money_stock")
+        core_pce_rows = macro_indicators_db.load_macro_indicator_points(
             con,
             "core_pce_price_index",
         )
-        fed_total_assets_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        fed_total_assets_rows = macro_indicators_db.load_macro_indicator_points(
             con,
             "fed_total_assets",
         )
-        fed_treasury_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        fed_treasury_rows = macro_indicators_db.load_macro_indicator_points(
             con,
             "fed_treasury_holdings",
         )
-        fed_mbs_rows = us_rates_liquidity_db.load_macro_indicator_points(
+        fed_mbs_rows = macro_indicators_db.load_macro_indicator_points(
             con,
             "fed_mbs_holdings",
         )
@@ -806,12 +809,12 @@ def macro_dashboard_us_rates_liquidity():
     con = us_rates_liquidity_db.connect()
     try:
         latest_points = us_rates_liquidity_db.load_latest_points(con)
-        latest_macro = us_rates_liquidity_db.load_latest_macro_indicator_points(con)
+        latest_macro = macro_indicators_db.load_latest_macro_indicator_points(con)
         credit_rate_points = us_rates_liquidity_db.load_rate_points_for_series(
             con, ["treasury_10y"]
         )
         credit_macro_points = (
-            us_rates_liquidity_db.load_macro_indicator_points_for_series(
+            macro_indicators_db.load_macro_indicator_points_for_series(
                 con,
                 ["aaa_corporate_yield", "bbb_corporate_yield", "ccc_corporate_yield"],
             )
@@ -865,7 +868,7 @@ def macro_dashboard_us_rates_liquidity_detail(
             rate_series_ids,
         )
         points_by_id.update(
-            us_rates_liquidity_db.load_macro_indicator_points_for_series(
+            macro_indicators_db.load_macro_indicator_points_for_series(
                 con,
                 macro_series_ids,
             )

@@ -1,3 +1,4 @@
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from scripts import import_us_macro_indicators
 
@@ -5,7 +6,7 @@ from scripts import import_us_macro_indicators
 def test_replace_macro_indicator_points_saves_and_loads_rows(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
 
-    saved = us_rates_liquidity.replace_macro_indicator_points(
+    saved = macro_indicators.replace_macro_indicator_points(
         con,
         {
             "series_id": "cpi_yoy",
@@ -29,12 +30,10 @@ def test_replace_macro_indicator_points_saves_and_loads_rows(tmp_path):
 
     assert saved == {"series": 1, "points": 2}
     assert (
-        us_rates_liquidity.load_macro_indicator_series(con)[0]["series_id"] == "cpi_yoy"
+        macro_indicators.load_macro_indicator_series(con)[0]["series_id"] == "cpi_yoy"
     )
-    assert (
-        us_rates_liquidity.load_latest_macro_indicator_points(con)[0]["value"] == 1.40
-    )
-    assert us_rates_liquidity.load_macro_indicator_points_for_series(
+    assert macro_indicators.load_latest_macro_indicator_points(con)[0]["value"] == 1.40
+    assert macro_indicators.load_macro_indicator_points_for_series(
         con, ["cpi_yoy"]
     ) == {
         "cpi_yoy": [
@@ -95,10 +94,10 @@ def test_import_macro_indicator_csv_saves_all_parsed_series(tmp_path):
         "vix": 2,
     }
     assert (
-        us_rates_liquidity.load_macro_indicator_points(con, "cpi_yoy")[-1]["value"]
+        macro_indicators.load_macro_indicator_points(con, "cpi_yoy")[-1]["value"]
         == 1.40
     )
-    assert us_rates_liquidity.load_macro_indicator_points(con, "sp500_pe") == []
+    assert macro_indicators.load_macro_indicator_points(con, "sp500_pe") == []
 
 
 def test_import_fred_macro_csvs_saves_cpi_yoy_and_vix(tmp_path):
@@ -145,12 +144,12 @@ def test_import_fred_macro_csvs_saves_cpi_yoy_and_vix(tmp_path):
         "fed_treasury_holdings": 1,
         "fed_mbs_holdings": 1,
     }
-    assert us_rates_liquidity.load_macro_indicator_points(con, "cpi_yoy")[-1] == {
+    assert macro_indicators.load_macro_indicator_points(con, "cpi_yoy")[-1] == {
         "date": "2021-01-03",
         "value": 1.48,
         "source": "FRED weekly Sunday resample",
     }
-    assert us_rates_liquidity.load_macro_indicator_points(con, "vix")[-1] == {
+    assert macro_indicators.load_macro_indicator_points(con, "vix")[-1] == {
         "date": "2021-01-03",
         "value": 22.75,
         "source": "FRED weekly Sunday resample",
@@ -228,7 +227,7 @@ def test_import_fred_macro_csvs_saves_core_pce_price_index(tmp_path):
     assert inserted["fed_total_assets"] == 1
     assert inserted["fed_treasury_holdings"] == 1
     assert inserted["fed_mbs_holdings"] == 1
-    assert us_rates_liquidity.load_macro_indicator_points(
+    assert macro_indicators.load_macro_indicator_points(
         con,
         "core_pce_price_index",
     ) == [
@@ -297,7 +296,7 @@ def test_import_fred_macro_csvs_saves_fed_balance_sheet_series(tmp_path):
     assert inserted["fed_total_assets"] == 2
     assert inserted["fed_treasury_holdings"] == 2
     assert inserted["fed_mbs_holdings"] == 2
-    assert import_us_macro_indicators.us_rates_liquidity.load_macro_indicator_points(
+    assert import_us_macro_indicators.macro_indicators.load_macro_indicator_points(
         con,
         "fed_total_assets",
     )[-1] == {

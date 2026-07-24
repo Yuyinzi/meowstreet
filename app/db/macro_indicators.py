@@ -5,33 +5,36 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = ROOT / "data" / "local_system" / "market_data.sqlite"
 
+_MACRO_TABLES_DDL = """
+create table if not exists macro_indicator_series (
+    series_id text primary key,
+    title text not null,
+    units text not null,
+    source text not null
+);
+create table if not exists macro_indicator_points (
+    series_id text not null,
+    date text not null,
+    value real not null,
+    source text not null,
+    primary key(series_id, date),
+    foreign key(series_id) references macro_indicator_series(series_id)
+);
+create index if not exists idx_macro_indicator_points_series_date
+on macro_indicator_points(series_id, date);
+"""
+
+
+def init_macro_tables(con):
+    con.executescript(_MACRO_TABLES_DDL)
+
 
 def connect(db_path=DEFAULT_DB_PATH):
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(path)
     con.row_factory = sqlite3.Row
-    con.executescript(
-        """
-        pragma journal_mode = wal;
-        create table if not exists macro_indicator_series (
-            series_id text primary key,
-            title text not null,
-            units text not null,
-            source text not null
-        );
-        create table if not exists macro_indicator_points (
-            series_id text not null,
-            date text not null,
-            value real not null,
-            source text not null,
-            primary key(series_id, date),
-            foreign key(series_id) references macro_indicator_series(series_id)
-        );
-        create index if not exists idx_macro_indicator_points_series_date
-        on macro_indicator_points(series_id, date);
-        """
-    )
+    init_macro_tables(con)
     return con
 
 
@@ -42,7 +45,7 @@ def _normalize_series_id(series_id):
     return normalized
 
 
-def replace_macro_indicator_points(con, series, points):
+def _replace_single(con, series, points):
     sid = _normalize_series_id(series["series_id"])
     con.execute("delete from macro_indicator_points where series_id = ?", (sid,))
     con.execute("delete from macro_indicator_series where series_id = ?", (sid,))
@@ -61,6 +64,10 @@ def replace_macro_indicator_points(con, series, points):
             """,
             (sid, point["date"], point["value"], point["source"]),
         )
+
+
+def replace_macro_indicator_points(con, series, points):
+    _replace_single(con, series, points)
     con.commit()
     return {"series": 1, "points": len(points)}
 
@@ -159,5 +166,10 @@ def load_macro_indicator_points_for_series(con, series_ids):
 
 
 def replace_macro_indicator_points_batch(con, series_points_list):
-    for item in series_points_list:
-        replace_macro_indicator_points(con, item["series"], item["points"])
+    try:
+        for item in series_points_list:
+            _replace_single(con, item["series"], item["points"])
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise

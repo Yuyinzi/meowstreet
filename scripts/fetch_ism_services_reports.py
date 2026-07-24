@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.db import growth_cycle
 from app.db import ism_surveys
+from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from app.tools import ism_services_report
 from scripts import fetch_ism_official_reports
@@ -84,7 +85,7 @@ def merge_metrics(con, parsed):
             "units": "index",
             "source": "ISM official report",
         }
-        saved = us_rates_liquidity.merge_macro_indicator_points(con, series, points)
+        saved = macro_indicators.merge_macro_indicator_points(con, series, points)
         count += saved["points"]
     return count
 

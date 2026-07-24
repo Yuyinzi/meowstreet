@@ -158,3 +158,27 @@ def test_replace_macro_indicator_points_batch(tmp_path):
     )
     loaded = macro_indicators.load_macro_indicator_series(con)
     assert len(loaded) == 2
+
+
+def test_replace_macro_indicator_points_batch_atomic_rollback_on_error(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market_data.sqlite")
+
+    with pytest.raises(ValueError, match="series id is required"):
+        macro_indicators.replace_macro_indicator_points_batch(
+            con,
+            [
+                {"series": _series(), "points": _points()},
+                {
+                    "series": {
+                        "series_id": "",
+                        "title": "Bad Series",
+                        "units": "percent",
+                        "source": "test",
+                    },
+                    "points": [{"date": "2021-01-06", "value": 1.50, "source": "test"}],
+                },
+            ],
+        )
+
+    loaded = macro_indicators.load_macro_indicator_series(con)
+    assert len(loaded) == 0
