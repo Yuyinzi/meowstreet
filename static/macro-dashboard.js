@@ -1177,6 +1177,9 @@
     "Awaiting Confirmation": "等待确认",
     "not_required": "无需确认",
     "Not Required": "无需确认",
+    "Backlog confirmation": "订单积压确认",
+    "Supports Growth": "支持增长",
+    "Supports Contraction": "支持收缩",
     "ISM signals alone do not support materially increasing risk exposure or shifting to a short posture.": "仅凭ISM信号，不足以支持明显增加风险资产敞口，也不足以支持转向做空。",
     "ISM signals support a neutral or more defensive posture, while Market Setup determines the final portfolio posture.": "ISM信号支持保持中性或提高防御性，但最终仓位仍由Market Setup决定。",
     "Manufacturing and Services data are insufficient to form an ISM portfolio bias.": "制造业和服务业数据尚不足，暂不形成ISM组合倾向。",
@@ -3789,6 +3792,14 @@ html += '</div>';
     return titleCaseToken(leading);
   }
 
+  function _backlogConfirmationLabel(backlog) {
+    if (!backlog || backlog === "unavailable") return "Unavailable";
+    if (backlog === "supports_growth") return "Supports Growth";
+    if (backlog === "supports_contraction") return "Supports Contraction";
+    if (backlog === "neutral") return "Neutral";
+    return titleCaseToken(backlog);
+  }
+
   function renderSurveySynthesisCard(card) {
     const rows = [
       { question: "Business surveys expanding?", answer: titleCaseToken(card.economic_direction || "unavailable") },
@@ -3799,6 +3810,7 @@ html += '</div>';
       { question: "GDP direction", answer: titleCaseToken(card.expected_gdp_direction || "unavailable") },
       { question: "ISM Portfolio Bias", answer: titleCaseToken(card.survey_portfolio_implication || "unavailable") },
       { question: "Bias confirmation", answer: titleCaseToken(card.bias_confirmation || "unavailable") },
+      { question: "Backlog confirmation", answer: _backlogConfirmationLabel(card.backlog_confirmation) },
     ];
 
     const rowsHtml = rows.map((row) => `

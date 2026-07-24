@@ -721,7 +721,7 @@ _CONCLUSION_MAP = [
         "market_phase": "bull_market",
         "code": "growth_and_trend_aligned",
         "title": "Growth and market trend aligned",
-        "summary": "Manufacturing expansion, supportive financial conditions, and a bullish market trend all support broad-market long exposure.",
+        "summary": "Manufacturing and Services expansion, supportive financial conditions, and a bullish market trend support broad-market long exposure.",
     },
     {
         "setup_types": {"growth_and_conditions_aligned"},
@@ -783,7 +783,7 @@ _GUIDANCE_TEMPLATES = {
     "long": {
         "actions": [
             "Deploy broad-market long exposure with trend confirmation",
-            "Favor industries with persistent manufacturing growth",
+            "Favor industries with persistent ISM growth across Manufacturing or Services",
             "Monitor ISM, credit conditions, and market phase for deterioration",
         ],
         "avoid": [
@@ -1208,7 +1208,7 @@ def build_market_setup(
         "missing_inputs": missing_inputs,
         "pending_confirmations": ["Labor trend", "Consumer indicators"],
         "limitations": [
-            "This is a deterministic connection layer over Methods P2-P7. It does not calculate a numeric confidence score.",
+            "This is a deterministic connection layer over Methods P2-P8. It does not calculate a numeric confidence score.",
             "Later-method labor and consumer indicators may change the outlook when implemented.",
         ],
     }

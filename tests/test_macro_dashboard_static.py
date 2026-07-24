@@ -763,6 +763,14 @@ def test_macro_dashboard_js_renders_fed_balance_sheet_card():
     assert "美联储资产负债表13周构成" in js
 
 
+def test_survey_synthesis_contains_backlog_confirmation_row():
+    js = STATIC_JS.read_text()
+
+    assert "Backlog confirmation" in js
+    assert "Supports Growth" in js
+    assert "Supports Contraction" in js
+
+
 def test_macro_dashboard_js_renders_survey_synthesis_placeholder_card():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 

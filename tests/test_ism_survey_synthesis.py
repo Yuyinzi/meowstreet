@@ -37,6 +37,7 @@ def services_signal(
     orders_momentum="falling",
     activity_level=None,
     activity_momentum=None,
+    backlog_confirmation="supports_growth",
     period="2026-06-01",
 ):
     ba_level = activity_level if activity_level is not None else pmi_level
@@ -71,7 +72,7 @@ def services_signal(
                 "momentum": "rising",
             },
         },
-        "backlog_confirmation": "supports_growth",
+        "backlog_confirmation": backlog_confirmation,
         "missing_inputs": [],
     }
 
@@ -327,6 +328,44 @@ def test_synthesis_cross_sector_manufacturing_stronger():
     )
     assert result["cross_sector_comparison"] == "manufacturing_stronger"
     assert result["leading_side"] == "manufacturing"
+
+
+def test_backlog_is_visible_supporting_evidence_without_changing_direction():
+    result = ism_survey_synthesis.build_survey_synthesis(
+        manufacturing_signal(pmi_level="expanding"),
+        services_signal(
+            pmi_level="expanding",
+            backlog_confirmation="supports_contraction",
+        ),
+    )
+
+    assert result["economic_direction"] == "aligned_expansion"
+    assert result["backlog_confirmation"] == "supports_contraction"
+    assert any("backlog" in reason.lower() for reason in result["reasons"])
+
+
+def test_backlog_supports_growth_reason():
+    result = ism_survey_synthesis.build_survey_synthesis(
+        manufacturing_signal(pmi_level="expanding"),
+        services_signal(
+            pmi_level="expanding",
+            backlog_confirmation="supports_growth",
+        ),
+    )
+    assert result["backlog_confirmation"] == "supports_growth"
+    assert any("backlog" in reason.lower() for reason in result["reasons"])
+
+
+def test_backlog_neutral_reason():
+    result = ism_survey_synthesis.build_survey_synthesis(
+        manufacturing_signal(pmi_level="expanding"),
+        services_signal(
+            pmi_level="expanding",
+            backlog_confirmation="neutral",
+        ),
+    )
+    assert result["backlog_confirmation"] == "neutral"
+    assert any("backlog" in reason.lower() for reason in result["reasons"])
 
 
 def test_synthesis_cross_sector_unresolved_when_unclear():

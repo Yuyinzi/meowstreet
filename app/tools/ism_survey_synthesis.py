@@ -239,6 +239,15 @@ def _conflicts(comp, direction):
     return result
 
 
+def _backlog_reason(backlog_confirmation):
+    backlog_reason_by_state = {
+        "supports_growth": "Services Order Backlog supports ongoing demand",
+        "supports_contraction": "Services Order Backlog supports weaker demand",
+        "neutral": "Services Order Backlog is neutral",
+    }
+    return backlog_reason_by_state.get(backlog_confirmation)
+
+
 def _reasons(comp, direction, gdp_direction):
     result = []
     if direction in ("aligned_expansion",):
@@ -260,7 +269,13 @@ def _reasons(comp, direction, gdp_direction):
     elif mfg_dm and svc_dm and mfg_dm != svc_dm:
         result.append("Demand momentum differs between surveys")
     bias_confirm = _bias_confirmation(direction, _shared_momentum(comp))
-    if bias_confirm == "awaiting_confirmation":
+    backlog_reason = _backlog_reason(
+        comp.get("services", {}).get("backlog_confirmation")
+    )
+    if backlog_reason:
+        result.append(backlog_reason)
+    bc = _bias_confirmation(direction, _shared_momentum(comp))
+    if bc == "awaiting_confirmation":
         if direction == "aligned_expansion":
             result.append(
                 "Expansion remains intact; weaker one-period momentum is caution, not a confirmed reversal"
@@ -299,6 +314,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
             "bias_confirmation": None,
+            "backlog_confirmation": None,
             "components": comp,
             "agreements": [],
             "conflicts": [],
@@ -322,6 +338,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
             "bias_confirmation": None,
+            "backlog_confirmation": None,
             "components": comp,
             "agreements": [],
             "conflicts": [],
@@ -345,6 +362,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
             "bias_confirmation": None,
+            "backlog_confirmation": None,
             "components": comp,
             "agreements": [],
             "conflicts": [],
@@ -369,6 +387,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
             "expected_gdp_direction": None,
             "survey_portfolio_implication": None,
             "bias_confirmation": None,
+            "backlog_confirmation": None,
             "components": comp,
             "agreements": [],
             "conflicts": ["Manufacturing and Services observation periods differ"],
@@ -400,6 +419,7 @@ def build_survey_synthesis(manufacturing_signal, services_signal):
         "expected_gdp_direction": gdp_direction,
         "survey_portfolio_implication": implication,
         "bias_confirmation": bias_confirm,
+        "backlog_confirmation": comp["services"].get("backlog_confirmation"),
         "components": comp,
         "agreements": _agreements(comp, direction, demand),
         "conflicts": _conflicts(comp, direction),

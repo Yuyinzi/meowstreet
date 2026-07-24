@@ -272,6 +272,18 @@ class TestBuildExpectedGrowth:
         assert result["components"] == synthesis["components"]
         assert result["evidence_links"] == ["ism_manufacturing", "ism_services"]
 
+    def test_expected_growth_propagates_backlog_reason(self):
+        synthesis = _survey_synthesis(
+            economic_direction="aligned_expansion",
+            expected_gdp_direction="slowing",
+        )
+        synthesis["backlog_confirmation"] = "supports_growth"
+        synthesis["reasons"] = ["Services Order Backlog supports ongoing demand"]
+
+        result = market_setup.build_expected_growth(synthesis)
+
+        assert "backlog" in result.get("reason", "").lower()
+
 
 class TestBuildFinancialConditions:
     def test_expansion_confirmed(self):
@@ -616,6 +628,34 @@ class TestMissingAndPendingData:
         assert "Labor trend" in pending
         assert "Consumer indicators" in pending
         assert all(isinstance(item, str) for item in pending)
+
+    def test_limitations_reference_p2_to_p8(self):
+        result = market_setup.build_market_setup()
+        limitations_text = " ".join(result.get("limitations", []))
+        assert "P2-P7" not in limitations_text
+        assert "P2-P8" in limitations_text
+
+    def test_guidance_mentions_both_manufacturing_and_services(self):
+        result = market_setup.build_market_setup(
+            market_phase_payload=_market_phase_payload("bull_market"),
+            survey_synthesis=_survey_synthesis(
+                economic_direction="aligned_expansion",
+                expected_gdp_direction="rising",
+                survey_portfolio_implication="long",
+                period="2026-06",
+            ),
+            rates_liquidity_payload=_rates_liquidity_payload("steep", "healthy"),
+            fomc_tone=_fomc_tone_headline("dovish", "cut"),
+            m2_headline=_m2_headline("expanding"),
+            inflation_context=_inflation_context("near_target"),
+            fed_balance_sheet=_fed_balance_sheet(),
+        )
+        summary = result.get("market_conclusion", {}).get("summary", "")
+        assert "Manufacturing and Services" in summary
+        assert "Manufacturing expansion" not in summary
+        actions_text = " ".join(result.get("portfolio_guidance", {}).get("actions", []))
+        assert "Manufacturing or Services" in actions_text
+        assert "persistent manufacturing" not in actions_text
 
     def test_gdp_not_a_current_signal(self):
         result = market_setup.build_market_setup(
