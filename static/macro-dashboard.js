@@ -2,10 +2,7 @@
   const state = {
     markets: [],
     selectedBenchmarkId: null,
-    selectedRelationshipId: null,
     marketDetailsById: {},
-    gdpRelationships: [],
-    gdpRelationshipDetailsById: {},
     usRatesLiquidity: null,
     usRatesLiquidityError: null,
     selectedRatesDetailId: null,
@@ -46,7 +43,6 @@
 
   function closeDetailPanel() {
     state.selectedBenchmarkId = null;
-    state.selectedRelationshipId = null;
     state.selectedRatesDetailId = null;
     state.selectedGrowthCycleDetailId = null;
     state.selectedConsumerDetailId = null;
@@ -65,7 +61,7 @@
     const panel = $("detailPanel");
     if (!panel) return;
 
-    const anySelected = state.selectedBenchmarkId || state.selectedRelationshipId || state.selectedRatesDetailId || state.selectedGrowthCycleDetailId || state.selectedConsumerDetailId;
+    const anySelected = state.selectedBenchmarkId || state.selectedRatesDetailId || state.selectedGrowthCycleDetailId || state.selectedConsumerDetailId;
     if (!anySelected) {
       shell.classList.remove("panel-open");
       syncDetailPanelWidthClass();
@@ -80,9 +76,6 @@
     if (state.selectedBenchmarkId) {
       const market = selectedMarket();
       title = market ? market.title : "Market Detail";
-    } else if (state.selectedRelationshipId) {
-      const rel = selectedRelationship();
-      title = rel ? rel.title : "GDP Relationship Detail";
     } else if (state.selectedRatesDetailId) {
       const rates = state.usRatesLiquidity;
       const card = (rates?.headline || []).find((c) => c.id === state.selectedRatesDetailId || state.selectedRatesDetailId === `yield_curve_shape` || CREDIT_DETAIL_MAP[c.id] === state.selectedRatesDetailId);
@@ -120,7 +113,6 @@
       event.stopPropagation();
       closeDetailPanel();
       renderOverview();
-      renderGdpRelationshipOverview();
       renderUsRatesLiquidity();
     });
 
@@ -135,8 +127,6 @@
       renderDetailInPanel(body);
     } else if (state.selectedRatesDetailId) {
       renderRatesDetailInPanel(body);
-    } else if (state.selectedRelationshipId) {
-      renderGdpDetailInPanel(body);
     } else if (state.selectedConsumerDetailId) {
       renderConsumerDetailInPanel(body);
     } else if (state.selectedGrowthCycleDetailId) {
@@ -174,76 +164,6 @@
       .catch((error) => {
         if (state.selectedBenchmarkId !== market.benchmark_id) return;
         body.innerHTML = `<p class="status">Failed to load chart data.</p>`;
-        console.error(error);
-      });
-  }
-
-  function renderGdpDetailInPanel(body) {
-    const card = selectedRelationship();
-    if (!card) return;
-    body.innerHTML = `<p class="status">Loading GDP relationship detail...</p>`;
-
-    loadGdpRelationshipDetail(card.relationship_id)
-      .then((payload) => {
-        if (state.selectedRelationshipId !== card.relationship_id) return;
-        const latest = payload.latest || {};
-        const signal = signalUsabilityMeta(payload.relationship_signal_usability);
-        const portfolioBias = portfolioBiasMeta(payload.portfolio_bias_status);
-        const indexYoy = latest.index_yoy !== null && latest.index_yoy !== undefined
-          ? (latest.index_yoy * 100) : null;
-        const gdpYoy = latest.gdp_yoy !== null && latest.gdp_yoy !== undefined
-          ? (latest.gdp_yoy * 100) : null;
-        body.innerHTML = `
-          <div class="metric-strip">
-            <div><span>${bilingualTitle("Index YoY")}</span><strong>${escapeHtml(fmtPercent(indexYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
-            <div><span>${bilingualTitle("GDP YoY")}</span><strong>${escapeHtml(fmtPercent(gdpYoy))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}</small></div>
-            <div><span>${bilingualTitle("Average 10Y Correlation")}</span><strong>${escapeHtml(fmtCorrelationPercent(latest.average_10y_correlation))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag average</small></div>
-            <div><span>${bilingualTitle("Same Direction")}</span><strong>${escapeHtml(fmtPercent(payload.same_direction_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B</small></div>
-            <div><span>${bilingualTitle("Scenario Coverage")}</span><strong>${escapeHtml(fmtPercent(payload.method_explainable_pct))}</strong><small class="metric-context">${escapeHtml(payload.primary_lag_months)}M lag A + B + C</small></div>
-            <div><span>${bilingualTitle("Current Case")}</span><strong>${escapeHtml(latest.quadnomial_current_plain_label || latest.quadnomial_current_case)}</strong><small class="metric-context">Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}</small></div>
-            <div><span>${bilingualTitle("Signal usability")}</span><strong class="signal-status ${signal.className}" title="${escapeHtml(payload.relationship_signal_usability)}">${escapeHtml(signal.label)}</strong></div>
-            <div><span>${bilingualTitle("Portfolio Bias")}</span><strong class="signal-status ${portfolioBias.className}" title="${escapeHtml(payload.portfolio_bias_status)}">${escapeHtml(portfolioBias.label)}</strong></div>
-          </div>
-          <div class="relationship-chart-grid relationship-chart-grid-pre-method">
-            ${renderQuadBars(payload)}
-          </div>
-          <section class="method-note" aria-label="GDP relationship method">
-            <h3>Method</h3>
-            <ul class="method-formula-list">
-              <li>Index YoY vs GDP YoY compares market direction with economic growth direction.</li>
-              <li>Rolling correlation checks whether the current relationship is stable or breaking down.</li>
-              <li>Usability is strong when the primary-lag average 10Y correlation is at least 40% and the same-direction rate is at least 60%. It is caution when correlation is at least 25% and same-direction rate is at least 55%; below those levels, the GDP relationship is weak.</li>
-              <li>The confidence badge uses the same evidence: high when both strong thresholds are met, medium when only the caution thresholds are met, and low when the relationship is below those levels or lacks enough data.</li>
-              <li>Quadnomial distribution defines A as index down/GDP down, B as index up/GDP up, C as index down/GDP up, and D as index up/GDP down.</li>
-              <li>Scenario coverage combines A, B, and C for the primary 6M lag: same-direction GDP confirmation plus the profit-taking case where GDP rises but the index falls. It is not used as relationship confidence.</li>
-            </ul>
-          </section>
-          <div class="relationship-chart-grid">
-            ${renderYoyComparison(payload)}
-            ${renderPrimaryCorrelationComparison(payload)}
-            ${renderLagCorrelationComparison(payload)}
-          </div>
-        `;
-        const charts = body.querySelectorAll(".relationship-chart-wrap");
-        const chartSeries = [
-          { series: payload.yoy_series, keys: ["index", "gdp"], labels: { index: "Index YoY", gdp: "GDP YoY" }, valueFormatter: (value) => `${fmtNumber(value)}%` },
-          { series: payload.correlation_series, keys: ["value"], labels: { value: `${payload.primary_lag_months}M lag rolling correlation` }, valueFormatter: fmtCorrelationPercent },
-          { series: payload.lag_correlation_series, keys: Object.keys(payload.lag_correlation_labels || {}), labels: payload.lag_correlation_labels || {}, valueFormatter: fmtCorrelationPercent },
-        ];
-        charts.forEach((wrap, index) => {
-          attachRelationshipChartTooltip(
-            wrap.querySelector(".relationship-chart-svg"),
-            wrap.querySelector(".chart-tooltip"),
-            chartSeries[index].series,
-            chartSeries[index].keys,
-            chartSeries[index].labels,
-            { valueFormatter: chartSeries[index].valueFormatter }
-          );
-        });
-      })
-      .catch((error) => {
-        if (state.selectedRelationshipId !== card.relationship_id) return;
-        body.innerHTML = `<p class="status">Failed to load GDP relationship detail.</p>`;
         console.error(error);
       });
   }
@@ -351,26 +271,6 @@
   const Y_AXIS_TICK_COUNT = 9;
   const X_AXIS_TICK_COUNT = 12;
 
-  async function loadGdpRelationshipOverview() {
-    const response = await fetch("/api/macro-dashboard/gdp-relationships");
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const payload = await response.json();
-    state.gdpRelationships = payload.relationships || [];
-    state.selectedRelationshipId = null;
-    renderGdpRelationshipOverview();
-  }
-
-  async function loadGdpRelationshipDetail(relationshipId) {
-    if (state.gdpRelationshipDetailsById[relationshipId]) {
-      return state.gdpRelationshipDetailsById[relationshipId];
-    }
-    const response = await fetch(`/api/macro-dashboard/gdp-relationships/${encodeURIComponent(relationshipId)}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const payload = await response.json();
-    state.gdpRelationshipDetailsById[relationshipId] = payload;
-    return payload;
-  }
-
   function $(id) {
     return document.getElementById(id);
   }
@@ -420,39 +320,8 @@
     return zh ? `${escapeHtml(label)}<br><small>${escapeHtml(zh)}</small>` : escapeHtml(label);
   }
 
-  function signalUsabilityMeta(value) {
-    const text = String(value ?? "");
-    if (text.includes("usable with caution")) {
-      return { label: "caution", className: "signal-caution" };
-    }
-    if (text.includes("usable")) {
-      return { label: "usable", className: "signal-usable" };
-    }
-    if (text.includes("weak")) {
-      return { label: "weak", className: "signal-weak" };
-    }
-    if (!text) {
-      return { label: "n/a", className: "signal-neutral" };
-    }
-    return { label: "not usable", className: "signal-neutral" };
-  }
-
-  function portfolioBiasMeta(value) {
-    const text = String(value ?? "");
-    const normalized = text.toLowerCase();
-    if (normalized.includes("long")) {
-      return { label: "long bias", className: "signal-usable" };
-    }
-    if (normalized.includes("short") || normalized.includes("defensive")) {
-      return { label: "defensive", className: "signal-weak" };
-    }
-    if (normalized.includes("forecast")) {
-      return { label: "requires GDP forecast", className: "signal-caution" };
-    }
-    if (!text) {
-      return { label: "n/a", className: "signal-neutral" };
-    }
-    return { label: text, className: "signal-caution" };
+  function visibleMarketPhaseMarkets(markets) {
+    return (markets || []).filter((market) => String(market.region ?? "").toUpperCase() === "US");
   }
 
   function statusClass(market) {
@@ -461,15 +330,6 @@
 
   function selectedMarket() {
     return state.markets.find((market) => market.benchmark_id === state.selectedBenchmarkId)
-      || null;
-  }
-
-  function visibleMarketPhaseMarkets(markets) {
-    return (markets || []).filter((market) => String(market.region ?? "").toUpperCase() === "US");
-  }
-
-  function selectedRelationship() {
-    return state.gdpRelationships.find((card) => card.relationship_id === state.selectedRelationshipId)
       || null;
   }
 
@@ -527,10 +387,8 @@
         state.selectedBenchmarkId = state.selectedBenchmarkId === button.dataset.benchmarkId
           ? null
           : button.dataset.benchmarkId;
-        state.selectedRelationshipId = null;
         state.selectedRatesDetailId = null;
         renderOverview();
-        renderGdpRelationshipOverview();
         renderUsRatesLiquidity();
         renderDetailPanel();
       });
@@ -546,93 +404,6 @@
         event.preventDefault();
         event.stopPropagation();
         refreshMarket(button.dataset.refreshBenchmarkId, button);
-      });
-    });
-  }
-
-  function confidenceClass(relationship) {
-    return `confidence-${relationship.macro_relationship_confidence}`;
-  }
-
-  function ensureGdpRelationshipRoot() {
-    const existing = $("gdpRelationshipSection");
-    if (existing) return existing;
-    const shell = $("macroDashboardApp");
-    if (!shell) return null;
-    shell.insertAdjacentHTML(
-      "beforeend",
-      `<section class="gdp-relationship" id="gdpRelationshipSection" aria-label="GDP market relationship"></section>`
-    );
-    return $("gdpRelationshipSection");
-  }
-
-  function renderGdpRelationshipOverview() {
-    const section = ensureGdpRelationshipRoot();
-    if (!section) return;
-    const current = selectedRelationship();
-    if (!state.gdpRelationships.length) {
-      section.innerHTML = `
-        <div class="relationship-head">
-          <div>
-            <h2>GDP / Market Relationship</h2>
-            <p class="subtitle">Loading GDP relationship data...</p>
-          </div>
-        </div>
-      `;
-      return;
-    }
-    section.innerHTML = `
-      <div class="relationship-head">
-        <div>
-          <h2>GDP / Market Relationship</h2>
-          <p class="subtitle">GDP, index correlation, and quadnomial context.</p>
-        </div>
-      </div>
-      <div class="gdp-grid">
-        ${state.gdpRelationships.map((card) => {
-          const selected = card.relationship_id === current?.relationship_id ? " selected" : "";
-          const signal = signalUsabilityMeta(card.relationship_signal_usability);
-          return `
-            <button class="gdp-card${selected}" type="button" data-relationship-id="${escapeHtml(card.relationship_id)}">
-              <div class="gdp-card-topline">
-                <span class="market-region">${escapeHtml(card.region)}</span>
-              </div>
-              <span class="gdp-card-confidence ${confidenceClass(card)}">
-                <span class="confidence-level">${escapeHtml(card.macro_relationship_confidence)} ${escapeHtml("confidence")}</span>
-                <span>${escapeHtml(zhLabel("confidence"))} ${escapeHtml(zhLabel(card.macro_relationship_confidence))}</span>
-              </span>
-              <strong class="gdp-card-title">${escapeHtml(card.title)}</strong>
-              <span class="gdp-card-subtitle">
-                <span class="subtitle-en">${escapeHtml(card.economy)} · primary lag ${escapeHtml(card.primary_lag_months)}M</span>
-                <span class="subtitle-zh">${escapeHtml(zhLabel("primary lag"))} ${escapeHtml(card.primary_lag_months)}M</span>
-              </span>
-              <div class="gdp-card-summary">
-                <span>
-                  <small>${bilingualLabel("Signal")}</small>
-                  <strong class="signal-status ${signal.className}" title="${escapeHtml(card.relationship_signal_usability)}">${escapeHtml(signal.label)}</strong>
-                </span>
-                <span>
-                  <small>${bilingualLabel("Avg 10Y corr")}</small>
-                  <strong>${escapeHtml(fmtCorrelationPercent(card.latest?.average_10y_correlation))}</strong>
-                </span>
-              </div>
-            </button>
-          `;
-        }).join("")}
-      </div>
-    `;
-
-    section.querySelectorAll(".gdp-card").forEach((button) => {
-      button.addEventListener("click", () => {
-        state.selectedRelationshipId = state.selectedRelationshipId === button.dataset.relationshipId
-          ? null
-          : button.dataset.relationshipId;
-        state.selectedBenchmarkId = null;
-        state.selectedRatesDetailId = null;
-        renderOverview();
-        renderGdpRelationshipOverview();
-        renderUsRatesLiquidity();
-        renderDetailPanel();
       });
     });
   }
@@ -1064,92 +835,6 @@
     });
   }
 
-  function renderQuadBars(relationship) {
-    return `
-      <div class="relationship-chart">
-        <div class="relationship-chart-head">
-          <h3>${bilingualTitle("Quadnomial distribution")}</h3>
-          <span>${escapeHtml(relationship.primary_lag_months)}M lag rate</span>
-        </div>
-        <div class="quad-bars">
-          ${relationship.quadnomial_distribution.map((item) => `
-            <div class="quad-bar-row">
-              <span>${escapeHtml(item.label)}</span>
-              <strong>${escapeHtml(fmtPercent(item.value))}</strong>
-              <i style="width: ${Math.max(4, item.value).toFixed(2)}%"></i>
-            </div>
-          `).join("")}
-        </div>
-      </div>
-    `;
-  }
-
-  function renderLagComparison(relationship) {
-    return `
-      <div class="relationship-chart">
-        <div class="relationship-chart-head">
-          <h3>${bilingualTitle("Lag comparison")}</h3>
-          <span>${bilingualLabel("Primary lag")}</span>
-        </div>
-        <div class="lag-table">
-          ${relationship.lag_correlations.map((lag) => `
-            <div class="lag-row ${lag.method_primary ? "lag-row-primary" : ""}">
-              <span>${escapeHtml(lag.label)}</span>
-              <strong>${escapeHtml(fmtCorrelationPercent(lag.value))}</strong>
-              ${lag.method_primary ? '<em class="lag-primary-pill">Primary</em>' : "<em></em>"}
-            </div>
-          `).join("")}
-        </div>
-      </div>
-    `;
-  }
-
-  function renderLagCorrelationComparison(payload) {
-    const keys = Object.keys(payload.lag_correlation_labels || {});
-    return renderRelationshipLineChart(
-      bilingualTitle("Rolling 10Y correlations by lag"),
-      payload.lag_correlation_series,
-      keys,
-      payload.lag_correlation_labels || {},
-      {
-        wide: true,
-        rawTitle: true,
-        rawLabels: true,
-        valueFormatter: fmtCorrelationPercent,
-      }
-    );
-  }
-
-  function renderYoyComparison(payload) {
-    return renderRelationshipLineChart(
-      bilingualTitle("Index YoY vs GDP YoY"),
-      payload.yoy_series,
-      ["index", "gdp"],
-      { index: "Index YoY", gdp: "GDP YoY" },
-      {
-        wide: true,
-        rawTitle: true,
-        rawLabels: true,
-        valueFormatter: (value) => `${fmtNumber(value)}%`,
-      }
-    );
-  }
-
-  function renderPrimaryCorrelationComparison(payload) {
-    return renderRelationshipLineChart(
-      bilingualTitle("Rolling correlation"),
-      payload.correlation_series,
-      ["value"],
-      { value: `${payload.primary_lag_months}M lag rolling correlation` },
-      {
-        wide: true,
-        rawTitle: true,
-        rawLabels: true,
-        valueFormatter: fmtCorrelationPercent,
-      }
-    );
-  }
-
 
 
   async function loadUsRatesLiquidity() {
@@ -1250,31 +935,7 @@
     "Yield Curve Analysis": "收益率曲线分析",
     "US Yield Curve - Comparative Analysis": "美国收益率曲线对比分析",
     "US Real Yield Curve (TIPS) - Comparative Analysis": "美国实际收益率曲线(TIPS)对比分析",
-    // GDP Relationships
-    "Index YoY": "指数同比",
-    "GDP YoY": "GDP同比",
-    "Index YoY vs GDP YoY": "指数同比 vs GDP同比",
-    "No lag": "无滞后",
-    "3M lag": "3个月滞后",
-    "Rolling 10Y correlations by lag": "按滞后期的10年滚动相关性",
-    "Lag comparison": "滞后比较",
-    "Quadnomial distribution": "四分区分布",
-    "Rolling correlation": "滚动相关性",
-    "Signal": "信号",
-    "Signal usability": "信号可用性",
-    "Portfolio Bias": "组合偏向",
-    "Avg 10Y corr": "10年平均相关性",
-    "Average 10Y Correlation": "10年平均相关性",
-    "Same Direction": "同向率",
-    "Scenario Coverage": "情景覆盖率",
-    "Current Case": "当前案例",
-    "confidence": "置信度",
-    "High": "高",
-    "Medium": "中",
-    "Low": "低",
-    "high": "高",
-    "medium": "中",
-    "low": "低",
+
     "primary lag": "滞后期",
     "usable": "可用",
     "caution": "谨慎",
@@ -1690,21 +1351,25 @@
         <div>
           <h2>US Rates & Credit</h2>
         </div>
-        <span class="mock-pill">${escapeHtml(payload.as_of ? `As of ${fmtDate(payload.as_of)}` : "Import needed")}</span>
       </div>
-      ${rateCards.length ? `<div class="rates-signal-grid">${rateCards.map(renderRateCard).join("")}${renderSupportCard("Breakeven", fmtRate(payload.derived?.ten_year_breakeven_inflation))}${renderSupportCard("VIX", fmtNumber(payload.derived?.vix), "evidence-vix")}${renderCurveStatusCard(curveStatus, interpretation)}</div>` : ""}
-      ${creditCards.length ? `
-        <div class="rates-detail gdp-detail">
-          <div class="rates-chart-subtitle">
-            <div class="credit-conditions-head">
-              <p class="eyebrow">${bilingualLabel("Credit Conditions")}</p>
-              ${payload.credit_as_of ? `<span class="mock-pill">Data as of ${escapeHtml(payload.credit_as_of)}</span>` : ""}
-            </div>
-            <p>Credit spreads and quality spreads across rating tiers.<br><small>各评级层的信用利差和质量利差</small></p>
-          </div>
-          <div class="rates-signal-grid">${creditCards.map(renderRateCard).join("")}</div>
+      <div class="rates-content">
+        <div class="rates-content-head">
+          <span class="mock-pill">${escapeHtml(payload.as_of ? `As of ${fmtDate(payload.as_of)}` : "Import needed")}</span>
         </div>
-      ` : ""}
+        ${rateCards.length ? `<div class="rates-signal-grid">${rateCards.map(renderRateCard).join("")}${renderSupportCard("Breakeven", fmtRate(payload.derived?.ten_year_breakeven_inflation))}${renderSupportCard("VIX", fmtNumber(payload.derived?.vix), "evidence-vix")}${renderCurveStatusCard(curveStatus, interpretation)}</div>` : ""}
+        ${creditCards.length ? `
+          <div class="rates-detail gdp-detail">
+            <div class="rates-chart-subtitle">
+              <div class="credit-conditions-head">
+                <p class="eyebrow">${bilingualLabel("Credit Conditions")}</p>
+                ${payload.credit_as_of ? `<span class="mock-pill">Data as of ${escapeHtml(payload.credit_as_of)}</span>` : ""}
+              </div>
+              <p>Credit spreads and quality spreads across rating tiers.<br><small>各评级层的信用利差和质量利差</small></p>
+            </div>
+            <div class="rates-signal-grid">${creditCards.map(renderRateCard).join("")}</div>
+          </div>
+        ` : ""}
+      </div>
     `;
     section.querySelectorAll("[data-rates-detail-id]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1712,7 +1377,6 @@
           ? null
           : button.dataset.ratesDetailId;
         state.selectedBenchmarkId = null;
-        state.selectedRelationshipId = null;
         if (state.selectedRatesDetailId !== "yield_curve_shape") {
           state.selectedNominalCurrentDate = null;
           state.selectedNominalComparisonDate = null;
@@ -1720,7 +1384,6 @@
           state.selectedRealComparisonDate = null;
         }
         renderOverview();
-        renderGdpRelationshipOverview();
         renderUsRatesLiquidity();
         renderDetailPanel();
       });
@@ -2260,10 +1923,8 @@
           ? null
           : button.dataset.growthCycleDetailId;
         state.selectedBenchmarkId = null;
-        state.selectedRelationshipId = null;
         state.selectedRatesDetailId = null;
         renderOverview();
-        renderGdpRelationshipOverview();
         renderUsRatesLiquidity();
         renderGrowthCycle();
         renderDetailPanel();
@@ -3207,11 +2868,9 @@
           ? null
           : button.dataset.consumerDetailId;
         state.selectedBenchmarkId = null;
-        state.selectedRelationshipId = null;
         state.selectedRatesDetailId = null;
         state.selectedGrowthCycleDetailId = null;
         renderOverview();
-        renderGdpRelationshipOverview();
         renderUsRatesLiquidity();
         renderConsumerSentiment();
         renderDetailPanel();
@@ -5305,13 +4964,6 @@
           "beforeend",
           `<div class="rates-empty">Failed to load US rates data.</div>`,
         );
-      }
-      console.error(error);
-    });
-    loadGdpRelationshipOverview().catch((error) => {
-      const section = ensureGdpRelationshipRoot();
-      if (section) {
-        section.innerHTML = `<p class="status">Failed to load GDP relationship data.</p>`;
       }
       console.error(error);
     });

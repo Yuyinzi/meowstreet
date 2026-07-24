@@ -117,130 +117,35 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "detail-panel-head" in js
 
 
-def test_macro_dashboard_js_has_mock_gdp_relationship_panel():
+def test_macro_dashboard_js_removes_gdp_relationship_panel():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 
-    assert 'fetch("/api/macro-dashboard/gdp-relationships")' in js
+    assert 'fetch("/api/macro-dashboard/gdp-relationships")' not in js
     assert (
         "fetch(`/api/macro-dashboard/gdp-relationships/${encodeURIComponent(relationshipId)}`)"
-        in js
-    )
-    assert "gdpRelationshipDetailsById" in js
-    assert "loadGdpRelationshipDetail" in js
-    assert "MOCK_GDP_RELATIONSHIPS" not in js
-    assert "Portfolio bias requires GDP forecast" not in js
-    assert "Method Video 03 workflow data" not in js
-    assert "GDP / Market Relationship" in js
-    assert "renderGdpRelationshipOverview" in js
-    assert "renderGdpDetailInPanel" in js
-    assert (
-        "state.selectedRelationshipId = state.gdpRelationships[0]?.relationship_id || null"
         not in js
     )
-    assert "|| state.gdpRelationships[0]" not in js
-    assert "state.selectedRelationshipId === button.dataset.relationshipId" in js
+    assert "gdpRelationshipDetailsById" not in js
+    assert "loadGdpRelationshipDetail" not in js
+    assert "GDP / Market Relationship" not in js
+    assert "renderGdpRelationshipOverview" not in js
+    assert "renderGdpDetailInPanel" not in js
+    assert "state.selectedRelationshipId" not in js
+    assert "gdpRelationships" not in js
+    assert "gdpRelationship" not in js
 
-    assert "rolling_index_gdp_correlation" not in js
     assert "function fmtCorrelationPercent(" in js
-    assert "fmtCorrelationPercent(card.latest?.rolling_index_gdp_correlation)" not in js
-    assert "fmtCorrelationPercent(card.latest?.average_10y_correlation)" in js
-    assert "fmtCorrelationPercent(latest.rolling_index_gdp_correlation)" not in js
-    assert "fmtCorrelationPercent(latest.average_10y_correlation)" in js
-    assert "valueFormatter: fmtCorrelationPercent" in js
-    assert "same_direction_pct" in js
-    assert "method_explainable_pct" in js
-    assert "macro_relationship_confidence" in js
-    assert "relationship_signal_usability" in js
-    assert "portfolio_bias_status" in js
-    assert "quadnomial_current_plain_label || latest.quadnomial_current_case" in js
-    assert "quadnomial_current_label || card.latest?.quadnomial_current_case" not in js
-    assert "gdp-card-topline" in js
-    assert "gdp-card-confidence" in js
-    assert "gdp-card-summary" in js
-    assert "gdp-card-metrics" not in js
-    assert "gdp-card-row" not in js
-    assert "signalUsabilityMeta" in js
-    assert "portfolioBiasMeta" in js
-    assert "signal-status" in js
-    assert "signal-usable" in js
-    assert "signal-caution" in js
-    assert "signal-weak" in js
-    assert (
-        'return { label: "requires GDP forecast", className: "signal-caution" };' in js
-    )
-    assert "relationship-case" not in js
-    assert "relationship-bias" not in js
-    assert 'class="gdp-card${selected}"' in js
-    assert "Index YoY vs GDP YoY" in js
-    assert "<span>Rolling Correlation</span>" not in js
-    assert "Rolling correlation" in js
-    assert "Average 10Y Correlation" in js
-    assert "requires GDP forecast" in js
-    assert "requires GDP forcast" not in js
-    assert (
-        "Usability is strong when the primary-lag average 10Y correlation is at least 40%"
-        in js
-    )
-    assert (
-        "The confidence badge uses the same evidence: high when both strong thresholds are met"
-        in js
-    )
-    assert "If corr >= 0.4" not in js
-    assert "Rolling 10Y correlations by lag" in js
-    assert "lag_correlation_series" in js
-    assert "Object.keys(payload.lag_correlation_labels || {})" in js
-    assert "relationship-chart-wide" in js
-    assert "Y-axis: value" not in js
-    assert "X-axis: period" not in js
-    assert "Source:" not in js
-    assert "M lag ${escapeHtml(fmtDate(latest.primary_lag_date))}" in js
-    assert (
-        "Quadnomial ${escapeHtml(latest.quadnomial_period_label || fmtDate(latest.quadnomial_date))}"
-        in js
-    )
-    assert "Derived from correlation and same-direction rate" not in js
-    assert "Requires future GDP forecast input" not in js
-    assert "relationship-legend" in js
     assert "chart-axis" in js
-    assert "relationship-axis-labels" not in js
-    assert "Index YoY" in js
-    assert "GDP YoY" in js
     assert "series[0].label || series[0].date" in js
-    assert "Quadnomial distribution" in js
-    assert "Scenario Coverage" in js
-    assert "M lag A + B + C" in js
-    assert "M lag A + B" in js
-    assert "M lag rate" in js
-    assert "Quadnomial distribution defines A as index down/GDP down" in js
-    assert "Scenario coverage combines A, B, and C" in js
-    assert js.index("${renderQuadBars(payload)}") < js.index(
-        "${renderYoyComparison(payload)}"
-    )
-    assert js.index("relationship-chart-grid-pre-method") < js.index("method-note")
-    assert "Signal usability" in js
-    assert "Mock data" not in js
-    assert "Fake data" not in js
-    assert "Mock data based on" not in js
-    assert "portfolio_bias_status" in js
-    assert "Index YoY vs GDP YoY" in js
-    assert "<span>Rolling Correlation</span>" not in js
-    assert "Rolling correlation" in js
-    assert "Quadnomial distribution" in js
-    assert "Signal usability" in js
-    assert "signal-neutral" in js
-    assert "Mock data" not in js
-    assert "Fake data" not in js
-    assert "Mock data based on" not in js
-    assert "portfolio_bias_status" in js
 
 
 def test_macro_dashboard_js_has_mock_lag_comparison_metrics():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 
-    assert "lag_correlations" in js
-    assert "renderLagComparison" in js
-    assert "Lag comparison" in js
-    assert "method_primary" in js
+    assert "lag_correlations" not in js
+    assert "renderLagComparison" not in js
+    assert "Lag comparison" not in js
+    assert "method_primary" not in js
 
 
 def test_macro_dashboard_css_has_overview_and_chart_classes():
@@ -262,34 +167,15 @@ def test_macro_dashboard_css_has_mock_gdp_relationship_styles():
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 
     assert ".gdp-relationship" in css
-    assert ".gdp-card" in css
-    assert ".gdp-card.selected" in css
-    assert "grid-template-columns: repeat(auto-fit, minmax(220px, 280px));" in css
-    assert ".gdp-card-topline" in css
-    assert ".gdp-card-confidence" in css
-    assert ".gdp-card-summary" in css
-    assert ".gdp-card-summary strong.signal-usable" in css
-    assert ".gdp-card-summary strong.signal-caution" in css
-    assert ".gdp-card-summary strong.signal-weak" in css
-    assert ".gdp-card-metrics" not in css
-    assert ".gdp-card-row" not in css
-    assert ".relationship-case" not in css
-    assert ".relationship-bias" not in css
-    assert ".gdp-detail" in css
     assert ".relationship-chart" in css
-    assert ".relationship-chart-grid-pre-method" in css
     assert ".relationship-legend" in css
     assert ".relationship-chart-wide" in css
     assert ".chart-axis" in css
     assert ".chart-grid" in css
     assert ".chart-y-tick" in css
     assert ".signal-status" in css
-    assert ".signal-status::before" not in css
     assert "background: transparent;" in css
     assert "text-transform: uppercase;" in css
-    assert ".metric-strip strong.signal-usable" in css
-    assert ".metric-strip strong.signal-caution" in css
-    assert ".metric-strip strong.signal-weak" in css
     assert ".signal-usable" in css
     assert ".signal-caution" in css
     assert ".signal-weak" in css
@@ -298,11 +184,6 @@ def test_macro_dashboard_css_has_mock_gdp_relationship_styles():
     assert ".relationship-line-key-4" in css
     assert ".metric-context" in css
     assert "grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));" in css
-    assert ".metric-source" not in css
-    assert ".quad-bars" in css
-    assert ".confidence-high" in css
-    assert ".confidence-medium" in css
-    assert ".confidence-low" in css
 
 
 def test_macro_dashboard_css_has_lag_comparison_styles():

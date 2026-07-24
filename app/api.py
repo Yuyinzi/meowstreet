@@ -14,7 +14,6 @@ from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.services import consumer_sentiment_dashboard, ism_services_dashboard
 from app.tools import (
-    gdp_market_relationship,
     ism_industry_analysis,
     ism_macro_signal,
     ism_official_report,
@@ -139,14 +138,6 @@ app = FastAPI(title="Meowstreet")
 
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-
-def _us_gdp_relationships(relationships):
-    return [
-        relationship
-        for relationship in relationships
-        if str(relationship.get("region", "")).lower() == "us"
-    ]
 
 
 def _load_latest_ism_industry_breadth(con, latest_ism_report=None):
@@ -319,50 +310,6 @@ def macro_dashboard_market_phase_refresh(benchmark_id):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return results[0]
-
-
-@app.get("/api/macro-dashboard/gdp-relationships")
-def macro_dashboard_gdp_relationships():
-    con = gdp_market_relationships.connect()
-    try:
-        relationships = gdp_market_relationships.load_relationships(con)
-        return gdp_market_relationship.build_overview_payload(
-            _us_gdp_relationships(relationships),
-            lambda relationship_id: gdp_market_relationships.load_lag_rows(
-                con, relationship_id
-            ),
-            lambda relationship_id: gdp_market_relationships.load_quad_rows(
-                con, relationship_id
-            ),
-        )
-    finally:
-        con.close()
-
-
-@app.get("/api/macro-dashboard/gdp-relationships/{relationship_id}")
-def macro_dashboard_gdp_relationship_detail(relationship_id):
-    con = gdp_market_relationships.connect()
-    try:
-        relationships = gdp_market_relationships.load_relationships(con)
-        relationship = next(
-            (
-                item
-                for item in relationships
-                if item["relationship_id"] == relationship_id
-            ),
-            None,
-        )
-        if not relationship:
-            raise ValueError(f"relationship is unknown: {relationship_id}")
-        return gdp_market_relationship.build_detail_payload(
-            relationship,
-            gdp_market_relationships.load_lag_rows(con, relationship_id),
-            gdp_market_relationships.load_quad_rows(con, relationship_id),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    finally:
-        con.close()
 
 
 @app.get("/api/macro-dashboard/growth-cycle")
