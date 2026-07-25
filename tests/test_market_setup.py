@@ -1,5 +1,7 @@
 from copy import deepcopy
 
+import pytest
+
 from app.tools import market_setup
 
 
@@ -1050,3 +1052,109 @@ class TestNarrativeDeterminism:
         assert result["market_conclusion"]["code"]
         assert result["portfolio_guidance"]["posture"] == "long"
         assert len(result["evidence_chain"]) == 3
+
+
+def _consumer_sentiment_summary(
+    zone="elevated", momentum="improving", percentile_rank=91.25
+):
+    return {
+        "method_version": 2,
+        "data_status": "aligned_period",
+        "aligned_month": "2026-06-01",
+        "primary_signal": {
+            "series_id": "umcsi_expectations",
+            "percentile_zone": zone,
+            "momentum": momentum,
+        },
+        "expectations": {
+            "percentile_rank": percentile_rank,
+            "percentile_label": "91st percentile",
+        },
+        "confirmation": {"state": "broadly_confirmed"},
+    }
+
+
+def _consumer_demand_outlook(state):
+    directions = {
+        "confirms_expansion": "expansion",
+        "confirms_downside_risk": "downside_risk",
+        "transition": None,
+        "unavailable": None,
+    }
+    return {
+        "state": state,
+        "direction": directions[state],
+        "data_status": "available" if state != "unavailable" else "missing",
+        "evidence_links": ["consumer_sentiment"],
+    }
+
+
+class TestConsumerDemandOutlook:
+    def test_consumer_demand_outlook_uses_expectations_as_primary_signal(self):
+        result = market_setup.build_consumer_demand_outlook(
+            {
+                "method_version": 2,
+                "data_status": "aligned_period",
+                "aligned_month": "2026-06-01",
+                "primary_signal": {
+                    "series_id": "umcsi_expectations",
+                    "percentile_zone": "elevated",
+                    "momentum": "improving",
+                },
+                "expectations": {
+                    "percentile_rank": 91.25,
+                    "percentile_label": "91st percentile",
+                },
+                "confirmation": {"state": "broadly_confirmed"},
+            }
+        )
+
+        assert result == {
+            "state": "confirms_expansion",
+            "direction": "expansion",
+            "reason": "Consumer Expectations are elevated and improving, confirming expansion-oriented demand evidence.",
+            "observation_period": "2026-06-01",
+            "data_status": "available",
+            "percentile_zone": "elevated",
+            "momentum": "improving",
+            "percentile_label": "91st percentile",
+            "confirmation_state": "broadly_confirmed",
+            "evidence_links": ["consumer_sentiment"],
+        }
+
+    @pytest.mark.parametrize(
+        ("zone", "momentum", "expected_state", "expected_direction"),
+        [
+            ("depressed", "weakening", "confirms_downside_risk", "downside_risk"),
+            ("depressed", "improving", "transition", None),
+            ("elevated", "weakening", "transition", None),
+            ("typical", "unchanged", "transition", None),
+        ],
+    )
+    def test_consumer_demand_outlook_maps_only_clear_p09_directional_states(
+        self, zone, momentum, expected_state, expected_direction
+    ):
+        summary = _consumer_sentiment_summary(zone=zone, momentum=momentum)
+
+        result = market_setup.build_consumer_demand_outlook(summary)
+
+        assert result["state"] == expected_state
+        assert result["direction"] == expected_direction
+        assert result["data_status"] == "available"
+
+    @pytest.mark.parametrize(
+        "summary",
+        [
+            None,
+            {"method_version": 1},
+            {"method_version": 2, "data_status": "mixed_periods"},
+            _consumer_sentiment_summary(percentile_rank=None),
+            _consumer_sentiment_summary(zone="percentile_unavailable"),
+        ],
+    )
+    def test_consumer_demand_outlook_does_not_classify_incomplete_inputs(self, summary):
+        result = market_setup.build_consumer_demand_outlook(summary)
+
+        assert result["state"] == "unavailable"
+        assert result["direction"] is None
+        assert result["data_status"] == "missing"

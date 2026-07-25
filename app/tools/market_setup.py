@@ -829,6 +829,79 @@ _GUIDANCE_TEMPLATES = {
     },
 }
 
+_CONSUMER_DEMAND_OUTLOOK_DIRECTIONS = {
+    ("elevated", "improving"): ("confirms_expansion", "expansion"),
+    ("depressed", "weakening"): ("confirms_downside_risk", "downside_risk"),
+}
+
+_CONSUMER_DEMAND_OUTLOOK_REASONS = {
+    "confirms_expansion": "Consumer Expectations are elevated and improving, confirming expansion-oriented demand evidence.",
+    "confirms_downside_risk": "Consumer Expectations are depressed and weakening, confirming consumer-demand downside risk.",
+    "transition": "Consumer Expectations do not show a clear directional signal.",
+}
+
+
+def build_consumer_demand_outlook(consumer_sentiment_summary):
+    unavailable = {
+        "state": "unavailable",
+        "direction": None,
+        "reason": "Consumer Demand Outlook is awaiting complete, aligned percentile data.",
+        "observation_period": None,
+        "data_status": "missing",
+        "percentile_zone": None,
+        "momentum": None,
+        "percentile_label": None,
+        "confirmation_state": None,
+        "evidence_links": ["consumer_sentiment"],
+    }
+    if consumer_sentiment_summary is None:
+        return unavailable
+    if consumer_sentiment_summary.get("method_version") != 2:
+        return unavailable
+    if consumer_sentiment_summary.get("data_status") != "aligned_period":
+        return unavailable
+    primary = consumer_sentiment_summary.get("primary_signal") or {}
+    zone = primary.get("percentile_zone")
+    momentum = primary.get("momentum")
+    expectations = consumer_sentiment_summary.get("expectations") or {}
+    percentile_rank = expectations.get("percentile_rank")
+    if zone is None or momentum is None or percentile_rank is None:
+        return unavailable
+    if zone == "percentile_unavailable":
+        return unavailable
+    outlook = _CONSUMER_DEMAND_OUTLOOK_DIRECTIONS.get((zone, momentum))
+    if outlook is None:
+        return {
+            "state": "transition",
+            "direction": None,
+            "reason": _CONSUMER_DEMAND_OUTLOOK_REASONS["transition"],
+            "observation_period": consumer_sentiment_summary.get("aligned_month"),
+            "data_status": "available",
+            "percentile_zone": zone,
+            "momentum": momentum,
+            "percentile_label": expectations.get("percentile_label"),
+            "confirmation_state": (
+                consumer_sentiment_summary.get("confirmation") or {}
+            ).get("state"),
+            "evidence_links": ["consumer_sentiment"],
+        }
+    state, direction = outlook
+    return {
+        "state": state,
+        "direction": direction,
+        "reason": _CONSUMER_DEMAND_OUTLOOK_REASONS[state],
+        "observation_period": consumer_sentiment_summary.get("aligned_month"),
+        "data_status": "available",
+        "percentile_zone": zone,
+        "momentum": momentum,
+        "percentile_label": expectations.get("percentile_label"),
+        "confirmation_state": (
+            consumer_sentiment_summary.get("confirmation") or {}
+        ).get("state"),
+        "evidence_links": ["consumer_sentiment"],
+    }
+
+
 _CONFIRMATION_MORE_DEFENSIVE = [
     "S&P 500 enters a bear-market phase",
     "ISM falls below 50 with weakening New Orders",
