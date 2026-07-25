@@ -4387,6 +4387,20 @@ h2 {
   gap: 4px;
 }
 
+.ms-component-cell-consumer-demand {
+  gap: 4px;
+}
+
+.ms-component-cell-consumer-demand .ms-component-value.muted {
+  background: #F0EAE4;
+  color: #8B7E74;
+}
+
+.ms-component-cell-awaiting .ms-component-value {
+  color: #8B7E74;
+  font-style: italic;
+}
+
 .ms-component-meta {
   color: #6F6257;
   font-size: 0.72rem;

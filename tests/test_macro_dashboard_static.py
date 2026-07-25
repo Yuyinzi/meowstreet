@@ -124,6 +124,8 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
     assert "function renderRelationshipYAxisAndGrid(" in js
     assert "function renderRelationshipLineChart(" in js
     assert "function attachRelationshipChartTooltip(" in js
+    assert "attachRelationshipChartTooltip" in js
+    assert "window.__chartHelpers" in js
     assert "function fmtMonthYear(" in js
     assert "chart-axis" in js
     assert "chart-grid" in js
@@ -5072,6 +5074,8 @@ def test_services_industry_selector_preserves_valid_selection_and_escapes_names(
     assert payload["escapedOption"] is True
     assert payload["escapedButton"] is True
     assert payload["hasEmptyGrowthMessage"] is True
+
+
 def test_macro_dashboard_js_has_consumer_sentiment_loading():
     js = STATIC_JS.read_text()
     assert "loadConsumerSentiment" in js
@@ -5120,3 +5124,742 @@ def test_consumer_sentiment_js_detail_includes_chart():
 def test_consumer_sentiment_js_does_not_invent_missing_provenance():
     js = (ROOT / "static" / "consumer-sentiment.js").read_text()
     assert '"FRED"' not in js
+
+
+def test_consumer_sentiment_js_no_status_current_label():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "Status: Current" not in js
+    assert ">Status<" not in js
+
+
+def test_consumer_sentiment_js_has_aligned_period_text():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "card-period" in js or "card-warning" in js
+
+
+def test_consumer_sentiment_js_no_fomc_policy_context():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "FOMC Policy Context" not in js
+    assert "fomc_tone" not in js
+
+
+def test_consumer_sentiment_js_no_visible_provenance_table():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert ">Provenance<" not in js
+    assert "Provenance" not in js or all(
+        "Provenance" not in line or "provenance" not in line.lower() or "<!--" in line
+        for line in js.split("\n")
+    )
+
+
+def test_consumer_sentiment_js_has_capacity_evidence_section():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "Consumer Capacity Evidence" in js
+    assert "consumer-capacity-section" in js
+    assert "consumer-capacity-headline" in js
+    assert "consumer-capacity-drivers" in js
+
+
+def test_consumer_sentiment_js_has_primary_signal_badge():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "consumer-signal-primary" in js
+    assert "Primary" in js
+    assert "consumer-signal-primary-badge" in js
+
+
+def test_consumer_sentiment_js_has_aligned_month():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "aligned_month" in js
+
+
+def test_consumer_sentiment_js_has_combined_chart():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "aggregate" in js
+    assert "expectations" in js
+    assert "current_conditions" in js
+    assert "UMCSI Components" in js
+    assert "renderRelationshipLineChart" in js
+
+
+def test_consumer_sentiment_js_has_raw_values_disclosure():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "Raw capacity observations" in js
+    assert "consumer-raw-values" in js
+    assert "Real Rate (10Y - CPI)" not in js
+    assert "TIPS 10Y" not in js
+
+
+def test_consumer_sentiment_js_has_household_debt_quarter_note():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "household_debt_gdp_quarter_note" in js
+    assert "quarterNote" in js
+    assert "consumer-quarter-note" not in js
+
+
+def test_consumer_sentiment_js_no_standalone_real_rate_chart():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "Real Rate" not in js
+    assert "realRate" not in js
+    assert "real_rate" not in js
+
+
+def test_consumer_sentiment_js_driver_cards_show_date():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "consumer-driver-date" in js
+    assert "d.latest_date" in js
+
+
+def test_consumer_sentiment_js_shows_missing_drivers():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "consumer-driver-missing" in js
+    assert "Data unavailable" in js
+
+
+def test_consumer_sentiment_css_has_signal_card_styles():
+    css = (ROOT / "static" / "consumer-sentiment.css").read_text()
+    assert ".consumer-signal-grid" in css
+    assert ".consumer-signal-card" in css
+    assert ".consumer-signal-primary" in css
+    assert ".consumer-signal-primary-badge" in css
+
+
+def test_consumer_sentiment_css_has_decision_summary_styles():
+    css = (ROOT / "static" / "consumer-sentiment.css").read_text()
+    assert ".consumer-v2-summary" in css
+    assert ".consumer-primary-read" in css
+    assert ".consumer-method-note" in css
+
+
+def test_consumer_sentiment_css_has_capacity_section_styles():
+    css = (ROOT / "static" / "consumer-sentiment.css").read_text()
+    assert ".consumer-capacity-section" in css
+    assert ".consumer-capacity-headline" in css
+    assert ".consumer-capacity-drivers" in css
+    assert ".consumer-capacity-driver" in css
+    assert ".consumer-driver-context" in css
+    assert ".consumer-raw-values" in css
+
+
+def test_consumer_sentiment_css_has_mobile_styles():
+    css = (ROOT / "static" / "consumer-sentiment.css").read_text()
+    assert "@media (max-width: 820px)" in css
+
+
+def test_consumer_sentiment_css_has_panel_layout_styles():
+    css = (ROOT / "static" / "consumer-sentiment.css").read_text()
+    assert ".macro-shell.panel-open .consumer-signal-grid" in css
+    assert ".macro-shell.panel-open.panel-expanded .consumer-signal-grid" in css
+
+
+def test_consumer_sentiment_css_has_tabular_number_style():
+    css = (ROOT / "static" / "consumer-sentiment.css").read_text()
+    assert "tabular-nums" in css
+
+
+def test_consumer_sentiment_js_detail_excludes_buy_sell_gdp_sp():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert "buy" not in js.lower()
+    assert "sell" not in js.lower()
+    lower_js = js.lower()
+    assert "gdp" not in lower_js or all(
+        "gdp" not in lower_js
+        or "household_debt_to_gdp" in js
+        or "household_debt_gdp" in js
+        for _ in [1]
+    )
+
+
+def test_consumer_sentiment_js_no_method_validation():
+    js = (ROOT / "static" / "consumer-sentiment.js").read_text()
+    assert (
+        "historical" not in js.lower()
+        or "historical" in js.lower()
+        and "historical"
+        not in [w.lower() for w in js.split() if w.lower() == "historical"]
+    )
+
+
+def test_consumer_sentiment_card_renders_v2_compact_rows():
+    script = textwrap.dedent(r"""
+        const fs = require("fs");
+        const vm = require("vm");
+        global.window = {};
+        global.document = {};
+        vm.runInThisContext(
+          fs.readFileSync("static/consumer-sentiment.js", "utf8")
+        );
+
+        const summary = {
+          method_version: 2,
+          data_status: "aligned_period",
+          aligned_month: "2026-05-01",
+          primary_signal: {
+            percentile_zone: "depressed",
+            momentum: "weakening",
+            headline: "Depressed \u00b7 Weakening"
+          },
+          confirmation: {
+            state: "broadly_confirmed",
+            aggregate_confirms: true,
+            current_conditions_confirms: true
+          },
+          expectations: {
+            value: 44.1,
+            percentile_label: "8th percentile",
+            percentile_zone: "depressed",
+            point_change: -4.0,
+            point_change_unit: "index_points",
+            momentum: "weakening",
+            role: "primary"
+          },
+          aggregate: {
+            value: 44.8,
+            percentile_label: "6th percentile",
+            percentile_zone: "depressed",
+            point_change: -3.5,
+            point_change_unit: "index_points",
+            momentum: "weakening",
+            role: "confirmation",
+            confirms_primary: true
+          },
+          current_conditions: {
+            value: 45.8,
+            percentile_label: "9th percentile",
+            percentile_zone: "depressed",
+            point_change: -6.7,
+            point_change_unit: "index_points",
+            momentum: "weakening",
+            role: "confirmation",
+            confirms_primary: true
+          },
+          ability_read: {
+            financing: { label: "Financing", state: "easing" },
+            leverage: { label: "Leverage", state: "rising" },
+            saving: { label: "Saving", state: "unchanged" }
+          },
+          capacity_as_of: {
+            household_debt_to_gdp: "2025-04-01",
+            household_debt_service_ratio: "2026-01-01",
+            personal_saving_rate: "2026-05-01",
+            one_to_four_family_mortgage_liabilities: "2026-01-01"
+          },
+          capacity_evidence: {
+            headline: "This long headline belongs in Detail.",
+            explanation: "This long explanation also belongs in Detail."
+          }
+        };
+
+        const html = window.consumerSentimentUi.renderCard(summary);
+        console.log(JSON.stringify({
+          hasZoneChip: html.includes('consumer-state-chip consumer-zone-depressed')
+            && html.includes(">Depressed</span>"),
+          hasMomentumChip: html.includes('consumer-state-chip consumer-momentum-weakening')
+            && html.includes(">Weakening</span>"),
+          hasNoDuplicateCardTitle: !html.includes('class="ism-card-title">Consumer Sentiment'),
+          hasExpectations:
+            html.includes("Expectations")
+            && html.includes("8th percentile")
+            && html.includes("\u2193 4.0 pts")
+            && html.includes("Primary"),
+          hasAggregate:
+            html.includes("Aggregate")
+            && html.includes("6th percentile")
+            && html.includes("Confirms Expectations"),
+          hasCurrent:
+            html.includes("Current Conditions")
+            && html.includes("9th percentile")
+            && html.includes("Confirms Expectations"),
+          hasAbilityRows:
+            html.includes("Financing")
+            && html.includes("Easing")
+            && html.includes("Leverage")
+            && html.includes("Rising")
+            && html.includes("Saving")
+            && html.includes("Unchanged"),
+          hasSentimentMonth: html.includes("Sentiment as of May 2026"),
+          identifiesMixedAbilityDates: html.includes("Household context \u00b7 observation periods vary"),
+          noAmbiguousStandaloneMonth: !html.includes('class="consumer-card-period">May 2026'),
+          noSeriesAligned: !html.includes("Series aligned"),
+          noLongCopy:
+            !html.includes("This long headline")
+            && !html.includes("This long explanation"),
+          noLegacyCopy:
+            !/Bullish|Bearish|Peak|Trough|Ambiguous|method/i.test(html),
+          hasTrigger:
+            html.includes(
+              'data-consumer-detail-id="consumer_sentiment"'
+            ),
+          accessible:
+            html.includes(
+              "Consumer Sentiment: Depressed, Weakening, Broadly Confirmed"
+            )
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert all(payload.values()), payload
+
+
+def test_consumer_sentiment_detail_shows_primary_state_once_and_card_has_pointer_cursor():
+    script = textwrap.dedent("""
+        const fs = require("fs"), vm = require("vm");
+        global.window = { __chartHelpers: null };
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/consumer-sentiment.js", "utf8"));
+        const body = { innerHTML: "" };
+        window.consumerSentimentUi.renderDetailInPanel(body, {
+          summary: {
+            method_version: 2,
+            primary_signal: { percentile_zone: "depressed", momentum: "improving", headline: "Depressed \\u00b7 Improving" },
+            confirmation: { state: "broadly_confirmed" },
+            aggregate: {}, expectations: {}, current_conditions: {},
+            capacity_evidence: {}
+          },
+          capacity_interpretations: [], context: {}, history: {}, capacity: {}
+        });
+        const primaryRead = body.innerHTML.match(/<div class="consumer-primary-read[^>]*>([\\s\\S]*?)<\\/div>\\s*<p class="consumer-confirmation-read"/)[1];
+        console.log(JSON.stringify({
+          hasHeadline: primaryRead.includes("Depressed \\u00b7 Improving"),
+          hasOnePrimaryState: (primaryRead.match(/Depressed/g) || []).length === 1
+            && (primaryRead.match(/Improving/g) || []).length === 1,
+        }));
+    """)
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasHeadline"] is True
+    assert payload["hasOnePrimaryState"] is True
+
+    css = (ROOT / "static" / "consumer-sentiment.css").read_text()
+    assert ".consumer-card-button" in css
+    assert "cursor: pointer" in css
+
+
+def test_consumer_sentiment_detail_explains_percentile_zone_threshold_and_result():
+    script = textwrap.dedent("""
+        const fs = require("fs"), vm = require("vm");
+        global.window = { __chartHelpers: null };
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/consumer-sentiment.js", "utf8"));
+        const body = { innerHTML: "" };
+        window.consumerSentimentUi.renderDetailInPanel(body, {
+          summary: {
+            method_version: 2,
+            percentile_method: { lower_boundary: 15, upper_boundary: 85 },
+            primary_signal: { percentile_zone: "depressed", momentum: "improving", headline: "Depressed \\u00b7 Improving" },
+            confirmation: { state: "broadly_confirmed" },
+            aggregate: {},
+            expectations: { percentile_rank: 5, percentile_zone: "depressed" },
+            current_conditions: {},
+            capacity_evidence: {}
+          },
+          capacity_interpretations: [], context: {}, history: {}, capacity: {}
+        });
+        console.log(JSON.stringify({
+          explainsLowerThreshold: body.innerHTML.includes("at or below the 15th percentile"),
+          explainsUpperThreshold: body.innerHTML.includes("at or above the 85th percentile"),
+          explainsCurrentResult: body.innerHTML.includes("5.00 percentile rank is Depressed"),
+        }));
+    """)
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+    payload = json.loads(result.stdout)
+    assert all(payload.values()), payload
+
+
+def test_consumer_sentiment_visual_states_use_distinct_zone_and_momentum_styles():
+    css = (ROOT / "static" / "consumer-sentiment.css").read_text()
+
+    assert ".consumer-sentiment" in css
+    assert ".consumer-state-chip" in css
+    assert ".consumer-zone-depressed" in css
+    assert ".consumer-momentum-improving" in css
+    assert ".consumer-signal-card.consumer-zone-depressed" in css
+    assert ".consumer-signal-card.consumer-momentum-improving" in css
+    assert ".consumer-group-heading" in css
+    assert "white-space: nowrap" in css
+
+
+def test_consumer_sentiment_card_uses_a_fixed_role_column_for_aligned_rows():
+    css = (ROOT / "static" / "consumer-sentiment.css").read_text()
+
+    assert (
+        "grid-template-columns: minmax(9rem, 1fr) minmax(13rem, 1.4fr) 7rem 10.5rem"
+        in css
+    )
+
+
+def test_consumer_sentiment_card_warns_only_for_mixed_periods():
+    script = textwrap.dedent(r"""
+        const fs = require("fs");
+        const vm = require("vm");
+        global.window = {};
+        global.document = {};
+        vm.runInThisContext(
+          fs.readFileSync("static/consumer-sentiment.js", "utf8")
+        );
+        const metric = {
+          value: 50,
+          percentile_label: "10th percentile",
+          percentile_zone: "depressed",
+          point_change: -1,
+          point_change_unit: "index_points",
+          momentum: "weakening",
+          role: "confirmation",
+          confirms_primary: null
+        };
+        const html = window.consumerSentimentUi.renderCard({
+          method_version: 2,
+          data_status: "mixed_periods",
+          aligned_month: null,
+          primary_signal: {
+            percentile_zone: "depressed",
+            momentum: "weakening",
+            headline: "Depressed \u00b7 Weakening"
+          },
+          confirmation: {
+            state: "unavailable",
+            aggregate_confirms: null,
+            current_conditions_confirms: null
+          },
+          aggregate: metric,
+          expectations: {
+            ...metric,
+            role: "primary",
+            confirms_primary: null
+          },
+          current_conditions: metric,
+          ability_read: {
+            financing: { label: "Financing", state: "unavailable" },
+            leverage: { label: "Leverage", state: "unavailable" },
+            saving: { label: "Saving", state: "unavailable" }
+          }
+        });
+        console.log(JSON.stringify({
+          hasPeriodWarning: html.includes("Observation periods differ"),
+          hasSeriesAligned: html.includes("Series aligned"),
+          accessibleInLabel:
+            html.match(/aria-label="[^"]*Observation periods differ[^"]*"/)
+            !== null
+        }));
+    """)
+    payload = json.loads(
+        subprocess.run(
+            ["node", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout
+    )
+    assert payload["hasPeriodWarning"] is True
+    assert payload["hasSeriesAligned"] is False
+    assert payload["accessibleInLabel"] is True
+
+
+def test_consumer_sentiment_card_responds_to_keyboard():
+    script = textwrap.dedent(r"""
+        const fs = require("fs");
+        const vm = require("vm");
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = { getElementById: (id) => elements[id] || { innerHTML: "", querySelectorAll: () => [] } };
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+
+        let clicked = 0;
+        const listeners = {};
+        const element = {
+          addEventListener: (type, handler) => { listeners[type] = handler; },
+          click: () => { clicked++; },
+        };
+        window.__macroDashboardTestHooks.bindConsumerSentimentDetailTrigger(element);
+        let prevented = 0;
+        listeners.keydown({ key: "Enter", preventDefault: () => { prevented++; } });
+        listeners.keydown({ key: " ", preventDefault: () => { prevented++; } });
+        listeners.keydown({ key: "Tab", preventDefault: () => { prevented++; } });
+
+        console.log(JSON.stringify({
+          enterTriggersClick: clicked === 2,
+          tabDoesNotTrigger: clicked === 2,
+          preventsDefault: prevented === 2,
+        }));
+        process.exit(0);
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["enterTriggersClick"] is True
+    assert payload["tabDoesNotTrigger"] is True
+    assert payload["preventsDefault"] is True
+
+
+def test_consumer_sentiment_detail_shows_mixed_period_dates():
+    script = textwrap.dedent("""
+        const fs = require("fs"), vm = require("vm");
+        global.window = { __chartHelpers: null };
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/consumer-sentiment.js", "utf8"));
+        const ui = window.consumerSentimentUi, body = { innerHTML: "" };
+        const s = {
+          method_version: 2, data_status: "mixed_periods", aligned_month: null,
+          percentile_method: { version: 2, window_months: 240, lower_boundary: 15, upper_boundary: 85, rank_method: "midrank" },
+          primary_signal: { series_id: "umcsi_expectations", percentile_zone: "depressed", momentum: "weakening", headline: "Depressed \\u00b7 Weakening" },
+          confirmation: { state: "unavailable", aggregate_confirms: null, current_conditions_confirms: null },
+          expectations: { value: 44.1, date: "2026-05-01", point_change: -4, point_change_unit: "index_points", momentum: "weakening", percentile_rank: null, percentile_label: "Unavailable", percentile_zone: "percentile_unavailable", role: "primary" },
+          aggregate: { value: 44.8, date: "2026-04-01", point_change: null, point_change_unit: "index_points", momentum: "unavailable", percentile_rank: null, percentile_label: "Unavailable", percentile_zone: "percentile_unavailable", role: "confirmation", confirms_primary: null },
+          current_conditions: { value: 45.8, date: "2026-05-01", point_change: null, point_change_unit: "index_points", momentum: "unavailable", percentile_rank: null, percentile_label: "Unavailable", percentile_zone: "percentile_unavailable", role: "confirmation", confirms_primary: null },
+          capacity_evidence: { headline: "x", explanation: "x" }
+        };
+        ui.renderDetailInPanel(body, { summary: s, percentile_windows: {}, capacity_interpretations: [], context: {}, history: {}, capacity: {} });
+        const html = body.innerHTML;
+        console.log(JSON.stringify({ hasDatesSection: html.includes("consumer-mixed-dates"), listsAggregateDate: html.includes("Aggregate: 2026-04-01"), listsExpectationsDate: html.includes("Expectations: 2026-05-01"), listsCurrentDate: html.includes("Current Conditions: 2026-05-01"), noAlignedDate: !html.includes("aligned") }));
+    """)
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasDatesSection"] is True
+    assert payload["listsAggregateDate"] is True
+    assert payload["listsExpectationsDate"] is True
+    assert payload["listsCurrentDate"] is True
+    assert payload["noAlignedDate"] is True
+
+
+def test_consumer_sentiment_detail_shows_unavailable_percentile_rank():
+    script = textwrap.dedent("""
+        const fs = require("fs"), vm = require("vm");
+        global.window = { __chartHelpers: null };
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/consumer-sentiment.js", "utf8"));
+        const ui = window.consumerSentimentUi, body = { innerHTML: "" };
+        const s = {
+          method_version: 2, data_status: "aligned_period", aligned_month: "2026-05-01",
+          percentile_method: { version: 2, window_months: 240, lower_boundary: 15, upper_boundary: 85, rank_method: "midrank" },
+          primary_signal: { series_id: "umcsi_expectations", percentile_zone: "percentile_unavailable", momentum: "unavailable", headline: "Primary sentiment percentile is unavailable." },
+          confirmation: { state: "unavailable", aggregate_confirms: null, current_conditions_confirms: null },
+          expectations: { value: 44.1, point_change: -4, point_change_unit: "index_points", momentum: "unavailable", percentile_rank: null, percentile_label: "Unavailable", percentile_zone: "percentile_unavailable", role: "primary" },
+          aggregate: { value: 44.8, point_change: null, point_change_unit: "index_points", momentum: "unavailable", percentile_rank: null, percentile_label: "Unavailable", percentile_zone: "percentile_unavailable", role: "confirmation", confirms_primary: null },
+          current_conditions: { value: 45.8, point_change: null, point_change_unit: "index_points", momentum: "unavailable", percentile_rank: null, percentile_label: "Unavailable", percentile_zone: "percentile_unavailable", role: "confirmation", confirms_primary: null },
+          capacity_evidence: { headline: "x", explanation: "x" }
+        };
+        ui.renderDetailInPanel(body, { summary: s, percentile_windows: { aggregate: { start: null, end: null, observation_count: 0 }, expectations: { start: null, end: null, observation_count: 0 }, current_conditions: { start: null, end: null, observation_count: 0 } }, capacity_interpretations: [], context: {}, history: {}, capacity: {} });
+        const html = body.innerHTML;
+        console.log(JSON.stringify({ avoidsZeroPercentile: !html.includes("0.00 percentile") && html.includes("percentile rank unavailable"), headlineUnavailable: html.includes("Primary sentiment percentile is unavailable."), momentumUnavailable: html.includes("unavailable") && !html.includes("0.00") }));
+    """)
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+    payload = json.loads(result.stdout)
+    assert payload["avoidsZeroPercentile"] is True
+    assert payload["headlineUnavailable"] is True
+    assert payload["momentumUnavailable"] is True
+
+
+def test_consumer_sentiment_detail_shows_missing_drivers():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = { __chartHelpers: null };
+        global.document = {};
+
+        vm.runInThisContext(fs.readFileSync("static/consumer-sentiment.js", "utf8"));
+
+        const ui = window.consumerSentimentUi;
+        const body = { innerHTML: "" };
+
+        const payload = {
+          summary: {
+            method_version: 2,
+            data_status: "missing",
+            primary_signal: { series_id: "umcsi_expectations", percentile_zone: "percentile_unavailable", momentum: "unavailable", headline: "Primary sentiment percentile is unavailable." },
+            confirmation: { state: "unavailable", aggregate_confirms: null, current_conditions_confirms: null },
+            aggregate: { role: "confirmation", confirms_primary: null },
+            expectations: { role: "primary" },
+            current_conditions: { role: "confirmation", confirms_primary: null },
+            capacity_evidence: { headline: "Consumer capacity data is currently unavailable." },
+          },
+          capacity_interpretations: [
+            { series_id: "household_debt_to_gdp", label: "Household Debt/GDP", available: false },
+            { series_id: "household_debt_service_ratio", label: "Debt Service Ratio", available: false },
+            { series_id: "personal_saving_rate", label: "Personal Saving Rate", available: true, direction: "unchanged", interpretation: "Personal saving rate is unchanged." },
+            { series_id: "one_to_four_family_mortgage_liabilities", label: "Mortgage Liabilities", available: false },
+            { series_id: "real_10y_rate", label: "Real 10Y Rate", available: true, direction: "unavailable", interpretation: "Single real rate observation \\u2014 direction cannot be determined." },
+          ],
+          context: {},
+          history: {},
+          capacity: {},
+        };
+
+        ui.renderDetailInPanel(body, payload);
+        const html = body.innerHTML;
+
+        const capSection = html.substring(html.indexOf("consumer-capacity-section"));
+        const results = {
+          driverCount: (capSection.match(/consumer-capacity-driver[">\\s]/g) || []).length,
+          unavailableCount: (capSection.match(/Data unavailable/g) || []).length,
+          hasDirectionUnavailable: capSection.includes("direction cannot be determined"),
+          hasUnchanged: capSection.includes("Personal saving rate is unchanged."),
+          labels: Array.from(capSection.matchAll(/class="consumer-driver-label">([^<]+)<\\/span>/g)).map(function (match) { return match[1]; }),
+          sample: capSection.substring(0, 800),
+        };
+        console.log(JSON.stringify(results));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    assert payload["driverCount"] == 5, (
+        f"Expected 5, got {payload['driverCount']}. Sample: {payload['sample']}"
+    )
+    assert payload["unavailableCount"] == 3
+    assert payload["hasDirectionUnavailable"] is True
+    assert payload["hasUnchanged"] is True
+    assert payload["labels"] == [
+        "Household Debt/GDP",
+        "Debt Service Ratio",
+        "Personal Saving Rate",
+        "Mortgage Liabilities",
+        "Real 10Y Rate",
+    ]
+
+
+def test_market_setup_presentation_exposes_consumer_demand_outlook():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const payload = {
+            expected_growth: {
+                state: "aligned_expansion",
+                expected_gdp_direction: "rising",
+                consumer_demand: {
+                    state: "confirms_expansion",
+                    percentile_label: "91st percentile",
+                    percentile_zone: "elevated",
+                    momentum: "improving",
+                    observation_period: "2026-06-01",
+                    evidence_links: ["consumer_sentiment"],
+                },
+                consumer_demand_agreement: true,
+                consumer_demand_conflict: false,
+                evidence_links: ["ism_manufacturing", "ism_services", "consumer_sentiment"],
+            },
+        };
+
+        const pr = hooks.buildMarketSetupPresentation(payload);
+        const html = hooks.renderDetailedReasoning(pr);
+
+        console.log(JSON.stringify({
+            hasConsumerDemand: html.indexOf("Consumer Demand") >= 0,
+            hasPercentile: html.indexOf("91st percentile") >= 0,
+            hasDataEvidenceTarget: html.indexOf('data-evidence-target="consumerSentiment"') >= 0,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasConsumerDemand"] is True
+    assert payload["hasPercentile"] is True
+    assert payload["hasDataEvidenceTarget"] is True
+
+
+def test_market_setup_presentation_marks_unavailable_consumer_demand_as_pending():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        const payload = {
+            expected_growth: {
+                consumer_demand: { state: "unavailable" },
+            },
+        };
+
+        const pr = hooks.buildMarketSetupPresentation(payload);
+        const html = hooks.renderDetailedReasoning(pr);
+
+        console.log(JSON.stringify({
+            hasAwaiting: html.indexOf("Consumer Demand: Awaiting aligned percentile data") >= 0,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasAwaiting"] is True

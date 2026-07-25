@@ -1623,6 +1623,29 @@
     return MARKET_SETUP_SENTIMENT_CLASSES[String(value).toLowerCase()] || "neutral-state";
   }
 
+  function buildConsumerDemandComponent(cd) {
+    if (!cd) {
+      return null;
+    }
+    if (cd.state === "unavailable") {
+      return { state: "unavailable" };
+    }
+    var labels = {
+      confirms_expansion: "Confirms Expansion",
+      confirms_downside_risk: "Confirms Downside Risk",
+      transition: "Transition",
+    };
+    return {
+      state: cd.state || null,
+      label: labels[cd.state] || titleCaseToken(cd.state),
+      percentileLabel: cd.percentile_label || null,
+      zone: cd.percentile_zone ? titleCaseToken(cd.percentile_zone) : null,
+      momentum: cd.momentum ? titleCaseToken(cd.momentum) : null,
+      date: cd.observation_period || null,
+      links: cd.evidence_links || [],
+    };
+  }
+
   function buildMarketSetupPresentation(setup) {
     if (!setup) return null;
     var mc = setup.market_conclusion || {};
@@ -1676,6 +1699,7 @@
           components: (setup.expected_growth || {}).components || {},
           links: (setup.expected_growth || {}).evidence_links || [],
           sentiment: stateSentimentClass((setup.expected_growth || {}).state),
+          consumerDemand: buildConsumerDemandComponent((setup.expected_growth || {}).consumer_demand),
         },
         financialConditions: { state: (setup.financial_conditions || {}).state || null, sentiment: stateSentimentClass((setup.financial_conditions || {}).state) },
         policyResponse: { state: (setup.policy_response || {}).state || null, sentiment: stateSentimentClass((setup.policy_response || {}).state) },
@@ -1791,6 +1815,7 @@
     vix: "evidence-vix",
     fomc_policy: "evidence-fomc-policy",
     m2_money_supply: "evidence-m2-money-supply",
+    consumer_sentiment: "consumerSentiment",
   });
 
   function evidenceTargetId(link) {
@@ -1890,7 +1915,7 @@
       html += '</div>';
     }
     var comps = pr.components;
-    if (comps && (comps.marketEnvironment.state || comps.expectedGrowth.state || comps.financialConditions.state || comps.policyResponse.state)) {
+    if (comps && (comps.marketEnvironment.state || comps.expectedGrowth.state || comps.financialConditions.state || comps.policyResponse.state || comps.expectedGrowth.consumerDemand)) {
       html += '<details class="ms-component-data">';
       html += '<summary class="ms-component-summary">Component Data</summary>';
       html += '<div class="ms-component-grid">';
@@ -1909,6 +1934,28 @@ html += '<div class="ms-evidence-links">' +
   comps.expectedGrowth.links.map(renderEvidenceLink).join("") +
   '</div>';
 html += '</div>';
+      var cd = comps.expectedGrowth.consumerDemand;
+      if (cd && cd.state !== "unavailable") {
+        html += '<div class="ms-component-cell ms-component-cell-consumer-demand">';
+        html += '<span class="ms-component-label">Consumer Demand</span>';
+        html += '<span class="ms-component-value ' + stateSentimentClass(cd.state) + '">' + escapeHtml(cd.label) + '</span>';
+        if (cd.percentileLabel) {
+          html += '<span class="ms-component-meta">' + escapeHtml(cd.percentileLabel) + ' · ' + escapeHtml(cd.zone || "") + ' · ' + escapeHtml(cd.momentum || "") + '</span>';
+        }
+        if (cd.date) {
+          html += '<span class="ms-component-meta">' + escapeHtml(fmtMonthYear(cd.date)) + '</span>';
+        }
+        if (cd.links.length) {
+          html += '<div class="ms-evidence-links">' +
+            cd.links.map(renderEvidenceLink).join("") +
+            '</div>';
+        }
+        html += '</div>';
+      } else if (cd) {
+        html += '<div class="ms-component-cell ms-component-cell-consumer-demand ms-component-cell-awaiting">';
+        html += '<span class="ms-component-value muted">Consumer Demand: Awaiting aligned percentile data</span>';
+        html += '</div>';
+      }
       html += '<div class="ms-component-cell"><span class="ms-component-label">Financial Conditions</span><span class="ms-component-value ' + comps.financialConditions.sentiment + '">' + escapeHtml(titleCaseToken(comps.financialConditions.state)) + '</span></div>';
       html += '<div class="ms-component-cell"><span class="ms-component-label">Policy Response</span><span class="ms-component-value ' + comps.policyResponse.sentiment + '">' + escapeHtml(titleCaseToken(comps.policyResponse.state)) + '</span></div>';
       html += '</div></details>';
@@ -2963,6 +3010,15 @@ html += '</div>';
     renderConsumerSentiment();
   }
 
+  function bindConsumerSentimentDetailTrigger(button, onActivate) {
+    button.addEventListener("click", onActivate);
+    button.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      button.click();
+    });
+  }
+
   function renderConsumerSentiment() {
     const section = $("consumerSentiment");
     if (!section) return;
@@ -2994,7 +3050,7 @@ html += '</div>';
       </div>
     `;
     section.querySelectorAll("[data-consumer-detail-id]").forEach((button) => {
-      button.addEventListener("click", () => {
+      bindConsumerSentimentDetailTrigger(button, () => {
         state.selectedConsumerDetailId = state.selectedConsumerDetailId === button.dataset.consumerDetailId
           ? null
           : button.dataset.consumerDetailId;
@@ -5203,7 +5259,7 @@ html += '</div>';
   }
 
   if (typeof window !== "undefined") {
-    window.__chartHelpers = { renderRelationshipLineChart };
+    window.__chartHelpers = { renderRelationshipLineChart, attachRelationshipChartTooltip };
   }
 
   if (typeof window !== "undefined" && window.__MEOWSTREET_TEST__) {
@@ -5292,6 +5348,7 @@ html += '</div>';
       renderMarketSetupError,
       renderMarketSetup,
       bindEvidenceLinks,
+      bindConsumerSentimentDetailTrigger,
     };
   }
 
