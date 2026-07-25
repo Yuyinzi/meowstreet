@@ -597,6 +597,13 @@ def macro_dashboard_market_setup():
                 "version": ism_macro_signal.ISM_MACRO_SIGNAL_VERSION,
                 "status": "invalid_data",
             }
+        consumer_sentiment_summary = None
+        try:
+            consumer_sentiment_summary = consumer_sentiment_dashboard.load_overview(con)
+        except (ValueError, TypeError, RuntimeError):
+            logging.warning(
+                "consumer sentiment load failed for market setup", exc_info=True
+            )
         payload = market_setup.build_market_setup(
             market_phase_payload=market_phase_payload,
             survey_synthesis=survey_synthesis_result,
@@ -605,6 +612,7 @@ def macro_dashboard_market_setup():
             m2_headline=m2_headline,
             inflation_context=inflation_context,
             fed_balance_sheet=fed_balance_sheet,
+            consumer_sentiment_summary=consumer_sentiment_summary,
         )
         return {
             k: v

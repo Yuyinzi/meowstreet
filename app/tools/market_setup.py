@@ -1312,9 +1312,11 @@ def build_market_setup(
     inflation_context=None,
     fed_balance_sheet=None,
     ism_industry_analysis=None,
+    consumer_sentiment_summary=None,
 ):
     market_env = build_market_environment(market_phase_payload)
-    expected_growth = build_expected_growth(survey_synthesis)
+    consumer_demand_outlook = build_consumer_demand_outlook(consumer_sentiment_summary)
+    expected_growth = build_expected_growth(survey_synthesis, consumer_demand_outlook)
     financial_conditions = build_financial_conditions(rates_liquidity_payload)
     policy_response = build_policy_response(
         fomc_tone, m2_headline, inflation_context, fed_balance_sheet

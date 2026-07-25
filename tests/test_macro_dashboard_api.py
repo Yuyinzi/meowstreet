@@ -2847,9 +2847,10 @@ def test_consumer_sentiment_api_returns_summary(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    assert "version" in payload
-    assert "evidence_state" in payload
-    assert payload["evidence_state"] == "insufficient_data"
+    assert payload["method_version"] == 2
+    assert payload["primary_signal"]["percentile_zone"] == ("percentile_unavailable")
+    assert payload["confirmation"]["state"] == "unavailable"
+    assert "evidence_state" not in payload
 
 
 def test_consumer_sentiment_detail_api_returns_detail(monkeypatch):
@@ -2865,3 +2866,64 @@ def test_consumer_sentiment_detail_api_returns_detail(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert "detail_id" in payload
+    assert payload["summary"]["method_version"] == 2
+    assert "percentile_windows" in payload
+
+
+def _consumer_sentiment_summary(zone="elevated", momentum="improving"):
+    return {
+        "method_version": 2,
+        "data_status": "aligned_period",
+        "aligned_month": "2026-06-01",
+        "primary_signal": {
+            "series_id": "umcsi_expectations",
+            "percentile_zone": zone,
+            "momentum": momentum,
+        },
+        "expectations": {
+            "percentile_rank": 91.25,
+            "percentile_label": "91st percentile",
+        },
+        "confirmation": {"state": "broadly_confirmed"},
+    }
+
+
+def test_market_setup_api_passes_consumer_sentiment_to_market_setup(monkeypatch):
+    from app import api
+
+    captured = {}
+
+    monkeypatch.setattr(
+        api.consumer_sentiment_dashboard,
+        "load_overview",
+        lambda con: _consumer_sentiment_summary(zone="depressed", momentum="weakening"),
+    )
+    monkeypatch.setattr(
+        api.market_setup,
+        "build_market_setup",
+        lambda **kwargs: captured.setdefault("payload", kwargs) or {},
+    )
+
+    api.macro_dashboard_market_setup()
+
+    assert captured["payload"]["consumer_sentiment_summary"]["method_version"] == 2
+
+
+def test_market_setup_api_keeps_existing_setup_when_consumer_data_is_unavailable(
+    monkeypatch,
+):
+    from app import api
+
+    monkeypatch.setattr(
+        api.consumer_sentiment_dashboard,
+        "load_overview",
+        lambda con: {"method_version": 2, "data_status": "missing"},
+    )
+
+    response = TestClient(api.app).get("/api/macro-dashboard/market-setup")
+
+    assert response.status_code == 200
+    assert (
+        response.json()["expected_growth"]["consumer_demand"]["state"] == "unavailable"
+    )
+    assert "Consumer Sentiment" not in response.json()["missing_inputs"]
