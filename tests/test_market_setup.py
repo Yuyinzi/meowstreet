@@ -286,6 +286,59 @@ class TestBuildExpectedGrowth:
 
         assert "backlog" in result.get("reason", "").lower()
 
+    def test_expected_growth_adds_consumer_agreement_without_replacing_ism_direction(
+        self,
+    ):
+        result = market_setup.build_expected_growth(
+            _survey_synthesis(expected_gdp_direction="rising"),
+            _consumer_demand_outlook("confirms_expansion"),
+        )
+
+        assert result["expected_gdp_direction"] == "rising"
+        assert result["consumer_demand"]["state"] == "confirms_expansion"
+        assert (
+            "Business surveys and consumer expectations both support expansion"
+            in result["agreements"]
+        )
+        assert "consumer_sentiment" in result["evidence_links"]
+
+    def test_expected_growth_records_consumer_conflict_without_reclassifying_ism(self):
+        result = market_setup.build_expected_growth(
+            _survey_synthesis(expected_gdp_direction="rising"),
+            _consumer_demand_outlook("confirms_downside_risk"),
+        )
+
+        assert result["expected_gdp_direction"] == "rising"
+        assert result["consumer_demand_conflict"] is True
+        assert (
+            "Business surveys indicate expansion while consumer expectations signal downside risk"
+            in result["conflicts"]
+        )
+
+    @pytest.mark.parametrize(
+        ("ism_direction", "consumer_state", "agreement", "conflict"),
+        [
+            ("rising", "confirms_expansion", True, False),
+            ("rebound_risk", "confirms_expansion", True, False),
+            ("slowing", "confirms_downside_risk", True, False),
+            ("falling", "confirms_downside_risk", True, False),
+            ("rising", "confirms_downside_risk", False, True),
+            ("slowing", "confirms_expansion", False, True),
+            ("falling", "confirms_expansion", False, True),
+            ("improving", "transition", False, False),
+        ],
+    )
+    def test_expected_growth_consumer_demand_matrix(
+        self, ism_direction, consumer_state, agreement, conflict
+    ):
+        result = market_setup.build_expected_growth(
+            _survey_synthesis(expected_gdp_direction=ism_direction),
+            _consumer_demand_outlook(consumer_state),
+        )
+
+        assert bool(result["consumer_demand_agreement"]) is agreement
+        assert bool(result["consumer_demand_conflict"]) is conflict
+
 
 class TestBuildFinancialConditions:
     def test_expansion_confirmed(self):

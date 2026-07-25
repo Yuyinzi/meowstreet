@@ -113,7 +113,27 @@ def _ism_period(ism_macro_signal):
     return ism_macro_signal.get("period")
 
 
-def build_expected_growth(survey_synthesis):
+def build_expected_growth(survey_synthesis, consumer_demand_outlook=None):
+    if consumer_demand_outlook is None:
+        consumer_demand_outlook = {
+            "state": "unavailable",
+            "direction": None,
+            "reason": "Consumer Demand Outlook is awaiting complete, aligned percentile data.",
+            "observation_period": None,
+            "data_status": "missing",
+            "percentile_zone": None,
+            "momentum": None,
+            "percentile_label": None,
+            "confirmation_state": None,
+            "evidence_links": ["consumer_sentiment"],
+        }
+
+    expansion_directions = {"rising", "rebound_risk"}
+    downside_directions = {"slowing", "falling"}
+
+    consumer_agreement = False
+    consumer_conflict = False
+
     if survey_synthesis is None:
         return {
             "state": "unavailable",
@@ -125,6 +145,9 @@ def build_expected_growth(survey_synthesis):
             "observation_period": None,
             "data_status": "missing",
             "missing_inputs": ["ISM Manufacturing", "ISM Services"],
+            "consumer_demand": consumer_demand_outlook,
+            "consumer_demand_agreement": False,
+            "consumer_demand_conflict": False,
         }
     status = survey_synthesis.get("status")
     if status in ("partial", "mixed_periods"):
@@ -138,7 +161,42 @@ def build_expected_growth(survey_synthesis):
             "observation_period": survey_synthesis.get("period"),
             "data_status": "missing",
             "missing_inputs": survey_synthesis.get("missing_inputs", []),
+            "consumer_demand": consumer_demand_outlook,
+            "consumer_demand_agreement": False,
+            "consumer_demand_conflict": False,
         }
+
+    ism_dir = survey_synthesis.get("expected_gdp_direction")
+    agreements = list(survey_synthesis.get("agreements", []))
+    conflicts = list(survey_synthesis.get("conflicts", []))
+    evidence_links = ["ism_manufacturing", "ism_services"]
+
+    consumer_state = consumer_demand_outlook.get("state")
+    if consumer_state == "confirms_expansion" and ism_dir in expansion_directions:
+        consumer_agreement = True
+        agreements.append(
+            "Business surveys and consumer expectations both support expansion"
+        )
+    elif consumer_state == "confirms_downside_risk" and ism_dir in downside_directions:
+        consumer_agreement = True
+        agreements.append(
+            "Business surveys and consumer expectations both signal downside risk"
+        )
+    elif consumer_state == "confirms_expansion" and ism_dir in downside_directions:
+        consumer_conflict = True
+        conflicts.append(
+            "Business surveys indicate slowing or contraction while consumer expectations signal strength"
+        )
+    elif consumer_state == "confirms_downside_risk" and ism_dir in expansion_directions:
+        consumer_conflict = True
+        conflicts.append(
+            "Business surveys indicate expansion while consumer expectations signal downside risk"
+        )
+
+    if consumer_demand_outlook.get("data_status") == "available":
+        if "consumer_sentiment" not in evidence_links:
+            evidence_links.append("consumer_sentiment")
+
     return {
         "state": survey_synthesis["economic_direction"],
         "expected_gdp_direction": survey_synthesis["expected_gdp_direction"],
@@ -148,12 +206,15 @@ def build_expected_growth(survey_synthesis):
         "demand_alignment": survey_synthesis.get("demand_alignment"),
         "components": survey_synthesis.get("components", {}),
         "reason": "; ".join(survey_synthesis.get("reasons", [])),
-        "agreements": survey_synthesis.get("agreements", []),
-        "conflicts": survey_synthesis.get("conflicts", []),
-        "evidence_links": ["ism_manufacturing", "ism_services"],
+        "agreements": agreements,
+        "conflicts": conflicts,
+        "evidence_links": evidence_links,
         "source_module": "ism_survey_synthesis",
         "observation_period": survey_synthesis.get("period"),
         "data_status": "available",
+        "consumer_demand": consumer_demand_outlook,
+        "consumer_demand_agreement": consumer_agreement,
+        "consumer_demand_conflict": consumer_conflict,
     }
 
 
