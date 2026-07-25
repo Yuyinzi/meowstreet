@@ -615,6 +615,52 @@ class TestReconcilePortfolioPosture:
         assert posture == "neutral"
         assert any("bear market" in c.lower() for c in conflicts)
 
+    @pytest.mark.parametrize(
+        ("base_posture", "expected_posture"),
+        [
+            ("long", "neutral_to_long"),
+            ("short_or_neutral", "cautious"),
+            ("neutral", "neutral"),
+            ("neutral_to_long", "neutral_to_long"),
+            ("cautious", "cautious"),
+        ],
+    )
+    def test_consumer_demand_conflict_only_downgrades_directional_posture(
+        self, base_posture, expected_posture
+    ):
+        posture, conflicts, _ = market_setup.reconcile_portfolio_posture(
+            market_setup.build_market_environment(_market_phase_payload("bull_market")),
+            {"portfolio_posture": base_posture, "conflicts": [], "agreements": []},
+            {"consumer_demand_conflict": True},
+        )
+
+        assert posture == expected_posture
+        assert (
+            "Consumer expectations conflict with the growth path, limiting conviction."
+            in conflicts
+        )
+
+    def test_consumer_conflict_is_visible_in_conclusion_and_conviction_limits(self):
+        expected_growth = {"consumer_demand_conflict": True}
+        conclusion = market_setup.build_market_conclusion(
+            {"setup_type": "growth_and_conditions_aligned"},
+            market_setup.build_market_environment(_market_phase_payload("bull_market")),
+            "neutral_to_long",
+            expected_growth,
+        )
+        limits = market_setup.build_conviction_limits(
+            market_setup.build_market_environment(_market_phase_payload("bull_market")),
+            {"details": {}, "state": "confirms_expansion"},
+            {"details": {}},
+            {"setup_type": "growth_and_conditions_aligned"},
+            expected_growth,
+        )
+
+        assert conclusion["summary"].endswith(
+            "Consumer expectations conflict with the growth path, limiting conviction."
+        )
+        assert {"consumer_sentiment"} == set(limits["offsets"][-1]["evidence_links"])
+
 
 class TestBuildIdeaGeneration:
     def test_no_industry_data(self):
@@ -681,14 +727,15 @@ class TestMissingAndPendingData:
         result = market_setup.build_market_setup()
         pending = result.get("pending_confirmations", [])
         assert "Labor trend" in pending
-        assert "Consumer indicators" in pending
+        assert "Consumer indicators" not in pending
         assert all(isinstance(item, str) for item in pending)
 
-    def test_limitations_reference_p2_to_p8(self):
+    def test_limitations_reference_p2_to_p9(self):
         result = market_setup.build_market_setup()
         limitations_text = " ".join(result.get("limitations", []))
         assert "P2-P7" not in limitations_text
-        assert "P2-P8" in limitations_text
+        assert "P2-P8" not in limitations_text
+        assert "P2-P9" in limitations_text
 
     def test_guidance_mentions_both_manufacturing_and_services(self):
         result = market_setup.build_market_setup(

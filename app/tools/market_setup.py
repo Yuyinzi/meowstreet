@@ -695,19 +695,37 @@ def reconcile_portfolio_posture(market_environment, setup_type_result, expected_
     if market_state == "unavailable":
         return base_posture, conflicts, agreements
 
-    if market_state == "bull_market" and base_posture in ("short_or_neutral",):
+    posture = base_posture
+
+    if expected_growth.get("consumer_demand_conflict") and posture in (
+        "long",
+        "short_or_neutral",
+    ):
+        conflicts.append(
+            "Consumer expectations conflict with the growth path, limiting conviction."
+        )
+        if posture == "long":
+            posture = "neutral_to_long"
+        elif posture == "short_or_neutral":
+            posture = "cautious"
+    elif expected_growth.get("consumer_demand_conflict"):
+        conflicts.append(
+            "Consumer expectations conflict with the growth path, limiting conviction."
+        )
+
+    if market_state == "bull_market" and posture in ("short_or_neutral",):
         conflicts.append(
             "Bull market phase conflicts with contraction setup — reconciled to neutral posture"
         )
-        return "neutral", conflicts, agreements
+        posture = "neutral"
 
-    if market_state == "bear_market" and base_posture in ("long", "neutral_to_long"):
+    if market_state == "bear_market" and posture in ("long", "neutral_to_long"):
         conflicts.append(
             "Bear market phase conflicts with expansion setup — reconciled to neutral posture"
         )
-        return "neutral", conflicts, agreements
+        posture = "neutral"
 
-    return base_posture, conflicts, agreements
+    return posture, conflicts, agreements
 
 
 def _industry_signal_direction(industry):
@@ -1168,7 +1186,11 @@ def _conviction_limit_vix(financial_conditions):
 
 
 def build_conviction_limits(
-    market_environment, financial_conditions, policy_response, setup_type_result
+    market_environment,
+    financial_conditions,
+    policy_response,
+    setup_type_result,
+    expected_growth=None,
 ):
     offsets = []
     offset = _conviction_limit_market_phase(market_environment, setup_type_result)
@@ -1180,6 +1202,14 @@ def build_conviction_limits(
     offset = _conviction_limit_vix(financial_conditions)
     if offset:
         offsets.append(offset)
+    if expected_growth and expected_growth.get("consumer_demand_conflict"):
+        offsets.append(
+            {
+                "finding": "Consumer expectations conflict with the business-survey growth path",
+                "effect": "Limits conviction in the directional Market Setup posture",
+                "evidence_links": ["consumer_sentiment"],
+            }
+        )
     if not offsets:
         return None
     limit_count = len(offsets)
@@ -1189,6 +1219,8 @@ def build_conviction_limits(
         summary = "The market-phase trend does not confirm the macro warning"
     elif any(o.get("evidence_links") == ["m2_money_supply"] for o in offsets):
         summary = "Liquidity conditions do not uniformly confirm the macro view"
+    elif any(o.get("evidence_links") == ["consumer_sentiment"] for o in offsets):
+        summary = "Consumer demand does not confirm the business-survey growth path"
     else:
         summary = "Volatility conditions do not confirm acute stress"
     return {
@@ -1198,7 +1230,9 @@ def build_conviction_limits(
     }
 
 
-def build_market_conclusion(setup_type_result, market_environment, reconciled_posture):
+def build_market_conclusion(
+    setup_type_result, market_environment, reconciled_posture, expected_growth=None
+):
     setup_type = setup_type_result.get("setup_type", "insufficient_data")
     market_state = market_environment.get("state")
     for entry in _CONCLUSION_MAP:
@@ -1207,15 +1241,23 @@ def build_market_conclusion(setup_type_result, market_environment, reconciled_po
         market_match = entry.get("market_phase")
         if market_match and market_state != market_match:
             continue
+        summary = entry["summary"]
+        if expected_growth and expected_growth.get("consumer_demand_conflict"):
+            summary += " Consumer expectations conflict with the growth path, limiting conviction."
         return {
             "code": entry["code"],
             "title": entry["title"],
-            "summary": entry["summary"],
+            "summary": summary,
         }
+    summary = "The combination of inputs does not match a defined scenario. Posture is cautious."
+    if expected_growth and expected_growth.get("consumer_demand_conflict"):
+        summary += (
+            " Consumer expectations conflict with the growth path, limiting conviction."
+        )
     return {
         "code": "unresolved",
         "title": "Evidence is unresolved",
-        "summary": "The combination of inputs does not match a defined scenario. Posture is cautious.",
+        "summary": summary,
     }
 
 
@@ -1292,10 +1334,14 @@ def build_market_setup(
         expected_growth, financial_conditions, policy_response
     )
     conviction_limits = build_conviction_limits(
-        market_env, financial_conditions, policy_response, setup_type_result
+        market_env,
+        financial_conditions,
+        policy_response,
+        setup_type_result,
+        expected_growth,
     )
     market_conclusion = build_market_conclusion(
-        setup_type_result, market_env, reconciled_posture
+        setup_type_result, market_env, reconciled_posture, expected_growth
     )
     portfolio_guidance = build_portfolio_guidance(reconciled_posture)
     confirmation_conditions = build_confirmation_conditions(
@@ -1340,9 +1386,9 @@ def build_market_setup(
         "conviction_limits": conviction_limits,
         "confirmation_conditions": confirmation_conditions,
         "missing_inputs": missing_inputs,
-        "pending_confirmations": ["Labor trend", "Consumer indicators"],
+        "pending_confirmations": ["Labor trend"],
         "limitations": [
-            "This is a deterministic connection layer over Methods P2-P8. It does not calculate a numeric confidence score.",
-            "Later-method labor and consumer indicators may change the outlook when implemented.",
+            "This is a deterministic connection layer over Methods P2-P9. It does not calculate a numeric confidence score.",
+            "Later-method leading-indicator modules may still change the outlook when implemented.",
         ],
     }
