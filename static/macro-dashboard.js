@@ -4028,13 +4028,60 @@ html += '</div>';
   }
 
   function renderSurveySynthesisCard(card) {
+    const crossEvidence = _crossSectorEvidenceHtml(card);
+    const rows = [
+      { question: "ISM Growth Direction", answer: _economicDirectionLabel(card.economic_direction) },
+      { question: "Manufacturing & Services PMI Trend", answer: _headlinePmiTrendLabel(card.growth_momentum) },
+      { question: "New Orders Signal", answer: _newOrdersSignalLabel(card) },
+      { question: "Leading Indicator Comparison", answer: _crossSectorLeadLabel(card), evidenceHtml: crossEvidence },
+      { question: "ISM-implied GDP Growth", answer: _gdpGrowthLabel(card.expected_gdp_direction) },
+      { question: "ISM Portfolio Contribution", answer: _portfolioContributionLabel(card.survey_portfolio_implication) },
+      { question: "Observation Status", answer: _observationStatusLabel(card.bias_confirmation) },
+      { question: "Services Backlog Signal", answer: _backlogConfirmationLabel(card.backlog_confirmation) },
+    ];
+
+    const rowsHtml = rows.map((row) => `
+      <div class="survey-synthesis-row">
+        <span class="survey-synthesis-question">${bilingualLabel(row.question)}</span>
+        <strong class="survey-synthesis-answer">${bilingualLabel(row.answer)}${row.evidenceHtml || ""}</strong>
+      </div>
+    `).join("");
+
+    const evidenceHtml = (card.reasons || []).length
+      ? `<div class="survey-synthesis-evidence"><strong>${bilingualLabel("Evidence")}</strong><ul>${(card.reasons || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul></div>`
+      : "";
+
+    const conflictsHtml = (card.conflicts || []).length
+      ? `<div class="survey-synthesis-conflicts"><strong>${bilingualLabel("Conflicts")}</strong><ul>${(card.conflicts || []).map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul></div>`
+      : "";
+
+    const biasExplanations = {
+      long: "ISM signals support a more constructive risk-asset posture, while Market Setup determines the final portfolio posture.",
+      long_awaiting: "Expansion remains intact; weaker one-period momentum is caution, not a confirmed reversal. Market Setup determines the final portfolio posture.",
+      neutral: "ISM signals alone do not support materially increasing risk exposure or shifting to a short posture.",
+      short_or_neutral: "ISM signals support a neutral or more defensive posture, while Market Setup determines the final portfolio posture.",
+      short_or_neutral_awaiting: "Contraction remains intact; one-period improvement awaits confirmation. Market Setup determines the final portfolio posture.",
+    };
+    const biasKey = card.bias_confirmation === "awaiting_confirmation"
+      ? card.survey_portfolio_implication + "_awaiting"
+      : card.survey_portfolio_implication;
+    const biasExplanation = biasExplanations[biasKey]
+      || "Manufacturing and Services data are insufficient to form an ISM portfolio bias.";
+    const biasExplanationHtml = `
+      <div class="survey-portfolio-bias-explanation">
+        ${bilingualLabel(biasExplanation)}
+      </div>
+    `;
+
     return `
-      <button class="m2-card m2-card-button m2-card-${escapeHtml(card.status || "missing")}" id="evidence-survey-synthesis" type="button">
-        <div class="m2-card-title-row">
-          <span class="m2-card-title">Survey Synthesis</span>
+      <div class="survey-synthesis-card">
+        <div class="survey-synthesis-grid">
+          ${rowsHtml}
         </div>
-        <p class="m2-card-reason">${escapeHtml(card.reason || "Survey synthesis is not available")}</p>
-      </button>
+        ${biasExplanationHtml}
+        ${evidenceHtml}
+        ${conflictsHtml}
+      </div>
     `;
   }
 
