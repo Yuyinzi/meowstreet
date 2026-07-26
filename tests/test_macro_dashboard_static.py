@@ -6013,3 +6013,184 @@ def test_housing_permits_renders_card_for_unavailable_state():
     assert payload["hasEvidenceId"] is True
     assert payload["hasReason"] is True
     assert payload["hasDataDetailId"] is True
+
+
+def test_housing_permits_card_explains_awaiting_confirmation_against_ism_path():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = { getElementById: function () { return {}; } };
+        global.fetch = async function () { return { ok: true, status: 200, json: async function () { return { markets: [] }; } }; };
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/housing-permits-ui.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const html = hooks.renderCard({
+          id: "housing_permits",
+          status: "awaiting_confirmation",
+          reason: "current monthly change conflicts with the 12-month yoy average",
+          observation_period: "2026-06-01",
+          latest: {
+            permits_saar: 130.5,
+            permits_mom_pct: 0.083,
+            permits_yoy_pct: 0.0023,
+            permits_yoy_12m_average: -0.023,
+          },
+        });
+
+        console.log(JSON.stringify({
+          hasStatus: html.indexOf("Could Not Confirm ISM Path") >= 0,
+          hasConclusion: html.indexOf("住房端尚未确认 ISM 指向的增长路径") >= 0,
+          hasReason: html.indexOf("current monthly change conflicts with the 12-month yoy average") >= 0,
+          hasObservationRow: html.indexOf("Observation") >= 0,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasStatus"] is True
+    assert payload["hasConclusion"] is True
+    assert payload["hasReason"] is True
+    assert payload["hasObservationRow"] is False
+
+
+def test_housing_permits_detail_explains_confirmation_role_without_redundant_basis_block():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = {};
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/housing-permits-ui.js", "utf8"));
+
+        const body = { innerHTML: "" };
+        window.housingPermitsUi.renderDetail(body, {
+          series_id: "building_permits",
+          status: "awaiting_confirmation",
+          reason: "current monthly change conflicts with the 12-month yoy average",
+          observation_period: "2026-06-01",
+          latest: { permits_saar: 130.5 },
+          cross_validation: {
+            survey_synthesis: {
+              expected_gdp_direction: "slowing",
+              underlying_alignment: "aligned",
+            },
+            permits: {
+              primary_trend: "weakening",
+              yoy_12m_average: -0.023,
+              previous_yoy_12m_average: -0.0208,
+              latest_mom: 0.083,
+              latest_yoy: 0.0023,
+            },
+          },
+          charts: [],
+        }, {
+          escapeHtml: function (value) { return String(value || ""); },
+          bilingualLabel: function (value) { return value; },
+          bilingualTitle: function (value) { return value; },
+          titleCaseToken: function () { return "Building Permits"; },
+          statusClass: function () { return "mixed"; },
+          fmtNumber: function (value) { return String(value); },
+          fmtSignedPctDecimal: function (value) { return (value * 100).toFixed(2) + "%"; },
+          fmtMonthYear: function () { return "Jun 2026"; },
+          renderGrowthCycleRangeControl: function () { return ""; },
+          filterChartForRange: function (chart) { return chart; },
+          getSelectedChartRange: function () { return "1y"; },
+          renderRatesDetailChart: function () { return ""; },
+          bindGrowthCycleRangeControl: function () {},
+          attachRatesChartTooltips: function () {},
+        });
+
+        console.log(JSON.stringify({
+          hasHousingRead: body.innerHTML.indexOf("Housing Read") >= 0,
+          hasReadHeadline: body.innerHTML.indexOf("Could Not Confirm ISM Path") >= 0,
+          hasReason: body.innerHTML.indexOf("current monthly change conflicts with the 12-month yoy average") >= 0,
+          hasOldUseHeading: body.innerHTML.indexOf("How to Use This") >= 0,
+          hasOldAssessmentHeading: body.innerHTML.indexOf("Current Assessment") >= 0,
+          hasCrossCheck: body.innerHTML.indexOf("Cross-check") >= 0,
+          hasIsmPath: body.innerHTML.indexOf("ISM path: <strong>slowing") >= 0,
+          hasPermitTrend: body.innerHTML.indexOf("Permit primary trend: <strong>weakening") >= 0,
+          hasQualifiedAlignedRead: body.innerHTML.indexOf("Longer-term permit trend aligns with the ISM slowdown path, but the latest monthly rebound conflicts with that trend, so this release cannot confirm the ISM path.") >= 0,
+          hasBasisBlock: body.innerHTML.indexOf("Basis for This Judgment") >= 0,
+          hasSurveySynthesis: body.innerHTML.indexOf("Survey Synthesis") >= 0,
+          hasRepeatedSaar: body.innerHTML.indexOf("SAAR 130.5K") >= 0,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasHousingRead"] is True
+    assert payload["hasReadHeadline"] is True
+    assert payload["hasReason"] is True
+    assert payload["hasOldUseHeading"] is False
+    assert payload["hasOldAssessmentHeading"] is False
+    assert payload["hasCrossCheck"] is True
+    assert payload["hasIsmPath"] is True
+    assert payload["hasPermitTrend"] is True
+    assert payload["hasQualifiedAlignedRead"] is True
+    assert payload["hasBasisBlock"] is False
+    assert payload["hasSurveySynthesis"] is False
+    assert payload["hasRepeatedSaar"] is False
+
+
+def test_housing_permits_detail_maps_each_signal_state_to_a_read_tone():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = {};
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/housing-permits-ui.js", "utf8"));
+
+        const helpers = {
+          escapeHtml: function (value) { return String(value || ""); },
+          titleCaseToken: function () { return "Building Permits"; },
+          statusClass: function () { return "mixed"; },
+          fmtMonthYear: function () { return "Jun 2026"; },
+          fmtSignedPctDecimal: function (value) { return String(value); },
+          renderGrowthCycleRangeControl: function () { return ""; },
+          filterChartForRange: function (chart) { return chart; },
+          getSelectedChartRange: function () { return "1y"; },
+          renderRatesDetailChart: function () { return ""; },
+          bindGrowthCycleRangeControl: function () {},
+          attachRatesChartTooltips: function () {},
+          bilingualLabel: function (value) { return value; },
+        };
+        function render(status) {
+          const body = { innerHTML: "" };
+          window.housingPermitsUi.renderDetail(body, { series_id: "building_permits", status, charts: [] }, helpers);
+          return body.innerHTML;
+        }
+        console.log(JSON.stringify({
+          supportive: render("supports_growth_path").includes("housing-permits-assessment supportive"),
+          warning: render("challenges_growth_path").includes("housing-permits-assessment warning"),
+          mixed: render("awaiting_confirmation").includes("housing-permits-assessment mixed"),
+          missing: render("unavailable").includes("housing-permits-assessment missing"),
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+
+    assert json.loads(result.stdout) == {
+        "supportive": True,
+        "warning": True,
+        "mixed": True,
+        "missing": True,
+    }

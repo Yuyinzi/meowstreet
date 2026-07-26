@@ -1,6 +1,30 @@
 from jobs import refresh_macro_data
 
 
+def test_main_refreshes_official_building_permits_when_enabled():
+    calls = []
+
+    def permits_main(argv):
+        calls.append(argv)
+        return 0
+
+    exit_code = refresh_macro_data.main(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-consumer-sentiment",
+            "--skip-m2",
+            "--skip-ism",
+            "--skip-gdp",
+            "--skip-fomc",
+        ],
+        building_permits_main=permits_main,
+    )
+
+    assert exit_code == 0
+    assert calls == [[]]
+
+
 def test_main_runs_market_and_fred_refreshes_in_order(capsys):
     calls = []
 
@@ -38,6 +62,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         rates_main=rates_main,
         consumer_main=consumer_main,
         m2_main=m2_main,
+        building_permits_main=lambda argv: 0,
         ism_main=ism_main,
         ism_services_main=lambda argv: 0,
         ism_reports_main=ism_reports_main,
@@ -73,6 +98,7 @@ def test_main_does_not_generate_ai_interpretations():
         rates_main=recorder("rates"),
         consumer_main=recorder("consumer"),
         m2_main=recorder("m2"),
+        building_permits_main=lambda argv: 0,
         ism_main=recorder("ism"),
         ism_services_main=recorder("services_workbook"),
         ism_reports_main=recorder("ism_reports"),
@@ -106,6 +132,7 @@ def test_main_continues_after_provider_failure(capsys):
         rates_main=ok_task("rates"),
         consumer_main=lambda argv: 0,
         m2_main=ok_task("m2"),
+        building_permits_main=lambda argv: 0,
         ism_main=ok_task("ism"),
         ism_services_main=lambda argv: 0,
         ism_reports_main=lambda argv: 0,
@@ -147,6 +174,7 @@ def test_main_can_stop_after_first_failure():
         rates_main=ok_task("rates"),
         consumer_main=lambda argv: 0,
         m2_main=ok_task("m2"),
+        building_permits_main=lambda argv: 0,
         ism_main=ok_task("ism"),
         ism_services_main=lambda argv: 0,
         ism_reports_main=lambda argv: 0,
@@ -167,6 +195,7 @@ def test_main_records_exceptions_as_failures(capsys):
         rates_main=lambda argv: 0,
         consumer_main=lambda argv: 0,
         m2_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
         ism_main=lambda argv: 0,
         gdp_main=lambda argv: 0,
     )
@@ -195,6 +224,7 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
             str(tmp_path / "missing_fomc_calendar.csv"),
         ],
         consumer_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
         fomc_main=fake_task,
     )
 
@@ -227,6 +257,7 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
             str(csv_path),
         ],
         consumer_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
         fomc_main=fake_task,
     )
 
@@ -250,6 +281,7 @@ def test_main_skip_flags_remove_tasks():
         rates_main=recorder("rates"),
         consumer_main=lambda argv: 0,
         m2_main=recorder("m2"),
+        building_permits_main=lambda argv: 0,
         ism_main=recorder("ism"),
         gdp_main=recorder("gdp"),
     )
@@ -282,6 +314,7 @@ def test_main_runs_both_ism_surveys_in_order():
             "--skip-consumer-sentiment",
         ],
         consumer_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
         ism_main=recorder("manufacturing_workbook"),
         ism_services_main=recorder("services_workbook"),
         ism_reports_main=recorder("ism_reports"),
@@ -312,6 +345,7 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         rates_main=lambda argv: 0,
         consumer_main=lambda argv: 0,
         m2_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
         ism_main=lambda argv: 0,
         ism_services_main=lambda argv: 0,
         ism_reports_main=lambda argv: calls.append(argv) or 0,

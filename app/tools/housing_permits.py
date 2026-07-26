@@ -71,18 +71,29 @@ def _calculate_yoy_12m_average(yoy_series):
     return sum(item["value"] for item in recent) / len(recent)
 
 
-def _primary_trend(observations):
-    if len(observations) < 13:
+def _yoy_12m_average_series(yoy_series):
+    if len(yoy_series) < 12:
+        return []
+    return [
+        {
+            "date": yoy_series[index - 1]["date"],
+            "value": sum(item["value"] for item in yoy_series[index - 12 : index])
+            / 12,
+        }
+        for index in range(12, len(yoy_series) + 1)
+    ]
+
+
+def _primary_trend(yoy_12m_average_series):
+    if len(yoy_12m_average_series) < 2:
         return None
-    first_half = observations[-12:-6]
-    second_half = observations[-6:]
-    first_avg = sum(o["value"] for o in first_half) / len(first_half)
-    second_avg = sum(o["value"] for o in second_half) / len(second_half)
-    if second_avg > first_avg:
+    previous = yoy_12m_average_series[-2]["value"]
+    latest = yoy_12m_average_series[-1]["value"]
+    if latest > 0 and latest > previous:
         return "improving"
-    if second_avg < first_avg:
+    if latest < 0 and latest < previous:
         return "weakening"
-    return "flat"
+    return "mixed"
 
 
 def _survey_direction(survey_synthesis):
@@ -125,9 +136,9 @@ def _determine_status(latest, yoy_average, trend, survey_dir, observations):
             return "awaiting_confirmation", (
                 "current monthly change conflicts with the 12-month yoy average"
             )
-    if trend == "flat":
+    if trend not in ("improving", "weakening"):
         return "awaiting_confirmation", (
-            "flat primary trend, awaiting confirmation of sustained direction"
+            "smoothed permit trend is internally mixed, awaiting confirmation of sustained direction"
         )
     if survey_dir is None:
         return "awaiting_confirmation", (
@@ -189,11 +200,22 @@ def build_housing_permits_signal(observations, survey_synthesis, as_of_date):
             },
         }
     yoy_vals = _yoy_series(obs)
-    yoy_average = _calculate_yoy_12m_average(yoy_vals)
-    trend = _primary_trend(obs)
+    yoy_12m_averages = _yoy_12m_average_series(yoy_vals)
+    yoy_average = yoy_12m_averages[-1]["value"] if yoy_12m_averages else None
+    previous_yoy_average = (
+        yoy_12m_averages[-2]["value"] if len(yoy_12m_averages) >= 2 else None
+    )
+    trend = _primary_trend(yoy_12m_averages)
     latest = _latest_metrics(obs)
     survey_dir = _survey_direction(survey_synthesis)
     status, reason = _determine_status(latest, yoy_average, trend, survey_dir, obs)
+    underlying_alignment = (
+        "aligned"
+        if trend in ("improving", "weakening") and trend == survey_dir
+        else "conflicting"
+        if trend in ("improving", "weakening") and survey_dir is not None
+        else "unavailable"
+    )
     return {
         "version": HOUSING_PERMITS_SIGNAL_VERSION,
         "status": status,
@@ -204,6 +226,31 @@ def build_housing_permits_signal(observations, survey_synthesis, as_of_date):
             "permits_mom_pct": latest["permits_mom_pct"],
             "permits_yoy_pct": latest["permits_yoy_pct"],
             "permits_yoy_12m_average": yoy_average,
+        },
+        "cross_validation": {
+            "survey_synthesis": {
+                "status": survey_synthesis.get("status") if survey_synthesis else None,
+                "period": survey_synthesis.get("period") if survey_synthesis else None,
+                "expected_gdp_direction": (
+                    survey_synthesis.get("expected_gdp_direction")
+                    if survey_synthesis
+                    else None
+                ),
+                "direction": survey_dir,
+                "underlying_alignment": underlying_alignment,
+            },
+            "permits": {
+                "primary_trend": trend,
+                "yoy_12m_average": yoy_average,
+                "previous_yoy_12m_average": previous_yoy_average,
+                "yoy_12m_average_change": (
+                    yoy_average - previous_yoy_average
+                    if yoy_average is not None and previous_yoy_average is not None
+                    else None
+                ),
+                "latest_yoy": latest["permits_yoy_pct"],
+                "latest_mom": latest["permits_mom_pct"],
+            },
         },
     }
 
@@ -239,12 +286,10 @@ def build_housing_permits_detail_payload(observations, signal):
                 return idx
         return -1
 
-    yoy_average_by_date = {}
-    if len(yoy_vals) >= 12:
-        for i in range(12, len(yoy_vals) + 1):
-            window = yoy_vals[i - 12 : i]
-            avg = sum(item["value"] for item in window) / len(window)
-            yoy_average_by_date[yoy_vals[i - 1]["date"]] = avg
+    yoy_average_by_date = {
+        item["date"]: item["value"] for item in _yoy_12m_average_series(yoy_vals)
+    }
+    if yoy_average_by_date:
         yoy_keys.add("yoy_12m_avg")
         yoy_labels["yoy_12m_avg"] = "12M Average YoY"
 
@@ -262,6 +307,7 @@ def build_housing_permits_detail_payload(observations, signal):
         "reason": signal.get("reason"),
         "observation_period": signal.get("observation_period"),
         "latest": signal.get("latest", {}),
+        "cross_validation": signal.get("cross_validation", {}),
         "charts": [
             {
                 "title": "Building Permits SAAR",

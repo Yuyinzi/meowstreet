@@ -1202,6 +1202,7 @@
     "No Additional Observation Flag": "无需额外观察提示",
     "awaiting_confirmation": "继续观察",
     "Awaiting Confirmation": "继续观察",
+    "Building Permits": "建筑许可",
     "not_required": "无需确认",
     "Not Required": "无需确认",
     "Services Backlog Signal": "服务业订单积压信号",

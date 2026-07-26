@@ -50,6 +50,21 @@ def survey(direction="rising"):
 
 
 class TestBuildHousingPermitsSignal:
+    def test_build_housing_permits_signal_exposes_smoothed_trend_and_survey_cross_check(
+        self,
+    ):
+        observations = monthly_observations(36, start_value=1000, monthly_step=-10)
+        result = housing_permits.build_housing_permits_signal(
+            observations, survey("slowing"), "2026-07-26"
+        )
+
+        comparison = result["cross_validation"]
+        assert comparison["survey_synthesis"]["expected_gdp_direction"] == "slowing"
+        assert comparison["survey_synthesis"]["direction"] == "weakening"
+        assert comparison["permits"]["primary_trend"] == "weakening"
+        assert comparison["permits"]["yoy_12m_average"] < 0
+        assert comparison["permits"]["yoy_12m_average_change"] < 0
+
     def test_build_housing_permits_signal_calculates_method_metrics_without_lookahead(
         self,
     ):
@@ -60,7 +75,7 @@ class TestBuildHousingPermitsSignal:
         assert result["latest"]["permits_saar"] == 1230.0
         assert result["latest"]["permits_mom_pct"] == pytest.approx(10 / 1220)
         assert result["latest"]["permits_yoy_pct"] == pytest.approx(120 / 1110)
-        assert result["status"] == "supports_growth_path"
+        assert result["status"] == "awaiting_confirmation"
 
     def test_build_housing_permits_signal_marks_extreme_month_awaiting_confirmation(
         self,
@@ -99,7 +114,9 @@ class TestBuildHousingPermitsSignal:
         assert result["latest"]["permits_yoy_12m_average"] is None
 
     def test_build_housing_permits_signal_challenges_growth_path(self):
-        observations = monthly_observations(24, 1000, -10)
+        observations = monthly_observations(36, 1000, -10)
+        for index, observation in enumerate(observations):
+            observation["value"] = 1000 * (0.999 ** (index * index))
         result = housing_permits.build_housing_permits_signal(
             observations, survey("rising"), "2026-07-26"
         )

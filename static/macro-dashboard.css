@@ -4798,14 +4798,16 @@ h2 {
   margin: 4px 0 12px;
 }
 
-.housing-permits-source,
+.housing-permits-assessment,
+.housing-permits-cross-check,
 .housing-permits-definitions {
   margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid #E5DCD3;
 }
 
-.housing-permits-source h3,
+.housing-permits-assessment h3,
+.housing-permits-cross-check h3,
 .housing-permits-definitions h3 {
   font-size: 0.85rem;
   font-weight: 600;
@@ -4813,16 +4815,56 @@ h2 {
   margin-bottom: 8px;
 }
 
-.housing-permits-source ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.housing-permits-source li {
+.housing-permits-assessment p {
   font-size: 0.82rem;
   color: #6F6257;
-  padding: 3px 0;
+  line-height: 1.45;
+  margin: 0 0 8px;
+}
+
+.housing-permits-cross-check p {
+  color: #6F6257;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0 0 6px;
+}
+
+.housing-permits-cross-check p:last-child {
+  margin-bottom: 0;
+}
+
+.housing-permits-cross-result {
+  color: #3B3530 !important;
+}
+
+.housing-permits-assessment p:last-child {
+  margin-bottom: 0;
+}
+
+.housing-permits-primary-read {
+  border: 1px solid #E0D6C8;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.housing-permits-primary-read strong {
+  color: #3B3530;
+  font-size: 0.95rem;
+}
+
+.housing-permits-assessment.mixed .housing-permits-primary-read,
+.housing-permits-assessment.missing .housing-permits-primary-read {
+  background: #F7F1EA;
+}
+
+.housing-permits-assessment.supportive .housing-permits-primary-read {
+  background: #EEF9F3;
+}
+
+.housing-permits-assessment.warning .housing-permits-primary-read {
+  background: #FDF2EE;
 }
 
 .housing-permits-definitions p {

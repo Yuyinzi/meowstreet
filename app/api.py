@@ -671,8 +671,17 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             observations = macro_indicators_db.load_macro_indicator_observations(
                 con, "building_permits_saar"
             )
+            growth_cycle_payload = macro_dashboard_growth_cycle()
+            survey_synthesis = next(
+                (
+                    card
+                    for card in growth_cycle_payload.get("headline", [])
+                    if card.get("id") == "survey_synthesis"
+                ),
+                {},
+            )
             signal = housing_permits.build_housing_permits_signal(
-                observations, {}, date.today().isoformat()
+                observations, survey_synthesis, date.today().isoformat()
             )
             return housing_permits.build_housing_permits_detail_payload(
                 observations, signal

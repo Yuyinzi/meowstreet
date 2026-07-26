@@ -13,6 +13,7 @@ from scripts import import_gdp_market_relationships
 from scripts import import_ism_manufacturing
 from scripts import import_ism_services
 from scripts import import_m2_money_supply
+from scripts import import_us_building_permits
 from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
 
@@ -73,6 +74,7 @@ def _planned_tasks(
     rates_main,
     consumer_main,
     m2_main,
+    building_permits_main,
     ism_main,
     ism_services_main,
     ism_reports_main,
@@ -99,6 +101,8 @@ def _planned_tasks(
     if not args.skip_m2:
         tasks.append(("m2_fred_fetch", m2_main, ["--fetch-fred-csv"]))
         tasks.append(("m2_fred_merge", m2_main, ["--fred-csv-merge"]))
+    if not args.skip_building_permits:
+        tasks.append(("building_permits_census", building_permits_main, []))
     if not args.skip_ism:
         tasks.append(("ism_manufacturing", ism_main, []))
         tasks.append(
@@ -141,6 +145,7 @@ def main(
     rates_main=refresh_us_rates_liquidity.main,
     consumer_main=import_consumer_sentiment.main,
     m2_main=import_m2_money_supply.main,
+    building_permits_main=import_us_building_permits.main,
     ism_main=import_ism_manufacturing.main,
     ism_services_main=import_ism_services.main,
     ism_reports_main=fetch_ism_reports.main,
@@ -152,6 +157,7 @@ def main(
     parser.add_argument("--skip-rates", action="store_true")
     parser.add_argument("--skip-consumer-sentiment", action="store_true")
     parser.add_argument("--skip-m2", action="store_true")
+    parser.add_argument("--skip-building-permits", action="store_true")
     parser.add_argument("--skip-ism", action="store_true")
     parser.add_argument("--skip-gdp", action="store_true")
     parser.add_argument("--skip-fomc", action="store_true")
@@ -170,6 +176,7 @@ def main(
         rates_main,
         consumer_main,
         m2_main,
+        building_permits_main,
         ism_main,
         ism_services_main,
         ism_reports_main,
