@@ -230,12 +230,31 @@ def build_housing_permits_card(signal):
 def build_housing_permits_detail_payload(observations, signal):
     obs = [{"date": o["date"], "value": float(o["value"])} for o in observations]
     yoy_vals = _yoy_series(obs)
-    yoy_average_series = []
+    yoy_keys = {"yoy_pct"}
+    yoy_labels = {"yoy_pct": "YoY % Change"}
+
+    def _date_index(series, date_str):
+        for idx, item in enumerate(series):
+            if item["date"] == date_str:
+                return idx
+        return -1
+
+    yoy_average_by_date = {}
     if len(yoy_vals) >= 12:
         for i in range(12, len(yoy_vals) + 1):
             window = yoy_vals[i - 12 : i]
             avg = sum(item["value"] for item in window) / len(window)
-            yoy_average_series.append({"date": yoy_vals[i - 1]["date"], "value": avg})
+            yoy_average_by_date[yoy_vals[i - 1]["date"]] = avg
+        yoy_keys.add("yoy_12m_avg")
+        yoy_labels["yoy_12m_avg"] = "12M Average YoY"
+
+    yoy_multi = []
+    for item in yoy_vals:
+        row = {"date": item["date"], "yoy_pct": item["value"] * 100}
+        avg_val = yoy_average_by_date.get(item["date"])
+        row["yoy_12m_avg"] = avg_val * 100 if avg_val is not None else None
+        yoy_multi.append(row)
+
     return {
         "detail_id": "housing_permits",
         "series_id": "building_permits_saar",
@@ -247,33 +266,17 @@ def build_housing_permits_detail_payload(observations, signal):
             {
                 "title": "Building Permits SAAR",
                 "series": [
-                    {
-                        "label": "Building Permits SAAR",
-                        "data": [
-                            {"date": o["date"], "value": float(o["value"])}
-                            for o in observations
-                        ],
-                    }
+                    {"date": o["date"], "value": float(o["value"])}
+                    for o in observations
                 ],
+                "keys": ["value"],
+                "labels": {"value": "Building Permits SAAR"},
             },
             {
                 "title": "Building Permits YoY and 12M Average",
-                "series": [
-                    {
-                        "label": "YoY % Change",
-                        "data": [
-                            {"date": item["date"], "value": item["value"] * 100}
-                            for item in yoy_vals
-                        ],
-                    },
-                    {
-                        "label": "12M Average YoY",
-                        "data": [
-                            {"date": item["date"], "value": item["value"] * 100}
-                            for item in yoy_average_series
-                        ],
-                    },
-                ],
+                "series": yoy_multi,
+                "keys": sorted(yoy_keys),
+                "labels": yoy_labels,
             },
         ],
     }

@@ -90,6 +90,8 @@
         title = "ISM Manufacturing";
       } else if (state.selectedGrowthCycleDetailId === "ism_services") {
         title = "ISM Services";
+      } else if (state.selectedGrowthCycleDetailId === "housing_permits") {
+        title = "Building Permits";
       } else {
         title = "M2 Money Supply";
       }
