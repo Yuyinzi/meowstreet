@@ -4754,3 +4754,85 @@ h2 {
   font-size: 14px;
   margin: 12px 0 0;
 }
+
+.housing-permits-card .m2-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.housing-permits-detail {
+  padding: 0;
+}
+
+.housing-permits-status {
+  font-size: 0.9rem;
+  margin: 8px 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.housing-permits-status.supports_growth_path {
+  background: rgba(106, 150, 103, 0.12);
+  color: #3A5A40;
+}
+
+.housing-permits-status.challenges_growth_path {
+  background: rgba(204, 104, 78, 0.12);
+  color: #8B4513;
+}
+
+.housing-permits-status.awaiting_confirmation {
+  background: rgba(139, 126, 116, 0.12);
+  color: #6F6257;
+}
+
+.housing-permits-status.unavailable {
+  background: rgba(139, 126, 116, 0.08);
+  color: #8B7E74;
+}
+
+.housing-permits-period {
+  font-size: 0.8rem;
+  color: #8B7E74;
+  margin: 4px 0 12px;
+}
+
+.housing-permits-source,
+.housing-permits-definitions {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #E5DCD3;
+}
+
+.housing-permits-source h3,
+.housing-permits-definitions h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #5C4F44;
+  margin-bottom: 8px;
+}
+
+.housing-permits-source ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.housing-permits-source li {
+  font-size: 0.82rem;
+  color: #6F6257;
+  padding: 3px 0;
+}
+
+.housing-permits-definitions p {
+  font-size: 0.8rem;
+  color: #8B7E74;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .housing-permits-detail {
+    padding: 0;
+  }
+}

@@ -5893,3 +5893,15 @@ def test_market_setup_presentation_marks_unavailable_consumer_demand_as_pending(
     payload = json.loads(result.stdout)
 
     assert payload["hasAwaiting"] is True
+
+
+def test_housing_permits_card_uses_existing_growth_card_and_detail_hooks():
+    js = (ROOT / "static" / "housing-permits-ui.js").read_text()
+    assert 'data-growth-cycle-detail-id="housing_permits"' in js
+    assert "housingPermitsUi" in js
+
+
+def test_housing_permits_css_reuses_growth_card_tokens():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    assert ".housing-permits-card" in css or ".m2-card" in css
+    assert "var(--" in css or ".housing-permits-detail" in css
