@@ -1552,6 +1552,7 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
         "inflation_context",
         "fed_balance_sheet",
         "survey_synthesis",
+        "housing_permits",
     ]
     inflation = payload["headline"][3]
     assert inflation["label"] == "Inflation Context"
@@ -1648,6 +1649,7 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
         "ism_services",
         "m2_money_supply",
         "survey_synthesis",
+        "housing_permits",
     ]
 
 
@@ -1726,6 +1728,7 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
         "m2_money_supply",
         "fed_balance_sheet",
         "survey_synthesis",
+        "housing_permits",
     ]
     fed_card = next(card for card in cards if card["id"] == "fed_balance_sheet")
     assert fed_card["status"] == "context"
@@ -2927,3 +2930,43 @@ def test_market_setup_api_keeps_existing_setup_when_consumer_data_is_unavailable
         response.json()["expected_growth"]["consumer_demand"]["state"] == "unavailable"
     )
     assert "Consumer Sentiment" not in response.json()["missing_inputs"]
+
+
+def test_growth_cycle_endpoint_returns_housing_card_with_visible_unavailable_state(
+    monkeypatch,
+):
+    from app import api
+
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+
+    response = TestClient(api.app).get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    card = next(
+        card for card in response.json()["headline"] if card["id"] == "housing_permits"
+    )
+    assert card["status"] == "unavailable"
+    assert card["reason"]
+
+
+def test_housing_detail_endpoint_returns_level_and_smoothed_yoy_charts(monkeypatch):
+    from app import api
+
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/housing_permits"
+    )
+
+    assert response.status_code == 200
+    charts = response.json()["charts"]
+    assert charts[0]["title"] == "Building Permits SAAR"
+    assert charts[1]["title"] == "Building Permits YoY and 12M Average"

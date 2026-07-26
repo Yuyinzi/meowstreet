@@ -1315,6 +1315,7 @@ def build_market_setup(
     fed_balance_sheet=None,
     ism_industry_analysis=None,
     consumer_sentiment_summary=None,
+    housing_permits_signal=None,
 ):
     market_env = build_market_environment(market_phase_payload)
     consumer_demand_outlook = build_consumer_demand_outlook(consumer_sentiment_summary)
@@ -1351,6 +1352,19 @@ def build_market_setup(
     confirmation_conditions = build_confirmation_conditions(
         setup_type_result, market_env
     )
+
+    pending_confirmations = ["Labor trend"]
+    if housing_permits_signal:
+        hp_status = housing_permits_signal.get("status")
+        hp_reason = housing_permits_signal.get("reason", "")
+        if hp_status == "supports_growth_path":
+            all_agreements.append(hp_reason)
+        elif hp_status == "challenges_growth_path":
+            all_conflicts.append(hp_reason)
+        elif hp_status in ("awaiting_confirmation", "unavailable"):
+            pending_confirmations.append("Housing permits")
+    else:
+        pending_confirmations.append("Housing permits")
 
     missing_inputs = []
     if market_env.get("data_status") == "missing":
@@ -1390,7 +1404,7 @@ def build_market_setup(
         "conviction_limits": conviction_limits,
         "confirmation_conditions": confirmation_conditions,
         "missing_inputs": missing_inputs,
-        "pending_confirmations": ["Labor trend"],
+        "pending_confirmations": pending_confirmations,
         "limitations": [
             "This is a deterministic connection layer over Methods P2-P9. It does not calculate a numeric confidence score.",
             "Later-method leading-indicator modules may still change the outlook when implemented.",

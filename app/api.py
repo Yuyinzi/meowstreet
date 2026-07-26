@@ -15,6 +15,7 @@ from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.services import consumer_sentiment_dashboard, ism_services_dashboard
 from app.tools import (
+    housing_permits,
     ism_industry_analysis,
     ism_macro_signal,
     ism_official_report,
@@ -385,6 +386,12 @@ def macro_dashboard_growth_cycle():
             fed_total_assets=fed_total_assets if fed_total_assets_rows else None,
             fed_treasury_holdings=fed_treasury_holdings if fed_treasury_rows else None,
             fed_mbs_holdings=fed_mbs_holdings if fed_mbs_rows else None,
+            building_permits={
+                "observations": macro_indicators_db.load_macro_indicator_observations(
+                    con, "building_permits_saar"
+                ),
+                "as_of_date": date.today().isoformat(),
+            },
         )
         next_fomc_meeting = us_rates_liquidity_db.load_next_macro_event(
             con,
@@ -604,6 +611,20 @@ def macro_dashboard_market_setup():
             logging.warning(
                 "consumer sentiment load failed for market setup", exc_info=True
             )
+        housing_permits_signal = None
+        try:
+            observations = macro_indicators_db.load_macro_indicator_observations(
+                con, "building_permits_saar"
+            )
+            housing_permits_signal = housing_permits.build_housing_permits_signal(
+                observations,
+                survey_synthesis_result,
+                date.today().isoformat(),
+            )
+        except (ValueError, TypeError, RuntimeError):
+            logging.warning(
+                "housing permits load failed for market setup", exc_info=True
+            )
         payload = market_setup.build_market_setup(
             market_phase_payload=market_phase_payload,
             survey_synthesis=survey_synthesis_result,
@@ -613,6 +634,7 @@ def macro_dashboard_market_setup():
             inflation_context=inflation_context,
             fed_balance_sheet=fed_balance_sheet,
             consumer_sentiment_summary=consumer_sentiment_summary,
+            housing_permits_signal=housing_permits_signal,
         )
         return {
             k: v
@@ -625,7 +647,12 @@ def macro_dashboard_market_setup():
 
 @app.get("/api/macro-dashboard/growth-cycle/{detail_id}")
 def macro_dashboard_growth_cycle_detail(detail_id):
-    if detail_id not in {"m2_money_supply", "ism_manufacturing", "ism_services"}:
+    if detail_id not in {
+        "m2_money_supply",
+        "ism_manufacturing",
+        "ism_services",
+        "housing_permits",
+    }:
         raise HTTPException(
             status_code=400,
             detail=f"growth cycle detail is unknown: {detail_id}",
@@ -633,6 +660,16 @@ def macro_dashboard_growth_cycle_detail(detail_id):
     con = us_rates_liquidity_db.connect()
     growth_cycle.init_db(con)
     try:
+        if detail_id == "housing_permits":
+            observations = macro_indicators_db.load_macro_indicator_observations(
+                con, "building_permits_saar"
+            )
+            signal = housing_permits.build_housing_permits_signal(
+                observations, {}, date.today().isoformat()
+            )
+            return housing_permits.build_housing_permits_detail_payload(
+                observations, signal
+            )
         if detail_id == "ism_services":
             return ism_services_dashboard.load_detail(con)
         if detail_id == "ism_manufacturing":

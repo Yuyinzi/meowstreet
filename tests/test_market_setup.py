@@ -1266,3 +1266,67 @@ class TestConsumerDemandOutlook:
         result = market_setup.build_consumer_demand_outlook(summary)
 
         assert result["state"] == "unavailable"
+
+
+def test_housing_permits_challenge_limits_conviction_without_changing_posture():
+    base = market_setup.build_market_setup(
+        _market_phase_payload("bull_market"),
+        _survey_synthesis(
+            economic_direction="aligned_expansion",
+            expected_gdp_direction="rising",
+            survey_portfolio_implication="long",
+            period="2026-06",
+        ),
+        _rates_liquidity_payload("steep", "healthy"),
+        _fomc_tone_headline("dovish", "cut"),
+    )
+    challenged = market_setup.build_market_setup(
+        _market_phase_payload("bull_market"),
+        _survey_synthesis(
+            economic_direction="aligned_expansion",
+            expected_gdp_direction="rising",
+            survey_portfolio_implication="long",
+            period="2026-06",
+        ),
+        _rates_liquidity_payload("steep", "healthy"),
+        _fomc_tone_headline("dovish", "cut"),
+        housing_permits_signal={
+            "status": "challenges_growth_path",
+            "reason": "Housing evidence challenges the current growth path",
+            "observation_period": "2026-05-01",
+        },
+    )
+    assert challenged["portfolio_posture"] == base["portfolio_posture"]
+    assert (
+        "Housing evidence challenges the current growth path" in challenged["conflicts"]
+    )
+
+
+def test_housing_permits_support_adds_agreement():
+    result = market_setup.build_market_setup(
+        _market_phase_payload("bull_market"),
+        _survey_synthesis(
+            economic_direction="aligned_expansion",
+            expected_gdp_direction="rising",
+            survey_portfolio_implication="long",
+            period="2026-06",
+        ),
+        _rates_liquidity_payload("steep", "healthy"),
+        _fomc_tone_headline("dovish", "cut"),
+        housing_permits_signal={
+            "status": "supports_growth_path",
+            "reason": "housing permit evidence supports the growth path",
+            "observation_period": "2026-05-01",
+        },
+    )
+    assert "housing permit evidence supports the growth path" in result["agreements"]
+
+
+def test_housing_permits_unavailable_adds_pending_confirmation():
+    result = market_setup.build_market_setup(
+        housing_permits_signal={
+            "status": "unavailable",
+            "reason": "no observations loaded",
+        },
+    )
+    assert "Housing permits" in result["pending_confirmations"]
