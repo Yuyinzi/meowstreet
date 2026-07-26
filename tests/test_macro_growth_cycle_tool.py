@@ -2,7 +2,69 @@ import json
 
 import pytest
 
+from app.tools import housing_permits
 from app.tools import macro_growth_cycle
+
+
+def _observation(date_str, value):
+    return {
+        "date": date_str,
+        "value": float(value),
+        "source": "census.xlsx",
+        "release_date": "2026-06-16",
+        "revision_status": "official_current_history",
+        "source_url": "https://www.census.gov/construction/nrc/index.html",
+        "source_identifier": "permits_cust.xlsx",
+    }
+
+
+def _monthly_observations(
+    count, start_value=1000, monthly_step=10, end_year=2026, end_month=6
+):
+    result = []
+    start_total_months = end_year * 12 + end_month
+    for i in range(count):
+        total = start_total_months - count + 1 + i
+        year = total // 12
+        month = total % 12
+        if month == 0:
+            year -= 1
+            month = 12
+        value = start_value + i * monthly_step
+        result.append(_observation(f"{year}-{month:02d}-01", float(value)))
+    return result
+
+
+class TestHousingPermitsGrowthCycleIntegration:
+    def test_build_growth_cycle_dashboard_includes_housing_permits_normalization(
+        self,
+    ):
+        obs = _monthly_observations(24, 1000, 10)
+        result = macro_growth_cycle.build_growth_cycle_dashboard(
+            building_permits={"observations": obs}
+        )
+        gc = result["macro"]["growth_cycle"]
+        assert gc["housing_permits_saar"] == 1230.0
+        assert gc["housing_permits_mom_pct"] is not None
+
+    def test_build_growth_cycle_dashboard_payload_includes_housing_card(self):
+        obs = _monthly_observations(24, 1000, 10)
+        dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+            building_permits={"observations": obs}
+        )
+        payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+        card = next(c for c in payload["headline"] if c["id"] == "housing_permits")
+        assert card["status"] is not None
+
+    def test_build_growth_cycle_dashboard_payload_includes_housing_card_unavailable(
+        self,
+    ):
+        dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+            building_permits={"observations": []}
+        )
+        payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+        card = next(c for c in payload["headline"] if c["id"] == "housing_permits")
+        assert card["status"] == "unavailable"
 
 
 def test_growth_cycle_source_fields_are_grouped_by_source():
@@ -16,6 +78,7 @@ def test_growth_cycle_source_fields_are_grouped_by_source():
         "survey_synthesis",
         "fed_balance_sheet",
         "jobless_claims",
+        "housing_permits",
     ]
 
     fields = [
@@ -35,6 +98,8 @@ def test_growth_cycle_source_fields_are_grouped_by_source():
     assert "macro.growth_cycle.core_pce_yoy" in fields
     assert "macro.growth_cycle.survey_synthesis" in fields
     assert "macro.growth_cycle.initial_jobless_claims" in fields
+    assert "macro.growth_cycle.housing_permits_saar" in fields
+    assert "macro.growth_cycle.housing_permits_signal" in fields
 
 
 def test_normalize_ism_manufacturing_maps_components_to_growth_cycle_fields():

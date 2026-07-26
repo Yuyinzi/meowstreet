@@ -241,6 +241,36 @@ GROWTH_CYCLE_DASHBOARD_FIELDS = [
         "kind": "compute",
     },
     {
+        "id": "housing_permits_saar",
+        "title": "Building Permits SAAR",
+        "field": "macro.growth_cycle.housing_permits_saar",
+        "kind": "query",
+    },
+    {
+        "id": "housing_permits_mom_pct",
+        "title": "Building Permits MoM",
+        "field": "macro.growth_cycle.housing_permits_mom_pct",
+        "kind": "compute",
+    },
+    {
+        "id": "housing_permits_yoy_pct",
+        "title": "Building Permits YoY",
+        "field": "macro.growth_cycle.housing_permits_yoy_pct",
+        "kind": "compute",
+    },
+    {
+        "id": "housing_permits_yoy_12m_average",
+        "title": "Building Permits 12M YoY Average",
+        "field": "macro.growth_cycle.housing_permits_yoy_12m_average",
+        "kind": "compute",
+    },
+    {
+        "id": "housing_permits_signal",
+        "title": "Building Permits Signal",
+        "field": "macro.growth_cycle.housing_permits_signal",
+        "kind": "compute",
+    },
+    {
         "id": "fed_total_assets",
         "title": "Fed Total Assets",
         "field": "macro.growth_cycle.fed_total_assets",
@@ -365,6 +395,18 @@ GROWTH_CYCLE_SOURCES = [
             "continuing_jobless_claims",
             "initial_claims_4w_avg",
             "labor_trend",
+        ),
+    },
+    {
+        "id": "housing_permits",
+        "title": "Building Permits",
+        "frequency": "monthly",
+        "fields": _dashboard_fields_by_id(
+            "housing_permits_saar",
+            "housing_permits_mom_pct",
+            "housing_permits_yoy_pct",
+            "housing_permits_yoy_12m_average",
+            "housing_permits_signal",
         ),
     },
 ]
@@ -1728,9 +1770,7 @@ def build_survey_synthesis_headline(survey_synthesis):
         "survey_alignment": survey_synthesis.get("survey_alignment"),
         "demand_alignment": survey_synthesis.get("demand_alignment"),
         "leading_side": survey_synthesis.get("leading_side"),
-        "cross_sector_comparison": survey_synthesis.get(
-            "cross_sector_comparison"
-        ),
+        "cross_sector_comparison": survey_synthesis.get("cross_sector_comparison"),
         "expected_gdp_direction": survey_synthesis.get("expected_gdp_direction"),
         "survey_portfolio_implication": survey_synthesis.get(
             "survey_portfolio_implication"
@@ -1790,6 +1830,9 @@ def build_growth_cycle_dashboard_payload(
     if tone_card["status"] != "missing":
         headline.append(tone_card)
     headline.append(build_survey_synthesis_headline(survey_synthesis))
+    housing_card = growth_cycle.get("housing_permits_card")
+    if housing_card:
+        headline.append(housing_card)
     services_signal_state = (
         ism_services_card.get("segments", {}).get("services_cycle", {}).get("state")
         if ism_services_card
@@ -1842,6 +1885,37 @@ def _labor_trend(initial_claims):
     return "stable"
 
 
+def normalize_building_permits(payload):
+    from app.tools import housing_permits
+
+    observations = payload.get("observations", [])
+    survey_synthesis = payload.get("survey_synthesis", {})
+    as_of_date = payload.get("as_of_date", "2026-01-01")
+    signal = housing_permits.build_housing_permits_signal(
+        observations, survey_synthesis, as_of_date
+    )
+    card = housing_permits.build_housing_permits_card(signal)
+    return {
+        "macro": {
+            "growth_cycle": {
+                "housing_permits_saar": (signal.get("latest", {}).get("permits_saar")),
+                "housing_permits_mom_pct": (
+                    signal.get("latest", {}).get("permits_mom_pct")
+                ),
+                "housing_permits_yoy_pct": (
+                    signal.get("latest", {}).get("permits_yoy_pct")
+                ),
+                "housing_permits_yoy_12m_average": (
+                    signal.get("latest", {}).get("permits_yoy_12m_average")
+                ),
+                "housing_permits_signal": signal,
+                "housing_permits_card": card,
+                "housing_permits_period": signal.get("observation_period"),
+            }
+        }
+    }
+
+
 def normalize_jobless_claims(payload):
     initial_claims = payload.get("initial_claims", [])
     continuing_claims = payload.get("continuing_claims", [])
@@ -1886,6 +1960,7 @@ def build_growth_cycle_dashboard(
     fed_treasury_holdings=None,
     fed_mbs_holdings=None,
     jobless_claims=None,
+    building_permits=None,
 ):
     result = {"macro": {"growth_cycle": {}}}
     if ism_manufacturing:
@@ -1909,6 +1984,8 @@ def build_growth_cycle_dashboard(
         )
     if jobless_claims:
         result = _deep_merge(result, normalize_jobless_claims(jobless_claims))
+    if building_permits:
+        result = _deep_merge(result, normalize_building_permits(building_permits))
     return result
 
 
