@@ -237,6 +237,7 @@ def build_housing_permits_detail_payload(observations, signal):
             avg = sum(item["value"] for item in window) / len(window)
             yoy_average_series.append({"date": yoy_vals[i - 1]["date"], "value": avg})
     return {
+        "detail_id": "housing_permits",
         "series_id": "building_permits_saar",
         "status": signal.get("status"),
         "reason": signal.get("reason"),
