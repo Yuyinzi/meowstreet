@@ -12,6 +12,10 @@ The project is based on:
 
 Use these design docs for product intent, but follow the current standalone `app/`, `static/`, `method_notes/`, and `data/local_system/` structure in this repo when implementing changes.
 
+## Session Handoff
+
+Before starting a new method chapter or resuming prior work, read `progress.md`. Its latest chapter section records the authoritative current method contract, dashboard interpretation, constraints, and handoff state; older entries are historical context only.
+
 ## Method Workflow Model
 
 Meowstreet is not a learning site and should not behave like raw RAG over method notes. It is a ticker-first workflow console that evaluates a ticker through a deterministic method-method graph.
