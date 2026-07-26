@@ -182,3 +182,112 @@ def test_replace_macro_indicator_points_batch_atomic_rollback_on_error(tmp_path)
 
     loaded = macro_indicators.load_macro_indicator_series(con)
     assert len(loaded) == 0
+
+
+class TestMacroIndicatorObservationMetadata:
+    def test_merge_macro_indicator_observations_replaces_a_revised_month(
+        self, tmp_path
+    ):
+        con = macro_indicators.connect(tmp_path / "market.sqlite")
+        series = {
+            "series_id": "building_permits_saar",
+            "title": "Building Permits",
+            "units": "thousands_saar",
+            "source": "Census",
+        }
+        macro_indicators.merge_macro_indicator_observations(
+            con,
+            series,
+            [
+                {
+                    "date": "2026-05-01",
+                    "value": 1413.0,
+                    "source": "census.xlsx",
+                    "release_date": "2026-06-16",
+                    "revision_status": "initial",
+                    "source_url": "https://www.census.gov/construction/nrc/index.html",
+                    "source_identifier": "May 2026",
+                }
+            ],
+        )
+        macro_indicators.merge_macro_indicator_observations(
+            con,
+            series,
+            [
+                {
+                    "date": "2026-05-01",
+                    "value": 1418.0,
+                    "source": "census.xlsx",
+                    "release_date": "2026-07-17",
+                    "revision_status": "revised",
+                    "source_url": "https://www.census.gov/construction/nrc/index.html",
+                    "source_identifier": "June 2026 release",
+                }
+            ],
+        )
+        result = macro_indicators.load_macro_indicator_observations(
+            con, "building_permits_saar"
+        )
+        assert result == [
+            {
+                "date": "2026-05-01",
+                "value": 1418.0,
+                "source": "census.xlsx",
+                "release_date": "2026-07-17",
+                "revision_status": "revised",
+                "source_url": "https://www.census.gov/construction/nrc/index.html",
+                "source_identifier": "June 2026 release",
+            }
+        ]
+
+    def test_merge_macro_indicator_observations_preserves_metadata_on_value_update(
+        self, tmp_path
+    ):
+        con = macro_indicators.connect(tmp_path / "market.sqlite")
+        series = {
+            "series_id": "building_permits_saar",
+            "title": "Building Permits",
+            "units": "thousands_saar",
+            "source": "Census",
+        }
+        macro_indicators.merge_macro_indicator_observations(
+            con,
+            series,
+            [
+                {
+                    "date": "2026-05-01",
+                    "value": 1413.0,
+                    "source": "census.xlsx",
+                    "release_date": "2026-06-16",
+                    "revision_status": "initial",
+                    "source_url": "https://www.census.gov/construction/nrc/index.html",
+                    "source_identifier": "May 2026",
+                },
+                {
+                    "date": "2026-04-01",
+                    "value": 1420.0,
+                    "source": "census.xlsx",
+                    "release_date": "2026-06-16",
+                    "revision_status": "initial",
+                    "source_url": "https://www.census.gov/construction/nrc/index.html",
+                    "source_identifier": "May 2026",
+                },
+            ],
+        )
+        result = macro_indicators.load_macro_indicator_observations(
+            con, "building_permits_saar"
+        )
+        assert len(result) == 2
+        assert result[0]["date"] == "2026-04-01"
+        assert result[1]["date"] == "2026-05-01"
+        assert all(r["release_date"] == "2026-06-16" for r in result)
+        assert all(r["revision_status"] == "initial" for r in result)
+
+    def test_load_macro_indicator_observations_returns_empty_for_unknown_series(
+        self, tmp_path
+    ):
+        con = macro_indicators.connect(tmp_path / "market.sqlite")
+        result = macro_indicators.load_macro_indicator_observations(
+            con, "no_such_series"
+        )
+        assert result == []

@@ -22,6 +22,16 @@ create table if not exists macro_indicator_points (
 );
 create index if not exists idx_macro_indicator_points_series_date
 on macro_indicator_points(series_id, date);
+create table if not exists macro_indicator_observation_metadata (
+    series_id text not null,
+    date text not null,
+    release_date text,
+    revision_status text,
+    source_url text,
+    source_identifier text,
+    primary key(series_id, date),
+    foreign key(series_id) references macro_indicator_series(series_id)
+);
 """
 
 
@@ -175,3 +185,42 @@ def replace_macro_indicator_points_batch(con, series_points_list):
     except Exception:
         con.rollback()
         raise
+
+
+def merge_macro_indicator_observations(con, series, observations):
+    merge_macro_indicator_points(con, series, observations, commit=False)
+    for observation in observations:
+        con.execute(
+            """insert into macro_indicator_observation_metadata(
+                series_id, date, release_date, revision_status, source_url, source_identifier
+            ) values (?, ?, ?, ?, ?, ?)
+            on conflict(series_id, date) do update set
+                release_date = excluded.release_date,
+                revision_status = excluded.revision_status,
+                source_url = excluded.source_url,
+                source_identifier = excluded.source_identifier""",
+            (
+                series["series_id"],
+                observation["date"],
+                observation.get("release_date"),
+                observation.get("revision_status"),
+                observation.get("source_url"),
+                observation.get("source_identifier"),
+            ),
+        )
+    con.commit()
+
+
+def load_macro_indicator_observations(con, series_id):
+    sid = _normalize_series_id(series_id)
+    rows = con.execute(
+        """select p.date, p.value, p.source,
+                  m.release_date, m.revision_status, m.source_url, m.source_identifier
+           from macro_indicator_points p
+           left join macro_indicator_observation_metadata m
+             on m.series_id = p.series_id and m.date = p.date
+           where p.series_id = ?
+           order by p.date""",
+        (sid,),
+    ).fetchall()
+    return [dict(row) for row in rows]
