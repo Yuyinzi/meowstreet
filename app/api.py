@@ -259,6 +259,13 @@ def ism_services_css():
     return FileResponse(STATIC_DIR / "ism-services.css", media_type="text/css")
 
 
+@app.get("/housing-permits-ui.js")
+def housing_permits_ui_js():
+    return FileResponse(
+        STATIC_DIR / "housing-permits-ui.js", media_type="application/javascript"
+    )
+
+
 @app.get("/api/macro-dashboard/consumer-sentiment")
 def macro_dashboard_consumer_sentiment():
     con = consumer_sentiment.connect()
