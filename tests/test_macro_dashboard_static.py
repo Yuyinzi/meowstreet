@@ -5271,12 +5271,7 @@ def test_consumer_sentiment_js_detail_excludes_buy_sell_gdp_sp():
 
 def test_consumer_sentiment_js_no_method_validation():
     js = (ROOT / "static" / "consumer-sentiment.js").read_text()
-    assert (
-        "historical" not in js.lower()
-        or "historical" in js.lower()
-        and "historical"
-        not in [w.lower() for w in js.split() if w.lower() == "historical"]
-    )
+    assert "method validation" not in js.lower()
 
 
 def test_consumer_sentiment_card_renders_v2_compact_rows():
@@ -5467,6 +5462,41 @@ def test_consumer_sentiment_detail_explains_percentile_zone_threshold_and_result
           explainsLowerThreshold: body.innerHTML.includes("at or below the 15th percentile"),
           explainsUpperThreshold: body.innerHTML.includes("at or above the 85th percentile"),
           explainsCurrentResult: body.innerHTML.includes("5.00 percentile rank is Depressed"),
+        }));
+    """)
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+    payload = json.loads(result.stdout)
+    assert all(payload.values()), payload
+
+
+def test_consumer_sentiment_explains_depressed_but_improving_as_early_stabilization():
+    script = textwrap.dedent("""
+        const fs = require("fs"), vm = require("vm");
+        global.window = { __chartHelpers: null };
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/consumer-sentiment.js", "utf8"));
+        const summary = {
+          method_version: 2,
+          data_status: "aligned_period",
+          aligned_month: "2026-06-01",
+          percentile_method: { lower_boundary: 15, upper_boundary: 85 },
+          primary_signal: { percentile_zone: "depressed", momentum: "improving", headline: "Depressed \\u00b7 Improving" },
+          confirmation: { state: "broadly_confirmed" },
+          aggregate: { percentile_label: "5th percentile", percentile_zone: "depressed", role: "confirmation", confirms_primary: true },
+          expectations: { percentile_rank: 5, percentile_label: "5th percentile", percentile_zone: "depressed", momentum: "improving", point_change: 2.1, role: "primary" },
+          current_conditions: { percentile_label: "5th percentile", percentile_zone: "depressed", role: "confirmation", confirms_primary: true },
+          ability_read: {}, capacity_evidence: {}
+        };
+        const body = { innerHTML: "" };
+        const card = window.consumerSentimentUi.renderCard(summary);
+        window.consumerSentimentUi.renderDetailInPanel(body, {
+          summary, capacity_interpretations: [], context: {}, history: {}, capacity: {}
+        });
+        console.log(JSON.stringify({
+          cardExplainsLevelAndChange: card.includes("Consumer expectations remain near a historical low, while the latest monthly reading has improved."),
+          detailExplainsInterpretation: body.innerHTML.includes("This indicates early stabilization, not yet a confirmed demand recovery."),
         }));
     """)
     result = subprocess.run(

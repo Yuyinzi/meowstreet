@@ -40,6 +40,24 @@ The same inputs and the same method method version should produce the same class
 
 Method concepts become executable workflow nodes only when they affect trading decisions: continue, wait, reject, downgrade, support long/short bias, require input, affect timing, position sizing, portfolio fit, risk, or final synthesis. Concepts that are only mindset or background should remain supporting documentation attached to relevant nodes.
 
+## Method Evolution
+
+Method material is the seed methodology and source lineage, not an immutable runtime rulebook or required dashboard vocabulary.
+
+Meowstreet may supersede an inherited rule with a system-owned method when the replacement:
+
+- has an approved specification in `docs/superpowers/specs/`;
+- defines its operational question, inputs, formula, window, thresholds, decision effect, and missing-data behavior;
+- uses a new explicit method version;
+- remains deterministic for the same inputs, observation date, and method version;
+- includes boundary, missing-data, look-ahead, and presentation tests;
+- distinguishes validated conclusions from hypotheses and supporting context;
+- does not use an LLM at runtime.
+
+Rules that claim to implement method guidance must preserve source fidelity. Rules identified as system-owned must cite their approved Meowstreet specification instead.
+
+Dashboard copy presents the system's current method and conclusions. It does not need to expose method terminology or source gaps unless provenance is operationally relevant.
+
 ## Operational Product Rules
 
 Meowstreet is a trading decision system, not a presentation of source material. Implement only information that helps a user assess the market, evaluate a ticker, or take the next step in the trade workflow.
@@ -66,13 +84,13 @@ Do not add runtime metrics, database fields, API fields, workflow nodes, or dash
 
 Preserve source fidelity:
 
-- Do not invent formulas, thresholds, weights, composite scores, correlations, mappings, or fallback rules
+- Do not invent formulas, thresholds, weights, composite scores, correlations, mappings, or fallback rules while claiming source fidelity. System-owned rules require an approved, versioned Meowstreet method specification.
 - Do not convert qualitative guidance into a numeric rule unless the source notes define that conversion
 - Do not imply predictive certainty or causality that the source notes do not establish
 - When guidance is incomplete, expose the raw evidence, mark the result ambiguous or insufficient, or require the missing input
 - Keep the same inputs and method version deterministic; do not use an LLM to fill gaps at runtime
 
-Dashboard output must favor decision clarity over source completeness. Summary cards should answer a small set of high-value market or ticker questions and provide a clear general impression. Put diagnostics, secondary evidence, provenance, and historical detail in focused detail views rather than expanding the summary card. Do not show a label, conclusion, or warning unless its calculation and decision meaning are supported by the source notes.
+Dashboard output must favor decision clarity over source completeness. Summary cards should answer a small set of high-value market or ticker questions and provide a clear general impression. Put diagnostics, secondary evidence, provenance, and historical detail in focused detail views rather than expanding the summary card. Do not show a label, conclusion, or warning unless an approved method-derived or system-owned method supports its calculation and decision meaning.
 
 Frontend additions must look and behave like existing Meowstreet interfaces. Reuse established design tokens, components, layouts, spacing, colors, typography, badges, labels, interaction patterns, responsive behavior, and accessibility conventions. Keep equivalent metrics and states visually consistent across dashboards. Create a new shared component only when the pattern is genuinely reusable.
 

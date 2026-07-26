@@ -11,7 +11,27 @@ def consumer_con(tmp_path):
     con.close()
 
 
-def _seed_all_series(con):
+def _monthly_history(count, start_year=2006, start_month=6):
+    points = []
+    for offset in range(count):
+        month_index = start_month - 1 + offset
+        year = start_year + month_index // 12
+        month = month_index % 12 + 1
+        points.append(
+            {
+                "date": f"{year:04d}-{month:02d}-01",
+                "value": float(offset),
+                "source": "test",
+            }
+        )
+    return points
+
+
+def _seed_all_series(con, sentiment_points=None):
+    sentiment_points = sentiment_points or [
+        {"date": "2026-05-01", "value": 75.0, "source": "test"},
+        {"date": "2026-06-01", "value": 78.0, "source": "test"},
+    ]
     series_list = []
     for sid, title in [
         ("umcsi_aggregate", "UMCSI Aggregate"),
@@ -28,10 +48,7 @@ def _seed_all_series(con):
                     if sid == "umcsi_aggregate"
                     else "University of Michigan Table 5",
                 },
-                "points": [
-                    {"date": "2026-05-01", "value": 75.0, "source": "test"},
-                    {"date": "2026-06-01", "value": 78.0, "source": "test"},
-                ],
+                "points": sentiment_points,
             }
         )
     consumer_sentiment.replace_michigan_series(con, series_list)
@@ -62,21 +79,40 @@ def _seed_all_series(con):
 def test_load_overview_returns_summary(consumer_con):
     _seed_all_series(consumer_con)
     result = consumer_sentiment_dashboard.load_overview(consumer_con)
-    assert result["version"] == 1
+    assert result["method_version"] == 2
+    assert result["percentile_method"]["window_months"] == 240
+    assert result["primary_signal"]["series_id"] == "umcsi_expectations"
+    assert "confirmation" in result
+    assert "ability_read" in result
+    assert "evidence_state" not in result
+    assert "willingness_read" not in result
     assert "as_of" in result
     assert "data_status" in result
-    assert "evidence_state" in result
     assert "aggregate" in result
     assert "expectations" in result
     assert "current_conditions" in result
     assert "large_expectations_decline" in result
     assert "capacity_completeness" in result
+    assert "capacity_evidence" in result
+    assert "aligned_month" in result
     assert result["aggregate"]["value"] == 78.0
+    assert result["expectations"]["percentile_zone"] == ("percentile_unavailable")
+
+
+def test_load_overview_returns_populated_v2_percentile(consumer_con):
+    _seed_all_series(consumer_con, sentiment_points=_monthly_history(240))
+
+    result = consumer_sentiment_dashboard.load_overview(consumer_con)
+
+    assert result["expectations"]["percentile_rank"] == 99.79
+    assert result["expectations"]["percentile_zone"] == "elevated"
+    assert result["primary_signal"]["headline"] == "Elevated \u00b7 Improving"
+    assert result["confirmation"]["state"] == "broadly_confirmed"
 
 
 def test_load_overview_insufficient_data_when_empty(consumer_con):
     result = consumer_sentiment_dashboard.load_overview(consumer_con)
-    assert result["evidence_state"] == "insufficient_data"
+    assert result["data_status"] == "missing"
 
 
 def test_load_detail_returns_history(consumer_con):
@@ -86,12 +122,15 @@ def test_load_detail_returns_history(consumer_con):
     assert "history" in result
     assert "capacity" in result
     assert len(result["history"]["umcsi_aggregate"]) == 2
+    assert "percentile_windows" in result
     assert "context" in result
     assert "treasury_10y" in result["context"]
     assert "tips_10y" in result["context"]
     assert "cpi_yoy" in result["context"]
     assert "real_rate" in result["context"]
-    assert "fomc_tone" in result["context"]
+    assert "fomc_tone" not in result["context"]
+    assert "capacity_interpretations" in result
+    assert "household_debt_gdp_quarter_note" in result
 
 
 def test_load_detail_preserves_rate_source_workbook(consumer_con):
