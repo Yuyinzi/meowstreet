@@ -2956,10 +2956,13 @@ html += '</div>';
             fmtSignedPctDecimal: fmtSignedPctDecimal,
             fmtMonthYear: fmtMonthYear,
             statusClass: ismBadgeClass,
+            renderGrowthCycleRangeControl: renderGrowthCycleRangeControl,
+            filterChartForRange: filterChartForRange,
+            renderRatesDetailChart: renderRatesDetailChart,
+            getSelectedChartRange: function () { return state.selectedGrowthCycleChartRange; },
+            bindGrowthCycleRangeControl: bindGrowthCycleRangeControl,
+            attachRatesChartTooltips: attachRatesChartTooltips,
           });
-          attachRatesChartTooltips(body, payload.charts.map(function (chart) {
-            return filterChartForRange(chart, state.selectedGrowthCycleChartRange);
-          }));
           return;
         }
         const filteredCharts = payload.charts.map((chart) => (
@@ -3008,11 +3011,13 @@ html += '</div>';
         fmtSignedPctDecimal: fmtSignedPctDecimal,
         fmtMonthYear: fmtMonthYear,
         statusClass: ismBadgeClass,
+        renderGrowthCycleRangeControl: renderGrowthCycleRangeControl,
+        filterChartForRange: filterChartForRange,
+        renderRatesDetailChart: renderRatesDetailChart,
+        getSelectedChartRange: function () { return state.selectedGrowthCycleChartRange; },
+        bindGrowthCycleRangeControl: bindGrowthCycleRangeControl,
+        attachRatesChartTooltips: attachRatesChartTooltips,
       });
-      const filteredCharts = payload.charts.map((chart) => (
-        filterChartForRange(chart, state.selectedGrowthCycleChartRange)
-      ));
-      attachRatesChartTooltips(body, filteredCharts);
     } else {
       const filteredCharts = payload.charts.map((chart) => (
         filterChartForRange(chart, state.selectedGrowthCycleChartRange)
@@ -5389,6 +5394,9 @@ html += '</div>';
       surveySynthesisHeadline,
       renderSurveySynthesis,
       renderFomcToneCard,
+      renderHousingPermitsCard,
+      renderGrowthCycleSections,
+      renderCard,
       computeSignalAgreement,
       buildMarketSetupPresentation,
       stateSentimentClass,

@@ -1680,7 +1680,25 @@ def build_growth_cycle_sections(growth_cycle, headline, services_signal_state=No
             if {"fomc_calendar", "fomc_tone"} & card_ids
             else "missing",
         ),
+        _growth_cycle_section(
+            "housing_credit",
+            "Housing / Credit",
+            "Building permits and credit conditions evidence.",
+            ["housing_permits"] if "housing_permits" in card_ids else [],
+            status=_housing_credit_status(growth_cycle),
+            period=growth_cycle.get("housing_permits_period"),
+        ),
     ]
+
+
+def _housing_credit_status(growth_cycle):
+    signal = growth_cycle.get("housing_permits_signal", {})
+    if not signal:
+        return "pending_inputs"
+    status = signal.get("status")
+    if status == "unavailable":
+        return "pending_inputs"
+    return "available"
 
 
 def _build_ism_manufacturing_headline(

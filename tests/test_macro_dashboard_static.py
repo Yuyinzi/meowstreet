@@ -5905,3 +5905,111 @@ def test_housing_permits_css_reuses_growth_card_tokens():
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
     assert ".housing-permits-card" in css or ".m2-card" in css
     assert "var(--" in css or ".housing-permits-detail" in css
+
+
+def test_growth_cycle_renders_housing_permits_card_in_dom_when_in_headline():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          dashboardStatus: {},
+          growthCycle: {
+            innerHTML: '<div class="relationship-head"><h2>Growth Cycle</h2></div>',
+            querySelector: function () {
+              return { outerHTML: '<div class="relationship-head"><h2>Growth Cycle</h2></div>' };
+            },
+            querySelectorAll: function () { return []; },
+          },
+          marketGrid: { innerHTML: "", querySelectorAll: function () { return []; } },
+        };
+
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: function (id) { return elements[id] || {}; },
+        };
+        global.fetch = async function () { return { ok: true, status: 200, json: async function () { return { markets: [] }; } }; };
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/housing-permits-ui.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        hooks.state.growthCycle = {
+          headline: [
+            { id: "ism_manufacturing", status: "missing" },
+            { id: "survey_synthesis", status: "pending_inputs" },
+            { id: "housing_permits", status: "unavailable", reason: "building permits observations are missing" },
+            { id: "m2_money_supply", status: "missing" },
+            { id: "fed_balance_sheet", status: "missing" },
+          ],
+          sections: [
+            { id: "ism_manufacturing", title: "ISM Manufacturing", subtitle: "Growth evidence", cards: ["ism_manufacturing"], status: "missing" },
+            { id: "housing_credit", title: "Housing / Credit", subtitle: "Permits evidence", cards: ["housing_permits"], status: "pending_inputs" },
+            { id: "m2_liquidity", title: "M2 Liquidity", subtitle: "Liquidity evidence", cards: ["m2_money_supply"], status: "missing" },
+            { id: "inflation_context", title: "Inflation Context", subtitle: "Inflation evidence", cards: [], status: "missing" },
+            { id: "fomc_context", title: "FOMC", subtitle: "Policy evidence", cards: [], status: "missing" },
+          ],
+        };
+
+        var sectionHtml = hooks.renderGrowthCycleSections(hooks.state.growthCycle.sections, hooks.state.growthCycle.headline);
+        elements.growthCycle.innerHTML = '<div class="relationship-head"><h2>Growth Cycle</h2></div>' + '<div class="growth-section-list">' + sectionHtml + '</div>';
+
+        var html = elements.growthCycle.innerHTML;
+            console.log(JSON.stringify({
+              hasHousingEvidenceId: html.indexOf('id="evidence-housing-permits"') >= 0,
+              hasDataDetailId: html.indexOf('data-growth-cycle-detail-id="housing_permits"') >= 0,
+              hasHousingSection: html.indexOf("Housing / Credit") >= 0,
+              hasUnavailableReason: html.indexOf("building permits observations are missing") >= 0,
+            }));
+        """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasHousingEvidenceId"] is True
+    assert payload["hasDataDetailId"] is True
+    assert payload["hasHousingSection"] is True
+    assert payload["hasUnavailableReason"] is True
+
+
+def test_housing_permits_renders_card_for_unavailable_state():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = { marketGrid: { innerHTML: "", querySelectorAll: function () { return []; } } };
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: function (id) { return elements[id] || {}; },
+        };
+        global.fetch = async function () { return { ok: true, status: 200, json: async function () { return { markets: [] }; } }; };
+
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/housing-permits-ui.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+
+        var card = hooks.renderCard({ id: "housing_permits", status: "unavailable", reason: "building permits observations are missing" });
+
+        console.log(JSON.stringify({
+          hasEvidenceId: card.indexOf('id="evidence-housing-permits"') >= 0,
+          hasReason: card.indexOf("building permits observations are missing") >= 0,
+          hasDataDetailId: card.indexOf('data-growth-cycle-detail-id="housing_permits"') >= 0,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasEvidenceId"] is True
+    assert payload["hasReason"] is True
+    assert payload["hasDataDetailId"] is True

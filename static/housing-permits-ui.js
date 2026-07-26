@@ -1,14 +1,5 @@
 (function () {
   window.housingPermitsUi = {
-    CONSTANTS: {
-      STATUS_MAP: {
-        supports_growth_path: "supports_growth_path",
-        challenges_growth_path: "challenges_growth_path",
-        awaiting_confirmation: "awaiting_confirmation",
-        unavailable: "unavailable",
-      },
-    },
-
     renderCard: function (card, helpers) {
       var h = helpers;
       var l = card.latest || {};
@@ -66,11 +57,11 @@
         html += '<p class="housing-permits-period">' + h.escapeHtml(h.fmtMonthYear(payload.observation_period)) + '</p>';
       }
 
-      html += renderGrowthCycleRangeControl();
+      html += h.renderGrowthCycleRangeControl();
       html += '<div class="relationship-chart-grid">';
       (payload.charts || []).forEach(function (chart, index) {
-        var filtered = filterChartForRange(chart, state.selectedGrowthCycleChartRange);
-        html += renderRatesDetailChart(filtered, index);
+        var filtered = h.filterChartForRange(chart, h.getSelectedChartRange());
+        html += h.renderRatesDetailChart(filtered, index);
       });
       html += '</div>';
 
@@ -86,9 +77,9 @@
 
       html += '</section>';
       body.innerHTML = html;
-      bindGrowthCycleRangeControl(body);
-      attachRatesChartTooltips(body, payload.charts.map(function (chart) {
-        return filterChartForRange(chart, state.selectedGrowthCycleChartRange);
+      h.bindGrowthCycleRangeControl(body);
+      h.attachRatesChartTooltips(body, payload.charts.map(function (chart) {
+        return h.filterChartForRange(chart, h.getSelectedChartRange());
       }));
     },
   };
