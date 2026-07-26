@@ -619,7 +619,7 @@ class TestReconcilePortfolioPosture:
         ("base_posture", "expected_posture"),
         [
             ("long", "neutral_to_long"),
-            ("short_or_neutral", "cautious"),
+            ("short_or_neutral", "neutral"),
             ("neutral", "neutral"),
             ("neutral_to_long", "neutral_to_long"),
             ("cautious", "cautious"),
@@ -1258,3 +1258,11 @@ class TestConsumerDemandOutlook:
         assert result["state"] == "unavailable"
         assert result["direction"] is None
         assert result["data_status"] == "missing"
+
+    def test_consumer_demand_outlook_rejects_mislabeled_primary_signal(self):
+        summary = _consumer_sentiment_summary(zone="elevated", momentum="improving")
+        summary["primary_signal"]["series_id"] = "umcsi_aggregate"
+
+        result = market_setup.build_consumer_demand_outlook(summary)
+
+        assert result["state"] == "unavailable"

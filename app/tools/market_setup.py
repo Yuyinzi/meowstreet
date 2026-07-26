@@ -697,6 +697,18 @@ def reconcile_portfolio_posture(market_environment, setup_type_result, expected_
 
     posture = base_posture
 
+    if market_state == "bull_market" and posture in ("short_or_neutral",):
+        conflicts.append(
+            "Bull market phase conflicts with contraction setup — reconciled to neutral posture"
+        )
+        posture = "neutral"
+
+    if market_state == "bear_market" and posture in ("long", "neutral_to_long"):
+        conflicts.append(
+            "Bear market phase conflicts with expansion setup — reconciled to neutral posture"
+        )
+        posture = "neutral"
+
     if expected_growth.get("consumer_demand_conflict") and posture in (
         "long",
         "short_or_neutral",
@@ -712,18 +724,6 @@ def reconcile_portfolio_posture(market_environment, setup_type_result, expected_
         conflicts.append(
             "Consumer expectations conflict with the growth path, limiting conviction."
         )
-
-    if market_state == "bull_market" and posture in ("short_or_neutral",):
-        conflicts.append(
-            "Bull market phase conflicts with contraction setup — reconciled to neutral posture"
-        )
-        posture = "neutral"
-
-    if market_state == "bear_market" and posture in ("long", "neutral_to_long"):
-        conflicts.append(
-            "Bear market phase conflicts with expansion setup — reconciled to neutral posture"
-        )
-        posture = "neutral"
 
     return posture, conflicts, agreements
 
@@ -940,6 +940,8 @@ def build_consumer_demand_outlook(consumer_sentiment_summary):
     if consumer_sentiment_summary.get("data_status") != "aligned_period":
         return unavailable
     primary = consumer_sentiment_summary.get("primary_signal") or {}
+    if primary.get("series_id") != "umcsi_expectations":
+        return unavailable
     zone = primary.get("percentile_zone")
     momentum = primary.get("momentum")
     expectations = consumer_sentiment_summary.get("expectations") or {}

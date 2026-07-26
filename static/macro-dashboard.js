@@ -1590,6 +1590,7 @@
     short_or_neutral: "defensive",
     contraction_deepening: "defensive",
     confirms_contraction_risk: "defensive",
+    confirms_downside_risk: "defensive",
     restrictive_confirmed: "defensive",
     falling: "defensive",
     reject: "defensive",
