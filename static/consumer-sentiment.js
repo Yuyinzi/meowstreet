@@ -172,7 +172,6 @@
 
   function renderCard(summary) {
     var dataStatus = summary.data_status || "missing";
-    var alignedMonth = summary.aligned_month;
     var primary = summary.primary_signal || {};
     var confirmation = summary.confirmation || {};
     var ability = summary.ability_read || {};
@@ -189,11 +188,9 @@
       accessibleName += " - Observation periods differ";
     }
 
-    var periodLine = "";
+    var warningLine = "";
     if (dataStatus === "mixed_periods") {
-      periodLine = '<div class="consumer-card-warning">Observation periods differ</div>';
-    } else if (alignedMonth) {
-      periodLine = '<div class="consumer-card-period">Sentiment as of ' + escapeHtml(fmtMonthYear(alignedMonth)) + '</div>';
+      warningLine = '<div class="consumer-card-warning">Observation periods differ</div>';
     }
 
     return '\n'
@@ -225,7 +222,7 @@
       + renderAbilityRow(ability.saving || { label: "Saving", state: "unavailable" })
       + '      </tbody></table>\n'
       + '    </div>\n'
-      + periodLine
+      + warningLine
       + '  </div>\n'
       + '</div>';
   }

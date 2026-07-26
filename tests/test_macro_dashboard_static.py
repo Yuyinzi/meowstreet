@@ -5167,9 +5167,10 @@ def test_consumer_sentiment_js_has_primary_signal_badge():
     assert "consumer-signal-primary-badge" in js
 
 
-def test_consumer_sentiment_js_has_aligned_month():
+def test_consumer_sentiment_js_has_aligned_month_in_summary():
     js = (ROOT / "static" / "consumer-sentiment.js").read_text()
-    assert "aligned_month" in js
+    assert "summary.aligned_month" not in js
+    assert "data_status" in js
 
 
 def test_consumer_sentiment_js_has_combined_chart():
@@ -5371,9 +5372,8 @@ def test_consumer_sentiment_card_renders_v2_compact_rows():
             && html.includes("Rising")
             && html.includes("Saving")
             && html.includes("Unchanged"),
-          hasSentimentMonth: html.includes("Sentiment as of May 2026"),
           identifiesMixedAbilityDates: html.includes("Household context \u00b7 observation periods vary"),
-          noAmbiguousStandaloneMonth: !html.includes('class="consumer-card-period">May 2026'),
+          noSentimentMonthInCard: !html.includes("Sentiment as of"),
           noSeriesAligned: !html.includes("Series aligned"),
           noLongCopy:
             !html.includes("This long headline")
