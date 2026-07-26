@@ -286,6 +286,20 @@ No docstrings. No inline comments. Rely entirely on descriptive function and var
 - **Module-level config**: Graph definitions, section names, valid sets, and regex patterns live at module top level.
 - **No mutable default arguments**: Constants defined at module level are never mutated.
 
+### Layered Responsibilities
+
+Create and modify files according to one clear layer of responsibility:
+
+- `app/data_sources/` fetches or parses external source material and returns normalized source payloads. It does not open SQLite connections, write database rows, build API responses, or render UI.
+- `app/db/` owns schema, connections, persistence, transactions, and database reads. It does not fetch external sources, parse source files, implement CLI behavior, or render UI.
+- `app/services/` coordinates focused application workflows across data-source and database adapters. It does not contain FastAPI route handling, frontend rendering, or CLI argument parsing.
+- `app/tools/` contains pure deterministic calculations and presentation-neutral domain payload builders. It does not fetch network data, open database connections, or depend on request state.
+- `app/api.py` validates request inputs, composes services/tools, converts validation failures to HTTP errors, and returns plain dict payloads. Keep persistence and source parsing out of routes.
+- `scripts/` are thin CLI entry points: parse arguments, call one focused service or tool, print results, and set exit status. They do not contain SQL, source parsing, merge logic, or business calculations.
+- `static/` renders API payloads and client-side interactions only. It does not reimplement backend classifications or calculate domain conclusions.
+
+When a feature crosses layers, create focused files at these boundaries rather than adding unrelated responsibilities to an existing module. Reuse a shared helper only when its source universe and domain semantics match exactly.
+
 ### Tests
 
 - One test file per source module: `tests/test_<module>.py`
