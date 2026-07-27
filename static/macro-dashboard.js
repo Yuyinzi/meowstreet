@@ -5225,18 +5225,19 @@ html += '</div>';
 
   function xAxisTicks(series) {
     if (!series.length) return [];
-    const desiredTicks = Math.min(X_AXIS_TICK_COUNT, series.length);
-    if (desiredTicks === 1) {
-      return [{ date: series[0].date, x: xAt(0, series.length) }];
+    const n = series.length;
+    if (n <= X_AXIS_TICK_COUNT) {
+      return series.map((point, i) => ({ date: point.date, x: xAt(i, n) }));
     }
-    const lastIndex = series.length - 1;
-    const indexes = Array.from({ length: desiredTicks }, (_, index) => (
-      Math.round((index / (desiredTicks - 1)) * lastIndex)
-    ));
-    return [...new Set(indexes)].map((index) => ({
-      date: series[index].date,
-      x: xAt(index, series.length),
-    }));
+    const step = Math.max(1, Math.round(n / X_AXIS_TICK_COUNT));
+    const indexes = [0];
+    for (let i = step; i < n - 1; i += step) {
+      indexes.push(i);
+    }
+    if (indexes[indexes.length - 1] !== n - 1) {
+      indexes.push(n - 1);
+    }
+    return indexes.map((i) => ({ date: series[i].date, x: xAt(i, n) }));
   }
 
   function fmtMonthYear(value) {
