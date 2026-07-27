@@ -224,3 +224,85 @@ def load_macro_indicator_observations(con, series_id):
         (sid,),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def load_macro_indicator_observations_for_series(con, series_ids):
+    normalized_ids = [_normalize_series_id(sid) for sid in series_ids]
+    return {sid: load_macro_indicator_observations(con, sid) for sid in normalized_ids}
+
+
+_NFIB_SERIES_METADATA = {
+    "nfib_sbo_optimism": {
+        "title": "Small Business Optimism Index",
+        "units": "index",
+        "source": "nfib_sbet_pdf",
+    },
+    "nfib_sbo_employment_plans": {
+        "title": "Plans to Increase Employment",
+        "units": "net_pct",
+        "source": "nfib_sbet_pdf",
+    },
+    "nfib_sbo_expansion_outlook": {
+        "title": "Plans to Make Capital Expenditures",
+        "units": "net_pct",
+        "source": "nfib_sbet_pdf",
+    },
+    "nfib_sbo_inventory_plans": {
+        "title": "Plans to Increase Inventories",
+        "units": "net_pct",
+        "source": "nfib_sbet_pdf",
+    },
+    "nfib_sbo_economic_expectations": {
+        "title": "Expect Economy to Improve",
+        "units": "net_pct",
+        "source": "nfib_sbet_pdf",
+    },
+    "nfib_sbo_real_sales_expectations": {
+        "title": "Expect Real Sales Higher",
+        "units": "net_pct",
+        "source": "nfib_sbet_pdf",
+    },
+}
+
+
+def merge_macro_indicator_observations_batch(con, observations):
+    try:
+        by_series = {}
+        for obs in observations:
+            sid = _normalize_series_id(obs["series_id"])
+            by_series.setdefault(sid, []).append(obs)
+
+        for sid, series_observations in by_series.items():
+            meta = _NFIB_SERIES_METADATA.get(sid, {})
+            series = {
+                "series_id": sid,
+                "title": meta.get("title", sid),
+                "units": meta.get("units", "index"),
+                "source": meta.get("source", "nfib_sbet_pdf"),
+            }
+            merge_macro_indicator_points(con, series, series_observations, commit=False)
+            for obs in series_observations:
+                con.execute(
+                    """insert into macro_indicator_observation_metadata(
+                        series_id, date, release_date, revision_status, source_url, source_identifier
+                    ) values (?, ?, ?, ?, ?, ?)
+                    on conflict(series_id, date) do update set
+                        release_date = excluded.release_date,
+                        revision_status = excluded.revision_status,
+                        source_url = excluded.source_url,
+                        source_identifier = excluded.source_identifier""",
+                    (
+                        sid,
+                        obs["date"],
+                        obs.get("release_date"),
+                        obs.get("revision_status"),
+                        obs.get("source_url"),
+                        obs.get("source_identifier"),
+                    ),
+                )
+
+        con.commit()
+        return {"series": len(by_series), "observations": len(observations)}
+    except Exception:
+        con.rollback()
+        raise
