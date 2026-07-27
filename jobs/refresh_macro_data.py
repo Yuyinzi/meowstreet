@@ -13,6 +13,7 @@ from scripts import import_gdp_market_relationships
 from scripts import import_ism_manufacturing
 from scripts import import_ism_services
 from scripts import import_m2_money_supply
+from scripts import import_nfib_sbet
 from scripts import import_us_building_permits
 from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
@@ -80,6 +81,7 @@ def _planned_tasks(
     ism_reports_main,
     gdp_main,
     fomc_main=import_fomc_calendar.main,
+    nfib_main=import_nfib_sbet.main,
 ):
     tasks = []
     if not args.skip_yahoo:
@@ -129,6 +131,8 @@ def _planned_tasks(
             tasks.append(
                 ("fomc_calendar", fomc_main, ["--calendar-path", str(calendar_path)])
             )
+    if not args.skip_nfib_sbo:
+        tasks.append(("nfib_sbo_official", nfib_main, []))
     return tasks
 
 
@@ -151,6 +155,7 @@ def main(
     ism_reports_main=fetch_ism_reports.main,
     gdp_main=import_gdp_market_relationships.main,
     fomc_main=import_fomc_calendar.main,
+    nfib_main=import_nfib_sbet.main,
 ):
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
@@ -161,6 +166,7 @@ def main(
     parser.add_argument("--skip-ism", action="store_true")
     parser.add_argument("--skip-gdp", action="store_true")
     parser.add_argument("--skip-fomc", action="store_true")
+    parser.add_argument("--skip-nfib-sbo", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
     parser.add_argument(
         "--stop-on-error",
@@ -182,6 +188,7 @@ def main(
         ism_reports_main,
         gdp_main,
         fomc_main,
+        nfib_main,
     ):
         result = _run_task(name, func, task_argv)
         results.append(result)
