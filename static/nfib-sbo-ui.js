@@ -77,7 +77,7 @@
         challenges_growth_path: "warning",
         awaiting_confirmation: "mixed",
         unavailable: "missing",
-      }[payload.signal_version] || "mixed";
+      }[payload.status] || "mixed";
 
       var html = '<section class="nfib-sbo-detail">';
       html += '<h2>' + h.escapeHtml(h.bilingualTitle("NFIB Small Business Outlook")) + '</h2>';
@@ -143,6 +143,14 @@
 
       if (payload.signal_version) {
         html += '<p class="nfib-sbo-version">' + h.escapeHtml(h.bilingualLabel("Signal Version")) + ': ' + h.escapeHtml(payload.signal_version) + '</p>';
+      }
+
+      var provItems = [];
+      if (payload.source_url) provItems.push('<a href="' + h.escapeHtml(payload.source_url) + '" target="_blank" rel="noopener noreferrer">' + h.escapeHtml(h.bilingualLabel("Official Report")) + ' &rarr;</a>');
+      if (payload.release_date) provItems.push(h.escapeHtml(h.bilingualLabel("Release Date")) + ': ' + h.escapeHtml(payload.release_date));
+      if (payload.source_hash) provItems.push(h.escapeHtml(h.bilingualLabel("SHA-256")) + ': <code>' + h.escapeHtml(payload.source_hash.slice(0, 16)) + '&hellip;</code>');
+      if (provItems.length) {
+        html += '<div class="nfib-sbo-provenance">' + provItems.join('<br>') + '</div>';
       }
 
       html += '</section>';

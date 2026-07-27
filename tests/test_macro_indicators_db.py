@@ -237,6 +237,7 @@ class TestMacroIndicatorObservationMetadata:
                 "revision_status": "revised",
                 "source_url": "https://www.census.gov/construction/nrc/index.html",
                 "source_identifier": "June 2026 release",
+                "source_hash": None,
             }
         ]
 

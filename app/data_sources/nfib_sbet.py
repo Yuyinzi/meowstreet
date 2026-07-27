@@ -184,6 +184,7 @@ def _build_observation(series_id, period, value, provenance):
         "source_url": provenance.get("source_url", ""),
         "release_date": provenance.get("release_date", ""),
         "source_identifier": provenance.get("source_identifier", ""),
+        "source_hash": provenance.get("source_hash", ""),
     }
 
 
@@ -311,12 +312,15 @@ def _parse_historical_sections(text, provenance):
     return observations
 
 
-def parse_sbet_report_text(text, source_url, release_date, source_identifier):
+def parse_sbet_report_text(
+    text, source_url, release_date, source_identifier, source_hash=None
+):
     report_year, report_month = _parse_report_month(text)
     provenance = {
         "source_url": source_url,
         "release_date": release_date or "",
         "source_identifier": source_identifier or f"{report_month}-{report_year}",
+        "source_hash": source_hash or "",
     }
     summary_observations = _parse_summary_table(
         text, report_year, report_month, provenance
@@ -343,8 +347,10 @@ def _read_report_text(report_path):
 def parse_sbet_report(report_path, source_url, release_date=None):
     path = Path(report_path)
     text = _read_report_text(str(path))
-    result = parse_sbet_report_text(text, source_url, release_date, path.name)
-    result["source_hash"] = _hash_file(str(path))
+    source_hash = _hash_file(str(path))
+    result = parse_sbet_report_text(
+        text, source_url, release_date, path.name, source_hash
+    )
     return result
 
 

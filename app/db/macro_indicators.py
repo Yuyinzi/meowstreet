@@ -29,6 +29,7 @@ create table if not exists macro_indicator_observation_metadata (
     revision_status text,
     source_url text,
     source_identifier text,
+    source_hash text,
     primary key(series_id, date),
     foreign key(series_id) references macro_indicator_series(series_id)
 );
@@ -37,6 +38,12 @@ create table if not exists macro_indicator_observation_metadata (
 
 def init_macro_tables(con):
     con.executescript(_MACRO_TABLES_DDL)
+    try:
+        con.execute(
+            "alter table macro_indicator_observation_metadata add column source_hash text"
+        )
+    except sqlite3.OperationalError:
+        pass
 
 
 def connect(db_path=DEFAULT_DB_PATH):
@@ -215,7 +222,7 @@ def load_macro_indicator_observations(con, series_id):
     sid = _normalize_series_id(series_id)
     rows = con.execute(
         """select p.date, p.value, p.source,
-                  m.release_date, m.revision_status, m.source_url, m.source_identifier
+                  m.release_date, m.revision_status, m.source_url, m.source_identifier, m.source_hash
            from macro_indicator_points p
            left join macro_indicator_observation_metadata m
              on m.series_id = p.series_id and m.date = p.date
@@ -243,7 +250,7 @@ _NFIB_SERIES_METADATA = {
         "source": "nfib_sbet_pdf",
     },
     "nfib_sbo_expansion_outlook": {
-        "title": "Plans to Make Capital Expenditures",
+        "title": "Good Time to Expand",
         "units": "net_pct",
         "source": "nfib_sbet_pdf",
     },
@@ -284,13 +291,14 @@ def merge_macro_indicator_observations_batch(con, observations):
             for obs in series_observations:
                 con.execute(
                     """insert into macro_indicator_observation_metadata(
-                        series_id, date, release_date, revision_status, source_url, source_identifier
-                    ) values (?, ?, ?, ?, ?, ?)
+                        series_id, date, release_date, revision_status, source_url, source_identifier, source_hash
+                    ) values (?, ?, ?, ?, ?, ?, ?)
                     on conflict(series_id, date) do update set
                         release_date = excluded.release_date,
                         revision_status = excluded.revision_status,
                         source_url = excluded.source_url,
-                        source_identifier = excluded.source_identifier""",
+                        source_identifier = excluded.source_identifier,
+                        source_hash = excluded.source_hash""",
                     (
                         sid,
                         obs["date"],
@@ -298,6 +306,7 @@ def merge_macro_indicator_observations_batch(con, observations):
                         obs.get("revision_status"),
                         obs.get("source_url"),
                         obs.get("source_identifier"),
+                        obs.get("source_hash"),
                     ),
                 )
 

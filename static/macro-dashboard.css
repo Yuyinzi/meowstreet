@@ -4974,6 +4974,23 @@ h2 {
   margin-top: 16px;
 }
 
+.nfib-sbo-provenance {
+  font-size: 0.75rem;
+  color: #8B7E74;
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+.nfib-sbo-provenance a {
+  color: #5C6BC0;
+  text-decoration: none;
+}
+
+.nfib-sbo-provenance code {
+  font-size: 0.7rem;
+  color: #BDBDBD;
+}
+
 @media (max-width: 768px) {
   .nfib-sbo-component-grid {
     grid-template-columns: 1fr;

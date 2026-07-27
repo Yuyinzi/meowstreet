@@ -257,6 +257,21 @@ def _build_reason(status, trend, change, survey_direction):
     return "nfib evidence is awaiting confirmation"
 
 
+def _latest_provenance(observations_by_series):
+    sources = []
+    for series_obs in observations_by_series.values():
+        if series_obs:
+            sources.append(series_obs[-1])
+    if not sources:
+        return {}
+    latest = max(sources, key=lambda o: o.get("date", ""))
+    return {
+        "source_url": latest.get("source_url", ""),
+        "release_date": latest.get("release_date", ""),
+        "source_hash": latest.get("source_hash", ""),
+    }
+
+
 def build_nfib_sbo_detail_payload(observations_by_series, signal):
     values_by_month = _series_values_by_month(observations_by_series)
     sorted_months = _sorted_months(values_by_month)
@@ -286,11 +301,18 @@ def build_nfib_sbo_detail_payload(observations_by_series, signal):
             ],
         }
 
+    provenance = _latest_provenance(observations_by_series)
+
     return {
         "detail_id": "nfib_sbo",
         "signal_version": NFIB_SBO_SIGNAL_VERSION,
+        "status": signal.get("status"),
+        "reason": signal.get("reason"),
         "latest_signal": signal.get("latest"),
         "components": components,
         "optimism": optimism,
         "detail_series": signal.get("detail_series", []),
+        "source_url": provenance.get("source_url", ""),
+        "release_date": provenance.get("release_date", ""),
+        "source_hash": provenance.get("source_hash", ""),
     }
