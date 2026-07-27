@@ -1330,3 +1330,68 @@ def test_housing_permits_unavailable_adds_pending_confirmation():
         },
     )
     assert "Housing permits" in result["pending_confirmations"]
+
+
+def test_market_setup_appends_nfib_conflict_without_changing_posture():
+    base = market_setup.build_market_setup(
+        _market_phase_payload("bull_market"),
+        _survey_synthesis(
+            economic_direction="aligned_expansion",
+            expected_gdp_direction="rising",
+            survey_portfolio_implication="long",
+            period="2026-06",
+        ),
+        _rates_liquidity_payload("steep", "healthy"),
+        _fomc_tone_headline("dovish", "cut"),
+    )
+    challenged = market_setup.build_market_setup(
+        _market_phase_payload("bull_market"),
+        _survey_synthesis(
+            economic_direction="aligned_expansion",
+            expected_gdp_direction="rising",
+            survey_portfolio_implication="long",
+            period="2026-06",
+        ),
+        _rates_liquidity_payload("steep", "healthy"),
+        _fomc_tone_headline("dovish", "cut"),
+        nfib_sbo_signal={
+            "status": "challenges_growth_path",
+            "reason": "nfib evidence challenges the rising growth path",
+        },
+    )
+    assert challenged["portfolio_posture"] == base["portfolio_posture"]
+    assert "nfib evidence challenges the rising growth path" in challenged["conflicts"]
+
+
+def test_nfib_support_adds_agreement():
+    result = market_setup.build_market_setup(
+        _market_phase_payload("bull_market"),
+        _survey_synthesis(
+            economic_direction="aligned_expansion",
+            expected_gdp_direction="rising",
+            survey_portfolio_implication="long",
+            period="2026-06",
+        ),
+        _rates_liquidity_payload("steep", "healthy"),
+        _fomc_tone_headline("dovish", "cut"),
+        nfib_sbo_signal={
+            "status": "supports_growth_path",
+            "reason": "nfib evidence supports the rising growth path",
+        },
+    )
+    assert "nfib evidence supports the rising growth path" in result["agreements"]
+
+
+def test_nfib_unavailable_adds_pending_confirmation():
+    result = market_setup.build_market_setup(
+        nfib_sbo_signal={
+            "status": "unavailable",
+            "reason": "no nfib data",
+        },
+    )
+    assert "NFIB Small Business" in result["pending_confirmations"]
+
+
+def test_missing_nfib_adds_pending_confirmation():
+    result = market_setup.build_market_setup()
+    assert "NFIB Small Business" in result["pending_confirmations"]

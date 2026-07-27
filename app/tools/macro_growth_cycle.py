@@ -1803,6 +1803,26 @@ def build_survey_synthesis_headline(survey_synthesis):
     }
 
 
+def build_nfib_sbo_headline(signal):
+    if signal is None or signal.get("status") in ("unavailable", None):
+        return {
+            "id": "nfib_sbo",
+            "label": "NFIB Small Business",
+            "status": "unavailable",
+            "reason": "nfib report is unavailable",
+            "latest": None,
+        }
+    latest = signal.get("latest", {})
+    return {
+        "id": "nfib_sbo",
+        "label": "NFIB Small Business",
+        "status": signal.get("status"),
+        "trend": signal.get("trend"),
+        "reason": signal.get("reason"),
+        "latest": latest,
+    }
+
+
 def build_growth_cycle_dashboard_payload(
     growth_cycle_dashboard,
     next_fomc_meeting=None,
@@ -1812,6 +1832,7 @@ def build_growth_cycle_dashboard_payload(
     ism_macro_signal=None,
     ism_services_card=None,
     survey_synthesis=None,
+    nfib_sbo_signal=None,
 ):
     growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
     policy_context = None
@@ -1851,6 +1872,8 @@ def build_growth_cycle_dashboard_payload(
     housing_card = growth_cycle.get("housing_permits_card")
     if housing_card:
         headline.append(housing_card)
+    nfib_card = build_nfib_sbo_headline(nfib_sbo_signal)
+    headline.append(nfib_card)
     services_signal_state = (
         ism_services_card.get("segments", {}).get("services_cycle", {}).get("state")
         if ism_services_card

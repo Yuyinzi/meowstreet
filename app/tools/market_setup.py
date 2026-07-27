@@ -1316,6 +1316,7 @@ def build_market_setup(
     ism_industry_analysis=None,
     consumer_sentiment_summary=None,
     housing_permits_signal=None,
+    nfib_sbo_signal=None,
 ):
     market_env = build_market_environment(market_phase_payload)
     consumer_demand_outlook = build_consumer_demand_outlook(consumer_sentiment_summary)
@@ -1365,6 +1366,18 @@ def build_market_setup(
             pending_confirmations.append("Housing permits")
     else:
         pending_confirmations.append("Housing permits")
+
+    if nfib_sbo_signal:
+        nfib_status = nfib_sbo_signal.get("status")
+        nfib_reason = nfib_sbo_signal.get("reason", "")
+        if nfib_status == "supports_growth_path":
+            all_agreements.append(nfib_reason)
+        elif nfib_status == "challenges_growth_path":
+            all_conflicts.append(nfib_reason)
+        elif nfib_status in ("awaiting_confirmation", "unavailable"):
+            pending_confirmations.append("NFIB Small Business")
+    else:
+        pending_confirmations.append("NFIB Small Business")
 
     missing_inputs = []
     if market_env.get("data_status") == "missing":

@@ -965,6 +965,117 @@ def test_growth_cycle_detail_api_rejects_unknown_detail():
     assert response.json()["detail"] == "growth cycle detail is unknown: unknown"
 
 
+def test_growth_cycle_nfib_card_appears_in_headline(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    def fake_load_macro_indicator_points(con, series_id):
+        if series_id == "m2_money_stock":
+            return [{"date": "2026-06-01", "value": 100, "source": "m2.xlsx"}]
+        return []
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        fake_load_macro_indicator_points,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    nfib_card = next(
+        item for item in response.json()["headline"] if item["id"] == "nfib_sbo"
+    )
+    assert nfib_card is not None
+    assert nfib_card["status"] == "unavailable"
+
+
+def test_growth_cycle_nfib_detail_returns_200(monkeypatch):
+    from app import api
+
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda *a: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda *a: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+
+    response = TestClient(api.app).get("/api/macro-dashboard/growth-cycle/nfib_sbo")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["detail_id"] == "nfib_sbo"
+
+
 def test_growth_cycle_m2_detail_api_attaches_stored_ai_interpretation(monkeypatch):
     from app import api
 
@@ -1554,6 +1665,7 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
         "fed_balance_sheet",
         "survey_synthesis",
         "housing_permits",
+        "nfib_sbo",
     ]
     inflation = payload["headline"][3]
     assert inflation["label"] == "Inflation Context"
@@ -1651,6 +1763,7 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
         "m2_money_supply",
         "survey_synthesis",
         "housing_permits",
+        "nfib_sbo",
     ]
 
 
@@ -1730,6 +1843,7 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
         "fed_balance_sheet",
         "survey_synthesis",
         "housing_permits",
+        "nfib_sbo",
     ]
     fed_card = next(card for card in cards if card["id"] == "fed_balance_sheet")
     assert fed_card["status"] == "context"

@@ -23,6 +23,7 @@ from app.tools import (
     macro_growth_cycle,
     market_phase,
     market_setup,
+    nfib_sbo,
     us_rates_liquidity,
 )
 
@@ -135,6 +136,15 @@ ISM_MANUFACTURING_SERIES_IDS = [
     "ism_manufacturing_order_backlog",
     "ism_manufacturing_exports",
     "ism_manufacturing_imports",
+]
+
+NFIB_SERIES_IDS = [
+    "nfib_sbo_optimism",
+    "nfib_sbo_employment_plans",
+    "nfib_sbo_expansion_outlook",
+    "nfib_sbo_inventory_plans",
+    "nfib_sbo_economic_expectations",
+    "nfib_sbo_real_sales_expectations",
 ]
 
 app = FastAPI(title="Meowstreet")
@@ -476,6 +486,21 @@ def macro_dashboard_growth_cycle():
                     },
                     "evidence": [],
                 }
+        nfib_sbo_observations = (
+            macro_indicators_db.load_macro_indicator_observations_for_series(
+                con,
+                NFIB_SERIES_IDS,
+            )
+        )
+        survey_synthesis_result = ism_survey_synthesis.build_survey_synthesis(
+            ism_macro_signal_result,
+            ism_services_data["signal"],
+        )
+        nfib_sbo_signal_result = nfib_sbo.build_nfib_sbo_signal(
+            nfib_sbo_observations,
+            survey_synthesis_result,
+            date.today().isoformat(),
+        )
         growth_cycle_payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(
             dashboard,
             next_fomc_meeting=next_fomc_meeting,
@@ -484,10 +509,8 @@ def macro_dashboard_growth_cycle():
             ism_at_a_glance=ism_at_a_glance,
             ism_macro_signal=ism_macro_signal_result,
             ism_services_card=ism_services_data["card"],
-            survey_synthesis=ism_survey_synthesis.build_survey_synthesis(
-                ism_macro_signal_result,
-                ism_services_data["signal"],
-            ),
+            survey_synthesis=survey_synthesis_result,
+            nfib_sbo_signal=nfib_sbo_signal_result,
         )
         return growth_cycle_payload
     finally:
@@ -632,6 +655,17 @@ def macro_dashboard_market_setup():
             logging.warning(
                 "housing permits load failed for market setup", exc_info=True
             )
+        nfib_sbo_observations = (
+            macro_indicators_db.load_macro_indicator_observations_for_series(
+                con,
+                NFIB_SERIES_IDS,
+            )
+        )
+        nfib_sbo_signal_result = nfib_sbo.build_nfib_sbo_signal(
+            nfib_sbo_observations,
+            survey_synthesis_result,
+            date.today().isoformat(),
+        )
         payload = market_setup.build_market_setup(
             market_phase_payload=market_phase_payload,
             survey_synthesis=survey_synthesis_result,
@@ -642,6 +676,7 @@ def macro_dashboard_market_setup():
             fed_balance_sheet=fed_balance_sheet,
             consumer_sentiment_summary=consumer_sentiment_summary,
             housing_permits_signal=housing_permits_signal,
+            nfib_sbo_signal=nfib_sbo_signal_result,
         )
         return {
             k: v
@@ -659,6 +694,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
         "ism_manufacturing",
         "ism_services",
         "housing_permits",
+        "nfib_sbo",
     }:
         raise HTTPException(
             status_code=400,
@@ -686,6 +722,28 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             return housing_permits.build_housing_permits_detail_payload(
                 observations, signal
             )
+        if detail_id == "nfib_sbo":
+            nfib_sbo_observations = (
+                macro_indicators_db.load_macro_indicator_observations_for_series(
+                    con,
+                    NFIB_SERIES_IDS,
+                )
+            )
+            growth_cycle_payload = macro_dashboard_growth_cycle()
+            survey_synthesis = next(
+                (
+                    card
+                    for card in growth_cycle_payload.get("headline", [])
+                    if card.get("id") == "survey_synthesis"
+                ),
+                {},
+            )
+            signal = nfib_sbo.build_nfib_sbo_signal(
+                nfib_sbo_observations,
+                survey_synthesis,
+                date.today().isoformat(),
+            )
+            return nfib_sbo.build_nfib_sbo_detail_payload(nfib_sbo_observations, signal)
         if detail_id == "ism_services":
             return ism_services_dashboard.load_detail(con)
         if detail_id == "ism_manufacturing":
