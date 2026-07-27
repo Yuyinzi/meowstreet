@@ -1717,21 +1717,21 @@ def _housing_credit_status(growth_cycle):
 
 
 def _nfib_sbo_section_status(headline):
-    card = _headline_card_by_id(headline, "nfib_sbo")
-    if not card:
-        return "pending_inputs"
-    status = card.get("status")
-    if status == "unavailable":
-        return "pending_inputs"
-    return "available"
+    for card in headline:
+        if card.get("id") == "nfib_sbo":
+            s = card.get("status")
+            if s == "unavailable":
+                return "pending_inputs"
+            return "available"
+    return "pending_inputs"
 
 
 def _nfib_sbo_period(headline):
-    card = _headline_card_by_id(headline, "nfib_sbo")
-    if not card:
-        return None
-    latest = card.get("latest") or {}
-    return latest.get("period")
+    for card in headline:
+        if card.get("id") == "nfib_sbo":
+            latest = card.get("latest") or {}
+            return latest.get("period")
+    return None
 
 
 def _build_ism_manufacturing_headline(

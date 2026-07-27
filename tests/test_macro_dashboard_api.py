@@ -966,6 +966,67 @@ def test_growth_cycle_detail_api_rejects_unknown_detail():
     assert response.json()["detail"] == "growth cycle detail is unknown: unknown"
 
 
+def test_growth_cycle_sections_include_small_business_with_nfib_card(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    def fake_points(con, series_id):
+        if series_id == "m2_money_stock":
+            return [{"date": "2026-06-01", "value": 100, "source": "m2.xlsx"}]
+        if series_id.startswith("ism_manufacturing_"):
+            return [{"date": "2026-06-01", "value": 51.2, "source": "ISM.xlsx"}]
+        return []
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        fake_points,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda *a: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda *a: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+
+    response = client.get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    sections = response.json()["sections"]
+    sb = next((s for s in sections if s["id"] == "small_business"), None)
+    assert sb is not None, "small_business section missing"
+    assert "nfib_sbo" in sb.get("cards", []), (
+        f"nfib_sbo card not in small_business section: {sb}"
+    )
+
+
 def test_growth_cycle_nfib_card_appears_in_headline(monkeypatch):
     from app import api
 
