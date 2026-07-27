@@ -1256,6 +1256,13 @@ def _headline_card_ids(headline):
     return {card["id"] for card in headline}
 
 
+def _headline_card_by_id(headline, card_id):
+    for card in headline:
+        if card["id"] == card_id:
+            return card
+    return None
+
+
 def _m2_status(growth_cycle):
     yoy = growth_cycle.get("m2_yoy_pct_change")
     momentum = growth_cycle.get("m2_3m_momentum")
@@ -1688,6 +1695,14 @@ def build_growth_cycle_sections(growth_cycle, headline, services_signal_state=No
             status=_housing_credit_status(growth_cycle),
             period=growth_cycle.get("housing_permits_period"),
         ),
+        _growth_cycle_section(
+            "small_business",
+            "Small Business",
+            "NFIB small-business confidence and leading indicator.",
+            ["nfib_sbo"] if "nfib_sbo" in card_ids else [],
+            status=_nfib_sbo_section_status(headline),
+            period=_nfib_sbo_period(headline),
+        ),
     ]
 
 
@@ -1699,6 +1714,24 @@ def _housing_credit_status(growth_cycle):
     if status == "unavailable":
         return "pending_inputs"
     return "available"
+
+
+def _nfib_sbo_section_status(headline):
+    card = _headline_card_by_id(headline, "nfib_sbo")
+    if not card:
+        return "pending_inputs"
+    status = card.get("status")
+    if status == "unavailable":
+        return "pending_inputs"
+    return "available"
+
+
+def _nfib_sbo_period(headline):
+    card = _headline_card_by_id(headline, "nfib_sbo")
+    if not card:
+        return None
+    latest = card.get("latest") or {}
+    return latest.get("period")
 
 
 def _build_ism_manufacturing_headline(

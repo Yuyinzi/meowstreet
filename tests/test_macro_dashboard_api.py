@@ -895,6 +895,7 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
         "inflation_context",
         "fomc_context",
         "housing_credit",
+        "small_business",
     ]
     assert sections[0]["title"] == "ISM Manufacturing"
     assert sections[0]["status"] == "available"
