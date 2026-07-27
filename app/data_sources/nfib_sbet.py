@@ -16,6 +16,11 @@ SERIES_IDS = {
     "nfib_sbo_inventory_plans",
     "nfib_sbo_economic_expectations",
     "nfib_sbo_real_sales_expectations",
+    "nfib_sbo_capital_outlay_plans",
+    "nfib_sbo_current_inventory_low",
+    "nfib_sbo_job_openings",
+    "nfib_sbo_credit_conditions_expectations",
+    "nfib_sbo_earnings_trends",
 }
 
 _LEADING_COMPONENT_SERIES = {
@@ -24,6 +29,14 @@ _LEADING_COMPONENT_SERIES = {
     "inventory_plans": "nfib_sbo_inventory_plans",
     "economic_expectations": "nfib_sbo_economic_expectations",
     "real_sales_expectations": "nfib_sbo_real_sales_expectations",
+}
+
+_CONTEXT_COMPONENT_SERIES = {
+    "capital_outlay_plans": "nfib_sbo_capital_outlay_plans",
+    "current_inventory_low": "nfib_sbo_current_inventory_low",
+    "job_openings": "nfib_sbo_job_openings",
+    "credit_conditions_expectations": "nfib_sbo_credit_conditions_expectations",
+    "earnings_trends": "nfib_sbo_earnings_trends",
 }
 
 _OPTIMISM_SERIES = "nfib_sbo_optimism"
@@ -64,7 +77,10 @@ _REPORT_MONTH_RE = re.compile(
 
 _COMPONENT_LINE_RE = re.compile(
     r"(Plans to Increase Employment|Good Time to Expand|Plans to Increase Inventories|"
-    r"Expect Economy to Improve|Expect Real Sales Higher)\s*(?:\(net\$?\))?\s*(-?\d+)"
+    r"Expect Economy to Improve|Expect Real Sales Higher|"
+    r"Plans to Make Capital Outlays|Current Inventory-too low|"
+    r"Current Job Openings|Expected Credit Conditions|Earnings Trends"
+    r")\s*(?:\(net\$?\))?\s*(-?\d+)"
 )
 
 _OPTIMISM_VALUE_RE = re.compile(
@@ -115,7 +131,6 @@ _NEXT_SECTION_BOUNDARIES = [
     "ACTUAL PRICE CHANGES",
 ]
 
-
 def _hash_file(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -149,6 +164,16 @@ def _parse_summary_table(text, report_year, report_month, provenance):
                 provenance["economic_expectations"] = val
             elif label == "Expect Real Sales Higher":
                 provenance["real_sales_expectations"] = val
+            elif label == "Plans to Make Capital Outlays":
+                provenance["capital_outlay_plans"] = val
+            elif label == "Current Inventory-too low":
+                provenance["current_inventory_low"] = val
+            elif label == "Current Job Openings":
+                provenance["job_openings"] = val
+            elif label == "Expected Credit Conditions":
+                provenance["credit_conditions_expectations"] = val
+            elif label == "Earnings Trends":
+                provenance["earnings_trends"] = val
 
     optimism_m = _OPTIMISM_VALUE_RE.search(text)
     if optimism_m:
@@ -156,21 +181,26 @@ def _parse_summary_table(text, report_year, report_month, provenance):
 
     end_of_month = _end_of_month(report_year, report_month)
 
-    if "optimism" not in provenance:
-        raise ValueError("nfib report is missing required optimism index value")
     for key in _LEADING_COMPONENT_SERIES:
         if key not in provenance:
             raise ValueError(f"nfib report is missing required component: {key}")
 
-    observations = [
-        _build_observation(
-            _OPTIMISM_SERIES, end_of_month, provenance["optimism"], provenance
+    observations = []
+    if "optimism" in provenance:
+        observations.append(
+            _build_observation(
+                _OPTIMISM_SERIES, end_of_month, provenance["optimism"], provenance
+            )
         )
-    ]
     for key, series_id in _LEADING_COMPONENT_SERIES.items():
         observations.append(
             _build_observation(series_id, end_of_month, provenance[key], provenance)
         )
+    for key, series_id in _CONTEXT_COMPONENT_SERIES.items():
+        if key in provenance:
+            observations.append(
+                _build_observation(series_id, end_of_month, provenance[key], provenance)
+            )
     return observations
 
 
@@ -219,6 +249,26 @@ def _is_expansion_outlook_grid(g_rows):
     return False
 
 
+def _find_next_boundary(lines, start_i):
+    for j in range(start_i, len(lines)):
+        for b in _NEXT_SECTION_BOUNDARIES:
+            if lines[j].strip().upper().startswith(b):
+                return j
+    return len(lines)
+
+
+def _assign_grid_data(entry, sid, observations, seen, provenance):
+    _, g_months, g_rows = entry
+    for year, row_data in g_rows:
+        for month_num, value in row_data.items():
+            period = _end_of_month(year, month_num)
+            obs_key = (sid, period)
+            if obs_key in seen:
+                continue
+            seen.add(obs_key)
+            observations.append(_build_observation(sid, period, value, provenance))
+
+
 def _parse_historical_sections(text, provenance):
     observations = []
     seen = set()
@@ -250,67 +300,143 @@ def _parse_historical_sections(text, provenance):
         ("SALES EXPECTATIONS", "nfib_sbo_real_sales_expectations", False),
         ("HIRING PLANS", "nfib_sbo_employment_plans", False),
         ("INVENTORY PLANS", "nfib_sbo_inventory_plans", False),
+        ("CAPITAL EXPENDITURE PLANS", "nfib_sbo_capital_outlay_plans", False),
+        ("CURRENT INVENTORY (TOO LOW)", "nfib_sbo_current_inventory_low", False),
+        ("JOB OPENINGS", "nfib_sbo_job_openings", False),
+        (
+            "EXPECT EASIER CREDIT CONDITIONS",
+            "nfib_sbo_credit_conditions_expectations",
+            False,
+        ),
+        ("EARNINGS", "nfib_sbo_earnings_trends", False),
     ]
 
-    SKIP_TEXTS = [
-        "SMALL BUSINESS COMPENSATION",
-        "CURRENT INVENTORY",
-        "ACTUAL SALES CHANGES",
-    ]
-
-    def _pop_nearest(line_i, max_dist=25):
-        best_gi = None
-        for gi, entry in enumerate(grid_entries):
-            if entry[0] <= line_i:
-                continue
-            d = entry[0] - line_i
-            if best_gi is None or d < (grid_entries[best_gi][0] - line_i):
-                best_gi = gi
-        if best_gi is not None:
-            dist = grid_entries[best_gi][0] - line_i
-            if dist < max_dist:
-                return grid_entries.pop(best_gi)
+    def _pop_nearest(line_i, skip=0, max_dist=25):
+        candidates = [
+            (gi, entry)
+            for gi, entry in enumerate(grid_entries)
+            if entry[0] > line_i
+        ]
+        if len(candidates) > skip:
+            grid_i, entry = candidates[skip]
+            if entry[0] - line_i < max_dist:
+                return grid_entries.pop(grid_i)
         return None
 
-    for i, line in enumerate(lines):
-        upper = line.strip().upper()
-        if any(s in upper for s in SKIP_TEXTS):
-            _pop_nearest(i)
+    def _is_header_line(stripped_line, marker):
+        if not stripped_line.startswith(marker):
+            return False
+        remainder = stripped_line[len(marker) :].lstrip()
+        return not remainder
+
+    def _bounded_grids(marker_i):
+        boundary_i = _find_next_boundary(lines, marker_i + 1)
+        return [
+            gi
+            for gi, ge in enumerate(grid_entries)
+            if ge[0] > marker_i and ge[0] < boundary_i
+        ]
+
+    _VULNERABLE_MARKERS = {"JOB OPENINGS", "EARNINGS"}
+
+    def _assign_one(marker, sid, disambiguate, observations, seen, provenance):
+        header_indices = [
+            i
+            for i, line in enumerate(lines)
+            if _is_header_line(line.strip().upper(), marker)
+        ]
+        marker_i = next(
+            (i for i in reversed(header_indices) if _bounded_grids(i)), None
+        )
+        if marker_i is None:
+            marker_i = header_indices[-1] if header_indices else None
+        if marker_i is None:
+            return
+
+        candidates = _bounded_grids(marker_i)
+
+        if not candidates:
+            entry = _pop_nearest(
+                marker_i, skip=1 if marker == "SALES EXPECTATIONS" else 0
+            )
+            if entry is None:
+                return
+            actual_sid = sid
+            if disambiguate and _is_expansion_outlook_grid(entry[2]):
+                actual_sid = "nfib_sbo_expansion_outlook"
+            _assign_grid_data(entry, actual_sid, observations, seen, provenance)
+        elif marker in {"INVENTORY PLANS", "SALES EXPECTATIONS"}:
+            taken = candidates[1] if len(candidates) >= 2 else candidates[0]
+            _assign_grid_data(
+                grid_entries.pop(taken), sid, observations, seen, provenance
+            )
+        elif disambiguate and len(candidates) >= 2:
+            first_gi = candidates[0]
+            if _is_expansion_outlook_grid(grid_entries[first_gi][2]):
+                entry = grid_entries.pop(first_gi)
+                _assign_grid_data(
+                    entry, "nfib_sbo_expansion_outlook", observations, seen, provenance
+                )
+                for gi, ge in enumerate(grid_entries):
+                    if ge[0] > marker_i and ge[0] < _find_next_boundary(
+                        lines, marker_i + 1
+                    ):
+                        _assign_grid_data(
+                            grid_entries.pop(gi), sid, observations, seen, provenance
+                        )
+                        break
+            else:
+                _assign_grid_data(
+                    grid_entries.pop(first_gi), sid, observations, seen, provenance
+                )
+        else:
+            _assign_grid_data(
+                grid_entries.pop(candidates[0]), sid, observations, seen, provenance
+            )
 
     for marker, sid, disambiguate in ASSIGN_ORDER:
-        candidates = []
-        for i, line in enumerate(lines):
-            stripped = line.strip().upper()
-            if not stripped.startswith(marker):
-                continue
-            for ge in grid_entries:
-                if ge[0] > i and ge[0] - i < 25:
-                    candidates.append((ge[0] - i, i))
-                    break
-        if not candidates:
-            continue
-        candidates.sort(key=lambda x: x[0])
-        best_i = candidates[0][1]
-        entry = _pop_nearest(best_i)
-        if entry is None:
-            continue
-        _, g_months, g_rows = entry
-        if disambiguate and _is_expansion_outlook_grid(g_rows):
-            actual_sid = "nfib_sbo_expansion_outlook"
-        else:
-            actual_sid = sid
-        for year, row_data in g_rows:
-            for month_num, value in row_data.items():
-                period = _end_of_month(year, month_num)
-                obs_key = (actual_sid, period)
-                if obs_key in seen:
-                    continue
-                seen.add(obs_key)
-                observations.append(
-                    _build_observation(actual_sid, period, value, provenance)
-                )
+        if marker in _VULNERABLE_MARKERS:
+            _assign_one(marker, sid, disambiguate, observations, seen, provenance)
+
+    for marker, sid, disambiguate in ASSIGN_ORDER:
+        if marker not in _VULNERABLE_MARKERS:
+            _assign_one(marker, sid, disambiguate, observations, seen, provenance)
 
     return observations
+
+
+def _normalize_observations(observations):
+    observations_by_key = {}
+    for observation in observations:
+        key = (observation["series_id"], observation["date"])
+        existing = observations_by_key.get(key)
+        if existing and existing["value"] != observation["value"]:
+            raise ValueError("nfib report has conflicting values")
+        observations_by_key[key] = observation
+    return list(observations_by_key.values())
+
+
+def _required_historical_dates(report_year, report_month):
+    return {
+        _end_of_month(year, month)
+        for year in range(2021, report_year + 1)
+        for month in range(1, 13)
+        if (year, month) <= (report_year, report_month)
+    }
+
+
+def _validate_historical_coverage(observations, report_year, report_month):
+    required_dates = _required_historical_dates(report_year, report_month)
+    dates_by_series = {}
+    for observation in observations:
+        dates_by_series.setdefault(observation["series_id"], set()).add(
+            observation["date"]
+        )
+    if any(
+        not required_dates.issubset(dates_by_series.get(series_id, set()))
+        for series_id in SERIES_IDS
+    ):
+        raise ValueError("nfib report is missing historical months")
 
 
 def parse_sbet_report_text(
@@ -327,7 +453,13 @@ def parse_sbet_report_text(
         text, report_year, report_month, provenance
     )
     historical_observations = _parse_historical_sections(text, provenance)
-    all_observations = historical_observations + summary_observations
+    historical_observations = _normalize_observations(historical_observations)
+    _validate_historical_coverage(
+        historical_observations, report_year, report_month
+    )
+    all_observations = _normalize_observations(
+        historical_observations + summary_observations
+    )
     if not all_observations:
         raise ValueError("nfib report is missing required observations")
     return {"observations": all_observations}

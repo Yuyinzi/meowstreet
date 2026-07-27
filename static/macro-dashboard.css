@@ -4938,6 +4938,10 @@ h2 {
   margin-bottom: 16px;
 }
 
+.nfib-sbo-section {
+  margin-top: 20px;
+}
+
 .nfib-sbo-components h3,
 .nfib-sbo-optimism h3 {
   font-size: 0.8rem;
@@ -4991,8 +4995,64 @@ h2 {
   color: #BDBDBD;
 }
 
+.nfib-sbo-context-components {
+  margin-top: 20px;
+}
+
+.nfib-sbo-context-components h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #3B3530;
+  margin: 0 0 4px 0;
+}
+
+.nfib-sbo-context-note {
+  font-size: 0.75rem;
+  color: #8B7E74;
+  margin: 0 0 8px 0;
+  font-style: italic;
+}
+
+.nfib-sbo-context-grid {
+  gap: 8px;
+}
+
+.nfib-sbo-context-row {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.nfib-sbo-context-label {
+  flex: 1;
+  color: #8B7E74;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nfib-sbo-context-value {
+  text-align: right;
+}
+
+.nfib-sbo-context-change {
+  font-size: 0.8rem;
+  color: #8B7E74;
+  text-align: right;
+  min-width: 3em;
+}
+
+.nfib-sbo-context-units {
+  font-size: 0.7rem;
+  color: #BDBDBD;
+  text-align: right;
+  min-width: 2.5em;
+}
+
 @media (max-width: 768px) {
   .nfib-sbo-component-grid {
     grid-template-columns: 1fr;
   }
+
 }

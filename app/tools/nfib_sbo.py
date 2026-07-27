@@ -11,7 +11,23 @@ _COMPONENT_SERIES = [
     "nfib_sbo_real_sales_expectations",
 ]
 
-_ALL_SERIES = _COMPONENT_SERIES + ["nfib_sbo_optimism"]
+_CONTEXT_SERIES = [
+    "nfib_sbo_capital_outlay_plans",
+    "nfib_sbo_current_inventory_low",
+    "nfib_sbo_job_openings",
+    "nfib_sbo_credit_conditions_expectations",
+    "nfib_sbo_earnings_trends",
+]
+
+_CONTEXT_SERIES_TITLES = {
+    "nfib_sbo_capital_outlay_plans": "Capital Expenditure Plans",
+    "nfib_sbo_current_inventory_low": "Current Inventory Too Low",
+    "nfib_sbo_job_openings": "Current Job Openings",
+    "nfib_sbo_credit_conditions_expectations": "Credit Conditions Expectation",
+    "nfib_sbo_earnings_trends": "Earnings Trends",
+}
+
+_ALL_SERIES = _COMPONENT_SERIES + _CONTEXT_SERIES + ["nfib_sbo_optimism"]
 
 _REPORT_STALE_DAYS = 45
 
@@ -225,7 +241,18 @@ def build_nfib_sbo_signal(observations_by_series, survey_synthesis, as_of_date):
             "detail_series": [],
         }
 
-    reasons = _build_reason(status, trend, latest_4m_change, survey_direction)
+    previous_leading_index = None
+    if current_one_month_change is not None:
+        previous_leading_index = latest_index - current_one_month_change
+
+    reasons = _build_reason(
+        status,
+        trend,
+        latest_index,
+        previous_leading_index,
+        current_one_month_change,
+        survey_direction,
+    )
     latest = {
         "leading_index": round(latest_index, 1),
         "leading_index_4m_average": round(latest_4m_avg, 2)
@@ -233,6 +260,12 @@ def build_nfib_sbo_signal(observations_by_series, survey_synthesis, as_of_date):
         else None,
         "leading_index_4m_change": round(latest_4m_change, 2)
         if latest_4m_change is not None
+        else None,
+        "leading_index_1m_change": round(current_one_month_change, 2)
+        if current_one_month_change is not None
+        else None,
+        "previous_leading_index": round(previous_leading_index, 1)
+        if previous_leading_index is not None
         else None,
         "period": latest_month,
     }
@@ -247,12 +280,41 @@ def build_nfib_sbo_signal(observations_by_series, survey_synthesis, as_of_date):
     }
 
 
-def _build_reason(status, trend, change, survey_direction):
+def _build_reason(
+    status,
+    trend,
+    leading_index,
+    previous_leading_index,
+    one_month_change,
+    survey_direction,
+):
     if status == "supports_growth_path":
         return f"nfib evidence supports the {survey_direction or 'current'} growth path"
     if status == "challenges_growth_path":
         return (
             f"nfib evidence challenges the {survey_direction or 'current'} growth path"
+        )
+    if (
+        trend == "weakening"
+        and one_month_change is not None
+        and one_month_change > 0
+        and previous_leading_index is not None
+    ):
+        return (
+            "nfib's 4-month trend is weakening, but the latest leading index rose "
+            f"from {previous_leading_index:.1f} to {leading_index:.1f}, so it has not "
+            f"yet confirmed the ism-implied {survey_direction or 'current'} growth path"
+        )
+    if (
+        trend == "improving"
+        and one_month_change is not None
+        and one_month_change < 0
+        and previous_leading_index is not None
+    ):
+        return (
+            "nfib's 4-month trend is improving, but the latest leading index fell "
+            f"from {previous_leading_index:.1f} to {leading_index:.1f}, so it has not "
+            f"yet confirmed the ism-implied {survey_direction or 'current'} growth path"
         )
     return "nfib evidence is awaiting confirmation"
 
@@ -272,34 +334,67 @@ def _latest_provenance(observations_by_series):
     }
 
 
+def _build_component_detail(series_id, series_obs, values_by_month, sorted_months_list):
+    if not series_obs:
+        return None
+    latest_val = series_obs[-1]["value"]
+    period = series_obs[-1]["date"][:7]
+    previous_val = None
+    if len(series_obs) >= 2:
+        previous_val = series_obs[-2]["value"]
+    change = latest_val - previous_val if previous_val is not None else None
+    return {
+        "latest": latest_val,
+        "previous": previous_val,
+        "change": change,
+        "period": period,
+        "observations": [
+            {"date": obs["date"], "value": obs["value"]} for obs in series_obs
+        ],
+    }
+
+
+def _build_optimism_detail(series_id, series_obs):
+    if not series_obs:
+        return None
+    return {
+        "latest": series_obs[-1]["value"],
+        "period": series_obs[-1]["date"][:7],
+        "observations": [
+            {"date": obs["date"], "value": obs["value"]} for obs in series_obs
+        ],
+        "basis": "1986=100",
+        "role": "overall_context",
+    }
+
+
 def build_nfib_sbo_detail_payload(observations_by_series, signal):
     values_by_month = _series_values_by_month(observations_by_series)
     sorted_months = _sorted_months(values_by_month)
 
-    components = {}
+    leading_components = {}
     for series_id in _COMPONENT_SERIES:
         series_obs = observations_by_series.get(series_id, [])
-        if series_obs:
-            components[series_id] = {
-                "latest": series_obs[-1]["value"],
-                "period": series_obs[-1]["date"][:7],
-                "observations": [
-                    {"date": obs["date"], "value": obs["value"]} for obs in series_obs
-                ],
-            }
+        leading_components[series_id] = _build_component_detail(
+            series_id, series_obs, values_by_month, sorted_months
+        )
+
+    context_components = {}
+    for series_id in _CONTEXT_SERIES:
+        series_obs = observations_by_series.get(series_id, [])
+        detail = _build_component_detail(
+            series_id, series_obs, values_by_month, sorted_months
+        )
+        if detail:
+            detail["title"] = _CONTEXT_SERIES_TITLES.get(series_id, series_id)
+            detail["units"] = "net_pct"
+            detail["role"] = "context_only"
+            context_components[series_id] = detail
         else:
-            components[series_id] = None
+            context_components[series_id] = None
 
     optimism_obs = observations_by_series.get("nfib_sbo_optimism", [])
-    optimism = None
-    if optimism_obs:
-        optimism = {
-            "latest": optimism_obs[-1]["value"],
-            "period": optimism_obs[-1]["date"][:7],
-            "observations": [
-                {"date": obs["date"], "value": obs["value"]} for obs in optimism_obs
-            ],
-        }
+    optimism = _build_optimism_detail("nfib_sbo_optimism", optimism_obs)
 
     provenance = _latest_provenance(observations_by_series)
 
@@ -309,7 +404,8 @@ def build_nfib_sbo_detail_payload(observations_by_series, signal):
         "status": signal.get("status"),
         "reason": signal.get("reason"),
         "latest_signal": signal.get("latest"),
-        "components": components,
+        "leading_components": leading_components,
+        "context_components": context_components,
         "optimism": optimism,
         "detail_series": signal.get("detail_series", []),
         "source_url": provenance.get("source_url", ""),

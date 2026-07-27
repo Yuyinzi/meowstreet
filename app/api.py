@@ -145,6 +145,11 @@ NFIB_SERIES_IDS = [
     "nfib_sbo_inventory_plans",
     "nfib_sbo_economic_expectations",
     "nfib_sbo_real_sales_expectations",
+    "nfib_sbo_capital_outlay_plans",
+    "nfib_sbo_current_inventory_low",
+    "nfib_sbo_job_openings",
+    "nfib_sbo_credit_conditions_expectations",
+    "nfib_sbo_earnings_trends",
 ]
 
 app = FastAPI(title="Meowstreet")

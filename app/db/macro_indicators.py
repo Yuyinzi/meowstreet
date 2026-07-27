@@ -269,6 +269,31 @@ _NFIB_SERIES_METADATA = {
         "units": "net_pct",
         "source": "nfib_sbet_pdf",
     },
+    "nfib_sbo_capital_outlay_plans": {
+        "title": "Plans to Make Capital Expenditures",
+        "units": "net_pct",
+        "source": "nfib_sbet_pdf",
+    },
+    "nfib_sbo_current_inventory_low": {
+        "title": "Current Inventory Too Low",
+        "units": "net_pct",
+        "source": "nfib_sbet_pdf",
+    },
+    "nfib_sbo_job_openings": {
+        "title": "Current Job Openings",
+        "units": "net_pct",
+        "source": "nfib_sbet_pdf",
+    },
+    "nfib_sbo_credit_conditions_expectations": {
+        "title": "Credit Conditions Expectation",
+        "units": "net_pct",
+        "source": "nfib_sbet_pdf",
+    },
+    "nfib_sbo_earnings_trends": {
+        "title": "Earnings Trends",
+        "units": "net_pct",
+        "source": "nfib_sbet_pdf",
+    },
 }
 
 

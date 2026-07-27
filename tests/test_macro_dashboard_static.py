@@ -6194,3 +6194,170 @@ def test_housing_permits_detail_maps_each_signal_state_to_a_read_tone():
         "mixed": True,
         "missing": True,
     }
+
+
+def test_nfib_sbo_renders_growth_path_outlook_and_evidence_reads():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = {};
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/nfib-sbo-ui.js", "utf8"));
+
+        const helpers = {
+          escapeHtml: function (value) { return String(value || "").replace(/</g, "&lt;").replace(/>/g, "&gt;"); },
+          bilingualLabel: function (value) { return value === "Evidence" ? "Evidence<small>证据</small>" : value; },
+          bilingualTitle: function (value) { return value; },
+          fmtNumber: function (value) { return Number(value).toFixed(1); },
+          isSelectedGrowthCycleDetailId: function () { return false; },
+          renderGrowthCycleRangeControl: function () { return ""; },
+          filterChartForRange: function (chart) { return chart; },
+          getSelectedChartRange: function () { return "1y"; },
+          renderRatesDetailChart: function () { return ""; },
+          bindGrowthCycleRangeControl: function () {},
+          attachRatesChartTooltips: function () {},
+        };
+        const card = {
+          status: "awaiting_confirmation",
+          trend: "weakening",
+          latest: {
+            leading_index: 7.6,
+            previous_leading_index: 3.0,
+            leading_index_4m_average: 4.55,
+            leading_index_4m_change: -0.3,
+            leading_index_1m_change: 4.6,
+          },
+          reason: "nfib's 4-month trend is weakening",
+        };
+        const body = { innerHTML: "" };
+        const cardHtml = window.nfibSboUi.renderCard(card, helpers);
+        const unavailableHtml = window.nfibSboUi.renderCard({ status: "unavailable" }, helpers);
+        window.nfibSboUi.renderDetail(body, Object.assign({
+          latest_signal: card.latest,
+          components: {},
+          optimism: null,
+          detail_series: [],
+        }, card), helpers);
+
+        console.log(JSON.stringify({
+          cardHasGrowthPath: cardHtml.includes("Could Not Confirm ISM Path"),
+          cardHasGrowthPathZh: cardHtml.includes("未能确认 ISM 指向的增长路径"),
+          cardHasOutlook: cardHtml.includes("The medium-term small-business outlook is weakening, while the latest month improved."),
+          cardHasEvidence: cardHtml.includes("The leading index rose from 3.0 to 7.6 in the latest month."),
+          detailHasTradingRead: body.innerHTML.includes("Trading Read"),
+          detailHasOutlook: body.innerHTML.includes("Small-Business Outlook"),
+          detailHasEvidence: body.innerHTML.includes("Evidence"),
+          detailHasGenericReason: body.innerHTML.includes("nfib's 4-month trend is weakening"),
+          detailHasEscapedEvidenceTag: body.innerHTML.includes("&lt;small&gt;证据&lt;/small&gt;"),
+          unavailableDoesNotClaimMixedOutlook: unavailableHtml.includes("Small-business outlook cannot be assessed from available data."),
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+
+    assert json.loads(result.stdout) == {
+        "cardHasGrowthPath": True,
+        "cardHasGrowthPathZh": True,
+        "cardHasOutlook": True,
+        "cardHasEvidence": True,
+        "detailHasTradingRead": True,
+        "detailHasOutlook": True,
+        "detailHasEvidence": True,
+        "detailHasGenericReason": False,
+        "detailHasEscapedEvidenceTag": False,
+        "unavailableDoesNotClaimMixedOutlook": True,
+    }
+
+
+def test_nfib_sbo_renders_context_components_in_detail():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = {};
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/nfib-sbo-ui.js", "utf8"));
+
+        const helpers = {
+          escapeHtml: function (value) { return String(value || "").replace(/</g, "&lt;").replace(/>/g, "&gt;"); },
+          bilingualLabel: function (value) { return value; },
+          bilingualTitle: function (value) { return value; },
+          fmtNumber: function (value) { return Number(value).toFixed(1); },
+          isSelectedGrowthCycleDetailId: function () { return false; },
+          renderGrowthCycleRangeControl: function () { return ""; },
+          filterChartForRange: function (chart) { return chart; },
+          getSelectedChartRange: function () { return "1y"; },
+          renderRatesDetailChart: function () { return ""; },
+          bindGrowthCycleRangeControl: function () {},
+          attachRatesChartTooltips: function () {},
+        };
+        const body = { innerHTML: "" };
+        const payload = {
+          status: "supports_growth_path",
+          trend: "improving",
+          latest_signal: { leading_index: 7.6, leading_index_4m_average: 6.2 },
+          leading_components: {},
+          context_components: {
+            nfib_sbo_job_openings: {
+              title: "Current Job Openings",
+              units: "net_pct",
+              role: "context_only",
+              latest: 32,
+              previous: 34,
+              change: -2.0,
+              period: "2026-06",
+              observations: [],
+            },
+            nfib_sbo_capital_outlay_plans: {
+              title: "Capital Expenditure Plans",
+              units: "net_pct",
+              role: "context_only",
+              latest: 20,
+              previous: 20,
+              change: 0,
+              period: "2026-06",
+              observations: [],
+            },
+          },
+          optimism: { latest: 97.4 },
+          detail_series: [],
+          signal_version: "nfib_sbo_signal_v1",
+          source_url: "https://example.com",
+          release_date: "2026-07-14",
+        };
+        window.nfibSboUi.renderDetail(body, payload, helpers);
+        const html = body.innerHTML;
+
+        console.log(JSON.stringify({
+          hasOfficialContextComponents: html.indexOf("Official Context Components") !== -1,
+          hasContextOnlyExplanation: html.indexOf("Context only") !== -1,
+          hasJobOpenings: html.indexOf("Current Job Openings") !== -1,
+          hasJobOpeningsChange: html.indexOf("-2.0") !== -1,
+          hasCapitalExpenditure: html.indexOf("Capital Expenditure Plans") !== -1,
+          hasLeadingIndexInputs: html.indexOf("Leading Index Inputs") !== -1,
+          hasNetPctUnits: (html.match(/net%/g) || []).length >= 2,
+          contextUsesLeadingGrid: html.indexOf('class="nfib-sbo-component-grid nfib-sbo-context-grid"') !== -1,
+          contextUsesLeadingRows: html.indexOf('class="nfib-sbo-component-row nfib-sbo-context-row"') !== -1,
+          optimismUsesSectionSpacing: html.indexOf('class="nfib-sbo-optimism nfib-sbo-section"') !== -1,
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+
+    assert json.loads(result.stdout) == {
+        "hasOfficialContextComponents": True,
+        "hasContextOnlyExplanation": True,
+        "hasJobOpenings": True,
+        "hasJobOpeningsChange": True,
+        "hasCapitalExpenditure": True,
+        "hasLeadingIndexInputs": True,
+        "hasNetPctUnits": True,
+        "contextUsesLeadingGrid": True,
+        "contextUsesLeadingRows": True,
+        "optimismUsesSectionSpacing": True,
+    }

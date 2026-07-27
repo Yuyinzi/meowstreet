@@ -797,6 +797,7 @@ def test_build_growth_cycle_dashboard_payload_groups_headline_cards_into_section
         "inflation_context",
         "fomc_context",
         "housing_credit",
+        "small_business",
     ]
     assert sections["ism_manufacturing"]["status"] == "available"
     assert sections["ism_manufacturing"]["period"] == "2026-06-01"
@@ -806,6 +807,8 @@ def test_build_growth_cycle_dashboard_payload_groups_headline_cards_into_section
     assert sections["fomc_context"]["cards"] == []
     assert sections["housing_credit"]["cards"] == []
     assert sections["housing_credit"]["status"] == "pending_inputs"
+    assert sections["small_business"]["cards"] == ["nfib_sbo"]
+    assert sections["small_business"]["status"] == "pending_inputs"
 
 
 def test_build_growth_cycle_dashboard_payload_marks_ism_missing_without_ism_values():
@@ -972,8 +975,10 @@ def test_growth_cycle_dashboard_payload_includes_survey_synthesis_card():
         "ism_manufacturing",
         "m2_money_supply",
         "survey_synthesis",
+        "nfib_sbo",
     ]
     assert payload["headline"][2]["status"] == "pending_inputs"
+    assert payload["headline"][3]["status"] == "unavailable"
 
 
 def test_growth_cycle_payload_exposes_survey_synthesis_as_headline_and_section():
@@ -1038,6 +1043,7 @@ def test_survey_synthesis_is_headline_only_not_growth_cycle_section():
         "inflation_context",
         "fomc_context",
         "housing_credit",
+        "small_business",
     ]
 
 

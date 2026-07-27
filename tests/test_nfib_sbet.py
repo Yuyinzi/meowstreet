@@ -6,12 +6,14 @@ from app.data_sources import nfib_sbet
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_PATH = ROOT / "tests" / "fixtures" / "nfib_sbet_june_2026.txt"
+REAL_LAYOUT_FIXTURE_PATH = (
+    ROOT / "tests" / "fixtures" / "nfib_sbet_june_2026_real_layout.txt"
+)
 SOURCE_URL = "https://www.nfib.com/sbet/june-2026"
 RELEASE_DATE = "2026-07-14"
 SOURCE_ID = "NFIB-June-2026-SBET-Report.pdf"
 
-FIXTURE_TEXT = FIXTURE_PATH.read_text()
+FIXTURE_TEXT = REAL_LAYOUT_FIXTURE_PATH.read_text()
 
 
 def test_parse_sbet_report_text_extracts_june_component_values():
@@ -36,6 +38,20 @@ def test_parse_sbet_report_text_includes_optimism_index():
         (row["series_id"], row["date"]): row["value"] for row in payload["observations"]
     }
     assert values[("nfib_sbo_optimism", "2026-06-30")] == 97.4
+
+
+def test_parse_sbet_report_text_extracts_context_component_values():
+    payload = nfib_sbet.parse_sbet_report_text(
+        FIXTURE_TEXT, SOURCE_URL, RELEASE_DATE, SOURCE_ID
+    )
+    values = {
+        (row["series_id"], row["date"]): row["value"] for row in payload["observations"]
+    }
+    assert values[("nfib_sbo_capital_outlay_plans", "2026-06-30")] == 20.0
+    assert values[("nfib_sbo_current_inventory_low", "2026-06-30")] == 0.0
+    assert values[("nfib_sbo_job_openings", "2026-06-30")] == 32.0
+    assert values[("nfib_sbo_credit_conditions_expectations", "2026-06-30")] == -5.0
+    assert values[("nfib_sbo_earnings_trends", "2026-06-30")] == -20.0
 
 
 def test_parse_sbet_report_text_includes_historical_data():
@@ -81,6 +97,88 @@ def test_parse_sbet_report_text_emits_series_ids():
     )
     series_ids = {row["series_id"] for row in payload["observations"]}
     assert series_ids == nfib_sbet.SERIES_IDS
+
+
+def test_parse_sbet_report_text_retains_complete_unique_history_from_real_layout():
+    payload = nfib_sbet.parse_sbet_report_text(
+        FIXTURE_TEXT, SOURCE_URL, RELEASE_DATE, SOURCE_ID
+    )
+    expected_months = {
+        f"{year:04d}-{month:02d}"
+        for year in range(2021, 2027)
+        for month in range(1, 13)
+        if (year, month) <= (2026, 6)
+    }
+    months_by_series = {}
+    for observation in payload["observations"]:
+        months_by_series.setdefault(observation["series_id"], set()).add(
+            observation["date"][:7]
+        )
+
+    assert set(months_by_series) == nfib_sbet.SERIES_IDS
+    for series_id in nfib_sbet.SERIES_IDS:
+        assert months_by_series[series_id] == expected_months
+
+    values = {
+        (row["series_id"], row["date"]): row["value"] for row in payload["observations"]
+    }
+    assert values[("nfib_sbo_inventory_plans", "2026-05-31")] == 1.0
+    assert values[("nfib_sbo_current_inventory_low", "2026-05-31")] == -4.0
+    assert values[("nfib_sbo_current_inventory_low", "2026-06-30")] == 0.0
+    assert values[("nfib_sbo_job_openings", "2026-06-30")] == 32.0
+    assert values[("nfib_sbo_credit_conditions_expectations", "2026-05-31")] == -3.0
+    assert values[("nfib_sbo_credit_conditions_expectations", "2026-06-30")] == -5.0
+    assert values[("nfib_sbo_earnings_trends", "2026-06-30")] == -20.0
+
+
+def test_parse_sbet_report_text_uses_section_headings_not_grid_order():
+    unrelated_grid = """UNRELATED MONTHLY TABLE
+Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec
+2021 1 1 1 1 1 1 1 1 1 1 1 1
+2022 1 1 1 1 1 1 1 1 1 1 1 1
+2023 1 1 1 1 1 1 1 1 1 1 1 1
+2024 1 1 1 1 1 1 1 1 1 1 1 1
+2025 1 1 1 1 1 1 1 1 1 1 1 1
+2026 1 1 1 1 1 1
+"""
+    text = FIXTURE_TEXT.replace("OVERVIEW – SMALL BUSINESS OPTIMISM", unrelated_grid + "OVERVIEW – SMALL BUSINESS OPTIMISM", 1)
+
+    payload = nfib_sbet.parse_sbet_report_text(
+        text, SOURCE_URL, RELEASE_DATE, SOURCE_ID
+    )
+    values = {
+        (row["series_id"], row["date"]): row["value"] for row in payload["observations"]
+    }
+
+    assert values[("nfib_sbo_optimism", "2026-06-30")] == 97.4
+    assert values[("nfib_sbo_employment_plans", "2026-06-30")] == 11.0
+    assert values[("nfib_sbo_earnings_trends", "2026-06-30")] == -20.0
+
+
+def test_parse_sbet_report_text_rejects_conflicting_cover_and_historical_values():
+    conflicting_text = FIXTURE_TEXT.replace(
+        "Plans to Increase Employment (net)   11%",
+        "Plans to Increase Employment (net)   12%",
+        1,
+    )
+
+    with pytest.raises(ValueError, match="nfib report has conflicting values"):
+        nfib_sbet.parse_sbet_report_text(
+            conflicting_text, SOURCE_URL, RELEASE_DATE, SOURCE_ID
+        )
+
+
+def test_parse_sbet_report_text_rejects_missing_historical_month():
+    missing_month_text = FIXTURE_TEXT.replace(
+        "2021 95.0 95.8 98.2 99.8 99.6 102.5 99.7 100.1 99.1 98.2 98.4 98.9 ",
+        "2021 95.0 95.8 98.2 99.8 99.6 102.5 99.7 100.1 99.1 98.2 98.4",
+        1,
+    )
+
+    with pytest.raises(ValueError, match="nfib report is missing historical months"):
+        nfib_sbet.parse_sbet_report_text(
+            missing_month_text, SOURCE_URL, RELEASE_DATE, SOURCE_ID
+        )
 
 
 @pytest.mark.parametrize("text", ["", "June 2026\nPlans to Increase Employment 11"])
