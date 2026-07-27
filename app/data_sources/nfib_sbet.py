@@ -255,6 +255,7 @@ def _parse_historical_sections(text, provenance):
     SKIP_TEXTS = [
         "SMALL BUSINESS COMPENSATION",
         "CURRENT INVENTORY",
+        "ACTUAL SALES CHANGES",
     ]
 
     def _pop_nearest(line_i, max_dist=25):
