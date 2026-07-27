@@ -4,7 +4,9 @@ from app.data_sources import nfib_sbet
 from app.db import macro_indicators
 
 
-DEFAULT_NFIB_SOURCE_URL = "https://www.nfib.com/sbet/june-2026"
+DEFAULT_NFIB_SOURCE_URL = (
+    "https://www.nfib.com/wp-content/uploads/2026/07/NFIB-June-2026-SBET-Report.pdf"
+)
 DEFAULT_CACHE_DIR = (
     Path(__file__).resolve().parents[2] / "data" / "local_system" / "nfib_cache"
 )

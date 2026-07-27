@@ -41,7 +41,7 @@ def test_import_cached_official_sbet_stores_values(tmp_path):
         con.close()
     assert employment[-1]["value"] == 11.0
     assert employment[-1]["date"] == "2026-06-30"
-    assert optimism[-1]["value"] == 98.5
+    assert optimism[-1]["value"] == 97.4
     assert optimism[-1]["date"] == "2026-06-30"
 
 

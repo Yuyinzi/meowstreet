@@ -133,16 +133,20 @@ def _survey_growth_direction(survey_synthesis):
     return survey_synthesis.get("expected_gdp_direction")
 
 
-def _cross_check_status(nfib_trend, survey_direction, survey_synthesis):
+def _cross_check_status(
+    nfib_trend, survey_direction, survey_synthesis, one_month_change, change_4m
+):
     if nfib_trend in ("unavailable", "awaiting_confirmation"):
         return "awaiting_confirmation"
 
     if not survey_synthesis or not survey_direction:
-        if nfib_trend == "improving":
-            return "supports_growth_path"
-        if nfib_trend == "weakening":
-            return "challenges_growth_path"
-        return "unavailable"
+        return "awaiting_confirmation"
+
+    if change_4m is not None and one_month_change is not None:
+        if (change_4m > 0 and one_month_change < 0) or (
+            change_4m < 0 and one_month_change > 0
+        ):
+            return "awaiting_confirmation"
 
     supports = {
         "improving": {"rising", "rebound_risk"},
@@ -201,7 +205,13 @@ def build_nfib_sbo_signal(observations_by_series, survey_synthesis, as_of_date):
     )
     trend = _trend_direction(latest_4m_change)
     survey_direction = _survey_growth_direction(survey_synthesis)
-    status = _cross_check_status(trend, survey_direction, survey_synthesis)
+    status = _cross_check_status(
+        trend,
+        survey_direction,
+        survey_synthesis,
+        current_one_month_change,
+        latest_4m_change,
+    )
 
     if is_stale:
         status = "unavailable"

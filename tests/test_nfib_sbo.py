@@ -174,11 +174,11 @@ def test_build_nfib_sbo_signal_less_than_5_months():
     assert result["status"] == "awaiting_confirmation"
 
 
-def test_build_nfib_sbo_signal_no_survey():
+def test_build_nfib_sbo_signal_no_survey_is_awaiting():
     result = nfib_sbo.build_nfib_sbo_signal(
         _observations_by_series(), None, "2026-07-27"
     )
-    assert result["status"] == "supports_growth_path"
+    assert result["status"] == "awaiting_confirmation"
 
 
 def test_build_nfib_sbo_signal_is_deterministic():

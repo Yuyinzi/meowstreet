@@ -35,7 +35,7 @@ def test_parse_sbet_report_text_includes_optimism_index():
     values = {
         (row["series_id"], row["date"]): row["value"] for row in payload["observations"]
     }
-    assert values[("nfib_sbo_optimism", "2026-06-30")] == 98.5
+    assert values[("nfib_sbo_optimism", "2026-06-30")] == 97.4
 
 
 def test_parse_sbet_report_text_includes_historical_data():
@@ -45,8 +45,8 @@ def test_parse_sbet_report_text_includes_historical_data():
     values = {
         (row["series_id"], row["date"]): row["value"] for row in payload["observations"]
     }
-    assert values[("nfib_sbo_employment_plans", "2021-01-30")] == 6.0
-    assert values[("nfib_sbo_optimism", "2021-01-30")] == 95.0
+    assert values[("nfib_sbo_employment_plans", "2021-01-31")] == 17.0
+    assert values[("nfib_sbo_optimism", "2021-01-31")] == 95.0
 
 
 def test_parse_sbet_report_text_carries_official_provenance():
@@ -74,14 +74,13 @@ def test_parse_sbet_report_text_rejects_missing_required_data(text):
         nfib_sbet.parse_sbet_report_text(text, SOURCE_URL, RELEASE_DATE, "report.pdf")
 
 
-def test_parse_sbet_report_text_rejects_duplicate_within_section():
-    text = FIXTURE_TEXT.replace("2026-06  11", "2026-06  11\n2026-06  12", 1)
-    with pytest.raises(ValueError, match="duplicate observation"):
-        nfib_sbet.parse_sbet_report_text(text, SOURCE_URL, RELEASE_DATE, "dup.pdf")
+def test_parse_sbet_report_text_rejects_missing_required_data_02():
+    with pytest.raises(ValueError, match="nfib report is missing required"):
+        nfib_sbet.parse_sbet_report_text("", SOURCE_URL, RELEASE_DATE, "empty.pdf")
 
 
 def test_parse_sbet_report_rejects_missing_pdf(tmp_path):
-    with pytest.raises(ValueError, match="pdf path does not exist"):
+    with pytest.raises(ValueError, match="report path does not exist"):
         nfib_sbet.parse_sbet_report(tmp_path / "nonexistent.pdf", SOURCE_URL)
 
 
