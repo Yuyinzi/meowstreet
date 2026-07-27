@@ -90,9 +90,11 @@
         title = "ISM Manufacturing";
       } else if (state.selectedGrowthCycleDetailId === "ism_services") {
         title = "ISM Services";
-      } else if (state.selectedGrowthCycleDetailId === "housing_permits") {
+    } else if (state.selectedGrowthCycleDetailId === "housing_permits") {
         title = "Building Permits";
-      } else {
+    } else if (state.selectedGrowthCycleDetailId === "nfib_sbo") {
+        title = "NFIB Small Business";
+    } else {
         title = "M2 Money Supply";
       }
     }
@@ -1821,6 +1823,7 @@
     m2_money_supply: "evidence-m2-money-supply",
     consumer_sentiment: "consumerSentiment",
     housing_permits: "evidence-housing-permits",
+    nfib_sbo: "evidence-nfib-sbo",
   });
 
   function evidenceTargetId(link) {
@@ -2968,6 +2971,25 @@ html += '</div>';
           });
           return;
         }
+        if (payload.detail_id === "nfib_sbo" && window.nfibSboUi && window.nfibSboUi.renderDetail) {
+          window.nfibSboUi.renderDetail(body, payload, {
+            escapeHtml: escapeHtml,
+            bilingualLabel: bilingualLabel,
+            bilingualTitle: bilingualTitle,
+            titleCaseToken: titleCaseToken,
+            fmtNumber: fmtNumber,
+            fmtSignedPctDecimal: fmtSignedPctDecimal,
+            fmtMonthYear: fmtMonthYear,
+            statusClass: ismBadgeClass,
+            renderGrowthCycleRangeControl: renderGrowthCycleRangeControl,
+            filterChartForRange: filterChartForRange,
+            renderRatesDetailChart: renderRatesDetailChart,
+            getSelectedChartRange: function () { return state.selectedGrowthCycleChartRange; },
+            bindGrowthCycleRangeControl: bindGrowthCycleRangeControl,
+            attachRatesChartTooltips: attachRatesChartTooltips,
+          });
+          return;
+        }
         const filteredCharts = payload.charts.map((chart) => (
           filterChartForRange(chart, state.selectedGrowthCycleChartRange)
         ));
@@ -3006,6 +3028,23 @@ html += '</div>';
       window.ismServicesUi.renderDetail(body, payload, { renderServicesDetail: renderServicesDetailInPanel });
     } else if (payload.detail_id === "housing_permits" && window.housingPermitsUi && window.housingPermitsUi.renderDetail) {
       window.housingPermitsUi.renderDetail(body, payload, {
+        escapeHtml: escapeHtml,
+        bilingualLabel: bilingualLabel,
+        bilingualTitle: bilingualTitle,
+        titleCaseToken: titleCaseToken,
+        fmtNumber: fmtNumber,
+        fmtSignedPctDecimal: fmtSignedPctDecimal,
+        fmtMonthYear: fmtMonthYear,
+        statusClass: ismBadgeClass,
+        renderGrowthCycleRangeControl: renderGrowthCycleRangeControl,
+        filterChartForRange: filterChartForRange,
+        renderRatesDetailChart: renderRatesDetailChart,
+        getSelectedChartRange: function () { return state.selectedGrowthCycleChartRange; },
+        bindGrowthCycleRangeControl: bindGrowthCycleRangeControl,
+        attachRatesChartTooltips: attachRatesChartTooltips,
+      });
+    } else if (payload.detail_id === "nfib_sbo" && window.nfibSboUi && window.nfibSboUi.renderDetail) {
+      window.nfibSboUi.renderDetail(body, payload, {
         escapeHtml: escapeHtml,
         bilingualLabel: bilingualLabel,
         bilingualTitle: bilingualTitle,
@@ -4119,6 +4158,25 @@ html += '</div>';
     return "";
   }
 
+  function renderNfibSboCard(card) {
+    if (window.nfibSboUi && window.nfibSboUi.renderCard) {
+      return window.nfibSboUi.renderCard(card, {
+        escapeHtml: escapeHtml,
+        bilingualLabel: bilingualLabel,
+        bilingualTitle: bilingualTitle,
+        titleCaseToken: titleCaseToken,
+        fmtNumber: fmtNumber,
+        fmtSignedPctDecimal: fmtSignedPctDecimal,
+        fmtMonthYear: fmtMonthYear,
+        statusClass: ismBadgeClass,
+        isSelectedGrowthCycleDetailId: function (id) {
+          return state.selectedGrowthCycleDetailId === id;
+        },
+      });
+    }
+    return "";
+  }
+
   function renderFedBalanceSheetCard(card) {
     return `
       <div class="m2-card fed-balance-sheet-card">
@@ -4268,6 +4326,7 @@ html += '</div>';
     if (card.id === "survey_synthesis") return renderSurveySynthesisCard(card);
     if (card.id === "fed_balance_sheet") return renderFedBalanceSheetCard(card);
     if (card.id === "housing_permits") return renderHousingPermitsCard(card);
+    if (card.id === "nfib_sbo") return renderNfibSboCard(card);
     return "";
   }
 

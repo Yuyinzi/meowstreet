@@ -4878,3 +4878,104 @@ h2 {
     padding: 0;
   }
 }
+
+.nfib-sbo-detail {
+  padding: 16px;
+}
+
+.nfib-sbo-signal {
+  border-left: 3px solid #E8E0D6;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+}
+
+.nfib-sbo-signal.supportive {
+  border-left-color: #2E7D32;
+}
+
+.nfib-sbo-signal.warning {
+  border-left-color: #C62828;
+}
+
+.nfib-sbo-signal.mixed {
+  border-left-color: #F9A825;
+}
+
+.nfib-sbo-signal.missing {
+  border-left-color: #BDBDBD;
+}
+
+.nfib-sbo-signal h3 {
+  font-size: 0.8rem;
+  color: #8B7E74;
+  margin: 0 0 8px 0;
+}
+
+.nfib-sbo-signal-metrics {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.nfib-sbo-signal-metrics div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nfib-sbo-signal-metrics div span {
+  font-size: 0.7rem;
+  color: #8B7E74;
+}
+
+.nfib-sbo-signal-metrics div strong {
+  font-size: 1.1rem;
+  color: #3B3530;
+}
+
+.nfib-sbo-components,
+.nfib-sbo-optimism {
+  margin-bottom: 16px;
+}
+
+.nfib-sbo-components h3,
+.nfib-sbo-optimism h3 {
+  font-size: 0.8rem;
+  color: #8B7E74;
+  margin: 0 0 8px 0;
+}
+
+.nfib-sbo-component-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.nfib-sbo-component-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: #F5F0EB;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.nfib-sbo-component-row span {
+  color: #8B7E74;
+}
+
+.nfib-sbo-component-row strong {
+  color: #3B3530;
+}
+
+.nfib-sbo-version {
+  font-size: 0.75rem;
+  color: #BDBDBD;
+  margin-top: 16px;
+}
+
+@media (max-width: 768px) {
+  .nfib-sbo-component-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -276,6 +276,13 @@ def housing_permits_ui_js():
     )
 
 
+@app.get("/nfib-sbo-ui.js")
+def nfib_sbo_ui_js():
+    return FileResponse(
+        STATIC_DIR / "nfib-sbo-ui.js", media_type="application/javascript"
+    )
+
+
 @app.get("/api/macro-dashboard/consumer-sentiment")
 def macro_dashboard_consumer_sentiment():
     con = consumer_sentiment.connect()
