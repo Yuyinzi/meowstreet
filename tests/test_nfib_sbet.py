@@ -49,6 +49,21 @@ def test_parse_sbet_report_text_includes_historical_data():
     assert values[("nfib_sbo_optimism", "2021-01-31")] == 95.0
 
 
+def test_parse_sbet_report_text_does_not_mix_actual_sales_changes():
+    payload = nfib_sbet.parse_sbet_report_text(
+        FIXTURE_TEXT, SOURCE_URL, RELEASE_DATE, SOURCE_ID
+    )
+    values = {
+        (row["series_id"], row["date"]): row["value"] for row in payload["observations"]
+    }
+    assert values[("nfib_sbo_real_sales_expectations", "2026-01-31")] == 16.0
+    assert values[("nfib_sbo_real_sales_expectations", "2026-02-28")] == 8.0
+    assert values[("nfib_sbo_real_sales_expectations", "2026-03-31")] == 7.0
+    assert values[("nfib_sbo_real_sales_expectations", "2026-04-30")] == 3.0
+    assert values[("nfib_sbo_real_sales_expectations", "2026-05-31")] == 1.0
+    assert values[("nfib_sbo_real_sales_expectations", "2026-06-30")] == 9.0
+
+
 def test_parse_sbet_report_text_carries_official_provenance():
     payload = nfib_sbet.parse_sbet_report_text(
         FIXTURE_TEXT, SOURCE_URL, RELEASE_DATE, SOURCE_ID
