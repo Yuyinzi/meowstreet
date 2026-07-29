@@ -493,6 +493,38 @@ def test_fetch_document_type_records_failure_on_invalid_published_statement(
         con.close()
 
 
+NO_URL_EVENT = {
+    "event_id": "fomc_2026_09_15",
+    "event_type": "fomc_meeting",
+    "start_date": "2026-09-15",
+    "end_date": "2026-09-16",
+    "display_month": "2026-09-01",
+    "title": "FOMC Meeting",
+    "source": "Federal Reserve",
+    "policy_tone": "unknown",
+    "has_sep": 1,
+}
+
+
+def test_fetch_document_type_records_missing_event_url_as_failure(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(con, "fomc_meeting", [NO_URL_EVENT])
+        result = fetch_fomc_documents.fetch_document_type(
+            con,
+            "statement",
+            fetch=lambda url: "<html>not reached</html>",
+        )
+        assert result == {
+            "document_type": "statement",
+            "fetched": 0,
+            "unavailable": 0,
+            "failed": 1,
+        }
+    finally:
+        con.close()
+
+
 def test_main_returns_1_on_fetch_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(
         fetch_fomc_documents,
