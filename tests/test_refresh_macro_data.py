@@ -273,6 +273,9 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
         fomc_main=fake_task,
+        fomc_document_main=lambda argv: 0,
+        fomc_policy_tone_main=lambda argv: 0,
+        fomc_minutes_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
     )
