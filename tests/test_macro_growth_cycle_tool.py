@@ -2363,3 +2363,40 @@ def test_services_section_falls_back_to_services_labor_without_card():
     payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
     sections = {s["id"]: s for s in payload["sections"]}
     assert sections["services_labor"]["status"] == "pending_inputs"
+
+
+def test_cyclical_commodities_card_appears_in_headline_when_passed():
+    payload = {
+        "cot_rows": [
+            {
+                "commodity_id": "crude_oil_wti",
+                "report_date": "2026-07-21",
+                "manager_longs": 200000.0,
+                "manager_shorts": 150000.0,
+                "open_interest": 1000000.0,
+            }
+        ],
+        "usd_observations_by_series": {},
+        "as_of_date": "2026-07-25",
+    }
+    dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+        m2_money_stock={
+            "series": [
+                {"date": "2025-06-01", "value": 100},
+                {"date": "2026-06-01", "value": 112},
+            ]
+        },
+        cyclical_commodities=payload,
+    )
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+    card_ids = [card["id"] for card in payload["headline"] if card.get("id")]
+
+    assert "cyclical_commodities" in card_ids
+
+
+def test_cyclical_commodities_card_not_in_headline_when_omitted():
+    dashboard = macro_growth_cycle.build_growth_cycle_dashboard()
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+    card_ids = [card["id"] for card in payload["headline"] if card.get("id")]
+
+    assert "cyclical_commodities" not in card_ids

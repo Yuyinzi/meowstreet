@@ -21,6 +21,7 @@ def test_main_refreshes_official_building_permits_when_enabled():
         building_permits_main=permits_main,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -72,6 +73,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         fomc_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -110,6 +112,7 @@ def test_main_does_not_generate_ai_interpretations():
         fomc_main=recorder("fomc"),
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -145,6 +148,7 @@ def test_main_continues_after_provider_failure(capsys):
         gdp_main=ok_task("gdp"),
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -189,6 +193,7 @@ def test_main_can_stop_after_first_failure():
         gdp_main=ok_task("gdp"),
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -210,6 +215,7 @@ def test_main_records_exceptions_as_failures(capsys):
         gdp_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -240,6 +246,7 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
         fomc_main=fake_task,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -275,6 +282,7 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
         fomc_main=fake_task,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -302,6 +310,7 @@ def test_main_skip_flags_remove_tasks():
         gdp_main=recorder("gdp"),
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -338,6 +347,7 @@ def test_main_runs_both_ism_surveys_in_order():
         ism_reports_main=recorder("ism_reports"),
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert result == 0
@@ -373,6 +383,7 @@ def test_planned_tasks_includes_nfib_import_by_default():
         building_permits_main=lambda argv: 0,
         nfib_main=record("nfib"),
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert any(call[0] == "nfib" for call in calls)
@@ -396,6 +407,7 @@ def test_skip_nfib_sbo_removes_nfib_task():
             AssertionError("should not be called")
         ),
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
 
@@ -423,9 +435,62 @@ def test_planned_tasks_includes_nfib_regional_import_by_default():
         building_permits_main=lambda argv: 0,
         nfib_main=record("nfib"),
         nfib_regional_main=record("nfib_regional"),
+        main=lambda argv: 0,
     )
 
     assert any(call[0] == "nfib_regional" for call in calls)
+
+
+def test_planned_tasks_includes_unless_skipped():
+    calls = []
+
+    def record(label):
+        def run(argv):
+            calls.append((label, argv))
+            return 0
+
+        return run
+
+    refresh_macro_data.main(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-consumer-sentiment",
+            "--skip-m2",
+            "--skip-ism",
+            "--skip-gdp",
+            "--skip-fomc",
+        ],
+        consumer_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
+        nfib_main=lambda argv: 0,
+        nfib_regional_main=lambda argv: 0,
+        main=record(""),
+    )
+
+    assert any(call[0] == "" for call in calls)
+
+
+def test_skip_cyclical_commodities_removes_task():
+    refresh_macro_data.main(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-consumer-sentiment",
+            "--skip-m2",
+            "--skip-ism",
+            "--skip-gdp",
+            "--skip-fomc",
+            "--skip-cyclical-commodities",
+        ],
+        consumer_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
+        nfib_main=lambda argv: 0,
+        nfib_regional_main=lambda argv: 0,
+        main=lambda argv: (_ for _ in ()).throw(
+            AssertionError("should not be called")
+        ),
+    )
 
 
 def test_skip_nfib_sbo_regional_removes_nfib_regional_task():
@@ -446,6 +511,7 @@ def test_skip_nfib_sbo_regional_removes_nfib_regional_task():
         nfib_regional_main=lambda argv: (_ for _ in ()).throw(
             AssertionError("should not be called")
         ),
+        main=lambda argv: 0,
     )
 
 
@@ -473,6 +539,7 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         fomc_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
     )
 
     assert exit_code == 0

@@ -6492,3 +6492,18 @@ def test_nfib_sbo_renders_context_components_in_detail():
         "contextUsesLeadingRows": True,
         "optimismUsesSectionSpacing": True,
     }
+
+
+def test_macro_dashboard_loads_and_dispatches_renderer():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+
+    assert "/cyclical-commodities-ui.js" in html
+    assert 'card.id === "cyclical_commodities"' in js
+
+
+def test_renderer_has_no_client_side_position_or_return_formula():
+    js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "manager_longs -" not in js
+    assert "weekly_return =" not in js
