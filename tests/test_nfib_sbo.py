@@ -332,6 +332,21 @@ def test_build_nfib_sbo_detail_payload_includes_context_components():
         assert detail["context_components"][sid]["title"] is not None
 
 
+def test_context_component_changes_do_not_change_nfib_leading_signal():
+    observations = _observations_by_series()
+    baseline = nfib_sbo.build_nfib_sbo_signal(
+        observations, _survey_synthesis(), "2026-07-29"
+    )
+    observations["nfib_sbo_job_openings"][-1]["value"] = -99.0
+    observations["nfib_sbo_earnings_trends"][-1]["value"] = 99.0
+
+    changed_context = nfib_sbo.build_nfib_sbo_signal(
+        observations, _survey_synthesis(), "2026-07-29"
+    )
+
+    assert changed_context == baseline
+
+
 def test_build_nfib_sbo_detail_payload_context_change():
     obs = _observations_by_series(job_openings_obs=(34, 32))
     signal = nfib_sbo.build_nfib_sbo_signal(

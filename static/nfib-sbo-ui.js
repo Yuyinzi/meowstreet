@@ -236,6 +236,106 @@
         html += '</div>';
       }
 
+      if (payload.regional_evidence && payload.regional_evidence.regions && payload.regional_evidence.regions.length) {
+        var regionalHistory = payload.regional_evidence.optimism_history_chart || {};
+        html += '<details class="nfib-sbo-regional-details-panel">';
+        html += '<summary>' + h.bilingualLabel("Regional Evidence") + '</summary>';
+        html += '<p class="nfib-sbo-regional-subtitle">' + h.bilingualLabel("Quarterly raw survey data — not seasonally adjusted") + '</p>';
+        html += '<p class="nfib-sbo-regional-disclaimer">' + h.bilingualLabel("Research context only — does not change the NFIB leading signal") + '</p>';
+        if ((regionalHistory.series || []).length) {
+          html += '<div class="relationship-chart-grid">';
+          html += h.renderRatesDetailChart(regionalHistory, 0);
+          html += '</div>';
+        }
+
+        function regionalComponentComparison(component) {
+          if (!component) return '';
+          var comparisons = [];
+          if (component.qoq_change != null) {
+            comparisons.push(h.bilingualLabel("QoQ") + ': ' + (component.qoq_change >= 0 ? '+' : '') + h.escapeHtml(h.fmtNumber(component.qoq_change)));
+          }
+          if (component.national_diff) {
+            comparisons.push(h.bilingualLabel("vs National") + ': ' + (component.national_diff.difference >= 0 ? '+' : '') + h.escapeHtml(h.fmtNumber(component.national_diff.difference)));
+          }
+          return comparisons.length ? '<small class="nfib-sbo-regional-component-comparison">' + comparisons.join(' · ') + '</small>' : '';
+        }
+
+        for (var ri = 0; ri < payload.regional_evidence.regions.length; ri++) {
+          var reg = payload.regional_evidence.regions[ri];
+          html += '<div class="nfib-sbo-regional-card">';
+          html += '<div class="nfib-sbo-regional-card-head">';
+          html += '<strong>' + h.escapeHtml(reg.display_label || reg.id) + '</strong>';
+          if (reg.states) {
+            html += '<small>' + h.escapeHtml(reg.states) + '</small>';
+          }
+          html += '<span class="nfib-sbo-regional-availability nfib-sbo-regional-availability-' + h.escapeHtml(reg.availability) + '">' + h.escapeHtml(reg.availability) + '</span>';
+          html += '</div>';
+
+          if (reg.optimism) {
+            html += '<div class="nfib-sbo-regional-metric"><span>' + h.bilingualLabel("Optimism") + '</span><strong>' + (reg.optimism.latest != null ? h.escapeHtml(h.fmtNumber(reg.optimism.latest)) : '\u2014') + '</strong></div>';
+            if (reg.optimism.qoq_change != null) {
+              html += '<div class="nfib-sbo-regional-metric"><span>' + h.bilingualLabel("QoQ Change") + '</span><strong class="' + (reg.optimism.qoq_change >= 0 ? 'positive' : 'negative') + '">' + (reg.optimism.qoq_change >= 0 ? '+' : '') + h.escapeHtml(h.fmtNumber(reg.optimism.qoq_change)) + '</strong></div>';
+            }
+            if (reg.optimism.national_diff) {
+              html += '<div class="nfib-sbo-regional-metric"><span>' + h.bilingualLabel("vs National") + '</span><strong>' + (reg.optimism.national_diff.difference >= 0 ? '+' : '') + h.escapeHtml(h.fmtNumber(reg.optimism.national_diff.difference)) + '</strong></div>';
+            }
+          }
+
+          if (reg.regional_read) {
+            html += '<div class="nfib-sbo-regional-read">';
+            html += '<h4>' + h.bilingualLabel("Regional Research Read") + '</h4>';
+            html += '<p>' + h.escapeHtml(reg.regional_read.en) + '<br><span lang="zh">' + h.escapeHtml(reg.regional_read.zh) + '</span></p>';
+            html += '</div>';
+          }
+
+          html += '<details class="nfib-sbo-regional-details">';
+          html += '<summary>' + h.bilingualLabel("Leading Components") + '</summary>';
+          html += '<div class="nfib-sbo-regional-component-grid">';
+          var regLeadingMeta = {
+            nfib_sbo_employment_plans: { label: "Employment Plans" },
+            nfib_sbo_expansion_outlook: { label: "Expansion Outlook" },
+            nfib_sbo_inventory_plans: { label: "Inventory Plans" },
+            nfib_sbo_economic_expectations: { label: "Economic Expectations" },
+            nfib_sbo_real_sales_expectations: { label: "Real Sales Expectations" },
+          };
+          for (var rc in regLeadingMeta) {
+            if (regLeadingMeta.hasOwnProperty(rc)) {
+              var comp = reg.leading_components ? reg.leading_components[rc] : null;
+              html += '<div class="nfib-sbo-regional-component-row"><span>' + h.bilingualLabel(regLeadingMeta[rc].label) + '</span><strong>' + (comp && comp.latest != null ? h.escapeHtml(h.fmtNumber(comp.latest)) : '\u2014') + '</strong>' + regionalComponentComparison(comp) + '</div>';
+            }
+          }
+          html += '</div>';
+          html += '</details>';
+
+          html += '<details class="nfib-sbo-regional-details">';
+          html += '<summary>' + h.bilingualLabel("Context Components") + '</summary>';
+          html += '<div class="nfib-sbo-regional-component-grid">';
+          var regContextMeta = {
+            nfib_sbo_capital_outlay_plans: { label: "Capital Expenditure Plans" },
+            nfib_sbo_current_inventory_low: { label: "Current Inventory Too Low" },
+            nfib_sbo_job_openings: { label: "Current Job Openings" },
+            nfib_sbo_credit_conditions_expectations: { label: "Credit Conditions Expectation" },
+            nfib_sbo_earnings_trends: { label: "Earnings Trends" },
+          };
+          for (var rcx in regContextMeta) {
+            if (regContextMeta.hasOwnProperty(rcx)) {
+              var ctxComp = reg.context_components ? reg.context_components[rcx] : null;
+              html += '<div class="nfib-sbo-regional-component-row"><span>' + h.bilingualLabel(regContextMeta[rcx].label) + '</span><strong>' + (ctxComp && ctxComp.latest != null ? h.escapeHtml(h.fmtNumber(ctxComp.latest)) : '\u2014') + '</strong>' + regionalComponentComparison(ctxComp) + '</div>';
+            }
+          }
+          html += '</div>';
+          html += '</details>';
+
+          if (reg.research_next_action) {
+            html += '<p class="nfib-sbo-regional-action"><small>' + h.escapeHtml(reg.research_next_action) + '</small></p>';
+          }
+
+          html += '</div>';
+        }
+
+        html += '</details>';
+      }
+
       if (payload.signal_version) {
         html += '<p class="nfib-sbo-version">' + h.bilingualLabel("Signal Version") + ': ' + h.escapeHtml(payload.signal_version) + '</p>';
       }

@@ -755,7 +755,28 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 survey_synthesis,
                 date.today().isoformat(),
             )
-            return nfib_sbo.build_nfib_sbo_detail_payload(nfib_sbo_observations, signal)
+            detail = nfib_sbo.build_nfib_sbo_detail_payload(
+                nfib_sbo_observations, signal
+            )
+            regional_rows = macro_indicators_db.load_all_nfib_regional_observations(con)
+            regional_by_region = {}
+            national_quarterly_by_series = {}
+            for row in regional_rows or []:
+                rid = row["region_id"]
+                iid = row["indicator_id"]
+                if rid == "national":
+                    national_quarterly_by_series.setdefault(iid, []).append(row)
+                else:
+                    regional_by_region.setdefault(rid, {}).setdefault(iid, []).append(
+                        row
+                    )
+            regional_evidence = nfib_sbo.build_nfib_sbo_regional_payload(
+                regional_by_region,
+                nfib_sbo_observations,
+                national_quarterly_observations=national_quarterly_by_series,
+            )
+            detail["regional_evidence"] = regional_evidence
+            return detail
         if detail_id == "ism_services":
             return ism_services_dashboard.load_detail(con)
         if detail_id == "ism_manufacturing":

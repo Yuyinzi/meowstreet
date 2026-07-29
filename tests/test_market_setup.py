@@ -1389,9 +1389,36 @@ def test_nfib_unavailable_adds_pending_confirmation():
             "reason": "no nfib data",
         },
     )
-    assert "NFIB Small Business" in result["pending_confirmations"]
+    assert any("NFIB Small Business" in p for p in result["pending_confirmations"])
+    assert "no nfib data" in str(result["pending_confirmations"])
 
 
 def test_missing_nfib_adds_pending_confirmation():
     result = market_setup.build_market_setup()
-    assert "NFIB Small Business" in result["pending_confirmations"]
+    assert any("NFIB Small Business" in p for p in result["pending_confirmations"])
+
+
+def test_nfib_support_adds_expected_growth_evidence_link():
+    result = market_setup.build_market_setup(
+        nfib_sbo_signal={
+            "status": "supports_growth_path",
+            "reason": "nfib evidence supports the rising growth path",
+        }
+    )
+
+    assert "nfib_sbo" in result["expected_growth"]["evidence_links"]
+    assert "nfib evidence supports the rising growth path" in result["agreements"]
+
+
+def test_nfib_pending_preserves_the_actual_reason():
+    result = market_setup.build_market_setup(
+        nfib_sbo_signal={
+            "status": "awaiting_confirmation",
+            "reason": "nfib evidence is awaiting confirmation",
+        }
+    )
+
+    assert (
+        "NFIB Small Business — nfib evidence is awaiting confirmation"
+        in result["pending_confirmations"]
+    )

@@ -5050,6 +5050,186 @@ h2 {
   min-width: 2.5em;
 }
 
+.nfib-sbo-regional {
+  margin-top: 24px;
+  border-top: 1px solid #E8E0D6;
+  padding-top: 16px;
+}
+
+.nfib-sbo-regional h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.nfib-sbo-regional-subtitle {
+  font-size: 12px;
+  color: #8B7E74;
+  margin: 0 0 4px;
+}
+
+.nfib-sbo-regional-disclaimer {
+  font-size: 11px;
+  color: #A89B91;
+  font-style: italic;
+  margin: 0 0 12px;
+}
+
+.nfib-sbo-regional-card {
+  border: 1px solid #E8E0D6;
+  border-radius: 8px;
+  background: #FDFAF7;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.nfib-sbo-regional-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.nfib-sbo-regional-card-head strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nfib-sbo-regional-card-head small {
+  font-size: 11px;
+  color: #8B7E74;
+}
+
+.nfib-sbo-regional-availability {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.nfib-sbo-regional-availability-available {
+  background: #EEF9F3;
+  color: #2F9E74;
+}
+
+.nfib-sbo-regional-availability-suppressed {
+  background: #FDF2EE;
+  color: #B85C38;
+}
+
+.nfib-sbo-regional-availability-unavailable {
+  background: #F4F1EE;
+  color: #8B7E74;
+}
+
+.nfib-sbo-regional-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.nfib-sbo-regional-metric span {
+  color: #8B7E74;
+  font-size: 12px;
+}
+
+.nfib-sbo-regional-metric strong {
+  font-weight: 600;
+}
+
+.nfib-sbo-regional-metric strong.positive {
+  color: #2F9E74;
+}
+
+.nfib-sbo-regional-metric strong.negative {
+  color: #C0665A;
+}
+
+.nfib-sbo-regional-details {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.nfib-sbo-regional-details summary {
+  cursor: pointer;
+  color: #5D7FA8;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.nfib-sbo-regional-component-grid {
+  display: grid;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.nfib-sbo-regional-component-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+  font-size: 12px;
+}
+
+.nfib-sbo-regional-component-row span {
+  color: #8B7E74;
+}
+
+.nfib-sbo-regional-component-row strong {
+  font-weight: 600;
+}
+
+.nfib-sbo-regional-read {
+  border-top: 1px solid #E5DED7;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.nfib-sbo-regional-read h4 {
+  margin: 0 0 5px;
+}
+
+.nfib-sbo-regional-read p,
+.nfib-sbo-regional-component-comparison {
+  color: #8B7E74;
+  font-size: 12px;
+}
+
+.nfib-sbo-regional-read p {
+  margin: 0;
+}
+
+.nfib-sbo-regional-component-comparison {
+  display: block;
+}
+
+.nfib-sbo-regional-action {
+  font-size: 11px;
+  color: #8B7E74;
+  margin: 8px 0 0;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.nfib-sbo-regional-details-panel {
+  margin-top: 20px;
+}
+
+.nfib-sbo-regional-details-panel > summary {
+  color: #5D7FA8;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.nfib-sbo-regional-details-panel[open] > summary {
+  margin-bottom: 10px;
+}
+
 @media (max-width: 768px) {
   .nfib-sbo-component-grid {
     grid-template-columns: 1fr;

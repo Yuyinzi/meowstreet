@@ -17,6 +17,24 @@ def test_macro_dashboard_html_links_assets_and_app_root():
     assert 'src="/macro-dashboard.js"' in html
 
 
+def test_nfib_regional_ui_renders_factual_read_and_component_comparisons():
+    js = (ROOT / "static" / "nfib-sbo-ui.js").read_text()
+
+    assert "regional_read" in js
+    assert "Regional Research Read" in js
+    assert "component.qoq_change" in js
+    assert "component.national_diff" in js
+
+
+def test_nfib_regional_evidence_is_default_collapsed_and_renders_history_chart():
+    js = (ROOT / "static" / "nfib-sbo-ui.js").read_text()
+
+    assert '<details class="nfib-sbo-regional-details-panel"' in js
+    assert '<details class="nfib-sbo-regional-details-panel" open' not in js
+    assert "optimism_history_chart" in js
+    assert "Quarterly raw survey data — not seasonally adjusted" in js
+
+
 def test_macro_dashboard_html_embeds_us_rates_credit_section():
     html = (ROOT / "static" / "macro-dashboard.html").read_text()
 

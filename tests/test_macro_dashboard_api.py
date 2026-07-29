@@ -1085,6 +1085,103 @@ def test_growth_cycle_nfib_card_appears_in_headline(monkeypatch):
     assert nfib_card["status"] == "unavailable"
 
 
+def test_growth_cycle_nfib_detail_includes_regional_evidence(monkeypatch):
+    from app import api
+
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {sid: [] for sid in series_ids},
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_all_nfib_regional_observations",
+        lambda con: [
+            {
+                "region_id": "pacific",
+                "indicator_id": "nfib_sbo_optimism",
+                "date": "2026-06-30",
+                "value": 95.0,
+                "availability": "available",
+                "units": "index",
+                "title": "Small Business Optimism Index",
+                "display_label": "Pacific",
+                "api_label": "Pacific",
+                "states": "AK, CA, HI, OR, WA",
+                "source_url": "https://api.nfib-sbet.org/rest/sbetdb/_proc/getTotals2",
+                "procedure_name": "getTotals2",
+            },
+            {
+                "region_id": "pacific",
+                "indicator_id": "nfib_sbo_employment_plans",
+                "date": "2026-06-30",
+                "value": 10.0,
+                "availability": "available",
+                "units": "net_pct",
+                "title": "Plans to Increase Employment",
+                "display_label": "Pacific",
+                "api_label": "Pacific",
+                "states": "AK, CA, HI, OR, WA",
+                "source_url": "https://api.nfib-sbet.org/rest/sbetdb/_proc/getTotals2",
+                "procedure_name": "getTotals2",
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db, "connect", lambda: type("C", (_FakeConStubs,), {})()
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda *a: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda *a: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+
+    response = TestClient(api.app).get("/api/macro-dashboard/growth-cycle/nfib_sbo")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["detail_id"] == "nfib_sbo"
+    assert "regional_evidence" in payload
+    assert payload["regional_evidence"]["regions"][0]["id"] == "pacific"
+
+
 def test_growth_cycle_nfib_detail_returns_200(monkeypatch):
     from app import api
 
@@ -3128,6 +3225,22 @@ def test_growth_cycle_endpoint_returns_housing_card_with_visible_unavailable_sta
     )
     assert card["status"] == "unavailable"
     assert card["reason"]
+
+
+def test_market_setup_does_not_load_regional_nfib_evidence(monkeypatch):
+    from app import api
+
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_all_nfib_regional_observations",
+        lambda con: (_ for _ in ()).throw(
+            AssertionError("P2 must not reach Market Setup")
+        ),
+    )
+
+    response = TestClient(api.app).get("/api/macro-dashboard/market-setup")
+
+    assert response.status_code == 200
 
 
 def test_housing_detail_endpoint_returns_level_and_smoothed_yoy_charts(monkeypatch):

@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from pathlib import Path
 
@@ -35,9 +36,45 @@ create table if not exists macro_indicator_observation_metadata (
 );
 """
 
+_REGIONAL_TABLES_DDL = """
+create table if not exists macro_indicator_regional_series (
+    region_id text not null,
+    indicator_id text not null,
+    title text not null,
+    units text not null,
+    api_label text not null,
+    display_label text not null,
+    states text not null,
+    frequency text not null default 'quarterly_3_month_aggregate',
+    primary key(region_id, indicator_id)
+);
+create table if not exists macro_indicator_regional_observations (
+    region_id text not null,
+    indicator_id text not null,
+    date text not null,
+    value real,
+    availability text not null default 'available',
+    primary key(region_id, indicator_id, date),
+    foreign key(region_id, indicator_id) references macro_indicator_regional_series(region_id, indicator_id)
+);
+create table if not exists macro_indicator_regional_observation_metadata (
+    region_id text not null,
+    indicator_id text not null,
+    date text not null,
+    procedure_name text not null,
+    request_params text,
+    retrieval_time text,
+    source_url text,
+    response_hash text,
+    primary key(region_id, indicator_id, date),
+    foreign key(region_id, indicator_id, date) references macro_indicator_regional_observations(region_id, indicator_id, date)
+);
+"""
+
 
 def init_macro_tables(con):
     con.executescript(_MACRO_TABLES_DDL)
+    con.executescript(_REGIONAL_TABLES_DDL)
     try:
         con.execute(
             "alter table macro_indicator_observation_metadata add column source_hash text"
@@ -340,3 +377,129 @@ def merge_macro_indicator_observations_batch(con, observations):
     except Exception:
         con.rollback()
         raise
+
+
+def _region_id(value):
+    if not value or not str(value).strip():
+        raise ValueError("region id is required")
+    return str(value).strip().lower()
+
+
+def _indicator_id(value):
+    if not value or not str(value).strip():
+        raise ValueError("indicator id is required")
+    return str(value).strip().lower()
+
+
+def _json_val(val):
+    if val is None:
+        return None
+    if isinstance(val, (dict, list, tuple)):
+        return json.dumps(val, default=str)
+    return val
+
+
+def merge_nfib_regional_observations_batch(con, observations):
+    try:
+        seen = set()
+        for obs in observations:
+            rid = _region_id(obs["region_id"])
+            iid = _indicator_id(obs["indicator_id"])
+            key = (rid, iid, obs["date"])
+            if key in seen:
+                continue
+            seen.add(key)
+
+            con.execute(
+                """insert or ignore into macro_indicator_regional_series(
+                    region_id, indicator_id, title, units, api_label, display_label, states, frequency
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    rid,
+                    iid,
+                    obs.get("title", ""),
+                    obs.get("units", ""),
+                    obs.get("api_label", ""),
+                    obs.get("display_label", ""),
+                    obs.get("states", ""),
+                    obs.get("frequency", "quarterly_3_month_aggregate"),
+                ),
+            )
+            con.execute(
+                """insert into macro_indicator_regional_observations(
+                    region_id, indicator_id, date, value, availability
+                ) values (?, ?, ?, ?, ?)
+                on conflict(region_id, indicator_id, date) do update set
+                    value = excluded.value,
+                    availability = excluded.availability""",
+                (
+                    rid,
+                    iid,
+                    obs["date"],
+                    obs.get("value"),
+                    obs.get("availability", "available"),
+                ),
+            )
+            con.execute(
+                """insert into macro_indicator_regional_observation_metadata(
+                    region_id, indicator_id, date, procedure_name, request_params, retrieval_time, source_url, response_hash
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(region_id, indicator_id, date) do update set
+                    procedure_name = excluded.procedure_name,
+                    request_params = excluded.request_params,
+                    retrieval_time = excluded.retrieval_time,
+                    source_url = excluded.source_url,
+                    response_hash = excluded.response_hash""",
+                (
+                    rid,
+                    iid,
+                    obs["date"],
+                    obs.get("procedure_name", "getTotals2"),
+                    _json_val(obs.get("request_params")),
+                    obs.get("retrieval_time"),
+                    obs.get("source_url", ""),
+                    _json_val(obs.get("response_hash")),
+                ),
+            )
+        con.commit()
+        return len(seen)
+    except Exception:
+        con.rollback()
+        raise
+
+
+_REGIONAL_OBS_COLS = """
+    o.region_id, o.indicator_id, o.date, o.value, o.availability,
+    s.title, s.units, s.api_label, s.display_label, s.states, s.frequency,
+    m.procedure_name, m.request_params, m.retrieval_time, m.source_url, m.response_hash
+"""
+
+
+def load_nfib_regional_observations(con, region_id, indicator_id):
+    rid = _region_id(region_id)
+    iid = _indicator_id(indicator_id)
+    rows = con.execute(
+        f"""select {_REGIONAL_OBS_COLS}
+           from macro_indicator_regional_observations o
+           left join macro_indicator_regional_series s
+               on o.region_id = s.region_id and o.indicator_id = s.indicator_id
+           left join macro_indicator_regional_observation_metadata m
+               on o.region_id = m.region_id and o.indicator_id = m.indicator_id and o.date = m.date
+           where o.region_id = ? and o.indicator_id = ?
+           order by o.date""",
+        (rid, iid),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def load_all_nfib_regional_observations(con):
+    rows = con.execute(
+        f"""select {_REGIONAL_OBS_COLS}
+           from macro_indicator_regional_observations o
+           left join macro_indicator_regional_series s
+               on o.region_id = s.region_id and o.indicator_id = s.indicator_id
+           left join macro_indicator_regional_observation_metadata m
+               on o.region_id = m.region_id and o.indicator_id = m.indicator_id and o.date = m.date
+           order by o.region_id, o.indicator_id, o.date"""
+    ).fetchall()
+    return [dict(row) for row in rows]

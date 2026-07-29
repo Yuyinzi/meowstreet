@@ -1262,6 +1262,10 @@
     "More constructive": "更积极",
     "Component Data": "组件数据",
     "Supporting data": "支持数据",
+    "Regional Research Read": "区域研究读数",
+    "Regional Optimism vs National": "区域乐观指数 vs 全国",
+    "Quarterly raw survey data — not seasonally adjusted": "原始季度调查数据 — 未经季节性调整",
+    "QoQ": "季度环比",
   };
 
   function zhLabel(label) {

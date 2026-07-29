@@ -412,3 +412,301 @@ def build_nfib_sbo_detail_payload(observations_by_series, signal):
         "release_date": provenance.get("release_date", ""),
         "source_hash": provenance.get("source_hash", ""),
     }
+
+
+def _regional_latest_by_indicator(by_indicator):
+    latest = {}
+    for indicator_id, obs_list in by_indicator.items():
+        if not obs_list:
+            continue
+        latest_obs = obs_list[-1]
+        prev_obs = obs_list[-2] if len(obs_list) >= 2 else None
+        detail = {
+            "latest": latest_obs["value"],
+            "previous": prev_obs["value"] if prev_obs else None,
+            "period": latest_obs["date"],
+            "availability": latest_obs.get("availability", "available"),
+            "units": latest_obs.get("units", ""),
+            "title": latest_obs.get("title", ""),
+        }
+        if (
+            prev_obs is not None
+            and prev_obs["value"] is not None
+            and latest_obs["value"] is not None
+        ):
+            detail["qoq_change"] = latest_obs["value"] - prev_obs["value"]
+        else:
+            detail["qoq_change"] = None
+        latest[indicator_id] = detail
+    return latest
+
+
+def _find_national_for_period(national_observations, indicator_id, period):
+    obs_list = national_observations.get(indicator_id, [])
+    for obs in obs_list:
+        if obs["date"] == period:
+            return obs.get("value")
+    return None
+
+
+def _find_national_quarterly_for_period(
+    national_quarterly_observations, indicator_id, period
+):
+    if not national_quarterly_observations:
+        return None
+    obs_list = national_quarterly_observations.get(indicator_id, [])
+    for obs in obs_list:
+        if obs["date"] == period:
+            return obs.get("value")
+    return None
+
+
+def _compute_national_diff(
+    regional_detail,
+    national_observations,
+    indicator_id,
+    national_quarterly_observations=None,
+):
+    period = regional_detail.get("period")
+    regional_value = regional_detail.get("latest")
+    if period is None or regional_value is None:
+        return None
+    national_value = _find_national_quarterly_for_period(
+        national_quarterly_observations, indicator_id, period
+    )
+    if national_value is None:
+        return None
+    return {
+        "national_value": national_value,
+        "difference": round(regional_value - national_value, 2),
+    }
+
+
+def _build_regional_research_read(optimism_detail):
+    if not optimism_detail or optimism_detail.get("latest") is None:
+        return None
+
+    english_parts = []
+    chinese_parts = []
+    national_diff = optimism_detail.get("national_diff")
+    if national_diff is not None:
+        difference = national_diff["difference"]
+        relation = "above" if difference > 0 else "below" if difference < 0 else "at"
+        chinese_relation = (
+            "高" if difference > 0 else "低" if difference < 0 else "持平"
+        )
+        if relation == "at":
+            english_parts.append("Optimism is at the national quarterly reading")
+            chinese_parts.append("乐观指数与全国季度读数持平")
+        else:
+            english_parts.append(
+                f"Optimism is {abs(difference):.1f} points {relation} the national quarterly reading"
+            )
+            chinese_parts.append(
+                f"乐观指数较全国季度读数{chinese_relation}{abs(difference):.1f}点"
+            )
+
+    qoq_change = optimism_detail.get("qoq_change")
+    if qoq_change is not None:
+        direction = (
+            "rose" if qoq_change > 0 else "fell" if qoq_change < 0 else "was unchanged"
+        )
+        chinese_direction = (
+            "上升" if qoq_change > 0 else "下降" if qoq_change < 0 else "持平"
+        )
+        if qoq_change == 0:
+            english_parts.append("was unchanged from the prior quarter")
+            chinese_parts.append("较上季度持平")
+        else:
+            point_label = "point" if abs(qoq_change) == 1 else "points"
+            english_parts.append(
+                f"{direction} {abs(qoq_change):.1f} {point_label} from the prior quarter"
+            )
+            chinese_parts.append(f"较上季度{chinese_direction}{abs(qoq_change):.1f}点")
+
+    if not english_parts:
+        return None
+    english = " and ".join(english_parts)
+    if english.startswith("Optimism"):
+        english = f"{english}."
+    else:
+        english = f"Optimism {english}."
+    return {"en": english, "zh": "，".join(chinese_parts) + "。"}
+
+
+def _unavailable_region(region_id):
+    return {
+        "id": region_id,
+        "display_label": region_id.replace("_", " ").title(),
+        "api_label": "",
+        "states": "",
+        "availability": "unavailable",
+        "optimism": None,
+        "leading_components": {},
+        "context_components": {},
+        "provenance": {},
+        "regional_read": None,
+        "research_next_action": "Official regional data was not published or was suppressed. Assess ticker exposure to this region through other sources.",
+    }
+
+
+def _build_regional_optimism_history_chart(
+    regional_observations, national_quarterly_observations
+):
+    region_ids = ["pacific", "west_gulf", "north_atlantic"]
+    values_by_region = {
+        region_id: {
+            obs["date"]: obs["value"]
+            for obs in regional_observations.get(region_id, {}).get(
+                "nfib_sbo_optimism", []
+            )
+            if obs.get("availability", "available") == "available"
+            and obs.get("value") is not None
+        }
+        for region_id in region_ids
+    }
+    values_by_region["national"] = {
+        obs["date"]: obs["value"]
+        for obs in (national_quarterly_observations or {}).get("nfib_sbo_optimism", [])
+        if obs.get("availability", "available") == "available"
+        and obs.get("value") is not None
+    }
+    dates = sorted(
+        {date_key for values in values_by_region.values() for date_key in values}
+    )
+    return {
+        "title": "Regional Optimism vs National",
+        "unit": "raw",
+        "keys": ["pacific", "west_gulf", "north_atlantic", "national"],
+        "labels": {
+            "pacific": "Pacific",
+            "west_gulf": "West Gulf",
+            "north_atlantic": "North Atlantic",
+            "national": "National",
+        },
+        "series": [
+            {
+                "date": date_key,
+                **{
+                    key: values_by_region[key].get(date_key) for key in values_by_region
+                },
+            }
+            for date_key in dates
+        ],
+    }
+
+
+def build_nfib_sbo_regional_payload(
+    regional_observations, national_observations, national_quarterly_observations=None
+):
+    _REGION_ORDER = ["pacific", "west_gulf", "north_atlantic"]
+
+    chart = _build_regional_optimism_history_chart(
+        regional_observations, national_quarterly_observations
+    )
+
+    if not regional_observations:
+        return {
+            "regions": [_unavailable_region(r) for r in _REGION_ORDER],
+            "optimism_history_chart": chart,
+        }
+
+    region_ids = [r for r in _REGION_ORDER if r in regional_observations] + [
+        r for r in sorted(regional_observations.keys()) if r not in _REGION_ORDER
+    ]
+    regions = []
+    for region_id in region_ids:
+        by_indicator = regional_observations[region_id]
+        if not by_indicator:
+            regions.append(_unavailable_region(region_id))
+            continue
+
+        indicator_details = _regional_latest_by_indicator(by_indicator)
+
+        first_obs = next(
+            (obs for obs_list in by_indicator.values() for obs in obs_list if obs), {}
+        )
+        display_label = first_obs.get(
+            "display_label", region_id.replace("_", " ").title()
+        )
+        api_label = first_obs.get("api_label", "")
+        states = first_obs.get("states", "")
+
+        optimism_detail = indicator_details.get("nfib_sbo_optimism")
+        if optimism_detail:
+            optimism_detail["national_diff"] = _compute_national_diff(
+                optimism_detail,
+                national_observations,
+                "nfib_sbo_optimism",
+                national_quarterly_observations,
+            )
+        availability = (
+            optimism_detail["availability"] if optimism_detail else "unavailable"
+        )
+
+        leading_components = {}
+        for cid in _COMPONENT_SERIES:
+            detail = indicator_details.get(cid)
+            if detail:
+                detail["national_diff"] = _compute_national_diff(
+                    detail,
+                    national_observations,
+                    cid,
+                    national_quarterly_observations,
+                )
+            leading_components[cid] = detail
+
+        context_components = {}
+        for cid in _CONTEXT_SERIES:
+            detail = indicator_details.get(cid)
+            if detail:
+                detail["national_diff"] = _compute_national_diff(
+                    detail,
+                    national_observations,
+                    cid,
+                    national_quarterly_observations,
+                )
+            context_components[cid] = detail
+
+        _ALL_SIGNS = (
+            list(_COMPONENT_SERIES) + list(_CONTEXT_SERIES) + ["nfib_sbo_optimism"]
+        )
+        provenance = {}
+        for sid in _ALL_SIGNS:
+            obs_list = by_indicator.get(sid, [])
+            if obs_list and obs_list[-1].get("source_url"):
+                last_obs = obs_list[-1]
+                provenance = {
+                    "source_url": last_obs.get("source_url", ""),
+                    "retrieval_time": last_obs.get("retrieval_time", ""),
+                    "procedure": last_obs.get("procedure_name", "getTotals2"),
+                }
+                break
+
+        has_data = any(
+            indicator_details.get(sid, {}).get("latest") is not None
+            for sid in _ALL_SIGNS
+        )
+
+        if has_data:
+            research_action = "Regional small-business data is available. Check whether the ticker has documented exposure to this region."
+        else:
+            research_action = "Official regional data was not published or was suppressed. Assess ticker exposure to this region through other sources."
+
+        regions.append(
+            {
+                "id": region_id,
+                "display_label": display_label,
+                "api_label": api_label,
+                "states": states,
+                "availability": availability,
+                "optimism": optimism_detail,
+                "leading_components": leading_components,
+                "context_components": context_components,
+                "provenance": provenance,
+                "regional_read": _build_regional_research_read(optimism_detail),
+                "research_next_action": research_action,
+            }
+        )
+
+    return {"regions": regions, "optimism_history_chart": chart}

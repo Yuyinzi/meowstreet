@@ -1370,12 +1370,16 @@ def build_market_setup(
     if nfib_sbo_signal:
         nfib_status = nfib_sbo_signal.get("status")
         nfib_reason = nfib_sbo_signal.get("reason", "")
+        if "nfib_sbo" not in expected_growth.get("evidence_links", []):
+            expected_growth["evidence_links"].append("nfib_sbo")
         if nfib_status == "supports_growth_path":
             all_agreements.append(nfib_reason)
         elif nfib_status == "challenges_growth_path":
             all_conflicts.append(nfib_reason)
         elif nfib_status in ("awaiting_confirmation", "unavailable"):
-            pending_confirmations.append("NFIB Small Business")
+            pending_confirmations.append(
+                f"NFIB Small Business — {nfib_reason or 'awaiting confirmation'}"
+            )
     else:
         pending_confirmations.append("NFIB Small Business")
 
