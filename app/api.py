@@ -24,6 +24,7 @@ from app.tools import (
     market_phase,
     market_setup,
     nfib_sbo,
+    cyclical_commodities as tool,
     us_rates_liquidity,
 )
 
@@ -150,6 +151,15 @@ NFIB_SERIES_IDS = [
     "nfib_sbo_job_openings",
     "nfib_sbo_credit_conditions_expectations",
     "nfib_sbo_earnings_trends",
+]
+
+_OBSERVATION_SERIES_IDS = [
+    "usd_broad",
+    "usd_afe",
+    "usd_eme",
+    "cpi_all_items",
+    "core_cpi",
+    "ppi_all_commodities",
 ]
 
 app = FastAPI(title="Meowstreet")
@@ -407,6 +417,16 @@ def macro_dashboard_growth_cycle():
             else None
         )
         ism_services_data = ism_services_dashboard.load_overview(con)
+        cot_rows = macro_indicators_db.load_cot_observations(con)
+        usd_observations = (
+            macro_indicators_db.load_macro_indicator_observations_for_series(
+                con,
+                _OBSERVATION_SERIES_IDS,
+            )
+        )
+        has_data = bool(cot_rows) or any(
+            usd_observations.get(sid, []) for sid in _OBSERVATION_SERIES_IDS
+        )
         dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
             ism_manufacturing=ism_manufacturing,
             ism_services=ism_services_data["payload"],
@@ -421,6 +441,13 @@ def macro_dashboard_growth_cycle():
                 ),
                 "as_of_date": date.today().isoformat(),
             },
+            cyclical_commodities={
+                "cot_rows": cot_rows,
+                "usd_observations_by_series": usd_observations,
+                "as_of_date": date.today().isoformat(),
+            }
+            if has_data
+            else None,
         )
         next_fomc_meeting = us_rates_liquidity_db.load_next_macro_event(
             con,
@@ -707,6 +734,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
         "ism_services",
         "housing_permits",
         "nfib_sbo",
+        "cyclical_commodities",
     }:
         raise HTTPException(
             status_code=400,
@@ -777,6 +805,18 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             )
             detail["regional_evidence"] = regional_evidence
             return detail
+        if detail_id == "cyclical_commodities":
+            cot_rows = macro_indicators_db.load_cot_observations(con)
+            usd_observations = (
+                macro_indicators_db.load_macro_indicator_observations_for_series(
+                    con,
+                    _OBSERVATION_SERIES_IDS,
+                )
+            )
+            payload = tool.build_cyclical_commodities_payload(
+                cot_rows, usd_observations, date.today().isoformat()
+            )
+            return tool.build_cyclical_commodities_detail(payload)
         if detail_id == "ism_services":
             return ism_services_dashboard.load_detail(con)
         if detail_id == "ism_manufacturing":
