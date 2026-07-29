@@ -5151,6 +5151,22 @@ def test_macro_dashboard_js_consumer_sentiment_error_uses_polite_live_region():
     assert 'role="status"' in js
 
 
+def test_consumer_sentiment_loaded_layout_uses_page_section_header():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "consumer-sentiment.css").read_text(encoding="utf-8")
+
+    render_start = js.index("function renderConsumerSentiment()")
+    render_end = js.index("function renderConsumerDetailInPanel", render_start)
+    render_body = js[render_start:render_end]
+
+    assert 'const head = section.querySelector(".relationship-head");' in render_body
+    assert "${head.outerHTML}" in render_body
+    assert 'class="consumer-content"' not in render_body
+    assert '<div class="growth-section-card-grid">' in render_body
+    assert ".consumer-sentiment {\n  margin-top: 24px;" in css
+    assert ".consumer-content {" not in css
+
+
 def test_consumer_sentiment_js_exposes_required_interfaces():
     js = (ROOT / "static" / "consumer-sentiment.js").read_text()
     assert "renderLoading" in js

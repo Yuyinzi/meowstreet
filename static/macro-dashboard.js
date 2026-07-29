@@ -3199,17 +3199,10 @@ html += '</div>';
       escapeHtml: escapeHtml,
       formatIndex: fmtNumber,
     });
-    const asOf = state.consumerSentiment.as_of;
     section.innerHTML = `
-      <div class="consumer-content">
-        <div class="credit-conditions-head">
-          <h3>Consumer Sentiment</h3>
-          ${asOf ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDate(asOf))}</span>` : ""}
-        </div>
-        <div class="rates-chart-subtitle"><p>UMCSI aggregate, expectations, and consumer capacity context.</p></div>
-        <div class="growth-section-card-grid">
-          ${cardHtml}
-        </div>
+      ${head.outerHTML}
+      <div class="growth-section-card-grid">
+        ${cardHtml}
       </div>
     `;
     section.querySelectorAll("[data-consumer-detail-id]").forEach((button) => {

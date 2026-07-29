@@ -3,20 +3,7 @@
 }
 
 .consumer-sentiment {
-  margin-top: 40px;
-}
-
-.consumer-content {
-  border: 1px solid #E0D6C8;
-  border-radius: 10px;
-  background: #FFFDFB;
-  padding: 18px 20px 20px;
-}
-
-.consumer-content h3 {
-  margin: 0;
-  font-size: 0.95rem;
-  color: #3B3530;
+  margin-top: 24px;
 }
 
 .consumer-section {
