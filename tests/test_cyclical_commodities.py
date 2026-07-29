@@ -552,3 +552,90 @@ def test_oil_benchmark_distribution_is_unavailable_when_insufficient_history():
     assert benchmark["status"] == "available"
     detail = .build_cyclical_commodities_detail(payload)
     assert detail["process_read"]["status"] == "review_required"
+
+
+def _payload_with_distribution_states(
+    wti_daily, wti_weekly, brent_daily, brent_weekly
+):
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+    )
+    benchmarks = payload["oil_observation"]["benchmarks"]
+    for series_id, daily, weekly in (
+        ("oil_wti_spot", wti_daily, wti_weekly),
+        ("oil_brent_spot", brent_daily, brent_weekly),
+    ):
+        benchmarks[series_id]["daily_distribution"]["classification"] = daily
+        benchmarks[series_id]["weekly_distribution"]["classification"] = weekly
+    return payload
+
+
+def test_oil_distribution_summary_is_normal_only_when_all_four_horizons_are_normal():
+    detail = .build_cyclical_commodities_detail(
+        _payload_with_distribution_states(
+            wti_daily="normal",
+            wti_weekly="normal",
+            brent_daily="normal",
+            brent_weekly="normal",
+        )
+    )
+
+    summary = detail["oil_price_distribution_summary"]
+    assert summary["status"] == "normal"
+    assert summary["abnormal_observations"] == []
+    assert "physical-market attribution remains required" in summary["detail"]
+
+
+def test_oil_distribution_summary_lists_only_abnormal_benchmark_horizons():
+    detail = .build_cyclical_commodities_detail(
+        _payload_with_distribution_states(
+            wti_daily="abnormal_2sigma",
+            wti_weekly="normal",
+            brent_daily="normal",
+            brent_weekly="abnormal_1sigma",
+        )
+    )
+
+    summary = detail["oil_price_distribution_summary"]
+    assert summary["status"] == "abnormal"
+    assert summary["abnormal_observations"] == [
+        "WTI daily (2σ abnormal)",
+        "Brent weekly (1σ abnormal)",
+    ]
+    assert "WTI daily" in summary["label"]
+    assert "Brent weekly" in summary["label"]
+
+
+def test_oil_distribution_summary_is_incomplete_when_any_horizon_is_unavailable():
+    detail = .build_cyclical_commodities_detail(
+        _payload_with_distribution_states(
+            wti_daily="normal",
+            wti_weekly="unavailable",
+            brent_daily="abnormal_3sigma",
+            brent_weekly="normal",
+        )
+    )
+
+    summary = detail["oil_price_distribution_summary"]
+    assert summary["status"] == "incomplete"
+    assert summary["abnormal_observations"] == []
+
+
+def test_oil_distribution_summary_does_not_change_process_read():
+    normal_payload = _payload_with_distribution_states(
+        wti_daily="normal",
+        wti_weekly="normal",
+        brent_daily="normal",
+        brent_weekly="normal",
+    )
+    abnormal_payload = _payload_with_distribution_states(
+        wti_daily="abnormal_3sigma",
+        wti_weekly="normal",
+        brent_daily="normal",
+        brent_weekly="normal",
+    )
+
+    normal_detail = .build_cyclical_commodities_detail(normal_payload)
+    abnormal_detail = .build_cyclical_commodities_detail(abnormal_payload)
+
+    assert normal_detail["process_read"] == abnormal_detail["process_read"]

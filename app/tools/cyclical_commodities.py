@@ -185,6 +185,17 @@ def _compute_inflation_series_payload(
 
 _OIL_BENCHMARK_IDS = {"oil_wti_spot", "oil_brent_spot"}
 
+_OIL_BENCHMARK_SUMMARY_NAMES = {
+    "oil_wti_spot": "WTI",
+    "oil_brent_spot": "Brent",
+}
+
+_DISTRIBUTION_LABELS = {
+    "abnormal_1sigma": "1σ abnormal",
+    "abnormal_2sigma": "2σ abnormal",
+    "abnormal_3sigma": "3σ abnormal",
+}
+
 _OIL_ATTRIBUTION_IDS = {
     "oil_commercial_crude_stocks",
     "oil_commercial_crude_imports",
@@ -492,6 +503,47 @@ def _oil_attribution_review(payload):
     }
 
 
+def _incomplete_oil_distribution_summary():
+    return {
+        "status": "incomplete",
+        "label": "Oil price distribution is incomplete; review the available benchmark evidence.",
+        "detail": "This describes price distribution only; physical-market attribution remains required.",
+        "abnormal_observations": [],
+    }
+
+
+def _oil_price_distribution_summary(payload):
+    benchmarks = payload.get("oil_observation", {}).get("benchmarks", {})
+    abnormal_observations = []
+    for series_id, display_name in _OIL_BENCHMARK_SUMMARY_NAMES.items():
+        benchmark = benchmarks.get(series_id, {})
+        if benchmark.get("status") != "available":
+            return _incomplete_oil_distribution_summary()
+        for horizon, field in (("daily", "daily_distribution"), ("weekly", "weekly_distribution")):
+            classification = benchmark.get(field, {}).get("classification")
+            if classification == "unavailable" or classification is None:
+                return _incomplete_oil_distribution_summary()
+            if classification != "normal":
+                abnormal_observations.append(
+                    f"{display_name} {horizon} ({_DISTRIBUTION_LABELS[classification]})"
+                )
+    if abnormal_observations:
+        return {
+            "status": "abnormal",
+            "label": "Statistically abnormal oil-price movement requires review: "
+            + "; ".join(abnormal_observations)
+            + ".",
+            "detail": "This describes price distribution only; physical-market attribution remains required.",
+            "abnormal_observations": abnormal_observations,
+        }
+    return {
+        "status": "normal",
+        "label": "Oil price movement is statistically normal across WTI and Brent on both daily and weekly horizons.",
+        "detail": "This describes price distribution only; physical-market attribution remains required.",
+        "abnormal_observations": [],
+    }
+
+
 def build_cyclical_commodities_detail(payload):
     details = _collect_series_details(payload)
     return {
@@ -503,6 +555,7 @@ def build_cyclical_commodities_detail(payload):
         "commodity_attribution": payload.get("commodity_attribution"),
         "commodity_returns": payload.get("commodity_returns"),
         "oil_attribution_review": _oil_attribution_review(payload),
+        "oil_price_distribution_summary": _oil_price_distribution_summary(payload),
         "process_read": _process_read(payload),
         "corroboration": _corroboration_summary(payload),
         "steps": details,
