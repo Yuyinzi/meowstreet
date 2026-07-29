@@ -38,7 +38,12 @@ def target_events(events, minutes_docs, statement_tones):
 
 
 def should_skip_existing_extraction(existing, source_hash, force):
-    return bool(existing and existing.get("source_hash") == source_hash and not force)
+    return bool(
+        existing
+        and existing.get("source_hash") == source_hash
+        and existing.get("extraction_status") == "approved"
+        and not force
+    )
 
 
 def pending_events(events, minutes_docs, statement_tones, load_existing, force):

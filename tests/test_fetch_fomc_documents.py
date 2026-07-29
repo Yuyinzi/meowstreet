@@ -131,7 +131,7 @@ def test_fetch_statement_document_raises_on_empty_url():
     raised = False
     try:
         fetch_fomc_documents.fetch_statement_document(event)
-    except fetch_fomc_documents.DocumentUnavailableError as exc:
+    except ValueError as exc:
         assert "statement url is missing" in str(exc)
         raised = True
     assert raised

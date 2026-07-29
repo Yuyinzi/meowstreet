@@ -22,8 +22,12 @@ def test_target_events_only_include_events_with_statement_tone_and_minutes_doc()
     assert result == [{"event_id": "fomc_2026_06_16", "start_date": "2026-06-16"}]
 
 
-def test_should_skip_existing_minutes_extraction_when_hash_matches():
-    existing = {"event_id": "fomc_2026_06_16", "source_hash": "abc123"}
+def test_should_skip_approved_minutes_extraction_when_hash_matches():
+    existing = {
+        "event_id": "fomc_2026_06_16",
+        "source_hash": "abc123",
+        "extraction_status": "approved",
+    }
 
     assert generate_fomc_minutes_structure.should_skip_existing_extraction(
         existing,
@@ -32,8 +36,26 @@ def test_should_skip_existing_minutes_extraction_when_hash_matches():
     )
 
 
-def test_should_not_skip_existing_minutes_extraction_when_forced():
-    existing = {"event_id": "fomc_2026_06_16", "source_hash": "abc123"}
+def test_should_not_skip_non_approved_minutes_extraction():
+    existing = {
+        "event_id": "fomc_2026_06_16",
+        "source_hash": "abc123",
+        "extraction_status": "rejected",
+    }
+
+    assert not generate_fomc_minutes_structure.should_skip_existing_extraction(
+        existing,
+        "abc123",
+        force=False,
+    )
+
+
+def test_should_not_skip_approved_minutes_extraction_when_forced():
+    existing = {
+        "event_id": "fomc_2026_06_16",
+        "source_hash": "abc123",
+        "extraction_status": "approved",
+    }
 
     assert not generate_fomc_minutes_structure.should_skip_existing_extraction(
         existing,
@@ -50,6 +72,7 @@ def test_pending_events_excludes_existing_minutes_extraction_when_not_forced():
         ("fomc_2026_06_16", "minutes", "minutes_hash"): {
             "event_id": "fomc_2026_06_16",
             "source_hash": "minutes_hash",
+            "extraction_status": "approved",
         }
     }
 
@@ -66,7 +89,7 @@ def test_pending_events_excludes_existing_minutes_extraction_when_not_forced():
     assert pending == []
 
 
-def test_pending_events_keeps_existing_minutes_extraction_when_forced():
+def test_pending_events_keeps_approved_minutes_extraction_when_forced():
     event = {"event_id": "fomc_2026_06_16", "start_date": "2026-06-16"}
     minutes_docs = {"fomc_2026_06_16": {"source_hash": "minutes_hash"}}
     statement_tones = {"fomc_2026_06_16": {"marker_tone": "hawkish"}}
@@ -74,6 +97,7 @@ def test_pending_events_keeps_existing_minutes_extraction_when_forced():
         ("fomc_2026_06_16", "minutes", "minutes_hash"): {
             "event_id": "fomc_2026_06_16",
             "source_hash": "minutes_hash",
+            "extraction_status": "approved",
         }
     }
 
@@ -134,7 +158,10 @@ def test_generate_event_minutes_structure_retries_after_schema_error(
 
     async def fake_call_json(client, model, prompt):
         calls.append((model, prompt))
-        if model == "extractor" and len([call for call in calls if call[0] == "extractor"]) == 1:
+        if (
+            model == "extractor"
+            and len([call for call in calls if call[0] == "extractor"]) == 1
+        ):
             return json.dumps(
                 {
                     "statement_bias": "mild_hawkish",

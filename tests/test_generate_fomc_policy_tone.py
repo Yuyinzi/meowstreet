@@ -295,8 +295,12 @@ def test_log_generation_context_prints_meeting_and_comparison(capsys):
     assert "source_hash: abcdef123456" in output
 
 
-def test_should_skip_existing_extraction_when_not_forced():
-    existing = {"event_id": "fomc_2026_06_16", "source_hash": "abc123"}
+def test_should_skip_approved_extraction_when_not_forced():
+    existing = {
+        "event_id": "fomc_2026_06_16",
+        "source_hash": "abc123",
+        "extraction_status": "approved",
+    }
 
     assert generate_fomc_policy_tone.should_skip_existing_extraction(
         existing,
@@ -304,8 +308,25 @@ def test_should_skip_existing_extraction_when_not_forced():
     )
 
 
-def test_should_not_skip_existing_extraction_when_forced():
-    existing = {"event_id": "fomc_2026_06_16", "source_hash": "abc123"}
+def test_should_not_skip_non_approved_extraction_when_not_forced():
+    existing = {
+        "event_id": "fomc_2026_06_16",
+        "source_hash": "abc123",
+        "extraction_status": "max_rounds_reached",
+    }
+
+    assert not generate_fomc_policy_tone.should_skip_existing_extraction(
+        existing,
+        force=False,
+    )
+
+
+def test_should_not_skip_approved_extraction_when_forced():
+    existing = {
+        "event_id": "fomc_2026_06_16",
+        "source_hash": "abc123",
+        "extraction_status": "approved",
+    }
 
     assert not generate_fomc_policy_tone.should_skip_existing_extraction(
         existing,

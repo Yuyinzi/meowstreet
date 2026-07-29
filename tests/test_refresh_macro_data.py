@@ -59,7 +59,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         return 0
 
     exit_code = refresh_macro_data.main(
-        [],
+        ["--skip-fomc"],
         benchmark_main=benchmark_main,
         rates_main=rates_main,
         consumer_main=consumer_main,
@@ -133,7 +133,7 @@ def test_main_continues_after_provider_failure(capsys):
         return _ok
 
     exit_code = refresh_macro_data.main(
-        [],
+        ["--skip-fomc"],
         benchmark_main=failing_benchmark,
         rates_main=ok_task("rates"),
         consumer_main=lambda argv: 0,
@@ -177,7 +177,7 @@ def test_main_can_stop_after_first_failure():
         return _ok
 
     exit_code = refresh_macro_data.main(
-        ["--stop-on-error"],
+        ["--stop-on-error", "--skip-fomc"],
         benchmark_main=failing_benchmark,
         rates_main=ok_task("rates"),
         consumer_main=lambda argv: 0,
@@ -200,7 +200,13 @@ def test_main_records_exceptions_as_failures(capsys):
         raise ValueError("yahoo rate limited")
 
     exit_code = refresh_macro_data.main(
-        ["--skip-rates", "--skip-m2", "--skip-gdp", "--skip-consumer-sentiment"],
+        [
+            "--skip-rates",
+            "--skip-m2",
+            "--skip-gdp",
+            "--skip-consumer-sentiment",
+            "--skip-fomc",
+        ],
         benchmark_main=raising_benchmark,
         rates_main=lambda argv: 0,
         consumer_main=lambda argv: 0,
@@ -295,7 +301,13 @@ def test_main_skip_flags_remove_tasks():
         return _record
 
     exit_code = refresh_macro_data.main(
-        ["--skip-yahoo", "--skip-ism", "--skip-gdp", "--skip-consumer-sentiment"],
+        [
+            "--skip-yahoo",
+            "--skip-ism",
+            "--skip-gdp",
+            "--skip-consumer-sentiment",
+            "--skip-fomc",
+        ],
         benchmark_main=recorder("benchmark"),
         rates_main=recorder("rates"),
         consumer_main=lambda argv: 0,

@@ -106,9 +106,7 @@ def resolve_statement_url(event, fetch=None):
         return direct_url
     event_url = str(event.get("url") or "").strip()
     if not event_url:
-        raise DocumentUnavailableError(
-            f"statement url is missing for {event['event_id']}"
-        )
+        raise ValueError(f"statement url is missing for {event['event_id']}")
     calendar_html = fetch_document(event_url)
     statement_url = _statement_url_from_calendar_html(event, calendar_html)
     if not statement_url:
@@ -126,9 +124,7 @@ def resolve_minutes_url(event, fetch=None):
             return _absolute_fed_url(url)
     event_url = str(event.get("url") or "").strip()
     if not event_url:
-        raise DocumentUnavailableError(
-            f"minutes url is missing for {event['event_id']}"
-        )
+        raise ValueError(f"minutes url is missing for {event['event_id']}")
     calendar_html = fetch_document(event_url)
     minutes_url = _minutes_url_from_calendar_html(event, calendar_html)
     if not minutes_url:
