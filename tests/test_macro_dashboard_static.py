@@ -1358,15 +1358,26 @@ def test_macro_dashboard_policy_track_replaces_in_plot_event_bars_for_m2_chart()
     }
 
 
-def test_macro_dashboard_js_renders_growth_cycle_sections():
+def test_macro_dashboard_js_renders_growth_cycle_tabs():
     js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
 
-    assert "function renderGrowthCycleSections(" in js
+    assert "selectedGrowthCycleSectionId" in js
+    assert "function selectGrowthCycleSection(" in js
+    assert "function renderGrowthCycleTabs(" in js
+    assert "function bindGrowthCycleTabs(" in js
+    assert 'role="tablist"' in js
+    assert 'role="tab"' in js
+    assert 'role="tabpanel"' in js
+    assert "aria-selected" in js
+    assert "ArrowRight" in js
+    assert "ArrowLeft" in js
+    assert "Home" in js
+    assert "End" in js
     assert "function renderGrowthCycleSection(" in js
-    assert "function renderGrowthCycleStatusPanel(" in js
-    assert "state.growthCycle.sections || []" in js
-    assert "growth-section" in js
-    assert "growth-section-card-grid" in js
+    assert ".growth-cycle-tabs" in css
+    assert ".growth-cycle-tab.active" in css
+    assert "overflow-x: auto" in css
 
 
 def test_macro_dashboard_static_assets_render_ism_industry_breadth():
@@ -1398,10 +1409,13 @@ def test_macro_dashboard_css_styles_ism_overview_cards():
     assert ".ism-card-warning" in css
 
 
-def test_macro_dashboard_css_styles_growth_cycle_sections():
+def test_macro_dashboard_css_styles_growth_cycle_tabs():
     css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
 
-    assert ".growth-section-list" in css
+    assert ".growth-cycle-tabs" in css
+    assert ".growth-cycle-tab" in css
+    assert ".growth-cycle-tab.active" in css
+    assert ".growth-cycle-tab-panel" in css
     assert ".growth-section {" in css
     assert ".growth-section-head" in css
     assert ".growth-section-card-grid" in css
@@ -2858,8 +2872,14 @@ def test_market_setup_hero_aligned_signal():
     assert "evidence-market-phase" in payload["detailedHtml"]
     assert "ms-pending-confirmations" in payload["detailedHtml"]
     assert "<ul>" in payload["detailedHtml"]
-    assert "<li>Housing permits — permits could not confirm the ISM path</li>" in payload["detailedHtml"]
-    assert "<li>NFIB Small Business — NFIB has not yet confirmed the ISM-implied growth path</li>" in payload["detailedHtml"]
+    assert (
+        "<li>Housing permits — permits could not confirm the ISM path</li>"
+        in payload["detailedHtml"]
+    )
+    assert (
+        "<li>NFIB Small Business — NFIB has not yet confirmed the ISM-implied growth path</li>"
+        in payload["detailedHtml"]
+    )
     assert "ms-component-data" in payload["detailedHtml"]
 
 
@@ -5999,6 +6019,67 @@ def test_growth_cycle_renders_housing_permits_card_in_dom_when_in_headline():
     assert payload["hasDataDetailId"] is True
     assert payload["hasHousingSection"] is True
     assert payload["hasUnavailableReason"] is True
+
+
+def test_growth_cycle_tabs_default_to_ism_and_render_only_selected_panel():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        const elements = {
+          growthCycle: {
+            innerHTML: '<div class="relationship-head"><h2>Growth Cycle</h2></div>',
+            querySelector: function () {
+              return { outerHTML: '<div class="relationship-head"><h2>Growth Cycle</h2></div>' };
+            },
+            querySelectorAll: function () { return []; },
+          },
+          marketGrid: { innerHTML: "", querySelectorAll: function () { return []; } },
+          dashboardStatus: {},
+          marketDetail: { innerHTML: "" },
+          detailPanel: { innerHTML: "", querySelector: function () { return null; }, querySelectorAll: function () { return []; } },
+          usRatesLiquidity: { innerHTML: "", querySelector: function () { return null; }, querySelectorAll: function () { return []; }, insertAdjacentHTML: function () {} },
+          macroDashboardApp: { classList: { add: function () {}, remove: function () {}, contains: function () { return false; } } },
+          consumerSentiment: { innerHTML: "", querySelector: function () { return { outerHTML: "" }; }, querySelectorAll: function () { return []; } },
+          marketSetup: { innerHTML: "", querySelector: function () { return { outerHTML: "" }; }, querySelectorAll: function () { return []; } },
+          surveySynthesis: { innerHTML: "", querySelector: function () { return { outerHTML: "" }; }, querySelectorAll: function () { return []; } },
+        };
+
+        global.window = {
+          __MEOWSTREET_TEST__: true,
+          consumerSentimentUi: { renderCard: function () { return ""; } },
+        };
+        global.document = {
+          getElementById: function (id) { return elements[id] || {}; },
+          addEventListener: function () {},
+        };
+        global.fetch = async () => ({ ok: true, json: async () => ({ markets: [] }) });
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const sections = [
+          { id: "ism_manufacturing", title: "ISM Manufacturing", subtitle: "Manufacturing", cards: [], status: "missing" },
+          { id: "m2_liquidity", title: "M2 Liquidity", subtitle: "Liquidity", cards: [], status: "missing" },
+        ];
+        hooks.state.selectedGrowthCycleSectionId = null;
+        const initial = hooks.renderGrowthCycleTabs(sections, []);
+        hooks.state.selectedGrowthCycleSectionId = "m2_liquidity";
+        const selected = hooks.renderGrowthCycleTabs(sections, []);
+        console.log(JSON.stringify({
+          initialHasManufacturingSelected: initial.includes('data-growth-cycle-section-id="ism_manufacturing"') && initial.includes('aria-selected="true"'),
+          initialOmitsM2Panel: !initial.includes('id="growth-cycle-panel-m2_liquidity"'),
+          selectedHasM2Selected: selected.includes('data-growth-cycle-section-id="m2_liquidity"') && selected.includes('aria-selected="true"'),
+          selectedHasOnlyM2Panel: selected.includes('id="growth-cycle-panel-m2_liquidity"') && !selected.includes('id="growth-cycle-panel-ism_manufacturing"'),
+        }));
+    """)
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, text=True, check=True
+    )
+    assert json.loads(result.stdout) == {
+        "initialHasManufacturingSelected": True,
+        "initialOmitsM2Panel": True,
+        "selectedHasM2Selected": True,
+        "selectedHasOnlyM2Panel": True,
+    }
 
 
 def test_housing_permits_renders_card_for_unavailable_state():

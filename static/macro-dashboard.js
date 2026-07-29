@@ -14,6 +14,7 @@
     selectedConsumerDetailId: null,
     marketSetup: null,
     marketSetupError: null,
+    selectedGrowthCycleSectionId: null,
     selectedGrowthCycleDetailId: null,
     selectedGrowthCycleChartRange: "1y",
     growthCycleDetailsById: {},
@@ -1496,6 +1497,17 @@
     return result;
   }
 
+  function selectGrowthCycleSection(sections) {
+    const availableSections = sections || [];
+    if (!availableSections.length) return null;
+    const current = availableSections.find((section) => section.id === state.selectedGrowthCycleSectionId);
+    if (current) return current;
+    const manufacturing = availableSections.find((section) => section.id === "ism_manufacturing");
+    const next = manufacturing || availableSections[0];
+    state.selectedGrowthCycleSectionId = next.id;
+    return next;
+  }
+
   function growthCycleStatusLabel(status) {
     const labels = {
       available: "Available",
@@ -1543,6 +1555,63 @@
     return (sections || [])
       .map((section) => renderGrowthCycleSection(section, cardsById))
       .join("");
+  }
+
+  function renderGrowthCycleTabs(sections, cards) {
+    const activeSection = selectGrowthCycleSection(sections);
+    if (!activeSection) return "";
+    const cardsById = growthCycleCardsById(cards);
+    return `
+      <div class="growth-cycle-tabs" role="tablist" aria-label="Growth Cycle sections">
+        ${sections.map((section) => {
+          const active = section.id === activeSection.id;
+          return `<button
+            class="growth-cycle-tab${active ? " active" : ""}"
+            id="growth-cycle-tab-${escapeHtml(section.id)}"
+            type="button"
+            role="tab"
+            data-growth-cycle-section-id="${escapeHtml(section.id)}"
+            aria-selected="${active}"
+            aria-controls="growth-cycle-panel-${escapeHtml(section.id)}"
+            tabindex="${active ? "0" : "-1"}"
+          >${escapeHtml(section.title || "Growth Cycle")}</button>`;
+        }).join("")}
+      </div>
+      <div
+        id="growth-cycle-panel-${escapeHtml(activeSection.id)}"
+        class="growth-cycle-tab-panel"
+        role="tabpanel"
+        aria-labelledby="growth-cycle-tab-${escapeHtml(activeSection.id)}"
+      >${renderGrowthCycleSection(activeSection, cardsById)}</div>
+    `;
+  }
+
+  function bindGrowthCycleTabs(container, sections) {
+    const buttons = container.querySelectorAll("[data-growth-cycle-section-id]");
+    function activate(sectionId, focus) {
+      state.selectedGrowthCycleSectionId = sectionId;
+      renderGrowthCycle();
+      if (focus) {
+        const btn = container.querySelector(`[data-growth-cycle-section-id="${sectionId}"]`);
+        if (btn) btn.focus();
+      }
+    }
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        activate(button.dataset.growthCycleSectionId, false);
+      });
+      button.addEventListener("keydown", (event) => {
+        const index = Array.prototype.indexOf.call(buttons, event.currentTarget);
+        let nextIndex = null;
+        if (event.key === "ArrowRight") nextIndex = (index + 1) % buttons.length;
+        if (event.key === "ArrowLeft") nextIndex = (index - 1 + buttons.length) % buttons.length;
+        if (event.key === "Home") nextIndex = 0;
+        if (event.key === "End") nextIndex = buttons.length - 1;
+        if (nextIndex === null) return;
+        event.preventDefault();
+        activate(buttons[nextIndex].dataset.growthCycleSectionId, true);
+      });
+    });
   }
 
   async function loadMarketSetup() {
@@ -2096,17 +2165,16 @@ html += '</div>';
     }
     const cards = state.growthCycle.headline || [];
     const sections = state.growthCycle.sections || [];
-    const sectionHtml = renderGrowthCycleSections(sections, cards);
+    const tabsHtml = renderGrowthCycleTabs(sections, cards);
     section.innerHTML = `
       ${head.outerHTML}
-      ${sectionHtml ? `
+      ${tabsHtml ? `
         <div class="rates-detail gdp-detail">
-          <div class="growth-section-list">
-            ${sectionHtml}
-          </div>
+          ${tabsHtml}
         </div>
       ` : ""}
     `;
+    bindGrowthCycleTabs(section, sections);
     section.querySelectorAll("[data-growth-cycle-detail-id]").forEach((button) => {
       button.addEventListener("click", () => {
         state.selectedGrowthCycleDetailId = state.selectedGrowthCycleDetailId === button.dataset.growthCycleDetailId
@@ -5474,6 +5542,9 @@ html += '</div>';
       renderFomcToneCard,
       renderHousingPermitsCard,
       renderGrowthCycleSections,
+      selectGrowthCycleSection,
+      renderGrowthCycleTabs,
+      bindGrowthCycleTabs,
       renderCard,
       computeSignalAgreement,
       buildMarketSetupPresentation,

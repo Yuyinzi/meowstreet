@@ -546,10 +546,42 @@ h2 {
   margin-top: 14px;
 }
 
-.growth-section-list {
-  display: grid;
-  gap: 14px;
-  margin-top: 14px;
+.growth-cycle-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  scrollbar-width: thin;
+}
+
+.growth-cycle-tab {
+  flex: 0 0 auto;
+  border: 1px solid #E0D6C8;
+  border-radius: 999px;
+  background: #FFFDFB;
+  color: #5C534A;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.growth-cycle-tab:hover,
+.growth-cycle-tab.active {
+  border-color: #B77945;
+  background: #F4E7D8;
+  color: #5E351A;
+}
+
+.growth-cycle-tab:focus-visible {
+  outline: 3px solid rgba(183, 121, 69, 0.38);
+  outline-offset: 2px;
+}
+
+.growth-cycle-tab-panel {
+  margin-top: 4px;
 }
 
 .growth-section {
