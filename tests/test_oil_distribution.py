@@ -35,6 +35,11 @@ def test_distribution_classifies_threshold_boundaries_without_trade_direction():
     assert result == "abnormal_3sigma"
 
 
+def test_classify_return_handles_zero_standard_deviation():
+    assert oil_distribution.classify_return(0.01, 0.01, 0.0) == "normal"
+    assert oil_distribution.classify_return(0.02, 0.01, 0.0) == "abnormal_3sigma"
+
+
 def test_distribution_is_unavailable_below_minimum_sample_count():
     result = oil_distribution.build_distribution(
         [{"date": "2026-01-02", "value": 100.0}], "daily", minimum_samples=252

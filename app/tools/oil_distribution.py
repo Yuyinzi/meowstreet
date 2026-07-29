@@ -57,6 +57,8 @@ def iso_weekly_returns(observations):
 def classify_return(current_return, mean_return, sample_standard_deviation):
     if current_return is None:
         return "unavailable"
+    if sample_standard_deviation == 0:
+        return "normal" if current_return == mean_return else "abnormal_3sigma"
     distance = abs(current_return - mean_return)
     if distance >= 3 * sample_standard_deviation:
         return "abnormal_3sigma"
