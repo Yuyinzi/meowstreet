@@ -5160,7 +5160,9 @@ def test_consumer_sentiment_loaded_layout_uses_page_section_header():
     render_body = js[render_start:render_end]
 
     assert 'const head = section.querySelector(".relationship-head");' in render_body
-    assert "${head.outerHTML}" in render_body
+    assert "const asOf = state.consumerSentiment.as_of;" in render_body
+    assert "${head.innerHTML}" in render_body
+    assert "Data as of" in render_body
     assert 'class="consumer-content"' not in render_body
     assert '<div class="growth-section-card-grid">' in render_body
     assert ".consumer-sentiment {\n  margin-top: 24px;" in css

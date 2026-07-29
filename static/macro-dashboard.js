@@ -3199,8 +3199,12 @@ html += '</div>';
       escapeHtml: escapeHtml,
       formatIndex: fmtNumber,
     });
+    const asOf = state.consumerSentiment.as_of;
     section.innerHTML = `
-      ${head.outerHTML}
+      <div class="relationship-head">
+        ${head.innerHTML}
+        ${asOf ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDate(asOf))}</span>` : ""}
+      </div>
       <div class="growth-section-card-grid">
         ${cardHtml}
       </div>
