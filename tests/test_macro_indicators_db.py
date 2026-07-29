@@ -292,3 +292,28 @@ class TestMacroIndicatorObservationMetadata:
             con, "no_such_series"
         )
         assert result == []
+
+
+_COT_ROW = {
+    "commodity_id": "crude_oil_wti",
+    "report_date": "2026-07-21",
+    "manager_longs": 200000.0,
+    "manager_shorts": 150000.0,
+    "open_interest": 1000000.0,
+    "publication_date": "2026-07-24",
+    "report_type": "disaggregated_futures_only",
+    "source_url": "https://www.cftc.gov/files/dea/history/fut_disagg_txt_2026.zip",
+    "source_hash": "abc123",
+}
+
+
+def test_merge_cot_observations_updates_same_commodity_and_report_date(tmp_path):
+    con = macro_indicators.connect(tmp_path / ".sqlite")
+    macro_indicators.merge_cot_observations(con, [_COT_ROW])
+    macro_indicators.merge_cot_observations(
+        con, [{**_COT_ROW, "manager_longs": 201000.0}]
+    )
+
+    assert macro_indicators.load_cot_observations(con) == [
+        {**_COT_ROW, "manager_longs": 201000.0}
+    ]

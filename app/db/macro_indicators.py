@@ -72,9 +72,28 @@ create table if not exists macro_indicator_regional_observation_metadata (
 """
 
 
+__COT_DDL = """
+create table if not exists cot_observations (
+    commodity_id text not null,
+    report_date text not null,
+    manager_longs real not null,
+    manager_shorts real not null,
+    open_interest real not null,
+    publication_date text,
+    report_type text,
+    source_url text,
+    source_hash text,
+    primary key(commodity_id, report_date)
+);
+create index if not exists idx_cot_report_date
+on cot_observations(report_date);
+"""
+
+
 def init_macro_tables(con):
     con.executescript(_MACRO_TABLES_DDL)
     con.executescript(_REGIONAL_TABLES_DDL)
+    con.executescript(__COT_DDL)
     try:
         con.execute(
             "alter table macro_indicator_observation_metadata add column source_hash text"
@@ -501,5 +520,88 @@ def load_all_nfib_regional_observations(con):
            left join macro_indicator_regional_observation_metadata m
                on o.region_id = m.region_id and o.indicator_id = m.indicator_id and o.date = m.date
            order by o.region_id, o.indicator_id, o.date"""
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+__COT_REQUIRED_FIELDS = [
+    "commodity_id",
+    "report_date",
+    "manager_longs",
+    "manager_shorts",
+    "open_interest",
+]
+
+
+def merge_cot_observations(con, observations):
+    try:
+        for obs in observations:
+            for field in __COT_REQUIRED_FIELDS:
+                if field not in obs:
+                    raise ValueError(
+                        f" cot observation is missing required field: {field}"
+                    )
+            commodity_id = str(obs["commodity_id"] or "").strip().lower()
+            if not commodity_id:
+                raise ValueError(" cot commodity_id is required")
+            report_date = str(obs["report_date"] or "").strip()
+            if not report_date:
+                raise ValueError(" cot report_date is required")
+            manager_longs = float(obs["manager_longs"])
+            manager_shorts = float(obs["manager_shorts"])
+            open_interest = float(obs["open_interest"])
+            if manager_longs < 0 or manager_shorts < 0 or open_interest < 0:
+                raise ValueError(
+                    f" cot {commodity_id} has negative values on {report_date}"
+                )
+            if manager_longs > open_interest:
+                raise ValueError(
+                    f" cot {commodity_id} manager longs exceed open interest on {report_date}"
+                )
+            if manager_shorts > open_interest:
+                raise ValueError(
+                    f" cot {commodity_id} manager shorts exceed open interest on {report_date}"
+                )
+            con.execute(
+                """insert into cot_observations(
+                    commodity_id, report_date, manager_longs, manager_shorts,
+                    open_interest, publication_date, report_type, source_url, source_hash
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(commodity_id, report_date) do update set
+                    manager_longs = excluded.manager_longs,
+                    manager_shorts = excluded.manager_shorts,
+                    open_interest = excluded.open_interest,
+                    publication_date = excluded.publication_date,
+                    report_type = excluded.report_type,
+                    source_url = excluded.source_url,
+                    source_hash = excluded.source_hash""",
+                (
+                    commodity_id,
+                    report_date,
+                    manager_longs,
+                    manager_shorts,
+                    open_interest,
+                    str(obs.get("publication_date", "") or ""),
+                    str(obs.get("report_type", "") or ""),
+                    str(obs.get("source_url", "") or ""),
+                    str(obs.get("source_hash", "") or ""),
+                ),
+            )
+        con.commit()
+        return len(observations)
+    except Exception:
+        con.rollback()
+        raise
+
+
+__COT_COLS = """
+    commodity_id, report_date, manager_longs, manager_shorts, open_interest,
+    publication_date, report_type, source_url, source_hash
+"""
+
+
+def load_cot_observations(con):
+    rows = con.execute(
+        f"select {__COT_COLS} from cot_observations order by commodity_id, report_date"
     ).fetchall()
     return [dict(row) for row in rows]
