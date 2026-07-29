@@ -141,5 +141,7 @@ def fetch_historical_report(year, cache_dir):
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     dest = cache_dir / f"cftc-disaggregated-futures-only-{year}.zip"
-    urllib.request.urlretrieve(url, str(dest))
+    request = urllib.request.Request(url, headers={"User-Agent": "Meowstreet/1.0"})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        dest.write_bytes(response.read())
     return dest

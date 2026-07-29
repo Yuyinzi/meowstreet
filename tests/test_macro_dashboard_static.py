@@ -6514,3 +6514,15 @@ def test_renderer_has_no_client_side_position_or_return_formula():
 
     assert "manager_longs -" not in js
     assert "weekly_return =" not in js
+
+
+def test_detail_uses_evidence_sections_instead_of_method_steps():
+    js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert "Commodity Observation" in js
+    assert "Market Corroboration" in js
+    assert "Method Boundaries" in js
+    assert "Step " not in js
+    assert ".evidence-section" in css
+    assert ".evidence-grid" in css
