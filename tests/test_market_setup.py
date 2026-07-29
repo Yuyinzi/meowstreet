@@ -1322,14 +1322,17 @@ def test_housing_permits_support_adds_agreement():
     assert "housing permit evidence supports the growth path" in result["agreements"]
 
 
-def test_housing_permits_unavailable_adds_pending_confirmation():
+def test_housing_permits_unavailable_preserves_pending_reason():
     result = market_setup.build_market_setup(
         housing_permits_signal={
             "status": "unavailable",
             "reason": "no observations loaded",
         },
     )
-    assert "Housing permits" in result["pending_confirmations"]
+    assert (
+        "Housing permits — no observations loaded"
+        in result["pending_confirmations"]
+    )
 
 
 def test_market_setup_appends_nfib_conflict_without_changing_posture():

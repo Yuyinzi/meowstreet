@@ -1363,7 +1363,9 @@ def build_market_setup(
         elif hp_status == "challenges_growth_path":
             all_conflicts.append(hp_reason)
         elif hp_status in ("awaiting_confirmation", "unavailable"):
-            pending_confirmations.append("Housing permits")
+            pending_confirmations.append(
+                f"Housing permits — {hp_reason or 'awaiting confirmation'}"
+            )
     else:
         pending_confirmations.append("Housing permits")
 

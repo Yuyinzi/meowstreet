@@ -1917,7 +1917,11 @@
     if (pr.pendingConfirmations.length) {
       html += '<div class="ms-pending-confirmations">';
       html += '<h3>Pending Confirmations</h3>';
-      html += '<p>' + escapeHtml(pr.pendingConfirmations.join(" \u00B7 ")) + '</p>';
+      html += '<ul>';
+      pr.pendingConfirmations.forEach(function (confirmation) {
+        html += '<li>' + escapeHtml(confirmation) + '</li>';
+      });
+      html += '</ul>';
       html += '</div>';
     }
     if (pr.missingInputs.length && pr.status !== "insufficient") {

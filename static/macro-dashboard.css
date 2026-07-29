@@ -4287,11 +4287,21 @@ h2 {
   margin: 0 0 4px;
 }
 
-.ms-pending-confirmations p {
+.ms-pending-confirmations p,
+.ms-pending-confirmations ul {
   font-size: 12px;
   color: #6B6258;
   line-height: 1.4;
   margin: 0;
+}
+
+.ms-pending-confirmations ul {
+  padding: 0;
+  list-style: none;
+}
+
+.ms-pending-confirmations li + li {
+  margin-top: 4px;
 }
 
 .ms-missing-inputs {
@@ -4300,7 +4310,8 @@ h2 {
 }
 
 .ms-missing-inputs h3,
-.ms-missing-inputs p {
+.ms-missing-inputs p,
+.ms-missing-inputs ul {
   color: #8B4B4B;
 }
 

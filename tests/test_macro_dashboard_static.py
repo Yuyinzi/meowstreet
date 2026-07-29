@@ -2771,7 +2771,10 @@ def test_market_setup_hero_aligned_signal():
           agreements: ["Growth and conditions are aligned"],
           conflicts: [],
           missing_inputs: [],
-          pending_confirmations: ["ISM Services", "Labor trend"],
+          pending_confirmations: [
+            "Housing permits — permits could not confirm the ISM path",
+            "NFIB Small Business — NFIB has not yet confirmed the ISM-implied growth path",
+          ],
           market_conclusion: {
             code: "qualified_long_candidate",
             title: "Qualified Long Candidate",
@@ -2854,6 +2857,9 @@ def test_market_setup_hero_aligned_signal():
     assert "ms-evidence-link" in payload["detailedHtml"]
     assert "evidence-market-phase" in payload["detailedHtml"]
     assert "ms-pending-confirmations" in payload["detailedHtml"]
+    assert "<ul>" in payload["detailedHtml"]
+    assert "<li>Housing permits — permits could not confirm the ISM path</li>" in payload["detailedHtml"]
+    assert "<li>NFIB Small Business — NFIB has not yet confirmed the ISM-implied growth path</li>" in payload["detailedHtml"]
     assert "ms-component-data" in payload["detailedHtml"]
 
 
