@@ -6625,13 +6625,16 @@ def test_cyclical_commodities_ui_renders_backend_distribution_labels():
     assert "Distribution status is not configured." not in source
     assert "oil-distribution-summary" in source
     assert "oil-price-line" in source
+    assert "oil-price" in source
     assert "oil-distribution-line" in source
     assert "oil-provenance" in source
     assert ".oil-distribution-summary" in css
     assert ".oil-price-line" in css
+    assert ".oil-price" in css
     assert ".oil-provenance" in css
     assert "oil-distribution-abnormal" in source
     assert ".oil-distribution-abnormal" in css
+    assert "Within 1σ" in source
     assert source.count("state-review-required") == 1
     assert "statistics.stdev" not in source
     assert "Math.sqrt" not in source

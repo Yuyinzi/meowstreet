@@ -498,7 +498,7 @@ def _oil_attribution_review(payload):
     return {
         "method_version": "oil_attribution_review_states_v1",
         "status": "review_required",
-        "label": "Physical-market evidence is ready for review",
+        "label": "Attribution inputs complete — review whether the price move is demand-, supply-, or inventory-driven.",
         "reason": "Price, inventory, supply-context, processing-activity, and demand-proxy observations are available. Read their labeled changes together; no automatic attribution is made.",
     }
 
@@ -538,7 +538,7 @@ def _oil_price_distribution_summary(payload):
         }
     return {
         "status": "normal",
-        "label": "Oil price movement is statistically normal across WTI and Brent on both daily and weekly horizons.",
+        "label": "Oil price movement is within 1σ of their full-history distributions across WTI and Brent on both daily and weekly horizons.",
         "detail": "This describes price distribution only; physical-market attribution remains required.",
         "abnormal_observations": [],
     }

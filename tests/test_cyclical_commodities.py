@@ -379,6 +379,11 @@ def test_oil_state_contract_labels_raw_changes_without_trade_conclusion():
 
     assert review["method_version"] == "oil_attribution_review_states_v1"
     assert review["status"] == "review_required"
+    assert review["label"] == (
+        "Attribution inputs complete — review whether the price move is "
+        "demand-, supply-, or inventory-driven."
+    )
+    assert "no automatic attribution" in review["reason"]
     assert "trade" not in review["label"].lower()
     assert "demand-led" not in review["label"].lower()
     assert "supply-led" not in review["label"].lower()
@@ -583,6 +588,7 @@ def test_oil_distribution_summary_is_normal_only_when_all_four_horizons_are_norm
     summary = detail["oil_price_distribution_summary"]
     assert summary["status"] == "normal"
     assert summary["abnormal_observations"] == []
+    assert "within 1σ of their full-history distributions" in summary["label"]
     assert "physical-market attribution remains required" in summary["detail"]
 
 

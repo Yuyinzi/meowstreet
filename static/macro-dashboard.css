@@ -843,6 +843,15 @@ h2 {
   gap: 12px;
 }
 
+.oil-price {
+  align-self: center;
+  color: #6E6257;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .oil-distribution-line {
   display: flex;
   flex-wrap: wrap;

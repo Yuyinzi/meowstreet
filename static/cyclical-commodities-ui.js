@@ -44,7 +44,7 @@
             + '</span>';
         }
         var textMap = {
-          normal: "Normal",
+          normal: "Within 1σ",
           abnormal_1sigma: "1\u03c3 abnormal",
           abnormal_2sigma: "2\u03c3 abnormal",
           abnormal_3sigma: "3\u03c3 abnormal",
@@ -147,7 +147,7 @@
           var b = benchmarks[ids[i]];
           if (b.status !== "available") {
             html += '<div class="workflow-row oil-benchmark">'
-              + '<div class="oil-price-line"><strong>' + h.escapeHtml(_oilDisplayName(ids[i])) + '</strong><span>Not available</span></div>'
+              + '<div class="oil-price-line"><strong>' + h.escapeHtml(_oilDisplayName(ids[i])) + '</strong><span class="oil-price">Not available</span></div>'
               + '<div class="oil-distribution-line">'
               + renderDistribution(b.daily_distribution, "Daily")
               + renderDistribution(b.weekly_distribution, "Weekly")
@@ -163,7 +163,7 @@
           var dailyDistribution = b.daily_distribution || {};
           var weeklyDistribution = b.weekly_distribution || {};
           html += '<div class="workflow-row oil-benchmark">'
-            + '<div class="oil-price-line"><strong>' + h.escapeHtml(_oilDisplayName(ids[i])) + '</strong><span>'
+            + '<div class="oil-price-line"><strong>' + h.escapeHtml(_oilDisplayName(ids[i])) + '</strong><span class="oil-price">'
             + h.escapeHtml(h.fmtNumber(b.latest_value)) + ' ' + h.escapeHtml(unitStr) + '</span></div>'
             + '<div class="oil-distribution-line">'
             + renderState(h.fmtSignedPctDecimal(b.daily_return), b.daily_return_state, "Daily")
