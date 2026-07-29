@@ -589,15 +589,8 @@ h2 {
 
 .cyclical-commodities-detail {
   display: grid;
-  gap: 12px;
-}
-
-.detail-head,
-.evidence-section {
-  border: 1px solid #E0D6C8;
-  border-radius: 10px;
-  background: #FFFDFB;
-  padding: 14px;
+  gap: 0;
+  padding: 0;
 }
 
 .detail-head {
@@ -605,6 +598,7 @@ h2 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  padding: 0 0 14px;
 }
 
 .detail-head h2,
@@ -633,22 +627,35 @@ h2 {
 
 .evidence-grid {
   display: grid;
-  gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 12px;
 }
 
-.evidence-card,
-.evidence-empty {
-  border: 1px solid #E9E0D6;
-  background: #FFFCF8;
-  border-radius: 8px;
-  padding: 12px;
+.evidence-section {
+  border: 0;
+  border-top: 1px solid #E5DCD3;
+  padding: 16px 0;
+}
+
+.evidence-card {
+  min-width: 0;
+  padding: 0 12px;
+}
+
+.evidence-card:first-child {
+  padding-left: 0;
+}
+
+.evidence-card + .evidence-card {
+  border-left: 1px solid #E5DCD3;
 }
 
 .evidence-empty {
   display: grid;
   gap: 4px;
+  border-left: 3px solid #D7B789;
+  background: #F7F1EA;
+  padding: 10px 12px;
   margin-top: 10px;
 }
 
@@ -680,33 +687,35 @@ h2 {
   font-weight: 700;
 }
 
-.workflow-metrics,
-.freshness-grid {
+.workflow-metrics {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 10px;
   margin-top: 7px;
 }
 
-.workflow-metrics span,
-.freshness-grid span {
+.workflow-metrics span {
   color: #6E6257;
   font-size: 11px;
 }
 
-.freshness-grid strong {
-  color: #3B3530;
-  margin-left: 3px;
-}
-
 .boundaries {
   border-color: #E7C99E;
-  background: #FFF7ED;
 }
 
 @media (max-width: 900px) {
   .evidence-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .evidence-card {
+    padding: 12px 0 0;
+  }
+
+  .evidence-card + .evidence-card {
+    border-left: 0;
+    border-top: 1px solid #E5DCD3;
+    margin-top: 12px;
   }
 }
 

@@ -6528,3 +6528,5 @@ def test_detail_uses_evidence_sections_instead_of_method_steps():
     assert "As of" in js
     assert ".evidence-section" in css
     assert ".evidence-grid" in css
+    assert ".cyclical-commodities-detail {\n  display: grid;\n  gap: 0;\n  padding: 0;" in css
+    assert ".evidence-section {\n  border: 0;\n  border-top:" in css
