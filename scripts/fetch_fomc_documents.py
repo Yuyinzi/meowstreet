@@ -276,6 +276,8 @@ def fetch_document_type(con, document_type, fetch=fetch_text, now=fetched_at_now
     for event in us_rates_liquidity.load_macro_events(con, "fomc_meeting"):
         try:
             row = fetch_document(event, fetch=fetch, now=now)
+            us_rates_liquidity.replace_macro_event_document(con, row)
+            result["fetched"] += 1
         except DocumentUnavailableError as exc:
             result["unavailable"] += 1
             print(f"  SKIP {event['event_id']} {document_type}: {exc}")
@@ -284,8 +286,6 @@ def fetch_document_type(con, document_type, fetch=fetch_text, now=fetched_at_now
             result["failed"] += 1
             print(f"  FAIL {event['event_id']} {document_type}: {exc}", file=sys.stderr)
             continue
-        us_rates_liquidity.replace_macro_event_document(con, row)
-        result["fetched"] += 1
         print(f"  OK   {event['event_id']} {document_type}: {len(row['text'])} chars")
     return result
 
