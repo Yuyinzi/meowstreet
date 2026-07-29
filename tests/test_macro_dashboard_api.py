@@ -3640,6 +3640,10 @@ def test_detail_returns_oil_observation_and_pending_attribution(monkeypatch):
     body = response.json()
     assert body["oil_observation"]["status"] == "available"
     assert body["commodity_attribution"]["status"] == "attribution_pending_review"
+    summary = body["oil_price_distribution_summary"]
+    assert summary["status"] in {"normal", "abnormal", "incomplete"}
+    assert "trade" not in summary["label"].lower()
+    assert "physical-market attribution remains required" in summary["detail"]
     assert body["process_read"]["status"] == "review_required"
 
 
