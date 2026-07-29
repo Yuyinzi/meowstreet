@@ -1866,6 +1866,7 @@ def build_growth_cycle_dashboard_payload(
     ism_services_card=None,
     survey_synthesis=None,
     nfib_sbo_signal=None,
+    cyclical_commodities_card=None,
 ):
     growth_cycle = growth_cycle_dashboard.get("macro", {}).get("growth_cycle", {})
     policy_context = None
@@ -1907,6 +1908,12 @@ def build_growth_cycle_dashboard_payload(
         headline.append(housing_card)
     nfib_card = build_nfib_sbo_headline(nfib_sbo_signal)
     headline.append(nfib_card)
+    card = (
+        growth_cycle.get("cyclical_commodities_card")
+        or cyclical_commodities_card
+    )
+    if card:
+        headline.append(card)
     services_signal_state = (
         ism_services_card.get("segments", {}).get("services_cycle", {}).get("state")
         if ism_services_card
@@ -1990,6 +1997,26 @@ def normalize_building_permits(payload):
     }
 
 
+def normalize_cyclical_commodities(payload):
+    from app.tools import cyclical_commodities as tool
+
+    cot_rows = payload.get("cot_rows", [])
+    usd_observations_by_series = payload.get("usd_observations_by_series", {})
+    as_of_date = payload.get("as_of_date", "2026-01-01")
+    payload = tool.build_cyclical_commodities_payload(
+        cot_rows, usd_observations_by_series, as_of_date
+    )
+    card = tool.build_cyclical_commodities_headline(payload)
+    return {
+        "macro": {
+            "growth_cycle": {
+                "cyclical_commodities_payload": payload,
+                "cyclical_commodities_card": card,
+            }
+        }
+    }
+
+
 def normalize_jobless_claims(payload):
     initial_claims = payload.get("initial_claims", [])
     continuing_claims = payload.get("continuing_claims", [])
@@ -2035,6 +2062,7 @@ def build_growth_cycle_dashboard(
     fed_mbs_holdings=None,
     jobless_claims=None,
     building_permits=None,
+    cyclical_commodities=None,
 ):
     result = {"macro": {"growth_cycle": {}}}
     if ism_manufacturing:
@@ -2060,6 +2088,11 @@ def build_growth_cycle_dashboard(
         result = _deep_merge(result, normalize_jobless_claims(jobless_claims))
     if building_permits:
         result = _deep_merge(result, normalize_building_permits(building_permits))
+    if cyclical_commodities:
+        result = _deep_merge(
+            result,
+            normalize_cyclical_commodities(cyclical_commodities),
+        )
     return result
 
 
