@@ -428,6 +428,58 @@ def test_planned_tasks_includes_nfib_regional_import_by_default():
     assert any(call[0] == "nfib_regional" for call in calls)
 
 
+def test_planned_tasks_includes_unless_skipped():
+    calls = []
+
+    def record(label):
+        def run(argv):
+            calls.append((label, argv))
+            return 0
+
+        return run
+
+    refresh_macro_data.main(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-consumer-sentiment",
+            "--skip-m2",
+            "--skip-ism",
+            "--skip-gdp",
+            "--skip-fomc",
+        ],
+        consumer_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
+        nfib_main=lambda argv: 0,
+        nfib_regional_main=lambda argv: 0,
+        main=record(""),
+    )
+
+    assert any(call[0] == "" for call in calls)
+
+
+def test_skip_cyclical_commodities_removes_task():
+    refresh_macro_data.main(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-consumer-sentiment",
+            "--skip-m2",
+            "--skip-ism",
+            "--skip-gdp",
+            "--skip-fomc",
+            "--skip-cyclical-commodities",
+        ],
+        consumer_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
+        nfib_main=lambda argv: 0,
+        nfib_regional_main=lambda argv: 0,
+        main=lambda argv: (_ for _ in ()).throw(
+            AssertionError("should not be called")
+        ),
+    )
+
+
 def test_skip_nfib_sbo_regional_removes_nfib_regional_task():
     refresh_macro_data.main(
         [

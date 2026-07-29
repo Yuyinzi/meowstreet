@@ -15,6 +15,7 @@ from scripts import import_ism_services
 from scripts import import_m2_money_supply
 from scripts import import_nfib_sbet
 from scripts import import_nfib_sbet_regional
+from scripts import import_cyclical_commodities
 from scripts import import_us_building_permits
 from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
@@ -84,6 +85,7 @@ def _planned_tasks(
     fomc_main=import_fomc_calendar.main,
     nfib_main=import_nfib_sbet.main,
     nfib_regional_main=import_nfib_sbet_regional.main,
+    main=import_cyclical_commodities.main,
 ):
     tasks = []
     if not args.skip_yahoo:
@@ -137,6 +139,8 @@ def _planned_tasks(
         tasks.append(("nfib_sbo_official", nfib_main, []))
     if not args.skip_nfib_sbo_regional:
         tasks.append(("nfib_sbo_regional_official", nfib_regional_main, []))
+    if not args.skip_cyclical_commodities:
+        tasks.append(("cyclical_commodities_official", main, []))
     return tasks
 
 
@@ -161,6 +165,7 @@ def main(
     fomc_main=import_fomc_calendar.main,
     nfib_main=import_nfib_sbet.main,
     nfib_regional_main=import_nfib_sbet_regional.main,
+    main=import_cyclical_commodities.main,
 ):
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
@@ -173,6 +178,7 @@ def main(
     parser.add_argument("--skip-fomc", action="store_true")
     parser.add_argument("--skip-nfib-sbo", action="store_true")
     parser.add_argument("--skip-nfib-sbo-regional", action="store_true")
+    parser.add_argument("--skip-cyclical-commodities", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
     parser.add_argument(
         "--stop-on-error",
@@ -196,6 +202,7 @@ def main(
         fomc_main,
         nfib_main,
         nfib_regional_main,
+        main,
     ):
         result = _run_task(name, func, task_argv)
         results.append(result)
