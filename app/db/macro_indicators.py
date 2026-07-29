@@ -257,15 +257,17 @@ def replace_macro_indicator_points_batch(con, series_points_list):
         raise
 
 
-def merge_macro_indicator_observations(con, series, observations):
+def merge_macro_indicator_observations(con, series, observations, commit=True):
     merge_macro_indicator_points(con, series, observations, commit=False)
     for observation in observations:
         con.execute(
             """insert into macro_indicator_observation_metadata(
-                series_id, date, release_date, revision_status, source_url, source_identifier
-            ) values (?, ?, ?, ?, ?, ?)
+                series_id, date, release_date, publication_date_basis,
+                revision_status, source_url, source_identifier
+            ) values (?, ?, ?, ?, ?, ?, ?)
             on conflict(series_id, date) do update set
                 release_date = excluded.release_date,
+                publication_date_basis = excluded.publication_date_basis,
                 revision_status = excluded.revision_status,
                 source_url = excluded.source_url,
                 source_identifier = excluded.source_identifier""",
@@ -273,19 +275,22 @@ def merge_macro_indicator_observations(con, series, observations):
                 series["series_id"],
                 observation["date"],
                 observation.get("release_date"),
+                observation.get("publication_date_basis"),
                 observation.get("revision_status"),
                 observation.get("source_url"),
                 observation.get("source_identifier"),
             ),
         )
-    con.commit()
+    if commit:
+        con.commit()
 
 
 def load_macro_indicator_observations(con, series_id):
     sid = _normalize_series_id(series_id)
     rows = con.execute(
         """select p.date, p.value, p.source,
-                  m.release_date, m.revision_status, m.source_url, m.source_identifier, m.source_hash
+                  m.release_date, m.publication_date_basis,
+                  m.revision_status, m.source_url, m.source_identifier, m.source_hash
            from macro_indicator_points p
            left join macro_indicator_observation_metadata m
              on m.series_id = p.series_id and m.date = p.date

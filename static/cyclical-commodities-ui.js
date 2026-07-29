@@ -27,6 +27,7 @@
 
     renderDetail: function (body, payload, helpers) {
       var h = helpers;
+      var oilObservation = payload.oil_observation || {};
       var steps = payload.steps || [];
 
       function renderValue(val) {
@@ -85,50 +86,148 @@
         return { status: "unavailable", reason: "not configured" };
       }
 
-      function unavailable(reason) {
-        return '<p class="unavailable">' + h.escapeHtml(reason || "Not configured") + '</p>';
+      function reasonLabel(attrObj) {
+        return attrObj.review_label || attrObj.reason || "Attribution inputs not available";
       }
 
-      var observation = detail(1);
-      var attribution = detail(2);
-      var cot = detail(3);
-      var usd = detail(4);
-      var inflation = detail(5);
+      function _oilDisplayName(seriesId) {
+        var names = {
+          "oil_wti_spot": "WTI Spot",
+          "oil_brent_spot": "Brent Spot",
+        };
+        return names[seriesId] || seriesId;
+      }
+
+      function renderOilBenchmarkSummary(benchmarks) {
+        var ids = Object.keys(benchmarks || {}).sort();
+        var html = "";
+        for (var i = 0; i < ids.length; i++) {
+          var b = benchmarks[ids[i]];
+          if (b.status !== "available") {
+            html += '<div class="workflow-row">'
+              + '<div class="workflow-label">' + h.escapeHtml(_oilDisplayName(ids[i])) + '</div>'
+              + '<div class="workflow-metrics"><span>Not available</span></div>'
+              + '</div>';
+            continue;
+          }
+          html += '<div class="workflow-row">'
+            + '<div class="workflow-label">' + h.escapeHtml(_oilDisplayName(ids[i])) + '</div>'
+            + '<div class="workflow-metrics">'
+            + '<span>Value: ' + h.escapeHtml(h.fmtNumber(b.latest_value)) + ' $/BBL</span>'
+            + '<span>Daily: ' + renderValue(b.daily_return) + '</span>'
+            + '<span>Weekly: ' + renderValue(b.weekly_return) + '</span>'
+            + '<span class="source-date">As of: ' + h.escapeHtml(b.latest_date || "") + '</span>'
+            + '<span>Source: ' + h.escapeHtml(b.source_identifier || b.source_url || "") + '</span>'
+            + '</div>'
+            + '</div>';
+        }
+        return html;
+      }
+
+      function renderAttributionRows(metrics) {
+        var html = "";
+        for (var i = 0; i < (metrics || []).length; i++) {
+          var m = metrics[i];
+          var roleLabel = "";
+          if (m.role === "inventory") roleLabel = "Inventory";
+          else if (m.role === "supply_context") roleLabel = "Supply context";
+          else if (m.role === "processing_activity") roleLabel = "Processing activity";
+          else if (m.role === "demand_proxy") roleLabel = "Demand proxy";
+          else roleLabel = m.role;
+          html += '<div class="workflow-row">'
+            + '<div class="workflow-label">' + h.escapeHtml(m.display_name || m.series_id) + '</div>'
+            + '<div class="workflow-metrics">';
+          if (m.status === "available") {
+            html += '<span>' + h.escapeHtml(roleLabel) + '</span>'
+              + '<span>Value: ' + h.escapeHtml(h.fmtNumber(m.latest_value)) + '</span>'
+              + '<span class="source-date">' + h.escapeHtml(m.latest_date || "") + '</span>';
+            if (m.source_identifier) {
+              html += '<span>Source: ' + h.escapeHtml(m.source_identifier) + '</span>';
+            }
+          } else {
+            html += '<span>Not available</span>';
+          }
+          html += '</div></div>';
+        }
+        return html;
+      }
+
+      var read = payload.process_read || {};
+      var attr = payload.commodity_attribution || {};
       var freshness = payload.freshness || {};
+
       var html = '<section class="cyclical-commodities-detail">';
-      html += '<header class="detail-head">';
-      html += '<div><p class="eyebrow">Growth Cycle Evidence</p><h2>' + h.bilingualTitle("Cyclical Commodities & USD") + '</h2>';
-      html += '<p>This module corroborates a macro narrative; it does not issue buy or sell instructions.</p></div>';
-      html += '<span class="inflation-status-badge">Official Evidence</span></header>';
+
+      html += '<section class="process-read">';
+      html += '<p class="eyebrow">Process Read</p>';
+      html += '<h3>' + h.escapeHtml(read.label || "Evidence unavailable") + '</h3>';
+      html += '<p>' + h.escapeHtml(read.reason || "") + '</p>';
+      html += '<p class="next-action">Next: ' + h.escapeHtml(read.next_action || "") + '</p>';
+      html += '</section>';
 
       html += '<section class="evidence-section">';
-      html += '<h3>Commodity Observation</h3>';
-      html += '<p class="section-intro">Price moves require demand, supply, and inventory attribution before they can support a macro narrative.</p>';
-      html += '<div class="evidence-empty"><strong>Awaiting commodity price and attribution sources</strong><span>'
-        + h.escapeHtml(attribution.reason || observation.reason || "not configured") + '</span></div>';
+      html += '<h3>Oil Observation</h3>';
+      html += '<p class="section-intro">WTI and Brent describe the observed price move. Distribution status is not configured.</p>';
+      html += renderOilBenchmarkSummary(oilObservation.benchmarks || {});
+      html += '<h4>Attribution inputs</h4>';
+      html += '<p class="summary-stat">' + h.escapeHtml(attr.review_label || reasonLabel(attr)) + '</p>';
+      html += renderAttributionRows(attr.metrics || []);
       html += '</section>';
 
       html += '<section class="evidence-section">';
       html += '<h3>Market Corroboration</h3>';
       html += '<div class="evidence-grid">';
+
+      var cot = detail(5);
+      var usd = detail(6);
+      var inflation = detail(7);
+      var corr = payload.corroboration || {};
+      var cotCorr = corr.cot || {};
+      var usdCorr = corr.usd || {};
+      var infCorr = corr.inflation || {};
+
       html += '<article class="evidence-card"><h4>CFTC COT Positioning</h4>';
+      if (cotCorr.available_contract_count != null) {
+        html += '<p class="summary-stat">' + h.escapeHtml(String(cotCorr.available_contract_count)) + ' contracts available';
+        if (cotCorr.positive_flip_count) html += ', ' + h.escapeHtml(String(cotCorr.positive_flip_count)) + ' positive flips';
+        if (cotCorr.negative_flip_count) html += ', ' + h.escapeHtml(String(cotCorr.negative_flip_count)) + ' negative flips';
+        html += '</p>';
+      }
       if (freshness.cftc_latest_report_date) html += '<p class="source-date">As of ' + h.escapeHtml(freshness.cftc_latest_report_date) + '</p>';
       if (cot.status === "available") {
-        html += '<p class="note">' + h.escapeHtml(cot.method) + '</p>';
-        for (var c = 0; c < cot.commodities.length; c++) html += renderCOTRow(cot.commodities[c]);
-      } else html += unavailable(cot.reason);
+        html += '<details class="raw-evidence">';
+        html += '<summary>View raw evidence</summary>';
+        for (var c = 0; c < (cot.commodities || []).length; c++) html += renderCOTRow(cot.commodities[c]);
+        html += '</details>';
+      }
       html += '</article>';
+
       html += '<article class="evidence-card"><h4>Trade-Weighted USD</h4>';
+      if (usdCorr.available_series_count != null) {
+        html += '<p class="summary-stat">' + h.escapeHtml(String(usdCorr.available_series_count)) + ' series — daily: '
+          + h.escapeHtml(usdCorr.daily_direction || "unavailable") + ', weekly: '
+          + h.escapeHtml(usdCorr.weekly_direction || "unavailable") + '</p>';
+      }
       if (freshness.usd_latest_observation_date) html += '<p class="source-date">As of ' + h.escapeHtml(freshness.usd_latest_observation_date) + '</p>';
       if (usd.status === "available") {
-        for (var u = 0; u < usd.series.length; u++) html += renderUSDRow(usd.series[u]);
-      } else html += unavailable(usd.reason);
+        html += '<details class="raw-evidence">';
+        html += '<summary>View raw evidence</summary>';
+        for (var u = 0; u < (usd.series || []).length; u++) html += renderUSDRow(usd.series[u]);
+        html += '</details>';
+      }
       html += '</article>';
+
       html += '<article class="evidence-card"><h4>CPI / PPI Confirmation</h4>';
+      if (infCorr.available_series_count != null) {
+        html += '<p class="summary-stat">' + h.escapeHtml(String(infCorr.available_series_count)) + ' series — confirmation context</p>';
+      }
       if (freshness.inflation_latest_observation_date) html += '<p class="source-date">As of ' + h.escapeHtml(freshness.inflation_latest_observation_date) + '</p>';
       if (inflation.status === "available") {
-        for (var inf = 0; inf < inflation.series.length; inf++) html += renderInflationRow(inflation.series[inf]);
-      } else html += unavailable(inflation.reason);
+        html += '<details class="raw-evidence">';
+        html += '<summary>View raw evidence</summary>';
+        for (var inf = 0; inf < (inflation.series || []).length; inf++) html += renderInflationRow(inflation.series[inf]);
+        html += '</details>';
+      }
       html += '</article></div></section>';
 
       html += '<section class="evidence-section boundaries"><h3>Method Boundaries</h3>';

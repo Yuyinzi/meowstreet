@@ -22,6 +22,7 @@ def test_main_refreshes_official_building_permits_when_enabled():
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -74,6 +75,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -113,6 +115,7 @@ def test_main_does_not_generate_ai_interpretations():
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -149,6 +152,7 @@ def test_main_continues_after_provider_failure(capsys):
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -194,6 +198,7 @@ def test_main_can_stop_after_first_failure():
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -216,6 +221,7 @@ def test_main_records_exceptions_as_failures(capsys):
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -247,6 +253,7 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -283,6 +290,7 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -311,6 +319,7 @@ def test_main_skip_flags_remove_tasks():
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -348,6 +357,7 @@ def test_main_runs_both_ism_surveys_in_order():
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert result == 0
@@ -466,6 +476,7 @@ def test_planned_tasks_includes_unless_skipped():
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=record(""),
+        oil_main=lambda argv: 0,
     )
 
     assert any(call[0] == "" for call in calls)
@@ -490,6 +501,7 @@ def test_skip_cyclical_commodities_removes_task():
         main=lambda argv: (_ for _ in ()).throw(
             AssertionError("should not be called")
         ),
+        oil_main=lambda argv: 0,
     )
 
 
@@ -512,6 +524,7 @@ def test_skip_nfib_sbo_regional_removes_nfib_regional_task():
             AssertionError("should not be called")
         ),
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
 
@@ -540,6 +553,7 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -547,3 +561,35 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         ["--survey", "manufacturing", "--latest-only"],
         ["--survey", "services", "--latest-only"],
     ]
+
+
+def test_skip_oil_removes_oil_task():
+    calls = []
+
+    def record(label):
+        def run(argv):
+            calls.append((label, argv))
+            return 0
+
+        return run
+
+    refresh_macro_data.main(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-consumer-sentiment",
+            "--skip-m2",
+            "--skip-ism",
+            "--skip-gdp",
+            "--skip-fomc",
+            "--skip-oil",
+        ],
+        consumer_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
+        nfib_main=lambda argv: 0,
+        nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
+        oil_main=lambda argv: (_ for _ in ()).throw(
+            AssertionError("should not be called")
+        ),
+    )

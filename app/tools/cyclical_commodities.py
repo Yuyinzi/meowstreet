@@ -181,8 +181,143 @@ def _compute_inflation_series_payload(
     }
 
 
+_OIL_BENCHMARK_IDS = {"oil_wti_spot", "oil_brent_spot"}
+
+_OIL_ATTRIBUTION_IDS = {
+    "oil_commercial_crude_stocks",
+    "oil_commercial_crude_imports",
+    "oil_crude_production",
+    "oil_refinery_crude_input",
+    "oil_petroleum_products_supplied",
+}
+
+_OIL_ATTRIBUTION_DISPLAY = {
+    "oil_commercial_crude_stocks": "U.S. commercial crude stocks",
+    "oil_commercial_crude_imports": "Commercial crude imports",
+    "oil_crude_production": "U.S. crude production",
+    "oil_refinery_crude_input": "Refinery crude input",
+    "oil_petroleum_products_supplied": "Petroleum products supplied",
+}
+
+_OIL_ATTRIBUTION_ROLES = {
+    "oil_commercial_crude_stocks": "inventory",
+    "oil_commercial_crude_imports": "supply_context",
+    "oil_crude_production": "supply_context",
+    "oil_refinery_crude_input": "processing_activity",
+    "oil_petroleum_products_supplied": "demand_proxy",
+}
+
+
+def _latest_as_of(observations, as_of_date):
+    eligible = [row for row in observations if row["date"] <= as_of_date]
+    return sorted(eligible, key=lambda row: row["date"])
+
+
+def _oil_benchmark_payload(series_id, observations, as_of_date):
+    rows = _latest_as_of(observations, as_of_date)
+    if not rows:
+        return {
+            "series_id": series_id,
+            "status": "unavailable",
+            "distribution_status": "not_configured",
+            "source_identifier": None,
+            "source_url": None,
+        }
+    latest = rows[-1]
+    daily_return = (
+        _pct_change_ratio(latest["value"], rows[-2]["value"])
+        if len(rows) >= 2
+        else None
+    )
+    weekly_return = (
+        _pct_change_ratio(latest["value"], rows[-6]["value"])
+        if len(rows) >= 6
+        else None
+    )
+    return {
+        "series_id": series_id,
+        "status": "available",
+        "latest_date": latest["date"],
+        "latest_value": latest["value"],
+        "daily_return": daily_return,
+        "weekly_return": weekly_return,
+        "distribution_status": "not_configured",
+        "source_identifier": latest.get("source_identifier"),
+        "source_url": latest.get("source_url"),
+    }
+
+
+def _oil_observation_payload(oil_observations_by_series, as_of_date):
+    oil = oil_observations_by_series or {}
+    benchmarks = {}
+    any_available = False
+    missing = []
+    for sid in sorted(_OIL_BENCHMARK_IDS):
+        observations = oil.get(sid, [])
+        bp = _oil_benchmark_payload(sid, observations, as_of_date)
+        benchmarks[sid] = bp
+        if bp["status"] == "available":
+            any_available = True
+        else:
+            missing.append(sid)
+    if not any_available:
+        return {
+            "status": "unavailable",
+            "benchmarks": benchmarks,
+            "reason": "no oil benchmark observations are available",
+        }
+    if missing:
+        return {
+            "status": "available",
+            "benchmarks": benchmarks,
+            "reason": f"missing benchmarks: {', '.join(missing)}",
+        }
+    return {"status": "available", "benchmarks": benchmarks}
+
+
+def _oil_attribution_payload(oil_observations_by_series, as_of_date):
+    oil = oil_observations_by_series or {}
+    metrics = []
+    missing_ids = []
+    for sid in sorted(_OIL_ATTRIBUTION_IDS):
+        observations = oil.get(sid, [])
+        rows = _latest_as_of(observations, as_of_date)
+        metric = {
+            "series_id": sid,
+            "display_name": _OIL_ATTRIBUTION_DISPLAY.get(sid, sid),
+            "role": _OIL_ATTRIBUTION_ROLES.get(sid, ""),
+        }
+        if rows:
+            latest = rows[-1]
+            metric["status"] = "available"
+            metric["latest_date"] = latest["date"]
+            metric["latest_value"] = latest["value"]
+            metric["source_url"] = latest.get("source_url", "")
+            metric["source_identifier"] = latest.get("source_identifier", "")
+            metric["release_date"] = latest.get("release_date")
+        else:
+            metric["status"] = "unavailable"
+            missing_ids.append(sid)
+        metrics.append(metric)
+    if missing_ids:
+        return {
+            "status": "unavailable",
+            "metrics": metrics,
+            "reason": f"missing oil attribution inputs: {', '.join(missing_ids)}",
+            "missing_series": missing_ids,
+        }
+    return {
+        "status": "attribution_pending_review",
+        "metrics": metrics,
+        "review_label": "All five official oil attribution inputs are available",
+    }
+
+
 def build_cyclical_commodities_payload(
-    cot_rows, usd_observations_by_series, as_of_date
+    cot_rows,
+    usd_observations_by_series,
+    oil_observations_by_series=None,
+    as_of_date=None,
 ):
     as_of = as_of_date or ""
     cot_payload, cot_available = _compute_cot_payload(cot_rows)
@@ -198,16 +333,16 @@ def build_cyclical_commodities_payload(
         inflation_payload[sid] = _compute_inflation_series_payload(
             sid, display_name, observations, as_of
         )
+    oil_observation = _oil_observation_payload(oil_observations_by_series, as_of)
+    oil_attribution = _oil_attribution_payload(oil_observations_by_series, as_of)
     return {
         "version": _CYCLICAL_COMMODITIES_VERSION,
         "as_of_date": as_of,
         "cot": cot_payload,
         "usd": usd_payload,
         "inflation": inflation_payload,
-        "commodity_attribution": {
-            "status": "unavailable",
-            "reason": "commodity price, demand, supply, and inventory sources are not yet configured; COT and USD evidence cannot substitute for attribution",
-        },
+        "oil_observation": oil_observation,
+        "commodity_attribution": oil_attribution,
         "commodity_returns": {
             "status": "unavailable",
             "reason": "continuous commodity price histories and contract-roll methodology are not yet configured",
@@ -218,9 +353,11 @@ def build_cyclical_commodities_payload(
 
 def build_cyclical_commodities_headline(payload):
     reasons = []
-    if payload.get("commodity_attribution", {}).get("status") == "unavailable":
+    attr_status = payload.get("commodity_attribution", {}).get("status")
+    ret_status = payload.get("commodity_returns", {}).get("status")
+    if attr_status in ("unavailable", None):
         reasons.append("commodity attribution is unavailable")
-    if payload.get("commodity_returns", {}).get("status") == "unavailable":
+    if ret_status in ("unavailable", None):
         reasons.append("commodity prices are unavailable")
     cot_available = any(
         v.get("status") == "available" for v in payload.get("cot", {}).values()
@@ -231,6 +368,9 @@ def build_cyclical_commodities_headline(payload):
     inflation_available = any(
         v.get("status") == "available" for v in payload.get("inflation", {}).values()
     )
+    oil_obs = payload.get("oil_observation", {})
+    oil_available = oil_obs.get("status") == "available"
+    attr_review = attr_status == "attribution_pending_review"
     available = []
     freshness = {}
     if cot_available:
@@ -260,6 +400,10 @@ def build_cyclical_commodities_headline(payload):
         ]
         if inf_dates:
             freshness["inflation_latest"] = max(inf_dates)
+    if oil_available:
+        available.append("Oil price")
+    if attr_review:
+        available.append("Oil attribution inputs")
     if not available:
         return {
             "id": "cyclical_commodities",
@@ -296,8 +440,11 @@ def build_cyclical_commodities_detail(payload):
         "version": payload.get("version"),
         "as_of_date": payload.get("as_of_date"),
         "card_status": payload.get("card_status"),
+        "oil_observation": payload.get("oil_observation"),
         "commodity_attribution": payload.get("commodity_attribution"),
         "commodity_returns": payload.get("commodity_returns"),
+        "process_read": _process_read(payload),
+        "corroboration": _corroboration_summary(payload),
         "steps": details,
         "freshness": _collect_freshness_metadata(payload),
     }
@@ -309,13 +456,33 @@ def _collect_series_details(payload):
     cot = payload.get("cot", {})
     usd = payload.get("usd", {})
     inf = payload.get("inflation", {})
+    oil_obs = payload.get("oil_observation", {})
 
     def has_available(d):
         return any(v.get("status") == "available" for v in d.values())
 
-    return [
+    steps = [
         _build_step(
             1,
+            "Oil Observation",
+            oil_obs.get("status", "unavailable"),
+            {
+                "benchmarks": list(oil_obs.get("benchmarks", {}).values()),
+                "reason": oil_obs.get("reason", ""),
+            },
+        ),
+        _build_step(
+            2,
+            "Oil Attribution",
+            attr.get("status", "unavailable"),
+            {
+                "metrics": attr.get("metrics", []),
+                "reason": attr.get("reason", "not configured"),
+                "review_label": attr.get("review_label", ""),
+            },
+        ),
+        _build_step(
+            3,
             "Commodity Returns",
             returns.get("status", "unavailable"),
             {
@@ -323,15 +490,15 @@ def _collect_series_details(payload):
             },
         ),
         _build_step(
-            2,
+            4,
             "Commodity Attribution",
-            attr.get("status", "unavailable"),
+            "unavailable",
             {
-                "reason": attr.get("reason", "not configured"),
+                "reason": "continuous commodity price attribution requires the Oil Attribution step; non-oil commodity attribution sources are not yet configured",
             },
         ),
         _build_step(
-            3,
+            5,
             "CFTC COT Positioning",
             "available" if has_available(cot) else "unavailable",
             {
@@ -341,7 +508,7 @@ def _collect_series_details(payload):
             },
         ),
         _build_step(
-            4,
+            6,
             "Trade-Weighted USD",
             "available" if has_available(usd) else "unavailable",
             {
@@ -350,7 +517,7 @@ def _collect_series_details(payload):
             },
         ),
         _build_step(
-            5,
+            7,
             "CPI/PPI Confirmation",
             "available" if has_available(inf) else "unavailable",
             {
@@ -359,6 +526,85 @@ def _collect_series_details(payload):
             },
         ),
     ]
+    return steps
+
+
+def _process_read(payload):
+    oil_observation = payload.get("oil_observation", {})
+    oil_attribution = payload.get("commodity_attribution", {})
+    if oil_observation.get("status") != "available":
+        return {
+            "status": "insufficient_for_commodity_narrative",
+            "label": "Commodity narrative cannot be assessed",
+            "reason": "commodity price observation and demand, supply, inventory attribution are unavailable",
+            "next_action": "configure official commodity price and attribution sources",
+        }
+    if oil_attribution.get("status") != "attribution_pending_review":
+        return {
+            "status": "insufficient_for_commodity_narrative",
+            "label": "Commodity narrative cannot be assessed",
+            "reason": "oil price observations are present but attribution inputs are incomplete",
+            "next_action": "load official oil attribution inputs",
+        }
+    return {
+        "status": "attribution_pending_review",
+        "label": "Oil attribution is ready for review",
+        "reason": "Official oil price, inventory, supply-context, processing-activity, and demand-proxy inputs are available; review their joint context before forming a macro narrative.",
+        "next_action": "review oil attribution evidence; do not treat any individual metric as a trade signal",
+    }
+
+
+def _direction(values):
+    signs = {
+        1 if value > 0 else -1 if value < 0 else 0
+        for value in values
+        if value is not None
+    }
+    if not signs:
+        return "unavailable"
+    if signs == {1}:
+        return "rising"
+    if signs == {-1}:
+        return "falling"
+    return "mixed"
+
+
+def _corroboration_summary(payload):
+    cot = payload.get("cot", {})
+    usd = payload.get("usd", {})
+    inf = payload.get("inflation", {})
+
+    available_contracts = [k for k, v in cot.items() if v.get("status") == "available"]
+    positive_flips = sum(
+        1 for k in available_contracts if cot[k].get("flip") == "positive"
+    )
+    negative_flips = sum(
+        1 for k in available_contracts if cot[k].get("flip") == "negative"
+    )
+
+    usd_available = [k for k, v in usd.items() if v.get("status") == "available"]
+    usd_daily_vals = [usd[k].get("daily_return") for k in usd_available]
+    usd_weekly_vals = [usd[k].get("weekly_return") for k in usd_available]
+
+    inf_available = [k for k, v in inf.items() if v.get("status") == "available"]
+
+    result = {
+        "cot": {
+            "available_contract_count": len(available_contracts),
+            "positive_flip_count": positive_flips,
+            "negative_flip_count": negative_flips,
+        },
+        "usd": {
+            "available_series_count": len(usd_available),
+            "daily_direction": _direction(usd_daily_vals),
+            "weekly_direction": _direction(usd_weekly_vals),
+        },
+        "inflation": {
+            "available_series_count": len(inf_available),
+            "role": "confirmation_context",
+        },
+    }
+    return result
 
 
 def _collect_freshness_metadata(payload):
@@ -384,6 +630,13 @@ def _collect_freshness_metadata(payload):
     ]
     if inf_dates:
         freshness["inflation_latest_observation_date"] = max(inf_dates)
+    oil_dates = [
+        v.get("latest_date")
+        for v in payload.get("oil_observation", {}).get("benchmarks", {}).values()
+        if v.get("status") == "available" and v.get("latest_date")
+    ]
+    if oil_dates:
+        freshness["oil_latest_observation_date"] = max(oil_dates)
     obs_date = payload.get("as_of_date")
     if obs_date:
         freshness["as_of_date"] = obs_date

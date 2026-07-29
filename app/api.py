@@ -162,6 +162,16 @@ _OBSERVATION_SERIES_IDS = [
     "ppi_all_commodities",
 ]
 
+_OIL_SERIES_IDS = [
+    "oil_wti_spot",
+    "oil_brent_spot",
+    "oil_commercial_crude_stocks",
+    "oil_commercial_crude_imports",
+    "oil_crude_production",
+    "oil_refinery_crude_input",
+    "oil_petroleum_products_supplied",
+]
+
 app = FastAPI(title="Meowstreet")
 
 if STATIC_DIR.exists():
@@ -432,6 +442,12 @@ def macro_dashboard_growth_cycle():
                 _OBSERVATION_SERIES_IDS,
             )
         )
+        oil_observations = (
+            macro_indicators_db.load_macro_indicator_observations_for_series(
+                con,
+                _OIL_SERIES_IDS,
+            )
+        )
         dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
             ism_manufacturing=ism_manufacturing,
             ism_services=ism_services_data["payload"],
@@ -449,6 +465,7 @@ def macro_dashboard_growth_cycle():
             cyclical_commodities={
                 "cot_rows": cot_rows,
                 "usd_observations_by_series": usd_observations,
+                "oil_observations_by_series": oil_observations,
                 "as_of_date": date.today().isoformat(),
             },
         )
@@ -816,8 +833,17 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                     _OBSERVATION_SERIES_IDS,
                 )
             )
+            oil_observations = (
+                macro_indicators_db.load_macro_indicator_observations_for_series(
+                    con,
+                    _OIL_SERIES_IDS,
+                )
+            )
             payload = tool.build_cyclical_commodities_payload(
-                cot_rows, usd_observations, date.today().isoformat()
+                cot_rows,
+                usd_observations,
+                oil_observations,
+                date.today().isoformat(),
             )
             return tool.build_cyclical_commodities_detail(payload)
         if detail_id == "ism_services":

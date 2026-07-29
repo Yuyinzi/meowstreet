@@ -2017,9 +2017,10 @@ def normalize_cyclical_commodities(payload):
 
     cot_rows = payload.get("cot_rows", [])
     usd_observations_by_series = payload.get("usd_observations_by_series", {})
+    oil_observations_by_series = payload.get("oil_observations_by_series", {})
     as_of_date = payload.get("as_of_date", "2026-01-01")
     payload = tool.build_cyclical_commodities_payload(
-        cot_rows, usd_observations_by_series, as_of_date
+        cot_rows, usd_observations_by_series, oil_observations_by_series, as_of_date
     )
     card = tool.build_cyclical_commodities_headline(payload)
     return {

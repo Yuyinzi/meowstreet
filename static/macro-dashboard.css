@@ -625,6 +625,47 @@ h2 {
   text-transform: uppercase;
 }
 
+.process-read {
+  border-left: 3px solid #D7B789;
+  background: #F7F1EA;
+  padding: 12px;
+}
+
+.process-read h3 {
+  font-size: 14px;
+  margin: 4px 0;
+}
+
+.process-read p {
+  color: #6E6257;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.next-action {
+  color: #5C4F44 !important;
+  font-weight: 700;
+}
+
+.summary-stat {
+  color: #6E6257;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+
+.raw-evidence {
+  margin-top: 10px;
+}
+
+.raw-evidence summary {
+  color: #5C4F44;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .evidence-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

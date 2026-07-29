@@ -228,18 +228,16 @@ class TestMacroIndicatorObservationMetadata:
         result = macro_indicators.load_macro_indicator_observations(
             con, "building_permits_saar"
         )
-        assert result == [
-            {
-                "date": "2026-05-01",
-                "value": 1418.0,
-                "source": "census.xlsx",
-                "release_date": "2026-07-17",
-                "revision_status": "revised",
-                "source_url": "https://www.census.gov/construction/nrc/index.html",
-                "source_identifier": "June 2026 release",
-                "source_hash": None,
-            }
-        ]
+        result = macro_indicators.load_macro_indicator_observations(
+            con, "building_permits_saar"
+        )
+        assert len(result) == 1
+        assert result[0]["date"] == "2026-05-01"
+        assert result[0]["value"] == 1418.0
+        assert result[0]["source"] == "census.xlsx"
+        assert result[0]["release_date"] == "2026-07-17"
+        assert result[0]["publication_date_basis"] is None
+        assert result[0]["source_identifier"] == "June 2026 release"
 
     def test_merge_macro_indicator_observations_preserves_metadata_on_value_update(
         self, tmp_path

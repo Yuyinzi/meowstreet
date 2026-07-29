@@ -2400,3 +2400,23 @@ def test_cyclical_commodities_card_not_in_headline_when_omitted():
     card_ids = [card["id"] for card in payload["headline"] if card.get("id")]
 
     assert "cyclical_commodities" not in card_ids
+
+
+def test_cyclical_commodities_dashboard_normalize_accepts_oil_observations():
+    payload = {
+        "cot_rows": [],
+        "usd_observations_by_series": {},
+        "oil_observations_by_series": {
+            "oil_wti_spot": [
+                {"date": "2026-07-24", "value": 64.89, "source_identifier": "RWTC"},
+            ],
+        },
+        "as_of_date": "2026-07-25",
+    }
+    dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
+        cyclical_commodities=payload,
+    )
+    payload = macro_growth_cycle.build_growth_cycle_dashboard_payload(dashboard)
+    card_ids = [card["id"] for card in payload["headline"] if card.get("id")]
+
+    assert "cyclical_commodities" in card_ids

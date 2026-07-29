@@ -16,6 +16,7 @@ from scripts import import_m2_money_supply
 from scripts import import_nfib_sbet
 from scripts import import_nfib_sbet_regional
 from scripts import import_cyclical_commodities
+from scripts import import_oil
 from scripts import import_us_building_permits
 from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
@@ -86,6 +87,7 @@ def _planned_tasks(
     nfib_main=import_nfib_sbet.main,
     nfib_regional_main=import_nfib_sbet_regional.main,
     main=None,
+    oil_main=None,
 ):
     tasks = []
     if not args.skip_yahoo:
@@ -141,6 +143,8 @@ def _planned_tasks(
         tasks.append(("nfib_sbo_regional_official", nfib_regional_main, []))
     if main is not None and not args.skip_cyclical_commodities:
         tasks.append(("cyclical_commodities_official", main, []))
+    if oil_main is not None and not args.skip_oil:
+        tasks.append(("oil_official", oil_main, []))
     return tasks
 
 
@@ -166,9 +170,12 @@ def main(
     nfib_main=import_nfib_sbet.main,
     nfib_regional_main=import_nfib_sbet_regional.main,
     main=None,
+    oil_main=None,
 ):
     if main is None:
         main = import_cyclical_commodities.main
+    if oil_main is None:
+        oil_main = import_oil.main
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
     parser.add_argument("--skip-rates", action="store_true")
@@ -181,6 +188,7 @@ def main(
     parser.add_argument("--skip-nfib-sbo", action="store_true")
     parser.add_argument("--skip-nfib-sbo-regional", action="store_true")
     parser.add_argument("--skip-cyclical-commodities", action="store_true")
+    parser.add_argument("--skip-oil", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
     parser.add_argument(
         "--stop-on-error",
@@ -205,6 +213,7 @@ def main(
         nfib_main,
         nfib_regional_main,
         main,
+        oil_main,
     ):
         result = _run_task(name, func, task_argv)
         results.append(result)

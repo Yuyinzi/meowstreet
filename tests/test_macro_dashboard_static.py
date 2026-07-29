@@ -78,7 +78,9 @@ def test_benchmark_indices_has_section_spacing_after_survey_synthesis():
     html = (ROOT / "static" / "macro-dashboard.html").read_text()
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 
-    assert 'class="benchmark-indices" aria-label="Benchmark market phase overview"' in html
+    assert (
+        'class="benchmark-indices" aria-label="Benchmark market phase overview"' in html
+    )
     assert ".benchmark-indices {\n  margin-top: 24px;\n}" in css
 
 
@@ -6509,6 +6511,19 @@ def test_macro_dashboard_loads_and_dispatches_renderer():
     assert 'card.id === "cyclical_commodities"' in js
 
 
+def test_detail_renders_process_read_and_collapses_raw_evidence():
+    js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert "Process Read" in js
+    assert "Evidence unavailable" in js
+    assert 'class="raw-evidence"' in js
+    assert "View raw evidence" in js
+    assert "positive_flip_count" in js
+    assert "weekly_direction" in js
+    assert ".raw-evidence" in css
+
+
 def test_renderer_has_no_client_side_position_or_return_formula():
     js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
 
@@ -6520,13 +6535,28 @@ def test_detail_uses_evidence_sections_instead_of_method_steps():
     js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 
-    assert "Commodity Observation" in js
+    assert "Process Read" in js
     assert "Market Corroboration" in js
     assert "Method Boundaries" in js
     assert "Step " not in js
-    assert "Freshness / 数据时效" not in js
+    assert "View raw evidence" in js
     assert "As of" in js
     assert ".evidence-section" in css
     assert ".evidence-grid" in css
-    assert ".cyclical-commodities-detail {\n  display: grid;\n  gap: 0;\n  padding: 0;" in css
-    assert ".evidence-section {\n  border: 0;\n  border-top:" in css
+    assert ".process-read" in css
+    assert ".raw-evidence" in css
+
+
+def test_renderer_shows_oil_before_market_corroboration():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert source.index("Oil Observation") < source.index("Market Corroboration")
+    assert "demand-led" not in source.lower()
+    assert "supply-led" not in source.lower()
+
+
+def test_oil_benchmark_renders_source_identifier():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "source_identifier" in source
+    assert "source_url" in source

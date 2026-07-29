@@ -3408,6 +3408,83 @@ def test_detail_endpoint_returns_explicit_unavailable_attribution(monkeypatch):
     assert response.json()["commodity_attribution"]["status"] == "unavailable"
 
 
+def test_detail_endpoint_exposes_process_read_and_corroboration(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: [
+                {"date": "2026-07-20", "value": 120.0, "source_identifier": "DTWEXBGS"},
+                {"date": "2026-07-21", "value": 120.5, "source_identifier": "DTWEXBGS"},
+            ]
+            for sid in series_ids
+            if not sid.startswith("oil")
+        },
+    )
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.json()["process_read"]["status"]
+        == "insufficient_for_commodity_narrative"
+    )
+    assert response.json()["corroboration"]["usd"]["available_series_count"] == 3
+
+
 def test_market_setup_is_identical_when_data_changes(monkeypatch):
     from app import api
 
@@ -3465,3 +3542,170 @@ def test_market_setup_is_identical_when_data_changes(monkeypatch):
     second = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
 
     assert second == first
+
+
+def _stub_eia_observations(monkeypatch):
+    from app import api
+
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: (
+            {
+                sid: [
+                    {"date": "2026-07-24", "value": 64.89, "source_identifier": "RWTC"}
+                ]
+                for sid in series_ids
+                if sid in api._OIL_SERIES_IDS
+            }
+            if any(sid in api._OIL_SERIES_IDS for sid in series_ids)
+            else {
+                sid: [
+                    {
+                        "date": "2026-07-20",
+                        "value": 120.0,
+                        "source_identifier": "DTWEXBGS",
+                    },
+                    {
+                        "date": "2026-07-21",
+                        "value": 120.5,
+                        "source_identifier": "DTWEXBGS",
+                    },
+                ]
+                for sid in series_ids
+            }
+        ),
+    )
+
+
+def test_detail_returns_oil_observation_and_pending_attribution(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    _stub_eia_observations(monkeypatch)
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["oil_observation"]["status"] == "available"
+    assert body["commodity_attribution"]["status"] == "attribution_pending_review"
+    assert body["process_read"]["status"] == "attribution_pending_review"
+
+
+def test_market_setup_is_identical_when_oil_data_changes(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.market_phase,
+        "build_dashboard_payload",
+        lambda loader: None,
+    )
+    monkeypatch.setattr(
+        api.benchmark_market_data,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.gdp_market_relationships,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+
+    def _market_setup_response(oil_value):
+        monkeypatch.setattr(
+            api.macro_indicators_db,
+            "load_macro_indicator_observations_for_series",
+            lambda con, series_ids: {
+                sid: [
+                    {
+                        "date": "2026-07-24",
+                        "value": oil_value,
+                        "source_identifier": "RWTC",
+                    }
+                ]
+                for sid in series_ids
+            },
+        )
+        return TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+
+    assert _market_setup_response(60.0) == _market_setup_response(90.0)
