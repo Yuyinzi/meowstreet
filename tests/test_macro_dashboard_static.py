@@ -6634,7 +6634,7 @@ def test_cyclical_commodities_ui_renders_backend_distribution_labels():
     assert ".oil-provenance" in css
     assert "oil-distribution-abnormal" in source
     assert ".oil-distribution-abnormal" in css
-    assert "Within 1σ" in source
+    assert "Within 1σ, Normal" in source
     assert source.count("state-review-required") == 1
     assert "statistics.stdev" not in source
     assert "Math.sqrt" not in source

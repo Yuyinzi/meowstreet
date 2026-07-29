@@ -44,7 +44,7 @@
             + '</span>';
         }
         var textMap = {
-          normal: "Within 1σ",
+          normal: "Within 1σ, Normal",
           abnormal_1sigma: "1\u03c3 abnormal",
           abnormal_2sigma: "2\u03c3 abnormal",
           abnormal_3sigma: "3\u03c3 abnormal",
