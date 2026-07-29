@@ -201,10 +201,25 @@ def test_fetch_sbet_report_creates_parent_directory(monkeypatch, tmp_path):
     import urllib.request
 
     calls = []
-    monkeypatch.setattr(
-        urllib.request, "urlretrieve", lambda url, path: Path(path).write_text("fake")
-    )
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self):
+            return b"%PDF-fake"
+
+    def fake_urlopen(request, timeout):
+        calls.append((request.full_url, request.get_header("User-agent"), timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     dest = tmp_path / "subdir" / "report.pdf"
     result = nfib_sbet.fetch_sbet_report(dest, SOURCE_URL)
     assert result.parent.exists()
     assert result == dest
+    assert dest.read_bytes() == b"%PDF-fake"
+    assert calls == [(SOURCE_URL, "Mozilla/5.0", 60)]

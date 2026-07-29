@@ -488,9 +488,11 @@ def parse_sbet_report(report_path, source_url, release_date=None):
 
 
 def fetch_sbet_report(destination, source_url):
-    import urllib.request
+    from urllib.request import Request, urlopen
 
     dest = Path(destination)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    urllib.request.urlretrieve(source_url, str(dest))
+    request = Request(source_url, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(request, timeout=60) as response:
+        dest.write_bytes(response.read())
     return dest
