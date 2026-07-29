@@ -3047,6 +3047,19 @@ html += '</div>';
           });
           return;
         }
+        if (payload.detail_id === "cyclical_commodities" && window.CyclicalCommoditiesUi && window.CyclicalCommoditiesUi.renderDetail) {
+          window.CyclicalCommoditiesUi.renderDetail(body, payload, {
+            escapeHtml: escapeHtml,
+            bilingualLabel: bilingualLabel,
+            bilingualTitle: bilingualTitle,
+            titleCaseToken: titleCaseToken,
+            fmtNumber: fmtNumber,
+            fmtSignedPctDecimal: fmtSignedPctDecimal,
+            fmtMonthYear: fmtMonthYear,
+            statusClass: ismBadgeClass,
+          });
+          return;
+        }
         if (payload.detail_id === "nfib_sbo" && window.nfibSboUi && window.nfibSboUi.renderDetail) {
           window.nfibSboUi.renderDetail(body, payload, {
             escapeHtml: escapeHtml,
@@ -3118,6 +3131,17 @@ html += '</div>';
         getSelectedChartRange: function () { return state.selectedGrowthCycleChartRange; },
         bindGrowthCycleRangeControl: bindGrowthCycleRangeControl,
         attachRatesChartTooltips: attachRatesChartTooltips,
+      });
+    } else if (payload.detail_id === "cyclical_commodities" && window.CyclicalCommoditiesUi && window.CyclicalCommoditiesUi.renderDetail) {
+      window.CyclicalCommoditiesUi.renderDetail(body, payload, {
+        escapeHtml: escapeHtml,
+        bilingualLabel: bilingualLabel,
+        bilingualTitle: bilingualTitle,
+        titleCaseToken: titleCaseToken,
+        fmtNumber: fmtNumber,
+        fmtSignedPctDecimal: fmtSignedPctDecimal,
+        fmtMonthYear: fmtMonthYear,
+        statusClass: ismBadgeClass,
       });
     } else if (payload.detail_id === "nfib_sbo" && window.nfibSboUi && window.nfibSboUi.renderDetail) {
       window.nfibSboUi.renderDetail(body, payload, {
@@ -4227,6 +4251,25 @@ html += '</div>';
     return "";
   }
 
+  function renderCyclicalCommoditiesCard(card) {
+    if (window.CyclicalCommoditiesUi && window.CyclicalCommoditiesUi.renderCard) {
+      return window.CyclicalCommoditiesUi.renderCard(card, {
+        escapeHtml: escapeHtml,
+        bilingualLabel: bilingualLabel,
+        bilingualTitle: bilingualTitle,
+        titleCaseToken: titleCaseToken,
+        fmtNumber: fmtNumber,
+        fmtSignedPctDecimal: fmtSignedPctDecimal,
+        fmtMonthYear: fmtMonthYear,
+        statusClass: ismBadgeClass,
+        isSelectedGrowthCycleDetailId: function (id) {
+          return state.selectedGrowthCycleDetailId === id;
+        },
+      });
+    }
+    return "";
+  }
+
   function renderNfibSboCard(card) {
     if (window.nfibSboUi && window.nfibSboUi.renderCard) {
       return window.nfibSboUi.renderCard(card, {
@@ -4396,6 +4439,7 @@ html += '</div>';
     if (card.id === "fed_balance_sheet") return renderFedBalanceSheetCard(card);
     if (card.id === "housing_permits") return renderHousingPermitsCard(card);
     if (card.id === "nfib_sbo") return renderNfibSboCard(card);
+    if (card.id === "cyclical_commodities") return renderCyclicalCommoditiesCard(card);
     return "";
   }
 
