@@ -35,6 +35,13 @@ def test_macro_dashboard_page_routes_are_served():
     assert "text/html" in response.headers["content-type"]
 
 
+def test_cyclical_commodities_script_is_served():
+    response = client.get("/cyclical-commodities-ui.js")
+
+    assert response.status_code == 200
+    assert "application/javascript" in response.headers["content-type"]
+
+
 def test_growth_cycle_ism_industry_breadth_prefers_latest_official_report(monkeypatch):
     from app import api
 

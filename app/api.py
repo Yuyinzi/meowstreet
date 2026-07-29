@@ -298,6 +298,14 @@ def nfib_sbo_ui_js():
     )
 
 
+@app.get("/cyclical-commodities-ui.js")
+def cyclical_commodities_ui_js():
+    return FileResponse(
+        STATIC_DIR / "cyclical-commodities-ui.js",
+        media_type="application/javascript",
+    )
+
+
 @app.get("/api/macro-dashboard/consumer-sentiment")
 def macro_dashboard_consumer_sentiment():
     con = consumer_sentiment.connect()
