@@ -1666,6 +1666,21 @@ def build_growth_cycle_sections(growth_cycle, headline, services_signal_state=No
             ["m2_money_supply"] if "m2_money_supply" in card_ids else [],
             period=growth_cycle.get("m2_period"),
         ),
+        *(
+            [
+                _growth_cycle_section(
+                    "cyclical_commodities_usd",
+                    "Cyclical Commodities & USD",
+                    "Official CFTC positioning, trade-weighted USD, and CPI/PPI confirmation evidence.",
+                    ["cyclical_commodities"],
+                    status=_headline_card_by_id(
+                        headline, "cyclical_commodities"
+                    ).get("status", "pending_inputs"),
+                )
+            ]
+            if "cyclical_commodities" in card_ids
+            else []
+        ),
         _growth_cycle_section(
             "inflation_context",
             "Inflation Context",

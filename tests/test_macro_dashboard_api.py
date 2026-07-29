@@ -3343,6 +3343,12 @@ def test_growth_cycle_api_returns_partial_card_when_only_official_usd_is_availab
     assert len(cards) > 0
     card = cards[0]
     assert card["status"] == "partial_official_evidence"
+    section = next(
+        section
+        for section in response.json()["sections"]
+        if section["id"] == "cyclical_commodities_usd"
+    )
+    assert section["cards"] == ["cyclical_commodities"]
 
 
 def test_detail_endpoint_returns_explicit_unavailable_attribution(monkeypatch):
