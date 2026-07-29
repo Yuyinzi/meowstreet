@@ -800,9 +800,56 @@ h2 {
   border-radius: 6px;
 }
 
-.distribution-normal { color: #4C6250; background: #EEF4EC; }
-.distribution-abnormal { color: #87531B; background: #FBF0DE; }
-.distribution-unavailable { color: #6E6257; background: #F3EEE8; }
+.oil-distribution-summary {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+
+.oil-distribution-summary strong {
+  display: block;
+  font-size: 13px;
+}
+
+.oil-distribution-summary span {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.oil-distribution-summary-normal {
+  color: #4C6250;
+  background: #EEF4EC;
+}
+
+.oil-distribution-summary-abnormal {
+  color: #87531B;
+  background: #FBF0DE;
+}
+
+.oil-distribution-summary-incomplete {
+  color: #6E6257;
+  background: #F3EEE8;
+}
+
+.oil-price-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.oil-distribution-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.oil-provenance {
+  color: #8A7B6D;
+  font-size: 11px;
+  margin-top: 7px;
+}
 
 @media (max-width: 900px) {
   .evidence-grid {

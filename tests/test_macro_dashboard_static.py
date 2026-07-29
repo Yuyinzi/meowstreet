@@ -6620,12 +6620,16 @@ def test_cyclical_commodities_ui_renders_backend_distribution_labels():
 
     assert "daily_distribution" in source
     assert "weekly_distribution" in source
-    assert "Distribution v1" in source
-    assert "Full history" in source
-    assert "Sample std" in source
-    assert "ISO week" in source
-    assert "distribution-normal" in css
-    assert "distribution-abnormal" in css
+    assert "oil_price_distribution_summary" in source
+    assert "Oil price movement is statistically normal" not in source
+    assert "Distribution status is not configured." not in source
+    assert "oil-distribution-summary" in source
+    assert "oil-price-line" in source
+    assert "oil-distribution-line" in source
+    assert "oil-provenance" in source
+    assert ".oil-distribution-summary" in css
+    assert ".oil-price-line" in css
+    assert ".oil-provenance" in css
     assert "statistics.stdev" not in source
     assert "Math.sqrt" not in source
     assert "demand-led" not in source.lower()

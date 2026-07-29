@@ -39,20 +39,10 @@
 
       function renderDistribution(distribution, label) {
         if (!distribution || distribution.classification === "unavailable") {
-          var reason = distribution && distribution.reason ? distribution.reason : null;
-          var meta = 'Distribution v1 \u00b7 Full history \u00b7 Sample std';
-          var html = '<span class="distribution distribution-unavailable">'
-            + h.escapeHtml(label + ' distribution: Unavailable')
-            + '</span>'
-            + '<div class="distribution-meta">' + h.escapeHtml(meta) + '</div>';
-          if (reason) {
-            html += '<div class="distribution-reason">' + h.escapeHtml(reason) + '</div>';
-          }
-          return html;
+          return '<span class="state state-unavailable">'
+            + h.escapeHtml(label + ': Unavailable')
+            + '</span>';
         }
-        var cls = distribution.classification === "normal"
-          ? "distribution-normal"
-          : "distribution-abnormal";
         var textMap = {
           normal: "Normal",
           abnormal_1sigma: "1\u03c3 abnormal",
@@ -60,15 +50,19 @@
           abnormal_3sigma: "3\u03c3 abnormal",
         };
         var text = textMap[distribution.classification] || distribution.classification;
-        var meta = 'Distribution v1 \u00b7 Full history \u00b7 Sample std \u00b7 '
-          + h.escapeHtml(String(distribution.sample_count || 0)) + ' returns';
-        if (distribution.week_definition) {
-          meta += ' \u00b7 ISO week';
-        }
-        return '<span class="distribution ' + h.escapeHtml(cls) + '">'
-          + h.escapeHtml(label + ' distribution: ' + text)
-          + '</span>'
-          + '<div class="distribution-meta">' + h.escapeHtml(meta) + '</div>';
+        var state = distribution.classification === "normal" ? "flat" : "review-required";
+        return '<span class="state state-' + h.escapeHtml(state) + '">'
+          + h.escapeHtml(label + ': ' + text)
+          + '</span>';
+      }
+
+      function renderOilDistributionSummary(summary) {
+        if (!summary) return "";
+        return '<div class="oil-distribution-summary oil-distribution-summary-'
+          + h.escapeHtml(summary.status || "incomplete") + '">'
+          + '<strong>' + h.escapeHtml(summary.label || "Oil price distribution is incomplete; review the available benchmark evidence.") + '</strong>'
+          + '<span>' + h.escapeHtml(summary.detail || "") + '</span>'
+          + '</div>';
       }
 
       function renderValue(val) {
@@ -150,23 +144,35 @@
         for (var i = 0; i < ids.length; i++) {
           var b = benchmarks[ids[i]];
           if (b.status !== "available") {
-            html += '<div class="workflow-row">'
-              + '<div class="workflow-label">' + h.escapeHtml(_oilDisplayName(ids[i])) + '</div>'
-              + '<div class="workflow-metrics"><span>Not available</span></div>'
+            html += '<div class="workflow-row oil-benchmark">'
+              + '<div class="oil-price-line"><strong>' + h.escapeHtml(_oilDisplayName(ids[i])) + '</strong><span>Not available</span></div>'
+              + '<div class="oil-distribution-line">'
+              + renderDistribution(b.daily_distribution, "Daily")
+              + renderDistribution(b.weekly_distribution, "Weekly")
+              + '</div>'
+              + '<div class="oil-provenance">'
+              + h.escapeHtml(b.reason || "No oil observation is available.")
+              + (b.source_identifier ? ' · Source: ' + h.escapeHtml(b.source_identifier) : "")
+              + '</div>'
               + '</div>';
             continue;
           }
           var unitStr = b.units || "$/BBL";
-          html += '<div class="workflow-row">'
-            + '<div class="workflow-label">' + h.escapeHtml(_oilDisplayName(ids[i])) + '</div>'
-            + '<div class="workflow-metrics">'
-            + '<span>Value: ' + h.escapeHtml(h.fmtNumber(b.latest_value)) + ' ' + h.escapeHtml(unitStr) + '</span>'
-            + '<span>' + renderState(h.fmtSignedPctDecimal(b.daily_return), b.daily_return_state, "Daily") + '</span>'
-            + '<span>' + renderState(h.fmtSignedPctDecimal(b.weekly_return), b.weekly_return_state, "Weekly") + '</span>'
+          var dailyDistribution = b.daily_distribution || {};
+          var weeklyDistribution = b.weekly_distribution || {};
+          html += '<div class="workflow-row oil-benchmark">'
+            + '<div class="oil-price-line"><strong>' + h.escapeHtml(_oilDisplayName(ids[i])) + '</strong><span>'
+            + h.escapeHtml(h.fmtNumber(b.latest_value)) + ' ' + h.escapeHtml(unitStr) + '</span></div>'
+            + '<div class="oil-distribution-line">'
+            + renderState(h.fmtSignedPctDecimal(b.daily_return), b.daily_return_state, "Daily")
             + renderDistribution(b.daily_distribution, "Daily")
+            + renderState(h.fmtSignedPctDecimal(b.weekly_return), b.weekly_return_state, "Weekly")
             + renderDistribution(b.weekly_distribution, "Weekly")
-            + '<span>Source: ' + h.escapeHtml(b.source_identifier || b.source_url || "") + '</span>'
             + '</div>'
+            + '<div class="oil-provenance">v1 · full history · sample std · '
+            + h.escapeHtml(String(dailyDistribution.sample_count || 0)) + ' daily / '
+            + h.escapeHtml(String(weeklyDistribution.sample_count || 0)) + ' weekly returns · Source: '
+            + h.escapeHtml(b.source_identifier || b.source_url || "") + '</div>'
             + '</div>';
         }
         return html;
@@ -237,7 +243,8 @@
 
       html += '<section class="evidence-section">';
       html += '<h3>Oil Observation</h3>';
-      html += '<p class="section-intro">WTI and Brent describe the observed price move. Distribution status is not configured.</p>';
+      html += '<p class="section-intro">WTI and Brent show observed price moves and their statistical distribution status.</p>';
+      html += renderOilDistributionSummary(payload.oil_price_distribution_summary);
       if (freshness.oil_latest_observation_date) {
         html += '<p class="source-date">Latest oil observation: ' + h.escapeHtml(freshness.oil_latest_observation_date) + '</p>';
       }
