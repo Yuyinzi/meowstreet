@@ -310,10 +310,37 @@ def test_process_read_is_pending_review_when_prices_and_inputs_are_present():
     detail = .build_cyclical_commodities_detail(payload)
 
     read = detail["process_read"]
-    assert read["status"] == "attribution_pending_review"
+    assert read["status"] == "review_required"
     assert read["label"] == "Oil attribution is ready for review"
     assert "demand-led" not in read["reason"].lower()
     assert "supply-led" not in read["reason"].lower()
+    assert detail["commodity_attribution"]["review_label"] == (
+        "Official attribution inputs loaded — review required before forming a narrative."
+    )
+
+
+def test_oil_attribution_exposes_change_from_previous_weekly_observation():
+    oil_rows = {
+        **_OIL_ROWS,
+        "oil_commercial_crude_stocks": [
+            {"date": "2026-07-10", "value": 452000.0},
+            {"date": "2026-07-17", "value": 450000.0},
+        ],
+        "oil_commercial_crude_imports": [
+            {"date": "2026-07-10", "value": 3100.0},
+            {"date": "2026-07-17", "value": 3200.0},
+        ],
+    }
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, oil_rows, "2026-07-25"
+    )
+    metrics = {
+        item["series_id"]: item for item in payload["commodity_attribution"]["metrics"]
+    }
+
+    assert metrics["oil_commercial_crude_stocks"]["weekly_change"] == -2000.0
+    assert metrics["oil_commercial_crude_imports"]["weekly_change"] == 100.0
+    assert metrics["oil_crude_production"]["weekly_change"] is None
 
 
 def test_oil_payload_excludes_observations_after_as_of_date():
@@ -341,3 +368,187 @@ def test_attribution_data_never_creates_demand_or_supply_conclusion():
     assert detail["commodity_attribution"]["status"] == "attribution_pending_review"
     assert "conclusion" not in detail["commodity_attribution"]
     assert "trade" not in detail["process_read"]["label"].lower()
+
+
+def test_oil_state_contract_labels_raw_changes_without_trade_conclusion():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+    review = detail["oil_attribution_review"]
+
+    assert review["method_version"] == "oil_attribution_review_states_v1"
+    assert review["status"] == "review_required"
+    assert "trade" not in review["label"].lower()
+    assert "demand-led" not in review["label"].lower()
+    assert "supply-led" not in review["label"].lower()
+
+
+def test_oil_payload_marks_price_and_physical_changes_with_raw_states():
+    oil_rows = {
+        **_OIL_ROWS,
+        "oil_wti_spot": [
+            {"date": "2026-07-14", "value": 65.0, "source_identifier": "RWTC"},
+            {"date": "2026-07-15", "value": 66.0, "source_identifier": "RWTC"},
+            {"date": "2026-07-16", "value": 67.0, "source_identifier": "RWTC"},
+            {"date": "2026-07-17", "value": 68.0, "source_identifier": "RWTC"},
+            {"date": "2026-07-20", "value": 69.0, "source_identifier": "RWTC"},
+            {"date": "2026-07-21", "value": 70.0, "source_identifier": "RWTC"},
+        ],
+        "oil_commercial_crude_stocks": [
+            {"date": "2026-07-10", "value": 452000.0},
+            {"date": "2026-07-17", "value": 450000.0},
+        ],
+        "oil_commercial_crude_imports": [
+            {"date": "2026-07-10", "value": 3100.0},
+            {"date": "2026-07-17", "value": 3200.0},
+        ],
+        "oil_crude_production": [
+            {"date": "2026-07-10", "value": 13000.0},
+            {"date": "2026-07-17", "value": 13100.0},
+        ],
+        "oil_refinery_crude_input": [
+            {"date": "2026-07-10", "value": 17000.0},
+            {"date": "2026-07-17", "value": 16900.0},
+        ],
+        "oil_petroleum_products_supplied": [
+            {"date": "2026-07-10", "value": 20000.0},
+            {"date": "2026-07-17", "value": 20500.0},
+        ],
+    }
+    meta = {
+        "oil_wti_spot": {
+            "series_id": "oil_wti_spot",
+            "units": "USD/BBL",
+            "source": "eia",
+        },
+        "oil_brent_spot": {
+            "series_id": "oil_brent_spot",
+            "units": "USD/BBL",
+            "source": "eia",
+        },
+        "oil_commercial_crude_stocks": {
+            "series_id": "oil_commercial_crude_stocks",
+            "units": "MBBL",
+            "source": "eia",
+        },
+        "oil_commercial_crude_imports": {
+            "series_id": "oil_commercial_crude_imports",
+            "units": "MBBL/D",
+            "source": "eia",
+        },
+        "oil_crude_production": {
+            "series_id": "oil_crude_production",
+            "units": "MBBL/D",
+            "source": "eia",
+        },
+        "oil_refinery_crude_input": {
+            "series_id": "oil_refinery_crude_input",
+            "units": "MBBL/D",
+            "source": "eia",
+        },
+        "oil_petroleum_products_supplied": {
+            "series_id": "oil_petroleum_products_supplied",
+            "units": "MBBL/D",
+            "source": "eia",
+        },
+    }
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS,
+        USD_ROWS,
+        oil_rows,
+        "2026-07-25",
+        oil_series_metadata_by_id=meta,
+    )
+    benchmarks = payload["oil_observation"]["benchmarks"]
+    metrics = {
+        item["series_id"]: item for item in payload["commodity_attribution"]["metrics"]
+    }
+
+    assert benchmarks["oil_wti_spot"]["weekly_return_state"] == "up"
+    assert benchmarks["oil_wti_spot"]["units"] == "USD/BBL"
+    assert metrics["oil_commercial_crude_stocks"]["weekly_change_state"] == "draw"
+    assert metrics["oil_commercial_crude_stocks"]["units"] == "MBBL"
+    assert metrics["oil_commercial_crude_imports"]["weekly_change_state"] == "up"
+
+
+def test_oil_payload_marks_missing_prior_observation_unavailable():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+    )
+    metric = next(
+        item
+        for item in payload["commodity_attribution"]["metrics"]
+        if item["series_id"] == "oil_crude_production"
+    )
+
+    assert metric["weekly_change"] is None
+    assert metric["weekly_change_state"] == "unavailable"
+
+
+def test_oil_benchmark_daily_and_weekly_distribution_are_exposed():
+    import datetime
+
+    daily_rows = []
+    for i in range(253):
+        d = datetime.date(2025, 1, 2) + datetime.timedelta(days=i)
+        daily_rows.append({"date": d.isoformat(), "value": 100.0 + i * 0.1})
+
+    weekly_rows = []
+    d = datetime.date(2025, 1, 6)
+    for i in range(53):
+        friday = d + datetime.timedelta(days=4)
+        weekly_rows.append({"date": friday.isoformat(), "value": 100.0 + i * 0.5})
+        d += datetime.timedelta(days=7)
+
+    oil_rows = {
+        "oil_wti_spot": daily_rows + weekly_rows,
+        "oil_brent_spot": daily_rows + weekly_rows,
+        "oil_commercial_crude_stocks": [
+            {"date": "2026-07-17", "value": 450000.0},
+        ],
+        "oil_commercial_crude_imports": [
+            {"date": "2026-07-17", "value": 3200.0},
+        ],
+        "oil_crude_production": [
+            {"date": "2026-07-17", "value": 13100.0},
+        ],
+        "oil_refinery_crude_input": [
+            {"date": "2026-07-17", "value": 16900.0},
+        ],
+        "oil_petroleum_products_supplied": [
+            {"date": "2026-07-17", "value": 20500.0},
+        ],
+    }
+
+    payload = .build_cyclical_commodities_payload([], {}, oil_rows, "2026-12-31")
+    benchmark = payload["oil_observation"]["benchmarks"]["oil_wti_spot"]
+
+    assert (
+        benchmark["daily_distribution"]["method_version"] == "oil_distribution_v1"
+    )
+    assert benchmark["daily_distribution"]["standard_deviation"] == "sample"
+    assert (
+        benchmark["weekly_distribution"]["week_definition"]
+        == "iso_calendar_week_last_available_trading_day"
+    )
+    assert benchmark["daily_distribution"]["classification"] in {
+        "normal",
+        "abnormal_1sigma",
+        "abnormal_2sigma",
+        "abnormal_3sigma",
+    }
+    assert "trade" not in benchmark["daily_distribution"]
+
+
+def test_oil_benchmark_distribution_is_unavailable_when_insufficient_history():
+    payload = .build_cyclical_commodities_payload(
+        [], {}, _OIL_ROWS, "2026-07-25"
+    )
+    benchmark = payload["oil_observation"]["benchmarks"]["oil_wti_spot"]
+
+    assert benchmark["daily_distribution"]["classification"] == "unavailable"
+    assert benchmark["weekly_distribution"]["classification"] == "unavailable"
+    assert benchmark["status"] == "available"
+    detail = .build_cyclical_commodities_detail(payload)
+    assert detail["process_read"]["status"] == "review_required"

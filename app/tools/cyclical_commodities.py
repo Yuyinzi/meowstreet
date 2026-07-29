@@ -1,3 +1,5 @@
+from app.tools import oil_distribution
+
 _CYCLICAL_COMMODITIES_VERSION = "cyclical_commodities_v1"
 
 _COMMODITY_DISPLAY = {
@@ -208,13 +210,24 @@ _OIL_ATTRIBUTION_ROLES = {
 }
 
 
+def _raw_change_state(value, role=None):
+    if value is None:
+        return "unavailable"
+    if value == 0:
+        return "flat"
+    if role == "inventory":
+        return "draw" if value < 0 else "build"
+    return "up" if value > 0 else "down"
+
+
 def _latest_as_of(observations, as_of_date):
     eligible = [row for row in observations if row["date"] <= as_of_date]
     return sorted(eligible, key=lambda row: row["date"])
 
 
-def _oil_benchmark_payload(series_id, observations, as_of_date):
+def _oil_benchmark_payload(series_id, observations, as_of_date, metadata=None):
     rows = _latest_as_of(observations, as_of_date)
+    meta = metadata or {}
     if not rows:
         return {
             "series_id": series_id,
@@ -222,6 +235,10 @@ def _oil_benchmark_payload(series_id, observations, as_of_date):
             "distribution_status": "not_configured",
             "source_identifier": None,
             "source_url": None,
+            "daily_distribution": oil_distribution.build_distribution([], "daily"),
+            "weekly_distribution": oil_distribution.build_distribution(
+                [], "weekly"
+            ),
         }
     latest = rows[-1]
     daily_return = (
@@ -240,21 +257,31 @@ def _oil_benchmark_payload(series_id, observations, as_of_date):
         "latest_date": latest["date"],
         "latest_value": latest["value"],
         "daily_return": daily_return,
+        "daily_return_state": _raw_change_state(daily_return),
         "weekly_return": weekly_return,
+        "weekly_return_state": _raw_change_state(weekly_return),
+        "units": meta.get("units", ""),
         "distribution_status": "not_configured",
         "source_identifier": latest.get("source_identifier"),
         "source_url": latest.get("source_url"),
+        "daily_distribution": oil_distribution.build_distribution(rows, "daily"),
+        "weekly_distribution": oil_distribution.build_distribution(rows, "weekly"),
     }
 
 
-def _oil_observation_payload(oil_observations_by_series, as_of_date):
+def _oil_observation_payload(
+    oil_observations_by_series, as_of_date, oil_series_metadata_by_id=None
+):
     oil = oil_observations_by_series or {}
+    meta = oil_series_metadata_by_id or {}
     benchmarks = {}
     any_available = False
     missing = []
     for sid in sorted(_OIL_BENCHMARK_IDS):
         observations = oil.get(sid, [])
-        bp = _oil_benchmark_payload(sid, observations, as_of_date)
+        bp = _oil_benchmark_payload(
+            sid, observations, as_of_date, metadata=meta.get(sid)
+        )
         benchmarks[sid] = bp
         if bp["status"] == "available":
             any_available = True
@@ -275,23 +302,35 @@ def _oil_observation_payload(oil_observations_by_series, as_of_date):
     return {"status": "available", "benchmarks": benchmarks}
 
 
-def _oil_attribution_payload(oil_observations_by_series, as_of_date):
+def _oil_attribution_payload(
+    oil_observations_by_series, as_of_date, oil_series_metadata_by_id=None
+):
     oil = oil_observations_by_series or {}
+    meta = oil_series_metadata_by_id or {}
     metrics = []
     missing_ids = []
     for sid in sorted(_OIL_ATTRIBUTION_IDS):
         observations = oil.get(sid, [])
         rows = _latest_as_of(observations, as_of_date)
+        sid_meta = meta.get(sid, {})
+        role = _OIL_ATTRIBUTION_ROLES.get(sid, "")
         metric = {
             "series_id": sid,
             "display_name": _OIL_ATTRIBUTION_DISPLAY.get(sid, sid),
-            "role": _OIL_ATTRIBUTION_ROLES.get(sid, ""),
+            "role": role,
         }
         if rows:
             latest = rows[-1]
+            prior = rows[-2] if len(rows) >= 2 else None
+            weekly_change = (
+                latest["value"] - prior["value"] if prior is not None else None
+            )
             metric["status"] = "available"
             metric["latest_date"] = latest["date"]
             metric["latest_value"] = latest["value"]
+            metric["weekly_change"] = weekly_change
+            metric["weekly_change_state"] = _raw_change_state(weekly_change, role)
+            metric["units"] = sid_meta.get("units", "")
             metric["source_url"] = latest.get("source_url", "")
             metric["source_identifier"] = latest.get("source_identifier", "")
             metric["release_date"] = latest.get("release_date")
@@ -309,7 +348,7 @@ def _oil_attribution_payload(oil_observations_by_series, as_of_date):
     return {
         "status": "attribution_pending_review",
         "metrics": metrics,
-        "review_label": "All five official oil attribution inputs are available",
+        "review_label": "Official attribution inputs loaded — review required before forming a narrative.",
     }
 
 
@@ -318,6 +357,7 @@ def build_cyclical_commodities_payload(
     usd_observations_by_series,
     oil_observations_by_series=None,
     as_of_date=None,
+    oil_series_metadata_by_id=None,
 ):
     as_of = as_of_date or ""
     cot_payload, cot_available = _compute_cot_payload(cot_rows)
@@ -333,8 +373,12 @@ def build_cyclical_commodities_payload(
         inflation_payload[sid] = _compute_inflation_series_payload(
             sid, display_name, observations, as_of
         )
-    oil_observation = _oil_observation_payload(oil_observations_by_series, as_of)
-    oil_attribution = _oil_attribution_payload(oil_observations_by_series, as_of)
+    oil_observation = _oil_observation_payload(
+        oil_observations_by_series, as_of, oil_series_metadata_by_id
+    )
+    oil_attribution = _oil_attribution_payload(
+        oil_observations_by_series, as_of, oil_series_metadata_by_id
+    )
     return {
         "version": _CYCLICAL_COMMODITIES_VERSION,
         "as_of_date": as_of,
@@ -433,6 +477,21 @@ def _build_step(step_num, title, status, detail=None):
     return step
 
 
+def _oil_attribution_review(payload):
+    oil_observation = payload.get("oil_observation", {})
+    oil_attribution = payload.get("commodity_attribution", {})
+    if oil_observation.get("status") != "available":
+        return None
+    if oil_attribution.get("status") != "attribution_pending_review":
+        return None
+    return {
+        "method_version": "oil_attribution_review_states_v1",
+        "status": "review_required",
+        "label": "Physical-market evidence is ready for review",
+        "reason": "Price, inventory, supply-context, processing-activity, and demand-proxy observations are available. Read their labeled changes together; no automatic attribution is made.",
+    }
+
+
 def build_cyclical_commodities_detail(payload):
     details = _collect_series_details(payload)
     return {
@@ -443,6 +502,7 @@ def build_cyclical_commodities_detail(payload):
         "oil_observation": payload.get("oil_observation"),
         "commodity_attribution": payload.get("commodity_attribution"),
         "commodity_returns": payload.get("commodity_returns"),
+        "oil_attribution_review": _oil_attribution_review(payload),
         "process_read": _process_read(payload),
         "corroboration": _corroboration_summary(payload),
         "steps": details,
@@ -547,7 +607,7 @@ def _process_read(payload):
             "next_action": "load official oil attribution inputs",
         }
     return {
-        "status": "attribution_pending_review",
+        "status": "review_required",
         "label": "Oil attribution is ready for review",
         "reason": "Official oil price, inventory, supply-context, processing-activity, and demand-proxy inputs are available; review their joint context before forming a macro narrative.",
         "next_action": "review oil attribution evidence; do not treat any individual metric as a trade signal",
