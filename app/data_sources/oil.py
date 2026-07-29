@@ -52,7 +52,9 @@ STOCK_ROUTE = "petroleum/stoc/wstk/data/"
 SUPPLY_ROUTE = "petroleum/sum/sndw/data/"
 
 
-def _build_params(series_id, api_key, frequency, start_date=None, end_date=None):
+def _build_params(
+    series_id, api_key, frequency, start_date=None, end_date=None, offset=None
+):
     params = {
         "api_key": api_key,
         "data[0]": "value",
@@ -66,6 +68,8 @@ def _build_params(series_id, api_key, frequency, start_date=None, end_date=None)
         params["start[0]"] = start_date
     if end_date:
         params["end[0]"] = end_date
+    if offset is not None:
+        params["offset"] = offset
     return params
 
 
@@ -99,6 +103,37 @@ def _build_route_url(route):
     return f"{EIA_BASE_URL}/{route}"
 
 
+def _request_payload(client, route_url, params, series_id):
+    request_failed = False
+    try:
+        response = client.request("GET", route_url, params=params, timeout=30)
+    except Exception:
+        request_failed = True
+    if request_failed:
+        raise ValueError(f"eia request failed for {series_id}")
+    data = response.content
+    return json.loads(data)
+
+
+def _fetch_price_pages(series_id, api_key, client, route_url, price_start_date=None):
+    observations = []
+    offset = 0
+    while True:
+        params = _build_params(
+            series_id, api_key, "daily", start_date=price_start_date, offset=offset
+        )
+        payload = _request_payload(client, route_url, params, series_id)
+        page = payload.get("response", {}).get("data", [])
+        total = int(payload.get("response", {}).get("total", len(page)))
+        observations.extend(
+            _normalize_observation(row, series_id, route_url) for row in page
+        )
+        offset += len(page)
+        if offset >= total or not page:
+            break
+    return observations
+
+
 def _fetch_route(
     route,
     series_map,
@@ -117,15 +152,7 @@ def _fetch_route(
         units = series_spec[2] if len(series_spec) > 2 else "eia_units"
         role_val = series_spec[3] if len(series_spec) > 3 else None
         params = _build_params(series_id, api_key, frequency, start_date, end_date)
-        request_failed = False
-        try:
-            response = client.request("GET", route_url, params=params, timeout=30)
-        except Exception:
-            request_failed = True
-        if request_failed:
-            raise ValueError(f"eia request failed for {series_id}")
-        data = response.content
-        payload = json.loads(data)
+        payload = _request_payload(client, route_url, params, series_id)
         points = payload.get("response", {}).get("data", [])
         observations = [_normalize_observation(p, series_id, route_url) for p in points]
         series = {
@@ -145,17 +172,38 @@ def _fetch_route(
 
 
 def _fetch_price_observations(
-    api_key, http_client=None, start_date=None, end_date=None
+    api_key, http_client=None, price_start_date=None, full_price_history=False
 ):
-    return _fetch_route(
-        PRICE_ROUTE,
-        PRICE_SERIES,
-        api_key,
-        http_client,
-        frequency="daily",
-        start_date=start_date,
-        end_date=end_date,
-    )
+    client = http_client or HttpClient()
+    route_url = _build_route_url(PRICE_ROUTE)
+    result = {}
+    for internal_id, series_spec in PRICE_SERIES.items():
+        series_id = series_spec[0]
+        title = series_spec[1]
+        units = series_spec[2]
+        if full_price_history:
+            observations = _fetch_price_pages(
+                series_id, api_key, client, route_url, price_start_date=None
+            )
+        else:
+            params = _build_params(
+                series_id, api_key, "daily", start_date=price_start_date
+            )
+            payload = _request_payload(client, route_url, params, series_id)
+            points = payload.get("response", {}).get("data", [])
+            observations = [
+                _normalize_observation(p, series_id, route_url) for p in points
+            ]
+        result[internal_id] = {
+            "series": {
+                "series_id": internal_id,
+                "title": title,
+                "units": units,
+                "source": "eia",
+            },
+            "observations": observations,
+        }
+    return result
 
 
 def _fetch_attribution_observations(
@@ -183,12 +231,19 @@ def _fetch_attribution_observations(
 
 
 def fetch_oil_observations(
-    api_key, http_client=None, start_date=None, end_date=None
+    api_key,
+    http_client=None,
+    price_start_date=None,
+    attribution_start_date=None,
+    full_price_history=False,
 ):
     key = str(api_key or "").strip()
     if not key:
         raise ValueError("eia api key is required")
-    return {
-        **_fetch_price_observations(key, http_client, start_date, end_date),
-        **_fetch_attribution_observations(key, http_client, start_date, end_date),
-    }
+    prices = _fetch_price_observations(
+        key, http_client, price_start_date, full_price_history
+    )
+    attribution = _fetch_attribution_observations(
+        key, http_client, start_date=attribution_start_date
+    )
+    return {**prices, **attribution}

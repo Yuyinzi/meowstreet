@@ -289,6 +289,47 @@ def test_oil_benchmark_payload_includes_source_provenance():
     assert "test-key" not in wti["source_url"]
 
 
+def test_full_price_history_paginates_past_five_thousand_rows():
+    calls = []
+
+    def handler(request):
+        url = str(request.url)
+        calls.append(url)
+        if "pri/spt" in url:
+            series = "RWTC" if "RWTC" in url else "RBRTE" if "RBRTE" in url else None
+            if series is not None:
+                has_offset = "offset=" in url
+                if not has_offset:
+                    data = [
+                        {"period": "2026-07-24", "value": "70.00"} for _ in range(5000)
+                    ]
+                    return httpx.Response(
+                        200,
+                        json={"response": {"total": "5001", "data": data}},
+                    )
+                data = [{"period": "2026-07-23", "value": "71.00"}]
+                return httpx.Response(
+                    200,
+                    json={"response": {"total": "5001", "data": data}},
+                )
+        return httpx.Response(200, json={"response": {"data": []}})
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(transport=transport)
+    payload = oil.fetch_oil_observations(
+        "test-key", http_client=client, full_price_history=True
+    )
+
+    wti = payload["oil_wti_spot"]["observations"]
+    brent = payload["oil_brent_spot"]["observations"]
+    assert len(wti) == 5001
+    assert len(brent) == 5001
+
+    for url in calls:
+        if "stoc/wstk" in url or "sum/sndw" in url:
+            assert "offset=" not in url, f"weekly url should not paginate: {url}"
+
+
 def test_series_includes_actual_eia_units():
     def handler(request):
         url = str(request.url)
