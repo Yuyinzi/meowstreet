@@ -14,6 +14,10 @@ sys.path.insert(0, str(ROOT))
 from app.db import us_rates_liquidity
 
 
+class DocumentUnavailableError(ValueError):
+    pass
+
+
 TAG_RE = re.compile(r"<[^>]+>")
 BLOCK_RE = re.compile(r"</(?:p|div|h1|h2|h3|li)>", re.IGNORECASE)
 STATEMENT_PATH_RE = re.compile(r"/newsevents/pressreleases/monetary\d{8}a\.htm$")
@@ -102,11 +106,15 @@ def resolve_statement_url(event, fetch=None):
         return direct_url
     event_url = str(event.get("url") or "").strip()
     if not event_url:
-        raise ValueError(f"statement url is missing for {event['event_id']}")
+        raise DocumentUnavailableError(
+            f"statement url is missing for {event['event_id']}"
+        )
     calendar_html = fetch_document(event_url)
     statement_url = _statement_url_from_calendar_html(event, calendar_html)
     if not statement_url:
-        raise ValueError(f"statement url is missing for {event['event_id']}")
+        raise DocumentUnavailableError(
+            f"statement url is missing for {event['event_id']}"
+        )
     return statement_url
 
 
@@ -118,11 +126,15 @@ def resolve_minutes_url(event, fetch=None):
             return _absolute_fed_url(url)
     event_url = str(event.get("url") or "").strip()
     if not event_url:
-        raise ValueError(f"minutes url is missing for {event['event_id']}")
+        raise DocumentUnavailableError(
+            f"minutes url is missing for {event['event_id']}"
+        )
     calendar_html = fetch_document(event_url)
     minutes_url = _minutes_url_from_calendar_html(event, calendar_html)
     if not minutes_url:
-        raise ValueError(f"minutes url is missing for {event['event_id']}")
+        raise DocumentUnavailableError(
+            f"minutes url is missing for {event['event_id']}"
+        )
     return minutes_url
 
 
@@ -250,29 +262,37 @@ def fetch_minutes_document(event, fetch=fetch_text, now=fetched_at_now):
     return document_row(event, "minutes", url, text, now())
 
 
-def import_statement_documents(con, fetch=fetch_text, skip_empty=True):
-    events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
-    count = 0
-    errors = 0
-    for event in events:
-        if not str(event.get("statement_url") or event.get("url") or "").strip():
-            print(f"  SKIP {event['event_id']}: no url")
-            continue
+def fetch_document_type(con, document_type, fetch=fetch_text, now=fetched_at_now):
+    fetch_document = {
+        "statement": fetch_statement_document,
+        "minutes": fetch_minutes_document,
+    }[document_type]
+    result = {
+        "document_type": document_type,
+        "fetched": 0,
+        "unavailable": 0,
+        "failed": 0,
+    }
+    for event in us_rates_liquidity.load_macro_events(con, "fomc_meeting"):
         try:
-            row = fetch_statement_document(event, fetch=fetch)
-        except ValueError as exc:
-            print(f"  SKIP {event['event_id']}: {exc}")
-            errors += 1
+            row = fetch_document(event, fetch=fetch, now=now)
+        except DocumentUnavailableError as exc:
+            result["unavailable"] += 1
+            print(f"  SKIP {event['event_id']} {document_type}: {exc}")
             continue
         except Exception as exc:
-            print(f"  SKIP {event['event_id']}: {exc}")
-            errors += 1
+            result["failed"] += 1
+            print(f"  FAIL {event['event_id']} {document_type}: {exc}", file=sys.stderr)
             continue
         us_rates_liquidity.replace_macro_event_document(con, row)
-        print(f"  OK   {event['event_id']}: {len(row['text'])} chars")
-        count += 1
-    print(f"  Result: {count} fetched, {errors} skipped")
-    return {"statement_documents": count}
+        result["fetched"] += 1
+        print(f"  OK   {event['event_id']} {document_type}: {len(row['text'])} chars")
+    return result
+
+
+def import_statement_documents(con, fetch=fetch_text, skip_empty=True):
+    result = fetch_document_type(con, "statement", fetch=fetch)
+    return {"statement_documents": result["fetched"]}
 
 
 def main(argv=None):
@@ -286,34 +306,24 @@ def main(argv=None):
         default="statement",
     )
     args = parser.parse_args(argv)
+
+    document_types = (
+        ["statement", "minutes"]
+        if args.document_type == "all"
+        else [args.document_type]
+    )
+
     con = us_rates_liquidity.connect(args.db_path)
     try:
-        events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
-        for event in events:
-            if args.document_type in {"statement", "all"}:
-                try:
-                    row = fetch_statement_document(event)
-                    us_rates_liquidity.replace_macro_event_document(con, row)
-                    print(
-                        f"  OK   {event['event_id']} statement: {len(row['text'])} chars"
-                    )
-                except ValueError as exc:
-                    print(f"  SKIP {event['event_id']} statement: {exc}")
-            if args.document_type in {"minutes", "all"}:
-                if not (event.get("minutes_url") or event.get("url")):
-                    print(f"  SKIP {event['event_id']} minutes: no url")
-                    continue
-                try:
-                    row = fetch_minutes_document(event)
-                    us_rates_liquidity.replace_macro_event_document(con, row)
-                    print(
-                        f"  OK   {event['event_id']} minutes: {len(row['text'])} chars"
-                    )
-                except ValueError as exc:
-                    print(f"  SKIP {event['event_id']} minutes: {exc}")
+        results = []
+        for doc_type in document_types:
+            result = fetch_document_type(con, doc_type)
+            print(f"  {result}")
+            results.append(result)
     finally:
         con.close()
-    return 0
+
+    return 1 if any(r["failed"] > 0 for r in results) else 0
 
 
 if __name__ == "__main__":
