@@ -10,6 +10,7 @@ def _parse_cot_zip(zip_path, year):
     import hashlib
     import io
     import zipfile
+    from datetime import datetime, timedelta
 
     data = Path(zip_path).read_bytes()
     source_url = cftc_cot.historical_report_url(year)
@@ -22,7 +23,16 @@ def _parse_cot_zip(zip_path, year):
         if txt_name is None:
             raise ValueError(f"no txt file in cftc zip for {year}")
         text = zf.read(txt_name).decode("utf-8", errors="replace")
-    return cftc_cot.parse_disaggregated_futures_only(text, source_url, str(year))
+    rows = cftc_cot.parse_disaggregated_futures_only(text, source_url, "")
+    for r in rows:
+        try:
+            report_dt = datetime.strptime(r["report_date"], "%Y-%m-%d")
+            r["publication_date"] = (report_dt + timedelta(days=3)).strftime("%Y-%m-%d")
+            r["publication_date_basis"] = "estimated: report_date_plus_3_calendar_days"
+        except (ValueError, TypeError):
+            r["publication_date"] = ""
+            r["publication_date_basis"] = "unavailable"
+    return rows
 
 
 def _import_cot_years(con, cache_dir, years):
@@ -85,6 +95,16 @@ def import_cached_official_(con, cache_dir, years):
         "cot_observations": cot_count,
         "usd_observations": usd_count,
     }
+
+
+def import_cached_official_cot_only(con, cache_dir, years):
+    cot_count = _import_cot_years(con, cache_dir, years)
+    return {"cot_observations": cot_count, "usd_observations": 0}
+
+
+def import_cached_official_usd_only(con, cache_dir):
+    usd_count = _import_usd_observations(con, cache_dir)
+    return {"cot_observations": 0, "usd_observations": usd_count}
 
 
 def refresh_official_(con, cache_dir, years, fred_client_factory=None):

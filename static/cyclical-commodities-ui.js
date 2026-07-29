@@ -39,8 +39,13 @@
         var norm = commodity.normalized_manager_net_position;
         var normStr = norm != null ? norm.toFixed(4) : "--";
         var flipStr = commodity.flip || "--";
+        var noteHtml = "";
+        if (commodity.contract_note) {
+          noteHtml = '<p class="contract-note">' + h.escapeHtml(commodity.contract_note) + '</p>';
+        }
         return '<div class="workflow-row">'
           + '<div class="workflow-label">' + h.escapeHtml(commodity.display_name || commodity.commodity_id) + '</div>'
+          + noteHtml
           + '<div class="workflow-metrics">'
           + '<span>Longs: ' + h.escapeHtml(String(commodity.manager_longs || "--")) + '</span>'
           + '<span>Shorts: ' + h.escapeHtml(String(commodity.manager_shorts || "--")) + '</span>'
@@ -82,13 +87,13 @@
         html += '<section class="step-section">';
         html += '<h3>Step ' + step.step + ': ' + h.escapeHtml(step.title) + '</h3>';
 
-        if (step.step === 1 && isAvailable) {
+        if (step.step === 3 && isAvailable) {
           html += '<p><em>' + h.escapeHtml(step.method) + '</em></p>';
           html += '<p class="note">' + h.escapeHtml(step.note) + '</p>';
           for (var c = 0; c < step.commodities.length; c++) {
             html += renderCOTRow(step.commodities[c]);
           }
-        } else if (step.step === 2 && isAvailable) {
+        } else if (step.step === 4 && isAvailable) {
           html += '<p class="note">' + h.escapeHtml(step.note) + '</p>';
           for (var u = 0; u < step.series.length; u++) {
             html += renderUSDRow(step.series[u]);
@@ -102,6 +107,17 @@
           html += '<p class="unavailable">Status: ' + h.escapeHtml(step.status) + ' — ' + h.escapeHtml(step.reason || "Not configured") + '</p>';
         }
 
+        html += '</section>';
+      }
+
+      if (payload.freshness && Object.keys(payload.freshness).length) {
+        html += '<section class="step-section">';
+        html += '<h3>Freshness / 数据时效</h3>';
+        html += '<p>Observation dates — exact dates only; no age-based stale classification is applied.</p>';
+        var f = payload.freshness;
+        if (f.cftc_latest_report_date) html += '<p>CFTC COT latest report date: <strong>' + h.escapeHtml(f.cftc_latest_report_date) + '</strong></p>';
+        if (f.usd_latest_observation_date) html += '<p>USD latest observation date: <strong>' + h.escapeHtml(f.usd_latest_observation_date) + '</strong></p>';
+        if (f.inflation_latest_observation_date) html += '<p>CPI/PPI latest observation date: <strong>' + h.escapeHtml(f.inflation_latest_observation_date) + '</strong></p>';
         html += '</section>';
       }
 

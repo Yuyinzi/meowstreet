@@ -94,9 +94,16 @@ def init_macro_tables(con):
     con.executescript(_MACRO_TABLES_DDL)
     con.executescript(_REGIONAL_TABLES_DDL)
     con.executescript(__COT_DDL)
+    for col in ["source_hash", "publication_date_basis"]:
+        try:
+            con.execute(
+                f"alter table macro_indicator_observation_metadata add column {col} text"
+            )
+        except sqlite3.OperationalError:
+            pass
     try:
         con.execute(
-            "alter table macro_indicator_observation_metadata add column source_hash text"
+            "alter table cot_observations add column publication_date_basis text"
         )
     except sqlite3.OperationalError:
         pass
@@ -565,13 +572,15 @@ def merge_cot_observations(con, observations):
             con.execute(
                 """insert into cot_observations(
                     commodity_id, report_date, manager_longs, manager_shorts,
-                    open_interest, publication_date, report_type, source_url, source_hash
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    open_interest, publication_date, publication_date_basis,
+                    report_type, source_url, source_hash
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict(commodity_id, report_date) do update set
                     manager_longs = excluded.manager_longs,
                     manager_shorts = excluded.manager_shorts,
                     open_interest = excluded.open_interest,
                     publication_date = excluded.publication_date,
+                    publication_date_basis = excluded.publication_date_basis,
                     report_type = excluded.report_type,
                     source_url = excluded.source_url,
                     source_hash = excluded.source_hash""",
@@ -582,6 +591,7 @@ def merge_cot_observations(con, observations):
                     manager_shorts,
                     open_interest,
                     str(obs.get("publication_date", "") or ""),
+                    str(obs.get("publication_date_basis", "") or ""),
                     str(obs.get("report_type", "") or ""),
                     str(obs.get("source_url", "") or ""),
                     str(obs.get("source_hash", "") or ""),
@@ -596,7 +606,7 @@ def merge_cot_observations(con, observations):
 
 __COT_COLS = """
     commodity_id, report_date, manager_longs, manager_shorts, open_interest,
-    publication_date, report_type, source_url, source_hash
+    publication_date, publication_date_basis, report_type, source_url, source_hash
 """
 
 

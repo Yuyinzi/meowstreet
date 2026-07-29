@@ -39,22 +39,28 @@ def main(argv=None):
     try:
         if args.fetch_cot:
             cyclical_commodities_import.fetch_cot_zips(cache_dir, years)
+            print("cot: fetched")
             return 0
 
         if args.import_cot:
-            result = cyclical_commodities_import.import_cached_official_(
-                con, cache_dir, years
+            result = (
+                cyclical_commodities_import.import_cached_official_cot_only(
+                    con, cache_dir, years
+                )
             )
             print(f"cot: {result['cot_observations']} observations")
             return 0
 
         if args.fetch_usd:
             cyclical_commodities_import._fetch_fred_csvs(cache_dir)
+            print("usd: fetched")
             return 0
 
         if args.import_usd:
-            result = cyclical_commodities_import.import_cached_official_(
-                con, cache_dir, years
+            result = (
+                cyclical_commodities_import.import_cached_official_usd_only(
+                    con, cache_dir
+                )
             )
             print(f"usd: {result['usd_observations']} observations")
             return 0

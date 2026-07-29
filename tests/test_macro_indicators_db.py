@@ -301,6 +301,7 @@ _COT_ROW = {
     "manager_shorts": 150000.0,
     "open_interest": 1000000.0,
     "publication_date": "2026-07-24",
+    "publication_date_basis": "estimated: report_date_plus_3_calendar_days",
     "report_type": "disaggregated_futures_only",
     "source_url": "https://www.cftc.gov/files/dea/history/fut_disagg_txt_2026.zip",
     "source_hash": "abc123",

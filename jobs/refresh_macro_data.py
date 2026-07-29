@@ -85,7 +85,7 @@ def _planned_tasks(
     fomc_main=import_fomc_calendar.main,
     nfib_main=import_nfib_sbet.main,
     nfib_regional_main=import_nfib_sbet_regional.main,
-    main=import_cyclical_commodities.main,
+    main=None,
 ):
     tasks = []
     if not args.skip_yahoo:
@@ -139,7 +139,7 @@ def _planned_tasks(
         tasks.append(("nfib_sbo_official", nfib_main, []))
     if not args.skip_nfib_sbo_regional:
         tasks.append(("nfib_sbo_regional_official", nfib_regional_main, []))
-    if not args.skip_cyclical_commodities:
+    if main is not None and not args.skip_cyclical_commodities:
         tasks.append(("cyclical_commodities_official", main, []))
     return tasks
 
@@ -165,8 +165,10 @@ def main(
     fomc_main=import_fomc_calendar.main,
     nfib_main=import_nfib_sbet.main,
     nfib_regional_main=import_nfib_sbet_regional.main,
-    main=import_cyclical_commodities.main,
+    main=None,
 ):
+    if main is None:
+        main = import_cyclical_commodities.main
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
     parser.add_argument("--skip-rates", action="store_true")

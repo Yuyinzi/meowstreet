@@ -1825,6 +1825,7 @@ def test_growth_cycle_api_returns_inflation_context_card(monkeypatch):
         "survey_synthesis",
         "housing_permits",
         "nfib_sbo",
+        "cyclical_commodities",
     ]
     inflation = payload["headline"][3]
     assert inflation["label"] == "Inflation Context"
@@ -1923,6 +1924,7 @@ def test_growth_cycle_api_keeps_m2_when_inflation_context_is_missing(monkeypatch
         "survey_synthesis",
         "housing_permits",
         "nfib_sbo",
+        "cyclical_commodities",
     ]
 
 
@@ -2003,6 +2005,7 @@ def test_growth_cycle_api_returns_fed_balance_sheet_card(monkeypatch):
         "survey_synthesis",
         "housing_permits",
         "nfib_sbo",
+        "cyclical_commodities",
     ]
     fed_card = next(card for card in cards if card["id"] == "fed_balance_sheet")
     assert fed_card["status"] == "context"

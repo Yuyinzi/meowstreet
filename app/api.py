@@ -424,9 +424,6 @@ def macro_dashboard_growth_cycle():
                 _OBSERVATION_SERIES_IDS,
             )
         )
-        has_data = bool(cot_rows) or any(
-            usd_observations.get(sid, []) for sid in _OBSERVATION_SERIES_IDS
-        )
         dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
             ism_manufacturing=ism_manufacturing,
             ism_services=ism_services_data["payload"],
@@ -445,9 +442,7 @@ def macro_dashboard_growth_cycle():
                 "cot_rows": cot_rows,
                 "usd_observations_by_series": usd_observations,
                 "as_of_date": date.today().isoformat(),
-            }
-            if has_data
-            else None,
+            },
         )
         next_fomc_meeting = us_rates_liquidity_db.load_next_macro_event(
             con,
