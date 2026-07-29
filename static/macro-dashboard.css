@@ -790,6 +790,11 @@ h2 {
   background: #F3EEE8;
 }
 
+.oil-distribution-abnormal {
+  color: #87531B;
+  background: #FBF0DE;
+}
+
 .state-review-required {
   display: block;
   color: #7A4B14;

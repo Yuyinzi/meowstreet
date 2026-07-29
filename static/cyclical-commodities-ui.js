@@ -50,8 +50,10 @@
           abnormal_3sigma: "3\u03c3 abnormal",
         };
         var text = textMap[distribution.classification] || distribution.classification;
-        var state = distribution.classification === "normal" ? "flat" : "review-required";
-        return '<span class="state state-' + h.escapeHtml(state) + '">'
+        var className = distribution.classification === "normal"
+          ? "state state-flat"
+          : "state oil-distribution-abnormal";
+        return '<span class="' + h.escapeHtml(className) + '">'
           + h.escapeHtml(label + ': ' + text)
           + '</span>';
       }
