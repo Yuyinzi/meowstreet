@@ -728,6 +728,25 @@ h2 {
   font-weight: 700;
 }
 
+.attribution-group {
+  margin-top: 18px;
+}
+
+.attribution-group h5 {
+  color: #6E6257;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.workflow-role {
+  color: #8A7B6D;
+  font-size: 11px;
+  font-weight: 400;
+  margin-left: 8px;
+}
+
 .workflow-metrics {
   display: flex;
   flex-wrap: wrap;
@@ -743,6 +762,47 @@ h2 {
 .boundaries {
   border-color: #E7C99E;
 }
+
+.state {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.state-up,
+.state-draw {
+  color: #155724;
+  background: #E8F4EA;
+}
+
+.state-down,
+.state-build {
+  color: #8B2E2E;
+  background: #FBEAEA;
+}
+
+.state-flat,
+.state-unavailable {
+  color: #6E6257;
+  background: #F3EEE8;
+}
+
+.state-review-required {
+  display: block;
+  color: #7A4B14;
+  background: #FBF0DE;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.distribution-normal { color: #4C6250; background: #EEF4EC; }
+.distribution-abnormal { color: #87531B; background: #FBF0DE; }
+.distribution-unavailable { color: #6E6257; background: #F3EEE8; }
 
 @media (max-width: 900px) {
   .evidence-grid {

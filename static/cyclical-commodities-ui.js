@@ -30,10 +30,56 @@
       var oilObservation = payload.oil_observation || {};
       var steps = payload.steps || [];
 
+      function renderState(value, state, label) {
+        var st = state || "unavailable";
+        return '<span class="state state-' + h.escapeHtml(st) + '">'
+          + h.escapeHtml(label + ': ' + value + ' (' + st + ')')
+          + '</span>';
+      }
+
+      function renderDistribution(distribution, label) {
+        if (!distribution || distribution.classification === "unavailable") {
+          var reason = distribution && distribution.reason ? distribution.reason : null;
+          var meta = 'Distribution v1 \u00b7 Full history \u00b7 Sample std';
+          var html = '<span class="distribution distribution-unavailable">'
+            + h.escapeHtml(label + ' distribution: Unavailable')
+            + '</span>'
+            + '<div class="distribution-meta">' + h.escapeHtml(meta) + '</div>';
+          if (reason) {
+            html += '<div class="distribution-reason">' + h.escapeHtml(reason) + '</div>';
+          }
+          return html;
+        }
+        var cls = distribution.classification === "normal"
+          ? "distribution-normal"
+          : "distribution-abnormal";
+        var textMap = {
+          normal: "Normal",
+          abnormal_1sigma: "1\u03c3 abnormal",
+          abnormal_2sigma: "2\u03c3 abnormal",
+          abnormal_3sigma: "3\u03c3 abnormal",
+        };
+        var text = textMap[distribution.classification] || distribution.classification;
+        var meta = 'Distribution v1 \u00b7 Full history \u00b7 Sample std \u00b7 '
+          + h.escapeHtml(String(distribution.sample_count || 0)) + ' returns';
+        if (distribution.week_definition) {
+          meta += ' \u00b7 ISO week';
+        }
+        return '<span class="distribution ' + h.escapeHtml(cls) + '">'
+          + h.escapeHtml(label + ' distribution: ' + text)
+          + '</span>'
+          + '<div class="distribution-meta">' + h.escapeHtml(meta) + '</div>';
+      }
+
       function renderValue(val) {
         if (val == null) return "--";
         if (typeof val === "number") return h.fmtSignedPctDecimal(val);
         return h.escapeHtml(String(val));
+      }
+
+      function renderChange(val) {
+        if (val == null) return "--";
+        return (val > 0 ? "+" : "") + h.fmtNumber(val);
       }
 
       function renderCOTRow(commodity) {
@@ -110,13 +156,15 @@
               + '</div>';
             continue;
           }
+          var unitStr = b.units || "$/BBL";
           html += '<div class="workflow-row">'
             + '<div class="workflow-label">' + h.escapeHtml(_oilDisplayName(ids[i])) + '</div>'
             + '<div class="workflow-metrics">'
-            + '<span>Value: ' + h.escapeHtml(h.fmtNumber(b.latest_value)) + ' $/BBL</span>'
-            + '<span>Daily: ' + renderValue(b.daily_return) + '</span>'
-            + '<span>Weekly: ' + renderValue(b.weekly_return) + '</span>'
-            + '<span class="source-date">As of: ' + h.escapeHtml(b.latest_date || "") + '</span>'
+            + '<span>Value: ' + h.escapeHtml(h.fmtNumber(b.latest_value)) + ' ' + h.escapeHtml(unitStr) + '</span>'
+            + '<span>' + renderState(h.fmtSignedPctDecimal(b.daily_return), b.daily_return_state, "Daily") + '</span>'
+            + '<span>' + renderState(h.fmtSignedPctDecimal(b.weekly_return), b.weekly_return_state, "Weekly") + '</span>'
+            + renderDistribution(b.daily_distribution, "Daily")
+            + renderDistribution(b.weekly_distribution, "Weekly")
             + '<span>Source: ' + h.escapeHtml(b.source_identifier || b.source_url || "") + '</span>'
             + '</div>'
             + '</div>';
@@ -125,22 +173,42 @@
       }
 
       function renderAttributionRows(metrics) {
+        var groups = [
+          {
+            title: "Supply & inventory",
+            roles: ["inventory", "supply_context"],
+          },
+          {
+            title: "Demand & processing",
+            roles: ["demand_proxy", "processing_activity"],
+          },
+        ];
+        var roleLabels = {
+          inventory: "Inventory",
+          supply_context: "Supply context",
+          processing_activity: "Processing activity",
+          demand_proxy: "Demand proxy",
+        };
         var html = "";
-        for (var i = 0; i < (metrics || []).length; i++) {
-          var m = metrics[i];
-          var roleLabel = "";
-          if (m.role === "inventory") roleLabel = "Inventory";
-          else if (m.role === "supply_context") roleLabel = "Supply context";
-          else if (m.role === "processing_activity") roleLabel = "Processing activity";
-          else if (m.role === "demand_proxy") roleLabel = "Demand proxy";
-          else roleLabel = m.role;
+        for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+          var group = groups[groupIndex];
+          var groupMetrics = (metrics || []).filter(function (metric) {
+            return group.roles.indexOf(metric.role) !== -1;
+          });
+          if (!groupMetrics.length) continue;
+          html += '<div class="attribution-group">'
+            + '<h5>' + h.escapeHtml(group.title) + '</h5>';
+          for (var i = 0; i < groupMetrics.length; i++) {
+            var m = groupMetrics[i];
+            var roleLabel = roleLabels[m.role] || m.role;
           html += '<div class="workflow-row">'
-            + '<div class="workflow-label">' + h.escapeHtml(m.display_name || m.series_id) + '</div>'
+            + '<div class="workflow-label">' + h.escapeHtml(m.display_name || m.series_id)
+            + '<span class="workflow-role">' + h.escapeHtml(roleLabel) + '</span></div>'
             + '<div class="workflow-metrics">';
           if (m.status === "available") {
-            html += '<span>' + h.escapeHtml(roleLabel) + '</span>'
-              + '<span>Value: ' + h.escapeHtml(h.fmtNumber(m.latest_value)) + '</span>'
-              + '<span class="source-date">' + h.escapeHtml(m.latest_date || "") + '</span>';
+            var unitStr = m.units || "";
+            html += '<span>Value: ' + h.escapeHtml(h.fmtNumber(m.latest_value)) + ' ' + h.escapeHtml(unitStr) + '</span>'
+              + '<span>' + renderState(renderChange(m.weekly_change), m.weekly_change_state, "WoW") + '</span>';
             if (m.source_identifier) {
               html += '<span>Source: ' + h.escapeHtml(m.source_identifier) + '</span>';
             }
@@ -148,6 +216,8 @@
             html += '<span>Not available</span>';
           }
           html += '</div></div>';
+        }
+          html += '</div>';
         }
         return html;
       }
@@ -168,9 +238,19 @@
       html += '<section class="evidence-section">';
       html += '<h3>Oil Observation</h3>';
       html += '<p class="section-intro">WTI and Brent describe the observed price move. Distribution status is not configured.</p>';
+      if (freshness.oil_latest_observation_date) {
+        html += '<p class="source-date">Latest oil observation: ' + h.escapeHtml(freshness.oil_latest_observation_date) + '</p>';
+      }
       html += renderOilBenchmarkSummary(oilObservation.benchmarks || {});
+      var review = payload.oil_attribution_review;
+      if (review && review.status === "review_required") {
+        html += '<div class="state state-review-required">'
+          + h.escapeHtml(review.label || "Evidence is ready for review")
+          + '</div>';
+      }
       html += '<h4>Attribution inputs</h4>';
       html += '<p class="summary-stat">' + h.escapeHtml(attr.review_label || reasonLabel(attr)) + '</p>';
+      html += '<p class="note">WoW changes are raw context for review; no automatic attribution is made.</p>';
       html += renderAttributionRows(attr.metrics || []);
       html += '</section>';
 

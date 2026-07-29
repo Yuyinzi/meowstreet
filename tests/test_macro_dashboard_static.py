@@ -6560,3 +6560,73 @@ def test_oil_benchmark_renders_source_identifier():
 
     assert "source_identifier" in source
     assert "source_url" in source
+
+
+def test_oil_renderer_uses_one_module_date_not_row_dates():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "oil_latest_observation_date" in source
+    assert "b.latest_date" not in source
+    assert "m.latest_date" not in source
+
+
+def test_oil_renderer_shows_weekly_attribution_changes_without_conclusion():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "m.weekly_change" in source
+    assert "WoW change" in source
+    assert "automatic attribution" in source
+
+
+def test_oil_renderer_groups_attribution_rows_and_separates_role_from_metrics():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert "Supply & inventory" in source
+    assert "Demand & processing" in source
+    assert "attribution-group" in source
+    assert "workflow-role" in source
+    assert ".attribution-group" in css
+    assert ".workflow-role" in css
+
+
+def test_oil_renderer_uses_backend_state_classes_and_labels():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert "daily_return_state" in source
+    assert "weekly_change_state" in source
+    assert "state-" in source
+    assert "state-up" in css
+    assert "state-down" in css
+    assert "state-draw" in css
+    assert "state-build" in css
+    assert "state-flat" in css
+    assert "state-unavailable" in css
+    assert "state-review-required" in css
+
+
+def test_oil_renderer_does_not_calculate_attribution_in_javascript():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "latest_value -" not in source
+    assert "demand-led" not in source.lower()
+    assert "supply-led" not in source.lower()
+
+
+def test_cyclical_commodities_ui_renders_backend_distribution_labels():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert "daily_distribution" in source
+    assert "weekly_distribution" in source
+    assert "Distribution v1" in source
+    assert "Full history" in source
+    assert "Sample std" in source
+    assert "ISO week" in source
+    assert "distribution-normal" in css
+    assert "distribution-abnormal" in css
+    assert "statistics.stdev" not in source
+    assert "Math.sqrt" not in source
+    assert "demand-led" not in source.lower()
+    assert "supply-led" not in source.lower()
