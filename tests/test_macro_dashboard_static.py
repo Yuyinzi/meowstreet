@@ -74,6 +74,14 @@ def test_survey_synthesis_mount_is_between_market_setup_and_benchmarks():
     assert html.count("<h2>Survey Synthesis</h2>") == 1
 
 
+def test_benchmark_indices_has_section_spacing_after_survey_synthesis():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert 'class="benchmark-indices" aria-label="Benchmark market phase overview"' in html
+    assert ".benchmark-indices {\n  margin-top: 24px;\n}" in css
+
+
 def test_macro_dashboard_js_fetches_us_rates_liquidity_api():
     js = (ROOT / "static" / "macro-dashboard.js").read_text()
 
