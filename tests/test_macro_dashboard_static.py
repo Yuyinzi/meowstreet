@@ -1385,7 +1385,7 @@ def test_macro_dashboard_js_renders_growth_cycle_tabs():
     assert "function renderGrowthCycleSection(" in js
     assert ".growth-cycle-tabs" in css
     assert ".growth-cycle-tab.active" in css
-    assert "overflow-x: auto" in css
+    assert "flex-wrap: wrap" in css
 
 
 def test_macro_dashboard_static_assets_render_ism_industry_breadth():
@@ -1428,6 +1428,13 @@ def test_macro_dashboard_css_styles_growth_cycle_tabs():
     assert ".growth-section-head" in css
     assert ".growth-section-card-grid" in css
     assert ".growth-section-status" in css
+
+
+def test_growth_cycle_tabs_wrap_instead_of_clipping_later_sections():
+    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    tabs_rule = css.split(".growth-cycle-tabs {", 1)[1].split("}", 1)[0]
+
+    assert "flex-wrap: wrap" in tabs_rule
 
 
 def test_growth_cycle_ism_cards_open_focused_detail_static_assets():

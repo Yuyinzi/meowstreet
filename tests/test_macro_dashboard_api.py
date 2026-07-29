@@ -899,6 +899,7 @@ def test_growth_cycle_api_returns_grouped_sections(monkeypatch):
         "ism_manufacturing",
         "ism_services",
         "m2_liquidity",
+        "cyclical_commodities_usd",
         "inflation_context",
         "fomc_context",
         "housing_credit",
