@@ -94,6 +94,7 @@
       var cot = detail(3);
       var usd = detail(4);
       var inflation = detail(5);
+      var freshness = payload.freshness || {};
       var html = '<section class="cyclical-commodities-detail">';
       html += '<header class="detail-head">';
       html += '<div><p class="eyebrow">Growth Cycle Evidence</p><h2>' + h.bilingualTitle("Cyclical Commodities & USD") + '</h2>';
@@ -111,32 +112,24 @@
       html += '<h3>Market Corroboration</h3>';
       html += '<div class="evidence-grid">';
       html += '<article class="evidence-card"><h4>CFTC COT Positioning</h4>';
+      if (freshness.cftc_latest_report_date) html += '<p class="source-date">As of ' + h.escapeHtml(freshness.cftc_latest_report_date) + '</p>';
       if (cot.status === "available") {
         html += '<p class="note">' + h.escapeHtml(cot.method) + '</p>';
         for (var c = 0; c < cot.commodities.length; c++) html += renderCOTRow(cot.commodities[c]);
       } else html += unavailable(cot.reason);
       html += '</article>';
       html += '<article class="evidence-card"><h4>Trade-Weighted USD</h4>';
+      if (freshness.usd_latest_observation_date) html += '<p class="source-date">As of ' + h.escapeHtml(freshness.usd_latest_observation_date) + '</p>';
       if (usd.status === "available") {
         for (var u = 0; u < usd.series.length; u++) html += renderUSDRow(usd.series[u]);
       } else html += unavailable(usd.reason);
       html += '</article>';
       html += '<article class="evidence-card"><h4>CPI / PPI Confirmation</h4>';
+      if (freshness.inflation_latest_observation_date) html += '<p class="source-date">As of ' + h.escapeHtml(freshness.inflation_latest_observation_date) + '</p>';
       if (inflation.status === "available") {
         for (var inf = 0; inf < inflation.series.length; inf++) html += renderInflationRow(inflation.series[inf]);
       } else html += unavailable(inflation.reason);
       html += '</article></div></section>';
-
-      if (payload.freshness && Object.keys(payload.freshness).length) {
-        var f = payload.freshness;
-        html += '<section class="evidence-section freshness"><h3>Freshness / 数据时效</h3>';
-        html += '<p>Exact observation dates only; no age-based stale classification is applied.</p>';
-        html += '<div class="freshness-grid">';
-        if (f.cftc_latest_report_date) html += '<span>CFTC COT <strong>' + h.escapeHtml(f.cftc_latest_report_date) + '</strong></span>';
-        if (f.usd_latest_observation_date) html += '<span>USD <strong>' + h.escapeHtml(f.usd_latest_observation_date) + '</strong></span>';
-        if (f.inflation_latest_observation_date) html += '<span>CPI/PPI <strong>' + h.escapeHtml(f.inflation_latest_observation_date) + '</strong></span>';
-        html += '</div></section>';
-      }
 
       html += '<section class="evidence-section boundaries"><h3>Method Boundaries</h3>';
       html += '<p>Commodity price attribution, COT extreme detection, and USD/CPI/PPI distribution classifications are not configured. These gaps remain pending rather than being converted into a trading conclusion.</p>';

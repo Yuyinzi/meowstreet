@@ -6524,5 +6524,7 @@ def test_detail_uses_evidence_sections_instead_of_method_steps():
     assert "Market Corroboration" in js
     assert "Method Boundaries" in js
     assert "Step " not in js
+    assert "Freshness / 数据时效" not in js
+    assert "As of" in js
     assert ".evidence-section" in css
     assert ".evidence-grid" in css

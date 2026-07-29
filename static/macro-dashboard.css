@@ -655,11 +655,17 @@ h2 {
 .evidence-empty span,
 .unavailable,
 .note,
-.contract-note {
+.contract-note,
+.source-date {
   color: #7A6E62;
   font-size: 12px;
   line-height: 1.45;
   margin: 6px 0 0;
+}
+
+.source-date {
+  color: #B77945;
+  font-weight: 700;
 }
 
 .workflow-row {
