@@ -466,6 +466,97 @@ def test_fetch_document_type_records_missing_calendar_link_as_unavailable(tmp_pa
     }
 
 
+def test_fetch_document_type_fetches_only_latest_missing_completed_document(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    older_event = {
+        **STATEMENT_EVENT,
+        "event_id": "fomc_2026_06_16",
+        "start_date": "2026-06-16",
+        "end_date": "2026-06-17",
+        "display_month": "2026-06-01",
+        "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260617a.htm",
+    }
+    future_event = {
+        **STATEMENT_EVENT,
+        "event_id": "fomc_2026_09_15",
+        "start_date": "2026-09-15",
+        "end_date": "2026-09-16",
+        "display_month": "2026-09-01",
+        "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+    }
+    calls = []
+    try:
+        us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [older_event, STATEMENT_EVENT, future_event],
+        )
+        us_rates_liquidity.replace_macro_event_document(
+            con,
+            fetch_fomc_documents.document_row(
+                older_event,
+                "statement",
+                older_event["url"],
+                "Federal Reserve issues FOMC statement\nOlder statement",
+                "2026-06-17T00:00:00Z",
+            ),
+        )
+        result = fetch_fomc_documents.fetch_document_type(
+            con,
+            "statement",
+            fetch=lambda url: calls.append(url)
+            or "Federal Reserve issues FOMC statement\nLatest statement",
+            today="2026-07-30",
+        )
+    finally:
+        con.close()
+
+    assert result == {
+        "document_type": "statement",
+        "fetched": 1,
+        "unavailable": 0,
+        "failed": 0,
+    }
+    assert calls == [STATEMENT_EVENT["url"]]
+
+
+def test_fetch_document_type_backfill_fetches_all_missing_completed_documents(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    older_event = {
+        **STATEMENT_EVENT,
+        "event_id": "fomc_2026_06_16",
+        "start_date": "2026-06-16",
+        "end_date": "2026-06-17",
+        "display_month": "2026-06-01",
+        "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260617a.htm",
+    }
+    calls = []
+    try:
+        us_rates_liquidity.replace_macro_events(
+            con,
+            "fomc_meeting",
+            [older_event, STATEMENT_EVENT],
+        )
+        result = fetch_fomc_documents.fetch_document_type(
+            con,
+            "statement",
+            fetch=lambda url: calls.append(url)
+            or "Federal Reserve issues FOMC statement\nStatement",
+            today="2026-07-30",
+            backfill=True,
+        )
+    finally:
+        con.close()
+
+    assert result == {
+        "document_type": "statement",
+        "fetched": 2,
+        "unavailable": 0,
+        "failed": 0,
+    }
+    assert calls == [older_event["url"], STATEMENT_EVENT["url"]]
+
+
 def test_fetch_document_type_records_failure_on_invalid_published_statement(
     tmp_path,
 ):
@@ -514,6 +605,7 @@ def test_fetch_document_type_records_missing_event_url_as_failure(tmp_path):
             con,
             "statement",
             fetch=lambda url: "<html>not reached</html>",
+            today="2026-09-17",
         )
         assert result == {
             "document_type": "statement",

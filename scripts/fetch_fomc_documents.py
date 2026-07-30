@@ -2,16 +2,16 @@ import argparse
 import hashlib
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from html import unescape
 from pathlib import Path
 from urllib.parse import urljoin
-from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import us_rates_liquidity
+from app.http_client import HttpClient
 
 
 class DocumentUnavailableError(ValueError):
@@ -217,18 +217,9 @@ def validate_minutes_text(event, text):
 
 
 def fetch_text(url):
-    req = Request(
-        url,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-        },
-    )
-    with urlopen(req, timeout=30) as response:
-        return response.read().decode("utf-8", errors="replace")
+    client = HttpClient()
+    response = client.request("GET", url, timeout=30)
+    return response.content.decode("utf-8", errors="replace")
 
 
 def document_row(event, document_type, url, text, fetched_at):
@@ -258,7 +249,50 @@ def fetch_minutes_document(event, fetch=fetch_text, now=fetched_at_now):
     return document_row(event, "minutes", url, text, now())
 
 
-def fetch_document_type(con, document_type, fetch=fetch_text, now=fetched_at_now):
+def _normalized_today(today):
+    if today is None:
+        return date.today()
+    if isinstance(today, date):
+        return today
+    try:
+        return date.fromisoformat(str(today))
+    except ValueError as exc:
+        raise ValueError(f"today is invalid: {today}") from exc
+
+
+def _event_completion_date(event):
+    value = event.get("end_date") or event.get("start_date")
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as exc:
+        raise ValueError(f"fomc event date is invalid for {event['event_id']}") from exc
+
+
+def _document_events_to_fetch(con, document_type, today, backfill):
+    events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
+    missing_completed_events = [
+        event
+        for event in events
+        if _event_completion_date(event) <= today
+        and not us_rates_liquidity.load_macro_event_document(
+            con,
+            event["event_id"],
+            document_type,
+        )
+    ]
+    if backfill:
+        return missing_completed_events
+    return missing_completed_events[-1:]
+
+
+def fetch_document_type(
+    con,
+    document_type,
+    fetch=fetch_text,
+    now=fetched_at_now,
+    today=None,
+    backfill=False,
+):
     fetch_document = {
         "statement": fetch_statement_document,
         "minutes": fetch_minutes_document,
@@ -269,7 +303,12 @@ def fetch_document_type(con, document_type, fetch=fetch_text, now=fetched_at_now
         "unavailable": 0,
         "failed": 0,
     }
-    for event in us_rates_liquidity.load_macro_events(con, "fomc_meeting"):
+    for event in _document_events_to_fetch(
+        con,
+        document_type,
+        _normalized_today(today),
+        backfill,
+    ):
         try:
             row = fetch_document(event, fetch=fetch, now=now)
             us_rates_liquidity.replace_macro_event_document(con, row)
@@ -301,6 +340,7 @@ def main(argv=None):
         choices=["statement", "minutes", "all"],
         default="statement",
     )
+    parser.add_argument("--backfill", action="store_true")
     args = parser.parse_args(argv)
 
     document_types = (
@@ -313,7 +353,7 @@ def main(argv=None):
     try:
         results = []
         for doc_type in document_types:
-            result = fetch_document_type(con, doc_type)
+            result = fetch_document_type(con, doc_type, backfill=args.backfill)
             print(f"  {result}")
             results.append(result)
     finally:
