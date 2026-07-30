@@ -712,5 +712,8 @@ def test_static_labels_method_market_source_without_claiming_official_settlement
 
     assert "Commodity Market Data" in source
     assert "Reference market data sourced from Investing.com. Not official exchange settlement." in source
+    assert "Investing.com reference data" in source
     assert "Method-Specified Commodity Markets" not in source
     assert "Method-specified market data from Investing.com" not in source
+    assert "method-market data not yet fetched" not in source
+    assert "series.source_label" not in source

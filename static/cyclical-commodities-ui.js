@@ -67,6 +67,25 @@
           + '</div>';
       }
 
+      function renderNonOilRow(series) {
+        if (series.status !== "available") {
+          return '<div class="workflow-row">'
+            + '<div class="workflow-label">' + h.escapeHtml(series.display_name) + '</div>'
+            + '<div class="workflow-metrics"><span>Not available — commodity market data not yet fetched</span></div>'
+            + '</div>';
+        }
+        return '<div class="workflow-row">'
+          + '<div class="workflow-label">' + h.escapeHtml(series.display_name) + '</div>'
+          + '<div class="workflow-metrics">'
+          + '<span>Value: ' + h.escapeHtml(h.fmtNumber(series.latest_value)) + '</span>'
+          + '<span>' + renderState(h.fmtSignedPctDecimal(series.daily_return), series.daily_return_state, "Daily") + '</span>'
+          + '<span>' + renderState(h.fmtSignedPctDecimal(series.weekly_return), series.weekly_return_state, "Weekly") + '</span>'
+          + '<span class="workflow-source">Investing.com reference data</span>'
+          + (series.latest_date ? '<span class="source-date">As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
+          + '</div>'
+          + '</div>';
+      }
+
       function renderValue(val) {
         if (val == null) return "--";
         if (typeof val === "number") return h.fmtSignedPctDecimal(val);
