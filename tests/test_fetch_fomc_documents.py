@@ -1,6 +1,32 @@
 from app.db import us_rates_liquidity
 from scripts import fetch_fomc_documents
 
+CALENDAR_EVENT = {
+    "event_id": "fomc_2026_03_17",
+    "event_type": "fomc_meeting",
+    "start_date": "2026-03-17",
+    "end_date": "2026-03-18",
+    "display_month": "2026-03-01",
+    "title": "FOMC Meeting",
+    "source": "Federal Reserve",
+    "policy_tone": "unknown",
+    "has_sep": 1,
+    "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+}
+
+STATEMENT_EVENT = {
+    "event_id": "fomc_2026_07_28",
+    "event_type": "fomc_meeting",
+    "start_date": "2026-07-28",
+    "end_date": "2026-07-29",
+    "display_month": "2026-07-01",
+    "title": "FOMC Meeting",
+    "source": "Federal Reserve",
+    "policy_tone": "unknown",
+    "has_sep": 1,
+    "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260729a.htm",
+}
+
 
 def test_statement_url_from_event_uses_event_url_when_it_is_statement_url():
     event = {
@@ -71,7 +97,7 @@ def test_resolve_statement_url_raises_when_calendar_has_no_statement_link():
             event,
             fetch=lambda url: "<html>Meeting calendars and information</html>",
         )
-    except ValueError as exc:
+    except fetch_fomc_documents.DocumentUnavailableError as exc:
         assert "statement url is missing" in str(exc)
         raised = True
     assert raised
@@ -377,7 +403,7 @@ def test_fetch_minutes_document_raises_when_calendar_has_no_minutes_link():
             event,
             fetch=lambda url: "<html>Meeting calendars and information</html>",
         )
-    except ValueError as exc:
+    except fetch_fomc_documents.DocumentUnavailableError as exc:
         assert "minutes url is missing" in str(exc)
         raised = True
     assert raised
@@ -389,20 +415,7 @@ def test_import_statement_documents_resolves_calendar_url(tmp_path):
         us_rates_liquidity.replace_macro_events(
             con,
             "fomc_meeting",
-            [
-                {
-                    "event_id": "fomc_2026_03_17",
-                    "event_type": "fomc_meeting",
-                    "start_date": "2026-03-17",
-                    "end_date": "2026-03-18",
-                    "display_month": "2026-03-01",
-                    "title": "FOMC Meeting",
-                    "source": "Federal Reserve",
-                    "policy_tone": "unknown",
-                    "has_sep": 1,
-                    "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
-                }
-            ],
+            [CALENDAR_EVENT],
         )
 
         def fake_fetch(url):
@@ -431,3 +444,99 @@ def test_import_statement_documents_resolves_calendar_url(tmp_path):
     assert documents[0]["url"] == (
         "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260318a.htm"
     )
+
+
+def test_fetch_document_type_records_missing_calendar_link_as_unavailable(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(con, "fomc_meeting", [CALENDAR_EVENT])
+        result = fetch_fomc_documents.fetch_document_type(
+            con,
+            "statement",
+            fetch=lambda url: "<html>Meeting calendars and information</html>",
+        )
+    finally:
+        con.close()
+
+    assert result == {
+        "document_type": "statement",
+        "fetched": 0,
+        "unavailable": 1,
+        "failed": 0,
+    }
+
+
+def test_fetch_document_type_records_failure_on_invalid_published_statement(
+    tmp_path,
+):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(con, "fomc_meeting", [STATEMENT_EVENT])
+        result = fetch_fomc_documents.fetch_document_type(
+            con,
+            "statement",
+            fetch=lambda url: "<html>not a statement</html>",
+        )
+        assert result == {
+            "document_type": "statement",
+            "fetched": 0,
+            "unavailable": 0,
+            "failed": 1,
+        }
+        assert (
+            us_rates_liquidity.load_macro_event_documents(
+                con, STATEMENT_EVENT["event_id"]
+            )
+            == []
+        )
+    finally:
+        con.close()
+
+
+NO_URL_EVENT = {
+    "event_id": "fomc_2026_09_15",
+    "event_type": "fomc_meeting",
+    "start_date": "2026-09-15",
+    "end_date": "2026-09-16",
+    "display_month": "2026-09-01",
+    "title": "FOMC Meeting",
+    "source": "Federal Reserve",
+    "policy_tone": "unknown",
+    "has_sep": 1,
+}
+
+
+def test_fetch_document_type_records_missing_event_url_as_failure(tmp_path):
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    try:
+        us_rates_liquidity.replace_macro_events(con, "fomc_meeting", [NO_URL_EVENT])
+        result = fetch_fomc_documents.fetch_document_type(
+            con,
+            "statement",
+            fetch=lambda url: "<html>not reached</html>",
+        )
+        assert result == {
+            "document_type": "statement",
+            "fetched": 0,
+            "unavailable": 0,
+            "failed": 1,
+        }
+    finally:
+        con.close()
+
+
+def test_main_returns_1_on_fetch_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        fetch_fomc_documents,
+        "fetch_document_type",
+        lambda *args, **kwargs: {"failed": 1},
+    )
+    result = fetch_fomc_documents.main(
+        [
+            "--document-type",
+            "statement",
+            "--db-path",
+            str(tmp_path / "market.sqlite"),
+        ]
+    )
+    assert result == 1

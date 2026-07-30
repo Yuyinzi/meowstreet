@@ -6,7 +6,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scripts import fetch_fomc_documents
 from scripts import fetch_ism_reports
+from scripts import generate_fomc_minutes_structure
+from scripts import generate_fomc_policy_tone
 from scripts import import_consumer_sentiment
 from scripts import import_fomc_calendar
 from scripts import import_gdp_market_relationships
@@ -84,10 +87,14 @@ def _planned_tasks(
     ism_reports_main,
     gdp_main,
     fomc_main=import_fomc_calendar.main,
+    fomc_document_main=fetch_fomc_documents.main,
+    fomc_policy_tone_main=generate_fomc_policy_tone.main,
+    fomc_minutes_main=generate_fomc_minutes_structure.main,
     nfib_main=import_nfib_sbet.main,
     nfib_regional_main=import_nfib_sbet_regional.main,
     main=None,
     oil_main=None,
+    tracked_commodities_main=None,
 ):
     tasks = []
     if not args.skip_yahoo:
@@ -134,8 +141,17 @@ def _planned_tasks(
     if not args.skip_fomc:
         calendar_path = _fomc_calendar_path(args)
         if calendar_path:
-            tasks.append(
-                ("fomc_calendar", fomc_main, ["--calendar-path", str(calendar_path)])
+            tasks.extend(
+                [
+                    (
+                        "fomc_calendar",
+                        fomc_main,
+                        ["--calendar-path", str(calendar_path)],
+                    ),
+                    ("fomc_documents", fomc_document_main, ["--document-type", "all"]),
+                    ("fomc_policy_tone", fomc_policy_tone_main, ["--all"]),
+                    ("fomc_minutes_structure", fomc_minutes_main, ["--all"]),
+                ]
             )
     if not args.skip_nfib_sbo:
         tasks.append(("nfib_sbo_official", nfib_main, []))
@@ -145,6 +161,8 @@ def _planned_tasks(
         tasks.append(("cyclical_commodities_official", main, []))
     if oil_main is not None and not args.skip_oil:
         tasks.append(("oil_official", oil_main, []))
+    if tracked_commodities_main is not None and not args.skip_tracked_commodities:
+        tasks.append(("tracked_commodities", tracked_commodities_main, []))
     return tasks
 
 
@@ -167,6 +185,9 @@ def main(
     ism_reports_main=fetch_ism_reports.main,
     gdp_main=import_gdp_market_relationships.main,
     fomc_main=import_fomc_calendar.main,
+    fomc_document_main=fetch_fomc_documents.main,
+    fomc_policy_tone_main=generate_fomc_policy_tone.main,
+    fomc_minutes_main=generate_fomc_minutes_structure.main,
     nfib_main=import_nfib_sbet.main,
     nfib_regional_main=import_nfib_sbet_regional.main,
     main=None,
@@ -210,6 +231,9 @@ def main(
         ism_reports_main,
         gdp_main,
         fomc_main,
+        fomc_document_main,
+        fomc_policy_tone_main,
+        fomc_minutes_main,
         nfib_main,
         nfib_regional_main,
         main,

@@ -59,7 +59,9 @@ def _event_label(event):
 
 
 def should_skip_existing_extraction(existing, force):
-    return bool(existing) and not force
+    return (
+        bool(existing and existing.get("extraction_status") == "approved") and not force
+    )
 
 
 def target_events(all_events, event_id=None, generate_all=False):
