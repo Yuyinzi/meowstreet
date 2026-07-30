@@ -10,7 +10,11 @@ BENCHMARKS = [
     {"id": "uk_ftse_350", "title": "FTSE 350", "region": "UK"},
     {"id": "germany_dax_40", "title": "DAX 40", "region": "Germany"},
     {"id": "hong_kong_hsi", "title": "Hang Seng Index", "region": "Hong Kong"},
-    {"id": "hong_kong_hscei", "title": "Hang Seng China Enterprises", "region": "Hong Kong"},
+    {
+        "id": "hong_kong_hscei",
+        "title": "Hang Seng China Enterprises",
+        "region": "Hong Kong",
+    },
     {"id": "japan_nikkei_225", "title": "Nikkei 225", "region": "Japan"},
     {"id": "australia_asx_200", "title": "ASX 200", "region": "Australia"},
 ]
@@ -72,9 +76,12 @@ def build_market_phase_summary_payload(benchmark_id, rows):
     }
 
 
-def build_dashboard_payload(load_rows):
+def build_dashboard_payload(load_rows, benchmark_ids=None):
+    benchmarks = [
+        b for b in BENCHMARKS if benchmark_ids is None or b["id"] in benchmark_ids
+    ]
     markets = []
-    for benchmark in BENCHMARKS:
+    for benchmark in benchmarks:
         rows = load_rows(benchmark["id"])
         if rows:
             markets.append(build_market_phase_summary_payload(benchmark["id"], rows))

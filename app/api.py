@@ -32,6 +32,8 @@ ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
 METHOD_PATH = ROOT / "data" / "local_system" / "synthesis" / "method.v1.json"
 
+US_BENCHMARK_IDS = ["us_sp500", "us_nasdaq_100", "us_nasdaq_composite", "us_djia"]
+
 
 def _load_market_phase_for_setup():
     try:
@@ -45,7 +47,8 @@ def _load_market_phase_for_setup():
         return market_phase.build_dashboard_payload(
             lambda benchmark_id: benchmark_market_data.load_price_rows(
                 con, benchmark_id
-            )
+            ),
+            benchmark_ids=US_BENCHMARK_IDS,
         )
     except (ValueError, TypeError, RuntimeError):
         logging.warning("market phase load failed for market setup", exc_info=True)
@@ -170,6 +173,15 @@ _OIL_SERIES_IDS = [
     "oil_crude_production",
     "oil_refinery_crude_input",
     "oil_petroleum_products_supplied",
+]
+
+method_COMMODITY_SERIES_IDS = [
+    "copper_comex",
+    "copper_lme",
+    "copper_shanghai",
+    "lumber",
+    "iron_ore_62_cfr_china",
+    "iron_ore_dce",
 ]
 
 app = FastAPI(title="Meowstreet")
@@ -345,7 +357,8 @@ def macro_dashboard_market_phase():
         return market_phase.build_dashboard_payload(
             lambda benchmark_id: benchmark_market_data.load_price_rows(
                 con, benchmark_id
-            )
+            ),
+            benchmark_ids=US_BENCHMARK_IDS,
         )
     finally:
         con.close()
@@ -448,6 +461,12 @@ def macro_dashboard_growth_cycle():
                 _OIL_SERIES_IDS,
             )
         )
+        oil_series_metadata = (
+            macro_indicators_db.load_macro_indicator_series_for_ids(
+                con,
+                _OIL_SERIES_IDS,
+            )
+        )
         dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
             ism_manufacturing=ism_manufacturing,
             ism_services=ism_services_data["payload"],
@@ -466,6 +485,7 @@ def macro_dashboard_growth_cycle():
                 "cot_rows": cot_rows,
                 "usd_observations_by_series": usd_observations,
                 "oil_observations_by_series": oil_observations,
+                "oil_series_metadata_by_id": oil_series_metadata,
                 "as_of_date": date.today().isoformat(),
             },
         )
@@ -839,11 +859,25 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                     _OIL_SERIES_IDS,
                 )
             )
+            oil_series_metadata = (
+                macro_indicators_db.load_macro_indicator_series_for_ids(
+                    con,
+                    _OIL_SERIES_IDS,
+                )
+            )
+            method_observations = (
+                macro_indicators_db.load_macro_indicator_observations_for_series(
+                    con,
+                    method_COMMODITY_SERIES_IDS,
+                )
+            )
             payload = tool.build_cyclical_commodities_payload(
                 cot_rows,
                 usd_observations,
                 oil_observations,
                 date.today().isoformat(),
+                oil_series_metadata_by_id=oil_series_metadata,
+                commodity_observations=method_observations,
             )
             return tool.build_cyclical_commodities_detail(payload)
         if detail_id == "ism_services":
