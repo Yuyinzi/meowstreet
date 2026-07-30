@@ -1,4 +1,10 @@
 data/
+/data/private/investing_chrome_profile/
+/data/private/investing_chrome_trace/
+/data/private/investing_downloads/
+investing_historical.json
+.investing-browser-profile/
+scripts/.investing-browser-profile/
 .supervisors/
 __pycache__/
 *.pyc

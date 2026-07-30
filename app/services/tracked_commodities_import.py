@@ -1,0 +1,139 @@
+from datetime import timedelta, date as date_type
+from pathlib import Path
+
+from app.data_sources import investing_chrome
+from app.data_sources.investing_download import download_commodity_csv
+from app.data_sources.tracked_commodities import (
+    MARKET_SERIES,
+    build_commodity_series_payload,
+    parse_commodity_csv,
+    parse_investing_history_payload,
+)
+from app.db import macro_indicators
+
+
+def _browser_fetcher(start_date=None, end_date=None, markets=None, cdp_endpoint=None):
+    endpoint = cdp_endpoint or "http://127.0.0.1:9222"
+    series_ids = markets or list(MARKET_SERIES)
+    results = {}
+    for sid in series_ids:
+        meta = MARKET_SERIES[sid]
+        kwargs = {
+            "market": meta,
+            "cdp_endpoint": endpoint,
+        }
+        if start_date:
+            kwargs["start_date"] = start_date
+        if end_date:
+            kwargs["end_date"] = end_date
+        browser_result = investing_chrome.fetch_investing_history(**kwargs)
+        if browser_result["status"] != "ok":
+            raise ValueError(browser_result["message"])
+        observations = parse_investing_history_payload(
+            browser_result["payload"],
+            sid,
+            retrieved_at=browser_result["retrieved_at"],
+        )
+        results[sid] = build_commodity_series_payload(sid, observations)
+    return results
+
+
+def refresh_tracked_commodities(
+    con,
+    fetcher=_browser_fetcher,
+    start_date=None,
+    end_date=None,
+    markets=None,
+    cdp_endpoint=None,
+):
+    series_ids = markets or list(MARKET_SERIES)
+    if start_date is None and end_date is None:
+        latest_dates = []
+        for sid in series_ids:
+            points = macro_indicators.load_macro_indicator_points(con, sid)
+            if points:
+                latest_dates.append(max(p["date"] for p in points))
+        if latest_dates:
+            start_date = (
+                date_type.fromisoformat(min(latest_dates)) - timedelta(days=14)
+            ).isoformat()
+    kwargs = {"start_date": start_date, "end_date": end_date, "markets": markets}
+    if cdp_endpoint:
+        kwargs["cdp_endpoint"] = cdp_endpoint
+    payload = fetcher(**kwargs)
+    try:
+        result = {"series": 0, "observations": 0}
+        for item in payload.values():
+            macro_indicators.merge_macro_indicator_observations(
+                con, item["series"], item["observations"], commit=False
+            )
+            result["series"] += 1
+            result["observations"] += len(item["observations"])
+        con.commit()
+        return result
+    except Exception:
+        con.rollback()
+        raise
+
+
+def import_commodity_browser_downloads(
+    con,
+    markets=None,
+    downloader=download_commodity_csv,
+    cdp_endpoint=None,
+):
+    series_ids = markets or list(MARKET_SERIES)
+    all_payloads = []
+    for sid in series_ids:
+        meta = MARKET_SERIES[sid]
+        result = downloader(meta, cdp_endpoint=cdp_endpoint)
+        if result["status"] != "ok":
+            raise ValueError(
+                f"{sid}: browser download failed — {result.get('message', result['status'])}"
+            )
+        csv_text = Path(result["csv_path"]).read_text(encoding="utf-8")
+        observations = parse_commodity_csv(
+            csv_text,
+            sid,
+            source_url=result["source_url"],
+            retrieved_at=result["retrieved_at"],
+        )
+        if not observations:
+            raise ValueError(f"{sid}: parsed 0 valid observations from downloaded CSV")
+        all_payloads.append(
+            (sid, build_commodity_series_payload(sid, observations))
+        )
+    try:
+        result = {"series": 0, "observations": 0}
+        for sid, payload in all_payloads:
+            macro_indicators.merge_macro_indicator_observations(
+                con, payload["series"], payload["observations"], commit=False
+            )
+            result["series"] += 1
+            result["observations"] += len(payload["observations"])
+        con.commit()
+        return result
+    except Exception:
+        con.rollback()
+        raise
+
+
+def import_commodity_csv_files(con, csv_paths_by_market):
+    try:
+        result = {"series": 0, "observations": 0}
+        for series_id, csv_path in csv_paths_by_market.items():
+            if series_id not in MARKET_SERIES:
+                raise ValueError(f"unknown method commodity market: {series_id}")
+            text = Path(csv_path).read_text(encoding="utf-8")
+            observations = parse_commodity_csv(text, series_id)
+            payload = build_commodity_series_payload(series_id, observations)
+            macro_indicators.merge_macro_indicator_observations(
+                con, payload["series"], payload["observations"], commit=False
+            )
+            result["series"] += 1
+            result["observations"] += len(observations)
+        con.commit()
+        return result
+    except Exception:
+        con.rollback()
+        raise
