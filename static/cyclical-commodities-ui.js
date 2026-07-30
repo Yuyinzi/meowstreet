@@ -264,6 +264,16 @@
       html += '</section>';
 
       html += '<section class="evidence-section">';
+      html += '<h3>Commodity Market Data</h3>';
+      html += '<p class="section-intro">Reference market data sourced from Investing.com. Not official exchange settlement.</p>';
+      var methodData = payload.non_oil_observation || {};
+      var methodIds = Object.keys(methodData).sort();
+      for (var ci = 0; ci < methodIds.length; ci++) {
+        html += renderNonOilRow(methodData[methodIds[ci]]);
+      }
+      html += '</section>';
+
+      html += '<section class="evidence-section">';
       html += '<h3>Market Corroboration</h3>';
       html += '<div class="evidence-grid">';
 

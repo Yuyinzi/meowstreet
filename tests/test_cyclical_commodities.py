@@ -645,3 +645,72 @@ def test_oil_distribution_summary_does_not_change_process_read():
     abnormal_detail = .build_cyclical_commodities_detail(abnormal_payload)
 
     assert normal_detail["process_read"] == abnormal_detail["process_read"]
+
+
+def test_oil_distribution_v2_excludes_pre_2016_observations_from_returns():
+    all_rows = [
+        {"date": "2015-12-31", "value": 10.0},
+        {"date": "2016-01-01", "value": 100.0},
+        {"date": "2016-01-04", "value": 110.0},
+        {"date": "2016-01-05", "value": 121.0},
+    ]
+
+    result = oil_distribution.build_distribution(
+        all_rows, "daily", minimum_samples=2
+    )
+    expected = oil_distribution.build_distribution(
+        all_rows[1:], "daily", minimum_samples=2
+    )
+
+    assert result["method_version"] == "oil_distribution_v2"
+    assert result["distribution_window"] == "2016-01-01_to_latest_available"
+    assert result["sample_start_date"] == "2016-01-04"
+    assert result["sample_end_date"] == "2016-01-05"
+    assert result["sample_count"] == expected["sample_count"]
+    assert result["sample_mean"] == expected["sample_mean"]
+    assert result["sample_standard_deviation"] == expected["sample_standard_deviation"]
+
+
+_method_ROWS = {
+    "copper_comex": [
+        {"date": "2026-07-22", "value": 5.66},
+        {"date": "2026-07-23", "value": 5.68},
+        {"date": "2026-07-24", "value": 5.70},
+    ],
+    "copper_lme": [
+        {"date": "2026-07-22", "value": 10400.0},
+        {"date": "2026-07-23", "value": 10380.0},
+        {"date": "2026-07-24", "value": 10420.0},
+    ],
+    "lumber": [],
+}
+
+
+def test_detail_builds_method_market_observation_without_attribution_conclusion():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS,
+        USD_ROWS,
+        _OIL_ROWS,
+        "2026-07-25",
+        commodity_observations=_method_ROWS,
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+    copper = detail["non_oil_observation"]["copper_comex"]
+    assert copper["daily_return"] == pytest.approx(0.0035, abs=1e-4)
+    assert copper["source_class"] == "free_web"
+    assert "Method-specified market data" in copper["source_label"]
+    assert copper["status"] == "available"
+    assert "attribution" not in copper
+
+
+def test_static_labels_method_market_source_without_claiming_official_settlement():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "static"
+        / "cyclical-commodities-ui.js"
+    ).read_text()
+
+    assert "Commodity Market Data" in source
+    assert "Reference market data sourced from Investing.com. Not official exchange settlement." in source
+    assert "Method-Specified Commodity Markets" not in source
+    assert "Method-specified market data from Investing.com" not in source
