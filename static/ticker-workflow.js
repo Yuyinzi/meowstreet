@@ -892,7 +892,7 @@
   }
 
   async function loadMethod() {
-    state.method = await jsonFetch("/api/method-system/method");
+    state.method = await jsonFetch("/api/ticker-workflow/method");
     state.graphNodes = normalizeMethodNodes(state.method.workflow_nodes || []);
     state.selectedNodeId = null;
     renderMethodMeta();
@@ -915,7 +915,7 @@
     await delay(180);
 
     try {
-      const result = await jsonFetch("/api/method-system/workflow/evaluate", {
+      const result = await jsonFetch("/api/ticker-workflow/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

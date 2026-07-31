@@ -7,7 +7,7 @@ client = TestClient(app)
 
 
 def test_method_endpoint_returns_graph():
-    response = client.get("/api/method-system/method")
+    response = client.get("/api/ticker-workflow/method")
 
     assert response.status_code == 200
     payload = response.json()
@@ -17,7 +17,7 @@ def test_method_endpoint_returns_graph():
 
 
 def test_method_endpoint_uses_stable_top_level_graph():
-    response = client.get("/api/method-system/method")
+    response = client.get("/api/ticker-workflow/method")
 
     assert response.status_code == 200
     payload = response.json()
@@ -47,7 +47,7 @@ def test_workflow_evaluate_endpoint_accepts_sparse_ticker_payload(monkeypatch):
     )
 
     response = client.post(
-        "/api/method-system/workflow/evaluate",
+        "/api/ticker-workflow/evaluate",
         json={"symbol": "XYZ", "observations": {}},
     )
 
@@ -82,7 +82,7 @@ def test_workflow_evaluate_endpoint_uses_tool_runner(monkeypatch):
     monkeypatch.setattr(api.tool_runner, "apply_tools", fake_apply_tools)
 
     response = client.post(
-        "/api/method-system/workflow/evaluate",
+        "/api/ticker-workflow/evaluate",
         json={"symbol": "AAPL", "observations": {}},
     )
 
@@ -92,8 +92,7 @@ def test_workflow_evaluate_endpoint_uses_tool_runner(monkeypatch):
         node for node in payload["nodes"] if node["node_id"] == "data_readiness"
     )
     groups = {
-        check["check_id"]: check.get("group")
-        for check in readiness_node["checks"]
+        check["check_id"]: check.get("group") for check in readiness_node["checks"]
     }
     assert groups["symbol_present"] == "instrument_identity"
     assert groups["market_price_available"] == "market_data"
