@@ -93,9 +93,20 @@ def _default_fetcher(start_date, end_date):
     return fetch_lumber_series(start_date, end_date)
 
 
-def _write_overlap_audit(audit, audit_path):
+def _stage_overlap_audit(audit, audit_path):
     audit_path.parent.mkdir(parents=True, exist_ok=True)
-    audit_path.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n")
+    temp_path = audit_path.with_name(audit_path.name + ".tmp")
+    temp_path.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n")
+    return temp_path
+
+
+def _promote_overlap_audit(temp_path, audit_path):
+    temp_path.replace(audit_path)
+
+
+def _remove_staged_audit(temp_path):
+    if temp_path is not None and temp_path.exists():
+        temp_path.unlink()
 
 
 def refresh_lumber(
@@ -107,6 +118,8 @@ def refresh_lumber(
 ):
     if fetcher is None:
         fetcher = _default_fetcher
+    effective_audit_path = audit_path or LUMBER_OVERLAP_AUDIT_PATH
+    temp_audit_path = None
     effective_today = today_date or date.today().isoformat()
     try:
         stored_rows = macro_indicators.load_macro_indicator_observations(
@@ -128,11 +141,13 @@ def refresh_lumber(
                 con, ARCHIVED_LUMBER_SERIES_ID
             )
             audit = audit_lumber_overlap(archived_rows, observations)
-            _write_overlap_audit(audit, audit_path or LUMBER_OVERLAP_AUDIT_PATH)
+            temp_audit_path = _stage_overlap_audit(audit, effective_audit_path)
         macro_indicators.merge_macro_indicator_observations(
             con, payload["series"], observations, commit=False
         )
         con.commit()
+        if temp_audit_path is not None:
+            _promote_overlap_audit(temp_audit_path, effective_audit_path)
         return {
             "series": payload["series"]["series_id"],
             "observations": len(observations),
@@ -141,4 +156,5 @@ def refresh_lumber(
         }
     except Exception:
         con.rollback()
+        _remove_staged_audit(temp_audit_path)
         raise

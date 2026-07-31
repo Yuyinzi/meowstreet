@@ -172,6 +172,66 @@ def test_failed_lbr_import_does_not_persist_overlap_audit(tmp_path):
     assert not audit_path.exists()
 
 
+def test_merge_failure_leaves_no_audit_or_active_rows(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    macro_indicators.merge_macro_indicator_observations(
+        con, archived_lumber_series(), archived_rows()
+    )
+    audit_path = tmp_path / "lumber_overlap_v1.json"
+
+    def bad_contract_fetcher(start_date, end_date):
+        payload = yahoo_payload(expected_yahoo_rows())
+        payload["series"] = dict(payload["series"], source_contract={})
+        return payload
+
+    with pytest.raises(
+        ValueError, match="series source contract is required to be a non-empty dict"
+    ):
+        lumber_import.refresh_lumber(
+            con,
+            today_date="2026-07-31",
+            fetcher=bad_contract_fetcher,
+            audit_path=audit_path,
+        )
+    assert not audit_path.exists()
+    assert (
+        macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
+        == []
+    )
+
+
+class _FailingCommitCon:
+    def __init__(self, con):
+        self._con = con
+
+    def __getattr__(self, name):
+        return getattr(self._con, name)
+
+    def commit(self):
+        raise ValueError("sqlite commit failed")
+
+
+def test_commit_failure_leaves_no_audit_or_active_rows(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    macro_indicators.merge_macro_indicator_observations(
+        con, archived_lumber_series(), archived_rows()
+    )
+    audit_path = tmp_path / "lumber_overlap_v1.json"
+
+    with pytest.raises(ValueError, match="sqlite commit failed"):
+        lumber_import.refresh_lumber(
+            _FailingCommitCon(con),
+            today_date="2026-07-31",
+            fetcher=fake_yahoo_fetcher,
+            audit_path=audit_path,
+        )
+    assert not audit_path.exists()
+    assert (
+        macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
+        == []
+    )
+
+
 def test_overlap_audit_excludes_investing_only_saturday_and_detects_unequal_shared_close():
     audit = lumber_import.audit_lumber_overlap(archived_rows(), yahoo_rows())
     assert audit["archived_only_dates"] == ["2023-08-05"]
