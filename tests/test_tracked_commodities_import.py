@@ -106,7 +106,7 @@ def test_cli_reports_chrome_start_command_when_cdp_session_is_missing(
 ):
     from scripts import import_tracked_commodities
 
-    def blocked_refresh(con, **kwargs):
+    def blocked_import(con, **kwargs):
         raise ValueError(
             "No Investing.com page found in the Chrome session at "
             "http://127.0.0.1:9222. "
@@ -121,7 +121,9 @@ def test_cli_reports_chrome_start_command_when_cdp_session_is_missing(
             "fake_mod",
             (),
             {
-                "refresh_tracked_commodities": staticmethod(blocked_refresh),
+                "import_commodity_browser_downloads": staticmethod(
+                    blocked_import
+                ),
             },
         )(),
     )
@@ -133,21 +135,34 @@ def test_cli_reports_chrome_start_command_when_cdp_session_is_missing(
     assert "start_investing_chrome.py" in capsys.readouterr().err
 
 
-def test_cli_dry_run_uses_browser_history_defaults(monkeypatch, capsys):
+def test_cli_dry_run_uses_browser_download_range(monkeypatch, capsys):
     from scripts import import_tracked_commodities
 
     calls = []
 
-    def fake_fetch(market, start_date=None, end_date=None, **kwargs):
-        calls.append((market, start_date, end_date))
+    def fake_import(con, **kwargs):
+        calls.append(kwargs)
         return {
-            "status": "ok",
-            "payload": {"data": [{"rowDate": "2026-07-29", "last_close": 4.5}]},
-            "retrieved_at": "2026-07-30T00:00:00+00:00",
+            "series": 1,
+            "observations": 42,
+            "ranges": {
+                "copper_comex": {
+                    "start_date": "2016-01-01",
+                    "end_date": "2026-07-30",
+                }
+            },
         }
 
     monkeypatch.setattr(
-        "app.data_sources.investing_chrome.fetch_investing_history", fake_fetch
+        import_tracked_commodities,
+        "tracked_commodities_import",
+        type(
+            "fake_mod",
+            (),
+            {
+                "import_commodity_browser_downloads": staticmethod(fake_import),
+            },
+        )(),
     )
 
     exit_code = import_tracked_commodities.main(
@@ -155,8 +170,51 @@ def test_cli_dry_run_uses_browser_history_defaults(monkeypatch, capsys):
     )
 
     assert exit_code == 0
-    assert calls[0][1:] == (None, None)
-    assert "copper_comex" in capsys.readouterr().out
+    assert calls == [
+        {
+            "markets": ["copper_comex"],
+            "cdp_endpoint": "http://127.0.0.1:9222",
+            "dry_run": True,
+        }
+    ]
+    assert "2016-01-01 to 2026-07-30" in capsys.readouterr().out
+
+
+def test_cli_defaults_to_browser_download_batch(monkeypatch, capsys, tmp_path):
+    from scripts import import_tracked_commodities
+
+    calls = []
+
+    def successful_import(con, **kwargs):
+        calls.append(kwargs)
+        return {"series": 1, "observations": 5}
+
+    monkeypatch.setattr(
+        import_tracked_commodities,
+        "tracked_commodities_import",
+        type(
+            "fake_mod",
+            (),
+            {
+                "import_commodity_browser_downloads": staticmethod(
+                    successful_import
+                ),
+            },
+        )(),
+    )
+
+    exit_code = import_tracked_commodities.main(
+        ["--markets", "copper_lme", "--db-path", str(tmp_path / "test.db")]
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "markets": ["copper_lme"],
+            "cdp_endpoint": "http://127.0.0.1:9222",
+        }
+    ]
+    assert "observations: 5" in capsys.readouterr().out
 
 
 _CSV_TEXT = 'Date,Price,Open,High,Low,Vol.,Change %\n"Jul 24, 2026",5.700,5.710,5.720,5.680,12.5K,0.35%\n"Jul 23, 2026",5.680,5.690,5.700,5.660,15.2K,-0.18%\n'
@@ -210,6 +268,7 @@ def test_macro_refresh_does_not_register_http_commodity_task_by_default():
         skip_cyclical_commodities=True,
         skip_oil=True,
         skip_tracked_commodities=False,
+        skip_lumber=True,
         fomc_calendar_path=None,
     )
 
@@ -299,7 +358,46 @@ def test_browser_download_import_uses_price_page_url_and_download_retrieval_time
     assert observations[0]["retrieved_at"] == "2026-07-30T00:00:00+00:00"
 
 
-def test_browser_download_cli_mode_requires_existing_investing_tab(monkeypatch, capsys):
+def test_browser_download_dry_run_returns_range_without_writing_observations(tmp_path):
+    con = macro_indicators.connect(tmp_path / "macro.db")
+    csv_path = tmp_path / "ok.csv"
+    csv_path.write_text(
+        "Date,Price,Open,High,Low,Vol.,Change %\n"
+        '"Jul 24, 2026",5.700,5.710,5.720,5.680,12.5K,0.35%\n',
+        encoding="utf-8",
+    )
+
+    def completed_downloader(market, **kwargs):
+        return {
+            "status": "ok",
+            "csv_path": csv_path,
+            "source_url": market["price_page_url"],
+            "retrieved_at": "2026-07-30T00:00:00+00:00",
+            "start_date": "2016-01-01",
+            "end_date": "2026-07-30",
+        }
+
+    result = import_commodity_browser_downloads(
+        con,
+        markets=["copper_comex"],
+        downloader=completed_downloader,
+        dry_run=True,
+    )
+
+    assert result == {
+        "series": 1,
+        "observations": 1,
+        "ranges": {
+            "copper_comex": {
+                "start_date": "2016-01-01",
+                "end_date": "2026-07-30",
+            }
+        },
+    }
+    assert macro_indicators.load_macro_indicator_points(con, "copper_comex") == []
+
+
+def test_default_browser_download_reports_missing_investing_tab(monkeypatch, capsys):
     from scripts import import_tracked_commodities
 
     def missing_tab_import(con, **kwargs):
@@ -322,34 +420,13 @@ def test_browser_download_cli_mode_requires_existing_investing_tab(monkeypatch, 
         )(),
     )
 
-    exit_code = import_tracked_commodities.main(
-        ["--browser-download", "--markets", "copper_lme"]
-    )
+    exit_code = import_tracked_commodities.main(["--markets", "copper_lme"])
     assert exit_code == 1
     assert "leave it open" in capsys.readouterr().err
 
 
-def test_browser_download_cli_mode_calls_batch_import(monkeypatch, capsys):
+def test_cli_rejects_obsolete_browser_download_option():
     from scripts import import_tracked_commodities
 
-    def successful_import(con, **kwargs):
-        return {"series": 1, "observations": 5}
-
-    monkeypatch.setattr(
-        import_tracked_commodities,
-        "tracked_commodities_import",
-        type(
-            "fake_mod",
-            (),
-            {
-                "import_commodity_browser_downloads": staticmethod(
-                    successful_import
-                ),
-            },
-        )(),
-    )
-
-    exit_code = import_tracked_commodities.main(
-        ["--browser-download", "--markets", "copper_lme", "lumber"]
-    )
-    assert exit_code == 0
+    with pytest.raises(SystemExit, match="2"):
+        import_tracked_commodities.main(["--browser-download"])
