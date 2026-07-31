@@ -27,11 +27,19 @@ create table if not exists macro_indicator_observation_metadata (
     series_id text not null,
     date text not null,
     release_date text,
+    publication_date_basis text,
     revision_status text,
     source_url text,
     source_identifier text,
     source_hash text,
+    source_class text,
+    retrieved_at text,
     primary key(series_id, date),
+    foreign key(series_id) references macro_indicator_series(series_id)
+);
+create table if not exists macro_indicator_series_contracts (
+    series_id text primary key,
+    contract_json text not null,
     foreign key(series_id) references macro_indicator_series(series_id)
 );
 """
@@ -94,7 +102,12 @@ def init_macro_tables(con):
     con.executescript(_MACRO_TABLES_DDL)
     con.executescript(_REGIONAL_TABLES_DDL)
     con.executescript(__COT_DDL)
-    for col in ["source_hash", "publication_date_basis"]:
+    for col in [
+        "source_hash",
+        "publication_date_basis",
+        "source_class",
+        "retrieved_at",
+    ]:
         try:
             con.execute(
                 f"alter table macro_indicator_observation_metadata add column {col} text"
@@ -200,6 +213,20 @@ def insert_macro_indicator_points(con, series, points, commit=True):
     return {"series": 1, "points": len(points)}
 
 
+def load_macro_indicator_series_for_ids(con, series_ids):
+    normalized_ids = [_normalize_series_id(sid) for sid in series_ids]
+    if not normalized_ids:
+        return {}
+    placeholders = ", ".join("?" for _ in normalized_ids)
+    rows = con.execute(
+        f"""select series_id, title, units, source
+              from macro_indicator_series
+              where series_id in ({placeholders})""",
+        normalized_ids,
+    ).fetchall()
+    return {row["series_id"]: dict(row) for row in rows}
+
+
 def load_macro_indicator_series(con):
     rows = con.execute(
         """
@@ -257,20 +284,40 @@ def replace_macro_indicator_points_batch(con, series_points_list):
         raise
 
 
+def _merge_series_contract(con, series):
+    contract = series.get("source_contract")
+    if contract is None:
+        return
+    if not isinstance(contract, dict) or not contract:
+        raise ValueError("series source contract is required to be a non-empty dict")
+    con.execute(
+        """insert into macro_indicator_series_contracts(series_id, contract_json)
+           values (?, ?)
+           on conflict(series_id) do update set contract_json = excluded.contract_json""",
+        (
+            _normalize_series_id(series["series_id"]),
+            json.dumps(contract, sort_keys=True),
+        ),
+    )
+
+
 def merge_macro_indicator_observations(con, series, observations, commit=True):
     merge_macro_indicator_points(con, series, observations, commit=False)
     for observation in observations:
         con.execute(
             """insert into macro_indicator_observation_metadata(
                 series_id, date, release_date, publication_date_basis,
-                revision_status, source_url, source_identifier
-            ) values (?, ?, ?, ?, ?, ?, ?)
+                revision_status, source_url, source_identifier,
+                source_class, retrieved_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
             on conflict(series_id, date) do update set
                 release_date = excluded.release_date,
                 publication_date_basis = excluded.publication_date_basis,
                 revision_status = excluded.revision_status,
                 source_url = excluded.source_url,
-                source_identifier = excluded.source_identifier""",
+                source_identifier = excluded.source_identifier,
+                source_class = excluded.source_class,
+                retrieved_at = excluded.retrieved_at""",
             (
                 series["series_id"],
                 observation["date"],
@@ -279,8 +326,11 @@ def merge_macro_indicator_observations(con, series, observations, commit=True):
                 observation.get("revision_status"),
                 observation.get("source_url"),
                 observation.get("source_identifier"),
+                observation.get("source_class"),
+                observation.get("retrieved_at"),
             ),
         )
+    _merge_series_contract(con, series)
     if commit:
         con.commit()
 
@@ -290,7 +340,8 @@ def load_macro_indicator_observations(con, series_id):
     rows = con.execute(
         """select p.date, p.value, p.source,
                   m.release_date, m.publication_date_basis,
-                  m.revision_status, m.source_url, m.source_identifier, m.source_hash
+                  m.revision_status, m.source_url, m.source_identifier, m.source_hash,
+                  m.source_class, m.retrieved_at
            from macro_indicator_points p
            left join macro_indicator_observation_metadata m
              on m.series_id = p.series_id and m.date = p.date
@@ -304,6 +355,20 @@ def load_macro_indicator_observations(con, series_id):
 def load_macro_indicator_observations_for_series(con, series_ids):
     normalized_ids = [_normalize_series_id(sid) for sid in series_ids]
     return {sid: load_macro_indicator_observations(con, sid) for sid in normalized_ids}
+
+
+def load_macro_indicator_series_contracts_for_ids(con, series_ids):
+    normalized_ids = [_normalize_series_id(sid) for sid in series_ids]
+    if not normalized_ids:
+        return {}
+    placeholders = ", ".join("?" for _ in normalized_ids)
+    rows = con.execute(
+        f"""select series_id, contract_json
+              from macro_indicator_series_contracts
+              where series_id in ({placeholders})""",
+        normalized_ids,
+    ).fetchall()
+    return {row["series_id"]: json.loads(row["contract_json"]) for row in rows}
 
 
 _NFIB_SERIES_METADATA = {

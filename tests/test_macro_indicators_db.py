@@ -306,6 +306,31 @@ _COT_ROW = {
 }
 
 
+def test_load_macro_indicator_series_for_ids_returns_only_requested_series(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market_data.sqlite")
+    macro_indicators.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "oil_commercial_crude_stocks",
+            "title": "Stocks",
+            "units": "MBBL",
+            "source": "eia",
+        },
+        [{"date": "2026-07-17", "value": 411675.0, "source": "eia"}],
+    )
+
+    assert macro_indicators.load_macro_indicator_series_for_ids(
+        con, ["oil_commercial_crude_stocks", "missing"]
+    ) == {
+        "oil_commercial_crude_stocks": {
+            "series_id": "oil_commercial_crude_stocks",
+            "title": "Stocks",
+            "units": "MBBL",
+            "source": "eia",
+        }
+    }
+
+
 def test_merge_cot_observations_updates_same_commodity_and_report_date(tmp_path):
     con = macro_indicators.connect(tmp_path / ".sqlite")
     macro_indicators.merge_cot_observations(con, [_COT_ROW])
@@ -316,3 +341,55 @@ def test_merge_cot_observations_updates_same_commodity_and_report_date(tmp_path)
     assert macro_indicators.load_cot_observations(con) == [
         {**_COT_ROW, "manager_longs": 201000.0}
     ]
+
+
+def test_merge_macro_indicator_observations_persists_series_source_contract(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    series = {
+        "series_id": "lumber_cme_lbr_yahoo_v1",
+        "title": "Lumber (CME LBR)",
+        "units": "USD/1,000 board feet",
+        "source": "yahoo_finance",
+        "source_contract": {"product_code": "LBR", "roll_rule": "undocumented"},
+    }
+    macro_indicators.merge_macro_indicator_observations(con, series, [])
+    assert macro_indicators.load_macro_indicator_series_contracts_for_ids(
+        con, [series["series_id"]]
+    ) == {series["series_id"]: series["source_contract"]}
+
+
+def test_series_contract_is_unchanged_when_observation_merge_rolls_back(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    original = {
+        "series_id": "lumber_cme_lbr_yahoo_v1",
+        "title": "Lumber (CME LBR)",
+        "units": "USD/1,000 board feet",
+        "source": "yahoo_finance",
+        "source_contract": {"product_code": "LBR", "roll_rule": "undocumented"},
+    }
+    macro_indicators.merge_macro_indicator_observations(con, original, [])
+    replacement = dict(
+        original, source_contract={"product_code": "LBR", "roll_rule": "claimed"}
+    )
+    macro_indicators.merge_macro_indicator_observations(
+        con, replacement, [], commit=False
+    )
+    con.rollback()
+    assert macro_indicators.load_macro_indicator_series_contracts_for_ids(
+        con, [original["series_id"]]
+    ) == {original["series_id"]: original["source_contract"]}
+
+
+def test_series_source_contract_must_be_a_non_empty_dict(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    series = {
+        "series_id": "lumber_cme_lbr_yahoo_v1",
+        "title": "Lumber (CME LBR)",
+        "units": "USD/1,000 board feet",
+        "source": "yahoo_finance",
+        "source_contract": {},
+    }
+    with pytest.raises(
+        ValueError, match="series source contract is required to be a non-empty dict"
+    ):
+        macro_indicators.merge_macro_indicator_observations(con, series, [])
