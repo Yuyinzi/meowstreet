@@ -1,4 +1,5 @@
 import json
+import tempfile
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -95,13 +96,25 @@ def _default_fetcher(start_date, end_date):
 
 def _stage_overlap_audit(audit, audit_path):
     audit_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = audit_path.with_name(audit_path.name + ".tmp")
-    temp_path.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n")
-    return temp_path
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=audit_path.parent,
+        prefix=audit_path.name + ".",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        handle.write(json.dumps(audit, indent=2, sort_keys=True) + "\n")
+        temp_name = handle.name
+    return Path(temp_name)
 
 
 def _promote_overlap_audit(temp_path, audit_path):
-    temp_path.replace(audit_path)
+    try:
+        temp_path.replace(audit_path)
+    except OSError:
+        audit_path.write_text(temp_path.read_text(encoding="utf-8"), encoding="utf-8")
+        temp_path.unlink()
 
 
 def _remove_staged_audit(temp_path):

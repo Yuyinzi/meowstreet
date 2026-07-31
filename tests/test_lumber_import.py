@@ -1,4 +1,6 @@
 import json
+import threading
+from pathlib import Path
 
 import pytest
 
@@ -230,6 +232,106 @@ def test_commit_failure_leaves_no_audit_or_active_rows(tmp_path):
         macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
         == []
     )
+
+
+def _failing_replace_path_class(audit_path):
+    class FailingReplacePath(type(audit_path)):
+        def replace(self, target):
+            raise OSError("audit promote failed")
+
+    return FailingReplacePath
+
+
+def test_promote_failure_after_commit_compensates_with_audit(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    macro_indicators.merge_macro_indicator_observations(
+        con, archived_lumber_series(), archived_rows()
+    )
+    audit_path = tmp_path / "lumber_overlap_v1.json"
+    failing_class = _failing_replace_path_class(audit_path)
+    original_replace = failing_class.replace
+
+    def failing_replace(self, target):
+        raise OSError("audit promote failed")
+
+    failing_class.replace = failing_replace
+    original_module_path = lumber_import.Path
+    lumber_import.Path = failing_class
+    try:
+        lumber_import.refresh_lumber(
+            con,
+            today_date="2026-07-31",
+            fetcher=fake_yahoo_fetcher,
+            audit_path=audit_path,
+        )
+    finally:
+        lumber_import.Path = original_module_path
+        failing_class.replace = original_replace
+
+    assert audit_path.exists()
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert audit["overlap_test_version"] == "lumber_overlap_v1"
+    assert (
+        macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
+        != []
+    )
+    assert list(audit_path.parent.glob("*.tmp")) == []
+
+
+def test_stage_overlap_audit_uses_unique_temp_files(tmp_path):
+    audit_path = tmp_path / "lumber_overlap_v1.json"
+    first = lumber_import._stage_overlap_audit({"a": 1}, audit_path)
+    second = lumber_import._stage_overlap_audit({"b": 2}, audit_path)
+    try:
+        assert first != second
+        assert first.name != second.name
+        assert first.parent == audit_path.parent
+        assert first.exists()
+        assert second.exists()
+    finally:
+        lumber_import._remove_staged_audit(first)
+        lumber_import._remove_staged_audit(second)
+
+
+def test_interleaved_imports_preserve_each_others_temp_and_final_audit(tmp_path):
+    audit_path = tmp_path / "lumber_overlap_v1.json"
+    barrier = threading.Barrier(2)
+    errors = []
+    results = []
+
+    def worker(db_name):
+        try:
+            con = macro_indicators.connect(tmp_path / db_name)
+            macro_indicators.merge_macro_indicator_observations(
+                con, archived_lumber_series(), archived_rows()
+            )
+            barrier.wait()
+            result = lumber_import.refresh_lumber(
+                con,
+                today_date="2026-07-31",
+                fetcher=fake_yahoo_fetcher,
+                audit_path=audit_path,
+            )
+            results.append(result)
+            con.close()
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=worker, args=("first.sqlite",)),
+        threading.Thread(target=worker, args=("second.sqlite",)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert len(results) == 2
+    assert audit_path.exists()
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert audit["overlap_test_version"] == "lumber_overlap_v1"
+    assert list(audit_path.parent.glob("*.tmp")) == []
 
 
 def test_overlap_audit_excludes_investing_only_saturday_and_detects_unequal_shared_close():
