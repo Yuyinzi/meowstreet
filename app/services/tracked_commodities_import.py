@@ -4,6 +4,7 @@ from pathlib import Path
 from app.data_sources import investing_chrome
 from app.data_sources.investing_download import download_commodity_csv
 from app.data_sources.tracked_commodities import (
+    ACTIVE_MARKET_SERIES,
     MARKET_SERIES,
     build_commodity_series_payload,
     parse_commodity_csv,
@@ -12,12 +13,24 @@ from app.data_sources.tracked_commodities import (
 from app.db import macro_indicators
 
 
+def _require_active_market(series_id):
+    if series_id not in ACTIVE_MARKET_SERIES:
+        raise ValueError(f"unknown or archived method commodity market: {series_id}")
+    return series_id
+
+
+def _active_series_ids(markets):
+    if markets is None:
+        return list(ACTIVE_MARKET_SERIES)
+    return [_require_active_market(sid) for sid in markets]
+
+
 def _browser_fetcher(start_date=None, end_date=None, markets=None, cdp_endpoint=None):
     endpoint = cdp_endpoint or "http://127.0.0.1:9222"
-    series_ids = markets or list(MARKET_SERIES)
+    series_ids = _active_series_ids(markets)
     results = {}
     for sid in series_ids:
-        meta = MARKET_SERIES[sid]
+        meta = ACTIVE_MARKET_SERIES[sid]
         kwargs = {
             "market": meta,
             "cdp_endpoint": endpoint,
@@ -46,7 +59,7 @@ def refresh_tracked_commodities(
     markets=None,
     cdp_endpoint=None,
 ):
-    series_ids = markets or list(MARKET_SERIES)
+    series_ids = _active_series_ids(markets)
     if start_date is None and end_date is None:
         latest_dates = []
         for sid in series_ids:
@@ -57,13 +70,14 @@ def refresh_tracked_commodities(
             start_date = (
                 date_type.fromisoformat(min(latest_dates)) - timedelta(days=14)
             ).isoformat()
-    kwargs = {"start_date": start_date, "end_date": end_date, "markets": markets}
+    kwargs = {"start_date": start_date, "end_date": end_date, "markets": series_ids}
     if cdp_endpoint:
         kwargs["cdp_endpoint"] = cdp_endpoint
     payload = fetcher(**kwargs)
     try:
         result = {"series": 0, "observations": 0}
-        for item in payload.values():
+        for sid, item in payload.items():
+            _require_active_market(sid)
             macro_indicators.merge_macro_indicator_observations(
                 con, item["series"], item["observations"], commit=False
             )
@@ -81,11 +95,13 @@ def import_commodity_browser_downloads(
     markets=None,
     downloader=download_commodity_csv,
     cdp_endpoint=None,
+    dry_run=False,
 ):
-    series_ids = markets or list(MARKET_SERIES)
+    series_ids = _active_series_ids(markets)
     all_payloads = []
+    ranges = {}
     for sid in series_ids:
-        meta = MARKET_SERIES[sid]
+        meta = ACTIVE_MARKET_SERIES[sid]
         result = downloader(meta, cdp_endpoint=cdp_endpoint)
         if result["status"] != "ok":
             raise ValueError(
@@ -100,9 +116,21 @@ def import_commodity_browser_downloads(
         )
         if not observations:
             raise ValueError(f"{sid}: parsed 0 valid observations from downloaded CSV")
+        ranges[sid] = {
+            "start_date": result.get("start_date"),
+            "end_date": result.get("end_date"),
+        }
         all_payloads.append(
             (sid, build_commodity_series_payload(sid, observations))
         )
+    if dry_run:
+        return {
+            "series": len(all_payloads),
+            "observations": sum(
+                len(payload["observations"]) for _, payload in all_payloads
+            ),
+            "ranges": ranges,
+        }
     try:
         result = {"series": 0, "observations": 0}
         for sid, payload in all_payloads:
@@ -122,8 +150,7 @@ def import_commodity_csv_files(con, csv_paths_by_market):
     try:
         result = {"series": 0, "observations": 0}
         for series_id, csv_path in csv_paths_by_market.items():
-            if series_id not in MARKET_SERIES:
-                raise ValueError(f"unknown method commodity market: {series_id}")
+            _require_active_market(series_id)
             text = Path(csv_path).read_text(encoding="utf-8")
             observations = parse_commodity_csv(text, series_id)
             payload = build_commodity_series_payload(series_id, observations)

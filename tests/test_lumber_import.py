@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.data_sources import lumber
@@ -97,8 +99,12 @@ def test_initial_lbr_import_backfills_from_contract_start_and_preserves_archive(
     macro_indicators.merge_macro_indicator_observations(
         con, archived_lumber_series(), archived_rows()
     )
+    audit_path = tmp_path / "lumber_overlap_v1.json"
     result = lumber_import.refresh_lumber(
-        con, today_date="2026-07-31", fetcher=fake_yahoo_fetcher
+        con,
+        today_date="2026-07-31",
+        fetcher=fake_yahoo_fetcher,
+        audit_path=audit_path,
     )
     assert result["start_date"] == "2022-08-08"
     assert (
@@ -111,6 +117,10 @@ def test_initial_lbr_import_backfills_from_contract_start_and_preserves_archive(
         )
         == expected_yahoo_rows()
     )
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert audit["overlap_test_version"] == "lumber_overlap_v1"
+    assert audit["shared_date_count"] == 3
+    assert audit["shared_price_difference_max"] == 0.0
 
 
 def test_incremental_lbr_import_uses_fourteen_calendar_day_overlap(tmp_path):
@@ -143,6 +153,23 @@ def test_failed_lbr_import_rolls_back_without_investing_fallback(tmp_path):
         macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
         == []
     )
+
+
+def test_failed_lbr_import_does_not_persist_overlap_audit(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    macro_indicators.merge_macro_indicator_observations(
+        con, archived_lumber_series(), archived_rows()
+    )
+    audit_path = tmp_path / "lumber_overlap_v1.json"
+
+    def raising_fetcher(start_date, end_date):
+        raise ValueError("yahoo unavailable")
+
+    with pytest.raises(ValueError, match="yahoo unavailable"):
+        lumber_import.refresh_lumber(
+            con, fetcher=raising_fetcher, audit_path=audit_path
+        )
+    assert not audit_path.exists()
 
 
 def test_overlap_audit_excludes_investing_only_saturday_and_detects_unequal_shared_close():
@@ -178,7 +205,7 @@ def test_import_cli_prints_only_summary_fields(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(
         lumber_import,
         "refresh_lumber",
-        lambda con, today_date=None, initial=False: {
+        lambda con, today_date=None, initial=False, audit_path=None: {
             "series": "lumber_cme_lbr_yahoo_v1",
             "observations": 3,
             "start_date": "2022-08-08",
@@ -199,7 +226,7 @@ def test_import_cli_prints_only_summary_fields(monkeypatch, capsys, tmp_path):
 def test_import_cli_reports_errors_without_traceback(monkeypatch, capsys, tmp_path):
     from scripts import import_lumber
 
-    def raising_refresh(con, today_date=None, initial=False):
+    def raising_refresh(con, today_date=None, initial=False, audit_path=None):
         raise ValueError("yahoo unavailable")
 
     monkeypatch.setattr(lumber_import, "refresh_lumber", raising_refresh)

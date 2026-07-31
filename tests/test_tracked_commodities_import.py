@@ -4,7 +4,10 @@ import pytest
 
 from pathlib import Path
 
-from app.data_sources.tracked_commodities import MARKET_SERIES
+from app.data_sources.tracked_commodities import (
+    ACTIVE_MARKET_SERIES,
+    MARKET_SERIES,
+)
 from app.db import macro_indicators
 from app.services import tracked_commodities_import
 from app.services.tracked_commodities_import import (
@@ -26,7 +29,8 @@ _FAKE_OBSERVATION = {
 
 def _fake_fetcher(start_date=None, end_date=None, markets=None):
     targets = [
-        (sid, MARKET_SERIES[sid]) for sid in (markets or MARKET_SERIES)
+        (sid, MARKET_SERIES[sid])
+        for sid in (markets or ACTIVE_MARKET_SERIES)
     ]
     return {
         sid: {
@@ -66,11 +70,24 @@ def test_refresh_merges_method_prices_and_preserves_source_metadata(tmp_path):
     con = macro_indicators.connect(db_path)
 
     result = refresh_tracked_commodities(con, fetcher=_fake_fetcher)
-    assert result == {"series": 6, "observations": 6}
+    assert result == {"series": 5, "observations": 5}
 
     points = macro_indicators.load_macro_indicator_points(con, "copper_comex")
     assert len(points) == 1
     assert points[0]["source"] == "investing.com"
+
+
+def test_refresh_rejects_archived_lumber(tmp_path):
+    db_path = tmp_path / "test.db"
+    con = macro_indicators.connect(db_path)
+
+    with pytest.raises(
+        ValueError, match="archived method commodity market: lumber"
+    ):
+        refresh_tracked_commodities(
+            con, fetcher=_fake_fetcher, markets=["lumber"]
+        )
+    assert macro_indicators.load_macro_indicator_points(con, "lumber") == []
 
 
 def test_refresh_preserves_source_class_and_retrieved_at_through_db_roundtrip(tmp_path):
@@ -99,6 +116,37 @@ def test_cli_csv_rejects_empty_entry(tmp_path, capsys):
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "--csv requires at least one market_id=path.csv entry" in captured.err
+
+
+def test_cli_csv_rejects_archived_lumber(tmp_path, capsys):
+    from scripts import import_tracked_commodities
+
+    csv_path = tmp_path / "lumber.csv"
+    csv_path.write_text(
+        "Date,Price,Open,High,Low,Vol.,Change %\n"
+        '"Jul 24, 2026",5.700,5.710,5.720,5.680,12.5K,0.35%\n',
+        encoding="utf-8",
+    )
+    exit_code = import_tracked_commodities.main(
+        [
+            "--csv",
+            f"lumber={csv_path}",
+            "--db-path",
+            str(tmp_path / "test.db"),
+        ]
+    )
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "archived method commodity market cannot be imported: lumber" in (
+        captured.err
+    )
+
+
+def test_cli_markets_rejects_archived_lumber():
+    from scripts import import_tracked_commodities
+
+    with pytest.raises(SystemExit, match="2"):
+        import_tracked_commodities.main(["--markets", "lumber"])
 
 
 def test_cli_reports_chrome_start_command_when_cdp_session_is_missing(

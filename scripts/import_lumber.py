@@ -22,11 +22,20 @@ def main(argv=None):
         action="store_true",
         help="backfill from the contract start date regardless of stored rows",
     )
+    parser.add_argument(
+        "--audit-path",
+        type=Path,
+        default=lumber_import.LUMBER_OVERLAP_AUDIT_PATH,
+        help="path for the initial overlap audit JSON record",
+    )
     args = parser.parse_args(argv)
     con = macro_indicators.connect(args.db_path)
     try:
         result = lumber_import.refresh_lumber(
-            con, today_date=args.today_date, initial=args.initial
+            con,
+            today_date=args.today_date,
+            initial=args.initial,
+            audit_path=args.audit_path,
         )
     except ValueError as exc:
         print(f" lumber import error: {exc}", file=sys.stderr)

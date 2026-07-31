@@ -1,4 +1,6 @@
+import json
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 from app.data_sources.lumber import (
     _LUMBER_SERIES_ID,
@@ -11,6 +13,11 @@ from app.db import macro_indicators
 LUMBER_OVERLAP_TEST_VERSION = "lumber_overlap_v1"
 ARCHIVED_LUMBER_SERIES_ID = "lumber"
 _OVERLAP_WINDOW_DAYS = 13
+
+ROOT = Path(__file__).resolve().parents[2]
+LUMBER_OVERLAP_AUDIT_PATH = (
+    ROOT / "data" / "local_system" / "audits" / "lumber_overlap_v1.json"
+)
 
 
 def _by_date(rows):
@@ -86,7 +93,18 @@ def _default_fetcher(start_date, end_date):
     return fetch_lumber_series(start_date, end_date)
 
 
-def refresh_lumber(con, today_date=None, fetcher=None, initial=False):
+def _write_overlap_audit(audit, audit_path):
+    audit_path.parent.mkdir(parents=True, exist_ok=True)
+    audit_path.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n")
+
+
+def refresh_lumber(
+    con,
+    today_date=None,
+    fetcher=None,
+    initial=False,
+    audit_path=None,
+):
     if fetcher is None:
         fetcher = _default_fetcher
     effective_today = today_date or date.today().isoformat()
@@ -109,7 +127,8 @@ def refresh_lumber(con, today_date=None, fetcher=None, initial=False):
             archived_rows = macro_indicators.load_macro_indicator_observations(
                 con, ARCHIVED_LUMBER_SERIES_ID
             )
-            audit_lumber_overlap(archived_rows, observations)
+            audit = audit_lumber_overlap(archived_rows, observations)
+            _write_overlap_audit(audit, audit_path or LUMBER_OVERLAP_AUDIT_PATH)
         macro_indicators.merge_macro_indicator_observations(
             con, payload["series"], observations, commit=False
         )
