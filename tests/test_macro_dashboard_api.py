@@ -3880,11 +3880,11 @@ def test_oil_full_history_injects_distributions_and_market_setup_unchanged(
         assert "weekly_distribution" in benchmarks[bid]
         assert (
             benchmarks[bid]["daily_distribution"]["method_version"]
-            == "oil_distribution_v1"
+            == "oil_distribution_v2"
         )
         assert (
             benchmarks[bid]["weekly_distribution"]["method_version"]
-            == "oil_distribution_v1"
+            == "oil_distribution_v2"
         )
         assert "classification" in benchmarks[bid]["daily_distribution"]
 
@@ -3923,3 +3923,74 @@ def test_oil_full_history_injects_distributions_and_market_setup_unchanged(
         return TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
 
     assert _market_setup_response(60.0) == _market_setup_response(90.0)
+
+
+def test_market_setup_is_identical_when_active_lbr_data_changes(monkeypatch):
+    from app import api
+    from fastapi.testclient import TestClient
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.market_phase,
+        "build_dashboard_payload",
+        lambda loader: None,
+    )
+    monkeypatch.setattr(
+        api.benchmark_market_data,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.gdp_market_relationships,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+
+    original_loader = (
+        api.macro_indicators_db.load_macro_indicator_observations_for_series
+    )
+
+    def changed_lbr_loader(con, series_ids):
+        result = original_loader(con, series_ids)
+        result["lumber_cme_lbr_yahoo_v1"] = [
+            {"date": "2026-07-24", "value": 999.0, "source_identifier": "LBR=F"}
+        ]
+        return result
+
+    baseline = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        changed_lbr_loader,
+    )
+    assert (
+        TestClient(api.app).get("/api/macro-dashboard/market-setup").json() == baseline
+    )

@@ -80,7 +80,7 @@
           + '<span>Value: ' + h.escapeHtml(h.fmtNumber(series.latest_value)) + '</span>'
           + '<span>' + renderState(h.fmtSignedPctDecimal(series.daily_return), series.daily_return_state, "Daily") + '</span>'
           + '<span>' + renderState(h.fmtSignedPctDecimal(series.weekly_return), series.weekly_return_state, "Weekly") + '</span>'
-          + '<span>Source: Investing.com</span>'
+          + '<span>Source: ' + h.escapeHtml(series.source_label) + '</span>'
           + (series.latest_date ? '<span>As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
           + '</div>'
           + '</div>';
@@ -288,6 +288,7 @@
 
       html += '<section class="evidence-section">';
       html += '<h3>Commodity Market Data</h3>';
+      html += '<p class="summary-stat">Vendor market data; not official exchange settlement.</p>';
       var methodData = payload.non_oil_observation || {};
       var methodIds = Object.keys(methodData).sort();
       for (var ci = 0; ci < methodIds.length; ci++) {

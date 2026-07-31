@@ -85,9 +85,9 @@ method_COMMODITY_SERIES_IDS = [
     "copper_comex",
     "copper_lme",
     "copper_shanghai",
-    "lumber",
     "iron_ore_62_cfr_china",
     "iron_ore_dce",
+    "lumber_cme_lbr_yahoo_v1",
 ]
 
 

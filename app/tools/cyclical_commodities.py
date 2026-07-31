@@ -1,3 +1,5 @@
+from app.data_sources.tracked_commodities import ACTIVE_MARKET_SERIES
+from app.data_sources.lumber import _LUMBER_SERIES
 from app.tools import oil_distribution
 
 _CYCLICAL_COMMODITIES_VERSION = "cyclical_commodities_v1"
@@ -363,12 +365,76 @@ def _oil_attribution_payload(
     }
 
 
+def _commodity_display_registry():
+    registry = {}
+    for sid, meta in ACTIVE_MARKET_SERIES.items():
+        registry[sid] = {
+            "display_name": meta["display_name"],
+            "exchange_label": meta["exchange_label"],
+            "source_label": "Method-specified market data \u00b7 Investing.com",
+            "source_url": meta["price_page_url"],
+            "source_class": "free_web",
+        }
+    registry[_LUMBER_SERIES["series_id"]] = {
+        "display_name": _LUMBER_SERIES["title"],
+        "exchange_label": "CME",
+        "source_label": "Yahoo Finance \u00b7 LBR=F \u00b7 delayed vendor data",
+        "source_url": _LUMBER_SERIES["source_url"],
+        "source_class": _LUMBER_SERIES["source_class"],
+    }
+    return registry
+
+
+def _commodity_payload(observations_by_series, as_of_date):
+    result = {}
+    for sid, entry in _commodity_display_registry().items():
+        rows = _latest_as_of(observations_by_series.get(sid, []), as_of_date)
+        if not rows:
+            result[sid] = {
+                "series_id": sid,
+                "display_name": entry["display_name"],
+                "status": "unavailable",
+                "exchange_label": entry["exchange_label"],
+                "source_class": entry["source_class"],
+            }
+            continue
+        latest = rows[-1]
+        daily_return = (
+            _pct_change_ratio(latest["value"], rows[-2]["value"])
+            if len(rows) >= 2
+            else None
+        )
+        weekly_return = (
+            _pct_change_ratio(latest["value"], rows[-6]["value"])
+            if len(rows) >= 6
+            else None
+        )
+        result[sid] = {
+            "series_id": sid,
+            "display_name": entry["display_name"],
+            "latest_date": latest["date"],
+            "latest_value": latest["value"],
+            "daily_return": daily_return,
+            "daily_return_state": _raw_change_state(daily_return),
+            "weekly_return": weekly_return,
+            "weekly_return_state": _raw_change_state(weekly_return),
+            "source_label": entry["source_label"],
+            "source_url": latest.get("source_url") or entry["source_url"],
+            "source_identifier": latest.get("source_identifier"),
+            "status": "available",
+            "exchange_label": entry["exchange_label"],
+            "source_class": entry["source_class"],
+        }
+    return result
+
+
 def build_cyclical_commodities_payload(
     cot_rows,
     usd_observations_by_series,
     oil_observations_by_series=None,
     as_of_date=None,
     oil_series_metadata_by_id=None,
+    commodity_observations=None,
 ):
     as_of = as_of_date or ""
     cot_payload, cot_available = _compute_cot_payload(cot_rows)
@@ -390,6 +456,9 @@ def build_cyclical_commodities_payload(
     oil_attribution = _oil_attribution_payload(
         oil_observations_by_series, as_of, oil_series_metadata_by_id
     )
+    commodity = _commodity_payload(
+        commodity_observations or {}, as_of
+    )
     return {
         "version": _CYCLICAL_COMMODITIES_VERSION,
         "as_of_date": as_of,
@@ -403,6 +472,7 @@ def build_cyclical_commodities_payload(
             "reason": "continuous commodity price histories and contract-roll methodology are not yet configured",
         },
         "card_status": "partial_official_evidence",
+        "commodity_observation": commodity,
     }
 
 
@@ -519,7 +589,10 @@ def _oil_price_distribution_summary(payload):
         benchmark = benchmarks.get(series_id, {})
         if benchmark.get("status") != "available":
             return _incomplete_oil_distribution_summary()
-        for horizon, field in (("daily", "daily_distribution"), ("weekly", "weekly_distribution")):
+        for horizon, field in (
+            ("daily", "daily_distribution"),
+            ("weekly", "weekly_distribution"),
+        ):
             classification = benchmark.get(field, {}).get("classification")
             if classification == "unavailable" or classification is None:
                 return _incomplete_oil_distribution_summary()
@@ -538,7 +611,7 @@ def _oil_price_distribution_summary(payload):
         }
     return {
         "status": "normal",
-        "label": "Oil price movement is within 1σ of their full-history distributions across WTI and Brent on both daily and weekly horizons.",
+        "label": "Oil price movement is within 1σ of their 2016-to-latest available distributions across WTI and Brent on both daily and weekly horizons.",
         "detail": "This describes price distribution only; physical-market attribution remains required.",
         "abnormal_observations": [],
     }
@@ -560,6 +633,7 @@ def build_cyclical_commodities_detail(payload):
         "corroboration": _corroboration_summary(payload),
         "steps": details,
         "freshness": _collect_freshness_metadata(payload),
+        "non_oil_observation": payload.get("commodity_observation", {}),
     }
 
 

@@ -689,6 +689,40 @@ _method_ROWS = {
 }
 
 
+def payload_with_lbr_and_archive():
+    return .build_cyclical_commodities_payload(
+        COT_ROWS,
+        USD_ROWS,
+        _OIL_ROWS,
+        "2026-07-25",
+        commodity_observations={
+            "lumber_cme_lbr_yahoo_v1": [
+                {
+                    "date": "2026-07-22",
+                    "value": 628.0,
+                    "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/LBR%3DF",
+                    "source_identifier": "LBR=F",
+                },
+                {
+                    "date": "2026-07-23",
+                    "value": 631.0,
+                    "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/LBR%3DF",
+                    "source_identifier": "LBR=F",
+                },
+                {
+                    "date": "2026-07-24",
+                    "value": 634.0,
+                    "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/LBR%3DF",
+                    "source_identifier": "LBR=F",
+                },
+            ],
+            "lumber": [
+                {"date": "2026-07-24", "value": 620.0},
+            ],
+        },
+    )
+
+
 def test_detail_builds_method_market_observation_without_attribution_conclusion():
     payload = .build_cyclical_commodities_payload(
         COT_ROWS,
@@ -706,6 +740,25 @@ def test_detail_builds_method_market_observation_without_attribution_conclusion(
     assert "attribution" not in copper
 
 
+def test_detail_uses_active_yahoo_lbr_and_excludes_archived_lumber():
+    detail = .build_cyclical_commodities_detail(payload_with_lbr_and_archive())
+    lumber = detail["non_oil_observation"]["lumber_cme_lbr_yahoo_v1"]
+    assert lumber["display_name"] == "Lumber (CME LBR)"
+    assert lumber["source_label"] == "Yahoo Finance · LBR=F · delayed vendor data"
+    assert lumber["source_identifier"] == "LBR=F"
+    assert "lumber" not in detail["non_oil_observation"]
+
+
+def test_renderer_uses_backend_source_label_and_does_not_hard_code_investing_for_lbr():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "static"
+        / "cyclical-commodities-ui.js"
+    ).read_text()
+    assert "series.source_label" in source
+    assert "<span>Source: Investing.com</span>" not in source
+
+
 def test_static_labels_method_market_source_without_claiming_official_settlement():
     source = (
         Path(__file__).resolve().parents[1]
@@ -718,9 +771,9 @@ def test_static_labels_method_market_source_without_claiming_official_settlement
         "Reference market data sourced from Investing.com. Not official exchange settlement."
         not in source
     )
-    assert "Source: Investing.com" in source
+    assert "series.source_label" in source
     assert "Investing.com reference data" not in source
     assert "Method-Specified Commodity Markets" not in source
     assert "Method-specified market data from Investing.com" not in source
     assert "method-market data not yet fetched" not in source
-    assert "series.source_label" not in source
+    assert "<span>Source: Investing.com</span>" not in source
