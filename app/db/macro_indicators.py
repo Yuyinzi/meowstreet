@@ -102,10 +102,66 @@ create table if not exists lumber_overlap_audits (
 """
 
 
+
+__SHFE_CU_DDL = """
+create table if not exists shfe_cu_contract_daily (
+    trade_date text not null,
+    contract text not null,
+    product text not null,
+    open real,
+    high real,
+    low real,
+    close real,
+    previous_settlement real,
+    settlement real,
+    volume real,
+    open_interest real,
+    open_interest_change real,
+    turnover real,
+    source text not null,
+    source_class text not null,
+    access_adapter text not null,
+    access_adapter_version text not null,
+    source_url text not null,
+    source_identifier text not null,
+    source_hash text,
+    retrieved_at text not null,
+    primary key(trade_date, contract)
+);
+create index if not exists idx_shfe_cu_contract_date
+on shfe_cu_contract_daily(trade_date, contract);
+
+create table if not exists shfe_cu_main_daily (
+    date text primary key,
+    selected_contract text not null,
+    previous_selected_contract text,
+    close real not null,
+    settlement real,
+    volume real,
+    open_interest real,
+    contract_roll integer not null,
+    roll_from text,
+    roll_to text,
+    roll_gap real,
+    unadjusted_continuous_return real,
+    same_contract_return real,
+    roll_affected integer not null,
+    selection_rule_version text not null,
+    price_series_version text not null,
+    return_method_version text not null,
+    source_url text not null,
+    retrieved_at text not null
+);
+"""
+
+
+
+
 def init_macro_tables(con):
     con.executescript(_MACRO_TABLES_DDL)
     con.executescript(_REGIONAL_TABLES_DDL)
     con.executescript(__COT_DDL)
+    con.executescript(__SHFE_CU_DDL)
     for col in [
         "source_hash",
         "publication_date_basis",
@@ -716,3 +772,213 @@ def load_lumber_overlap_audit(con, overlap_test_version):
         (version,),
     ).fetchone()
     return json.loads(row["audit_json"]) if row else None
+
+_SHFE_CU_CONTRACT_COLS = """
+    trade_date, contract, product, open, high, low, close,
+    previous_settlement, settlement, volume, open_interest,
+    open_interest_change, turnover, source, source_class,
+    access_adapter, access_adapter_version, source_url,
+    source_identifier, source_hash, retrieved_at
+"""
+
+
+def _validate_shfe_cu_row(row):
+    trade_date = str(row.get("trade_date") or "").strip()
+    if not trade_date:
+        raise ValueError("shfe cu trade_date is required")
+    contract = str(row.get("contract") or "").strip().upper()
+    if not contract:
+        raise ValueError("shfe cu contract is required")
+    close = row.get("close")
+    if close is None:
+        raise ValueError("shfe cu close is required")
+    open_interest = row.get("open_interest")
+    if open_interest is not None and float(open_interest) < 0:
+        raise ValueError("shfe cu open_interest must be non-negative")
+    if str(row.get("access_adapter") or "") != "akshare":
+        raise ValueError("shfe cu access_adapter must be akshare")
+    if not str(row.get("access_adapter_version") or "").strip():
+        raise ValueError("shfe cu access_adapter_version is required")
+    return trade_date, contract
+
+
+def merge_shfe_cu_contract_observations(con, rows, commit=True):
+    try:
+        for row in rows:
+            trade_date, contract = _validate_shfe_cu_row(row)
+            con.execute(
+                """insert into shfe_cu_contract_daily(
+                    trade_date, contract, product, open, high, low, close,
+                    previous_settlement, settlement, volume, open_interest,
+                    open_interest_change, turnover, source, source_class,
+                    access_adapter, access_adapter_version, source_url,
+                    source_identifier, source_hash, retrieved_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(trade_date, contract) do update set
+                    product = excluded.product,
+                    open = excluded.open,
+                    high = excluded.high,
+                    low = excluded.low,
+                    close = excluded.close,
+                    previous_settlement = excluded.previous_settlement,
+                    settlement = excluded.settlement,
+                    volume = excluded.volume,
+                    open_interest = excluded.open_interest,
+                    open_interest_change = excluded.open_interest_change,
+                    turnover = excluded.turnover,
+                    source = excluded.source,
+                    source_class = excluded.source_class,
+                    access_adapter = excluded.access_adapter,
+                    access_adapter_version = excluded.access_adapter_version,
+                    source_url = excluded.source_url,
+                    source_identifier = excluded.source_identifier,
+                    source_hash = excluded.source_hash,
+                    retrieved_at = excluded.retrieved_at""",
+                (
+                    trade_date,
+                    contract,
+                    str(row.get("product") or "CU"),
+                    row.get("open"),
+                    row.get("high"),
+                    row.get("low"),
+                    row.get("close"),
+                    row.get("previous_settlement"),
+                    row.get("settlement"),
+                    row.get("volume"),
+                    row.get("open_interest"),
+                    row.get("open_interest_change"),
+                    row.get("turnover"),
+                    str(row.get("source") or "shfe"),
+                    str(row.get("source_class") or "official_exchange"),
+                    str(row.get("access_adapter") or "akshare"),
+                    str(row.get("access_adapter_version") or ""),
+                    str(row.get("source_url") or ""),
+                    str(row.get("source_identifier") or "SHFE:CU"),
+                    row.get("source_hash"),
+                    str(row.get("retrieved_at") or ""),
+                ),
+            )
+        if commit:
+            con.commit()
+        return len(rows)
+    except Exception:
+        con.rollback()
+        raise
+
+
+def load_shfe_cu_contract_observations(con, start_date=None, end_date=None):
+    clauses = []
+    params = []
+    if start_date:
+        clauses.append("trade_date >= ?")
+        params.append(start_date)
+    if end_date:
+        clauses.append("trade_date <= ?")
+        params.append(end_date)
+    where = f"where {' and '.join(clauses)}" if clauses else ""
+    rows = con.execute(
+        f"""select {_SHFE_CU_CONTRACT_COLS}
+            from shfe_cu_contract_daily
+            {where}
+            order by trade_date, contract""",
+        params,
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+_SHFE_CU_MAIN_COLS = """
+    date, selected_contract, previous_selected_contract, close, settlement,
+    volume, open_interest, contract_roll, roll_from, roll_to, roll_gap,
+    unadjusted_continuous_return, same_contract_return, roll_affected,
+    selection_rule_version, price_series_version, return_method_version,
+    source_url, retrieved_at
+"""
+
+
+def _validate_shfe_cu_main_row(row):
+    date_value = str(row.get("date") or "").strip()
+    if not date_value:
+        raise ValueError("shfe cu main date is required")
+    selected_contract = str(row.get("selected_contract") or "").strip()
+    if not selected_contract:
+        raise ValueError("shfe cu main selected_contract is required")
+    close = row.get("close")
+    if close is None:
+        raise ValueError("shfe cu main close is required")
+    return date_value
+
+
+def replace_shfe_cu_main_observations(
+    con, rows, commit=True, rebuild_start_date=None, rebuild_end_date=None
+):
+    try:
+        if rebuild_start_date or rebuild_end_date:
+            if not (rebuild_start_date and rebuild_end_date):
+                raise ValueError("shfe cu main rebuild window requires both dates")
+            con.execute(
+                "delete from shfe_cu_main_daily where date >= ? and date <= ?",
+                (rebuild_start_date, rebuild_end_date),
+            )
+        elif rows:
+            dates = [str(row["date"]) for row in rows]
+            placeholders = ", ".join("?" for _ in dates)
+            con.execute(
+                f"delete from shfe_cu_main_daily where date in ({placeholders})",
+                dates,
+            )
+        for row in rows:
+            date_value = _validate_shfe_cu_main_row(row)
+            con.execute(
+                """insert into shfe_cu_main_daily(
+                    date, selected_contract, previous_selected_contract, close,
+                    settlement, volume, open_interest, contract_roll, roll_from,
+                    roll_to, roll_gap, unadjusted_continuous_return,
+                    same_contract_return, roll_affected, selection_rule_version,
+                    price_series_version, return_method_version, source_url, retrieved_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    date_value,
+                    str(row["selected_contract"]),
+                    row.get("previous_selected_contract"),
+                    row["close"],
+                    row.get("settlement"),
+                    row.get("volume"),
+                    row.get("open_interest"),
+                    int(bool(row.get("contract_roll"))),
+                    row.get("roll_from"),
+                    row.get("roll_to"),
+                    row.get("roll_gap"),
+                    row.get("unadjusted_continuous_return"),
+                    row.get("same_contract_return"),
+                    int(bool(row.get("roll_affected"))),
+                    str(row.get("selection_rule_version") or "shfe_cu_main_oi_v1"),
+                    str(
+                        row.get("price_series_version")
+                        or "shfe_cu_oi_main_unadjusted_v1"
+                    ),
+                    str(
+                        row.get("return_method_version") or "shfe_cu_oi_main_return_v1"
+                    ),
+                    str(row.get("source_url") or ""),
+                    str(row.get("retrieved_at") or ""),
+                ),
+            )
+        if commit:
+            con.commit()
+        return len(rows)
+    except Exception:
+        con.rollback()
+        raise
+
+
+def load_shfe_cu_main_observations(con):
+    rows = con.execute(
+        f"select {_SHFE_CU_MAIN_COLS} from shfe_cu_main_daily order by date"
+    ).fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["contract_roll"] = bool(item["contract_roll"])
+        item["roll_affected"] = bool(item["roll_affected"])
+        result.append(item)
+    return result

@@ -7,8 +7,10 @@ from app.data_sources.tracked_commodities import (
     ACTIVE_MARKET_SERIES,
     MARKET_SERIES,
     build_commodity_series_payload,
+    free_web_series,
     parse_commodity_csv,
     parse_investing_history_payload,
+    validate_free_web_markets,
 )
 from app.db import macro_indicators
 
@@ -21,8 +23,10 @@ def _require_active_market(series_id):
 
 def _active_series_ids(markets):
     if markets is None:
-        return list(ACTIVE_MARKET_SERIES)
-    return [_require_active_market(sid) for sid in markets]
+        return list(free_web_series())
+    series_ids = [_require_active_market(sid) for sid in markets]
+    validate_free_web_markets(series_ids)
+    return series_ids
 
 
 def _browser_fetcher(start_date=None, end_date=None, markets=None, cdp_endpoint=None):

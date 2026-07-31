@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT))
 from app.data_sources.tracked_commodities import (
     ACTIVE_MARKET_SERIES,
     MARKET_SERIES,
+    free_web_series,
 )
 from app.db import macro_indicators
 from app.services import tracked_commodities_import
@@ -25,6 +26,10 @@ def _parse_csv_arg(csv_arg):
             raise ValueError(
                 f"archived method commodity market cannot be imported: {market_id}"
             )
+        if market_id not in free_web_series():
+            raise ValueError(
+                f"method commodity market is not an Investing method market: {market_id}"
+            )
         result[market_id] = Path(path)
     return result
 
@@ -39,9 +44,9 @@ def main(argv=None):
     parser.add_argument(
         "--markets",
         nargs="*",
-        default=list(ACTIVE_MARKET_SERIES),
-        choices=list(ACTIVE_MARKET_SERIES),
-        help="specific markets to import (default: all five active Investing markets)",
+        default=list(free_web_series()),
+        choices=list(free_web_series()),
+        help="specific markets to import (default: all five Investing method markets)",
     )
     parser.add_argument(
         "--cdp-endpoint",

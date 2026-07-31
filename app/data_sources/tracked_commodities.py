@@ -32,12 +32,15 @@ MARKET_SERIES = {
         "instrument_id": 959211,
     },
     "copper_shanghai": {
-        "price_page_url": f"{INVESTING_BASE}/commodities/copper-historical-data?cid=996725",
         "display_name": "Copper (Shanghai)",
         "exchange_label": "SHFE",
-        "instrument": "Shanghai Copper futures",
+        "instrument": "SHFE Copper main contract (OI-selected)",
         "units": "CNY/tonne",
-        "instrument_id": 996725,
+        "source": "shfe",
+        "source_class": "official_exchange",
+        "access_adapter": "akshare",
+        "source_url": "https://www.shfe.com.cn/reports/tradedata/dailyandweeklydata/?query_options=1&query_params=kx&query_product_code=cu_f",
+        "source_identifier": "SHFE:CU",
     },
     "lumber": {
         "price_page_url": f"{INVESTING_BASE}/commodities/lumber-historical-data",
@@ -74,6 +77,24 @@ ACTIVE_MARKET_SERIES = {
     for series_id, meta in MARKET_SERIES.items()
     if series_id not in ARCHIVED_MARKET_SERIES
 }
+
+
+def free_web_series():
+    return {
+        series_id: meta
+        for series_id, meta in MARKET_SERIES.items()
+        if series_id not in ARCHIVED_MARKET_SERIES
+        and meta.get("source_class", "free_web") == "free_web"
+    }
+
+
+def validate_free_web_markets(series_ids):
+    allowed = set(free_web_series())
+    for series_id in series_ids:
+        if series_id not in allowed:
+            raise ValueError(
+                f"method commodity market {series_id} is not an Investing method market"
+            )
 
 
 def _normalize_method_price(row, series_id, source_url, retrieved_at):
@@ -164,6 +185,10 @@ def parse_investing_history_payload(payload, series_id, retrieved_at=None):
 
 def build_commodity_series_payload(series_id, observations):
     meta = MARKET_SERIES[series_id]
+    if meta.get("source_class", "free_web") != "free_web":
+        raise ValueError(
+            f"method commodity series {series_id} is not an Investing method market"
+        )
     return {
         "series": {
             "series_id": series_id,
@@ -280,11 +305,11 @@ def fetch_commodity_observations(
 ):
     client = http_client or HttpClient()
     result = {}
-    series_iter = (
-        [(sid, MARKET_SERIES[sid]) for sid in markets]
-        if markets
-        else MARKET_SERIES.items()
-    )
+    if markets:
+        validate_free_web_markets(markets)
+        series_iter = [(sid, MARKET_SERIES[sid]) for sid in markets]
+    else:
+        series_iter = free_web_series().items()
     for series_id, meta in series_iter:
         source_url = meta["price_page_url"]
         retrieved_at = datetime.now(timezone.utc).isoformat()

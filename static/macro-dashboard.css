@@ -704,11 +704,20 @@ h2 {
 .unavailable,
 .note,
 .contract-note,
+.shfe-roll-note,
 .source-date {
   color: #7A6E62;
   font-size: 12px;
   line-height: 1.45;
   margin: 6px 0 0;
+}
+
+.shfe-roll-note {
+  color: #8A7F70;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #F5F0E9;
+  border-left: 3px solid #D8C9B4;
 }
 
 .source-date {

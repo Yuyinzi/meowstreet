@@ -69,9 +69,38 @@
 
       function renderNonOilRow(series) {
         if (series.status !== "available") {
+          var unavailableLine = series.source_class === "official_exchange"
+            ? "Not available — SHFE official data not yet imported"
+            : "Not available — commodity market data not yet fetched";
           return '<div class="workflow-row">'
             + '<div class="workflow-label">' + h.escapeHtml(series.display_name) + '</div>'
-            + '<div class="workflow-metrics"><span>Not available — commodity market data not yet fetched</span></div>'
+            + '<div class="workflow-metrics"><span>' + h.escapeHtml(unavailableLine) + '</span></div>'
+            + '</div>';
+        }
+        if (series.source_class === "official_exchange") {
+          var rollLine = "";
+          if (series.contract_roll) {
+            rollLine = '<div class="shfe-roll-note">Contract changed '
+              + h.escapeHtml(series.roll_from) + " \u2192 " + h.escapeHtml(series.roll_to)
+              + '. The displayed daily return uses ' + h.escapeHtml(series.selected_contract)
+              + "'s own prior close; the unadjusted price gap is shown for audit only.</div>";
+          }
+          var auditLine = "";
+          if (series.unadjusted_continuous_return != null) {
+            auditLine = '<span>Unadjusted (audit only): ' + h.escapeHtml(h.fmtSignedPctDecimal(series.unadjusted_continuous_return)) + '</span>';
+          }
+          return '<div class="workflow-row">'
+            + '<div class="workflow-label">' + h.escapeHtml(series.display_name)
+            + '<span class="workflow-role">' + h.escapeHtml(series.selected_contract) + '</span></div>'
+            + '<div class="workflow-metrics">'
+            + '<span>Close: ' + h.escapeHtml(h.fmtNumber(series.latest_value)) + ' ' + h.escapeHtml(series.units || "CNY/tonne") + '</span>'
+            + '<span>Daily: ' + h.escapeHtml(h.fmtSignedPctDecimal(series.daily_return)) + ' (same-contract)</span>'
+            + '<span>Weekly: ' + h.escapeHtml(h.fmtSignedPctDecimal(series.weekly_return)) + ' (roll-neutral)</span>'
+            + auditLine
+            + '<span>Source: SHFE official data via AKShare</span>'
+            + (series.latest_date ? '<span>As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
+            + '</div>'
+            + rollLine
             + '</div>';
         }
         return '<div class="workflow-row">'

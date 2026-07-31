@@ -21,9 +21,6 @@ def test_method_market_registry_preserves_the_six_workbook_urls():
         "iron_ore_dce",
     ]
     assert MARKET_SERIES["copper_lme"]["price_page_url"].endswith("cid=959211")
-    assert MARKET_SERIES["copper_shanghai"]["price_page_url"].endswith(
-        "cid=996725"
-    )
     assert MARKET_SERIES["iron_ore_62_cfr_china"]["price_page_url"].endswith(
         "iron-ore-62-cfr-futures"
     )
@@ -154,9 +151,9 @@ def test_fetcher_honours_markets_filter():
     client = httpx.Client(transport=transport)
 
     payload = fetch_commodity_observations(
-        http_client=client, markets=["copper_comex", "lumber"]
+        http_client=client, markets=["copper_comex", "copper_lme"]
     )
-    assert list(payload) == ["copper_comex", "lumber"]
+    assert list(payload) == ["copper_comex", "copper_lme"]
 
 
 def test_fetcher_reports_diagnostic_on_empty_page():
@@ -277,8 +274,22 @@ def test_parse_commodity_csv_deduplicates_dates():
     assert observations[0]["date"] == "2026-07-23"
 
 
+def test_method_market_registry_marks_shanghai_as_shfe_official():
+    shanghai = MARKET_SERIES["copper_shanghai"]
+    assert shanghai["source"] == "shfe"
+    assert shanghai["source_class"] == "official_exchange"
+    assert shanghai["access_adapter"] == "akshare"
+    assert shanghai["source_identifier"] == "SHFE:CU"
+    assert "instrument_id" not in shanghai
+    assert "price_page_url" not in shanghai
+
+
 def test_method_market_registry_has_investing_instrument_ids():
-    assert all(meta.get("instrument_id") for meta in MARKET_SERIES.values())
+    assert all(
+        meta.get("instrument_id")
+        for meta in MARKET_SERIES.values()
+        if meta.get("source_class", "free_web") == "free_web"
+    )
 
 
 def test_parse_investing_history_payload_normalizes_and_deduplicates_dates():
