@@ -6,15 +6,18 @@ from app.data_sources.investing_download import download_commodity_csv
 from app.data_sources.tracked_commodities import (
     MARKET_SERIES,
     build_commodity_series_payload,
+    free_web_series,
     parse_commodity_csv,
     parse_investing_history_payload,
+    validate_free_web_markets,
 )
 from app.db import macro_indicators
 
 
 def _browser_fetcher(start_date=None, end_date=None, markets=None, cdp_endpoint=None):
     endpoint = cdp_endpoint or "http://127.0.0.1:9222"
-    series_ids = markets or list(MARKET_SERIES)
+    series_ids = markets or list(free_web_series())
+    validate_free_web_markets(series_ids)
     results = {}
     for sid in series_ids:
         meta = MARKET_SERIES[sid]
@@ -46,7 +49,8 @@ def refresh_tracked_commodities(
     markets=None,
     cdp_endpoint=None,
 ):
-    series_ids = markets or list(MARKET_SERIES)
+    series_ids = markets or list(free_web_series())
+    validate_free_web_markets(series_ids)
     if start_date is None and end_date is None:
         latest_dates = []
         for sid in series_ids:
@@ -81,9 +85,12 @@ def import_commodity_browser_downloads(
     markets=None,
     downloader=download_commodity_csv,
     cdp_endpoint=None,
+    dry_run=False,
 ):
-    series_ids = markets or list(MARKET_SERIES)
+    series_ids = markets or list(free_web_series())
+    validate_free_web_markets(series_ids)
     all_payloads = []
+    ranges = {}
     for sid in series_ids:
         meta = MARKET_SERIES[sid]
         result = downloader(meta, cdp_endpoint=cdp_endpoint)
@@ -100,9 +107,21 @@ def import_commodity_browser_downloads(
         )
         if not observations:
             raise ValueError(f"{sid}: parsed 0 valid observations from downloaded CSV")
+        ranges[sid] = {
+            "start_date": result.get("start_date"),
+            "end_date": result.get("end_date"),
+        }
         all_payloads.append(
             (sid, build_commodity_series_payload(sid, observations))
         )
+    if dry_run:
+        return {
+            "series": len(all_payloads),
+            "observations": sum(
+                len(payload["observations"]) for _, payload in all_payloads
+            ),
+            "ranges": ranges,
+        }
     try:
         result = {"series": 0, "observations": 0}
         for sid, payload in all_payloads:
@@ -120,6 +139,7 @@ def import_commodity_browser_downloads(
 
 def import_commodity_csv_files(con, csv_paths_by_market):
     try:
+        validate_free_web_markets(list(csv_paths_by_market))
         result = {"series": 0, "observations": 0}
         for series_id, csv_path in csv_paths_by_market.items():
             if series_id not in MARKET_SERIES:

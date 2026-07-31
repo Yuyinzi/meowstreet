@@ -18,8 +18,11 @@ from scripts import import_ism_services
 from scripts import import_m2_money_supply
 from scripts import import_nfib_sbet
 from scripts import import_nfib_sbet_regional
+from scripts import import_tracked_commodities
 from scripts import import_cyclical_commodities
+from scripts import import_lumber
 from scripts import import_oil
+from scripts import import_shfe_copper
 from scripts import import_us_building_permits
 from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
@@ -95,6 +98,8 @@ def _planned_tasks(
     main=None,
     oil_main=None,
     tracked_commodities_main=None,
+    lumber_main=import_lumber.main,
+    shfe_copper_main=None,
 ):
     tasks = []
     if not args.skip_yahoo:
@@ -161,8 +166,10 @@ def _planned_tasks(
         tasks.append(("cyclical_commodities_official", main, []))
     if oil_main is not None and not args.skip_oil:
         tasks.append(("oil_official", oil_main, []))
-    if tracked_commodities_main is not None and not args.skip_tracked_commodities:
-        tasks.append(("tracked_commodities", tracked_commodities_main, []))
+    if not args.skip_lumber:
+        tasks.append(("lumber_yahoo", lumber_main, []))
+    if shfe_copper_main is not None and not args.skip_shfe_copper:
+        tasks.append(("shfe_copper", shfe_copper_main, ["--incremental"]))
     return tasks
 
 
@@ -192,11 +199,18 @@ def main(
     nfib_regional_main=import_nfib_sbet_regional.main,
     main=None,
     oil_main=None,
+    tracked_commodities_main=None,
+    lumber_main=import_lumber.main,
+    shfe_copper_main=None,
 ):
     if main is None:
         main = import_cyclical_commodities.main
     if oil_main is None:
         oil_main = import_oil.main
+    if tracked_commodities_main is None:
+        tracked_commodities_main = import_tracked_commodities.main
+    if shfe_copper_main is None:
+        shfe_copper_main = import_shfe_copper.main
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
     parser.add_argument("--skip-rates", action="store_true")
@@ -210,6 +224,9 @@ def main(
     parser.add_argument("--skip-nfib-sbo-regional", action="store_true")
     parser.add_argument("--skip-cyclical-commodities", action="store_true")
     parser.add_argument("--skip-oil", action="store_true")
+    parser.add_argument("--skip-method-commodities", action="store_true")
+    parser.add_argument("--skip-lumber", action="store_true")
+    parser.add_argument("--skip-shfe-copper", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
     parser.add_argument(
         "--stop-on-error",
@@ -238,6 +255,9 @@ def main(
         nfib_regional_main,
         main,
         oil_main,
+        tracked_commodities_main,
+        lumber_main,
+        shfe_copper_main,
     ):
         result = _run_task(name, func, task_argv)
         results.append(result)

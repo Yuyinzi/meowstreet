@@ -1,0 +1,365 @@
+import httpx
+import pytest
+
+from app.data_sources.tracked_commodities import (
+    MARKET_SERIES,
+    _normalize_method_price,
+    _parse_investing_html,
+    build_commodity_series_payload,
+    free_web_series,
+    fetch_commodity_observations,
+    parse_commodity_csv,
+    parse_investing_history_payload,
+    validate_free_web_markets,
+)
+
+
+def test_method_market_registry_preserves_the_six_workbook_urls():
+    assert list(MARKET_SERIES) == [
+        "copper_comex",
+        "copper_lme",
+        "copper_shanghai",
+        "lumber",
+        "iron_ore_62_cfr_china",
+        "iron_ore_dce",
+    ]
+    assert MARKET_SERIES["copper_lme"]["price_page_url"].endswith("cid=959211")
+    assert MARKET_SERIES["iron_ore_62_cfr_china"]["price_page_url"].endswith(
+        "iron-ore-62-cfr-futures"
+    )
+    assert MARKET_SERIES["iron_ore_dce"]["price_page_url"].endswith("cid=961741")
+
+
+def test_method_market_registry_marks_shanghai_as_shfe_official():
+    shanghai = MARKET_SERIES["copper_shanghai"]
+    assert shanghai["source"] == "shfe"
+    assert shanghai["source_class"] == "official_exchange"
+    assert shanghai["access_adapter"] == "akshare"
+    assert shanghai["source_identifier"] == "SHFE:CU"
+    assert shanghai["source_url"].startswith("https://www.shfe.com.cn/reports/")
+    assert "instrument_id" not in shanghai
+    assert "price_page_url" not in shanghai
+
+
+def test_method_market_registry_keeps_five_investing_markets_unchanged():
+    investing_ids = [
+        sid
+        for sid, meta in MARKET_SERIES.items()
+        if meta.get("source_class", "free_web") == "free_web"
+    ]
+    assert investing_ids == [
+        "copper_comex",
+        "copper_lme",
+        "lumber",
+        "iron_ore_62_cfr_china",
+        "iron_ore_dce",
+    ]
+    for sid in investing_ids:
+        assert MARKET_SERIES[sid]["price_page_url"].startswith(
+            "https://www.investing.com/"
+        )
+        assert "instrument_id" in MARKET_SERIES[sid]
+
+
+def test_method_market_series_includes_units():
+    for sid, meta in MARKET_SERIES.items():
+        assert "units" in meta, f"{sid} missing units"
+
+
+def test_normalized_method_price_preserves_non_official_provenance():
+    row = {"date": "2026-07-24", "price": 5.7}
+    result = _normalize_method_price(
+        row,
+        "copper_comex",
+        "https://www.investing.com/commodities/copper-historical-data",
+        "2026-07-30T12:00:00",
+    )
+    assert result["source"] == "investing.com"
+    assert result["source_class"] == "free_web"
+    assert result["source_identifier"] == "copper_comex"
+    assert result["date"] == "2026-07-24"
+    assert result["value"] == 5.7
+
+
+_SAMPLE_HTML = """
+<table class="common-table">
+  <thead>
+    <tr><th>Date</th><th>Price</th><th>Open</th><th>High</th><th>Low</th><th>Vol.</th><th>Change %</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Jul 24, 2026</td><td>5.700</td><td>5.710</td><td>5.720</td><td>5.680</td><td>12.5K</td><td>0.35%</td></tr>
+    <tr><td>Jul 23, 2026</td><td>5.680</td><td>5.690</td><td>5.700</td><td>5.660</td><td>15.2K</td><td>-0.18%</td></tr>
+  </tbody>
+</table>
+"""
+
+
+def test_fetcher_parses_price_column_and_page_market_label():
+    def handler(request):
+        return httpx.Response(200, content=_SAMPLE_HTML.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+
+    payload = fetch_commodity_observations(http_client=client)
+    copper = payload["copper_comex"]
+    assert copper["series"]["source"] == "investing.com"
+    assert copper["series"]["source_class"] == "free_web"
+    assert copper["observations"] == [
+        {
+            "date": "2026-07-23",
+            "value": 5.68,
+            "source": "investing.com",
+            "source_url": "https://www.investing.com/commodities/copper-historical-data",
+            "source_identifier": "copper_comex",
+            "source_class": "free_web",
+            "retrieved_at": copper["observations"][0]["retrieved_at"],
+        },
+        {
+            "date": "2026-07-24",
+            "value": 5.7,
+            "source": "investing.com",
+            "source_url": "https://www.investing.com/commodities/copper-historical-data",
+            "source_identifier": "copper_comex",
+            "source_class": "free_web",
+            "retrieved_at": copper["observations"][0]["retrieved_at"],
+        },
+    ]
+
+
+def test_fetcher_reports_empty_observations_on_http_error():
+    def handler(request):
+        return httpx.Response(500)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+
+    payload = fetch_commodity_observations(http_client=client)
+    assert payload["copper_comex"]["observations"] == []
+
+
+def test_parse_investing_html_deduplicates_dates():
+    html = """
+    <table class="common-table">
+      <tbody>
+        <tr><td>Jul 24, 2026</td><td>5.700</td><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr><td>Jul 24, 2026</td><td>5.710</td><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr><td>Jul 23, 2026</td><td>5.680</td><td></td><td></td><td></td><td></td><td></td></tr>
+      </tbody>
+    </table>
+    """
+    parsed = _parse_investing_html(html, "copper_comex", "", "")
+    assert len(parsed) == 2
+    assert parsed[0]["date"] == "2026-07-23"
+    assert parsed[-1]["date"] == "2026-07-24"
+
+
+def test_fetcher_filters_by_date_range():
+    html = """
+    <table class="common-table">
+      <tbody>
+        <tr><td>Jul 24, 2026</td><td>5.700</td><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr><td>Jul 23, 2026</td><td>5.680</td><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr><td>Jul 22, 2026</td><td>5.660</td><td></td><td></td><td></td><td></td><td></td></tr>
+      </tbody>
+    </table>
+    """
+
+    def handler(request):
+        return httpx.Response(200, content=html.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+
+    payload = fetch_commodity_observations(
+        http_client=client, start_date="2026-07-23"
+    )
+    assert len(payload["copper_comex"]["observations"]) == 2
+
+
+def test_fetcher_honours_markets_filter():
+    def handler(request):
+        return httpx.Response(200, content=_SAMPLE_HTML.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+
+    payload = fetch_commodity_observations(
+        http_client=client, markets=["copper_comex", "lumber"]
+    )
+    assert list(payload) == ["copper_comex", "lumber"]
+
+
+def test_fetcher_reports_diagnostic_on_empty_page():
+    def handler(request):
+        return httpx.Response(200, content=b"<html><body>no data here</body></html>")
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+
+    payload = fetch_commodity_observations(
+        http_client=client, markets=["copper_comex"]
+    )
+    item = payload["copper_comex"]
+    assert item["observations"] == []
+    assert "_fetch_diagnostic" in item
+    assert "no table rows" in item["_fetch_diagnostic"]["error"]
+
+
+def test_fetcher_reports_http_error_diagnostic():
+    def handler(request):
+        return httpx.Response(503)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+
+    payload = fetch_commodity_observations(
+        http_client=client, markets=["copper_comex"]
+    )
+    item = payload["copper_comex"]
+    assert item["observations"] == []
+    assert "_fetch_diagnostic" in item
+    assert "503" in item["_fetch_diagnostic"]["error"]
+
+
+def test_fetcher_falls_back_to_any_tablerows_outside_table():
+    html = """
+    <div class="historical-data-table">
+      <tr><td>Jul 24, 2026</td><td>5.700</td><td>5.710</td><td>5.720</td><td>5.680</td><td>12.5K</td><td>0.35%</td></tr>
+      <tr><td>Jul 23, 2026</td><td>5.680</td><td>5.690</td><td>5.700</td><td>5.660</td><td>15.2K</td><td>-0.18%</td></tr>
+    </div>
+    """
+
+    def handler(request):
+        return httpx.Response(200, content=html.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+
+    payload = fetch_commodity_observations(
+        http_client=client, markets=["copper_comex"]
+    )
+    assert len(payload["copper_comex"]["observations"]) == 2
+
+
+def test_fetcher_series_includes_units():
+    def handler(request):
+        return httpx.Response(200, content=_SAMPLE_HTML.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+
+    payload = fetch_commodity_observations(http_client=client)
+    assert payload["copper_comex"]["series"]["units"] == "USD/lb"
+
+
+_SAMPLE_CSV = 'Date,Price,Open,High,Low,Vol.,Change %\n"Jul 24, 2026",5.700,5.710,5.720,5.680,12.5K,0.35%\n"Jul 23, 2026",5.680,5.690,5.700,5.660,15.2K,-0.18%\n'
+
+_SAMPLE_CSV_HOOK = "Date,Price,Open,High,Low,Vol.,Change %\nJul 24 2026,5.700,,,,,,,,\n"
+
+
+def test_parse_commodity_csv_parses_investing_download():
+    observations = parse_commodity_csv(
+        _SAMPLE_CSV,
+        "copper_comex",
+        source_url="https://example.com",
+        retrieved_at="2026-07-30T12:00:00",
+    )
+    assert len(observations) == 2
+    assert observations[0]["date"] == "2026-07-23"
+    assert observations[0]["value"] == 5.68
+    assert observations[1]["date"] == "2026-07-24"
+    assert observations[1]["value"] == 5.7
+    assert all(o["source"] == "investing.com" for o in observations)
+    assert all(o["source_class"] == "free_web" for o in observations)
+    assert all(o["source_identifier"] == "copper_comex" for o in observations)
+
+
+def test_parse_commodity_csv_parses_investing_download_with_utf8_bom():
+    observations = parse_commodity_csv(
+        "\ufeff" + _SAMPLE_CSV,
+        "copper_lme",
+        retrieved_at="2026-07-30T12:00:00",
+    )
+
+    assert [(item["date"], item["value"]) for item in observations] == [
+        ("2026-07-23", 5.68),
+        ("2026-07-24", 5.7),
+    ]
+
+
+def test_parse_commodity_csv_rejects_missing_columns():
+    with pytest.raises(ValueError, match="missing required Date/Price columns"):
+        parse_commodity_csv(
+            "Foo,Bar\n1,2\n",
+            "copper_comex",
+        )
+
+
+def test_parse_commodity_csv_deduplicates_dates():
+    csv_text = (
+        "Date,Price,Open,High,Low,Vol.,Change %\n"
+        '"Jul 24, 2026",5.700,,,,,,\n'
+        '"Jul 24, 2026",5.710,,,,,,\n'
+        '"Jul 23, 2026",5.680,,,,,,\n'
+    )
+    observations = parse_commodity_csv(csv_text, "copper_comex")
+    assert len(observations) == 2
+    assert observations[0]["date"] == "2026-07-23"
+
+
+def test_method_market_registry_has_investing_instrument_ids():
+    investing_ids = [
+        sid
+        for sid, meta in MARKET_SERIES.items()
+        if meta.get("source_class", "free_web") == "free_web"
+    ]
+    assert all(MARKET_SERIES[sid].get("instrument_id") for sid in investing_ids)
+
+
+def test_parse_investing_history_payload_normalizes_and_deduplicates_dates():
+    payload = {
+        "data": [
+            {"rowDate": "2026-07-29", "last_close": 4.5},
+            {"rowDate": "2026-07-29", "last_close": 4.6},
+            {"rowDate": "2026-07-28", "last_close": 4.4},
+        ],
+    }
+    observations = parse_investing_history_payload(
+        payload,
+        "copper_comex",
+        retrieved_at="2026-07-30T00:00:00+00:00",
+    )
+    assert [(item["date"], item["value"]) for item in observations] == [
+        ("2026-07-28", 4.4),
+        ("2026-07-29", 4.5),
+    ]
+    assert observations[0]["source_class"] == "free_web"
+    assert observations[0]["source_identifier"] == "copper_comex"
+
+
+def test_build_commodity_series_payload_rejects_shanghai_official_market():
+    with pytest.raises(ValueError, match="is not an Investing method market"):
+        build_commodity_series_payload("copper_shanghai", [])
+
+
+def test_validate_free_web_markets_rejects_shanghai():
+    with pytest.raises(ValueError, match="copper_shanghai is not an Investing"):
+        validate_free_web_markets(["copper_comex", "copper_shanghai"])
+
+
+def test_validate_free_web_markets_accepts_five_investing_markets():
+    validate_free_web_markets(list(free_web_series()))
+
+
+def test_fetch_commodity_observations_defaults_to_five_markets():
+    def handler(request):
+        return httpx.Response(200, content=_SAMPLE_HTML.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+
+    payload = fetch_commodity_observations(http_client=client)
+
+    assert "copper_shanghai" not in payload
+    assert "copper_comex" in payload

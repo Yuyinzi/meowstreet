@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.data_sources.tracked_commodities import MARKET_SERIES
+from app.data_sources.tracked_commodities import free_web_series
 from app.db import macro_indicators
 from app.services import tracked_commodities_import
 
@@ -16,7 +16,7 @@ def _parse_csv_arg(csv_arg):
         if "=" not in entry:
             raise ValueError(f"--csv entry must be market_id=path, got: {entry}")
         market_id, path = entry.split("=", 1)
-        if market_id not in MARKET_SERIES:
+        if market_id not in free_web_series():
             raise ValueError(f"unknown method commodity market: {market_id}")
         result[market_id] = Path(path)
     return result
@@ -32,12 +32,10 @@ def main(argv=None):
     parser.add_argument(
         "--markets",
         nargs="*",
-        default=list(MARKET_SERIES),
-        choices=list(MARKET_SERIES),
-        help="specific markets to import (default: all six)",
+        default=list(free_web_series()),
+        choices=list(free_web_series()),
+        help="specific markets to import (default: all five Investing method markets)",
     )
-    parser.add_argument("--start-date", help="inclusive start date YYYY-MM-DD")
-    parser.add_argument("--end-date", help="inclusive end date YYYY-MM-DD")
     parser.add_argument(
         "--cdp-endpoint",
         default="http://127.0.0.1:9222",
@@ -50,50 +48,12 @@ def main(argv=None):
         help="import from downloaded CSV files. Format: market_id=path/to/file.csv",
     )
     parser.add_argument(
-        "--browser-download",
-        action="store_true",
-        help="import via browser download (navigates existing Investing tab and clicks Download Data)",
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="print parsed observations without writing to database",
     )
     args = parser.parse_args(argv)
     markets_arg = args.markets
-
-    if args.browser_download and args.csv is not None:
-        print(
-            " method commodity error: --browser-download and --csv are mutually exclusive",
-            file=sys.stderr,
-        )
-        return 1
-    if args.browser_download and args.dry_run:
-        print(
-            " method commodity error: --browser-download and --dry-run are mutually exclusive",
-            file=sys.stderr,
-        )
-        return 1
-
-    if args.browser_download:
-        con = macro_indicators.connect(args.db_path)
-        try:
-            result = (
-                tracked_commodities_import.import_commodity_browser_downloads(
-                    con,
-                    markets=markets_arg,
-                    cdp_endpoint=args.cdp_endpoint,
-                )
-            )
-            print(f"series: {result['series']}, observations: {result['observations']}")
-            return 0
-        except ValueError as exc:
-            print(
-                f" method commodity browser download error: {exc}", file=sys.stderr
-            )
-            return 1
-        finally:
-            con.close()
 
     if args.csv is not None:
         if not args.csv:
@@ -102,7 +62,11 @@ def main(argv=None):
                 file=sys.stderr,
             )
             return 1
-        csv_paths_by_market = _parse_csv_arg(args.csv)
+        try:
+            csv_paths_by_market = _parse_csv_arg(args.csv)
+        except ValueError as exc:
+            print(f" method commodity csv error: {exc}", file=sys.stderr)
+            return 1
         if args.dry_run:
             from app.data_sources.tracked_commodities import (
                 parse_commodity_csv,
@@ -138,56 +102,28 @@ def main(argv=None):
         finally:
             con.close()
 
-    if args.dry_run:
-        from app.data_sources import investing_chrome
-        from app.data_sources.tracked_commodities import (
-            parse_investing_history_payload,
-        )
-
-        any_error = False
-        for market_id in markets_arg:
-            meta = MARKET_SERIES[market_id]
-            result = investing_chrome.fetch_investing_history(
-                meta,
-                args.start_date,
-                args.end_date,
-                cdp_endpoint=args.cdp_endpoint,
-            )
-            if result["status"] != "ok":
-                any_error = True
-                print(
-                    f"{market_id}: {meta['display_name']} — {result['message']}",
-                    file=sys.stderr,
-                )
-                continue
-            observations = parse_investing_history_payload(
-                result["payload"],
-                market_id,
-                retrieved_at=result["retrieved_at"],
-            )
-            if not observations:
-                print(f"{market_id}: {meta['display_name']} — 0 observations")
-            else:
-                print(
-                    f"{market_id}: {meta['display_name']} — "
-                    f"{len(observations)} observations "
-                    f"({observations[0]['date']} to {observations[-1]['date']})"
-                )
-        return 1 if any_error else 0
-
     con = macro_indicators.connect(args.db_path)
     try:
-        result = tracked_commodities_import.refresh_tracked_commodities(
-            con,
-            start_date=args.start_date,
-            end_date=args.end_date,
-            markets=markets_arg,
-            cdp_endpoint=args.cdp_endpoint,
+        kwargs = {
+            "markets": markets_arg,
+            "cdp_endpoint": args.cdp_endpoint,
+        }
+        if args.dry_run:
+            kwargs["dry_run"] = True
+        result = (
+            tracked_commodities_import.import_commodity_browser_downloads(
+                con, **kwargs
+            )
         )
+        if args.dry_run:
+            for market_id, date_range in result["ranges"].items():
+                print(
+                    f"{market_id}: {date_range['start_date']} to {date_range['end_date']}"
+                )
         print(f"series: {result['series']}, observations: {result['observations']}")
         return 0
     except ValueError as exc:
-        print(f" method commodity error: {exc}", file=sys.stderr)
+        print(f" method commodity browser download error: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()

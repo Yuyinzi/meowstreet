@@ -724,3 +724,139 @@ def test_static_labels_method_market_source_without_claiming_official_settlement
     assert "Method-specified market data from Investing.com" not in source
     assert "method-market data not yet fetched" not in source
     assert "series.source_label" not in source
+
+
+def _shfe_main_rows():
+    return [
+        {
+            "date": "2026-07-29",
+            "selected_contract": "CU2609",
+            "previous_selected_contract": None,
+            "close": 79000.0,
+            "settlement": 79000.0,
+            "volume": 100000.0,
+            "open_interest": 200000.0,
+            "contract_roll": False,
+            "roll_from": None,
+            "roll_to": None,
+            "roll_gap": None,
+            "unadjusted_continuous_return": None,
+            "same_contract_return": None,
+            "roll_affected": False,
+            "selection_rule_version": "shfe_cu_main_oi_v1",
+            "price_series_version": "shfe_cu_oi_main_unadjusted_v1",
+            "return_method_version": "shfe_cu_oi_main_return_v1",
+            "source_url": "https://www.shfe.com.cn/reports/tradedata/dailyandweeklydata/",
+            "retrieved_at": "2026-07-31T00:00:00+00:00",
+        },
+        {
+            "date": "2026-07-30",
+            "selected_contract": "CU2610",
+            "previous_selected_contract": "CU2609",
+            "close": 80500.0,
+            "settlement": 80400.0,
+            "volume": 100000.0,
+            "open_interest": 200000.0,
+            "contract_roll": True,
+            "roll_from": "CU2609",
+            "roll_to": "CU2610",
+            "roll_gap": 1500.0,
+            "unadjusted_continuous_return": 80500 / 79000 - 1,
+            "same_contract_return": 80500 / 80200 - 1,
+            "roll_affected": True,
+            "selection_rule_version": "shfe_cu_main_oi_v1",
+            "price_series_version": "shfe_cu_oi_main_unadjusted_v1",
+            "return_method_version": "shfe_cu_oi_main_return_v1",
+            "source_url": "https://www.shfe.com.cn/reports/tradedata/dailyandweeklydata/",
+            "retrieved_at": "2026-07-31T00:00:00+00:00",
+        },
+    ]
+
+
+def test_shanghai_detail_exposes_official_source_and_separated_returns():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS,
+        USD_ROWS,
+        _OIL_ROWS,
+        "2026-07-31",
+        commodity_observations={},
+        shfe_cu_main_observations=_shfe_main_rows(),
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+    shanghai = detail["non_oil_observation"]["copper_shanghai"]
+
+    assert shanghai["source_class"] == "official_exchange"
+    assert shanghai["source_label"] == "SHFE official public data · AKShare adapter"
+    assert shanghai["selected_contract"] == "CU2610"
+    assert shanghai["daily_return"] == pytest.approx(80500 / 80200 - 1)
+    assert shanghai["return_method_version"] == "shfe_cu_oi_main_return_v1"
+    assert shanghai["contract_roll"] is True
+    assert shanghai["unadjusted_continuous_return"] == pytest.approx(80500 / 79000 - 1)
+    assert shanghai["roll_gap"] == 1500.0
+    assert "buy" not in shanghai["summary"].lower()
+    assert "sell" not in shanghai["summary"].lower()
+
+
+def test_shanghai_is_unavailable_when_derived_series_is_missing():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS,
+        USD_ROWS,
+        _OIL_ROWS,
+        "2026-07-31",
+        commodity_observations={},
+        shfe_cu_main_observations=None,
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+    shanghai = detail["non_oil_observation"]["copper_shanghai"]
+
+    assert shanghai["status"] == "unavailable"
+    assert shanghai["source_class"] == "official_exchange"
+
+
+def test_shanghai_weekly_return_is_roll_neutral():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS,
+        USD_ROWS,
+        _OIL_ROWS,
+        "2026-07-31",
+        commodity_observations={},
+        shfe_cu_main_observations=_shfe_main_rows(),
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+    shanghai = detail["non_oil_observation"]["copper_shanghai"]
+
+    assert shanghai["weekly_return"] == pytest.approx(80500 / 80200 - 1)
+    assert shanghai["weekly_return_label"] == "roll-neutral"
+
+
+def test_shanghai_summary_keeps_roll_note_out_of_headline_classification():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS,
+        USD_ROWS,
+        _OIL_ROWS,
+        "2026-07-31",
+        commodity_observations={},
+        shfe_cu_main_observations=_shfe_main_rows(),
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+    shanghai = detail["non_oil_observation"]["copper_shanghai"]
+
+    assert "Contract changed CU2609 \u2192 CU2610" in shanghai["summary"]
+    assert "unadjusted price gap is shown for audit only" in shanghai["summary"]
+    assert "bullish" not in shanghai["summary"].lower()
+    assert "bearish" not in shanghai["summary"].lower()
+
+
+def test_static_renders_shfe_shanghai_official_source_and_roll_marker():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "static"
+        / "cyclical-commodities-ui.js"
+    ).read_text()
+
+    assert "SHFE official data via AKShare" in source
+    assert "same-contract" in source
+    assert "roll-neutral" in source
+    assert "unadjusted price gap is shown for audit only" in source
+    assert "shfe-roll-note" in source
+    assert 'source_class === "official_exchange"' in source

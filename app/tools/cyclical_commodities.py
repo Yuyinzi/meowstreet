@@ -1,4 +1,6 @@
+from app.data_sources.tracked_commodities import MARKET_SERIES
 from app.tools import oil_distribution
+from app.tools import shfe_copper
 
 _CYCLICAL_COMMODITIES_VERSION = "cyclical_commodities_v1"
 
@@ -363,12 +365,138 @@ def _oil_attribution_payload(
     }
 
 
+_SHANGHAI_SOURCE_LABEL = "SHFE official public data \u00b7 AKShare adapter"
+
+
+def _shanghai_summary(meta, latest, daily_return, weekly_return):
+    lines = [
+        f"{meta['display_name']} \u00b7 {latest['selected_contract']} \u00b7 {meta['units']}",
+        f"Daily: {_format_pct(daily_return)} (same-contract)",
+        f"Weekly: {_format_pct(weekly_return)} (roll-neutral)",
+        f"As of: {latest['date']} \u00b7 SHFE official data via AKShare",
+    ]
+    if latest.get("contract_roll"):
+        lines.append(
+            f"Contract changed {latest['roll_from']} \u2192 {latest['roll_to']}. "
+            "The displayed daily return uses the new contract's own prior close; "
+            "the unadjusted price gap is shown for audit only."
+        )
+    return "\n".join(lines)
+
+
+def _format_pct(value):
+    if value is None:
+        return "--"
+    return f"{value * 100:+.2f}%"
+
+
+def _shfe_shanghai_payload(meta, main_rows, as_of_date):
+    eligible = [row for row in main_rows if row["date"] <= as_of_date]
+    if not eligible:
+        return {
+            "series_id": "copper_shanghai",
+            "display_name": meta["display_name"],
+            "status": "unavailable",
+            "exchange_label": meta["exchange_label"],
+            "source_class": "official_exchange",
+        }
+    latest = eligible[-1]
+    weekly_returns = shfe_copper.build_shfe_cu_weekly_returns(eligible)
+    latest_week = weekly_returns[-1] if weekly_returns else None
+    daily_return = latest.get("same_contract_return")
+    weekly_return = latest_week.get("return") if latest_week else None
+    return {
+        "series_id": "copper_shanghai",
+        "display_name": meta["display_name"],
+        "exchange_label": meta["exchange_label"],
+        "instrument": meta["instrument"],
+        "units": meta["units"],
+        "latest_date": latest["date"],
+        "latest_value": latest["close"],
+        "selected_contract": latest["selected_contract"],
+        "daily_return": daily_return,
+        "daily_return_state": _raw_change_state(daily_return),
+        "weekly_return": weekly_return,
+        "weekly_return_state": _raw_change_state(weekly_return),
+        "weekly_return_label": "roll-neutral",
+        "source": "shfe",
+        "source_class": "official_exchange",
+        "access_adapter": "akshare",
+        "source_label": _SHANGHAI_SOURCE_LABEL,
+        "source_url": meta["source_url"],
+        "source_identifier": meta["source_identifier"],
+        "return_method_version": latest.get("return_method_version"),
+        "selection_rule_version": latest.get("selection_rule_version"),
+        "price_series_version": latest.get("price_series_version"),
+        "contract_roll": bool(latest.get("contract_roll")),
+        "roll_from": latest.get("roll_from"),
+        "roll_to": latest.get("roll_to"),
+        "roll_affected": bool(latest.get("roll_affected")),
+        "roll_gap": latest.get("roll_gap"),
+        "unadjusted_continuous_return": latest.get("unadjusted_continuous_return"),
+        "summary": _shanghai_summary(meta, latest, daily_return, weekly_return),
+        "status": "available",
+    }
+
+
+def _commodity_payload(
+    observations_by_series, as_of_date, shfe_cu_main_observations=None
+):
+    result = {}
+    for sid in MARKET_SERIES:
+        meta = MARKET_SERIES[sid]
+        if sid == "copper_shanghai":
+            result[sid] = _shfe_shanghai_payload(
+                meta, shfe_cu_main_observations or [], as_of_date
+            )
+            continue
+        rows = _latest_as_of(observations_by_series.get(sid, []), as_of_date)
+        if not rows:
+            result[sid] = {
+                "series_id": sid,
+                "display_name": meta["display_name"],
+                "status": "unavailable",
+                "exchange_label": meta["exchange_label"],
+                "source_class": "free_web",
+            }
+            continue
+        latest = rows[-1]
+        daily_return = (
+            _pct_change_ratio(latest["value"], rows[-2]["value"])
+            if len(rows) >= 2
+            else None
+        )
+        weekly_return = (
+            _pct_change_ratio(latest["value"], rows[-6]["value"])
+            if len(rows) >= 6
+            else None
+        )
+        result[sid] = {
+            "series_id": sid,
+            "display_name": meta["display_name"],
+            "latest_date": latest["date"],
+            "latest_value": latest["value"],
+            "daily_return": daily_return,
+            "daily_return_state": _raw_change_state(daily_return),
+            "weekly_return": weekly_return,
+            "weekly_return_state": _raw_change_state(weekly_return),
+            "source_label": "Method-specified market data \u00b7 Investing.com",
+            "source_url": meta["price_page_url"],
+            "status": "available",
+            "exchange_label": meta["exchange_label"],
+            "source_class": "free_web",
+        }
+    return result
+
+
 def build_cyclical_commodities_payload(
     cot_rows,
     usd_observations_by_series,
     oil_observations_by_series=None,
     as_of_date=None,
     oil_series_metadata_by_id=None,
+    commodity_observations=None,
+    shfe_cu_main_observations=None,
 ):
     as_of = as_of_date or ""
     cot_payload, cot_available = _compute_cot_payload(cot_rows)
@@ -390,6 +518,9 @@ def build_cyclical_commodities_payload(
     oil_attribution = _oil_attribution_payload(
         oil_observations_by_series, as_of, oil_series_metadata_by_id
     )
+    commodity = _commodity_payload(
+        commodity_observations or {}, as_of, shfe_cu_main_observations
+    )
     return {
         "version": _CYCLICAL_COMMODITIES_VERSION,
         "as_of_date": as_of,
@@ -403,6 +534,7 @@ def build_cyclical_commodities_payload(
             "reason": "continuous commodity price histories and contract-roll methodology are not yet configured",
         },
         "card_status": "partial_official_evidence",
+        "commodity_observation": commodity,
     }
 
 
@@ -519,7 +651,10 @@ def _oil_price_distribution_summary(payload):
         benchmark = benchmarks.get(series_id, {})
         if benchmark.get("status") != "available":
             return _incomplete_oil_distribution_summary()
-        for horizon, field in (("daily", "daily_distribution"), ("weekly", "weekly_distribution")):
+        for horizon, field in (
+            ("daily", "daily_distribution"),
+            ("weekly", "weekly_distribution"),
+        ):
             classification = benchmark.get(field, {}).get("classification")
             if classification == "unavailable" or classification is None:
                 return _incomplete_oil_distribution_summary()
@@ -538,7 +673,7 @@ def _oil_price_distribution_summary(payload):
         }
     return {
         "status": "normal",
-        "label": "Oil price movement is within 1σ of their full-history distributions across WTI and Brent on both daily and weekly horizons.",
+        "label": "Oil price movement is within 1σ of their 2016-to-latest available distributions across WTI and Brent on both daily and weekly horizons.",
         "detail": "This describes price distribution only; physical-market attribution remains required.",
         "abnormal_observations": [],
     }
@@ -560,6 +695,7 @@ def build_cyclical_commodities_detail(payload):
         "corroboration": _corroboration_summary(payload),
         "steps": details,
         "freshness": _collect_freshness_metadata(payload),
+        "non_oil_observation": payload.get("commodity_observation", {}),
     }
 
 

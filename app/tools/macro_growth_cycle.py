@@ -2018,9 +2018,18 @@ def normalize_cyclical_commodities(payload):
     cot_rows = payload.get("cot_rows", [])
     usd_observations_by_series = payload.get("usd_observations_by_series", {})
     oil_observations_by_series = payload.get("oil_observations_by_series", {})
+    oil_series_metadata_by_id = payload.get("oil_series_metadata_by_id", {})
+    commodity_observations = payload.get("commodity_observations", {})
+    shfe_cu_main_observations = payload.get("shfe_cu_main_observations")
     as_of_date = payload.get("as_of_date", "2026-01-01")
     payload = tool.build_cyclical_commodities_payload(
-        cot_rows, usd_observations_by_series, oil_observations_by_series, as_of_date
+        cot_rows,
+        usd_observations_by_series,
+        oil_observations_by_series,
+        as_of_date,
+        oil_series_metadata_by_id=oil_series_metadata_by_id,
+        commodity_observations=commodity_observations,
+        shfe_cu_main_observations=shfe_cu_main_observations,
     )
     card = tool.build_cyclical_commodities_headline(payload)
     return {
