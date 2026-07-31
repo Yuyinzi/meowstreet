@@ -142,7 +142,7 @@ python3 -m venv .venv
 ### Run
 
 ```bash
-.venv/bin/uvicorn app.api:app --reload --port 8797
+.venv/bin/uvicorn app.api:app --reload --port 8797 --workers 2
 ```
 
 ### Run all tests

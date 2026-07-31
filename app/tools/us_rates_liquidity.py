@@ -1,5 +1,6 @@
 import hashlib
 import json
+from bisect import bisect_right
 from calendar import monthrange
 from datetime import date, timedelta
 
@@ -1111,13 +1112,8 @@ def _date_value_map(points):
 
 
 def _latest_on_or_before(sorted_dates, target):
-    result = None
-    for d in sorted_dates:
-        if d <= target:
-            result = d
-        else:
-            break
-    return result
+    idx = bisect_right(sorted_dates, target) - 1
+    return sorted_dates[idx] if idx >= 0 else None
 
 
 def _bbb_credit_spread_series(points_by_id):
