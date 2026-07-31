@@ -1,7 +1,4 @@
-import json
-import tempfile
 from datetime import UTC, date, datetime, timedelta
-from pathlib import Path
 
 from app.data_sources.lumber import (
     _LUMBER_SERIES_ID,
@@ -14,12 +11,6 @@ from app.db import macro_indicators
 LUMBER_OVERLAP_TEST_VERSION = "lumber_overlap_v1"
 ARCHIVED_LUMBER_SERIES_ID = "lumber"
 _OVERLAP_WINDOW_DAYS = 13
-
-ROOT = Path(__file__).resolve().parents[2]
-LUMBER_OVERLAP_AUDIT_PATH = (
-    ROOT / "data" / "local_system" / "audits" / "lumber_overlap_v1.json"
-)
-
 
 def _by_date(rows):
     return {row["date"]: row["value"] for row in rows}
@@ -94,50 +85,24 @@ def _default_fetcher(start_date, end_date):
     return fetch_lumber_series(start_date, end_date)
 
 
-def _stage_overlap_audit(audit, audit_path):
-    audit_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=audit_path.parent,
-        prefix=audit_path.name + ".",
-        suffix=".tmp",
-        delete=False,
-    ) as handle:
-        handle.write(json.dumps(audit, indent=2, sort_keys=True) + "\n")
-        temp_name = handle.name
-    return Path(temp_name)
-
-
-def _promote_overlap_audit(temp_path, audit_path):
-    try:
-        temp_path.replace(audit_path)
-    except OSError:
-        audit_path.write_text(temp_path.read_text(encoding="utf-8"), encoding="utf-8")
-        temp_path.unlink()
-
-
-def _remove_staged_audit(temp_path):
-    if temp_path is not None and temp_path.exists():
-        temp_path.unlink()
-
-
 def refresh_lumber(
     con,
     today_date=None,
     fetcher=None,
     initial=False,
-    audit_path=None,
 ):
     if fetcher is None:
         fetcher = _default_fetcher
-    effective_audit_path = audit_path or LUMBER_OVERLAP_AUDIT_PATH
-    temp_audit_path = None
     effective_today = today_date or date.today().isoformat()
     try:
         stored_rows = macro_indicators.load_macro_indicator_observations(
             con, _LUMBER_SERIES_ID
         )
+        recorded_audit = macro_indicators.load_lumber_overlap_audit(
+            con, LUMBER_OVERLAP_TEST_VERSION
+        )
+        if initial and (recorded_audit is not None or stored_rows):
+            raise ValueError("lumber initial migration is already recorded")
         if initial or not stored_rows:
             start_date = _LUMBER_START_DATE
         else:
@@ -154,13 +119,13 @@ def refresh_lumber(
                 con, ARCHIVED_LUMBER_SERIES_ID
             )
             audit = audit_lumber_overlap(archived_rows, observations)
-            temp_audit_path = _stage_overlap_audit(audit, effective_audit_path)
+            macro_indicators.merge_lumber_overlap_audit(
+                con, audit, commit=False
+            )
         macro_indicators.merge_macro_indicator_observations(
             con, payload["series"], observations, commit=False
         )
         con.commit()
-        if temp_audit_path is not None:
-            _promote_overlap_audit(temp_audit_path, effective_audit_path)
         return {
             "series": payload["series"]["series_id"],
             "observations": len(observations),
@@ -169,5 +134,4 @@ def refresh_lumber(
         }
     except Exception:
         con.rollback()
-        _remove_staged_audit(temp_audit_path)
         raise

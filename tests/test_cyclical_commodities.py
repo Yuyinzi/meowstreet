@@ -744,7 +744,7 @@ def test_detail_uses_active_yahoo_lbr_and_excludes_archived_lumber():
     detail = .build_cyclical_commodities_detail(payload_with_lbr_and_archive())
     lumber = detail["non_oil_observation"]["lumber_cme_lbr_yahoo_v1"]
     assert lumber["display_name"] == "Lumber (CME LBR)"
-    assert lumber["source_label"] == "Yahoo Finance · LBR=F · delayed vendor data"
+    assert lumber["source_label"] == "Yahoo Finance LBR=F"
     assert lumber["source_identifier"] == "LBR=F"
     assert "lumber" not in detail["non_oil_observation"]
 
@@ -771,6 +771,7 @@ def test_static_labels_method_market_source_without_claiming_official_settlement
         "Reference market data sourced from Investing.com. Not official exchange settlement."
         not in source
     )
+    assert "Vendor market data; not official exchange settlement." not in source
     assert "series.source_label" in source
     assert "Investing.com reference data" not in source
     assert "Method-Specified Commodity Markets" not in source

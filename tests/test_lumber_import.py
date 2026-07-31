@@ -1,7 +1,3 @@
-import json
-import threading
-from pathlib import Path
-
 import pytest
 
 from app.data_sources import lumber
@@ -101,12 +97,10 @@ def test_initial_lbr_import_backfills_from_contract_start_and_preserves_archive(
     macro_indicators.merge_macro_indicator_observations(
         con, archived_lumber_series(), archived_rows()
     )
-    audit_path = tmp_path / "lumber_overlap_v1.json"
     result = lumber_import.refresh_lumber(
         con,
         today_date="2026-07-31",
         fetcher=fake_yahoo_fetcher,
-        audit_path=audit_path,
     )
     assert result["start_date"] == "2022-08-08"
     assert (
@@ -119,7 +113,9 @@ def test_initial_lbr_import_backfills_from_contract_start_and_preserves_archive(
         )
         == expected_yahoo_rows()
     )
-    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    audit = macro_indicators.load_lumber_overlap_audit(
+        con, "lumber_overlap_v1"
+    )
     assert audit["overlap_test_version"] == "lumber_overlap_v1"
     assert audit["shared_date_count"] == 3
     assert audit["shared_price_difference_max"] == 0.0
@@ -162,16 +158,14 @@ def test_failed_lbr_import_does_not_persist_overlap_audit(tmp_path):
     macro_indicators.merge_macro_indicator_observations(
         con, archived_lumber_series(), archived_rows()
     )
-    audit_path = tmp_path / "lumber_overlap_v1.json"
-
     def raising_fetcher(start_date, end_date):
         raise ValueError("yahoo unavailable")
 
     with pytest.raises(ValueError, match="yahoo unavailable"):
-        lumber_import.refresh_lumber(
-            con, fetcher=raising_fetcher, audit_path=audit_path
-        )
-    assert not audit_path.exists()
+        lumber_import.refresh_lumber(con, fetcher=raising_fetcher)
+    assert macro_indicators.load_lumber_overlap_audit(
+        con, "lumber_overlap_v1"
+    ) is None
 
 
 def test_merge_failure_leaves_no_audit_or_active_rows(tmp_path):
@@ -179,8 +173,6 @@ def test_merge_failure_leaves_no_audit_or_active_rows(tmp_path):
     macro_indicators.merge_macro_indicator_observations(
         con, archived_lumber_series(), archived_rows()
     )
-    audit_path = tmp_path / "lumber_overlap_v1.json"
-
     def bad_contract_fetcher(start_date, end_date):
         payload = yahoo_payload(expected_yahoo_rows())
         payload["series"] = dict(payload["series"], source_contract={})
@@ -193,9 +185,10 @@ def test_merge_failure_leaves_no_audit_or_active_rows(tmp_path):
             con,
             today_date="2026-07-31",
             fetcher=bad_contract_fetcher,
-            audit_path=audit_path,
         )
-    assert not audit_path.exists()
+    assert macro_indicators.load_lumber_overlap_audit(
+        con, "lumber_overlap_v1"
+    ) is None
     assert (
         macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
         == []
@@ -218,16 +211,15 @@ def test_commit_failure_leaves_no_audit_or_active_rows(tmp_path):
     macro_indicators.merge_macro_indicator_observations(
         con, archived_lumber_series(), archived_rows()
     )
-    audit_path = tmp_path / "lumber_overlap_v1.json"
-
     with pytest.raises(ValueError, match="sqlite commit failed"):
         lumber_import.refresh_lumber(
             _FailingCommitCon(con),
             today_date="2026-07-31",
             fetcher=fake_yahoo_fetcher,
-            audit_path=audit_path,
         )
-    assert not audit_path.exists()
+    assert macro_indicators.load_lumber_overlap_audit(
+        con, "lumber_overlap_v1"
+    ) is None
     assert (
         macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
         == []
@@ -242,96 +234,65 @@ def _failing_replace_path_class(audit_path):
     return FailingReplacePath
 
 
-def test_promote_failure_after_commit_compensates_with_audit(tmp_path):
+def test_overlap_audit_persists_only_with_initial_lbr_rows(tmp_path):
     con = macro_indicators.connect(tmp_path / "market.sqlite")
     macro_indicators.merge_macro_indicator_observations(
         con, archived_lumber_series(), archived_rows()
     )
-    audit_path = tmp_path / "lumber_overlap_v1.json"
-    failing_class = _failing_replace_path_class(audit_path)
-    original_replace = failing_class.replace
 
-    def failing_replace(self, target):
-        raise OSError("audit promote failed")
+    lumber_import.refresh_lumber(
+        con, today_date="2026-07-31", fetcher=fake_yahoo_fetcher
+    )
 
-    failing_class.replace = failing_replace
-    original_module_path = lumber_import.Path
-    lumber_import.Path = failing_class
-    try:
+    assert macro_indicators.load_lumber_overlap_audit(
+        con, "lumber_overlap_v1"
+    ) == lumber_import.audit_lumber_overlap(archived_rows(), yahoo_rows())
+
+
+def test_initial_lbr_import_rejects_overwriting_recorded_overlap_audit(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    macro_indicators.merge_macro_indicator_observations(
+        con, archived_lumber_series(), archived_rows()
+    )
+    lumber_import.refresh_lumber(
+        con, today_date="2026-07-31", fetcher=fake_yahoo_fetcher
+    )
+    active_rows = macro_indicators.load_macro_indicator_points(
+        con, "lumber_cme_lbr_yahoo_v1"
+    )
+
+    with pytest.raises(ValueError, match="lumber initial migration is already recorded"):
         lumber_import.refresh_lumber(
             con,
             today_date="2026-07-31",
             fetcher=fake_yahoo_fetcher,
-            audit_path=audit_path,
+            initial=True,
         )
-    finally:
-        lumber_import.Path = original_module_path
-        failing_class.replace = original_replace
 
-    assert audit_path.exists()
-    audit = json.loads(audit_path.read_text(encoding="utf-8"))
-    assert audit["overlap_test_version"] == "lumber_overlap_v1"
-    assert (
-        macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
-        != []
+    assert macro_indicators.load_macro_indicator_points(
+        con, "lumber_cme_lbr_yahoo_v1"
+    ) == active_rows
+
+
+def test_initial_lbr_import_rejects_existing_active_rows_without_overlap_audit(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    macro_indicators.merge_macro_indicator_observations(
+        con,
+        lumber._LUMBER_SERIES,
+        [yahoo_observation("2026-07-30", 631.0)],
     )
-    assert list(audit_path.parent.glob("*.tmp")) == []
 
+    with pytest.raises(ValueError, match="lumber initial migration is already recorded"):
+        lumber_import.refresh_lumber(
+            con,
+            today_date="2026-07-31",
+            fetcher=fake_yahoo_fetcher,
+            initial=True,
+        )
 
-def test_stage_overlap_audit_uses_unique_temp_files(tmp_path):
-    audit_path = tmp_path / "lumber_overlap_v1.json"
-    first = lumber_import._stage_overlap_audit({"a": 1}, audit_path)
-    second = lumber_import._stage_overlap_audit({"b": 2}, audit_path)
-    try:
-        assert first != second
-        assert first.name != second.name
-        assert first.parent == audit_path.parent
-        assert first.exists()
-        assert second.exists()
-    finally:
-        lumber_import._remove_staged_audit(first)
-        lumber_import._remove_staged_audit(second)
-
-
-def test_interleaved_imports_preserve_each_others_temp_and_final_audit(tmp_path):
-    audit_path = tmp_path / "lumber_overlap_v1.json"
-    barrier = threading.Barrier(2)
-    errors = []
-    results = []
-
-    def worker(db_name):
-        try:
-            con = macro_indicators.connect(tmp_path / db_name)
-            macro_indicators.merge_macro_indicator_observations(
-                con, archived_lumber_series(), archived_rows()
-            )
-            barrier.wait()
-            result = lumber_import.refresh_lumber(
-                con,
-                today_date="2026-07-31",
-                fetcher=fake_yahoo_fetcher,
-                audit_path=audit_path,
-            )
-            results.append(result)
-            con.close()
-        except Exception as exc:
-            errors.append(exc)
-
-    threads = [
-        threading.Thread(target=worker, args=("first.sqlite",)),
-        threading.Thread(target=worker, args=("second.sqlite",)),
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-
-    assert errors == []
-    assert len(results) == 2
-    assert audit_path.exists()
-    audit = json.loads(audit_path.read_text(encoding="utf-8"))
-    assert audit["overlap_test_version"] == "lumber_overlap_v1"
-    assert list(audit_path.parent.glob("*.tmp")) == []
+    assert macro_indicators.load_lumber_overlap_audit(
+        con, "lumber_overlap_v1"
+    ) is None
 
 
 def test_overlap_audit_excludes_investing_only_saturday_and_detects_unequal_shared_close():

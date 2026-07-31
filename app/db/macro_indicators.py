@@ -95,6 +95,10 @@ create table if not exists cot_observations (
 );
 create index if not exists idx_cot_report_date
 on cot_observations(report_date);
+create table if not exists lumber_overlap_audits (
+    overlap_test_version text primary key,
+    audit_json text not null
+);
 """
 
 
@@ -685,3 +689,30 @@ def load_cot_observations(con):
         f"select {__COT_COLS} from cot_observations order by commodity_id, report_date"
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def merge_lumber_overlap_audit(con, audit, commit=True):
+    version = str(audit.get("overlap_test_version") or "").strip()
+    if not version:
+        raise ValueError("lumber overlap audit version is required")
+    con.execute(
+        """insert into lumber_overlap_audits(overlap_test_version, audit_json)
+           values (?, ?)
+           on conflict(overlap_test_version) do update set audit_json = excluded.audit_json""",
+        (version, json.dumps(audit, sort_keys=True)),
+    )
+    if commit:
+        con.commit()
+
+
+def load_lumber_overlap_audit(con, overlap_test_version):
+    version = str(overlap_test_version or "").strip()
+    if not version:
+        raise ValueError("lumber overlap audit version is required")
+    row = con.execute(
+        """select audit_json
+              from lumber_overlap_audits
+              where overlap_test_version = ?""",
+        (version,),
+    ).fetchone()
+    return json.loads(row["audit_json"]) if row else None

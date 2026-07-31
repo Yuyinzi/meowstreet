@@ -378,7 +378,7 @@ def _commodity_display_registry():
     registry[_LUMBER_SERIES["series_id"]] = {
         "display_name": _LUMBER_SERIES["title"],
         "exchange_label": "CME",
-        "source_label": "Yahoo Finance \u00b7 LBR=F \u00b7 delayed vendor data",
+        "source_label": "Yahoo Finance LBR=F",
         "source_url": _LUMBER_SERIES["source_url"],
         "source_class": _LUMBER_SERIES["source_class"],
     }

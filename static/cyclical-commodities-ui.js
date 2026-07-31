@@ -288,7 +288,6 @@
 
       html += '<section class="evidence-section">';
       html += '<h3>Commodity Market Data</h3>';
-      html += '<p class="summary-stat">Vendor market data; not official exchange settlement.</p>';
       var methodData = payload.non_oil_observation || {};
       var methodIds = Object.keys(methodData).sort();
       for (var ci = 0; ci < methodIds.length; ci++) {
