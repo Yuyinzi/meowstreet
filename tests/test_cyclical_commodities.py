@@ -533,7 +533,7 @@ def test_oil_benchmark_daily_and_weekly_distribution_are_exposed():
     benchmark = payload["oil_observation"]["benchmarks"]["oil_wti_spot"]
 
     assert (
-        benchmark["daily_distribution"]["method_version"] == "oil_distribution_v1"
+        benchmark["daily_distribution"]["method_version"] == "oil_distribution_v2"
     )
     assert benchmark["daily_distribution"]["standard_deviation"] == "sample"
     assert (
@@ -562,9 +562,7 @@ def test_oil_benchmark_distribution_is_unavailable_when_insufficient_history():
     assert detail["process_read"]["status"] == "review_required"
 
 
-def _payload_with_distribution_states(
-    wti_daily, wti_weekly, brent_daily, brent_weekly
-):
+def _payload_with_distribution_states(wti_daily, wti_weekly, brent_daily, brent_weekly):
     payload = .build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
     )
@@ -591,7 +589,9 @@ def test_oil_distribution_summary_is_normal_only_when_all_four_horizons_are_norm
     summary = detail["oil_price_distribution_summary"]
     assert summary["status"] == "normal"
     assert summary["abnormal_observations"] == []
-    assert "within 1σ of their full-history distributions" in summary["label"]
+    assert (
+        "within 1σ of their 2016-to-latest available distributions" in summary["label"]
+    )
     assert "physical-market attribution remains required" in summary["detail"]
 
 
@@ -714,8 +714,12 @@ def test_static_labels_method_market_source_without_claiming_official_settlement
     ).read_text()
 
     assert "Commodity Market Data" in source
-    assert "Reference market data sourced from Investing.com. Not official exchange settlement." in source
-    assert "Investing.com reference data" in source
+    assert (
+        "Reference market data sourced from Investing.com. Not official exchange settlement."
+        not in source
+    )
+    assert "Source: Investing.com" in source
+    assert "Investing.com reference data" not in source
     assert "Method-Specified Commodity Markets" not in source
     assert "Method-specified market data from Investing.com" not in source
     assert "method-market data not yet fetched" not in source

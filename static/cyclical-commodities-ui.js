@@ -80,8 +80,8 @@
           + '<span>Value: ' + h.escapeHtml(h.fmtNumber(series.latest_value)) + '</span>'
           + '<span>' + renderState(h.fmtSignedPctDecimal(series.daily_return), series.daily_return_state, "Daily") + '</span>'
           + '<span>' + renderState(h.fmtSignedPctDecimal(series.weekly_return), series.weekly_return_state, "Weekly") + '</span>'
-          + '<span class="workflow-source">Investing.com reference data</span>'
-          + (series.latest_date ? '<span class="source-date">As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
+          + '<span>Source: Investing.com</span>'
+          + (series.latest_date ? '<span>As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
           + '</div>'
           + '</div>';
       }
@@ -181,6 +181,10 @@
           var unitStr = b.units || "$/BBL";
           var dailyDistribution = b.daily_distribution || {};
           var weeklyDistribution = b.weekly_distribution || {};
+          var distributionVersion = (dailyDistribution.method_version || "").replace("oil_distribution_", "") || "—";
+          var distributionWindow = dailyDistribution.distribution_window === "2016-01-01_to_latest_available"
+            ? "2016–latest available"
+            : (dailyDistribution.distribution_window || "—").replace(/_/g, " ");
           html += '<div class="workflow-row oil-benchmark">'
             + '<div class="oil-price-line"><strong>' + h.escapeHtml(_oilDisplayName(ids[i])) + '</strong><span class="oil-price">'
             + h.escapeHtml(h.fmtNumber(b.latest_value)) + ' ' + h.escapeHtml(unitStr) + '</span></div>'
@@ -190,7 +194,8 @@
             + renderState(h.fmtSignedPctDecimal(b.weekly_return), b.weekly_return_state, "Weekly")
             + renderDistribution(b.weekly_distribution, "Weekly")
             + '</div>'
-            + '<div class="oil-provenance">v1 · full history · sample std · '
+            + '<div class="oil-provenance">' + h.escapeHtml(distributionVersion) + ' · '
+            + h.escapeHtml(distributionWindow) + ' · sample std · '
             + h.escapeHtml(String(dailyDistribution.sample_count || 0)) + ' daily / '
             + h.escapeHtml(String(weeklyDistribution.sample_count || 0)) + ' weekly returns · Source: '
             + h.escapeHtml(b.source_identifier || b.source_url || "") + '</div>'
@@ -277,14 +282,12 @@
           + '</div>';
       }
       html += '<h4>Attribution inputs</h4>';
-      html += '<p class="summary-stat">' + h.escapeHtml(attr.review_label || reasonLabel(attr)) + '</p>';
-      html += '<p class="note">WoW changes are raw context for review; no automatic attribution is made.</p>';
+      html += '<p class="summary-stat">' + h.escapeHtml(attr.review_label || reasonLabel(attr)) + ' — WoW changes are raw context for review; no automatic attribution is made.</p>';
       html += renderAttributionRows(attr.metrics || []);
       html += '</section>';
 
       html += '<section class="evidence-section">';
       html += '<h3>Commodity Market Data</h3>';
-      html += '<p class="section-intro">Reference market data sourced from Investing.com. Not official exchange settlement.</p>';
       var methodData = payload.non_oil_observation || {};
       var methodIds = Object.keys(methodData).sort();
       for (var ci = 0; ci < methodIds.length; ci++) {
