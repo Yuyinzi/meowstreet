@@ -19,8 +19,7 @@ def _result(**overrides):
         },
         "no_new_data": [],
         "status": "ok",
-        "cdp_endpoint": "http://127.0.0.1:9223",
-        "profile_dir": "/tmp/profile",
+        "cdp_endpoint": "http://127.0.0.1:9222",
     }
     result.update(overrides)
     return result
@@ -66,8 +65,6 @@ def test_main_passes_cli_configuration_to_service(tmp_path, capsys):
         [
             "--db-path",
             str(tmp_path / "macro.db"),
-            "--profile-dir",
-            str(tmp_path / "profile"),
             "--cdp-port",
             "9333",
             "--lock-file",
@@ -80,7 +77,6 @@ def test_main_passes_cli_configuration_to_service(tmp_path, capsys):
     assert exit_code == 0
     assert calls == [
         {
-            "profile_dir": tmp_path / "profile",
             "cdp_port": 9333,
             "lock_path": tmp_path / "refresh.lock",
             "readiness_timeout": 9,
@@ -88,7 +84,7 @@ def test_main_passes_cli_configuration_to_service(tmp_path, capsys):
     ]
 
 
-def test_main_defaults_target_persistent_profile_and_dedicated_port(tmp_path, capsys):
+def test_main_defaults_to_interactive_chrome_port(tmp_path, capsys):
     calls = []
 
     def capture_refresh(con, **kwargs):
@@ -97,19 +93,15 @@ def test_main_defaults_target_persistent_profile_and_dedicated_port(tmp_path, ca
 
     exit_code = main(["--db-path", str(tmp_path / "macro.db")], refresh=capture_refresh)
     assert exit_code == 0
-    assert str(calls[0]["profile_dir"]).endswith(
-        "data/private/investing_chrome_profile"
-    )
     assert calls[0]["cdp_port"] == DEFAULT_CDP_PORT
-    assert DEFAULT_CDP_PORT == 9223
+    assert DEFAULT_CDP_PORT == 9222
 
 
 @pytest.mark.parametrize(
     "message",
     [
         " investing rendered refresh already running (lock held)",
-        "Chrome executable missing",
-        "Chrome CDP endpoint at http://127.0.0.1:9223 did not become ready",
+        "Chrome CDP endpoint at http://127.0.0.1:9222 did not become ready",
         "page did not render the Iron Ore 62% Fe CFR China index market title",
         "the Investing historical data table contained no rows",
         "rendered history fetch failed",

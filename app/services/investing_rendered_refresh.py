@@ -2,16 +2,14 @@ import fcntl
 import time
 from pathlib import Path
 
-from app.data_sources import chrome_cdp, investing_chrome
-from app.data_sources.tracked_commodities import ACTIVE_MARKET_SERIES
+from app.data_sources import chrome_cdp
 from app.http_client import HttpClient
 from app.services import tracked_commodities_import
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
-DEFAULT_PROFILE_DIR = ROOT / "data" / "private" / "investing_chrome_profile"
-DEFAULT_CDP_PORT = 9223
+DEFAULT_CDP_PORT = 9222
 DEFAULT_LOCK_PATH = (
     ROOT / "data" / "local_system" / "investing_rendered_refresh.lock"
 )
@@ -62,31 +60,16 @@ def _wait_for_cdp(client, cdp_endpoint, timeout_seconds):
 
 def refresh_investing_rendered(
     con,
-    profile_dir=None,
     cdp_port=DEFAULT_CDP_PORT,
     lock_path=DEFAULT_LOCK_PATH,
     readiness_timeout=DEFAULT_READY_TIMEOUT_SECONDS,
     http_client=None,
-    start_chrome=investing_chrome.start_investing_chrome,
     wait_for_cdp=_wait_for_cdp,
     importer=tracked_commodities_import.import_commodity_browser_rows,
 ):
     lock_file = _acquire_lock(lock_path)
-    proc = None
-    effective_profile = profile_dir or DEFAULT_PROFILE_DIR
     endpoint = f"http://127.0.0.1:{cdp_port}"
     try:
-        try:
-            proc = start_chrome(
-                profile_dir=effective_profile,
-                cdp_port=cdp_port,
-                headless=True,
-                initial_url=ACTIVE_MARKET_SERIES[_REFRESH_MARKET]["price_page_url"],
-            )
-        except OSError as exc:
-            raise ValueError(
-                f"failed to start headless Chrome with profile {effective_profile}: {exc}"
-            ) from exc
         client = http_client or HttpClient()
         wait_for_cdp(client, endpoint, readiness_timeout)
         importer_result = importer(
@@ -98,10 +81,6 @@ def refresh_investing_rendered(
             **importer_result,
             "status": "ok",
             "cdp_endpoint": endpoint,
-            "profile_dir": str(effective_profile),
         }
     finally:
-        if proc is not None:
-            proc.terminate()
-            proc.wait()
         _release_lock(lock_file)
