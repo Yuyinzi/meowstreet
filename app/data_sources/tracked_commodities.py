@@ -69,6 +69,7 @@ MARKET_SERIES = {
 }
 
 ARCHIVED_MARKET_SERIES = {
+    "copper_comex": MARKET_SERIES["copper_comex"],
     "lumber": MARKET_SERIES["lumber"],
 }
 

@@ -68,7 +68,7 @@ def test_fetcher_parses_price_column_and_page_market_label():
     client = httpx.Client(transport=transport)
 
     payload = fetch_commodity_observations(http_client=client)
-    copper = payload["copper_comex"]
+    copper = payload["copper_lme"]
     assert copper["series"]["source"] == "investing.com"
     assert copper["series"]["source_class"] == "free_web"
     assert copper["observations"] == [
@@ -76,8 +76,8 @@ def test_fetcher_parses_price_column_and_page_market_label():
             "date": "2026-07-23",
             "value": 5.68,
             "source": "investing.com",
-            "source_url": "https://www.investing.com/commodities/copper-historical-data",
-            "source_identifier": "copper_comex",
+            "source_url": "https://www.investing.com/commodities/copper-historical-data?cid=959211",
+            "source_identifier": "copper_lme",
             "source_class": "free_web",
             "retrieved_at": copper["observations"][0]["retrieved_at"],
         },
@@ -85,8 +85,8 @@ def test_fetcher_parses_price_column_and_page_market_label():
             "date": "2026-07-24",
             "value": 5.7,
             "source": "investing.com",
-            "source_url": "https://www.investing.com/commodities/copper-historical-data",
-            "source_identifier": "copper_comex",
+            "source_url": "https://www.investing.com/commodities/copper-historical-data?cid=959211",
+            "source_identifier": "copper_lme",
             "source_class": "free_web",
             "retrieved_at": copper["observations"][0]["retrieved_at"],
         },
@@ -101,7 +101,7 @@ def test_fetcher_reports_empty_observations_on_http_error():
     client = httpx.Client(transport=transport)
 
     payload = fetch_commodity_observations(http_client=client)
-    assert payload["copper_comex"]["observations"] == []
+    assert payload["copper_lme"]["observations"] == []
 
 
 def test_parse_investing_html_deduplicates_dates():
@@ -140,7 +140,7 @@ def test_fetcher_filters_by_date_range():
     payload = fetch_commodity_observations(
         http_client=client, start_date="2026-07-23"
     )
-    assert len(payload["copper_comex"]["observations"]) == 2
+    assert len(payload["copper_lme"]["observations"]) == 2
 
 
 def test_fetcher_honours_markets_filter():
@@ -151,9 +151,9 @@ def test_fetcher_honours_markets_filter():
     client = httpx.Client(transport=transport)
 
     payload = fetch_commodity_observations(
-        http_client=client, markets=["copper_comex", "copper_lme"]
+        http_client=client, markets=["copper_lme", "iron_ore_62_cfr_china"]
     )
-    assert list(payload) == ["copper_comex", "copper_lme"]
+    assert list(payload) == ["copper_lme", "iron_ore_62_cfr_china"]
 
 
 def test_fetcher_reports_diagnostic_on_empty_page():
@@ -164,9 +164,9 @@ def test_fetcher_reports_diagnostic_on_empty_page():
     client = httpx.Client(transport=transport)
 
     payload = fetch_commodity_observations(
-        http_client=client, markets=["copper_comex"]
+        http_client=client, markets=["copper_lme"]
     )
-    item = payload["copper_comex"]
+    item = payload["copper_lme"]
     assert item["observations"] == []
     assert "_fetch_diagnostic" in item
     assert "no table rows" in item["_fetch_diagnostic"]["error"]
@@ -180,9 +180,9 @@ def test_fetcher_reports_http_error_diagnostic():
     client = httpx.Client(transport=transport)
 
     payload = fetch_commodity_observations(
-        http_client=client, markets=["copper_comex"]
+        http_client=client, markets=["copper_lme"]
     )
-    item = payload["copper_comex"]
+    item = payload["copper_lme"]
     assert item["observations"] == []
     assert "_fetch_diagnostic" in item
     assert "503" in item["_fetch_diagnostic"]["error"]
@@ -203,9 +203,9 @@ def test_fetcher_falls_back_to_any_tablerows_outside_table():
     client = httpx.Client(transport=transport)
 
     payload = fetch_commodity_observations(
-        http_client=client, markets=["copper_comex"]
+        http_client=client, markets=["copper_lme"]
     )
-    assert len(payload["copper_comex"]["observations"]) == 2
+    assert len(payload["copper_lme"]["observations"]) == 2
 
 
 def test_fetcher_series_includes_units():
@@ -216,7 +216,7 @@ def test_fetcher_series_includes_units():
     client = httpx.Client(transport=transport)
 
     payload = fetch_commodity_observations(http_client=client)
-    assert payload["copper_comex"]["series"]["units"] == "USD/lb"
+    assert payload["copper_lme"]["series"]["units"] == "USD/tonne"
 
 
 _SAMPLE_CSV = 'Date,Price,Open,High,Low,Vol.,Change %\n"Jul 24, 2026",5.700,5.710,5.720,5.680,12.5K,0.35%\n"Jul 23, 2026",5.680,5.690,5.700,5.660,15.2K,-0.18%\n'
@@ -282,6 +282,15 @@ def test_method_market_registry_marks_shanghai_as_shfe_official():
     assert shanghai["source_identifier"] == "SHFE:CU"
     assert "instrument_id" not in shanghai
     assert "price_page_url" not in shanghai
+
+
+def test_free_web_import_rejects_archived_comex_copper():
+    from app.data_sources import tracked_commodities
+
+    with pytest.raises(
+        ValueError, match="copper_comex is not an Investing method market"
+    ):
+        tracked_commodities.validate_free_web_markets(["copper_comex"])
 
 
 def test_method_market_registry_has_investing_instrument_ids():

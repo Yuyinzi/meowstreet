@@ -2,6 +2,7 @@ from app.data_sources.tracked_commodities import (
     ACTIVE_MARKET_SERIES,
     MARKET_SERIES,
 )
+from app.data_sources.copper_comex import _COPPER_COMEX_SERIES
 from app.data_sources.lumber import _LUMBER_SERIES
 from app.tools import oil_distribution
 from app.tools import shfe_copper
@@ -387,6 +388,13 @@ def _commodity_display_registry():
         "source_label": "Yahoo Finance LBR=F",
         "source_url": _LUMBER_SERIES["source_url"],
         "source_class": _LUMBER_SERIES["source_class"],
+    }
+    registry[_COPPER_COMEX_SERIES["series_id"]] = {
+        "display_name": _COPPER_COMEX_SERIES["title"],
+        "exchange_label": "COMEX",
+        "source_label": "Yahoo Finance HG=F",
+        "source_url": _COPPER_COMEX_SERIES["source_url"],
+        "source_class": _COPPER_COMEX_SERIES["source_class"],
     }
     return registry
 
