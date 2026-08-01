@@ -135,7 +135,16 @@ class TestBuildTargetsLatestOnly:
 
 
 class TestBuildTargetsSpecificMonth:
-    def test_report_month_generates_one_target(self):
+    @patch("app.services.ism_report_ingestion.discover_prnewswire_reports")
+    def test_report_month_generates_one_target(self, mock_discover):
+        mock_discover.return_value = [
+            {
+                "url": "https://prnewswire.com/manufacturing-june-2026",
+                "title": "Test",
+                "report_month": "2026-06-01",
+                "report_id": "ism_manufacturing_2026_06",
+            }
+        ]
         targets = ingestion.build_targets("manufacturing", report_month="2026-06")
         assert any(t["report_month"] == "2026-06-01" for t in targets)
 
@@ -258,7 +267,16 @@ class TestTargetDeduplication:
         months = [t["report_month"] for t in targets if t["report_month"]]
         assert len(months) == len(set(months))
 
-    def test_same_month_different_survey_is_not_a_duplicate(self):
+    @patch("app.services.ism_report_ingestion.discover_prnewswire_reports")
+    def test_same_month_different_survey_is_not_a_duplicate(self, mock_discover):
+        mock_discover.return_value = [
+            {
+                "url": "https://prnewswire.com/june-2026",
+                "title": "Test",
+                "report_month": "2026-06-01",
+                "report_id": "ism_2026_06",
+            }
+        ]
         manu = ingestion.build_targets("manufacturing", report_month="2026-06")
         svcs = ingestion.build_targets("services", report_month="2026-06")
         manu_months = {

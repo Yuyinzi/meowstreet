@@ -16,6 +16,8 @@ sys.path.insert(0, str(ROOT))
 from app.db import us_rates_liquidity
 from app.services import ism_report_ingestion as ingestion
 from app.services.ism_services_ai_ingestion import import_targets as ai_import_targets
+from app.tools import ism_report_archive
+from app.tools import ism_report_config
 
 
 def requested_months(count=1, today=None):
@@ -67,16 +69,17 @@ def main(argv=None, fetch=None, ai_client_factory=None):
 
     months = requested_months(args.months)
 
-    targets = []
-    for month in months:
-        targets.extend(
-            ingestion.build_targets(
-                "services",
-                report_month=month,
-                force_latest=False,
-                fetch=fetch,
-            )
-        )
+    config = ism_report_config.load_survey_config("services")
+    targets = [
+        {
+            "survey_type": "services",
+            "report_month": month,
+            "report_id": ism_report_archive.report_id(month, "services"),
+            "source_name": "ismworld",
+            "url": config["ismworld_monthly_url"](ingestion.month_name(month)),
+        }
+        for month in months
+    ]
 
     if ai_client_factory is not None:
         config = {"model": "test-model"}
