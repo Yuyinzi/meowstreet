@@ -6638,6 +6638,32 @@ def test_cyclical_commodities_ui_renders_backend_distribution_labels():
     assert source.count("state-review-required") == 1
 
 
+def test_non_oil_renderer_displays_backend_distribution_evidence():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "series.daily_distribution" in source
+    assert "series.weekly_distribution" in source
+    assert "series.review_status" in source
+    assert "series.review_label" in source
+    assert "renderDistribution(series.daily_distribution" in source
+    assert "renderDistribution(series.weekly_distribution" in source
+
+
+def test_non_oil_renderer_has_no_client_side_statistics():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "Math.sqrt" not in source
+    assert "standardDeviation" not in source
+    assert "sample_standard_deviation" not in source
+
+
+def test_non_oil_css_has_distribution_review_note_styles():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".distribution-review-note" in css
+    assert ".distribution-provenance" in css
+
+
 def test_shanghai_copper_reuses_market_value_and_state_presentation():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     start = source.index('if (series.source_class === "official_exchange")')
@@ -6645,8 +6671,8 @@ def test_shanghai_copper_reuses_market_value_and_state_presentation():
     official_branch = source[start:end]
 
     assert "Value: " in official_branch
-    assert 'renderState(h.fmtSignedPctDecimal(series.daily_return)' in official_branch
-    assert 'renderState(h.fmtSignedPctDecimal(series.weekly_return)' in official_branch
+    assert "renderState(h.fmtSignedPctDecimal(series.daily_return)" in official_branch
+    assert "renderState(h.fmtSignedPctDecimal(series.weekly_return)" in official_branch
     assert "(same-contract)" not in official_branch
     assert "(roll-neutral)" not in official_branch
     assert "statistics.stdev" not in source

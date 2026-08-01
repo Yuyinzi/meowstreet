@@ -67,6 +67,27 @@
           + '</div>';
       }
 
+      function renderDistributionProvenance(series) {
+        var dailyDistribution = series.daily_distribution || {};
+        var weeklyDistribution = series.weekly_distribution || {};
+        var distributionVersion = (dailyDistribution.method_version || "")
+          .replace("non_oil_price_distribution_", "") || "—";
+        var distributionWindow = dailyDistribution.distribution_window === "2016-01-01_to_latest_available"
+          ? "2016–latest"
+          : (dailyDistribution.distribution_window || "—").replace(/_/g, " ");
+        return '<div class="distribution-provenance">' + h.escapeHtml(distributionVersion) + ' · '
+          + h.escapeHtml(distributionWindow) + ' · sample std · '
+          + h.escapeHtml(String(dailyDistribution.sample_count || 0)) + ' daily / '
+          + h.escapeHtml(String(weeklyDistribution.sample_count || 0)) + ' weekly returns</div>';
+      }
+
+      function renderDistributionReviewNote(series) {
+        if (series.review_status !== "review_required") return "";
+        return '<div class="distribution-review-note">'
+          + h.escapeHtml(series.review_label)
+          + '</div>';
+      }
+
       function renderNonOilRow(series) {
         if (series.status !== "available") {
           var unavailableLine = series.source_class === "official_exchange"
@@ -97,10 +118,14 @@
             + '<div class="workflow-metrics">'
             + '<span>Value: ' + h.escapeHtml(h.fmtNumber(series.latest_value)) + ' ' + h.escapeHtml(series.units || "CNY/tonne") + '</span>'
             + '<span>' + renderState(h.fmtSignedPctDecimal(series.daily_return), series.daily_return_state, "Daily") + '</span>'
+            + renderDistribution(series.daily_distribution, "Daily")
             + '<span>' + renderState(h.fmtSignedPctDecimal(series.weekly_return), series.weekly_return_state, "Weekly") + '</span>'
+            + renderDistribution(series.weekly_distribution, "Weekly")
             + '<span>Source: SHFE official data via AKShare</span>'
             + (series.latest_date ? '<span>As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
             + '</div>'
+            + renderDistributionProvenance(series)
+            + renderDistributionReviewNote(series)
             + rollLine
             + '</div>';
         }
@@ -115,10 +140,14 @@
           + '<div class="workflow-metrics">'
           + '<span>Value: ' + h.escapeHtml(h.fmtNumber(series.latest_value)) + '</span>'
           + '<span>' + renderState(h.fmtSignedPctDecimal(series.daily_return), series.daily_return_state, "Daily") + '</span>'
+          + renderDistribution(series.daily_distribution, "Daily")
           + '<span>' + renderState(h.fmtSignedPctDecimal(series.weekly_return), series.weekly_return_state, "Weekly") + '</span>'
+          + renderDistribution(series.weekly_distribution, "Weekly")
           + '<span>Source: ' + h.escapeHtml(series.source_label) + '</span>'
           + (series.latest_date ? '<span>As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
           + '</div>'
+          + renderDistributionProvenance(series)
+          + renderDistributionReviewNote(series)
           + transitionNote
           + '</div>';
       }

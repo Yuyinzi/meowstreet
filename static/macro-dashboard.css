@@ -874,6 +874,22 @@ h2 {
   margin-top: 7px;
 }
 
+.distribution-provenance {
+  color: #8A7B6D;
+  font-size: 11px;
+  margin-top: 7px;
+}
+
+.distribution-review-note {
+  display: block;
+  color: #87531B;
+  background: #FBF0DE;
+  padding: 8px 10px;
+  margin-top: 7px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
 @media (max-width: 900px) {
   .evidence-grid {
     grid-template-columns: minmax(0, 1fr);
