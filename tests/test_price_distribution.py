@@ -101,6 +101,20 @@ def test_insufficient_samples_returns_exact_reason_string():
     assert result["reason"] == "at least 252 daily returns are required"
 
 
+def test_single_return_row_with_minimum_samples_one_is_unavailable():
+    result = price_distribution.build_distribution_from_returns(
+        [{"date": "2026-01-02", "value": 0.01}],
+        "daily",
+        method_version="non_oil_price_distribution_v1",
+        distribution_window="2016-01-01_to_latest_available",
+        return_definition="arithmetic_close_to_close",
+        minimum_samples=1,
+    )
+    assert result["classification"] == "unavailable"
+    assert result["sample_count"] == 1
+    assert result["reason"] == "at least 2 daily returns are required"
+
+
 def test_default_minimum_samples_match_oil_frequency_defaults():
     daily = price_distribution.build_distribution_from_returns(
         [{"date": "2026-01-02", "value": 0.01}],

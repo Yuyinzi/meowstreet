@@ -503,7 +503,9 @@ def _shfe_shanghai_payload(meta, main_rows, as_of_date):
             ),
         }
     latest = eligible[-1]
-    weekly_returns = shfe_copper.build_shfe_cu_weekly_returns(eligible)
+    weekly_returns = shfe_copper.build_shfe_cu_weekly_returns(
+        [row for row in eligible if row["date"] >= _NON_OIL_DISTRIBUTION_START_DATE]
+    )
     latest_week = weekly_returns[-1] if weekly_returns else None
     daily_return = latest.get("same_contract_return")
     weekly_return = latest_week.get("return") if latest_week else None

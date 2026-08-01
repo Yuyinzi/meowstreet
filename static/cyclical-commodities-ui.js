@@ -70,21 +70,30 @@
       function renderDistributionProvenance(series) {
         var dailyDistribution = series.daily_distribution || {};
         var weeklyDistribution = series.weekly_distribution || {};
+        var distributionAvailable = dailyDistribution.classification != null
+          && dailyDistribution.classification !== "unavailable"
+          && weeklyDistribution.classification != null
+          && weeklyDistribution.classification !== "unavailable";
         var distributionVersion = (dailyDistribution.method_version || "")
           .replace("non_oil_price_distribution_", "") || "—";
         var distributionWindow = dailyDistribution.distribution_window === "2016-01-01_to_latest_available"
           ? "2016–latest"
           : (dailyDistribution.distribution_window || "—").replace(/_/g, " ");
-        return '<div class="distribution-provenance">' + h.escapeHtml(distributionVersion) + ' · '
-          + h.escapeHtml(distributionWindow) + ' · sample std · '
-          + h.escapeHtml(String(dailyDistribution.sample_count || 0)) + ' daily / '
-          + h.escapeHtml(String(weeklyDistribution.sample_count || 0)) + ' weekly returns</div>';
+        var provenance = distributionVersion + " · " + distributionWindow;
+        if (distributionAvailable) {
+          provenance += " · sample std · "
+            + String(dailyDistribution.sample_count || 0) + " daily / "
+            + String(weeklyDistribution.sample_count || 0) + " weekly returns";
+        } else {
+          provenance += " · no distribution data";
+        }
+        return '<div class="distribution-provenance">' + h.escapeHtml(provenance) + '</div>';
       }
 
       function renderDistributionReviewNote(series) {
         if (series.review_status !== "review_required") return "";
         return '<div class="distribution-review-note">'
-          + h.escapeHtml(series.review_label)
+          + h.escapeHtml(series.review_label || "")
           + '</div>';
       }
 

@@ -2,7 +2,6 @@ from datetime import date, timedelta
 from statistics import stdev
 
 
-_DEFAULT_START_DATE = "2016-01-01"
 _ISO_WEEK_DEFINITION = "iso_calendar_week_last_available_trading_day"
 _MINIMUM_SAMPLES = {"daily": 252, "weekly": 52}
 _RETURN_DEFINITION = "arithmetic_close_to_close"
@@ -72,6 +71,35 @@ def classify_return(current_return, mean_return, sample_standard_deviation):
     return "normal"
 
 
+def _unavailable_result(
+    method_version,
+    return_definition,
+    distribution_window,
+    frequency,
+    week_definition,
+    minimum_samples,
+    sample_count,
+    reason,
+):
+    return {
+        "method_version": method_version,
+        "return_definition": return_definition,
+        "distribution_window": distribution_window,
+        "standard_deviation": _STANDARD_DEVIATION,
+        "frequency": frequency,
+        "week_definition": week_definition,
+        "minimum_samples": minimum_samples,
+        "sample_count": sample_count,
+        "sample_mean": None,
+        "sample_standard_deviation": None,
+        "current_return": None,
+        "sample_start_date": None,
+        "sample_end_date": None,
+        "classification": "unavailable",
+        "reason": reason,
+    }
+
+
 def build_distribution_from_returns(
     returns,
     frequency,
@@ -96,25 +124,30 @@ def build_distribution_from_returns(
 
     sample_count = len(rows)
     if sample_count < minimum_samples:
-        return {
-            "method_version": method_version,
-            "return_definition": return_definition,
-            "distribution_window": distribution_window,
-            "standard_deviation": _STANDARD_DEVIATION,
-            "frequency": frequency,
-            "week_definition": week_definition,
-            "minimum_samples": minimum_samples,
-            "sample_count": sample_count,
-            "sample_mean": None,
-            "sample_standard_deviation": None,
-            "current_return": None,
-            "sample_start_date": None,
-            "sample_end_date": None,
-            "classification": "unavailable",
-            "reason": f"at least {minimum_samples} {frequency} returns are required",
-        }
+        return _unavailable_result(
+            method_version,
+            return_definition,
+            distribution_window,
+            frequency,
+            week_definition,
+            minimum_samples,
+            sample_count,
+            f"at least {minimum_samples} {frequency} returns are required",
+        )
 
     values = [r["value"] for r in rows]
+    if len(values) < 2:
+        return _unavailable_result(
+            method_version,
+            return_definition,
+            distribution_window,
+            frequency,
+            week_definition,
+            minimum_samples,
+            sample_count,
+            f"at least 2 {frequency} returns are required",
+        )
+
     sample_mean = sum(values) / len(values)
     sample_standard_deviation = stdev(values)
     current_return = rows[-1]["value"]

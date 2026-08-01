@@ -1166,3 +1166,63 @@ def test_shfe_distribution_excludes_pre_2016_weeks_from_weekly_window():
         "weekly_distribution"
     ]
     assert weekly["sample_count"] == baseline_weekly["sample_count"]
+
+
+def test_shfe_distribution_excludes_2015_w53_week_from_weekly_sample():
+    rows = []
+    for offset in range(4):
+        rows.append(
+            _shfe_day_row(
+                date(2015, 12, 28) + timedelta(days=offset), 35000.0 + len(rows)
+            )
+        )
+    current = date(2016, 1, 4)
+    for week_count in range(53):
+        for offset in range(5):
+            rows.append(
+                _shfe_day_row(current + timedelta(days=offset), 35000.0 + len(rows))
+            )
+        current += timedelta(days=7)
+
+    payload = _shfe_payload(rows)
+    weekly = payload["commodity_observation"]["copper_shanghai"][
+        "weekly_distribution"
+    ]
+
+    baseline = _shfe_payload(_shfe_main_rows(include_roll_day=False))
+    baseline_weekly = baseline["commodity_observation"]["copper_shanghai"][
+        "weekly_distribution"
+    ]
+    assert weekly["sample_count"] == baseline_weekly["sample_count"]
+    assert weekly["sample_count"] == 53
+
+
+def test_review_labels_distinguish_no_observations_from_insufficient_history():
+    no_rows = _comex_payload([])
+    no_rows_label = no_rows["commodity_observation"]["copper_comex"][
+        "review_label"
+    ]
+    insufficient = _comex_payload(
+        [
+            {"date": "2016-01-14", "value": 100.0},
+            {"date": "2016-01-15", "value": 100.5},
+            {"date": "2016-01-18", "value": 101.0},
+            {"date": "2016-01-19", "value": 101.5},
+            {"date": "2016-01-20", "value": 102.0},
+        ]
+    )
+    insufficient_label = insufficient["commodity_observation"][
+        "copper_comex"
+    ]["review_label"]
+
+    assert no_rows_label == (
+        "No price observations are available for a distribution-based review."
+    )
+    assert insufficient_label == (
+        "Insufficient price history for a distribution-based review."
+    )
+    assert no_rows_label != insufficient_label
+    for label in (no_rows_label, insufficient_label):
+        assert "demand-led" not in label.lower()
+        assert "supply-led" not in label.lower()
+        assert "trade" not in label.lower()
