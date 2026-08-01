@@ -20,6 +20,7 @@ from scripts import import_nfib_sbet
 from scripts import import_nfib_sbet_regional
 from scripts import import_tracked_commodities
 from scripts import import_cyclical_commodities
+from scripts import import_dce_iron_ore_sina
 from scripts import import_lumber
 from scripts import import_oil
 from scripts import import_shfe_copper
@@ -100,6 +101,7 @@ def _planned_tasks(
     tracked_commodities_main=None,
     lumber_main=import_lumber.main,
     shfe_copper_main=None,
+    dce_iron_ore_sina_main=None,
 ):
     tasks = []
     if not args.skip_yahoo:
@@ -170,6 +172,8 @@ def _planned_tasks(
         tasks.append(("lumber_yahoo", lumber_main, []))
     if shfe_copper_main is not None and not args.skip_shfe_copper:
         tasks.append(("shfe_copper", shfe_copper_main, ["--incremental"]))
+    if dce_iron_ore_sina_main is not None and not args.skip_dce_iron_ore_sina:
+        tasks.append(("dce_iron_ore_sina", dce_iron_ore_sina_main, []))
     return tasks
 
 
@@ -202,6 +206,7 @@ def main(
     tracked_commodities_main=None,
     lumber_main=import_lumber.main,
     shfe_copper_main=None,
+    dce_iron_ore_sina_main=None,
 ):
     if main is None:
         main = import_cyclical_commodities.main
@@ -211,6 +216,8 @@ def main(
         tracked_commodities_main = import_tracked_commodities.main
     if shfe_copper_main is None:
         shfe_copper_main = import_shfe_copper.main
+    if dce_iron_ore_sina_main is None:
+        dce_iron_ore_sina_main = import_dce_iron_ore_sina.main
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
     parser.add_argument("--skip-rates", action="store_true")
@@ -227,6 +234,7 @@ def main(
     parser.add_argument("--skip-method-commodities", action="store_true")
     parser.add_argument("--skip-lumber", action="store_true")
     parser.add_argument("--skip-shfe-copper", action="store_true")
+    parser.add_argument("--skip-dce-iron-ore-sina", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
     parser.add_argument(
         "--stop-on-error",
@@ -258,6 +266,7 @@ def main(
         tracked_commodities_main,
         lumber_main,
         shfe_copper_main,
+        dce_iron_ore_sina_main,
     ):
         result = _run_task(name, func, task_argv)
         results.append(result)

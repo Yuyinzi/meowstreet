@@ -19,6 +19,7 @@ def args_without_skips():
         skip_oil=False,
         skip_tracked_commodities=False,
         skip_lumber=False,
+        skip_dce_iron_ore_sina=False,
         fomc_calendar_path=None,
         stop_on_error=False,
     )
@@ -810,3 +811,41 @@ def test_macro_refresh_skip_lumber_omits_only_lumber_task():
         lumber_main=fake_lumber_main,
     )
     assert not any(name == "lumber_yahoo" for name, _, _ in tasks)
+
+
+def test_refresh_registry_runs_sina_dce_iron_ore_unless_skipped():
+    tasks = refresh_macro_data._planned_tasks(
+        args_without_skips(),
+        fake_benchmark_main,
+        fake_rates_main,
+        fake_consumer_main,
+        fake_m2_main,
+        fake_building_permits_main,
+        fake_ism_main,
+        fake_ism_services_main,
+        fake_ism_reports_main,
+        fake_gdp_main,
+        dce_iron_ore_sina_main=fake_lumber_main,
+    )
+
+    assert any(name == "dce_iron_ore_sina" for name, _, _ in tasks)
+
+
+def test_macro_refresh_skip_dce_iron_ore_sina_omits_the_task():
+    args = args_without_skips()
+    args.skip_dce_iron_ore_sina = True
+    tasks = refresh_macro_data._planned_tasks(
+        args,
+        fake_benchmark_main,
+        fake_rates_main,
+        fake_consumer_main,
+        fake_m2_main,
+        fake_building_permits_main,
+        fake_ism_main,
+        fake_ism_services_main,
+        fake_ism_reports_main,
+        fake_gdp_main,
+        dce_iron_ore_sina_main=fake_lumber_main,
+    )
+
+    assert not any(name == "dce_iron_ore_sina" for name, _, _ in tasks)
