@@ -104,6 +104,12 @@
             + rollLine
             + '</div>';
         }
+        var transitionNote = "";
+        if (series.return_transition_blocked) {
+          transitionNote = '<div class="shfe-roll-note">Source changed on '
+            + h.escapeHtml(series.source_cutover_date)
+            + '; return is withheld until same-source history is available.</div>';
+        }
         return '<div class="workflow-row">'
           + '<div class="workflow-label">' + h.escapeHtml(series.display_name) + '</div>'
           + '<div class="workflow-metrics">'
@@ -113,6 +119,7 @@
           + '<span>Source: ' + h.escapeHtml(series.source_label) + '</span>'
           + (series.latest_date ? '<span>As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
           + '</div>'
+          + transitionNote
           + '</div>';
       }
 
