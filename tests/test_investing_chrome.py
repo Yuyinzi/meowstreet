@@ -205,3 +205,92 @@ def test_investing_fetch_does_not_depend_on_playwright_or_create_pages():
     assert "sync_playwright" not in source
     assert "new_page(" not in source
     assert "page.close(" not in source
+
+
+def test_start_chrome_headless_adds_headless_flag_and_accepts_config(
+    monkeypatch, tmp_path
+):
+    command = []
+
+    def fake_popen(args, **kwargs):
+        command.extend(args)
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr(investing_chrome, "_find_chrome", lambda: "google-chrome")
+
+    start_investing_chrome(
+        profile_dir=tmp_path / "headless",
+        cdp_port=9333,
+        headless=True,
+        initial_url="https://www.investing.com/commodities/iron-ore-62-cfr-futures-historical-data",
+    )
+
+    assert "--headless=new" in command
+    assert "--remote-debugging-port=9333" in command
+    assert "--remote-allow-origins=http://127.0.0.1:9333" in command
+    assert f"--user-data-dir={tmp_path / 'headless'}" in command
+    assert (
+        command[-1]
+        == "https://www.investing.com/commodities/iron-ore-62-cfr-futures-historical-data"
+    )
+
+
+def test_start_chrome_interactive_omits_headless_flag(monkeypatch, tmp_path):
+    command = []
+
+    def fake_popen(args, **kwargs):
+        command.extend(args)
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr(investing_chrome, "_find_chrome", lambda: "google-chrome")
+
+    start_investing_chrome(profile_dir=tmp_path / "chrome", cdp_port=9222)
+
+    assert "--headless=new" not in command
+    assert "--remote-debugging-port=9222" in command
+    assert "--remote-allow-origins=http://127.0.0.1:9222" in command
+    assert f"--user-data-dir={tmp_path / 'chrome'}" in command
+    assert command[-1] == "https://www.investing.com/commodities/copper-historical-data"
+
+
+def test_start_chrome_returns_the_launched_process(monkeypatch, tmp_path):
+    class FakeProcess:
+        def __init__(self, args, **kwargs):
+            self.args = args
+
+    monkeypatch.setattr("subprocess.Popen", FakeProcess)
+    monkeypatch.setattr(investing_chrome, "_find_chrome", lambda: "google-chrome")
+
+    proc = start_investing_chrome(profile_dir=tmp_path / "chrome", cdp_port=9222)
+    assert isinstance(proc, FakeProcess)
+
+
+def test_start_chrome_rejects_invalid_cdp_port(monkeypatch, tmp_path):
+    monkeypatch.setattr(investing_chrome, "_find_chrome", lambda: "google-chrome")
+
+    with pytest.raises(ValueError, match="invalid cdp port"):
+        start_investing_chrome(profile_dir=tmp_path / "chrome", cdp_port=99999)
+
+
+def test_start_chrome_rejects_zero_cdp_port(monkeypatch, tmp_path):
+    monkeypatch.setattr(investing_chrome, "_find_chrome", lambda: "google-chrome")
+
+    with pytest.raises(ValueError, match="invalid cdp port"):
+        start_investing_chrome(profile_dir=tmp_path / "chrome", cdp_port=0)
+
+
+def test_start_chrome_rejects_non_numeric_cdp_port(monkeypatch, tmp_path):
+    monkeypatch.setattr(investing_chrome, "_find_chrome", lambda: "google-chrome")
+
+    with pytest.raises(ValueError, match="invalid cdp port"):
+        start_investing_chrome(profile_dir=tmp_path / "chrome", cdp_port="not-a-port")
+
+
+def test_start_chrome_raises_value_error_when_chrome_missing(monkeypatch, tmp_path):
+    def missing_chrome():
+        raise ValueError("Chrome not found")
+
+    monkeypatch.setattr(investing_chrome, "_find_chrome", missing_chrome)
+
+    with pytest.raises(ValueError, match="Chrome not found"):
+        start_investing_chrome(profile_dir=tmp_path / "chrome")

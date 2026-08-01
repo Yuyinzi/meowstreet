@@ -304,7 +304,17 @@ def test_rendered_history_import_preserves_source_provenance(tmp_path):
         markets=["iron_ore_62_cfr_china"],
         fetcher=provenance_fetcher,
     )
-    assert result == {"series": 1, "observations": 2}
+    assert result == {
+        "series": 1,
+        "observations": 2,
+        "ranges": {
+            "iron_ore_62_cfr_china": {
+                "start_date": "2026-07-30",
+                "end_date": "2026-07-31",
+            }
+        },
+        "no_new_data": [],
+    }
 
     observations = macro_indicators.load_macro_indicator_observations(
         con, "iron_ore_62_cfr_china"
@@ -340,6 +350,7 @@ def test_rendered_history_dry_run_returns_range_without_writing(tmp_path):
                 "end_date": "2026-07-31",
             }
         },
+        "no_new_data": [],
     }
     assert stored_dates(con) == ["2026-07-29"]
 
@@ -503,18 +514,98 @@ def test_rendered_history_requires_existing_baseline(tmp_path):
         )
 
 
-def test_rendered_history_no_op_when_no_rendered_date_is_newer_than_baseline(tmp_path):
+def test_rendered_history_rejects_empty_payload(tmp_path):
     con = macro_indicators.connect(tmp_path / "macro.db")
-    seed_observation(con, "2026-07-31", 98.00)
-    with pytest.raises(ValueError, match="no dates newer than 2026-07-31"):
+    seed_observation(con, "2026-07-29", 98.27)
+
+    with pytest.raises(ValueError, match="no parseable rows"):
         import_commodity_browser_rows(
             con,
             markets=["iron_ore_62_cfr_china"],
-            fetcher=lambda market, **kwargs: rendered_result(
-                [("Jul 31, 2026", "98.00"), ("Jul 30, 2026", "98.25")]
-            ),
+            fetcher=lambda market, **kwargs: {
+                "status": "ok",
+                "payload": {"data": []},
+                "retrieved_at": "2026-07-30T00:00:00+00:00",
+                "source_url": market["price_page_url"],
+            },
         )
+    assert stored_dates(con) == ["2026-07-29"]
+
+
+def test_rendered_history_no_op_when_no_rendered_date_is_newer_than_baseline(tmp_path):
+    con = macro_indicators.connect(tmp_path / "macro.db")
+    seed_observation(con, "2026-07-31", 98.00)
+    result = import_commodity_browser_rows(
+        con,
+        markets=["iron_ore_62_cfr_china"],
+        fetcher=lambda market, **kwargs: rendered_result(
+            [("Jul 31, 2026", "98.00"), ("Jul 30, 2026", "98.25")]
+        ),
+    )
+    assert result == {
+        "series": 0,
+        "observations": 0,
+        "ranges": {},
+        "no_new_data": ["iron_ore_62_cfr_china"],
+    }
     assert stored_dates(con) == ["2026-07-31"]
+
+
+def test_rendered_history_mixed_markets_commit_new_and_record_noop(
+    tmp_path, monkeypatch
+):
+    fake_meta = {
+        "price_page_url": "https://www.investing.com/commodities/fake-historical-data",
+        "display_name": "Fake Iron Ore",
+        "exchange_label": "Fake",
+        "instrument": "Fake index",
+        "units": "USD/tonne",
+    }
+    monkeypatch.setitem(MARKET_SERIES, "fake_iron_ore", fake_meta)
+    monkeypatch.setitem(ACTIVE_MARKET_SERIES, "fake_iron_ore", fake_meta)
+
+    con = macro_indicators.connect(tmp_path / "macro.db")
+    seed_observation(con, "2026-07-29", 98.27)
+    macro_indicators.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "fake_iron_ore",
+            "title": "Fake Iron Ore",
+            "units": "USD/tonne",
+            "source": "investing.com",
+        },
+        [{"date": "2026-07-31", "value": 1.0, "source": "investing.com"}],
+    )
+
+    def fetcher(market, **kwargs):
+        if market["price_page_url"] == fake_meta["price_page_url"]:
+            return rendered_result([("Jul 31, 2026", "1.00"), ("Jul 30, 2026", "1.01")])
+        return rendered_result([("Jul 31, 2026", "98.00"), ("Jul 30, 2026", "98.25")])
+
+    result = import_commodity_browser_rows(
+        con,
+        markets=["iron_ore_62_cfr_china", "fake_iron_ore"],
+        fetcher=fetcher,
+    )
+    assert result == {
+        "series": 1,
+        "observations": 2,
+        "ranges": {
+            "iron_ore_62_cfr_china": {
+                "start_date": "2026-07-30",
+                "end_date": "2026-07-31",
+            }
+        },
+        "no_new_data": ["fake_iron_ore"],
+    }
+    assert stored_dates(con) == ["2026-07-29", "2026-07-30", "2026-07-31"]
+    fake_dates = [
+        point["date"]
+        for point in macro_indicators.load_macro_indicator_points(
+            con, "fake_iron_ore"
+        )
+    ]
+    assert fake_dates == ["2026-07-31"]
 
 
 def test_rendered_history_writes_nothing_when_adapter_fails(tmp_path):
