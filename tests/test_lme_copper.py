@@ -84,6 +84,19 @@ def test_normalizer_rejects_invalid_frames(frame, message):
         lme_copper.normalize_lme_copper_cad_daily(frame, "retrieved", "1.18.81")
 
 
+def test_normalizer_accepts_pandas_datetime_dates():
+    import numpy as np
+
+    frame = pd.DataFrame(
+        [
+            {"date": pd.Timestamp("2026-07-31"), "close": 13803.0},
+            {"date": np.datetime64("2026-08-03"), "close": 13810.0},
+        ]
+    )
+    rows = lme_copper.normalize_lme_copper_cad_daily(frame, "retrieved", "1.18.81")
+    assert [row["date"] for row in rows] == ["2026-07-31", "2026-08-03"]
+
+
 def test_fetch_cad_calls_injected_adapter_with_cad_symbol():
     calls = []
     payload = lme_copper.fetch_lme_copper_cad(

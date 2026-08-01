@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from math import isfinite
 
+import pandas as pd
+
 
 SINA_CAD_DAILY_URL = (
     "https://stock2.finance.sina.com.cn/futures/api/jsonp.php/"
@@ -17,6 +19,8 @@ def _retrieved_at():
 
 
 def _normalize_sina_date(value):
+    if hasattr(value, "strftime"):
+        return value.strftime(_DATE_FORMAT)
     text = str(value or "").strip()
     if not text:
         return None
@@ -25,7 +29,10 @@ def _normalize_sina_date(value):
             return datetime.strptime(text, fmt).strftime(_DATE_FORMAT)
         except ValueError:
             continue
-    return None
+    try:
+        return pd.Timestamp(text).strftime(_DATE_FORMAT)
+    except (TypeError, ValueError):
+        return None
 
 
 def _as_finite_float(value):
