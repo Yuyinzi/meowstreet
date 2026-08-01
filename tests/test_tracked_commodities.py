@@ -22,7 +22,7 @@ def test_method_market_registry_preserves_the_six_workbook_urls():
     ]
     assert MARKET_SERIES["copper_lme"]["price_page_url"].endswith("cid=959211")
     assert MARKET_SERIES["iron_ore_62_cfr_china"]["price_page_url"].endswith(
-        "iron-ore-62-cfr-futures"
+        "iron-ore-62-cfr-futures-historical-data"
     )
     assert "price_page_url" not in MARKET_SERIES["iron_ore_dce"]
 
@@ -86,7 +86,7 @@ def test_fetcher_parses_price_column_and_page_market_label():
             "date": "2026-07-23",
             "value": 5.68,
             "source": "investing.com",
-            "source_url": "https://www.investing.com/commodities/iron-ore-62-cfr-futures",
+            "source_url": "https://www.investing.com/commodities/iron-ore-62-cfr-futures-historical-data",
             "source_identifier": "iron_ore_62_cfr_china",
             "source_class": "free_web",
             "retrieved_at": copper["observations"][0]["retrieved_at"],
@@ -95,7 +95,7 @@ def test_fetcher_parses_price_column_and_page_market_label():
             "date": "2026-07-24",
             "value": 5.7,
             "source": "investing.com",
-            "source_url": "https://www.investing.com/commodities/iron-ore-62-cfr-futures",
+            "source_url": "https://www.investing.com/commodities/iron-ore-62-cfr-futures-historical-data",
             "source_identifier": "iron_ore_62_cfr_china",
             "source_class": "free_web",
             "retrieved_at": copper["observations"][0]["retrieved_at"],

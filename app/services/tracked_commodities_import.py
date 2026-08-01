@@ -2,7 +2,9 @@ from datetime import timedelta, date as date_type
 from pathlib import Path
 
 from app.data_sources import investing_chrome
-from app.data_sources.investing_download import download_commodity_csv
+from app.data_sources.investing_rendered_history import (
+    fetch_rendered_investing_history,
+)
 from app.data_sources.tracked_commodities import (
     ACTIVE_MARKET_SERIES,
     MARKET_SERIES,
@@ -94,10 +96,25 @@ def refresh_tracked_commodities(
         raise
 
 
-def import_commodity_browser_downloads(
+def _newer_observations(con, series_id, observations):
+    points = macro_indicators.load_macro_indicator_points(con, series_id)
+    if not points:
+        raise ValueError(
+            f"{series_id}: rendered history refresh requires an existing baseline"
+        )
+    latest_date = max(point["date"] for point in points)
+    newer = [row for row in observations if row["date"] > latest_date]
+    if not newer:
+        raise ValueError(
+            f"{series_id}: rendered history has no dates newer than {latest_date}"
+        )
+    return newer
+
+
+def import_commodity_browser_rows(
     con,
     markets=None,
-    downloader=download_commodity_csv,
+    fetcher=fetch_rendered_investing_history,
     cdp_endpoint=None,
     dry_run=False,
 ):
@@ -106,27 +123,22 @@ def import_commodity_browser_downloads(
     ranges = {}
     for sid in series_ids:
         meta = ACTIVE_MARKET_SERIES[sid]
-        result = downloader(meta, cdp_endpoint=cdp_endpoint)
+        result = fetcher(meta, cdp_endpoint=cdp_endpoint)
         if result["status"] != "ok":
             raise ValueError(
-                f"{sid}: browser download failed — {result.get('message', result['status'])}"
+                f"{sid}: rendered history fetch failed — {result.get('message', result['status'])}"
             )
-        csv_text = Path(result["csv_path"]).read_text(encoding="utf-8")
-        observations = parse_commodity_csv(
-            csv_text,
+        observations = parse_investing_history_payload(
+            result["payload"],
             sid,
-            source_url=result["source_url"],
             retrieved_at=result["retrieved_at"],
         )
-        if not observations:
-            raise ValueError(f"{sid}: parsed 0 valid observations from downloaded CSV")
+        newer = _newer_observations(con, sid, observations)
         ranges[sid] = {
-            "start_date": result.get("start_date"),
-            "end_date": result.get("end_date"),
+            "start_date": newer[0]["date"],
+            "end_date": newer[-1]["date"],
         }
-        all_payloads.append(
-            (sid, build_commodity_series_payload(sid, observations))
-        )
+        all_payloads.append((sid, build_commodity_series_payload(sid, newer)))
     if dry_run:
         return {
             "series": len(all_payloads),

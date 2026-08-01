@@ -36,7 +36,8 @@ def _parse_csv_arg(csv_arg):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Import  method-specified commodity prices"
+        description="Incrementally refresh  method-specified commodity prices "
+        "from the rendered Investing.com history table"
     )
     parser.add_argument(
         "--db-path", type=Path, default=macro_indicators.DEFAULT_DB_PATH
@@ -46,7 +47,7 @@ def main(argv=None):
         nargs="*",
         default=list(free_web_series()),
         choices=list(free_web_series()),
-        help="specific markets to import (default: all five Investing method markets)",
+        help="specific markets to refresh (default: all active Investing method markets)",
     )
     parser.add_argument(
         "--cdp-endpoint",
@@ -57,7 +58,7 @@ def main(argv=None):
         "--csv",
         nargs="*",
         default=None,
-        help="import from downloaded CSV files. Format: market_id=path/to/file.csv",
+        help="import full history from downloaded CSV files. Format: market_id=path/to/file.csv",
     )
     parser.add_argument(
         "--dry-run",
@@ -122,10 +123,8 @@ def main(argv=None):
         }
         if args.dry_run:
             kwargs["dry_run"] = True
-        result = (
-            tracked_commodities_import.import_commodity_browser_downloads(
-                con, **kwargs
-            )
+        result = tracked_commodities_import.import_commodity_browser_rows(
+            con, **kwargs
         )
         if args.dry_run:
             for market_id, date_range in result["ranges"].items():
@@ -135,7 +134,7 @@ def main(argv=None):
         print(f"series: {result['series']}, observations: {result['observations']}")
         return 0
     except ValueError as exc:
-        print(f" method commodity browser download error: {exc}", file=sys.stderr)
+        print(f" method commodity rendered refresh error: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()
