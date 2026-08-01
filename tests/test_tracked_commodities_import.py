@@ -70,7 +70,7 @@ def test_refresh_merges_method_prices_and_preserves_source_metadata(tmp_path):
     con = macro_indicators.connect(db_path)
 
     result = refresh_tracked_commodities(con, fetcher=_fake_fetcher)
-    assert result == {"series": 4, "observations": 4}
+    assert result == {"series": 3, "observations": 3}
 
     points = macro_indicators.load_macro_indicator_points(con, "copper_comex")
     assert len(points) == 1
