@@ -1,5 +1,6 @@
 import httpx
 
+from app.data_sources.tracked_commodities import MARKET_SERIES
 from app.data_sources.investing_rendered_history import (
     _rendered_history_rows_expr,
     fetch_rendered_investing_history,
@@ -10,6 +11,10 @@ IRON_ORE_URL = (
     "https://www.investing.com/commodities/iron-ore-62-cfr-futures-historical-data"
 )
 IRON_ORE_TITLE = "Iron ore fines 62% Fe CFR Futures Historical Prices - Investing.com"
+LME_COPPER_URL = (
+    "https://www.investing.com/commodities/copper-historical-data?cid=959211"
+)
+COPPER_TITLE = "Copper Futures Historical Prices - Investing.com"
 
 
 def market(**overrides):
@@ -244,6 +249,27 @@ def test_fetch_rendered_history_rejects_wrong_market_title():
     )
     assert result["status"] == "render_failed"
     assert "market title" in result["message"]
+
+
+def test_fetch_rendered_history_accepts_lme_copper_generic_page_title():
+    lme_market = MARKET_SERIES["copper_lme"]
+    page = _FakePageCDP(
+        "ws://127.0.0.1:9222/devtools/page/1",
+        [["Jul 31, 2026", "13,803.00"]],
+        title=COPPER_TITLE,
+    )
+
+    result = fetch_rendered_investing_history(
+        lme_market,
+        http_client=cdp_targets_client(),
+        cdp_factory=lambda url: page,
+        timeout_seconds=0,
+    )
+
+    assert result["status"] == "ok"
+    assert result["payload"]["data"] == [
+        {"rowDate": "Jul 31, 2026", "last_close": "13,803.00"}
+    ]
 
 
 def test_fetch_rendered_history_waits_for_fully_populated_rows():

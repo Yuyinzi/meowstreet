@@ -43,7 +43,7 @@ def _rendered_history_rows_expr():
 
 
 def _expected_title_token(market):
-    instrument = market.get("instrument") or ""
+    instrument = market.get("rendered_title_token") or market.get("instrument") or ""
     first_word = instrument.split()[0].lower() if instrument.split() else ""
     return first_word
 
