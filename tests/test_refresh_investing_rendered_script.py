@@ -9,13 +9,21 @@ from scripts.refresh_investing_rendered import main
 
 def _result(**overrides):
     result = {
-        "series": 1,
-        "observations": 2,
+        "series": 3,
+        "observations": 6,
         "ranges": {
+            "copper_comex": {
+                "start_date": "2026-07-30",
+                "end_date": "2026-07-31",
+            },
+            "copper_lme": {
+                "start_date": "2026-07-30",
+                "end_date": "2026-07-31",
+            },
             "iron_ore_62_cfr_china": {
                 "start_date": "2026-07-30",
                 "end_date": "2026-07-31",
-            }
+            },
         },
         "no_new_data": [],
         "status": "ok",
@@ -40,7 +48,7 @@ def test_main_success_exits_zero_with_json_output(tmp_path, capsys):
     assert exit_code == 0
     out = json.loads(capsys.readouterr().out)
     assert out["status"] == "ok"
-    assert out["observations"] == 2
+    assert out["observations"] == 6
 
 
 def test_main_noop_exits_zero_with_json_output(tmp_path, capsys):

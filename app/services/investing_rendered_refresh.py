@@ -16,7 +16,11 @@ DEFAULT_LOCK_PATH = (
 DEFAULT_READY_TIMEOUT_SECONDS = 60
 
 _POLL_INTERVAL = 0.5
-_REFRESH_MARKET = "iron_ore_62_cfr_china"
+_REFRESH_MARKETS = (
+    "copper_comex",
+    "copper_lme",
+    "iron_ore_62_cfr_china",
+)
 
 
 def _acquire_lock(lock_path):
@@ -74,7 +78,7 @@ def refresh_investing_rendered(
         wait_for_cdp(client, endpoint, readiness_timeout)
         importer_result = importer(
             con,
-            markets=[_REFRESH_MARKET],
+            markets=list(_REFRESH_MARKETS),
             cdp_endpoint=endpoint,
         )
         return {

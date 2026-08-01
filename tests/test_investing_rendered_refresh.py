@@ -13,13 +13,21 @@ from app.services.investing_rendered_refresh import (
 
 def _importer_result():
     return {
-        "series": 1,
-        "observations": 2,
+        "series": 3,
+        "observations": 6,
         "ranges": {
+            "copper_comex": {
+                "start_date": "2026-07-30",
+                "end_date": "2026-07-31",
+            },
+            "copper_lme": {
+                "start_date": "2026-07-30",
+                "end_date": "2026-07-31",
+            },
             "iron_ore_62_cfr_china": {
                 "start_date": "2026-07-30",
                 "end_date": "2026-07-31",
-            }
+            },
         },
         "no_new_data": [],
     }
@@ -30,11 +38,17 @@ def _noop_importer_result():
         "series": 0,
         "observations": 0,
         "ranges": {},
-        "no_new_data": ["iron_ore_62_cfr_china"],
+        "no_new_data": [
+            "copper_comex",
+            "copper_lme",
+            "iron_ore_62_cfr_china",
+        ],
     }
 
 
-def test_refresh_attaches_existing_interactive_chrome_without_starting_another(tmp_path):
+def test_refresh_attaches_existing_interactive_chrome_without_starting_another(
+    tmp_path,
+):
     con = macro_indicators.connect(tmp_path / "macro.db")
     wait_calls = []
 
@@ -80,12 +94,16 @@ def test_refresh_waits_for_existing_chrome_and_imports(tmp_path):
     assert wait_calls == [("http://127.0.0.1:9222", 30)]
     assert import_calls == [
         {
-            "markets": ["iron_ore_62_cfr_china"],
+            "markets": [
+                "copper_comex",
+                "copper_lme",
+                "iron_ore_62_cfr_china",
+            ],
             "cdp_endpoint": "http://127.0.0.1:9222",
         }
     ]
     assert result["status"] == "ok"
-    assert result["observations"] == 2
+    assert result["observations"] == 6
     assert result["cdp_endpoint"] == "http://127.0.0.1:9222"
 
 
@@ -101,7 +119,11 @@ def test_refresh_noop_returns_zero_observations(tmp_path):
 
     assert result["status"] == "ok"
     assert result["observations"] == 0
-    assert result["no_new_data"] == ["iron_ore_62_cfr_china"]
+    assert result["no_new_data"] == [
+        "copper_comex",
+        "copper_lme",
+        "iron_ore_62_cfr_china",
+    ]
 
 
 def test_refresh_reports_unavailable_existing_chrome(tmp_path):
