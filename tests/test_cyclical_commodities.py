@@ -766,7 +766,7 @@ def test_detail_builds_method_market_observation_without_attribution_conclusion(
     copper = detail["non_oil_observation"]["iron_ore_62_cfr_china"]
     assert copper["daily_return"] == pytest.approx(10420.0 / 10380.0 - 1)
     assert copper["source_class"] == "free_web"
-    assert "Method-specified market data" in copper["source_label"]
+    assert copper["source_label"] == "Investing.com"
     assert copper["status"] == "available"
     assert "attribution" not in copper
 
@@ -780,125 +780,63 @@ def test_detail_uses_active_yahoo_lbr_and_excludes_archived_lumber():
     assert "lumber" not in detail["non_oil_observation"]
 
 
-def test_detail_uses_active_yahoo_copper_and_excludes_archived_comex():
+def test_detail_uses_active_investing_comex_and_excludes_yahoo_archive():
     payload = .build_cyclical_commodities_payload(
         COT_ROWS,
         USD_ROWS,
         _OIL_ROWS,
         "2026-07-25",
         commodity_observations={
-            "copper_comex_hg_yahoo_v1": [
-                {
-                    "date": "2026-07-22",
-                    "value": 4.35,
-                    "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/HG%3DF",
-                    "source_identifier": "HG=F",
-                },
-                {
-                    "date": "2026-07-23",
-                    "value": 4.40,
-                    "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/HG%3DF",
-                    "source_identifier": "HG=F",
-                },
-                {
-                    "date": "2026-07-24",
-                    "value": 4.45,
-                    "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/HG%3DF",
-                    "source_identifier": "HG=F",
-                },
-            ],
             "copper_comex": [
-                {"date": "2026-07-24", "value": 4.42},
+                {"date": "2026-07-22", "value": 4.35},
+                {"date": "2026-07-23", "value": 4.40},
+                {"date": "2026-07-24", "value": 4.45},
             ],
         },
     )
     detail = .build_cyclical_commodities_detail(payload)
-    copper = detail["non_oil_observation"]["copper_comex_hg_yahoo_v1"]
+    copper = detail["non_oil_observation"]["copper_comex"]
     assert copper["latest_date"] == "2026-07-24"
     assert copper["latest_value"] == 4.45
-    assert copper["source_label"] == "Yahoo Finance HG=F"
-    assert copper["source_identifier"] == "HG=F"
-    assert copper["source_class"] == "vendor_free_market_data"
-    assert "copper_comex" not in detail["non_oil_observation"]
+    assert copper["source_label"] == "Investing.com"
+    assert copper["source_class"] == "free_web"
+    assert copper["daily_return"] == pytest.approx(4.45 / 4.40 - 1)
+    assert "copper_comex_hg_yahoo_v1" not in detail["non_oil_observation"]
 
 
-def lme_transition_payload():
-    return .build_cyclical_commodities_payload(
+def _six_investing_lme_rows():
+    return [
+        {"date": "2026-07-24", "value": 13700.0},
+        {"date": "2026-07-27", "value": 13710.0},
+        {"date": "2026-07-28", "value": 13720.0},
+        {"date": "2026-07-29", "value": 13730.0},
+        {"date": "2026-07-30", "value": 13745.72},
+        {"date": "2026-07-31", "value": 13803.0},
+    ]
+
+
+def test_detail_uses_active_investing_lme_with_direct_returns():
+    payload = .build_cyclical_commodities_payload(
         [],
         {},
-        as_of_date="2026-08-01",
+        as_of_date="2026-07-31",
         commodity_observations={
-            "copper_lme": [
-                {"date": "2026-07-28", "value": 13700.0},
-                {"date": "2026-07-29", "value": 13730.0},
-                {"date": "2026-07-30", "value": 13745.72},
-            ],
-            "copper_lme_sina_cad_v1": [
-                {"date": "2026-07-31", "value": 13803.0},
-            ],
+            "copper_lme": _six_investing_lme_rows(),
         },
     )
-
-
-def test_detail_marks_lme_source_transition_and_withholds_returns():
-    detail = .build_cyclical_commodities_detail(lme_transition_payload())
-    lme = detail["non_oil_observation"]["copper_lme_sina_cad_v1"]
-    assert lme["display_name"] == "Copper (LME 3M)"
-    assert lme["source_label"] == "Sina Finance via AKShare · CAD · vendor data"
+    detail = .build_cyclical_commodities_detail(payload)
+    lme = detail["non_oil_observation"]["copper_lme"]
+    assert lme["display_name"] == "Copper (LME)"
+    assert lme["source_label"] == "Investing.com"
+    assert lme["source_class"] == "free_web"
     assert lme["latest_date"] == "2026-07-31"
-    assert lme["daily_return"] is None
-    assert lme["weekly_return"] is None
-    assert lme["source_transition"] is True
-    assert lme["return_transition_blocked"] is True
-    assert "copper_lme" not in detail["non_oil_observation"]
-
-
-def test_detail_uses_only_same_source_cad_history_after_cutover():
-    cad_days = [
-        "2026-07-31",
-        "2026-08-03",
-        "2026-08-04",
-        "2026-08-05",
-        "2026-08-06",
-        "2026-08-07",
-    ]
-    cad_rows = [
-        {"date": day, "value": 13800.0 + index * 10.0}
-        for index, day in enumerate(cad_days)
-    ]
-    payload = .build_cyclical_commodities_payload(
-        [],
-        {},
-        as_of_date="2026-08-08",
-        commodity_observations={
-            "copper_lme": [{"date": "2026-07-30", "value": 13745.72}],
-            "copper_lme_sina_cad_v1": cad_rows,
-        },
-    )
-    detail = .build_cyclical_commodities_detail(payload)
-    lme = detail["non_oil_observation"]["copper_lme_sina_cad_v1"]
-    assert lme["latest_date"] == "2026-08-07"
-    assert lme["daily_return"] == pytest.approx(13850.0 / 13840.0 - 1)
-    assert lme["weekly_return"] == pytest.approx(13850.0 / 13800.0 - 1)
-    assert lme["source_transition"] is False
-    assert lme["return_transition_blocked"] is False
-    assert "copper_lme" not in detail["non_oil_observation"]
-
-
-def test_detail_marks_lme_unavailable_when_no_cad_rows_exist():
-    payload = .build_cyclical_commodities_payload(
-        [],
-        {},
-        as_of_date="2026-08-01",
-        commodity_observations={
-            "copper_lme": [{"date": "2026-07-30", "value": 13745.72}],
-        },
-    )
-    detail = .build_cyclical_commodities_detail(payload)
-    lme = detail["non_oil_observation"]["copper_lme_sina_cad_v1"]
-    assert lme["status"] == "unavailable"
-    assert lme["display_name"] == "Copper (LME 3M)"
-    assert "copper_lme" not in detail["non_oil_observation"]
+    assert lme["latest_value"] == 13803.0
+    assert lme["daily_return"] == pytest.approx(13803.0 / 13745.72 - 1)
+    assert lme["weekly_return"] == pytest.approx(13803.0 / 13700.0 - 1)
+    assert "source_transition" not in lme
+    assert "source_cutover_date" not in lme
+    assert "return_transition_blocked" not in lme
+    assert "copper_lme_sina_cad_v1" not in detail["non_oil_observation"]
 
 
 def test_renderer_uses_backend_source_label_and_does_not_hard_code_investing_for_lbr():

@@ -48,11 +48,13 @@ def test_commodity_ids_keep_the_dce_iron_ore_id():
     assert "iron_ore_dce" in api.method_COMMODITY_SERIES_IDS
 
 
-def test_commodity_ids_include_archived_and_active_lme():
+def test_commodity_ids_use_investing_copper():
     from app import api
 
+    assert "copper_comex" in api.method_COMMODITY_SERIES_IDS
     assert "copper_lme" in api.method_COMMODITY_SERIES_IDS
-    assert "copper_lme_sina_cad_v1" in api.method_COMMODITY_SERIES_IDS
+    assert "copper_comex_hg_yahoo_v1" not in api.method_COMMODITY_SERIES_IDS
+    assert "copper_lme_sina_cad_v1" not in api.method_COMMODITY_SERIES_IDS
 
 
 def test_growth_cycle_ism_industry_breadth_prefers_latest_official_report(monkeypatch):
@@ -3498,10 +3500,8 @@ def test_detail_endpoint_exposes_process_read_and_corroboration(monkeypatch):
     assert response.json()["corroboration"]["usd"]["available_series_count"] == 3
 
 
-def test_detail_loads_active_cad_lme_and_presents_cutover_row(monkeypatch):
+def test_detail_loads_active_investing_lme(monkeypatch):
     from app import api
-
-    from fastapi.testclient import TestClient
 
     class FakeCon(_FakeConStubs):
         pass
@@ -3564,12 +3564,10 @@ def test_detail_loads_active_cad_lme_and_presents_cutover_row(monkeypatch):
                         "value": 13745.72,
                         "source_identifier": "copper_lme",
                     },
-                ],
-                "copper_lme_sina_cad_v1": [
                     {
                         "date": "2026-07-31",
                         "value": 13803.0,
-                        "source_identifier": "CAD",
+                        "source_identifier": "copper_lme",
                     },
                 ],
             }.items()
@@ -3583,14 +3581,15 @@ def test_detail_loads_active_cad_lme_and_presents_cutover_row(monkeypatch):
 
     assert response.status_code == 200
     body = response.json()
-    assert "copper_lme" not in body["non_oil_observation"]
-    lme = body["non_oil_observation"]["copper_lme_sina_cad_v1"]
+    lme = body["non_oil_observation"]["copper_lme"]
     assert lme["status"] == "available"
     assert lme["latest_date"] == "2026-07-31"
     assert lme["latest_value"] == 13803.0
-    assert lme["display_name"] == "Copper (LME 3M)"
-    assert lme["source_transition"] is True
-    assert lme["return_transition_blocked"] is True
+    assert lme["display_name"] == "Copper (LME)"
+    assert lme["source_label"] == "Investing.com"
+    assert "copper_lme_sina_cad_v1" not in body["non_oil_observation"]
+    assert "source_cutover_date" not in lme
+    assert "return_transition_blocked" not in lme
 
 
 def test_market_setup_is_identical_when_data_changes(monkeypatch):

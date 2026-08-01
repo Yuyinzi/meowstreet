@@ -2,11 +2,6 @@ from app.data_sources.tracked_commodities import (
     ACTIVE_MARKET_SERIES,
     MARKET_SERIES,
 )
-from app.data_sources.copper_comex import _COPPER_COMEX_SERIES
-from app.data_sources.lme_copper import (
-    _LME_COPPER_CUTOVER_DATE,
-    _LME_COPPER_SERIES,
-)
 from app.data_sources.lumber import _LUMBER_SERIES
 from app.tools import oil_distribution
 from app.tools import shfe_copper
@@ -385,7 +380,7 @@ def _commodity_display_registry():
             registry[sid] = {
                 "display_name": meta["display_name"],
                 "exchange_label": meta["exchange_label"],
-                "source_label": "Method-specified market data \u00b7 Investing.com",
+                "source_label": "Investing.com",
                 "source_url": meta["price_page_url"],
                 "source_class": "free_web",
             }
@@ -403,20 +398,6 @@ def _commodity_display_registry():
         "source_label": "Yahoo Finance LBR=F",
         "source_url": _LUMBER_SERIES["source_url"],
         "source_class": _LUMBER_SERIES["source_class"],
-    }
-    registry[_COPPER_COMEX_SERIES["series_id"]] = {
-        "display_name": _COPPER_COMEX_SERIES["title"],
-        "exchange_label": "COMEX",
-        "source_label": "Yahoo Finance HG=F",
-        "source_url": _COPPER_COMEX_SERIES["source_url"],
-        "source_class": _COPPER_COMEX_SERIES["source_class"],
-    }
-    registry[_LME_COPPER_SERIES["series_id"]] = {
-        "display_name": "Copper (LME 3M)",
-        "exchange_label": "LME",
-        "source_label": "Sina Finance via AKShare \u00b7 CAD \u00b7 vendor data",
-        "source_url": _LME_COPPER_SERIES["source_url"],
-        "source_class": "vendor_free_market_data",
     }
     return registry
 
@@ -495,59 +476,6 @@ def _shfe_shanghai_payload(meta, main_rows, as_of_date):
     }
 
 
-def _lme_copper_payload(observations_by_series, as_of_date, entry):
-    archive_rows = _latest_as_of(
-        observations_by_series.get("copper_lme", []), as_of_date
-    )
-    archive_before_cutover = [
-        row for row in archive_rows if row["date"] < _LME_COPPER_CUTOVER_DATE
-    ]
-    cad_rows = _latest_as_of(
-        observations_by_series.get(_LME_COPPER_SERIES["series_id"], []),
-        as_of_date,
-    )
-    cad_active = [row for row in cad_rows if row["date"] >= _LME_COPPER_CUTOVER_DATE]
-    if not cad_active:
-        return {
-            "series_id": _LME_COPPER_SERIES["series_id"],
-            "display_name": entry["display_name"],
-            "status": "unavailable",
-            "exchange_label": entry["exchange_label"],
-            "source_class": entry["source_class"],
-        }
-    latest = cad_active[-1]
-    prior = cad_active[-2] if len(cad_active) >= 2 else None
-    prior_5 = cad_active[-6] if len(cad_active) >= 6 else None
-    daily_return = _pct_change_ratio(latest["value"], prior["value"]) if prior else None
-    weekly_return = (
-        _pct_change_ratio(latest["value"], prior_5["value"]) if prior_5 else None
-    )
-    is_first_cad_row = latest["date"] == cad_active[0]["date"]
-    source_transition = bool(archive_before_cutover) and is_first_cad_row
-    return_transition_blocked = bool(archive_before_cutover) and (
-        prior is None or prior_5 is None
-    )
-    return {
-        "series_id": _LME_COPPER_SERIES["series_id"],
-        "display_name": entry["display_name"],
-        "latest_date": latest["date"],
-        "latest_value": latest["value"],
-        "daily_return": daily_return,
-        "daily_return_state": _raw_change_state(daily_return),
-        "weekly_return": weekly_return,
-        "weekly_return_state": _raw_change_state(weekly_return),
-        "source_label": entry["source_label"],
-        "source_url": latest.get("source_url") or entry["source_url"],
-        "source_identifier": latest.get("source_identifier"),
-        "source_cutover_date": _LME_COPPER_CUTOVER_DATE,
-        "source_transition": source_transition,
-        "return_transition_blocked": return_transition_blocked,
-        "status": "available",
-        "exchange_label": entry["exchange_label"],
-        "source_class": entry["source_class"],
-    }
-
-
 def _commodity_payload(
     observations_by_series, as_of_date, shfe_cu_main_observations=None
 ):
@@ -557,12 +485,7 @@ def _commodity_payload(
         shanghai_meta, shfe_cu_main_observations or [], as_of_date
     )
     registry = _commodity_display_registry()
-    result[_LME_COPPER_SERIES["series_id"]] = _lme_copper_payload(
-        observations_by_series, as_of_date, registry[_LME_COPPER_SERIES["series_id"]]
-    )
     for sid, entry in registry.items():
-        if sid == _LME_COPPER_SERIES["series_id"]:
-            continue
         rows = _latest_as_of(observations_by_series.get(sid, []), as_of_date)
         if not rows:
             result[sid] = {
