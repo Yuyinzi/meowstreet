@@ -99,8 +99,13 @@ create table if not exists lumber_overlap_audits (
     overlap_test_version text primary key,
     audit_json text not null
 );
+create table if not exists vendor_series_overlap_audits (
+    series_id text not null,
+    overlap_test_version text not null,
+    audit_json text not null,
+    primary key(series_id, overlap_test_version)
+);
 """
-
 
 
 __SHFE_CU_DDL = """
@@ -155,8 +160,6 @@ create table if not exists shfe_cu_main_daily (
 """
 
 
-
-
 def init_macro_tables(con):
     con.executescript(_MACRO_TABLES_DDL)
     con.executescript(_REGIONAL_TABLES_DDL)
@@ -188,6 +191,7 @@ def connect(db_path=DEFAULT_DB_PATH):
     con = sqlite3.connect(path)
     con.row_factory = sqlite3.Row
     init_macro_tables(con)
+    ensure_schema(con)
     return con
 
 
@@ -747,31 +751,50 @@ def load_cot_observations(con):
     return [dict(row) for row in rows]
 
 
-def merge_lumber_overlap_audit(con, audit, commit=True):
+def merge_vendor_series_overlap_audit(con, series_id, audit, commit=True):
+    sid = _normalize_series_id(series_id)
     version = str(audit.get("overlap_test_version") or "").strip()
     if not version:
-        raise ValueError("lumber overlap audit version is required")
+        raise ValueError("vendor overlap audit version is required")
     con.execute(
-        """insert into lumber_overlap_audits(overlap_test_version, audit_json)
-           values (?, ?)
-           on conflict(overlap_test_version) do update set audit_json = excluded.audit_json""",
-        (version, json.dumps(audit, sort_keys=True)),
+        """insert into vendor_series_overlap_audits(
+               series_id, overlap_test_version, audit_json
+           ) values (?, ?, ?)
+           on conflict(series_id, overlap_test_version) do update set
+               audit_json = excluded.audit_json""",
+        (sid, version, json.dumps(audit, sort_keys=True)),
     )
     if commit:
         con.commit()
 
 
-def load_lumber_overlap_audit(con, overlap_test_version):
+def load_vendor_series_overlap_audit(con, series_id, overlap_test_version):
+    sid = _normalize_series_id(series_id)
     version = str(overlap_test_version or "").strip()
     if not version:
-        raise ValueError("lumber overlap audit version is required")
+        raise ValueError("vendor overlap audit version is required")
     row = con.execute(
         """select audit_json
-              from lumber_overlap_audits
-              where overlap_test_version = ?""",
-        (version,),
+              from vendor_series_overlap_audits
+              where series_id = ? and overlap_test_version = ?""",
+        (sid, version),
     ).fetchone()
     return json.loads(row["audit_json"]) if row else None
+
+
+def ensure_schema(con):
+    con.executescript(__COT_DDL)
+    con.execute(
+        """insert or ignore into vendor_series_overlap_audits(
+               series_id, overlap_test_version, audit_json
+           )
+           select 'lumber_cme_lbr_yahoo_v1',
+                  overlap_test_version,
+                  audit_json
+             from lumber_overlap_audits"""
+    )
+    con.commit()
+
 
 _SHFE_CU_CONTRACT_COLS = """
     trade_date, contract, product, open, high, low, close,

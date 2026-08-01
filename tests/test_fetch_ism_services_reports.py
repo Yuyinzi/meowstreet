@@ -5,6 +5,7 @@ from app.db import growth_cycle
 from app.db import ism_surveys
 from app.db import macro_indicators
 from app.db import us_rates_liquidity
+from app.services import ism_report_ingestion as ingestion
 from app.tools import ism_services
 from scripts import fetch_ism_services_reports
 
@@ -221,6 +222,9 @@ def test_main_imports_latest_month(tmp_path, monkeypatch, capsys):
             return fake_july
 
     monkeypatch.setattr(fetch_ism_services_reports, "datetime", FakeDatetime)
+    monkeypatch.setattr(
+        ingestion, "latest_released_report_month", lambda: "2026-06-01"
+    )
 
     exit_code = fetch_ism_services_reports.main(
         ["--db-path", str(db_path), "--months", "1"],
@@ -343,6 +347,9 @@ def test_main_returns_1_on_promotion_failure(tmp_path, monkeypatch, capsys):
             return fake_july
 
     monkeypatch.setattr(fetch_ism_services_reports, "datetime", FakeDatetime)
+    monkeypatch.setattr(
+        ingestion, "latest_released_report_month", lambda: "2026-06-01"
+    )
 
     import app.services.ism_services_ai_ingestion as svc_ingestion
 
@@ -401,6 +408,9 @@ def test_success_then_failure_preserves_provenance(tmp_path, monkeypatch, capsys
             return fake_july
 
     monkeypatch.setattr(fetch_ism_services_reports, "datetime", FakeDatetime)
+    monkeypatch.setattr(
+        ingestion, "latest_released_report_month", lambda: "2026-06-01"
+    )
 
     ec = fetch_ism_services_reports.main(
         ["--db-path", str(db_path), "--months", "1"],
@@ -468,6 +478,9 @@ def test_full_then_reduced_retry_replaces_rankings_and_comments(
             return fake_july
 
     monkeypatch.setattr(fetch_ism_services_reports, "datetime", FakeDatetime)
+    monkeypatch.setattr(
+        ingestion, "latest_released_report_month", lambda: "2026-06-01"
+    )
 
     ec = fetch_ism_services_reports.main(
         ["--db-path", str(db_path), "--months", "1"],
@@ -519,6 +532,9 @@ def test_retry_reruns_extraction(tmp_path, monkeypatch, capsys):
             return fake_july
 
     monkeypatch.setattr(fetch_ism_services_reports, "datetime", FakeDatetime)
+    monkeypatch.setattr(
+        ingestion, "latest_released_report_month", lambda: "2026-06-01"
+    )
 
     ec = fetch_ism_services_reports.main(
         ["--db-path", str(db_path), "--months", "1"],

@@ -12,6 +12,7 @@ LUMBER_OVERLAP_TEST_VERSION = "lumber_overlap_v1"
 ARCHIVED_LUMBER_SERIES_ID = "lumber"
 _OVERLAP_WINDOW_DAYS = 13
 
+
 def _by_date(rows):
     return {row["date"]: row["value"] for row in rows}
 
@@ -98,8 +99,8 @@ def refresh_lumber(
         stored_rows = macro_indicators.load_macro_indicator_observations(
             con, _LUMBER_SERIES_ID
         )
-        recorded_audit = macro_indicators.load_lumber_overlap_audit(
-            con, LUMBER_OVERLAP_TEST_VERSION
+        recorded_audit = macro_indicators.load_vendor_series_overlap_audit(
+            con, _LUMBER_SERIES_ID, LUMBER_OVERLAP_TEST_VERSION
         )
         if initial and (recorded_audit is not None or stored_rows):
             raise ValueError("lumber initial migration is already recorded")
@@ -119,8 +120,8 @@ def refresh_lumber(
                 con, ARCHIVED_LUMBER_SERIES_ID
             )
             audit = audit_lumber_overlap(archived_rows, observations)
-            macro_indicators.merge_lumber_overlap_audit(
-                con, audit, commit=False
+            macro_indicators.merge_vendor_series_overlap_audit(
+                con, _LUMBER_SERIES_ID, audit, commit=False
             )
         macro_indicators.merge_macro_indicator_observations(
             con, payload["series"], observations, commit=False

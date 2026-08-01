@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.db import macro_indicators
@@ -393,3 +395,83 @@ def test_series_source_contract_must_be_a_non_empty_dict(tmp_path):
         ValueError, match="series source contract is required to be a non-empty dict"
     ):
         macro_indicators.merge_macro_indicator_observations(con, series, [])
+
+
+def test_vendor_overlap_audit_is_keyed_by_series_and_version(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    audit = {"overlap_test_version": "copper_comex_hg_overlap_v1", "passed": True}
+    macro_indicators.merge_vendor_series_overlap_audit(
+        con, "copper_comex_hg_yahoo_v1", audit
+    )
+    assert (
+        macro_indicators.load_vendor_series_overlap_audit(
+            con, "copper_comex_hg_yahoo_v1", "copper_comex_hg_overlap_v1"
+        )
+        == audit
+    )
+
+
+def test_vendor_overlap_audit_is_separate_across_series(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    lumber_audit = {"overlap_test_version": "lumber_overlap_v1", "passed": True}
+    copper_audit = {
+        "overlap_test_version": "copper_comex_hg_overlap_v1",
+        "passed": True,
+    }
+    macro_indicators.merge_vendor_series_overlap_audit(
+        con, "lumber_cme_lbr_yahoo_v1", lumber_audit
+    )
+    macro_indicators.merge_vendor_series_overlap_audit(
+        con, "copper_comex_hg_yahoo_v1", copper_audit
+    )
+    assert (
+        macro_indicators.load_vendor_series_overlap_audit(
+            con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
+        )
+        == lumber_audit
+    )
+    assert (
+        macro_indicators.load_vendor_series_overlap_audit(
+            con, "copper_comex_hg_yahoo_v1", "copper_comex_hg_overlap_v1"
+        )
+        == copper_audit
+    )
+
+
+def test_ensure_schema_migrates_legacy_lumber_overlap_audits(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    legacy_audit = {"overlap_test_version": "lumber_overlap_v1", "shared_date_count": 3}
+    con.execute(
+        """insert into lumber_overlap_audits(overlap_test_version, audit_json)
+           values (?, ?)""",
+        ("lumber_overlap_v1", json.dumps(legacy_audit, sort_keys=True)),
+    )
+    con.commit()
+    macro_indicators.ensure_schema(con)
+    assert (
+        macro_indicators.load_vendor_series_overlap_audit(
+            con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
+        )
+        == legacy_audit
+    )
+
+
+def test_connect_migrates_legacy_lumber_overlap_audits_on_reopen(tmp_path):
+    db_path = tmp_path / "market.sqlite"
+    con = macro_indicators.connect(db_path)
+    legacy_audit = {"overlap_test_version": "lumber_overlap_v1", "shared_date_count": 3}
+    con.execute(
+        """insert into lumber_overlap_audits(overlap_test_version, audit_json)
+           values (?, ?)""",
+        ("lumber_overlap_v1", json.dumps(legacy_audit, sort_keys=True)),
+    )
+    con.commit()
+    con.close()
+
+    reopened = macro_indicators.connect(db_path)
+    assert (
+        macro_indicators.load_vendor_series_overlap_audit(
+            reopened, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
+        )
+        == legacy_audit
+    )

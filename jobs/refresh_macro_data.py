@@ -19,6 +19,7 @@ from scripts import import_m2_money_supply
 from scripts import import_nfib_sbet
 from scripts import import_nfib_sbet_regional
 from scripts import import_tracked_commodities
+from scripts import import_copper_comex
 from scripts import import_cyclical_commodities
 from scripts import import_dce_iron_ore_sina
 from scripts import import_lumber
@@ -100,6 +101,7 @@ def _planned_tasks(
     oil_main=None,
     tracked_commodities_main=None,
     lumber_main=import_lumber.main,
+    copper_comex_main=import_copper_comex.main,
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
 ):
@@ -170,6 +172,8 @@ def _planned_tasks(
         tasks.append(("oil_official", oil_main, []))
     if not args.skip_lumber:
         tasks.append(("lumber_yahoo", lumber_main, []))
+    if not args.skip_copper_comex:
+        tasks.append(("copper_comex_yahoo", copper_comex_main, []))
     if shfe_copper_main is not None and not args.skip_shfe_copper:
         tasks.append(("shfe_copper", shfe_copper_main, ["--incremental"]))
     if dce_iron_ore_sina_main is not None and not args.skip_dce_iron_ore_sina:
@@ -205,6 +209,7 @@ def main(
     oil_main=None,
     tracked_commodities_main=None,
     lumber_main=import_lumber.main,
+    copper_comex_main=import_copper_comex.main,
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
 ):
@@ -233,6 +238,7 @@ def main(
     parser.add_argument("--skip-oil", action="store_true")
     parser.add_argument("--skip-method-commodities", action="store_true")
     parser.add_argument("--skip-lumber", action="store_true")
+    parser.add_argument("--skip-copper-comex", action="store_true")
     parser.add_argument("--skip-shfe-copper", action="store_true")
     parser.add_argument("--skip-dce-iron-ore-sina", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
@@ -265,6 +271,7 @@ def main(
         oil_main,
         tracked_commodities_main,
         lumber_main,
+        copper_comex_main,
         shfe_copper_main,
         dce_iron_ore_sina_main,
     ):

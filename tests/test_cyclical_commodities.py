@@ -772,8 +772,8 @@ def test_detail_builds_method_market_observation_without_attribution_conclusion(
         commodity_observations=_method_ROWS,
     )
     detail = .build_cyclical_commodities_detail(payload)
-    copper = detail["non_oil_observation"]["copper_comex"]
-    assert copper["daily_return"] == pytest.approx(0.0035, abs=1e-4)
+    copper = detail["non_oil_observation"]["copper_lme"]
+    assert copper["daily_return"] == pytest.approx(10420.0 / 10380.0 - 1)
     assert copper["source_class"] == "free_web"
     assert "Method-specified market data" in copper["source_label"]
     assert copper["status"] == "available"
@@ -787,6 +787,48 @@ def test_detail_uses_active_yahoo_lbr_and_excludes_archived_lumber():
     assert lumber["source_label"] == "Yahoo Finance LBR=F"
     assert lumber["source_identifier"] == "LBR=F"
     assert "lumber" not in detail["non_oil_observation"]
+
+
+def test_detail_uses_active_yahoo_copper_and_excludes_archived_comex():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS,
+        USD_ROWS,
+        _OIL_ROWS,
+        "2026-07-25",
+        commodity_observations={
+            "copper_comex_hg_yahoo_v1": [
+                {
+                    "date": "2026-07-22",
+                    "value": 4.35,
+                    "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/HG%3DF",
+                    "source_identifier": "HG=F",
+                },
+                {
+                    "date": "2026-07-23",
+                    "value": 4.40,
+                    "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/HG%3DF",
+                    "source_identifier": "HG=F",
+                },
+                {
+                    "date": "2026-07-24",
+                    "value": 4.45,
+                    "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/HG%3DF",
+                    "source_identifier": "HG=F",
+                },
+            ],
+            "copper_comex": [
+                {"date": "2026-07-24", "value": 4.42},
+            ],
+        },
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+    copper = detail["non_oil_observation"]["copper_comex_hg_yahoo_v1"]
+    assert copper["latest_date"] == "2026-07-24"
+    assert copper["latest_value"] == 4.45
+    assert copper["source_label"] == "Yahoo Finance HG=F"
+    assert copper["source_identifier"] == "HG=F"
+    assert copper["source_class"] == "vendor_free_market_data"
+    assert "copper_comex" not in detail["non_oil_observation"]
 
 
 def test_renderer_uses_backend_source_label_and_does_not_hard_code_investing_for_lbr():
