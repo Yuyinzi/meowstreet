@@ -70,3 +70,17 @@ def test_fetch_sina_i0_calls_injected_adapter_with_i0():
     assert calls == ["I0"]
     assert payload["series"]["series_id"] == "iron_ore_dce"
     assert [row["value"] for row in payload["observations"]] == [715.0, 716.0]
+
+
+def test_fetch_sina_i0_wraps_adapter_failures_as_value_error():
+    class AdapterFailure(RuntimeError):
+        pass
+
+    with pytest.raises(ValueError, match="sina I0 fetch failed") as excinfo:
+        sina.fetch_dce_iron_ore_sina(
+            adapter=lambda symbol: (_ for _ in ()).throw(
+                AdapterFailure("connection refused")
+            )
+        )
+
+    assert isinstance(excinfo.value.__cause__, AdapterFailure)

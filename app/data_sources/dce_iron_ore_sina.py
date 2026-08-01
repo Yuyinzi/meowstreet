@@ -94,11 +94,14 @@ def normalize_dce_iron_ore_sina_daily(frame, retrieved_at):
 
 
 def fetch_dce_iron_ore_sina(adapter=None):
-    if adapter is None:
-        import akshare as ak
+    try:
+        if adapter is None:
+            import akshare as ak
 
-        adapter = ak.futures_zh_daily_sina
-    frame = adapter(symbol="I0")
+            adapter = ak.futures_zh_daily_sina
+        frame = adapter(symbol="I0")
+    except Exception as exc:
+        raise ValueError(f"sina I0 fetch failed: {exc}") from exc
     return {
         "series": _DCE_IRON_ORE_SINA_SERIES,
         "observations": normalize_dce_iron_ore_sina_daily(frame, _retrieved_at()),
