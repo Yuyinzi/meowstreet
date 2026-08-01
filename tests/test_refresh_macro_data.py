@@ -20,6 +20,7 @@ def args_without_skips():
         skip_tracked_commodities=False,
         skip_lumber=False,
         skip_copper_comex=False,
+        skip_shfe_copper=False,
         fomc_calendar_path=None,
         stop_on_error=False,
     )
@@ -92,6 +93,8 @@ def test_main_refreshes_official_building_permits_when_enabled():
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -146,6 +149,8 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -187,6 +192,8 @@ def test_main_does_not_generate_ai_interpretations():
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -225,6 +232,8 @@ def test_main_continues_after_provider_failure(capsys):
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -272,6 +281,8 @@ def test_main_can_stop_after_first_failure():
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -302,6 +313,8 @@ def test_main_records_exceptions_as_failures(capsys):
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -335,6 +348,8 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -376,6 +391,8 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -412,6 +429,8 @@ def test_main_skip_flags_remove_tasks():
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -451,6 +470,8 @@ def test_main_runs_both_ism_surveys_in_order():
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert result == 0
@@ -488,6 +509,8 @@ def test_planned_tasks_includes_nfib_import_by_default():
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert any(call[0] == "nfib" for call in calls)
@@ -513,6 +536,8 @@ def test_skip_nfib_sbo_removes_nfib_task():
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
 
@@ -542,6 +567,8 @@ def test_planned_tasks_includes_nfib_regional_import_by_default():
         nfib_regional_main=record("nfib_regional"),
         main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert any(call[0] == "nfib_regional" for call in calls)
@@ -574,6 +601,8 @@ def test_planned_tasks_includes_unless_skipped():
         main=record(""),
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert any(call[0] == "" for call in calls)
@@ -600,6 +629,8 @@ def test_skip_cyclical_commodities_removes_task():
         ),
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
 
@@ -624,6 +655,8 @@ def test_skip_nfib_sbo_regional_removes_nfib_regional_task():
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
 
@@ -654,6 +687,8 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -710,6 +745,8 @@ def test_main_runs_all_fomc_tasks_in_order(tmp_path):
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -751,6 +788,8 @@ def test_main_skips_all_fomc_tasks_when_skip_fomc_flag():
         main=lambda argv: 0,
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -777,6 +816,8 @@ def test_skip_oil_removes_oil_task():
             AssertionError("should not be called")
         ),
         lumber_main=lambda argv: 0,
+        copper_comex_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
     )
 
 
