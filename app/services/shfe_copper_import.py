@@ -9,8 +9,10 @@ from app.tools import shfe_copper
 _REBUILD_LOOKBACK_DAYS = 14
 
 
-def _default_fetcher():
-    return shfe_copper.fetch_shfe_copper_contract_rows
+def _default_fetcher(progress_callback=None):
+    return lambda start_date, end_date: shfe_copper.fetch_shfe_copper_contract_rows(
+        start_date, end_date, progress_callback=progress_callback
+    )
 
 
 def _calendar_months(start_date, end_date):
@@ -79,13 +81,15 @@ def _prior_main_state(con, rebuild_start):
     return latest["selected_contract"], latest["close"]
 
 
-def import_shfe_cu_dates(con, trade_dates, fetcher=None, dry_run=False):
+def import_shfe_cu_dates(
+    con, trade_dates, fetcher=None, dry_run=False, progress_callback=None
+):
     if not trade_dates:
         raise ValueError("shfe cu trade dates are required")
     requested = sorted(set(trade_dates))
     requested_start = requested[0]
     requested_end = requested[-1]
-    fetch = fetcher or _default_fetcher()
+    fetch = fetcher or _default_fetcher(progress_callback)
     fetched_rows = []
     for month_start, month_end in _calendar_months(requested_start, requested_end):
         fetched_rows.extend(fetch(month_start, month_end))
@@ -143,9 +147,15 @@ def import_shfe_cu_dates(con, trade_dates, fetcher=None, dry_run=False):
 
 
 def refresh_shfe_cu_main(
-    con, start_date=None, end_date=None, fetcher=None, dry_run=False
+    con, start_date=None, end_date=None, fetcher=None, dry_run=False, progress_callback=None
 ):
     if start_date is None or end_date is None:
         start_date, end_date = incremental_window(con)
     trade_dates = _requested_dates(start_date, end_date)
-    return import_shfe_cu_dates(con, trade_dates, fetcher=fetcher, dry_run=dry_run)
+    return import_shfe_cu_dates(
+        con,
+        trade_dates,
+        fetcher=fetcher,
+        dry_run=dry_run,
+        progress_callback=progress_callback,
+    )

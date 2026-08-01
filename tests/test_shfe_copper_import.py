@@ -1,3 +1,5 @@
+from datetime import date as date_type
+
 import pytest
 
 from app.db import macro_indicators
@@ -94,7 +96,7 @@ def test_incremental_window_starts_from_latest_raw_date_minus_14_days(tmp_path):
     window = shfe_copper_import.incremental_window(con)
 
     assert window[0] == "2026-07-06"
-    assert window[1] == "2026-07-31"
+    assert window[1] == date_type.today().isoformat()
 
 
 def test_refresh_shfe_cu_main_rebuilds_recent_switch_in_lookback(tmp_path):
@@ -214,7 +216,14 @@ def test_import_shfe_cu_dates_does_not_issue_one_request_per_date(tmp_path):
 from scripts import import_shfe_copper
 
 
-def fake_refresh(con, start_date=None, end_date=None, fetcher=None):
+def fake_refresh(
+    con,
+    start_date=None,
+    end_date=None,
+    fetcher=None,
+    dry_run=False,
+    progress_callback=None,
+):
     return {
         "raw_dates_requested": 10,
         "raw_dates_published": 8,
@@ -242,6 +251,41 @@ def test_cli_accepts_explicit_backfill_dates(monkeypatch, tmp_path, capsys):
     )
     out = capsys.readouterr().out
     assert "derived_observations: 8" in out
+
+
+def test_cli_prints_each_received_shfe_trading_day(monkeypatch, tmp_path, capsys):
+    def refresh_with_progress(
+        con, start_date=None, end_date=None, fetcher=None, dry_run=False, progress_callback=None
+    ):
+        progress_callback(
+            {
+                "date": "2016-01-04",
+                "contracts_received": 160,
+                "completed": 1,
+                "total": 245,
+            }
+        )
+        return fake_refresh(con, start_date, end_date, fetcher)
+
+    monkeypatch.setattr(
+        shfe_copper_import, "refresh_shfe_cu_main", refresh_with_progress
+    )
+
+    assert (
+        import_shfe_copper.main(
+            [
+                "--db-path",
+                str(tmp_path / "market.sqlite"),
+                "--start-date",
+                "2016-01-01",
+                "--end-date",
+                "2016-12-31",
+            ]
+        )
+        == 0
+    )
+
+    assert "SHFE CU 2016-01-04: received 160 contracts (1/245)" in capsys.readouterr().out
 
 
 def test_cli_invalid_range_returns_code_1(monkeypatch, tmp_path, capsys):
@@ -286,7 +330,7 @@ def test_cli_dry_run_writes_neither_table(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         shfe_copper_import,
         "_default_fetcher",
-        lambda: fake_fetcher(
+        lambda progress_callback=None: fake_fetcher(
             {
                 ("2026-07-01", "2026-07-31"): [
                     _raw_row("2026-07-28", "CU2609", 79000.0, 200000.0)

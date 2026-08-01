@@ -91,11 +91,13 @@
         title = "ISM Manufacturing";
       } else if (state.selectedGrowthCycleDetailId === "ism_services") {
         title = "ISM Services";
-    } else if (state.selectedGrowthCycleDetailId === "housing_permits") {
+      } else if (state.selectedGrowthCycleDetailId === "housing_permits") {
         title = "Building Permits";
-    } else if (state.selectedGrowthCycleDetailId === "nfib_sbo") {
+      } else if (state.selectedGrowthCycleDetailId === "nfib_sbo") {
         title = "NFIB Small Business";
-    } else {
+      } else if (state.selectedGrowthCycleDetailId === "cyclical_commodities") {
+        title = "Cyclical Commodities & USD";
+      } else {
         title = "M2 Money Supply";
       }
     }
@@ -1017,6 +1019,7 @@
     "MoM Shock": "月度冲击",
     "M2 Level": "M2总量",
     "M2 Money Supply": "M2货币供应",
+    "Cyclical Commodities & USD": "周期性大宗商品与美元",
     "M2 YoY Growth": "M2同比增长",
     "M2 3M Change": "M2三个月变化",
     "M2 MoM Shock Events": "M2月度冲击事件",

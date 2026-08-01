@@ -6636,6 +6636,19 @@ def test_cyclical_commodities_ui_renders_backend_distribution_labels():
     assert ".oil-distribution-abnormal" in css
     assert "Within 1σ, Normal" in source
     assert source.count("state-review-required") == 1
+
+
+def test_shanghai_copper_reuses_market_value_and_state_presentation():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index('if (series.source_class === "official_exchange")')
+    end = source.index("\n        }\n        return '<div", start)
+    official_branch = source[start:end]
+
+    assert "Value: " in official_branch
+    assert 'renderState(h.fmtSignedPctDecimal(series.daily_return)' in official_branch
+    assert 'renderState(h.fmtSignedPctDecimal(series.weekly_return)' in official_branch
+    assert "(same-contract)" not in official_branch
+    assert "(roll-neutral)" not in official_branch
     assert "statistics.stdev" not in source
     assert "Math.sqrt" not in source
     assert "demand-led" not in source.lower()

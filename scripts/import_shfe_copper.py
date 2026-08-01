@@ -17,6 +17,14 @@ def _parse_date(value):
         raise argparse.ArgumentTypeError(f"invalid date: {value}") from exc
 
 
+def _print_progress(event):
+    print(
+        f"SHFE CU {event['date']}: received {event['contracts_received']} contracts "
+        f"({event['completed']}/{event['total']})",
+        flush=True,
+    )
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Import SHFE copper main-contract series via AKShare"
@@ -69,7 +77,9 @@ def main(argv=None):
 
     con = macro_indicators.connect(args.db_path)
     try:
-        refresh_kwargs = {"dry_run": True} if args.dry_run else {}
+        refresh_kwargs = {"progress_callback": _print_progress}
+        if args.dry_run:
+            refresh_kwargs["dry_run"] = True
         if explicit:
             result = shfe_copper_import.refresh_shfe_cu_main(
                 con,

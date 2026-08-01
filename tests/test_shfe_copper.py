@@ -225,6 +225,35 @@ def test_akshare_daily_fetch_requests_only_trading_days():
     assert len(records) == 2
 
 
+def test_akshare_daily_fetch_reports_each_received_trading_day():
+    calendar = _calendar_frame([__import__("datetime").date(2026, 7, 27)])
+    ak = _FakeAkshare(
+        {
+            "20260727": [
+                {
+                    "symbol": "CU2609",
+                    "date": "20260727",
+                    "close": 79000.0,
+                    "open_interest": 200000.0,
+                }
+            ]
+        }
+    )
+    events = []
+
+    shfe_copper._akshare_daily_fetch(
+        "20260727",
+        "20260727",
+        ak_module=ak,
+        calendar_frame=calendar,
+        progress_callback=events.append,
+    )
+
+    assert events == [
+        {"date": "2026-07-27", "contracts_received": 1, "completed": 1, "total": 1}
+    ]
+
+
 def test_akshare_daily_fetch_retries_transient_failure_then_succeeds():
     calendar = _calendar_frame([__import__("datetime").date(2026, 7, 27)])
 

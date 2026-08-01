@@ -2,12 +2,13 @@ from datetime import date, timedelta
 from statistics import StatisticsError, stdev
 
 
-METHOD_VERSION = "oil_distribution_v1"
+METHOD_VERSION = "oil_distribution_v2"
 RETURN_DEFINITION = "arithmetic_close_to_close"
-DISTRIBUTION_WINDOW = "full_history"
+DISTRIBUTION_WINDOW = "2016-01-01_to_latest_available"
 STANDARD_DEVIATION = "sample"
 ISO_WEEK_DEFINITION = "iso_calendar_week_last_available_trading_day"
 MINIMUM_SAMPLES = {"daily": 252, "weekly": 52}
+DISTRIBUTION_START_DATE = "2016-01-01"
 
 
 def _arithmetic_return(current, prior):
@@ -21,7 +22,11 @@ def _sorted_valid_observations(observations):
         [
             row
             for row in observations
-            if row.get("date") and row.get("value") is not None
+            if (
+                row.get("date")
+                and row["date"] >= DISTRIBUTION_START_DATE
+                and row.get("value") is not None
+            )
         ],
         key=lambda row: row["date"],
     )

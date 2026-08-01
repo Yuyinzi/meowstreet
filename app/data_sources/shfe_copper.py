@@ -1,7 +1,9 @@
 import hashlib
+import io
 import json
 import re
 import time
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
 from math import isfinite
 
@@ -77,7 +79,8 @@ def _fetch_day_with_retry(ak, day_text):
     last_exc = None
     for attempt in range(_REQUEST_MAX_RETRIES):
         try:
-            return ak.get_shfe_daily(date=_compact_date(day_text))
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                return ak.get_shfe_daily(date=_compact_date(day_text))
         except Exception as exc:
             last_exc = exc
             time.sleep(_REQUEST_BACKOFF_SECONDS * (attempt + 1))
@@ -86,15 +89,27 @@ def _fetch_day_with_retry(ak, day_text):
     ) from last_exc
 
 
-def _akshare_daily_fetch(start, end, ak_module=None, calendar_frame=None):
+def _akshare_daily_fetch(
+    start, end, ak_module=None, calendar_frame=None, progress_callback=None
+):
     if ak_module is None:
         import akshare as ak_module
 
     frames = []
-    for day_text in _trading_days(start, end, calendar_frame):
+    trading_days = _trading_days(start, end, calendar_frame)
+    for completed, day_text in enumerate(trading_days, start=1):
         frame = _fetch_day_with_retry(ak_module, day_text)
         if frame is not None and not frame.empty:
             frames.append(frame)
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "date": day_text,
+                    "contracts_received": 0 if frame is None else len(frame),
+                    "completed": completed,
+                    "total": len(trading_days),
+                }
+            )
         time.sleep(_REQUEST_INTERVAL_SECONDS)
     if not frames:
         return [], ak_module.__version__
@@ -208,11 +223,15 @@ def normalize_shfe_copper_contract_rows(records, retrieved_at, adapter_version):
     return normalized
 
 
-def fetch_shfe_copper_contract_rows(start_date, end_date, adapter=None):
+def fetch_shfe_copper_contract_rows(start_date, end_date, adapter=None, progress_callback=None):
     start, end = _normalize_date_range(start_date, end_date)
-    fetch = adapter or _akshare_daily_fetch
     try:
-        records, adapter_version = fetch(start, end)
+        if adapter is None:
+            records, adapter_version = _akshare_daily_fetch(
+                start, end, progress_callback=progress_callback
+            )
+        else:
+            records, adapter_version = adapter(start, end)
     except Exception as exc:
         raise ValueError(
             f"akshare SHFE CU fetch failed for {start} to {end}: {exc}"
