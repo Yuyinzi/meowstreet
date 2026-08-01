@@ -24,7 +24,17 @@ def test_method_market_registry_preserves_the_six_workbook_urls():
     assert MARKET_SERIES["iron_ore_62_cfr_china"]["price_page_url"].endswith(
         "iron-ore-62-cfr-futures"
     )
-    assert MARKET_SERIES["iron_ore_dce"]["price_page_url"].endswith("cid=961741")
+    assert "price_page_url" not in MARKET_SERIES["iron_ore_dce"]
+
+
+def test_dce_iron_ore_registry_uses_the_sina_i0_temporary_contract():
+    dce = MARKET_SERIES["iron_ore_dce"]
+
+    assert dce["source"] == "sina_finance"
+    assert dce["source_class"] == "vendor_free_market_data"
+    assert dce["access_adapter"] == "akshare"
+    assert dce["source_identifier"] == "I0"
+    assert dce["instrument"] == "DCE Iron Ore continuous series (I0)"
 
 
 def test_method_market_series_includes_units():

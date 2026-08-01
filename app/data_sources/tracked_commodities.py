@@ -59,12 +59,15 @@ MARKET_SERIES = {
         "instrument_id": 965515,
     },
     "iron_ore_dce": {
-        "price_page_url": f"{INVESTING_BASE}/commodities/iron-ore-62-cfr-futures?cid=961741",
         "display_name": "Iron Ore (DCE)",
         "exchange_label": "DCE",
-        "instrument": "DCE Iron Ore futures (I)",
+        "instrument": "DCE Iron Ore continuous series (I0)",
         "units": "CNY/tonne",
-        "instrument_id": 961741,
+        "source": "sina_finance",
+        "source_class": "vendor_free_market_data",
+        "access_adapter": "akshare",
+        "source_url": "https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_V21052021_4_12=/InnerFuturesNewService.getDailyKLine",
+        "source_identifier": "I0",
     },
 }
 

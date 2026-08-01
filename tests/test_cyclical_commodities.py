@@ -689,6 +689,46 @@ _method_ROWS = {
 }
 
 
+def i0_rows():
+    return [
+        {
+            "date": "2026-07-30",
+            "value": 715.0,
+            "source": "sina_finance",
+            "source_url": "https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_V21052021_4_12=/InnerFuturesNewService.getDailyKLine",
+            "source_identifier": "I0",
+            "source_class": "vendor_free_market_data",
+            "retrieved_at": "2026-08-01T00:00:00+00:00",
+        },
+        {
+            "date": "2026-07-31",
+            "value": 716.0,
+            "source": "sina_finance",
+            "source_url": "https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_V21052021_4_12=/InnerFuturesNewService.getDailyKLine",
+            "source_identifier": "I0",
+            "source_class": "vendor_free_market_data",
+            "retrieved_at": "2026-08-01T00:00:00+00:00",
+        },
+    ]
+
+
+def test_payload_presents_i0_as_raw_vendor_continuous_data():
+    payload = .build_cyclical_commodities_payload(
+        [],
+        {},
+        as_of_date="2026-07-31",
+        commodity_observations={"iron_ore_dce": i0_rows()},
+    )
+
+    dce = payload["commodity_observation"]["iron_ore_dce"]
+    assert dce["latest_value"] == 716.0
+    assert dce["daily_return"] == pytest.approx(716 / 715 - 1)
+    assert (
+        dce["source_label"]
+        == "Sina Finance I0 continuous series \u00b7 AKShare adapter"
+    )
+
+
 def payload_with_lbr_and_archive():
     return .build_cyclical_commodities_payload(
         COT_ROWS,

@@ -369,18 +369,29 @@ def _oil_attribution_payload(
     }
 
 
+_SINA_I0_SOURCE_LABEL = "Sina Finance I0 continuous series \u00b7 AKShare adapter"
+
+
 def _commodity_display_registry():
     registry = {}
     for sid, meta in ACTIVE_MARKET_SERIES.items():
-        if meta.get("source_class", "free_web") != "free_web":
-            continue
-        registry[sid] = {
-            "display_name": meta["display_name"],
-            "exchange_label": meta["exchange_label"],
-            "source_label": "Method-specified market data \u00b7 Investing.com",
-            "source_url": meta["price_page_url"],
-            "source_class": "free_web",
-        }
+        source_class = meta.get("source_class", "free_web")
+        if source_class == "free_web":
+            registry[sid] = {
+                "display_name": meta["display_name"],
+                "exchange_label": meta["exchange_label"],
+                "source_label": "Method-specified market data \u00b7 Investing.com",
+                "source_url": meta["price_page_url"],
+                "source_class": "free_web",
+            }
+        elif source_class == "vendor_free_market_data":
+            registry[sid] = {
+                "display_name": meta["display_name"],
+                "exchange_label": meta["exchange_label"],
+                "source_label": _SINA_I0_SOURCE_LABEL,
+                "source_url": meta["source_url"],
+                "source_class": "vendor_free_market_data",
+            }
     registry[_LUMBER_SERIES["series_id"]] = {
         "display_name": _LUMBER_SERIES["title"],
         "exchange_label": "CME",

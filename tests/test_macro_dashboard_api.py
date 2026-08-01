@@ -42,6 +42,12 @@ def test_cyclical_commodities_script_is_served():
     assert "application/javascript" in response.headers["content-type"]
 
 
+def test_commodity_ids_keep_the_dce_iron_ore_id():
+    from app import api
+
+    assert "iron_ore_dce" in api.method_COMMODITY_SERIES_IDS
+
+
 def test_growth_cycle_ism_industry_breadth_prefers_latest_official_report(monkeypatch):
     from app import api
 
