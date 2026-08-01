@@ -1,3 +1,5 @@
+import datetime
+
 from fastapi.testclient import TestClient
 
 from app.api import app
@@ -4101,3 +4103,213 @@ def test_market_setup_is_identical_when_active_lbr_data_changes(monkeypatch):
     assert (
         TestClient(api.app).get("/api/macro-dashboard/market-setup").json() == baseline
     )
+
+
+def _non_oil_weekday_rows(start, count, value_at):
+    rows = []
+    day = start
+    while len(rows) < count:
+        if day.weekday() < 5:
+            rows.append({"date": day.isoformat(), "value": value_at(len(rows))})
+        day += datetime.timedelta(days=1)
+    return rows
+
+
+def _copper_comex_normal_rows():
+    return _non_oil_weekday_rows(
+        datetime.date(2016, 1, 4), 265, lambda i: 100.0 * (1.0005**i)
+    )
+
+
+def _copper_comex_abnormal_rows():
+    def value_at(i):
+        if i == 264:
+            return 100.0 * (1.0005**263) * 1.5
+        return 100.0 * (1.0005**i)
+
+    return _non_oil_weekday_rows(datetime.date(2016, 1, 4), 265, value_at)
+
+
+def test_non_oil_detail_propagates_distribution_review_evidence(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    comex_rows = _copper_comex_abnormal_rows()
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: (comex_rows if sid == "copper_comex" else []) for sid in series_ids
+        },
+    )
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    series = body["non_oil_observation"]["copper_comex"]
+    assert (
+        series["daily_distribution"]["method_version"]
+        == "non_oil_price_distribution_v1"
+    )
+    assert (
+        series["weekly_distribution"]["method_version"]
+        == "non_oil_price_distribution_v1"
+    )
+    assert series["daily_distribution"]["classification"] == "abnormal_3sigma"
+    assert series["review_status"] in {"review_required", "observation_available"}
+    assert series["review_status"] == "review_required"
+    assert body["commodity_returns"]["review_required_series_ids"] == [
+        "copper_comex"
+    ]
+
+
+def test_non_oil_market_setup_is_identical_when_returns_change(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.market_phase,
+        "build_dashboard_payload",
+        lambda loader: None,
+    )
+    monkeypatch.setattr(
+        api.benchmark_market_data,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.gdp_market_relationships,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+
+    original_loader = (
+        api.macro_indicators_db.load_macro_indicator_observations_for_series
+    )
+
+    def changed_loader(con, series_ids, copper_rows):
+        result = original_loader(con, series_ids)
+        result["copper_comex"] = copper_rows
+        return result
+
+    baseline = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: changed_loader(
+            con, series_ids, _copper_comex_normal_rows()
+        ),
+    )
+    normal = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: changed_loader(
+            con, series_ids, _copper_comex_abnormal_rows()
+        ),
+    )
+    abnormal = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+
+    assert normal == baseline
+    assert abnormal == baseline
+
+
+def test_non_oil_ticker_workflow_output_has_no_field(monkeypatch):
+    import json
+
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
+    response = client.post(
+        "/api/ticker-workflow/evaluate",
+        json={"symbol": "XYZ", "observations": {}},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "" not in json.dumps(payload)
