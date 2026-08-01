@@ -964,6 +964,7 @@ def test_commodity_distribution_does_not_fall_back_across_copper_markets():
         },
     )
     comex = payload["commodity_observation"]["copper_comex"]
+    lme = payload["commodity_observation"]["copper_lme"]
 
     assert comex["status"] == "unavailable"
     assert comex["review_status"] == "unavailable"
@@ -971,6 +972,13 @@ def test_commodity_distribution_does_not_fall_back_across_copper_markets():
     assert comex["daily_distribution"]["sample_count"] == 0
     assert comex["weekly_distribution"]["classification"] == "unavailable"
     assert "latest_value" not in comex
+
+    assert lme["status"] == "available"
+    assert lme["review_status"] == "unavailable"
+    assert lme["daily_distribution"]["classification"] == "unavailable"
+    assert lme["daily_distribution"]["sample_count"] == 3
+    assert lme["weekly_distribution"]["classification"] == "unavailable"
+    assert lme["weekly_distribution"]["sample_count"] == 1
 
 
 def test_commodity_distribution_is_unavailable_with_insufficient_history():
@@ -1104,3 +1112,57 @@ def test_shfe_distribution_is_normal_with_sufficient_same_contract_returns():
         shfe["weekly_distribution"]["return_definition"]
         == "shfe_cu_same_contract_roll_neutral_iso_week"
     )
+
+
+def _shfe_day_row(day, close_value):
+    return {
+        "date": day.isoformat(),
+        "selected_contract": "CU2601",
+        "close": close_value,
+        "settlement": close_value,
+        "volume": 1000.0,
+        "open_interest": 100000.0,
+        "contract_roll": False,
+        "roll_from": None,
+        "roll_to": None,
+        "roll_gap": None,
+        "unadjusted_continuous_return": 0.001,
+        "same_contract_return": 0.001,
+        "roll_affected": False,
+        "selection_rule_version": "test",
+        "price_series_version": "test",
+        "return_method_version": "test",
+    }
+
+
+def _shfe_pre_2016_and_2016_rows():
+    rows = []
+    for week_start in (date(2015, 12, 7), date(2015, 12, 14), date(2015, 12, 21)):
+        for offset in range(5):
+            rows.append(
+                _shfe_day_row(week_start + timedelta(days=offset), 35000.0 + len(rows))
+            )
+    current = date(2016, 1, 4)
+    for week_count in range(53):
+        for offset in range(5):
+            rows.append(
+                _shfe_day_row(current + timedelta(days=offset), 35000.0 + len(rows))
+            )
+        current += timedelta(days=7)
+    return rows
+
+
+def test_shfe_distribution_excludes_pre_2016_weeks_from_weekly_window():
+    payload = _shfe_payload(_shfe_pre_2016_and_2016_rows())
+    weekly = payload["commodity_observation"]["copper_shanghai"][
+        "weekly_distribution"
+    ]
+
+    assert weekly["sample_start_date"] >= "2016-01-01"
+    assert weekly["sample_count"] == 53
+
+    baseline = _shfe_payload(_shfe_main_rows(include_roll_day=False))
+    baseline_weekly = baseline["commodity_observation"]["copper_shanghai"][
+        "weekly_distribution"
+    ]
+    assert weekly["sample_count"] == baseline_weekly["sample_count"]

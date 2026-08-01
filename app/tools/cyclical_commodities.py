@@ -448,7 +448,9 @@ def _distribution_review_status(daily_distribution, weekly_distribution):
     return "unavailable"
 
 
-def _distribution_review_label(review_status):
+def _distribution_review_label(review_status, no_observations=False):
+    if no_observations:
+        return "No price observations are available for a distribution-based review."
     if review_status == "review_required":
         return (
             "Abnormal price move — review demand, supply, inventory, and "
@@ -496,7 +498,9 @@ def _shfe_shanghai_payload(meta, main_rows, as_of_date):
                 return_definition=_SHFE_WEEKLY_RETURN_DEFINITION,
             ),
             "review_status": "unavailable",
-            "review_label": _distribution_review_label("unavailable"),
+            "review_label": _distribution_review_label(
+                "unavailable", no_observations=True
+            ),
         }
     latest = eligible[-1]
     weekly_returns = shfe_copper.build_shfe_cu_weekly_returns(eligible)
@@ -522,6 +526,8 @@ def _shfe_shanghai_payload(meta, main_rows, as_of_date):
                 "value": r["return"],
             }
             for r in weekly_returns
+            if date.fromisocalendar(r["year"], r["week"], 7)
+            >= date.fromisoformat(_NON_OIL_DISTRIBUTION_START_DATE)
         ],
         "weekly",
         method_version=_NON_OIL_METHOD_VERSION,
@@ -590,7 +596,9 @@ def _commodity_payload(
                 "daily_distribution": daily_distribution,
                 "weekly_distribution": weekly_distribution,
                 "review_status": "unavailable",
-                "review_label": _distribution_review_label("unavailable"),
+                "review_label": _distribution_review_label(
+                    "unavailable", no_observations=True
+                ),
             }
             continue
         latest = rows[-1]
@@ -654,10 +662,19 @@ def _commodity_returns_summary(commodity):
             "available_series_count": len(computed_series_ids),
             "review_required_series_ids": review_required_series_ids,
         }
+    has_history = any(
+        entry.get("daily_distribution", {}).get("sample_count")
+        or entry.get("weekly_distribution", {}).get("sample_count")
+        for entry in commodity.values()
+    )
     return {
         "status": "unavailable",
         "method_version": _NON_OIL_METHOD_VERSION,
-        "reason": "no non-oil price histories are available for distribution review",
+        "reason": (
+            "no active series has sufficient price history for a distribution review"
+            if has_history
+            else "no non-oil price histories are available for distribution review"
+        ),
         "available_series_count": 0,
         "review_required_series_ids": [],
     }
