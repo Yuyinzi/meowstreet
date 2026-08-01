@@ -42,11 +42,36 @@ def _rendered_history_rows_expr():
 """
 
 
+def _expected_title_token(market):
+    instrument = market.get("instrument") or ""
+    first_word = instrument.split()[0].lower() if instrument.split() else ""
+    return first_word
+
+
+def _wait_for_target_page(cdp, market, timeout_seconds=_PAGE_READY_TIMEOUT_SECONDS):
+    target_url = market["price_page_url"].rstrip("/")
+    token = _expected_title_token(market)
+    deadline = time.time() + timeout_seconds
+    navigated = False
+    while True:
+        if not navigated:
+            href = cdp.evaluate("location.href")
+            if href and href.rstrip("/") == target_url:
+                navigated = True
+        if navigated:
+            title = cdp.evaluate("document.title")
+            if title and (not token or token in title.lower()):
+                return "ok"
+        if time.time() >= deadline:
+            return "title_mismatch" if navigated else "navigation_timeout"
+        time.sleep(_POLL_INTERVAL)
+
+
 def _wait_for_rendered_rows(cdp, timeout_seconds=_PAGE_READY_TIMEOUT_SECONDS):
     deadline = time.time() + timeout_seconds
     while True:
         rows = cdp.evaluate(_rendered_history_rows_expr())
-        if rows:
+        if rows and all(all(_normalize_rendered_row(row)) for row in rows):
             return rows
         if time.time() >= deadline:
             return None
@@ -122,6 +147,16 @@ def fetch_rendered_investing_history(
         )
     try:
         cdp.command("Page.navigate", {"url": market["price_page_url"]})
+        ready = _wait_for_target_page(cdp, market, timeout_seconds)
+        if ready == "navigation_timeout":
+            return _render_failed(
+                f"page did not navigate to the {market['price_page_url']} market page"
+            )
+        if ready == "title_mismatch":
+            instrument = (
+                market.get("instrument") or market.get("display_name") or "target"
+            )
+            return _render_failed(f"page did not render the {instrument} market title")
         result = _wait_for_rendered_rows(cdp, timeout_seconds)
     except ValueError as exc:
         return _render_failed(f"browser evaluation failed: {exc}")
