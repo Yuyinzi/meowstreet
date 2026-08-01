@@ -191,6 +191,7 @@ def connect(db_path=DEFAULT_DB_PATH):
     con = sqlite3.connect(path)
     con.row_factory = sqlite3.Row
     init_macro_tables(con)
+    ensure_schema(con)
     return con
 
 

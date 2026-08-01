@@ -454,3 +454,24 @@ def test_ensure_schema_migrates_legacy_lumber_overlap_audits(tmp_path):
         )
         == legacy_audit
     )
+
+
+def test_connect_migrates_legacy_lumber_overlap_audits_on_reopen(tmp_path):
+    db_path = tmp_path / "market.sqlite"
+    con = macro_indicators.connect(db_path)
+    legacy_audit = {"overlap_test_version": "lumber_overlap_v1", "shared_date_count": 3}
+    con.execute(
+        """insert into lumber_overlap_audits(overlap_test_version, audit_json)
+           values (?, ?)""",
+        ("lumber_overlap_v1", json.dumps(legacy_audit, sort_keys=True)),
+    )
+    con.commit()
+    con.close()
+
+    reopened = macro_indicators.connect(db_path)
+    assert (
+        macro_indicators.load_vendor_series_overlap_audit(
+            reopened, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
+        )
+        == legacy_audit
+    )
