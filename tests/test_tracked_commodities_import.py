@@ -20,8 +20,8 @@ _FAKE_OBSERVATION = {
     "date": "2026-07-24",
     "value": 5.7,
     "source": "investing.com",
-    "source_url": "https://www.investing.com/commodities/copper-historical-data?cid=959211",
-    "source_identifier": "copper_lme",
+    "source_url": "https://www.investing.com/commodities/iron-ore-62-cfr-futures",
+    "source_identifier": "iron_ore_62_cfr_china",
     "source_class": "free_web",
     "retrieved_at": "2026-07-30T12:00:00",
 }
@@ -70,9 +70,11 @@ def test_refresh_merges_method_prices_and_preserves_source_metadata(tmp_path):
     con = macro_indicators.connect(db_path)
 
     result = refresh_tracked_commodities(con, fetcher=_fake_fetcher)
-    assert result == {"series": 2, "observations": 2}
+    assert result == {"series": 1, "observations": 1}
 
-    points = macro_indicators.load_macro_indicator_points(con, "copper_lme")
+    points = macro_indicators.load_macro_indicator_points(
+        con, "iron_ore_62_cfr_china"
+    )
     assert len(points) == 1
     assert points[0]["source"] == "investing.com"
 
@@ -96,12 +98,12 @@ def test_refresh_preserves_source_class_and_retrieved_at_through_db_roundtrip(tm
 
     refresh_tracked_commodities(con, fetcher=_fake_fetcher)
     observations = macro_indicators.load_macro_indicator_observations(
-        con, "copper_lme"
+        con, "iron_ore_62_cfr_china"
     )
     assert len(observations) == 1
     assert observations[0]["source_class"] == "free_web"
     assert observations[0]["retrieved_at"] == "2026-07-30T12:00:00"
-    assert observations[0]["source_identifier"] == "copper_lme"
+    assert observations[0]["source_identifier"] == "iron_ore_62_cfr_china"
 
 
 _CSV_TEXT = 'Date,Price,Open,High,Low,Vol.,Change %\n"Jul 24, 2026",5.700,5.710,5.720,5.680,12.5K,0.35%\n"Jul 23, 2026",5.680,5.690,5.700,5.660,15.2K,-0.18%\n'
@@ -177,7 +179,7 @@ def test_cli_reports_chrome_start_command_when_cdp_session_is_missing(
     )
 
     exit_code = import_tracked_commodities.main(
-        ["--markets", "copper_lme", "--db-path", "/tmp/nonexistent.db"]
+        ["--markets", "iron_ore_62_cfr_china", "--db-path", "/tmp/nonexistent.db"]
     )
     assert exit_code == 1
     assert "start_investing_chrome.py" in capsys.readouterr().err
@@ -194,7 +196,7 @@ def test_cli_dry_run_uses_browser_download_range(monkeypatch, capsys):
             "series": 1,
             "observations": 42,
             "ranges": {
-                "copper_lme": {
+                "iron_ore_62_cfr_china": {
                     "start_date": "2016-01-01",
                     "end_date": "2026-07-30",
                 }
@@ -214,13 +216,13 @@ def test_cli_dry_run_uses_browser_download_range(monkeypatch, capsys):
     )
 
     exit_code = import_tracked_commodities.main(
-        ["--dry-run", "--markets", "copper_lme"]
+        ["--dry-run", "--markets", "iron_ore_62_cfr_china"]
     )
 
     assert exit_code == 0
     assert calls == [
         {
-            "markets": ["copper_lme"],
+            "markets": ["iron_ore_62_cfr_china"],
             "cdp_endpoint": "http://127.0.0.1:9222",
             "dry_run": True,
         }
@@ -252,13 +254,18 @@ def test_cli_defaults_to_browser_download_batch(monkeypatch, capsys, tmp_path):
     )
 
     exit_code = import_tracked_commodities.main(
-        ["--markets", "copper_lme", "--db-path", str(tmp_path / "test.db")]
+        [
+            "--markets",
+            "iron_ore_62_cfr_china",
+            "--db-path",
+            str(tmp_path / "test.db"),
+        ]
     )
 
     assert exit_code == 0
     assert calls == [
         {
-            "markets": ["copper_lme"],
+            "markets": ["iron_ore_62_cfr_china"],
             "cdp_endpoint": "http://127.0.0.1:9222",
         }
     ]
@@ -275,17 +282,17 @@ def test_csv_import_roundtrip_preserves_provenance(tmp_path):
     con = macro_indicators.connect(db_path)
 
     result = tracked_commodities_import.import_commodity_csv_files(
-        con, {"copper_lme": csv_path}
+        con, {"iron_ore_62_cfr_china": csv_path}
     )
     assert result == {"series": 1, "observations": 2}
 
     observations = macro_indicators.load_macro_indicator_observations(
-        con, "copper_lme"
+        con, "iron_ore_62_cfr_china"
     )
     assert len(observations) == 2
     assert observations[0]["source"] == "investing.com"
     assert observations[0]["source_class"] == "free_web"
-    assert observations[0]["source_identifier"] == "copper_lme"
+    assert observations[0]["source_identifier"] == "iron_ore_62_cfr_china"
     assert observations[0]["retrieved_at"] is not None
 
 
@@ -294,9 +301,22 @@ def test_refresh_honours_markets_parameter(tmp_path):
     con = macro_indicators.connect(db_path)
 
     result = refresh_tracked_commodities(
-        con, fetcher=_fake_fetcher, markets=["copper_lme"]
+        con, fetcher=_fake_fetcher, markets=["iron_ore_62_cfr_china"]
     )
     assert result == {"series": 1, "observations": 1}
+
+
+def test_refresh_rejects_archived_lme(tmp_path):
+    db_path = tmp_path / "test.db"
+    con = macro_indicators.connect(db_path)
+
+    with pytest.raises(
+        ValueError, match="archived method commodity market: copper_lme"
+    ):
+        refresh_tracked_commodities(
+            con, fetcher=_fake_fetcher, markets=["copper_lme"]
+        )
+    assert macro_indicators.load_macro_indicator_points(con, "copper_lme") == []
 
 
 def test_macro_refresh_does_not_register_http_commodity_task_by_default():
@@ -318,6 +338,7 @@ def test_macro_refresh_does_not_register_http_commodity_task_by_default():
         skip_tracked_commodities=False,
         skip_lumber=True,
         skip_copper_comex=True,
+        skip_lme_copper=True,
         fomc_calendar_path=None,
     )
 
@@ -343,31 +364,26 @@ def test_macro_refresh_does_not_register_http_commodity_task_by_default():
     assert "tracked_commodities" not in task_names
 
 
-def test_browser_download_batch_writes_nothing_when_one_market_download_fails(tmp_path):
+def test_browser_download_aborts_before_writes_when_an_archived_market_is_requested(
+    tmp_path,
+):
     con = macro_indicators.connect(tmp_path / "macro.db")
 
-    def failing_downloader(market, **kwargs):
-        if "lumber" in market.get("price_page_url", ""):
-            return {"status": "download_failed", "message": "unavailable"}
-        csv_path = tmp_path / "ok.csv"
-        csv_path.write_text(
-            "Date,Price,Open,High,Low,Vol.,Change %\n"
-            '"Jul 24, 2026",5.700,5.710,5.720,5.680,12.5K,0.35%\n',
-            encoding="utf-8",
-        )
-        return {
-            "status": "ok",
-            "csv_path": csv_path,
-            "source_url": market["price_page_url"],
-            "retrieved_at": "2026-07-30T00:00:00+00:00",
-        }
+    def downloader(market, **kwargs):
+        return {"status": "ok", "csv_path": tmp_path / "ok.csv"}
 
-    with pytest.raises(ValueError, match="lumber"):
+    with pytest.raises(
+        ValueError, match="archived method commodity market: copper_lme"
+    ):
         import_commodity_browser_downloads(
             con,
-            markets=["copper_lme", "lumber"],
-            downloader=failing_downloader,
+            markets=["iron_ore_62_cfr_china", "copper_lme"],
+            downloader=downloader,
         )
+    assert (
+        macro_indicators.load_macro_indicator_points(con, "iron_ore_62_cfr_china")
+        == []
+    )
     assert macro_indicators.load_macro_indicator_points(con, "copper_lme") == []
 
 
@@ -391,18 +407,18 @@ def test_browser_download_import_uses_price_page_url_and_download_retrieval_time
 
     result = import_commodity_browser_downloads(
         con,
-        markets=["copper_lme"],
+        markets=["iron_ore_62_cfr_china"],
         downloader=completed_downloader,
     )
     assert result == {"series": 1, "observations": 1}
 
     observations = macro_indicators.load_macro_indicator_observations(
-        con, "copper_lme"
+        con, "iron_ore_62_cfr_china"
     )
     assert len(observations) == 1
     assert (
         observations[0]["source_url"]
-        == MARKET_SERIES["copper_lme"]["price_page_url"]
+        == MARKET_SERIES["iron_ore_62_cfr_china"]["price_page_url"]
     )
     assert observations[0]["retrieved_at"] == "2026-07-30T00:00:00+00:00"
 
@@ -428,7 +444,7 @@ def test_browser_download_dry_run_returns_range_without_writing_observations(tmp
 
     result = import_commodity_browser_downloads(
         con,
-        markets=["copper_lme"],
+        markets=["iron_ore_62_cfr_china"],
         downloader=completed_downloader,
         dry_run=True,
     )
@@ -437,13 +453,16 @@ def test_browser_download_dry_run_returns_range_without_writing_observations(tmp
         "series": 1,
         "observations": 1,
         "ranges": {
-            "copper_lme": {
+            "iron_ore_62_cfr_china": {
                 "start_date": "2016-01-01",
                 "end_date": "2026-07-30",
             }
         },
     }
-    assert macro_indicators.load_macro_indicator_points(con, "copper_lme") == []
+    assert (
+        macro_indicators.load_macro_indicator_points(con, "iron_ore_62_cfr_china")
+        == []
+    )
 
 
 def test_default_browser_download_reports_missing_investing_tab(monkeypatch, capsys):
@@ -469,7 +488,9 @@ def test_default_browser_download_reports_missing_investing_tab(monkeypatch, cap
         )(),
     )
 
-    exit_code = import_tracked_commodities.main(["--markets", "copper_lme"])
+    exit_code = import_tracked_commodities.main(
+        ["--markets", "iron_ore_62_cfr_china"]
+    )
     assert exit_code == 1
     assert "leave it open" in capsys.readouterr().err
 

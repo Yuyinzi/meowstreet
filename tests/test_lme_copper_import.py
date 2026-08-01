@@ -231,3 +231,57 @@ def test_audit_handles_no_shared_dates_without_divide_by_zero():
     assert audit["price_correlation"] is None
     assert audit["return_correlation"] is None
     assert audit["price_parity"] is False
+
+
+def test_import_cli_forwards_initial_flag_and_prints_result(
+    monkeypatch, tmp_path, capsys
+):
+    from scripts import import_lme_copper
+
+    captured = {}
+
+    def fake_refresh(con, today_date=None, fetcher=None, initial=False):
+        captured["today_date"] = today_date
+        captured["initial"] = initial
+        return {
+            "series": "copper_lme_sina_cad_v1",
+            "observations": 1,
+            "start_date": "2026-07-31",
+            "end_date": "2026-08-02",
+        }
+
+    monkeypatch.setattr(lme_copper_import, "refresh_lme_copper", fake_refresh)
+    exit_code = import_lme_copper.main(
+        [
+            "--db-path",
+            str(tmp_path / "market.sqlite"),
+            "--today-date",
+            "2026-08-01",
+            "--initial",
+        ]
+    )
+    assert exit_code == 0
+    assert captured == {"today_date": "2026-08-01", "initial": True}
+    out = capsys.readouterr().out
+    assert "series: copper_lme_sina_cad_v1" in out
+    assert "observations: 1" in out
+    assert "start_date: 2026-07-31" in out
+    assert "end_date: 2026-08-02" in out
+
+
+def test_import_cli_reports_errors_without_traceback(monkeypatch, capsys, tmp_path):
+    from scripts import import_lme_copper
+
+    def raising_refresh(con, today_date=None, fetcher=None, initial=False):
+        raise ValueError("sina unavailable")
+
+    monkeypatch.setattr(
+        lme_copper_import, "refresh_lme_copper", raising_refresh
+    )
+    exit_code = import_lme_copper.main(
+        ["--db-path", str(tmp_path / "market.sqlite"), "--today-date", "2026-08-01"]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err == " lme copper import error: sina unavailable\n"

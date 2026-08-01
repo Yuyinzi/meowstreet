@@ -21,6 +21,7 @@ def args_without_skips():
         skip_lumber=False,
         skip_copper_comex=False,
         skip_dce_iron_ore_sina=False,
+        skip_lme_copper=False,
         fomc_calendar_path=None,
         stop_on_error=False,
     )
@@ -96,6 +97,7 @@ def test_main_refreshes_official_building_permits_when_enabled():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -153,6 +155,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -197,6 +200,7 @@ def test_main_does_not_generate_ai_interpretations():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -238,6 +242,7 @@ def test_main_continues_after_provider_failure(capsys):
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -288,6 +293,7 @@ def test_main_can_stop_after_first_failure():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -321,6 +327,7 @@ def test_main_records_exceptions_as_failures(capsys):
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 1
@@ -357,6 +364,7 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -401,6 +409,7 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -440,6 +449,7 @@ def test_main_skip_flags_remove_tasks():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -482,6 +492,7 @@ def test_main_runs_both_ism_surveys_in_order():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert result == 0
@@ -522,6 +533,7 @@ def test_planned_tasks_includes_nfib_import_by_default():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert any(call[0] == "nfib" for call in calls)
@@ -550,6 +562,7 @@ def test_skip_nfib_sbo_removes_nfib_task():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
 
@@ -582,6 +595,7 @@ def test_planned_tasks_includes_nfib_regional_import_by_default():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert any(call[0] == "nfib_regional" for call in calls)
@@ -617,6 +631,7 @@ def test_planned_tasks_includes_unless_skipped():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert any(call[0] == "" for call in calls)
@@ -646,6 +661,7 @@ def test_skip_cyclical_commodities_removes_task():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
 
@@ -673,6 +689,7 @@ def test_skip_nfib_sbo_regional_removes_nfib_regional_task():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
 
@@ -706,6 +723,7 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -765,6 +783,7 @@ def test_main_runs_all_fomc_tasks_in_order(tmp_path):
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -809,6 +828,7 @@ def test_main_skips_all_fomc_tasks_when_skip_fomc_flag():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
     assert exit_code == 0
@@ -838,6 +858,7 @@ def test_skip_oil_removes_oil_task():
         dce_iron_ore_sina_main=lambda argv: 0,
         copper_comex_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
+        lme_copper_main=lambda argv: 0,
     )
 
 
@@ -950,3 +971,39 @@ def test_macro_refresh_skip_dce_iron_ore_sina_omits_the_task():
     )
 
     assert not any(name == "dce_iron_ore_sina" for name, _, _ in tasks)
+
+
+def test_macro_refresh_registers_lme_copper_cad_by_default():
+    tasks = refresh_macro_data._planned_tasks(
+        args_without_skips(),
+        fake_benchmark_main,
+        fake_rates_main,
+        fake_consumer_main,
+        fake_m2_main,
+        fake_building_permits_main,
+        fake_ism_main,
+        fake_ism_services_main,
+        fake_ism_reports_main,
+        fake_gdp_main,
+        lme_copper_main=fake_lumber_main,
+    )
+    assert ("lme_copper_sina", fake_lumber_main, []) in tasks
+
+
+def test_macro_refresh_skip_lme_copper_omits_only_lme_task():
+    args = args_without_skips()
+    args.skip_lme_copper = True
+    tasks = refresh_macro_data._planned_tasks(
+        args,
+        fake_benchmark_main,
+        fake_rates_main,
+        fake_consumer_main,
+        fake_m2_main,
+        fake_building_permits_main,
+        fake_ism_main,
+        fake_ism_services_main,
+        fake_ism_reports_main,
+        fake_gdp_main,
+        lme_copper_main=fake_lumber_main,
+    )
+    assert not any(name == "lme_copper_sina" for name, _, _ in tasks)

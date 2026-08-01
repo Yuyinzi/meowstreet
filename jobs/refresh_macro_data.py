@@ -23,6 +23,7 @@ from scripts import import_copper_comex
 from scripts import import_cyclical_commodities
 from scripts import import_dce_iron_ore_sina
 from scripts import import_lumber
+from scripts import import_lme_copper
 from scripts import import_oil
 from scripts import import_shfe_copper
 from scripts import import_us_building_permits
@@ -104,6 +105,7 @@ def _planned_tasks(
     copper_comex_main=import_copper_comex.main,
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
+    lme_copper_main=import_lme_copper.main,
 ):
     tasks = []
     if not args.skip_yahoo:
@@ -178,6 +180,8 @@ def _planned_tasks(
         tasks.append(("shfe_copper", shfe_copper_main, ["--incremental"]))
     if dce_iron_ore_sina_main is not None and not args.skip_dce_iron_ore_sina:
         tasks.append(("dce_iron_ore_sina", dce_iron_ore_sina_main, []))
+    if not args.skip_lme_copper:
+        tasks.append(("lme_copper_sina", lme_copper_main, []))
     return tasks
 
 
@@ -212,6 +216,7 @@ def main(
     copper_comex_main=import_copper_comex.main,
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
+    lme_copper_main=import_lme_copper.main,
 ):
     if main is None:
         main = import_cyclical_commodities.main
@@ -241,6 +246,7 @@ def main(
     parser.add_argument("--skip-copper-comex", action="store_true")
     parser.add_argument("--skip-shfe-copper", action="store_true")
     parser.add_argument("--skip-dce-iron-ore-sina", action="store_true")
+    parser.add_argument("--skip-lme-copper", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
     parser.add_argument(
         "--stop-on-error",
@@ -274,6 +280,7 @@ def main(
         copper_comex_main,
         shfe_copper_main,
         dce_iron_ore_sina_main,
+        lme_copper_main,
     ):
         result = _run_task(name, func, task_argv)
         results.append(result)
