@@ -20,8 +20,8 @@ _FAKE_OBSERVATION = {
     "date": "2026-07-24",
     "value": 5.7,
     "source": "investing.com",
-    "source_url": "https://www.investing.com/commodities/copper-historical-data",
-    "source_identifier": "copper_comex",
+    "source_url": "https://www.investing.com/commodities/copper-historical-data?cid=959211",
+    "source_identifier": "copper_lme",
     "source_class": "free_web",
     "retrieved_at": "2026-07-30T12:00:00",
 }
@@ -62,7 +62,7 @@ def test_refresh_rolls_back_when_a_market_requires_reauthentication(tmp_path):
     with pytest.raises(ValueError, match="session requires verification"):
         refresh_tracked_commodities(con, fetcher=failing_fetcher)
 
-    assert macro_indicators.load_macro_indicator_points(con, "copper_comex") == []
+    assert macro_indicators.load_macro_indicator_points(con, "copper_lme") == []
 
 
 def test_refresh_merges_method_prices_and_preserves_source_metadata(tmp_path):
@@ -70,9 +70,9 @@ def test_refresh_merges_method_prices_and_preserves_source_metadata(tmp_path):
     con = macro_indicators.connect(db_path)
 
     result = refresh_tracked_commodities(con, fetcher=_fake_fetcher)
-    assert result == {"series": 4, "observations": 4}
+    assert result == {"series": 3, "observations": 3}
 
-    points = macro_indicators.load_macro_indicator_points(con, "copper_comex")
+    points = macro_indicators.load_macro_indicator_points(con, "copper_lme")
     assert len(points) == 1
     assert points[0]["source"] == "investing.com"
 
@@ -96,12 +96,12 @@ def test_refresh_preserves_source_class_and_retrieved_at_through_db_roundtrip(tm
 
     refresh_tracked_commodities(con, fetcher=_fake_fetcher)
     observations = macro_indicators.load_macro_indicator_observations(
-        con, "copper_comex"
+        con, "copper_lme"
     )
     assert len(observations) == 1
     assert observations[0]["source_class"] == "free_web"
     assert observations[0]["retrieved_at"] == "2026-07-30T12:00:00"
-    assert observations[0]["source_identifier"] == "copper_comex"
+    assert observations[0]["source_identifier"] == "copper_lme"
 
 
 _CSV_TEXT = 'Date,Price,Open,High,Low,Vol.,Change %\n"Jul 24, 2026",5.700,5.710,5.720,5.680,12.5K,0.35%\n"Jul 23, 2026",5.680,5.690,5.700,5.660,15.2K,-0.18%\n'
@@ -177,7 +177,7 @@ def test_cli_reports_chrome_start_command_when_cdp_session_is_missing(
     )
 
     exit_code = import_tracked_commodities.main(
-        ["--markets", "copper_comex", "--db-path", "/tmp/nonexistent.db"]
+        ["--markets", "copper_lme", "--db-path", "/tmp/nonexistent.db"]
     )
     assert exit_code == 1
     assert "start_investing_chrome.py" in capsys.readouterr().err
@@ -194,7 +194,7 @@ def test_cli_dry_run_uses_browser_download_range(monkeypatch, capsys):
             "series": 1,
             "observations": 42,
             "ranges": {
-                "copper_comex": {
+                "copper_lme": {
                     "start_date": "2016-01-01",
                     "end_date": "2026-07-30",
                 }
@@ -214,13 +214,13 @@ def test_cli_dry_run_uses_browser_download_range(monkeypatch, capsys):
     )
 
     exit_code = import_tracked_commodities.main(
-        ["--dry-run", "--markets", "copper_comex"]
+        ["--dry-run", "--markets", "copper_lme"]
     )
 
     assert exit_code == 0
     assert calls == [
         {
-            "markets": ["copper_comex"],
+            "markets": ["copper_lme"],
             "cdp_endpoint": "http://127.0.0.1:9222",
             "dry_run": True,
         }
@@ -275,17 +275,17 @@ def test_csv_import_roundtrip_preserves_provenance(tmp_path):
     con = macro_indicators.connect(db_path)
 
     result = tracked_commodities_import.import_commodity_csv_files(
-        con, {"copper_comex": csv_path}
+        con, {"copper_lme": csv_path}
     )
     assert result == {"series": 1, "observations": 2}
 
     observations = macro_indicators.load_macro_indicator_observations(
-        con, "copper_comex"
+        con, "copper_lme"
     )
     assert len(observations) == 2
     assert observations[0]["source"] == "investing.com"
     assert observations[0]["source_class"] == "free_web"
-    assert observations[0]["source_identifier"] == "copper_comex"
+    assert observations[0]["source_identifier"] == "copper_lme"
     assert observations[0]["retrieved_at"] is not None
 
 
@@ -294,7 +294,7 @@ def test_refresh_honours_markets_parameter(tmp_path):
     con = macro_indicators.connect(db_path)
 
     result = refresh_tracked_commodities(
-        con, fetcher=_fake_fetcher, markets=["copper_comex"]
+        con, fetcher=_fake_fetcher, markets=["copper_lme"]
     )
     assert result == {"series": 1, "observations": 1}
 
@@ -317,6 +317,7 @@ def test_macro_refresh_does_not_register_http_commodity_task_by_default():
         skip_oil=True,
         skip_tracked_commodities=False,
         skip_lumber=True,
+        skip_copper_comex=True,
         fomc_calendar_path=None,
     )
 
@@ -364,10 +365,10 @@ def test_browser_download_batch_writes_nothing_when_one_market_download_fails(tm
     with pytest.raises(ValueError, match="lumber"):
         import_commodity_browser_downloads(
             con,
-            markets=["copper_comex", "lumber"],
+            markets=["copper_lme", "lumber"],
             downloader=failing_downloader,
         )
-    assert macro_indicators.load_macro_indicator_points(con, "copper_comex") == []
+    assert macro_indicators.load_macro_indicator_points(con, "copper_lme") == []
 
 
 def test_browser_download_import_uses_price_page_url_and_download_retrieval_time(tmp_path):
@@ -390,18 +391,18 @@ def test_browser_download_import_uses_price_page_url_and_download_retrieval_time
 
     result = import_commodity_browser_downloads(
         con,
-        markets=["copper_comex"],
+        markets=["copper_lme"],
         downloader=completed_downloader,
     )
     assert result == {"series": 1, "observations": 1}
 
     observations = macro_indicators.load_macro_indicator_observations(
-        con, "copper_comex"
+        con, "copper_lme"
     )
     assert len(observations) == 1
     assert (
         observations[0]["source_url"]
-        == MARKET_SERIES["copper_comex"]["price_page_url"]
+        == MARKET_SERIES["copper_lme"]["price_page_url"]
     )
     assert observations[0]["retrieved_at"] == "2026-07-30T00:00:00+00:00"
 
@@ -427,7 +428,7 @@ def test_browser_download_dry_run_returns_range_without_writing_observations(tmp
 
     result = import_commodity_browser_downloads(
         con,
-        markets=["copper_comex"],
+        markets=["copper_lme"],
         downloader=completed_downloader,
         dry_run=True,
     )
@@ -436,13 +437,13 @@ def test_browser_download_dry_run_returns_range_without_writing_observations(tmp
         "series": 1,
         "observations": 1,
         "ranges": {
-            "copper_comex": {
+            "copper_lme": {
                 "start_date": "2016-01-01",
                 "end_date": "2026-07-30",
             }
         },
     }
-    assert macro_indicators.load_macro_indicator_points(con, "copper_comex") == []
+    assert macro_indicators.load_macro_indicator_points(con, "copper_lme") == []
 
 
 def test_default_browser_download_reports_missing_investing_tab(monkeypatch, capsys):

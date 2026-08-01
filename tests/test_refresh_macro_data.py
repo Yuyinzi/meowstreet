@@ -19,6 +19,7 @@ def args_without_skips():
         skip_oil=False,
         skip_tracked_commodities=False,
         skip_lumber=False,
+        skip_copper_comex=False,
         fomc_calendar_path=None,
         stop_on_error=False,
     )
@@ -61,6 +62,10 @@ def fake_gdp_main(argv):
 
 
 def fake_lumber_main(argv):
+    return 0
+
+
+def fake_copper_main(argv):
     return 0
 
 
@@ -810,3 +815,39 @@ def test_macro_refresh_skip_lumber_omits_only_lumber_task():
         lumber_main=fake_lumber_main,
     )
     assert not any(name == "lumber_yahoo" for name, _, _ in tasks)
+
+
+def test_macro_refresh_registers_yahoo_comex_copper():
+    tasks = refresh_macro_data._planned_tasks(
+        args_without_skips(),
+        fake_benchmark_main,
+        fake_rates_main,
+        fake_consumer_main,
+        fake_m2_main,
+        fake_building_permits_main,
+        fake_ism_main,
+        fake_ism_services_main,
+        fake_ism_reports_main,
+        fake_gdp_main,
+        copper_comex_main=fake_copper_main,
+    )
+    assert ("copper_comex_yahoo", fake_copper_main, []) in tasks
+
+
+def test_macro_refresh_skip_copper_comex_omits_yahoo_copper_task():
+    args = args_without_skips()
+    args.skip_copper_comex = True
+    tasks = refresh_macro_data._planned_tasks(
+        args,
+        fake_benchmark_main,
+        fake_rates_main,
+        fake_consumer_main,
+        fake_m2_main,
+        fake_building_permits_main,
+        fake_ism_main,
+        fake_ism_services_main,
+        fake_ism_reports_main,
+        fake_gdp_main,
+        copper_comex_main=fake_copper_main,
+    )
+    assert not any(name == "copper_comex_yahoo" for name, _, _ in tasks)
