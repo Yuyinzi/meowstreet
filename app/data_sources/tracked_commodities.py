@@ -30,6 +30,7 @@ MARKET_SERIES = {
         "instrument": "LME Copper Grade A",
         "units": "USD/tonne",
         "instrument_id": 959211,
+        "rendered_title_token": "Copper",
     },
     "copper_shanghai": {
         "display_name": "Copper (Shanghai)",
