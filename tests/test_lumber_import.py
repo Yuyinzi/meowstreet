@@ -113,8 +113,8 @@ def test_initial_lbr_import_backfills_from_contract_start_and_preserves_archive(
         )
         == expected_yahoo_rows()
     )
-    audit = macro_indicators.load_lumber_overlap_audit(
-        con, "lumber_overlap_v1"
+    audit = macro_indicators.load_vendor_series_overlap_audit(
+        con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
     )
     assert audit["overlap_test_version"] == "lumber_overlap_v1"
     assert audit["shared_date_count"] == 3
@@ -158,14 +158,17 @@ def test_failed_lbr_import_does_not_persist_overlap_audit(tmp_path):
     macro_indicators.merge_macro_indicator_observations(
         con, archived_lumber_series(), archived_rows()
     )
+
     def raising_fetcher(start_date, end_date):
         raise ValueError("yahoo unavailable")
 
     with pytest.raises(ValueError, match="yahoo unavailable"):
         lumber_import.refresh_lumber(con, fetcher=raising_fetcher)
-    assert macro_indicators.load_lumber_overlap_audit(
-        con, "lumber_overlap_v1"
+    assert (
+        macro_indicators.load_vendor_series_overlap_audit(
+        con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
     ) is None
+    )
 
 
 def test_merge_failure_leaves_no_audit_or_active_rows(tmp_path):
@@ -173,6 +176,7 @@ def test_merge_failure_leaves_no_audit_or_active_rows(tmp_path):
     macro_indicators.merge_macro_indicator_observations(
         con, archived_lumber_series(), archived_rows()
     )
+
     def bad_contract_fetcher(start_date, end_date):
         payload = yahoo_payload(expected_yahoo_rows())
         payload["series"] = dict(payload["series"], source_contract={})
@@ -186,9 +190,11 @@ def test_merge_failure_leaves_no_audit_or_active_rows(tmp_path):
             today_date="2026-07-31",
             fetcher=bad_contract_fetcher,
         )
-    assert macro_indicators.load_lumber_overlap_audit(
-        con, "lumber_overlap_v1"
+    assert (
+        macro_indicators.load_vendor_series_overlap_audit(
+        con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
     ) is None
+    )
     assert (
         macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
         == []
@@ -217,9 +223,11 @@ def test_commit_failure_leaves_no_audit_or_active_rows(tmp_path):
             today_date="2026-07-31",
             fetcher=fake_yahoo_fetcher,
         )
-    assert macro_indicators.load_lumber_overlap_audit(
-        con, "lumber_overlap_v1"
+    assert (
+        macro_indicators.load_vendor_series_overlap_audit(
+        con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
     ) is None
+    )
     assert (
         macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
         == []
@@ -244,8 +252,8 @@ def test_overlap_audit_persists_only_with_initial_lbr_rows(tmp_path):
         con, today_date="2026-07-31", fetcher=fake_yahoo_fetcher
     )
 
-    assert macro_indicators.load_lumber_overlap_audit(
-        con, "lumber_overlap_v1"
+    assert macro_indicators.load_vendor_series_overlap_audit(
+        con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
     ) == lumber_import.audit_lumber_overlap(archived_rows(), yahoo_rows())
 
 
@@ -261,7 +269,9 @@ def test_initial_lbr_import_rejects_overwriting_recorded_overlap_audit(tmp_path)
         con, "lumber_cme_lbr_yahoo_v1"
     )
 
-    with pytest.raises(ValueError, match="lumber initial migration is already recorded"):
+    with pytest.raises(
+        ValueError, match="lumber initial migration is already recorded"
+    ):
         lumber_import.refresh_lumber(
             con,
             today_date="2026-07-31",
@@ -269,12 +279,15 @@ def test_initial_lbr_import_rejects_overwriting_recorded_overlap_audit(tmp_path)
             initial=True,
         )
 
-    assert macro_indicators.load_macro_indicator_points(
-        con, "lumber_cme_lbr_yahoo_v1"
-    ) == active_rows
+    assert (
+        macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
+        == active_rows
+    )
 
 
-def test_initial_lbr_import_rejects_existing_active_rows_without_overlap_audit(tmp_path):
+def test_initial_lbr_import_rejects_existing_active_rows_without_overlap_audit(
+    tmp_path,
+):
     con = macro_indicators.connect(tmp_path / "market.sqlite")
     macro_indicators.merge_macro_indicator_observations(
         con,
@@ -282,7 +295,9 @@ def test_initial_lbr_import_rejects_existing_active_rows_without_overlap_audit(t
         [yahoo_observation("2026-07-30", 631.0)],
     )
 
-    with pytest.raises(ValueError, match="lumber initial migration is already recorded"):
+    with pytest.raises(
+        ValueError, match="lumber initial migration is already recorded"
+    ):
         lumber_import.refresh_lumber(
             con,
             today_date="2026-07-31",
@@ -290,9 +305,11 @@ def test_initial_lbr_import_rejects_existing_active_rows_without_overlap_audit(t
             initial=True,
         )
 
-    assert macro_indicators.load_lumber_overlap_audit(
-        con, "lumber_overlap_v1"
+    assert (
+        macro_indicators.load_vendor_series_overlap_audit(
+        con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
     ) is None
+    )
 
 
 def test_overlap_audit_excludes_investing_only_saturday_and_detects_unequal_shared_close():
