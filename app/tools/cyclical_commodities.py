@@ -1,12 +1,21 @@
+from datetime import date
+
 from app.data_sources.tracked_commodities import (
     ACTIVE_MARKET_SERIES,
     MARKET_SERIES,
 )
 from app.data_sources.lumber import _LUMBER_SERIES
 from app.tools import oil_distribution
+from app.tools import price_distribution
 from app.tools import shfe_copper
 
 _CYCLICAL_COMMODITIES_VERSION = "cyclical_commodities_v1"
+
+_NON_OIL_METHOD_VERSION = "non_oil_price_distribution_v1"
+_NON_OIL_DISTRIBUTION_WINDOW = "2016-01-01_to_latest_available"
+_NON_OIL_DISTRIBUTION_START_DATE = "2016-01-01"
+_SHFE_DAILY_RETURN_DEFINITION = "shfe_cu_same_contract_close_to_close"
+_SHFE_WEEKLY_RETURN_DEFINITION = "shfe_cu_same_contract_roll_neutral_iso_week"
 
 _COMMODITY_DISPLAY = {
     "crude_oil_wti": "WTI Crude Oil (ICE Futures Europe)",
@@ -427,6 +436,42 @@ def _shanghai_summary(meta, latest, daily_return, weekly_return):
     return "\n".join(lines)
 
 
+def _distribution_review_status(daily_distribution, weekly_distribution):
+    classifications = (
+        daily_distribution.get("classification"),
+        weekly_distribution.get("classification"),
+    )
+    if any(c is not None and c.startswith("abnormal_") for c in classifications):
+        return "review_required"
+    if classifications == ("normal", "normal"):
+        return "observation_available"
+    return "unavailable"
+
+
+def _distribution_review_label(review_status):
+    if review_status == "review_required":
+        return (
+            "Abnormal price move — review demand, supply, inventory, and "
+            "corroborating leading indicators."
+        )
+    if review_status == "observation_available":
+        return (
+            "Price move is within the normal range of the configured history; "
+            "no review requested."
+        )
+    return "Insufficient price history for a distribution-based review."
+
+
+def _observations_distribution(rows, frequency):
+    return price_distribution.build_distribution_from_observations(
+        rows,
+        frequency,
+        method_version=_NON_OIL_METHOD_VERSION,
+        distribution_window=_NON_OIL_DISTRIBUTION_WINDOW,
+        start_date=_NON_OIL_DISTRIBUTION_START_DATE,
+    )
+
+
 def _shfe_shanghai_payload(meta, main_rows, as_of_date):
     eligible = [row for row in main_rows if row["date"] <= as_of_date]
     if not eligible:
@@ -436,12 +481,54 @@ def _shfe_shanghai_payload(meta, main_rows, as_of_date):
             "status": "unavailable",
             "exchange_label": meta["exchange_label"],
             "source_class": "official_exchange",
+            "daily_distribution": price_distribution.build_distribution_from_returns(
+                [],
+                "daily",
+                method_version=_NON_OIL_METHOD_VERSION,
+                distribution_window=_NON_OIL_DISTRIBUTION_WINDOW,
+                return_definition=_SHFE_DAILY_RETURN_DEFINITION,
+            ),
+            "weekly_distribution": price_distribution.build_distribution_from_returns(
+                [],
+                "weekly",
+                method_version=_NON_OIL_METHOD_VERSION,
+                distribution_window=_NON_OIL_DISTRIBUTION_WINDOW,
+                return_definition=_SHFE_WEEKLY_RETURN_DEFINITION,
+            ),
+            "review_status": "unavailable",
+            "review_label": _distribution_review_label("unavailable"),
         }
     latest = eligible[-1]
     weekly_returns = shfe_copper.build_shfe_cu_weekly_returns(eligible)
     latest_week = weekly_returns[-1] if weekly_returns else None
     daily_return = latest.get("same_contract_return")
     weekly_return = latest_week.get("return") if latest_week else None
+    daily_distribution = price_distribution.build_distribution_from_returns(
+        [
+            {"date": row["date"], "value": row["same_contract_return"]}
+            for row in eligible
+            if row.get("same_contract_return") is not None
+            and row["date"] >= _NON_OIL_DISTRIBUTION_START_DATE
+        ],
+        "daily",
+        method_version=_NON_OIL_METHOD_VERSION,
+        distribution_window=_NON_OIL_DISTRIBUTION_WINDOW,
+        return_definition=_SHFE_DAILY_RETURN_DEFINITION,
+    )
+    weekly_distribution = price_distribution.build_distribution_from_returns(
+        [
+            {
+                "date": date.fromisocalendar(r["year"], r["week"], 7).isoformat(),
+                "value": r["return"],
+            }
+            for r in weekly_returns
+        ],
+        "weekly",
+        method_version=_NON_OIL_METHOD_VERSION,
+        distribution_window=_NON_OIL_DISTRIBUTION_WINDOW,
+        return_definition=_SHFE_WEEKLY_RETURN_DEFINITION,
+    )
+    review_status = _distribution_review_status(daily_distribution, weekly_distribution)
     return {
         "series_id": "copper_shanghai",
         "display_name": meta["display_name"],
@@ -472,6 +559,10 @@ def _shfe_shanghai_payload(meta, main_rows, as_of_date):
         "roll_gap": latest.get("roll_gap"),
         "unadjusted_continuous_return": latest.get("unadjusted_continuous_return"),
         "summary": _shanghai_summary(meta, latest, daily_return, weekly_return),
+        "daily_distribution": daily_distribution,
+        "weekly_distribution": weekly_distribution,
+        "review_status": review_status,
+        "review_label": _distribution_review_label(review_status),
         "status": "available",
     }
 
@@ -488,12 +579,18 @@ def _commodity_payload(
     for sid, entry in registry.items():
         rows = _latest_as_of(observations_by_series.get(sid, []), as_of_date)
         if not rows:
+            daily_distribution = _observations_distribution([], "daily")
+            weekly_distribution = _observations_distribution([], "weekly")
             result[sid] = {
                 "series_id": sid,
                 "display_name": entry["display_name"],
                 "status": "unavailable",
                 "exchange_label": entry["exchange_label"],
                 "source_class": entry["source_class"],
+                "daily_distribution": daily_distribution,
+                "weekly_distribution": weekly_distribution,
+                "review_status": "unavailable",
+                "review_label": _distribution_review_label("unavailable"),
             }
             continue
         latest = rows[-1]
@@ -507,6 +604,11 @@ def _commodity_payload(
             if len(rows) >= 6
             else None
         )
+        daily_distribution = _observations_distribution(rows, "daily")
+        weekly_distribution = _observations_distribution(rows, "weekly")
+        review_status = _distribution_review_status(
+            daily_distribution, weekly_distribution
+        )
         result[sid] = {
             "series_id": sid,
             "display_name": entry["display_name"],
@@ -519,11 +621,46 @@ def _commodity_payload(
             "source_label": entry["source_label"],
             "source_url": latest.get("source_url") or entry["source_url"],
             "source_identifier": latest.get("source_identifier"),
+            "daily_distribution": daily_distribution,
+            "weekly_distribution": weekly_distribution,
+            "review_status": review_status,
+            "review_label": _distribution_review_label(review_status),
             "status": "available",
             "exchange_label": entry["exchange_label"],
             "source_class": entry["source_class"],
         }
     return result
+
+
+def _commodity_returns_summary(commodity):
+    computed_series_ids = [
+        sid
+        for sid, entry in commodity.items()
+        if entry.get("review_status") in ("review_required", "observation_available")
+    ]
+    review_required_series_ids = sorted(
+        sid
+        for sid, entry in commodity.items()
+        if entry.get("review_status") == "review_required"
+    )
+    if computed_series_ids:
+        return {
+            "status": "available",
+            "method_version": _NON_OIL_METHOD_VERSION,
+            "reason": (
+                f"non-oil price distributions available for "
+                f"{len(computed_series_ids)} active series"
+            ),
+            "available_series_count": len(computed_series_ids),
+            "review_required_series_ids": review_required_series_ids,
+        }
+    return {
+        "status": "unavailable",
+        "method_version": _NON_OIL_METHOD_VERSION,
+        "reason": "no non-oil price histories are available for distribution review",
+        "available_series_count": 0,
+        "review_required_series_ids": [],
+    }
 
 
 def build_cyclical_commodities_payload(
@@ -566,10 +703,7 @@ def build_cyclical_commodities_payload(
         "inflation": inflation_payload,
         "oil_observation": oil_observation,
         "commodity_attribution": oil_attribution,
-        "commodity_returns": {
-            "status": "unavailable",
-            "reason": "continuous commodity price histories and contract-roll methodology are not yet configured",
-        },
+        "commodity_returns": _commodity_returns_summary(commodity),
         "card_status": "partial_official_evidence",
         "commodity_observation": commodity,
     }

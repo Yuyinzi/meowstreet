@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -882,3 +883,224 @@ def test_renderer_uses_backend_transition_flags_for_lme_source_change_note():
     assert "same-source history" in source
     assert "series.source_label" in source
     assert "<span>Source: Investing.com</span>" not in source
+
+
+def _weekday_observation_rows(start, count, value_at):
+    rows = []
+    day = start
+    while len(rows) < count:
+        if day.weekday() < 5:
+            rows.append({"date": day.isoformat(), "value": value_at(len(rows))})
+        day += timedelta(days=1)
+    return rows
+
+
+def _comex_normal_rows():
+    return _weekday_observation_rows(
+        date(2016, 1, 4), 265, lambda i: 100.0 * (1.0005**i)
+    )
+
+
+def _comex_abnormal_rows():
+    def value_at(i):
+        if i == 264:
+            return 100.0 * (1.0005**263) * 1.5
+        return 100.0 * (1.0005**i)
+
+    return _weekday_observation_rows(date(2016, 1, 4), 265, value_at)
+
+
+def _comex_payload(rows):
+    return .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        commodity_observations={"copper_comex": rows},
+    )
+
+
+def test_commodity_distribution_classifies_abnormal_move_as_review_required():
+    payload = _comex_payload(_comex_abnormal_rows())
+    series = payload["commodity_observation"]["copper_comex"]
+
+    assert (
+        series["daily_distribution"]["method_version"]
+        == "non_oil_price_distribution_v1"
+    )
+    assert series["daily_distribution"]["classification"] == "abnormal_3sigma"
+    assert series["review_status"] == "review_required"
+    assert "demand-led" not in series["review_label"].lower()
+    assert "supply-led" not in series["review_label"].lower()
+    assert "trade" not in series["review_label"].lower()
+    assert payload["commodity_returns"]["status"] == "available"
+    assert "market_bias" not in payload["commodity_returns"]
+
+
+def test_commodity_distribution_marks_normal_move_as_observation_available():
+    payload = _comex_payload(_comex_normal_rows())
+    series = payload["commodity_observation"]["copper_comex"]
+
+    assert series["daily_distribution"]["classification"] == "normal"
+    assert series["weekly_distribution"]["classification"] == "normal"
+    assert series["review_status"] == "observation_available"
+    assert payload["commodity_returns"]["review_required_series_ids"] == []
+    assert payload["commodity_returns"]["available_series_count"] == 1
+
+
+def test_commodity_distribution_does_not_fall_back_across_copper_markets():
+    payload = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2016-01-20",
+        commodity_observations={
+            "copper_lme": [
+                {"date": "2016-01-15", "value": 4700.0},
+                {"date": "2016-01-18", "value": 4750.0},
+                {"date": "2016-01-19", "value": 4780.0},
+                {"date": "2016-01-20", "value": 4800.0},
+            ],
+        },
+    )
+    comex = payload["commodity_observation"]["copper_comex"]
+
+    assert comex["status"] == "unavailable"
+    assert comex["review_status"] == "unavailable"
+    assert comex["daily_distribution"]["classification"] == "unavailable"
+    assert comex["daily_distribution"]["sample_count"] == 0
+    assert comex["weekly_distribution"]["classification"] == "unavailable"
+    assert "latest_value" not in comex
+
+
+def test_commodity_distribution_is_unavailable_with_insufficient_history():
+    payload = _comex_payload(
+        [
+            {"date": "2016-01-14", "value": 100.0},
+            {"date": "2016-01-15", "value": 100.5},
+            {"date": "2016-01-18", "value": 101.0},
+            {"date": "2016-01-19", "value": 101.5},
+            {"date": "2016-01-20", "value": 102.0},
+        ]
+    )
+    series = payload["commodity_observation"]["copper_comex"]
+
+    assert series["daily_distribution"]["classification"] == "unavailable"
+    assert series["daily_distribution"]["sample_count"] == 4
+    assert series["weekly_distribution"]["classification"] == "unavailable"
+    assert series["review_status"] == "unavailable"
+    assert payload["commodity_returns"]["status"] == "unavailable"
+
+
+def test_commodity_returns_summary_reports_availability_without_market_bias():
+    payload = _comex_payload(_comex_abnormal_rows())
+    summary = payload["commodity_returns"]
+
+    assert summary["status"] == "available"
+    assert summary["method_version"] == "non_oil_price_distribution_v1"
+    assert summary["available_series_count"] == 1
+    assert summary["review_required_series_ids"] == ["copper_comex"]
+    assert "market_bias" not in summary
+    assert "non-oil price distributions available" in summary["reason"]
+
+
+def _shfe_main_rows(include_roll_day=True):
+    rows = []
+    current = date(2016, 1, 4)
+    contracts = ("CU2601", "CU2602")
+    for week_count in range(53):
+        contract = contracts[week_count % 2]
+        for offset in range(5):
+            day = current + timedelta(days=offset)
+            rows.append(
+                {
+                    "date": day.isoformat(),
+                    "selected_contract": contract,
+                    "close": 35000.0 + len(rows) * 1.0,
+                    "settlement": 35000.0 + len(rows) * 1.0,
+                    "volume": 1000.0,
+                    "open_interest": 100000.0,
+                    "contract_roll": False,
+                    "roll_from": None,
+                    "roll_to": None,
+                    "roll_gap": None,
+                    "unadjusted_continuous_return": 0.001,
+                    "same_contract_return": 0.001,
+                    "roll_affected": False,
+                    "selection_rule_version": "test",
+                    "price_series_version": "test",
+                    "return_method_version": "test",
+                }
+            )
+        current += timedelta(days=7)
+    if include_roll_day:
+        rows.append(
+            {
+                "date": current.isoformat(),
+                "selected_contract": "CU2602",
+                "close": 50000.0,
+                "settlement": 50000.0,
+                "volume": 1000.0,
+                "open_interest": 100000.0,
+                "contract_roll": True,
+                "roll_from": "CU2601",
+                "roll_to": "CU2602",
+                "roll_gap": 12000.0,
+                "unadjusted_continuous_return": 0.50,
+                "same_contract_return": None,
+                "roll_affected": True,
+                "selection_rule_version": "test",
+                "price_series_version": "test",
+                "return_method_version": "test",
+            }
+        )
+    return rows
+
+
+def _shfe_payload(main_rows):
+    return .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-10",
+        commodity_observations={},
+        shfe_cu_main_observations=main_rows,
+    )
+
+
+def test_shfe_distribution_excludes_unadjusted_roll_gap_return():
+    payload = _shfe_payload(_shfe_main_rows(include_roll_day=True))
+    shfe = payload["commodity_observation"]["copper_shanghai"]
+    daily = shfe["daily_distribution"]
+    weekly = shfe["weekly_distribution"]
+
+    assert daily["sample_count"] == 265
+    assert daily["current_return"] == pytest.approx(0.001)
+    assert daily["current_return"] != 0.50
+    assert daily["sample_end_date"] == "2017-01-06"
+    assert weekly["sample_count"] == 53
+    assert weekly["current_return"] != 0.50
+    assert "unadjusted_continuous_return" not in daily
+
+
+def test_shfe_distribution_is_normal_with_sufficient_same_contract_returns():
+    payload = _shfe_payload(_shfe_main_rows(include_roll_day=False))
+    shfe = payload["commodity_observation"]["copper_shanghai"]
+
+    assert (
+        shfe["daily_distribution"]["method_version"]
+        == "non_oil_price_distribution_v1"
+    )
+    assert shfe["daily_distribution"]["classification"] == "normal"
+    assert shfe["weekly_distribution"]["classification"] == "normal"
+    assert shfe["review_status"] == "observation_available"
+    assert shfe["daily_distribution"]["sample_count"] == 265
+    assert shfe["weekly_distribution"]["sample_count"] == 53
+    assert (
+        shfe["daily_distribution"]["return_definition"]
+        == "shfe_cu_same_contract_close_to_close"
+    )
+    assert (
+        shfe["weekly_distribution"]["return_definition"]
+        == "shfe_cu_same_contract_roll_neutral_iso_week"
+    )
