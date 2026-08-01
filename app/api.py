@@ -82,9 +82,8 @@ _OIL_SERIES_IDS = [
 ]
 
 method_COMMODITY_SERIES_IDS = [
-    "copper_comex_hg_yahoo_v1",
+    "copper_comex",
     "copper_lme",
-    "copper_lme_sina_cad_v1",
     "copper_shanghai",
     "iron_ore_62_cfr_china",
     "iron_ore_dce",
