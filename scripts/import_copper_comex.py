@@ -1,0 +1,46 @@
+import argparse
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from app.db import macro_indicators
+from app.services import copper_comex_import
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Import  Yahoo HG COMEX copper observations"
+    )
+    parser.add_argument(
+        "--db-path", type=Path, default=macro_indicators.DEFAULT_DB_PATH
+    )
+    parser.add_argument("--today-date")
+    parser.add_argument(
+        "--initial",
+        action="store_true",
+        help="backfill from the contract start date regardless of stored rows",
+    )
+    args = parser.parse_args(argv)
+    con = macro_indicators.connect(args.db_path)
+    try:
+        result = copper_comex_import.refresh_copper_comex(
+            con,
+            today_date=args.today_date,
+            initial=args.initial,
+        )
+    except ValueError as exc:
+        print(f" copper comex import error: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        con.close()
+    print(
+        f"series: {result['series']}, observations: {result['observations']}, "
+        f"start_date: {result['start_date']}, end_date: {result['end_date']}"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
