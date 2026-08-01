@@ -6,8 +6,15 @@ import pytest
 
 from app.data_sources.chrome_cdp import ChromeCDP
 from app.data_sources.investing_download import (
+    method_HISTORY_START_DATE,
     DOWNLOAD_DIR,
+    _click_download_expr,
+    _download_anchor_href_expr,
+    _download_href_expr,
+    _open_method_history_range_expr,
+    _set_method_history_range_expr,
     download_commodity_csv,
+    set_method_history_range,
     wait_for_completed_csv,
 )
 
@@ -71,21 +78,71 @@ def _page_that_navigates_and_returns_ready(
 ):
     csv_path = tmp_path / csv_filename
     messages = [
-        {"id": 1, "result": {"data": "ok"}},  # Browser.setDownloadBehavior
-        {"id": 2, "result": {}},  # Page.navigate
-        {"id": 3, "result": {"result": {"type": "string", "value": "complete"}}},
+        {"id": 1, "result": {}},
+        {"id": 2, "result": {"result": {"type": "string", "value": "complete"}}},
+        {
+            "id": 3,
+            "result": {
+                "result": {
+                    "type": "string",
+                    "value": "blob:https://www.investing.com/old",
+                }
+            },
+        },
+        {
+            "id": 4,
+            "result": {"result": {"type": "object", "value": {"opened": True}}},
+        },
+        {
+            "id": 5,
+            "result": {
+                "result": {
+                    "type": "object",
+                    "value": {
+                        "applied": True,
+                        "start_date": "2016-01-01",
+                        "end_date": "2026-07-30",
+                        "range_text": "01/01/2016 - 07/30/2026",
+                    },
+                }
+            },
+        },
+        {
+            "id": 6,
+            "result": {
+                "result": {
+                    "type": "object",
+                    "value": {
+                        "start_date": "2016-01-01",
+                        "end_date": "2026-07-30",
+                        "range_text": "01/01/2016 - 07/30/2026",
+                    },
+                }
+            },
+        },
     ]
     if click_success:
-        messages.append(
-            {
-                "id": 4,
+        messages.extend(
+            [
+                {
+                "id": 7,
+                "result": {
+                    "result": {
+                        "type": "string",
+                        "value": "blob:https://www.investing.com/new",
+                    }
+                },
+                },
+                {
+                "id": 8,
                 "result": {
                     "result": {
                         "type": "object",
                         "value": {"clicked": True, "tag": "A", "text": "Download Data"},
                     }
                 },
-            }
+                },
+            ]
         )
     socket = _FakeSocket(messages)
 
@@ -95,7 +152,7 @@ def _page_that_navigates_and_returns_ready(
 
         def evaluate(self, expression):
             result = super().evaluate(expression)
-            if create_csv_on_click and "download data" in expression.lower():
+            if create_csv_on_click and "previousElementSibling" in expression:
                 csv_path.write_text("Date,Price\n2026-07-30,4.5\n", encoding="utf-8")
             return result
 
@@ -135,6 +192,82 @@ class _FakePageCDPNoNav:
 
 
 # --- wait_for_completed_csv tests ---
+
+
+def test_download_click_expression_targets_the_download_anchor_sibling():
+    expression = _click_download_expr()
+
+    assert "a[download]" in expression
+    assert "previousElementSibling" in expression
+    assert "a, button, span, div" not in expression
+
+
+def test_download_href_expression_reads_the_native_csv_blob_url():
+    expression = _download_href_expr()
+
+    assert "a[download]" in expression
+    assert "blob:" in expression
+
+
+def test_download_anchor_href_expression_reads_pre_refresh_href():
+    expression = _download_anchor_href_expr()
+
+    assert "a[download]" in expression
+    assert "return anchor?.href" in expression
+
+
+def test_method_history_range_expression_uses_native_date_inputs_and_events():
+    expression = _set_method_history_range_expr(method_HISTORY_START_DATE)
+
+    assert "input[type=date]" in expression
+    assert method_HISTORY_START_DATE in expression
+    assert ".max" in expression
+    assert "input" in expression
+    assert "change" in expression
+    assert "Apply" in expression
+
+
+def test_method_history_range_open_expression_clicks_rendered_range_control():
+    expression = _open_method_history_range_expr()
+
+    assert "click()" in expression
+    assert "\\d{2}" in expression
+
+
+def test_set_method_history_range_returns_page_latest_available_date():
+    class FakePageCDP:
+        def evaluate(self, expression):
+            if "input[type=date]" in expression:
+                return {
+                    "applied": True,
+                    "start_date": "2016-01-01",
+                    "end_date": "2026-07-30",
+                    "range_text": "01/01/2016 - 07/30/2026",
+                }
+            if "click()" in expression:
+                return {"opened": True}
+            return {
+                "start_date": "2016-01-01",
+                "end_date": "2026-07-30",
+                "range_text": "01/01/2016 - 07/30/2026",
+            }
+
+    assert set_method_history_range(FakePageCDP(), timeout_seconds=0) == {
+        "status": "ok",
+        "start_date": "2016-01-01",
+        "end_date": "2026-07-30",
+    }
+
+
+def test_set_method_history_range_fails_when_page_has_no_latest_available_date():
+    class FakePageCDP:
+        def evaluate(self, expression):
+            return {"applied": False, "reason": "historical date controls unavailable"}
+
+    result = set_method_history_range(FakePageCDP(), timeout_seconds=0)
+
+    assert result["status"] == "download_failed"
+    assert "historical date controls unavailable" in result["message"]
 
 
 def test_download_wait_rejects_unfinished_crdownload(tmp_path):
@@ -179,6 +312,8 @@ def test_download_reuses_existing_page_and_closes_only_websockets(tmp_path):
         timeout_seconds=5,
     )
     assert result["status"] == "ok"
+    assert result["start_date"] == "2016-01-01"
+    assert result["end_date"] == "2026-07-30"
     assert "Browser.close" not in browser_instance.methods
     assert "Target.createTarget" not in browser_instance.methods
 
