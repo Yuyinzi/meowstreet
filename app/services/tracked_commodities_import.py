@@ -2,7 +2,6 @@ from datetime import timedelta, date as date_type
 from pathlib import Path
 
 from app.data_sources import investing_chrome
-from app.data_sources.investing_download import download_commodity_csv
 from app.data_sources.investing_rendered_history import (
     fetch_rendered_investing_history,
 )
@@ -90,62 +89,6 @@ def refresh_tracked_commodities(
             )
             result["series"] += 1
             result["observations"] += len(item["observations"])
-        con.commit()
-        return result
-    except Exception:
-        con.rollback()
-        raise
-
-
-def import_commodity_browser_downloads(
-    con,
-    markets=None,
-    downloader=download_commodity_csv,
-    cdp_endpoint=None,
-    dry_run=False,
-):
-    series_ids = _active_series_ids(markets)
-    all_payloads = []
-    ranges = {}
-    for sid in series_ids:
-        meta = ACTIVE_MARKET_SERIES[sid]
-        result = downloader(meta, cdp_endpoint=cdp_endpoint)
-        if result["status"] != "ok":
-            raise ValueError(
-                f"{sid}: browser download failed — {result.get('message', result['status'])}"
-            )
-        csv_text = Path(result["csv_path"]).read_text(encoding="utf-8")
-        observations = parse_commodity_csv(
-            csv_text,
-            sid,
-            source_url=result["source_url"],
-            retrieved_at=result["retrieved_at"],
-        )
-        if not observations:
-            raise ValueError(f"{sid}: parsed 0 valid observations from downloaded CSV")
-        ranges[sid] = {
-            "start_date": result.get("start_date"),
-            "end_date": result.get("end_date"),
-        }
-        all_payloads.append(
-            (sid, build_commodity_series_payload(sid, observations))
-        )
-    if dry_run:
-        return {
-            "series": len(all_payloads),
-            "observations": sum(
-                len(payload["observations"]) for _, payload in all_payloads
-            ),
-            "ranges": ranges,
-        }
-    try:
-        result = {"series": 0, "observations": 0}
-        for sid, payload in all_payloads:
-            macro_indicators.merge_macro_indicator_observations(
-                con, payload["series"], payload["observations"], commit=False
-            )
-            result["series"] += 1
-            result["observations"] += len(payload["observations"])
         con.commit()
         return result
     except Exception:
