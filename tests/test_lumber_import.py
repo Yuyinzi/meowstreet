@@ -34,6 +34,7 @@ def archived_observation(date_value, value):
         "source_hash": None,
         "source_class": "free_web",
         "retrieved_at": ARCHIVED_RETRIEVED_AT,
+        "access_adapter_version": None,
     }
 
 
@@ -59,6 +60,7 @@ def yahoo_observation(date_value, value):
         "source_hash": None,
         "source_class": "vendor_free_market_data",
         "retrieved_at": YAHOO_RETRIEVED_AT,
+        "access_adapter_version": None,
     }
 
 
@@ -166,8 +168,9 @@ def test_failed_lbr_import_does_not_persist_overlap_audit(tmp_path):
         lumber_import.refresh_lumber(con, fetcher=raising_fetcher)
     assert (
         macro_indicators.load_vendor_series_overlap_audit(
-        con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
-    ) is None
+            con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
+        )
+        is None
     )
 
 
@@ -192,8 +195,9 @@ def test_merge_failure_leaves_no_audit_or_active_rows(tmp_path):
         )
     assert (
         macro_indicators.load_vendor_series_overlap_audit(
-        con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
-    ) is None
+            con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
+        )
+        is None
     )
     assert (
         macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
@@ -225,8 +229,9 @@ def test_commit_failure_leaves_no_audit_or_active_rows(tmp_path):
         )
     assert (
         macro_indicators.load_vendor_series_overlap_audit(
-        con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
-    ) is None
+            con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
+        )
+        is None
     )
     assert (
         macro_indicators.load_macro_indicator_points(con, "lumber_cme_lbr_yahoo_v1")
@@ -307,8 +312,9 @@ def test_initial_lbr_import_rejects_existing_active_rows_without_overlap_audit(
 
     assert (
         macro_indicators.load_vendor_series_overlap_audit(
-        con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
-    ) is None
+            con, "lumber_cme_lbr_yahoo_v1", "lumber_overlap_v1"
+        )
+        is None
     )
 
 

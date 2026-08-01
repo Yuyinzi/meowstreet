@@ -36,6 +36,7 @@ def archived_observation(date_value, value):
         "source_hash": None,
         "source_class": "free_web",
         "retrieved_at": ARCHIVED_RETRIEVED_AT,
+        "access_adapter_version": None,
     }
 
 
@@ -52,6 +53,7 @@ def yahoo_observation(date_value, value):
         "source_hash": None,
         "source_class": "vendor_free_market_data",
         "retrieved_at": YAHOO_RETRIEVED_AT,
+        "access_adapter_version": None,
     }
 
 

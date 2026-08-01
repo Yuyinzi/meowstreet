@@ -293,6 +293,33 @@ class TestMacroIndicatorObservationMetadata:
         )
         assert result == []
 
+    def test_merge_macro_indicator_observations_persists_access_adapter_version(
+        self, tmp_path
+    ):
+        con = macro_indicators.connect(tmp_path / "market.sqlite")
+        series = {
+            "series_id": "copper_lme_sina_cad_v1",
+            "title": "Copper (LME 3M)",
+            "units": "USD/tonne",
+            "source": "sina_finance",
+        }
+        macro_indicators.merge_macro_indicator_observations(
+            con,
+            series,
+            [
+                {
+                    "date": "2026-07-31",
+                    "value": 13803.0,
+                    "source": "sina_finance",
+                    "access_adapter_version": "1.18.81",
+                }
+            ],
+        )
+        result = macro_indicators.load_macro_indicator_observations(
+            con, "copper_lme_sina_cad_v1"
+        )
+        assert result[0]["access_adapter_version"] == "1.18.81"
+
 
 _COT_ROW = {
     "commodity_id": "crude_oil_wti",

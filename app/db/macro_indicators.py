@@ -177,6 +177,16 @@ def init_macro_tables(con):
             )
         except sqlite3.OperationalError:
             pass
+    metadata_columns = {
+        row["name"]
+        for row in con.execute(
+            "pragma table_info(macro_indicator_observation_metadata)"
+        ).fetchall()
+    }
+    if "access_adapter_version" not in metadata_columns:
+        con.execute(
+            "alter table macro_indicator_observation_metadata add column access_adapter_version text"
+        )
     try:
         con.execute(
             "alter table cot_observations add column publication_date_basis text"
@@ -372,8 +382,8 @@ def merge_macro_indicator_observations(con, series, observations, commit=True):
             """insert into macro_indicator_observation_metadata(
                 series_id, date, release_date, publication_date_basis,
                 revision_status, source_url, source_identifier,
-                source_class, retrieved_at
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_class, retrieved_at, access_adapter_version
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             on conflict(series_id, date) do update set
                 release_date = excluded.release_date,
                 publication_date_basis = excluded.publication_date_basis,
@@ -381,7 +391,8 @@ def merge_macro_indicator_observations(con, series, observations, commit=True):
                 source_url = excluded.source_url,
                 source_identifier = excluded.source_identifier,
                 source_class = excluded.source_class,
-                retrieved_at = excluded.retrieved_at""",
+                retrieved_at = excluded.retrieved_at,
+                access_adapter_version = excluded.access_adapter_version""",
             (
                 series["series_id"],
                 observation["date"],
@@ -392,6 +403,7 @@ def merge_macro_indicator_observations(con, series, observations, commit=True):
                 observation.get("source_identifier"),
                 observation.get("source_class"),
                 observation.get("retrieved_at"),
+                observation.get("access_adapter_version"),
             ),
         )
     _merge_series_contract(con, series)
@@ -405,7 +417,7 @@ def load_macro_indicator_observations(con, series_id):
         """select p.date, p.value, p.source,
                   m.release_date, m.publication_date_basis,
                   m.revision_status, m.source_url, m.source_identifier, m.source_hash,
-                  m.source_class, m.retrieved_at
+                  m.source_class, m.retrieved_at, m.access_adapter_version
            from macro_indicator_points p
            left join macro_indicator_observation_metadata m
              on m.series_id = p.series_id and m.date = p.date
