@@ -10,36 +10,29 @@ from app.db import macro_indicators
 from app.services.investing_rendered_refresh import (
     DEFAULT_CDP_PORT,
     DEFAULT_LOCK_PATH,
-    DEFAULT_PROFILE_DIR,
     DEFAULT_READY_TIMEOUT_SECONDS,
     refresh_investing_rendered,
 )
 
 _REMEDIATION = (
     "start an interactive Chrome session with the profile, sign in and complete "
-    "any Investing.com verification, fully close Chrome, then retry the job"
+    "any Investing.com verification, keep Chrome open, then retry the job"
 )
 
 
 def main(argv=None, refresh=refresh_investing_rendered):
     parser = argparse.ArgumentParser(
         description="Refresh the  Iron Ore 62% CFR China rendered "
-        "Investing.com history unattended with the persistent browser profile"
+        "Investing.com history through an already-open verified Chrome session"
     )
     parser.add_argument(
         "--db-path", type=Path, default=macro_indicators.DEFAULT_DB_PATH
     )
     parser.add_argument(
-        "--profile-dir",
-        type=Path,
-        default=DEFAULT_PROFILE_DIR,
-        help="Investing persistent Chrome profile directory",
-    )
-    parser.add_argument(
         "--cdp-port",
         type=int,
         default=DEFAULT_CDP_PORT,
-        help="dedicated CDP port for the temporary headless Chrome",
+        help="CDP port for the already-open interactive Chrome",
     )
     parser.add_argument(
         "--lock-file",
@@ -51,14 +44,13 @@ def main(argv=None, refresh=refresh_investing_rendered):
         "--readiness-timeout",
         type=int,
         default=DEFAULT_READY_TIMEOUT_SECONDS,
-        help="seconds to wait for the headless Chrome CDP endpoint",
+        help="seconds to wait for the interactive Chrome CDP endpoint",
     )
     args = parser.parse_args(argv)
     con = macro_indicators.connect(args.db_path)
     try:
         result = refresh(
             con,
-            profile_dir=args.profile_dir,
             cdp_port=args.cdp_port,
             lock_path=args.lock_file,
             readiness_timeout=args.readiness_timeout,
