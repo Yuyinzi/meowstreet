@@ -354,3 +354,15 @@ def test_parse_investing_history_payload_normalizes_and_deduplicates_dates():
     ]
     assert observations[0]["source_class"] == "free_web"
     assert observations[0]["source_identifier"] == "copper_comex"
+
+
+def test_parse_investing_history_payload_parses_comma_formatted_lme_price():
+    observations = parse_investing_history_payload(
+        {"data": [{"rowDate": "Jul 31, 2026", "last_close": "13,790.78"}]},
+        "copper_lme",
+        retrieved_at="2026-08-01T00:00:00+00:00",
+    )
+
+    assert [(item["date"], item["value"]) for item in observations] == [
+        ("2026-07-31", 13790.78)
+    ]

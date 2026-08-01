@@ -170,7 +170,7 @@ def parse_investing_history_payload(payload, series_id, retrieved_at=None):
         if raw_value is None:
             continue
         try:
-            price = float(raw_value)
+            price = float(str(raw_value).replace(",", ""))
         except (ValueError, TypeError):
             continue
         rows.append({"date": parsed_date, "price": price})
