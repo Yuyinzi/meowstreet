@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 
+from app.http_client import HttpClient
 from app.data_sources import nfib_sbet_api
 
 
@@ -11,32 +13,20 @@ FIXTURE_PATH = ROOT / "tests" / "fixtures" / "nfib_sbet_api_regional_response.js
 FIXTURE_DATA = json.loads(FIXTURE_PATH.read_text())
 
 
-class _FakeOpener:
-    def __init__(self, response_data, status=200):
-        self.response_data = response_data
-        self.status = status
-        self.last_url = None
-        self.last_body = None
-
-    def open(self, url, data=None, timeout=None):
-        self.last_url = url
-        self.last_body = data
-        body = json.dumps(self.response_data).encode("utf-8")
-
-        class _FakeResponse:
-            def read(self):
-                return body
-
-        return _FakeResponse()
-
-    def close(self):
-        pass
-
-
 def test_fetch_regional_data_posts_documented_request_shape():
-    opener = _FakeOpener(FIXTURE_DATA)
-    payload = nfib_sbet_api.fetch_regional_data("pacific", 2021, 2026, opener=opener)
-    sent = json.loads(opener.last_body)
+    captured = {}
+
+    def handler(request):
+        captured["url"] = str(request.url)
+        captured["method"] = request.method
+        captured["body"] = request.content
+        return httpx.Response(200, json=FIXTURE_DATA)
+
+    http_client = HttpClient(transport=httpx.MockTransport(handler))
+    payload = nfib_sbet_api.fetch_regional_data(
+        "pacific", 2021, 2026, http_client=http_client
+    )
+    sent = json.loads(captured["body"])
     assert sent["app_name"] == "sbet"
     assert isinstance(sent["params"], list)
     params_by_name = {p["name"]: p["value"] for p in sent["params"]}
@@ -54,8 +44,13 @@ def test_fetch_regional_data_posts_documented_request_shape():
 
 
 def test_fetch_regional_data_parses_response_into_observations():
-    opener = _FakeOpener(FIXTURE_DATA)
-    payload = nfib_sbet_api.fetch_regional_data("pacific", 2026, 2026, opener=opener)
+    def handler(request):
+        return httpx.Response(200, json=FIXTURE_DATA)
+
+    http_client = HttpClient(transport=httpx.MockTransport(handler))
+    payload = nfib_sbet_api.fetch_regional_data(
+        "pacific", 2026, 2026, http_client=http_client
+    )
     assert len(payload["observations"]) == 1
     obs = payload["observations"][0]
     assert obs["date"] == "2026-06-30"
@@ -65,17 +60,26 @@ def test_fetch_regional_data_parses_response_into_observations():
 
 def test_fetch_regional_data_handles_all_three_regions():
     for region_id in nfib_sbet_api._VALID_REGION_IDS:
-        opener = _FakeOpener(FIXTURE_DATA)
+
+        def handler(request):
+            return httpx.Response(200, json=FIXTURE_DATA)
+
+        http_client = HttpClient(transport=httpx.MockTransport(handler))
         payload = nfib_sbet_api.fetch_regional_data(
-            region_id, 2026, 2026, opener=opener
+            region_id, 2026, 2026, http_client=http_client
         )
         assert payload["region_id"] == region_id
         assert len(payload["observations"]) == 1
 
 
 def test_fetch_regional_data_includes_provenance():
-    opener = _FakeOpener(FIXTURE_DATA)
-    payload = nfib_sbet_api.fetch_regional_data("pacific", 2026, 2026, opener=opener)
+    def handler(request):
+        return httpx.Response(200, json=FIXTURE_DATA)
+
+    http_client = HttpClient(transport=httpx.MockTransport(handler))
+    payload = nfib_sbet_api.fetch_regional_data(
+        "pacific", 2026, 2026, http_client=http_client
+    )
     assert "provenance" in payload
     assert payload["provenance"]["procedure"] == "getTotalsFullQuarter2"
     assert payload["provenance"]["url"] is not None
@@ -93,22 +97,29 @@ def test_fetch_regional_data_rejects_unknown_region():
 
 
 def test_fetch_regional_data_rejects_non_json_response():
-    class _BrokenOpener:
-        def open(self, url, data=None, timeout=None):
-            class _Resp:
-                def read(self):
-                    return b"not json"
-
-            return _Resp()
+    def handler(request):
+        return httpx.Response(200, content=b"not json")
 
     with pytest.raises(ValueError, match="non-json"):
-        nfib_sbet_api.fetch_regional_data("pacific", 2021, 2026, opener=_BrokenOpener())
+        nfib_sbet_api.fetch_regional_data(
+            "pacific",
+            2021,
+            2026,
+            http_client=HttpClient(transport=httpx.MockTransport(handler)),
+        )
 
 
 def test_fetch_regional_data_rejects_non_array_response():
-    opener = _FakeOpener({"unexpected": []})
+    def handler(request):
+        return httpx.Response(200, json={"unexpected": []})
+
     with pytest.raises(ValueError, match="not an array"):
-        nfib_sbet_api.fetch_regional_data("pacific", 2021, 2026, opener=opener)
+        nfib_sbet_api.fetch_regional_data(
+            "pacific",
+            2021,
+            2026,
+            http_client=HttpClient(transport=httpx.MockTransport(handler)),
+        )
 
 
 def test_parse_distributions_computes_net_percentages():
@@ -159,16 +170,25 @@ def test_compute_optimism_returns_none_when_missing_components():
 
 
 def test_fetch_national_data_sends_empty_statev():
-    opener = _FakeOpener(FIXTURE_DATA)
-    payload = nfib_sbet_api.fetch_national_data(2026, 2026, opener=opener)
-    sent = json.loads(opener.last_body)
+    captured = {}
+
+    def handler(request):
+        captured["body"] = request.content
+        return httpx.Response(200, json=FIXTURE_DATA)
+
+    http_client = HttpClient(transport=httpx.MockTransport(handler))
+    nfib_sbet_api.fetch_national_data(2026, 2026, http_client=http_client)
+    sent = json.loads(captured["body"])
     params_by_name = {p["name"]: p["value"] for p in sent["params"]}
     assert params_by_name["statev"] == ""
 
 
 def test_fetch_national_data_includes_response_hash_in_provenance():
-    opener = _FakeOpener(FIXTURE_DATA)
-    payload = nfib_sbet_api.fetch_national_data(2026, 2026, opener=opener)
+    def handler(request):
+        return httpx.Response(200, json=FIXTURE_DATA)
+
+    http_client = HttpClient(transport=httpx.MockTransport(handler))
+    payload = nfib_sbet_api.fetch_national_data(2026, 2026, http_client=http_client)
     assert payload["provenance"]["response_hash"] == payload["response_hash"]
 
 
@@ -472,8 +492,14 @@ def test_single_quarter_response_produces_one_observation():
             "DIM_SURVEY_id": 630,
         },
     ]
-    opener = _FakeOpener(single_quarter_data)
-    payload = nfib_sbet_api.fetch_regional_data("pacific", 2026, 2026, opener=opener)
+
+    def handler(request):
+        return httpx.Response(200, json=single_quarter_data)
+
+    http_client = HttpClient(transport=httpx.MockTransport(handler))
+    payload = nfib_sbet_api.fetch_regional_data(
+        "pacific", 2026, 2026, http_client=http_client
+    )
     assert len(payload["observations"]) == 1
     obs = payload["observations"][0]
     assert obs["date"] == "2026-03-31"

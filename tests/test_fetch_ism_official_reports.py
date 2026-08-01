@@ -1,8 +1,9 @@
 import time
 
+import httpx
 import pytest
-from subprocess import CalledProcessError
 
+from app.http_client import HttpClient
 from app.db import growth_cycle
 from app.db import macro_indicators
 from app.db import us_rates_liquidity
@@ -76,63 +77,41 @@ def test_main_handles_sso_error_gracefully(tmp_path, monkeypatch, capsys):
     assert "ISM membership login" in err
 
 
-def test_fetch_text_uses_plain_curl_transport(monkeypatch):
-    calls = []
+def test_fetch_text_uses_http_client_transport():
+    def handler(request):
+        return httpx.Response(200, content=HTML.encode("utf-8"))
 
-    class Result:
-        stdout = HTML
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(transport=transport)
 
-    def fake_run(args, capture_output, text, check, timeout):
-        calls.append(
-            {
-                "args": args,
-                "capture_output": capture_output,
-                "text": text,
-                "check": check,
-                "timeout": timeout,
-            }
-        )
-        return Result()
-
-    monkeypatch.setattr(fetch_ism_official_reports.subprocess, "run", fake_run)
-
-    result = fetch_ism_official_reports.fetch_text("https://example.com/report")
+    result = fetch_ism_official_reports.fetch_text(
+        "https://example.com/report", http_client=client
+    )
 
     assert result == HTML
-    assert calls == [
-        {
-            "args": ["curl", "-sS", "https://example.com/report"],
-            "capture_output": True,
-            "text": True,
-            "check": True,
-            "timeout": 30,
-        }
-    ]
 
 
-def test_fetch_text_retries_transient_curl_ssl_failure(monkeypatch, capsys):
-    attempts = 0
+def test_fetch_text_retries_transient_http_failure():
+    call_count = 0
     delays = []
 
-    class Result:
-        stdout = HTML
+    def handler(request):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise httpx.ReadTimeout("timed out", request=request)
+        return httpx.Response(200, content=HTML.encode("utf-8"))
 
-    def fake_run(args, capture_output, text, check, timeout):
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise CalledProcessError(35, args)
-        return Result()
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(transport=transport, sleep=delays.append, max_attempts=4)
 
-    monkeypatch.setattr(fetch_ism_official_reports.subprocess, "run", fake_run)
-    monkeypatch.setattr(fetch_ism_official_reports.time, "sleep", delays.append)
-
-    result = fetch_ism_official_reports.fetch_text("https://example.com/report")
+    result = fetch_ism_official_reports.fetch_text(
+        "https://example.com/report", http_client=client
+    )
 
     assert result == HTML
-    assert attempts == 2
+    assert call_count == 2
     assert delays == [1]
-    assert "fetch retry attempt=2/4" in capsys.readouterr().err
 
 
 def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
@@ -224,6 +203,10 @@ def test_requested_months_current_year_excludes_current_month(monkeypatch):
         @classmethod
         def now(cls, tz=None):
             return fake_july
+
+        @classmethod
+        def strftime(cls, fmt):
+            return fake_july.strftime(fmt)
 
     monkeypatch.setattr(fetch_ism_official_reports, "datetime", FakeDatetime)
 
@@ -627,7 +610,7 @@ def test_normalize_report_month_preserves_full_date():
     assert ingestion.normalize_report_month("2026-06-01") == "2026-06-01"
 
 
-def test_main_imports_one_report_month_with_ai(tmp_path, capsys):
+def test_main_imports_one_report_month_with_ai(tmp_path, capsys, monkeypatch):
     from tests.test_ism_ai_extraction import valid_extraction
 
     db_path = tmp_path / "market_data.sqlite"
@@ -635,6 +618,18 @@ def test_main_imports_one_report_month_with_ai(tmp_path, capsys):
     class FakeClient:
         def complete_json(self, prompt):
             return valid_extraction()
+
+    archive_reports = [
+        {
+            "url": "https://www.prnewswire.com/june-2026-ism.html",
+            "report_month": "2026-06-01",
+        }
+    ]
+    monkeypatch.setattr(
+        ingestion,
+        "discover_prnewswire_reports",
+        lambda since_year, survey_type, fetch=None: archive_reports,
+    )
 
     exit_code = fetch_ism_official_reports.main(
         [
@@ -647,7 +642,7 @@ def test_main_imports_one_report_month_with_ai(tmp_path, capsys):
         fetch=lambda url: (
             "<html><article>Manufacturing PMI at 50.0%; "
             "June 2026 ISM Manufacturing PMI Report text. WHAT RESPONDENTS "
-            'ARE SAYING "Input costs remain elevated." [Chemical Products]</article></html>'
+            'ARE SAYING "Input costs remain elevated." [Chemical Products]</article>'
         ),
         ai_client_factory=lambda config: FakeClient(),
     )
@@ -1035,7 +1030,7 @@ def test_main_continues_when_prnewswire_article_fetch_fails(
         if "institute-for-supply-management" in url:
             return listing_html
         if url == bad_url:
-            raise CalledProcessError(35, ["curl", "-sS", url])
+            raise ValueError("ism fetch failed")
         return HTML
 
     monkeypatch.setattr(fetch_ism_official_reports, "fetch_text", fake_fetch)

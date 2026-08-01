@@ -8,6 +8,8 @@ try:
 except ImportError:
     PdfReader = None
 
+from app.http_client import HttpClient
+
 
 SERIES_IDS = {
     "nfib_sbo_optimism",
@@ -130,6 +132,7 @@ _NEXT_SECTION_BOUNDARIES = [
     "PRICE PLANS",
     "ACTUAL PRICE CHANGES",
 ]
+
 
 def _hash_file(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -313,9 +316,7 @@ def _parse_historical_sections(text, provenance):
 
     def _pop_nearest(line_i, skip=0, max_dist=25):
         candidates = [
-            (gi, entry)
-            for gi, entry in enumerate(grid_entries)
-            if entry[0] > line_i
+            (gi, entry) for gi, entry in enumerate(grid_entries) if entry[0] > line_i
         ]
         if len(candidates) > skip:
             grid_i, entry = candidates[skip]
@@ -454,9 +455,7 @@ def parse_sbet_report_text(
     )
     historical_observations = _parse_historical_sections(text, provenance)
     historical_observations = _normalize_observations(historical_observations)
-    _validate_historical_coverage(
-        historical_observations, report_year, report_month
-    )
+    _validate_historical_coverage(historical_observations, report_year, report_month)
     all_observations = _normalize_observations(
         historical_observations + summary_observations
     )
@@ -487,12 +486,10 @@ def parse_sbet_report(report_path, source_url, release_date=None):
     return result
 
 
-def fetch_sbet_report(destination, source_url):
-    from urllib.request import Request, urlopen
-
+def fetch_sbet_report(destination, source_url, http_client=None):
     dest = Path(destination)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    request = Request(source_url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(request, timeout=60) as response:
-        dest.write_bytes(response.read())
+    client = http_client or HttpClient()
+    response = client.request("GET", source_url, timeout=60)
+    dest.write_bytes(response.content)
     return dest

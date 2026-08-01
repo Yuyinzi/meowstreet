@@ -2,6 +2,7 @@ import csv
 import io
 from pathlib import Path
 
+import httpx
 import pytest
 
 from app.data_sources.michigan_consumer_sentiment import (
@@ -12,6 +13,7 @@ from app.data_sources.michigan_consumer_sentiment import (
     parse_aggregate_csv,
     parse_components_csv,
 )
+from app.http_client import HttpClient
 
 
 TABLE_1_CSV = (
@@ -160,108 +162,74 @@ def test_parse_components_csv_rejects_nonnumeric_expectations(tmp_path):
 
 
 def test_michigan_client_fetch_csvs_returns_paths(tmp_path):
-    client = MichiganConsumerSentimentClient()
-
     TABLE_1_RESPONSE = "Month,Year,Index,Title\n1,1978,80.0\n"
     TABLE_5_RESPONSE = "Month,Year,Current Index,Expected Index\n1,1978,85.0,95.1\n"
 
-    class FakeResponse:
-        def __init__(self, body):
-            self._body = body
+    def handler(request):
+        assert request.method == "POST"
+        assert request.url == MICHIGAN_ARCHIVE_URL
+        body = request.content
+        if b"table=1" in body:
+            return httpx.Response(200, content=TABLE_1_RESPONSE.encode("utf-8"))
+        return httpx.Response(200, content=TABLE_5_RESPONSE.encode("utf-8"))
 
-        def read(self):
-            return self._body
+    client = MichiganConsumerSentimentClient(
+        http_client=HttpClient(transport=httpx.MockTransport(handler))
+    )
 
-    import unittest.mock
+    result_table_1 = client.fetch_csv(tmp_path, AGGREGATE_TABLE_ID)
+    assert result_table_1.exists()
+    assert result_table_1.name == "table_1.csv"
 
-    response_bodies = {}
-
-    def fake_urlopen(url, data=None, timeout=None):
-        body = response_bodies.get(url, b"")
-        return FakeResponse(body)
-
-    with unittest.mock.patch(
-        "app.data_sources.michigan_consumer_sentiment.urlopen",
-        side_effect=fake_urlopen,
-    ):
-        response_bodies.clear()
-        response_bodies[MICHIGAN_ARCHIVE_URL] = TABLE_1_RESPONSE.encode("utf-8")
-        result_table_1 = client.fetch_csv(tmp_path, AGGREGATE_TABLE_ID)
-        assert result_table_1.exists()
-        assert result_table_1.name == "table_1.csv"
-
-        response_bodies[MICHIGAN_ARCHIVE_URL] = TABLE_5_RESPONSE.encode("utf-8")
-        result_table_5 = client.fetch_csv(tmp_path, COMPONENTS_TABLE_ID)
-        assert result_table_5.exists()
-        assert result_table_5.name == "table_5.csv"
+    result_table_5 = client.fetch_csv(tmp_path, COMPONENTS_TABLE_ID)
+    assert result_table_5.exists()
+    assert result_table_5.name == "table_5.csv"
 
 
 def test_michigan_client_rejects_empty_response(tmp_path):
-    client = MichiganConsumerSentimentClient()
+    def handler(request):
+        return httpx.Response(200, content=b"")
 
-    class FakeResponse:
-        def read(self):
-            return b""
+    client = MichiganConsumerSentimentClient(
+        http_client=HttpClient(transport=httpx.MockTransport(handler))
+    )
 
-    import unittest.mock
-
-    with unittest.mock.patch(
-        "app.data_sources.michigan_consumer_sentiment.urlopen",
-        side_effect=lambda url, data=None, timeout=None: FakeResponse(),
-    ):
-        with pytest.raises(ValueError, match="empty response body"):
-            client.fetch_csv(tmp_path, AGGREGATE_TABLE_ID)
+    with pytest.raises(ValueError, match="empty response body"):
+        client.fetch_csv(tmp_path, AGGREGATE_TABLE_ID)
 
 
 def test_fetch_csv_rejects_plain_text_response(tmp_path):
-    client = MichiganConsumerSentimentClient()
+    def handler(request):
+        return httpx.Response(200, content=b"upstream temporarily unavailable")
 
-    class FakeResponse:
-        def read(self):
-            return b"upstream temporarily unavailable"
+    client = MichiganConsumerSentimentClient(
+        http_client=HttpClient(transport=httpx.MockTransport(handler))
+    )
 
-    import unittest.mock
-
-    with unittest.mock.patch(
-        "app.data_sources.michigan_consumer_sentiment.urlopen",
-        side_effect=lambda url, data=None, timeout=None: FakeResponse(),
-    ):
-        with pytest.raises(ValueError, match="missing required columns"):
-            client.fetch_csv(tmp_path, AGGREGATE_TABLE_ID)
+    with pytest.raises(ValueError, match="missing required columns"):
+        client.fetch_csv(tmp_path, AGGREGATE_TABLE_ID)
 
 
 def test_fetch_csv_rejects_wrong_columns_for_table(tmp_path):
-    client = MichiganConsumerSentimentClient()
+    def handler(request):
+        return httpx.Response(200, content=b"Date,Price\n1,100\n")
 
-    class FakeResponse:
-        def read(self):
-            return b"Date,Price\n1,100\n"
-
-    import unittest.mock
-
-    with unittest.mock.patch(
-        "app.data_sources.michigan_consumer_sentiment.urlopen",
-        side_effect=lambda url, data=None, timeout=None: FakeResponse(),
-    ):
-        with pytest.raises(ValueError, match="missing required columns"):
-            client.fetch_csv(tmp_path, COMPONENTS_TABLE_ID)
-
-
-def test_fetch_csv_rejects_html_response(tmp_path, monkeypatch):
-    from app.data_sources.michigan_consumer_sentiment import (
-        MichiganConsumerSentimentClient,
+    client = MichiganConsumerSentimentClient(
+        http_client=HttpClient(transport=httpx.MockTransport(handler))
     )
 
-    class FakeResponse:
-        def read(self):
-            return b"<html>upstream error</html>"
+    with pytest.raises(ValueError, match="missing required columns"):
+        client.fetch_csv(tmp_path, COMPONENTS_TABLE_ID)
 
-    monkeypatch.setattr(
-        "app.data_sources.michigan_consumer_sentiment.urlopen",
-        lambda *a, **kw: FakeResponse(),
+
+def test_fetch_csv_rejects_html_response(tmp_path):
+    def handler(request):
+        return httpx.Response(200, content=b"<html>upstream error</html>")
+
+    client = MichiganConsumerSentimentClient(
+        http_client=HttpClient(transport=httpx.MockTransport(handler))
     )
 
-    client = MichiganConsumerSentimentClient()
     with pytest.raises(ValueError, match="non-csv"):
         client.fetch_csv(tmp_path, 1)
 
@@ -304,9 +272,7 @@ def test_parse_components_csv_handles_trailing_blank_column(tmp_path):
 
 def test_parse_aggregate_csv_handles_official_title_line(tmp_path):
     content = (
-        "Table 1: The Index of Consumer Sentiment\n"
-        "Month,Year,Index,\n"
-        "1,1978,83.7,\n"
+        "Table 1: The Index of Consumer Sentiment\nMonth,Year,Index,\n1,1978,83.7,\n"
     )
     path = _write_csv(tmp_path, "table_1.csv", content)
 

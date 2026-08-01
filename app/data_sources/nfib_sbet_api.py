@@ -1,9 +1,11 @@
 import hashlib
 import json
-import urllib.error
-import urllib.request
 from calendar import monthrange
 from datetime import datetime, timezone
+
+import httpx
+
+from app.http_client import HttpClient
 
 
 API_BASE = "https://api.nfib-sbet.org:443/rest/sbetdb/_proc"
@@ -285,36 +287,29 @@ def validate_region_id(region_id):
         raise ValueError(f"nfib regional api: unknown region id: {region_id}")
 
 
-def _do_request(body, opener=None):
+def _do_request(body, http_client=None):
     url = f"{API_BASE}/{API_PROCEDURE}"
-    body_bytes = json.dumps(body).encode("utf-8")
     body_hash = _hash_body(body)
     retrieval_time = datetime.now(timezone.utc).isoformat()
 
-    if opener is not None:
-        try:
-            resp = opener.open(url, data=body_bytes, timeout=60)
-        except Exception as exc:
-            raise ValueError(f"nfib regional api: request failed: {exc}") from exc
-    else:
-        req = urllib.request.Request(
+    client = http_client or HttpClient()
+    try:
+        response = client.request(
+            "POST",
             url,
-            data=body_bytes,
+            json=body,
             headers={"Content-Type": "application/json"},
-            method="POST",
+            timeout=60,
         )
-        try:
-            resp = urllib.request.urlopen(req, timeout=60)
-        except urllib.error.HTTPError as exc:
-            raise ValueError(
-                f"nfib regional api: http {exc.code}: {exc.reason}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise ValueError(
-                f"nfib regional api: connection failed: {exc.reason}"
-            ) from exc
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code if exc.response is not None else "unknown"
+        raise ValueError(f"nfib regional api: http {code}: {exc}") from exc
+    except httpx.HTTPError as exc:
+        raise ValueError(f"nfib regional api: connection failed: {exc}") from exc
+    except Exception as exc:
+        raise ValueError(f"nfib regional api: request failed: {exc}") from exc
 
-    raw_bytes = resp.read()
+    raw_bytes = response.content
     response_hash = hashlib.sha256(raw_bytes).hexdigest()
     try:
         raw = json.loads(raw_bytes.decode("utf-8"))
@@ -327,10 +322,10 @@ def _do_request(body, opener=None):
     return raw, body_hash, response_hash, retrieval_time, url
 
 
-def fetch_regional_data(region_id, start_year, end_year, opener=None):
+def fetch_regional_data(region_id, start_year, end_year, http_client=None):
     validate_region_id(region_id)
     body = _build_request_body(region_id, start_year, end_year)
-    raw, body_hash, response_hash, retrieval_time, url = _do_request(body, opener)
+    raw, body_hash, response_hash, retrieval_time, url = _do_request(body, http_client)
     component_dict = _parse_distributions(raw)
     observations = _build_observations(component_dict)
     return {
@@ -353,9 +348,9 @@ def fetch_regional_data(region_id, start_year, end_year, opener=None):
     }
 
 
-def fetch_national_data(start_year, end_year, opener=None):
+def fetch_national_data(start_year, end_year, http_client=None):
     body = _build_national_request_body(start_year, end_year)
-    raw, body_hash, response_hash, retrieval_time, url = _do_request(body, opener)
+    raw, body_hash, response_hash, retrieval_time, url = _do_request(body, http_client)
     component_dict = _parse_distributions(raw)
     observations = _build_observations(component_dict)
     return {

@@ -3,6 +3,8 @@ import hashlib
 import io
 from pathlib import Path
 
+from app.http_client import HttpClient
+
 
 REPORT_TYPE = "disaggregated_futures_only"
 
@@ -134,14 +136,12 @@ def historical_report_url(year):
     return REPORT_URL_TEMPLATE.format(year=year)
 
 
-def fetch_historical_report(year, cache_dir):
-    import urllib.request
-
+def fetch_historical_report(year, cache_dir, http_client=None):
     url = historical_report_url(year)
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     dest = cache_dir / f"cftc-disaggregated-futures-only-{year}.zip"
-    request = urllib.request.Request(url, headers={"User-Agent": "Meowstreet/1.0"})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        dest.write_bytes(response.read())
+    client = http_client or HttpClient()
+    response = client.request("GET", url, timeout=30)
+    dest.write_bytes(response.content)
     return dest

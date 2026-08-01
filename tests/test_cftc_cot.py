@@ -1,9 +1,10 @@
 from pathlib import Path
-import urllib.request
 
+import httpx
 import pytest
 
 from app.data_sources import cftc_cot
+from app.http_client import HttpClient
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 FIXTURE_PATH = FIXTURE_DIR / "cftc_disaggregated_futures_only_2026.txt"
@@ -74,32 +75,14 @@ def test_cot_commodity_registry_preserves_the_video_12_energy_and_metals_univers
 
 
 def test_fetch_historical_report_uses_identified_request_and_writes_archive(
-    tmp_path, monkeypatch
+    tmp_path,
 ):
-    requests = []
+    def handler(request):
+        assert request.headers["User-Agent"] == "Meowstreet/1.0"
+        return httpx.Response(200, content=b"official archive")
 
-    class FakeResponse:
-        def read(self):
-            return b"official archive"
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            return False
-
-    def fake_urlopen(request, timeout):
-        requests.append((request, timeout))
-        return FakeResponse()
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(
-        urllib.request,
-        "urlretrieve",
-        lambda *args: pytest.fail("urlretrieve must not be used for CFTC downloads"),
+    destination = cftc_cot.fetch_historical_report(
+        2026, tmp_path, http_client=HttpClient(transport=httpx.MockTransport(handler))
     )
 
-    destination = cftc_cot.fetch_historical_report(2026, tmp_path)
-
     assert destination.read_bytes() == b"official archive"
-    assert requests[0][0].get_header("User-agent") == "Meowstreet/1.0"

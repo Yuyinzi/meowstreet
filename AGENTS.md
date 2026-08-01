@@ -334,6 +334,10 @@ method_notes/            # source markdown parsed by the builder
 data/local_system/      # generated JSON method artifacts
 ```
 
+### Outbound HTTP
+
+All website requests in `app/` and `scripts/` must use `app.http_client.HttpClient`. Do not call `urllib.request.urlopen`, `urllib.request.urlretrieve`, or raw `httpx` request APIs directly. Parsing and domain error translation remain with the caller. Every new source that makes HTTP requests must test request construction and response/error contracts using `httpx.MockTransport`.
+
 ## Self-Containment Rule
 
 This repo is a standalone product. Do not import from or reference `traderdash`, `serenity`, `scripts.server`, `chat_service`, `chat_index`, `x_curl`, `tweets`, `strategy`, or any external repos. All imports must resolve within `app/`, stdlib, or the three third-party packages listed in `requirements.txt`.

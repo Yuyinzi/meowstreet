@@ -1,13 +1,12 @@
 from datetime import datetime
 from pathlib import Path
-from urllib.request import Request, urlopen
 
 import openpyxl
 
+from app.http_client import HttpClient
+
 
 PERMIT_HISTORY_URL = "https://www.census.gov/construction/nrc/xls/permits_cust.xlsx"
-
-_USER_AGENT = "Meowstreet/1.0"
 
 
 def _find_seasonally_adjusted_sheet(workbook):
@@ -63,12 +62,12 @@ def _is_data_row(row):
     return False
 
 
-def fetch_permits_workbook(destination):
+def fetch_permits_workbook(destination, http_client=None):
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    request = Request(PERMIT_HISTORY_URL, headers={"User-Agent": _USER_AGENT})
-    with urlopen(request, timeout=60) as response:
-        destination.write_bytes(response.read())
+    client = http_client or HttpClient()
+    response = client.request("GET", PERMIT_HISTORY_URL, timeout=60)
+    destination.write_bytes(response.content)
     return destination
 
 

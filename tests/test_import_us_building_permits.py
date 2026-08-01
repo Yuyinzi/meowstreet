@@ -1,10 +1,12 @@
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 import openpyxl
 import pytest
 
 from app.data_sources import census_nrc
+from app.http_client import HttpClient
 from app.db import macro_indicators
 from app.services import housing_permits_import
 
@@ -33,20 +35,6 @@ def write_census_permits_workbook(xlsx_path, observations):
     wb.save(xlsx_path)
 
 
-class FakeResponse:
-    def __init__(self, content):
-        self._content = content
-
-    def read(self):
-        return self._content
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        pass
-
-
 class TestCensusSource:
     def test_parse_permits_workbook_reads_seasonally_adjusted_us_total(self, tmp_path):
         workbook_path = tmp_path / "permits_cust.xlsx"
@@ -64,16 +52,18 @@ class TestCensusSource:
             payload["observations"][-1]["source_url"] == census_nrc.PERMIT_HISTORY_URL
         )
 
-    def test_fetch_permits_workbook_writes_official_response(
-        self, monkeypatch, tmp_path
-    ):
-        monkeypatch.setattr(
-            census_nrc,
-            "urlopen",
-            lambda request, timeout: FakeResponse(_census_xlsx_bytes()),
+    def test_fetch_permits_workbook_writes_official_response(self, tmp_path):
+        xlsx_bytes = _census_xlsx_bytes()
+
+        def handler(request):
+            assert request.headers["User-Agent"] == "Meowstreet/1.0"
+            return httpx.Response(200, content=xlsx_bytes)
+
+        client = HttpClient(transport=httpx.MockTransport(handler))
+        destination = census_nrc.fetch_permits_workbook(
+            tmp_path / "permits_cust.xlsx", http_client=client
         )
-        destination = census_nrc.fetch_permits_workbook(tmp_path / "permits_cust.xlsx")
-        assert destination.read_bytes() == _census_xlsx_bytes()
+        assert destination.read_bytes() == xlsx_bytes
 
     def test_parse_permits_workbook_rejects_missing_seasonally_adjusted_sheet(
         self, tmp_path

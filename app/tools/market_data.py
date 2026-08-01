@@ -2,12 +2,13 @@ import argparse
 import json
 import sys
 from datetime import UTC, date, datetime, time, timedelta
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 from zoneinfo import ZoneInfo
 
+import httpx
+
 from app.db import market_data as market_data_db
+from app.http_client import HttpClient
 
 
 _YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -22,34 +23,31 @@ def _normalize_symbol(symbol):
     return normalized
 
 
-def _fetch_yahoo_chart_json(symbol, period, interval):
-    query = urlencode({"range": period, "interval": interval})
-    url = f"{_YAHOO_CHART_URL.format(symbol=symbol)}?{query}"
-    return _fetch_json_url(url, symbol)
+def _fetch_yahoo_chart_json(symbol, period, interval, http_client=None):
+    params = {"range": period, "interval": interval}
+    url = _YAHOO_CHART_URL.format(symbol=symbol)
+    return _fetch_json_url(url, symbol, params=params, http_client=http_client)
 
 
-def _fetch_json_url(url, symbol):
-    request = Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0",
-        },
-    )
-    last_error = "unknown error"
-    for _ in range(_YAHOO_FETCH_ATTEMPTS):
-        try:
-            with urlopen(request, timeout=_YAHOO_TIMEOUT_SECONDS) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
+def _fetch_json_url(url, symbol, params=None, http_client=None):
+    client = http_client or HttpClient(max_attempts=_YAHOO_FETCH_ATTEMPTS)
+    try:
+        response = client.request(
+            "GET",
+            url,
+            params=params,
+            headers={"Accept": "application/json"},
+            timeout=_YAHOO_TIMEOUT_SECONDS,
+        )
+        return json.loads(response.content.decode("utf-8"))
+    except httpx.HTTPStatusError as exc:
+        if exc.response is not None:
             raise ValueError(
-                f"market data fetch failed for {symbol}: HTTP {exc.code} {exc.reason}"
+                f"market data fetch failed for {symbol}: HTTP {exc.response.status_code} {exc.response.reason_phrase}"
             ) from exc
-        except TimeoutError as exc:
-            last_error = str(exc)
-        except URLError as exc:
-            last_error = str(exc.reason)
-    raise ValueError(f"market data fetch failed for {symbol}: {last_error}")
+        raise ValueError(f"market data fetch failed for {symbol}: {exc}") from exc
+    except httpx.HTTPError as exc:
+        raise ValueError(f"market data fetch failed for {symbol}: {exc}") from exc
 
 
 def _chart_result(payload, symbol):
@@ -103,11 +101,7 @@ def _current_regular_start_date(result):
     start_timestamp = (
         regular_period.get("start") if isinstance(regular_period, dict) else None
     )
-    timezone_name = (
-        meta.get("exchangeTimezoneName")
-        if isinstance(meta, dict)
-        else None
-    )
+    timezone_name = meta.get("exchangeTimezoneName") if isinstance(meta, dict) else None
     if start_timestamp is None or not timezone_name:
         return None
     return _exchange_date_from_timestamp(start_timestamp, timezone_name)
@@ -118,11 +112,7 @@ def _regular_market_price_date(result):
     regular_market_time = (
         meta.get("regularMarketTime") if isinstance(meta, dict) else None
     )
-    timezone_name = (
-        meta.get("exchangeTimezoneName")
-        if isinstance(meta, dict)
-        else None
-    )
+    timezone_name = meta.get("exchangeTimezoneName") if isinstance(meta, dict) else None
     if regular_market_time is None or not timezone_name:
         return None
     return _exchange_date_from_timestamp(regular_market_time, timezone_name)
@@ -225,6 +215,7 @@ def fetch_market_data(
     today_date=None,
     refresh_days=1,
     overlap_days=5,
+    http_client=None,
 ):
     normalized_symbol = _normalize_symbol(symbol)
     effective_today = today_date or _today_iso()
@@ -243,10 +234,6 @@ def fetch_market_data(
                     raise ValueError(
                         f"market data fetch failed for {normalized_symbol}: HTTP {exc.code} {exc.reason}"
                     ) from exc
-                except URLError as exc:
-                    raise ValueError(
-                        f"market data fetch failed for {normalized_symbol}: {exc.reason}"
-                    ) from exc
             else:
                 start_date = market_data_db.fetch_start_date(
                     latest_date,
@@ -258,6 +245,7 @@ def fetch_market_data(
                     start_date=start_date,
                     end_date=_tomorrow_iso(effective_today),
                     interval=interval,
+                    http_client=http_client,
                 )
             rows = chart_payload_to_price_rows(payload, normalized_symbol)
             market_data_db.save_price_rows(con, normalized_symbol, interval, rows)
@@ -289,7 +277,9 @@ def chart_payload_to_price_rows(payload, symbol):
     dates = _dates_from_timestamps(timestamps)
     adjusted_close = _adjusted_close_values(result, normalized_symbol)
     if len(dates) != len(adjusted_close):
-        raise ValueError(f"price dates and adjusted close lengths differ for {normalized_symbol}")
+        raise ValueError(
+            f"price dates and adjusted close lengths differ for {normalized_symbol}"
+        )
     quotes = {
         "open": _quote_values(result, "open"),
         "high": _quote_values(result, "high"),
@@ -312,18 +302,20 @@ def _date_to_timestamp(date_value):
     return int(datetime.combine(parsed, time.min, tzinfo=UTC).timestamp())
 
 
-def fetch_yahoo_chart_json_for_dates(symbol, start_date, end_date, interval):
+def fetch_yahoo_chart_json_for_dates(
+    symbol, start_date, end_date, interval, http_client=None
+):
     normalized_symbol = _normalize_symbol(symbol)
-    query = urlencode(
-        {
-            "period1": _date_to_timestamp(start_date),
-            "period2": _date_to_timestamp(end_date),
-            "interval": interval,
-            "events": "history",
-        }
+    params = {
+        "period1": _date_to_timestamp(start_date),
+        "period2": _date_to_timestamp(end_date),
+        "interval": interval,
+        "events": "history",
+    }
+    url = _YAHOO_CHART_URL.format(symbol=normalized_symbol)
+    return _fetch_json_url(
+        url, normalized_symbol, params=params, http_client=http_client
     )
-    url = f"{_YAHOO_CHART_URL.format(symbol=normalized_symbol)}?{query}"
-    return _fetch_json_url(url, normalized_symbol)
 
 
 def main(argv=None, fetch_json=None):

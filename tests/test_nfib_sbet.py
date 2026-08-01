@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import httpx
 import pytest
 
 from app.data_sources import nfib_sbet
+from app.http_client import HttpClient
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -141,7 +143,11 @@ Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec
 2025 1 1 1 1 1 1 1 1 1 1 1 1
 2026 1 1 1 1 1 1
 """
-    text = FIXTURE_TEXT.replace("OVERVIEW – SMALL BUSINESS OPTIMISM", unrelated_grid + "OVERVIEW – SMALL BUSINESS OPTIMISM", 1)
+    text = FIXTURE_TEXT.replace(
+        "OVERVIEW – SMALL BUSINESS OPTIMISM",
+        unrelated_grid + "OVERVIEW – SMALL BUSINESS OPTIMISM",
+        1,
+    )
 
     payload = nfib_sbet.parse_sbet_report_text(
         text, SOURCE_URL, RELEASE_DATE, SOURCE_ID
@@ -197,29 +203,15 @@ def test_parse_sbet_report_rejects_missing_pdf(tmp_path):
         nfib_sbet.parse_sbet_report(tmp_path / "nonexistent.pdf", SOURCE_URL)
 
 
-def test_fetch_sbet_report_creates_parent_directory(monkeypatch, tmp_path):
-    import urllib.request
+def test_fetch_sbet_report_creates_parent_directory(tmp_path):
+    def handler(request):
+        assert request.headers["User-Agent"] == "Meowstreet/1.0"
+        return httpx.Response(200, content=b"%PDF-fake")
 
-    calls = []
-
-    class FakeResponse:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            return False
-
-        def read(self):
-            return b"%PDF-fake"
-
-    def fake_urlopen(request, timeout):
-        calls.append((request.full_url, request.get_header("User-agent"), timeout))
-        return FakeResponse()
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(transport=transport)
     dest = tmp_path / "subdir" / "report.pdf"
-    result = nfib_sbet.fetch_sbet_report(dest, SOURCE_URL)
+    result = nfib_sbet.fetch_sbet_report(dest, SOURCE_URL, http_client=client)
     assert result.parent.exists()
     assert result == dest
     assert dest.read_bytes() == b"%PDF-fake"
-    assert calls == [(SOURCE_URL, "Mozilla/5.0", 60)]

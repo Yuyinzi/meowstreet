@@ -2,16 +2,16 @@ import argparse
 import asyncio
 import hashlib
 import re
-import subprocess
 import sys
 import time
-from subprocess import CalledProcessError, TimeoutExpired
 from datetime import datetime, timezone
 from pathlib import Path
 from sqlite3 import IntegrityError
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+from app.http_client import HttpClient
 
 from app.db import growth_cycle
 from app.db import macro_indicators
@@ -40,9 +40,8 @@ MONTHS = [
     "december",
 ]
 
-_IMPORT_ERRORS = (ValueError, CalledProcessError, TimeoutExpired, IntegrityError)
+_IMPORT_ERRORS = (ValueError, IntegrityError)
 _FETCH_ATTEMPTS = 4
-_FETCH_RETRYABLE_CURL_CODES = {6, 7, 18, 28, 35, 52, 56}
 
 
 def extract_prepared_report_payload(con, prepared, source, ai_client):
@@ -192,31 +191,10 @@ def _is_sso_page(html):
     return "Object moved" in html and "ecommerce.ismworld.org" in html
 
 
-def fetch_text(url):
-    result = None
-    for attempt in range(1, _FETCH_ATTEMPTS + 1):
-        try:
-            result = subprocess.run(
-                ["curl", "-sS", url],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=30,
-            )
-            break
-        except (CalledProcessError, TimeoutExpired) as exc:
-            retryable = isinstance(exc, TimeoutExpired) or (
-                exc.returncode in _FETCH_RETRYABLE_CURL_CODES
-            )
-            if not retryable or attempt == _FETCH_ATTEMPTS:
-                raise
-            delay = 2 ** (attempt - 1)
-            log_progress(
-                f"fetch retry attempt={attempt + 1}/{_FETCH_ATTEMPTS} "
-                f"delay={delay}s url={url} error={exc}"
-            )
-            time.sleep(delay)
-    text = result.stdout
+def fetch_text(url, http_client=None):
+    client = http_client or HttpClient(max_attempts=_FETCH_ATTEMPTS)
+    response = client.request("GET", url, timeout=30)
+    text = response.content.decode("utf-8", errors="replace")
     if _is_sso_page(text):
         raise ValueError("ism official report requires ISM membership login")
     return text
@@ -507,9 +485,6 @@ def requested_urls(args, fetch=None):
     return result
 
 
-
-
-
 def main(argv=None, fetch=None, ai_client_factory=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -543,7 +518,9 @@ def main(argv=None, fetch=None, ai_client_factory=None):
     failed = 0
     if args.latest_only:
         targets = ingestion.build_targets(
-            "manufacturing", force_latest=True, fetch=fetch,
+            "manufacturing",
+            force_latest=True,
+            fetch=fetch,
         )
         for target in targets:
             try:
@@ -557,7 +534,10 @@ def main(argv=None, fetch=None, ai_client_factory=None):
                 )
                 results.append(result)
             except _IMPORT_ERRORS as exc:
-                print(f"ism_official_report/{target['url']}: failed - {exc}", file=sys.stderr)
+                print(
+                    f"ism_official_report/{target['url']}: failed - {exc}",
+                    file=sys.stderr,
+                )
                 failed += 1
     elif args.report_month:
         normalized = ingestion.normalize_report_month(args.report_month)
@@ -571,7 +551,9 @@ def main(argv=None, fetch=None, ai_client_factory=None):
             ]
         else:
             archive_reports = ingestion.discover_prnewswire_reports(
-                since_year=int(normalized[:4]), survey_type="manufacturing", fetch=fetch,
+                since_year=int(normalized[:4]),
+                survey_type="manufacturing",
+                fetch=fetch,
             )
             targets = [
                 {"source_name": "prnewswire", "url": item["url"]}

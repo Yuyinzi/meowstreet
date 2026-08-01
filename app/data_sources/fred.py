@@ -4,7 +4,8 @@ from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
-from urllib.request import urlretrieve
+
+from app.http_client import HttpClient
 
 
 FRED_CSV_BASE_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id="
@@ -17,8 +18,9 @@ _QUARTER_END_MONTH_DAY = {
 
 
 class FredClient:
-    def __init__(self, cache_dir):
+    def __init__(self, cache_dir, http_client=None):
         self.cache_dir = Path(cache_dir)
+        self._http_client = http_client
 
     def csv_path(self, series_id):
         return self.cache_dir / f"{series_id}.csv"
@@ -32,7 +34,9 @@ class FredClient:
     def fetch_csv(self, series_id):
         path = self.csv_path(series_id)
         path.parent.mkdir(parents=True, exist_ok=True)
-        urlretrieve(self.csv_url(series_id), path)
+        client = self._http_client or HttpClient()
+        response = client.request("GET", self.csv_url(series_id), timeout=30)
+        path.write_bytes(response.content)
         return path
 
     def fetch_csvs(self, series_ids):

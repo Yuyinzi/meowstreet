@@ -1,7 +1,9 @@
 from urllib.error import HTTPError
 
+import httpx
 import pytest
 
+from app.http_client import HttpClient
 from app.tools import market_data
 
 
@@ -56,7 +58,9 @@ def test_fetch_market_data_returns_observation_fields_from_chart_payload(tmp_pat
 
 def test_fetch_market_data_rejects_blank_symbol():
     with pytest.raises(ValueError, match="symbol is required"):
-        market_data.fetch_market_data("", fetch_json=lambda symbol, period, interval: {})
+        market_data.fetch_market_data(
+            "", fetch_json=lambda symbol, period, interval: {}
+        )
 
 
 def test_fetch_market_data_reports_missing_adjusted_close():
@@ -112,7 +116,10 @@ def test_main_reports_provider_http_errors_without_traceback(tmp_path, capsys):
 
     assert exit_code == 1
     assert captured.out == ""
-    assert captured.err == "market data fetch failed for AAPL: HTTP 429 Too Many Requests\n"
+    assert (
+        captured.err
+        == "market data fetch failed for AAPL: HTTP 429 Too Many Requests\n"
+    )
 
 
 def test_chart_payload_to_price_rows_includes_ohlcv_and_adjusted_close():
@@ -203,31 +210,22 @@ def test_chart_payload_to_price_rows_uses_final_index_metadata_close():
     }
 
 
-def test_fetch_yahoo_chart_json_for_dates_passes_period_timestamps(monkeypatch):
+def test_fetch_yahoo_chart_json_for_dates_passes_period_timestamps():
     captured = {}
 
-    class Response:
-        def __enter__(self):
-            return self
+    def handler(request):
+        captured["url"] = str(request.url)
+        return httpx.Response(200, json={"chart": {"result": [], "error": None}})
 
-        def __exit__(self, exc_type, exc, traceback):
-            return None
-
-        def read(self):
-            return b'{"chart": {"result": [], "error": null}}'
-
-    def fake_urlopen(request, timeout):
-        captured["url"] = request.full_url
-        captured["timeout"] = timeout
-        return Response()
-
-    monkeypatch.setattr(market_data, "urlopen", fake_urlopen)
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(transport=transport)
 
     payload = market_data.fetch_yahoo_chart_json_for_dates(
         "AAPL",
         start_date="2026-06-25",
         end_date="2026-07-02",
         interval="1d",
+        http_client=client,
     )
 
     assert payload == {"chart": {"result": [], "error": None}}
@@ -235,39 +233,30 @@ def test_fetch_yahoo_chart_json_for_dates_passes_period_timestamps(monkeypatch):
     assert "period2=1782950400" in captured["url"]
     assert "interval=1d" in captured["url"]
     assert "events=history" in captured["url"]
-    assert captured["timeout"] == 45
 
 
-def test_fetch_yahoo_chart_json_for_dates_retries_timeouts(monkeypatch):
+def test_fetch_yahoo_chart_json_for_dates_retries_timeouts():
     calls = []
 
-    class Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, traceback):
-            return None
-
-        def read(self):
-            return b'{"chart": {"result": [], "error": null}}'
-
-    def fake_urlopen(request, timeout):
-        calls.append(timeout)
+    def handler(request):
+        calls.append(1)
         if len(calls) < 3:
-            raise TimeoutError("timed out")
-        return Response()
+            raise httpx.ReadTimeout("timed out")
+        return httpx.Response(200, json={"chart": {"result": [], "error": None}})
 
-    monkeypatch.setattr(market_data, "urlopen", fake_urlopen)
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(transport=transport, sleep=lambda _: None)
 
     payload = market_data.fetch_yahoo_chart_json_for_dates(
         "AAPL",
         start_date="2026-06-25",
         end_date="2026-07-02",
         interval="1d",
+        http_client=client,
     )
 
     assert payload == {"chart": {"result": [], "error": None}}
-    assert calls == [45, 45, 45]
+    assert len(calls) == 3
 
 
 def test_fetch_market_data_saves_and_returns_cached_price_rows(tmp_path):

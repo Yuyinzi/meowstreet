@@ -1,7 +1,9 @@
 import csv
 from pathlib import Path
-from urllib.error import URLError
-from urllib.request import urlopen
+
+import httpx
+
+from app.http_client import HttpClient
 
 
 MICHIGAN_ARCHIVE_URL = "https://data.sca.isr.umich.edu/data-archive/mine.php"
@@ -20,15 +22,21 @@ _REQUIRED_COLUMNS_BY_TABLE = {
 
 
 class MichiganConsumerSentimentClient:
+    def __init__(self, http_client=None):
+        self._http_client = http_client
+
     def fetch_csv(self, destination_dir, table_id):
         destination = Path(destination_dir)
         destination.mkdir(parents=True, exist_ok=True)
         output_path = destination / f"table_{table_id}.csv"
-        data = _build_post_body(table_id).encode("utf-8")
+        data = _build_post_body(table_id)
         try:
-            response = urlopen(MICHIGAN_ARCHIVE_URL, data=data, timeout=60)
-            content = response.read().decode("utf-8-sig")
-        except URLError as exc:
+            client = self._http_client or HttpClient()
+            response = client.request(
+                "POST", MICHIGAN_ARCHIVE_URL, data=data, timeout=60
+            )
+            content = response.content.decode("utf-8-sig")
+        except httpx.HTTPError as exc:
             raise ValueError(
                 f"failed to fetch michigan table {table_id}: {exc}"
             ) from exc

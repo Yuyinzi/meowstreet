@@ -1,5 +1,6 @@
 from datetime import date
 
+import httpx
 import pytest
 
 from app.data_sources.fred import FredClient
@@ -7,6 +8,7 @@ from app.data_sources.fred import compute_yoy
 from app.data_sources.fred import parse_fred_csv
 from app.data_sources.fred import quarter_end_for_date
 from app.data_sources.fred import resample_to_weekly_sundays
+from app.http_client import HttpClient
 
 
 def test_parse_fred_csv_returns_sorted_non_empty_float_rows(tmp_path):
@@ -94,3 +96,18 @@ def test_fred_client_uses_series_named_csv_path(tmp_path):
         client.csv_url("DGS10")
         == "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
     )
+
+
+def test_fetch_csv_with_injected_client(tmp_path):
+    csv_content = b"observation_date,DGS10\n2020-12-31,0.93\n"
+
+    def _handler(request):
+        assert request.headers.get("User-Agent") == "Meowstreet/1.0"
+        return httpx.Response(200, content=csv_content)
+
+    transport = httpx.MockTransport(_handler)
+    client = FredClient(tmp_path, http_client=HttpClient(transport=transport))
+    result = client.fetch_csv("DGS10")
+
+    assert result == tmp_path / "DGS10.csv"
+    assert result.read_bytes() == csv_content
