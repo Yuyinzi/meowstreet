@@ -48,6 +48,13 @@ def test_commodity_ids_keep_the_dce_iron_ore_id():
     assert "iron_ore_dce" in api.method_COMMODITY_SERIES_IDS
 
 
+def test_commodity_ids_include_archived_and_active_lme():
+    from app import api
+
+    assert "copper_lme" in api.method_COMMODITY_SERIES_IDS
+    assert "copper_lme_sina_cad_v1" in api.method_COMMODITY_SERIES_IDS
+
+
 def test_growth_cycle_ism_industry_breadth_prefers_latest_official_report(monkeypatch):
     from app import api
 
@@ -3489,6 +3496,101 @@ def test_detail_endpoint_exposes_process_read_and_corroboration(monkeypatch):
         == "insufficient_for_commodity_narrative"
     )
     assert response.json()["corroboration"]["usd"]["available_series_count"] == 3
+
+
+def test_detail_loads_active_cad_lme_and_presents_cutover_row(monkeypatch):
+    from app import api
+
+    from fastapi.testclient import TestClient
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: rows
+            for sid, rows in {
+                "copper_lme": [
+                    {
+                        "date": "2026-07-30",
+                        "value": 13745.72,
+                        "source_identifier": "copper_lme",
+                    },
+                ],
+                "copper_lme_sina_cad_v1": [
+                    {
+                        "date": "2026-07-31",
+                        "value": 13803.0,
+                        "source_identifier": "CAD",
+                    },
+                ],
+            }.items()
+            if sid in series_ids
+        },
+    )
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "copper_lme" not in body["non_oil_observation"]
+    lme = body["non_oil_observation"]["copper_lme_sina_cad_v1"]
+    assert lme["status"] == "available"
+    assert lme["latest_date"] == "2026-07-31"
+    assert lme["latest_value"] == 13803.0
+    assert lme["display_name"] == "Copper (LME 3M)"
+    assert lme["source_transition"] is True
+    assert lme["return_transition_blocked"] is True
 
 
 def test_market_setup_is_identical_when_data_changes(monkeypatch):
