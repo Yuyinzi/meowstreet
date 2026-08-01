@@ -42,14 +42,14 @@ def _rendered_history_rows_expr():
 """
 
 
-def _wait_for_page_ready(cdp, timeout_seconds=_PAGE_READY_TIMEOUT_SECONDS):
+def _wait_for_rendered_rows(cdp, timeout_seconds=_PAGE_READY_TIMEOUT_SECONDS):
     deadline = time.time() + timeout_seconds
     while True:
-        ready = cdp.evaluate("document.readyState")
-        if ready == "complete":
-            return
+        rows = cdp.evaluate(_rendered_history_rows_expr())
+        if rows:
+            return rows
         if time.time() >= deadline:
-            raise ValueError("Investing page did not become ready within the timeout")
+            return None
         time.sleep(_POLL_INTERVAL)
 
 
@@ -107,6 +107,7 @@ def fetch_rendered_investing_history(
     cdp_endpoint=_CDP_ENDPOINT,
     http_client=None,
     cdp_factory=chrome_cdp.ChromeCDP,
+    timeout_seconds=_PAGE_READY_TIMEOUT_SECONDS,
 ):
     target = _load_investing_target(http_client or HttpClient(), cdp_endpoint)
     if target.get("status"):
@@ -121,8 +122,7 @@ def fetch_rendered_investing_history(
         )
     try:
         cdp.command("Page.navigate", {"url": market["price_page_url"]})
-        _wait_for_page_ready(cdp)
-        result = cdp.evaluate(_rendered_history_rows_expr())
+        result = _wait_for_rendered_rows(cdp, timeout_seconds)
     except ValueError as exc:
         return _render_failed(f"browser evaluation failed: {exc}")
     finally:

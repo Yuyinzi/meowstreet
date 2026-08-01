@@ -51,7 +51,7 @@ MARKET_SERIES = {
         "instrument_id": 497,
     },
     "iron_ore_62_cfr_china": {
-        "price_page_url": f"{INVESTING_BASE}/commodities/iron-ore-62-cfr-futures",
+        "price_page_url": f"{INVESTING_BASE}/commodities/iron-ore-62-cfr-futures-historical-data",
         "display_name": "Iron Ore 62% CFR China",
         "exchange_label": "S&P Global",
         "instrument": "Iron Ore 62% Fe CFR China index",

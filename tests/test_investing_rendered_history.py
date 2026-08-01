@@ -8,7 +8,7 @@ from app.data_sources.investing_rendered_history import (
 
 def market(**overrides):
     m = {
-        "price_page_url": "https://www.investing.com/commodities/iron-ore-62-cfr-futures",
+        "price_page_url": "https://www.investing.com/commodities/iron-ore-62-cfr-futures-historical-data",
         "display_name": "Iron Ore 62% CFR China",
     }
     m.update(overrides)
@@ -20,7 +20,7 @@ def cdp_targets_client(targets=None):
         targets = [
             {
                 "type": "page",
-                "url": "https://www.investing.com/commodities/iron-ore-62-cfr-futures",
+                "url": "https://www.investing.com/commodities/iron-ore-62-cfr-futures-historical-data",
                 "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/1",
             }
         ]
@@ -86,20 +86,24 @@ def test_fetch_rendered_history_rejects_missing_history_table():
         market(),
         http_client=cdp_targets_client(),
         cdp_factory=fake_page_cdp(None),
+        timeout_seconds=0,
     )
     assert result["status"] == "render_failed"
     assert "historical data table" in result["message"]
 
 
 def test_fetch_rendered_history_navigates_to_price_page_url():
-    page = _FakePageCDP("ws://127.0.0.1:9222/devtools/page/1", [])
-    fetch_rendered_investing_history(
+    page = _FakePageCDP(
+        "ws://127.0.0.1:9222/devtools/page/1", [["Jul 31, 2026", "98.00"]]
+    )
+    result = fetch_rendered_investing_history(
         market(),
         http_client=cdp_targets_client(),
         cdp_factory=lambda url: page,
     )
     assert page.commands == ["Page.navigate"]
     assert page.closed
+    assert result["status"] == "ok"
 
 
 def test_fetch_rendered_history_returns_reauth_when_no_investing_page():
