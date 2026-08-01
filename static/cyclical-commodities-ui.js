@@ -85,7 +85,12 @@
             + String(dailyDistribution.sample_count || 0) + " daily / "
             + String(weeklyDistribution.sample_count || 0) + " weekly returns";
         } else {
-          provenance += " · no distribution data";
+          var unavailableReason = dailyDistribution.reason || weeklyDistribution.reason;
+          if (unavailableReason) {
+            provenance += " · " + unavailableReason;
+          } else {
+            provenance += " · no distribution data";
+          }
         }
         return '<div class="distribution-provenance">' + h.escapeHtml(provenance) + '</div>';
       }
@@ -99,9 +104,10 @@
 
       function renderNonOilRow(series) {
         if (series.status !== "available") {
-          var unavailableLine = series.source_class === "official_exchange"
-            ? "Not available — SHFE official data not yet imported"
-            : "Not available — commodity market data not yet fetched";
+          var unavailableLine = series.review_label
+            || (series.source_class === "official_exchange"
+              ? "Not available — SHFE official data not yet imported"
+              : "Not available — commodity market data not yet fetched");
           return '<div class="workflow-row">'
             + '<div class="workflow-label">' + h.escapeHtml(series.display_name) + '</div>'
             + '<div class="workflow-metrics"><span>' + h.escapeHtml(unavailableLine) + '</span></div>'

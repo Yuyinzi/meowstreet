@@ -6657,6 +6657,22 @@ def test_non_oil_renderer_has_no_client_side_statistics():
     assert "sample_standard_deviation" not in source
 
 
+def test_non_oil_renderer_shows_backend_distribution_reason_when_unavailable():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "dailyDistribution.reason || weeklyDistribution.reason" in source
+    assert '" · " + unavailableReason' in source
+
+
+def test_non_oil_renderer_surfaces_review_label_when_series_unavailable():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index('if (series.status !== "available")')
+    end = source.index('if (series.source_class === "official_exchange")', start)
+    unavailable_branch = source[start:end]
+
+    assert "series.review_label" in unavailable_branch
+
+
 def test_non_oil_css_has_distribution_review_note_styles():
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 
