@@ -72,8 +72,6 @@ MARKET_SERIES = {
 }
 
 ARCHIVED_MARKET_SERIES = {
-    "copper_comex": MARKET_SERIES["copper_comex"],
-    "copper_lme": MARKET_SERIES["copper_lme"],
     "lumber": MARKET_SERIES["lumber"],
 }
 

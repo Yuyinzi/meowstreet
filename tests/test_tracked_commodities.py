@@ -294,34 +294,37 @@ def test_method_market_registry_marks_shanghai_as_shfe_official():
     assert "price_page_url" not in shanghai
 
 
-def test_free_web_import_rejects_archived_comex_copper():
+def test_free_web_import_rejects_archived_lumber():
     from app.data_sources import tracked_commodities
 
     with pytest.raises(
-        ValueError, match="copper_comex is not an Investing method market"
+        ValueError, match="lumber is not an Investing method market"
     ):
-        tracked_commodities.validate_free_web_markets(["copper_comex"])
+        tracked_commodities.validate_free_web_markets(["lumber"])
 
 
-def test_lme_copper_is_archived_from_method_investing_import():
+def test_lme_copper_is_active_method_investing_market():
     from app.data_sources.tracked_commodities import (
         ACTIVE_MARKET_SERIES,
         ARCHIVED_MARKET_SERIES,
         free_web_series,
     )
 
-    assert "copper_lme" in ARCHIVED_MARKET_SERIES
-    assert "copper_lme" not in ACTIVE_MARKET_SERIES
-    assert "copper_lme" not in free_web_series()
+    assert "copper_lme" not in ARCHIVED_MARKET_SERIES
+    assert "copper_lme" in ACTIVE_MARKET_SERIES
+    assert "copper_lme" in free_web_series()
 
 
-def test_free_web_import_rejects_archived_lme_copper():
-    from app.data_sources import tracked_commodities
+def test_comex_copper_is_active_method_investing_market():
+    from app.data_sources.tracked_commodities import (
+        ACTIVE_MARKET_SERIES,
+        ARCHIVED_MARKET_SERIES,
+        free_web_series,
+    )
 
-    with pytest.raises(
-        ValueError, match="copper_lme is not an Investing method market"
-    ):
-        tracked_commodities.validate_free_web_markets(["copper_lme"])
+    assert "copper_comex" not in ARCHIVED_MARKET_SERIES
+    assert "copper_comex" in ACTIVE_MARKET_SERIES
+    assert "copper_comex" in free_web_series()
 
 
 def test_method_market_registry_has_investing_instrument_ids():

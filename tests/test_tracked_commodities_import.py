@@ -4,6 +4,7 @@ import pytest
 
 from pathlib import Path
 
+from app.data_sources import tracked_commodities
 from app.data_sources.tracked_commodities import (
     ACTIVE_MARKET_SERIES,
     MARKET_SERIES,
@@ -105,7 +106,7 @@ def test_refresh_merges_method_prices_and_preserves_source_metadata(tmp_path):
     con = macro_indicators.connect(db_path)
 
     result = refresh_tracked_commodities(con, fetcher=_fake_fetcher)
-    assert result == {"series": 1, "observations": 1}
+    assert result == {"series": 3, "observations": 3}
 
     points = macro_indicators.load_macro_indicator_points(
         con, "iron_ore_62_cfr_china"
@@ -272,11 +273,11 @@ def test_rendered_history_aborts_before_writes_when_an_archived_market_is_reques
         return rendered_result([("Jul 31, 2026", "98.00")])
 
     with pytest.raises(
-        ValueError, match="archived method commodity market: copper_lme"
+        ValueError, match="archived method commodity market: lumber"
     ):
         import_commodity_browser_rows(
             con,
-            markets=["iron_ore_62_cfr_china", "copper_lme"],
+            markets=["iron_ore_62_cfr_china", "lumber"],
             fetcher=fetcher,
         )
     assert stored_dates(con) == []
@@ -419,17 +420,30 @@ def test_refresh_honours_markets_parameter(tmp_path):
     assert result == {"series": 1, "observations": 1}
 
 
-def test_refresh_rejects_archived_lme(tmp_path):
+def test_refresh_accepts_reactivated_lme(tmp_path):
     db_path = tmp_path / "test.db"
     con = macro_indicators.connect(db_path)
 
-    with pytest.raises(
-        ValueError, match="archived method commodity market: copper_lme"
-    ):
-        refresh_tracked_commodities(
-            con, fetcher=_fake_fetcher, markets=["copper_lme"]
-        )
-    assert macro_indicators.load_macro_indicator_points(con, "copper_lme") == []
+    result = refresh_tracked_commodities(
+        con, fetcher=_fake_fetcher, markets=["copper_lme"]
+    )
+    assert result == {"series": 1, "observations": 1}
+    points = macro_indicators.load_macro_indicator_points(con, "copper_lme")
+    assert len(points) == 1
+
+
+def test_free_web_series_includes_investing_copper_and_iron_ore():
+    markets = tracked_commodities.free_web_series()
+
+    assert list(markets) == [
+        "copper_comex",
+        "copper_lme",
+        "iron_ore_62_cfr_china",
+    ]
+    assert (
+        "copper_comex" not in tracked_commodities.ARCHIVED_MARKET_SERIES
+    )
+    assert "copper_lme" not in tracked_commodities.ARCHIVED_MARKET_SERIES
 
 
 def test_macro_refresh_does_not_register_http_commodity_task_by_default():
@@ -642,5 +656,9 @@ def test_default_cli_uses_rendered_history_importer(monkeypatch, tmp_path, capsy
         import_tracked_commodities.main(["--db-path", str(tmp_path / "macro.db")])
         == 0
     )
-    assert calls[0]["markets"] == ["iron_ore_62_cfr_china"]
+    assert calls[0]["markets"] == [
+        "copper_comex",
+        "copper_lme",
+        "iron_ore_62_cfr_china",
+    ]
     assert "observations: 2" in capsys.readouterr().out
