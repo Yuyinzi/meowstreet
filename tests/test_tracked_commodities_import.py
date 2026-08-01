@@ -12,8 +12,44 @@ from app.db import macro_indicators
 from app.services import tracked_commodities_import
 from app.services.tracked_commodities_import import (
     import_commodity_browser_downloads,
+    import_commodity_browser_rows,
     refresh_tracked_commodities,
 )
+
+
+def seed_observation(con, date, value):
+    macro_indicators.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "iron_ore_62_cfr_china",
+            "title": "Iron Ore 62% CFR China",
+            "units": "USD/tonne",
+            "source": "investing.com",
+        },
+        [{"date": date, "value": value, "source": "investing.com"}],
+    )
+
+
+def rendered_result(rows):
+    return {
+        "status": "ok",
+        "payload": {
+            "data": [
+                {"rowDate": row_date, "last_close": price} for row_date, price in rows
+            ]
+        },
+        "retrieved_at": "2026-08-01T12:00:00+00:00",
+        "source_url": "https://www.investing.com/commodities/iron-ore-62-cfr-futures",
+    }
+
+
+def stored_dates(con):
+    return [
+        point["date"]
+        for point in macro_indicators.load_macro_indicator_points(
+            con, "iron_ore_62_cfr_china"
+        )
+    ]
 
 
 _FAKE_OBSERVATION = {
@@ -500,3 +536,66 @@ def test_cli_rejects_obsolete_browser_download_option():
 
     with pytest.raises(SystemExit, match="2"):
         import_tracked_commodities.main(["--browser-download"])
+
+
+def test_rendered_history_merges_only_dates_later_than_baseline(tmp_path):
+    con = macro_indicators.connect(tmp_path / "macro.db")
+    seed_observation(con, "2026-07-29", 98.27)
+    result = import_commodity_browser_rows(
+        con,
+        markets=["iron_ore_62_cfr_china"],
+        fetcher=lambda market, **kwargs: rendered_result(
+            [
+                ("Jul 31, 2026", "98.00"),
+                ("Jul 30, 2026", "98.25"),
+                ("Jul 29, 2026", "98.27"),
+            ]
+        ),
+    )
+    assert result["observations"] == 2
+    assert stored_dates(con) == ["2026-07-29", "2026-07-30", "2026-07-31"]
+
+
+def test_rendered_history_requires_existing_baseline(tmp_path):
+    con = macro_indicators.connect(tmp_path / "macro.db")
+    with pytest.raises(ValueError, match="requires an existing baseline"):
+        import_commodity_browser_rows(
+            con,
+            markets=["iron_ore_62_cfr_china"],
+            fetcher=lambda market, **kwargs: rendered_result(
+                [("Jul 31, 2026", "98.00")]
+            ),
+        )
+
+
+def test_rendered_history_no_op_when_no_rendered_date_is_newer_than_baseline(tmp_path):
+    con = macro_indicators.connect(tmp_path / "macro.db")
+    seed_observation(con, "2026-07-31", 98.00)
+    with pytest.raises(ValueError, match="no dates newer than 2026-07-31"):
+        import_commodity_browser_rows(
+            con,
+            markets=["iron_ore_62_cfr_china"],
+            fetcher=lambda market, **kwargs: rendered_result(
+                [("Jul 31, 2026", "98.00"), ("Jul 30, 2026", "98.25")]
+            ),
+        )
+    assert stored_dates(con) == ["2026-07-31"]
+
+
+def test_rendered_history_writes_nothing_when_adapter_fails(tmp_path):
+    con = macro_indicators.connect(tmp_path / "macro.db")
+    seed_observation(con, "2026-07-29", 98.27)
+
+    def failing_fetcher(market, **kwargs):
+        return {
+            "status": "render_failed",
+            "message": "historical data table missing",
+        }
+
+    with pytest.raises(ValueError, match="rendered history fetch failed"):
+        import_commodity_browser_rows(
+            con,
+            markets=["iron_ore_62_cfr_china"],
+            fetcher=failing_fetcher,
+        )
+    assert stored_dates(con) == ["2026-07-29"]
