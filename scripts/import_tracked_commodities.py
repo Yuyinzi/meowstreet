@@ -131,6 +131,8 @@ def main(argv=None):
                 print(
                     f"{market_id}: {date_range['start_date']} to {date_range['end_date']}"
                 )
+        for market_id in result.get("no_new_data", []):
+            print(f"{market_id}: no new data (already up to date)")
         print(f"series: {result['series']}, observations: {result['observations']}")
         return 0
     except ValueError as exc:

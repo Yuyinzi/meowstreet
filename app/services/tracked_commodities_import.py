@@ -103,12 +103,7 @@ def _newer_observations(con, series_id, observations):
             f"{series_id}: rendered history refresh requires an existing baseline"
         )
     latest_date = max(point["date"] for point in points)
-    newer = [row for row in observations if row["date"] > latest_date]
-    if not newer:
-        raise ValueError(
-            f"{series_id}: rendered history has no dates newer than {latest_date}"
-        )
-    return newer
+    return [row for row in observations if row["date"] > latest_date]
 
 
 def import_commodity_browser_rows(
@@ -121,6 +116,7 @@ def import_commodity_browser_rows(
     series_ids = _active_series_ids(markets)
     all_payloads = []
     ranges = {}
+    no_new_data = []
     for sid in series_ids:
         meta = ACTIVE_MARKET_SERIES[sid]
         result = fetcher(meta, cdp_endpoint=cdp_endpoint)
@@ -133,28 +129,34 @@ def import_commodity_browser_rows(
             sid,
             retrieved_at=result["retrieved_at"],
         )
+        if not observations:
+            raise ValueError(
+                f"{sid}: rendered history payload contained no parseable rows"
+            )
         newer = _newer_observations(con, sid, observations)
+        if not newer:
+            no_new_data.append(sid)
+            continue
         ranges[sid] = {
             "start_date": newer[0]["date"],
             "end_date": newer[-1]["date"],
         }
         all_payloads.append((sid, build_commodity_series_payload(sid, newer)))
+    result = {
+        "series": len(all_payloads),
+        "observations": sum(
+            len(payload["observations"]) for _, payload in all_payloads
+        ),
+        "ranges": ranges,
+        "no_new_data": no_new_data,
+    }
     if dry_run:
-        return {
-            "series": len(all_payloads),
-            "observations": sum(
-                len(payload["observations"]) for _, payload in all_payloads
-            ),
-            "ranges": ranges,
-        }
+        return result
     try:
-        result = {"series": 0, "observations": 0}
         for sid, payload in all_payloads:
             macro_indicators.merge_macro_indicator_observations(
                 con, payload["series"], payload["observations"], commit=False
             )
-            result["series"] += 1
-            result["observations"] += len(payload["observations"])
         con.commit()
         return result
     except Exception:
