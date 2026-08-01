@@ -369,7 +369,7 @@ def _oil_attribution_payload(
     }
 
 
-_SINA_I0_SOURCE_LABEL = "Sina Finance I0 continuous series \u00b7 AKShare adapter"
+_SINA_I0_SOURCE_LABEL = "Sina Finance I0 continuous series"
 
 
 def _commodity_display_registry():

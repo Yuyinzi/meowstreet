@@ -725,7 +725,7 @@ def test_payload_presents_i0_as_raw_vendor_continuous_data():
     assert dce["daily_return"] == pytest.approx(716 / 715 - 1)
     assert (
         dce["source_label"]
-        == "Sina Finance I0 continuous series \u00b7 AKShare adapter"
+        == "Sina Finance I0 continuous series"
     )
 
 
