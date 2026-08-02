@@ -63,6 +63,7 @@ def _validate_artifact(payload, catalog):
             " non-oil source audit source catalog version is invalid: "
             f"{payload.get('source_catalog_version')}"
         )
-    source.validate_non_oil_attribution_audits(
-        payload["audits"], catalog["resources"]
-    )
+    audits = payload.get("audits")
+    if audits is None:
+        raise ValueError(" non-oil source audit payload is missing the audits key")
+    source.validate_non_oil_attribution_audits(audits, catalog["resources"])

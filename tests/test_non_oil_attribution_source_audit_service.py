@@ -10,6 +10,17 @@ from app.services import non_oil_attribution_source_audit as service
 
 ROOT = Path(__file__).resolve().parents[1]
 
+CATALOG_PATH = (
+    ROOT
+    / "data"
+    / "local_system"
+    / "commodity_attribution_evidence_catalog.v1.json"
+)
+
+AUDIT_PATH = (
+    ROOT / "data" / "local_system" / "non_oil_attribution_source_audit.v1.json"
+)
+
 SOURCE_REF = "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
 CATALOG_VERSION = "commodity_attribution_evidence_catalog_v1"
 AUDITED_AT = "2026-08-02"
@@ -184,6 +195,31 @@ def test_load_returns_artifact_and_rejects_invalid_version(tmp_path):
 
     with pytest.raises(ValueError, match="version is invalid"):
         service.load_non_oil_attribution_source_audit(invalid_path, catalog_path)
+
+
+def test_load_rejects_artifact_with_missing_audits_key(tmp_path):
+    catalog_path = write_catalog(tmp_path, [copper_catalog()])
+    artifact_path = tmp_path / "no-audits.json"
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "version": service.VERSION,
+                "source_catalog_version": CATALOG_VERSION,
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match="missing the audits key"):
+        service.load_non_oil_attribution_source_audit(artifact_path, catalog_path)
+
+
+def test_seed_regeneration_matches_checked_in_audit():
+    built = service.build_non_oil_attribution_source_audit(
+        CATALOG_PATH, generated_at="2026-08-02T00:00:00+00:00"
+    )
+    loaded = service.load_non_oil_attribution_source_audit(AUDIT_PATH, CATALOG_PATH)
+
+    assert built["audits"] == loaded["audits"]
 
 
 def test_build_script_writes_audit_and_exits_zero(tmp_path):

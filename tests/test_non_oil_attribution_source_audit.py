@@ -10,7 +10,7 @@ from app.services import non_oil_attribution_source_audit as service
 
 ROOT = Path(__file__).resolve().parents[1]
 
-CATALOG_JSON_PATH = (
+CATALOG_PATH = (
     ROOT
     / "data"
     / "local_system"
@@ -19,13 +19,6 @@ CATALOG_JSON_PATH = (
 
 AUDIT_PATH = (
     ROOT / "data" / "local_system" / "non_oil_attribution_source_audit.v1.json"
-)
-
-CATALOG_PATH = (
-    ROOT
-    / "data"
-    / "local_system"
-    / "commodity_attribution_evidence_catalog.v1.json"
 )
 
 COMMODITY_DEFAULTS = {
@@ -93,7 +86,7 @@ def audit_record(commodity_id, url, catalog=None):
 
 
 def real_catalog_resources():
-    payload = json.loads(CATALOG_JSON_PATH.read_text())
+    payload = json.loads(CATALOG_PATH.read_text())
     return payload["resources"]
 
 
