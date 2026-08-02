@@ -154,6 +154,18 @@ def test_usd_short_history_marks_review_unavailable_with_horizon_reasons():
     )
 
 
+def test_usd_short_history_still_exposes_raw_iso_week_return():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, {"usd_broad": USD_ROWS["usd_broad"]}, None, "2026-07-25"
+    )
+    broad = payload["usd"]["usd_broad"]
+
+    assert broad["weekly_distribution"]["classification"] == "unavailable"
+    assert broad["weekly_distribution"]["current_return"] is None
+    assert broad["weekly_return"] == pytest.approx(120.0 / 119.3 - 1)
+    assert broad["weekly_return"] != pytest.approx(120.0 / 118.5 - 1)
+
+
 def test_usd_afe_only_input_leaves_broad_and_eme_unavailable():
     payload = .build_cyclical_commodities_payload(
         COT_ROWS, {"usd_afe": usd_distribution_rows()}, None, "2017-01-06"
@@ -365,7 +377,7 @@ def test_detail_corroboration_summarizes_raw_evidence_without_trade_bias():
     assert detail["corroboration"]["cot"]["available_contract_count"] == 2
     assert detail["corroboration"]["cot"]["positive_flip_count"] == 1
     assert detail["corroboration"]["usd"]["daily_direction"] == "rising"
-    assert detail["corroboration"]["usd"]["weekly_direction"] == "unavailable"
+    assert detail["corroboration"]["usd"]["weekly_direction"] == "rising"
     assert detail["corroboration"]["inflation"]["available_series_count"] == 3
     assert "trade_bias" not in detail["corroboration"]["cot"]
 

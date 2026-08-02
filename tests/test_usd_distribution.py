@@ -70,3 +70,18 @@ def test_usd_distribution_classifies_large_final_return_abnormal_with_lowered_mi
 
     assert result["classification"].startswith("abnormal_")
     assert result["current_return"] == pytest.approx(51.0 / 102.0 - 1)
+
+
+def test_usd_iso_weekly_returns_expose_last_iso_week_close_return():
+    rows = [
+        {"date": "2016-01-08", "value": 100.0},
+        {"date": "2016-01-15", "value": 110.0},
+        {"date": "2016-01-22", "value": 121.0},
+    ]
+
+    returns = usd_distribution.iso_weekly_returns(rows)
+
+    assert returns == [
+        {"date": "2016-01-15", "value": 0.1},
+        {"date": "2016-01-22", "value": 0.1},
+    ]
