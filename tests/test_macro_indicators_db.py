@@ -502,3 +502,73 @@ def test_connect_migrates_legacy_lumber_overlap_audits_on_reopen(tmp_path):
         )
         == legacy_audit
     )
+
+
+def global_fact():
+    return {
+        "method_version": "non_oil_attribution_evidence_v1",
+        "commodity_id": "copper",
+        "source_name": "International Wrought Copper Council",
+        "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "factor_category": "supply",
+        "metric_name": "Production",
+        "geography": "Global",
+        "observation_date": "2024-12-31",
+        "publication_date": None,
+        "value": 24100.0,
+        "units": "t",
+        "status": "available",
+    }
+
+
+def europe_fact():
+    return {**global_fact(), "geography": "Europe"}
+
+
+def test_merge_preserves_same_metric_for_two_geographies(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market_data.sqlite")
+    macro_indicators.merge_non_oil_attribution_facts(
+        con, [global_fact(), europe_fact()]
+    )
+    assert [
+        row["geography"]
+        for row in macro_indicators.load_non_oil_attribution_facts(con, "copper")
+    ] == ["Europe", "Global"]
+
+
+def test_merge_non_oil_attribution_facts_upserts_existing_key(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market_data.sqlite")
+    macro_indicators.merge_non_oil_attribution_facts(con, [global_fact()])
+    macro_indicators.merge_non_oil_attribution_facts(
+        con, [{**global_fact(), "value": 25000.0}]
+    )
+    rows = macro_indicators.load_non_oil_attribution_facts(con, "copper")
+    assert len(rows) == 1
+    assert rows[0]["value"] == 25000.0
+
+
+def test_load_non_oil_attribution_facts_filters_by_commodity(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market_data.sqlite")
+    lumber_fact = {
+        **global_fact(),
+        "commodity_id": "lumber",
+        "source_name": "Food and Agriculture Organization of the United Nations",
+        "source_url": "https://www.fao.org/faostat/en/#data/FO",
+        "factor_category": "trade",
+        "geography": "World",
+        "units": "m3",
+    }
+    macro_indicators.merge_non_oil_attribution_facts(
+        con, [global_fact(), lumber_fact]
+    )
+    rows = macro_indicators.load_non_oil_attribution_facts(con, "lumber")
+    assert len(rows) == 1
+    assert rows[0]["commodity_id"] == "lumber"
+
+
+def test_load_non_oil_attribution_facts_returns_empty_for_unknown_commodity(
+    tmp_path,
+):
+    con = macro_indicators.connect(tmp_path / "market_data.sqlite")
+    macro_indicators.merge_non_oil_attribution_facts(con, [global_fact()])
+    assert macro_indicators.load_non_oil_attribution_facts(con, "iron_ore") == []

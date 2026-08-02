@@ -1,5 +1,8 @@
+import hashlib
 import json
+import math
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -160,11 +163,33 @@ create table if not exists shfe_cu_main_daily (
 """
 
 
+__NON_OIL_ATTRIBUTION_DDL = """
+create table if not exists non_oil_attribution_facts (
+    commodity_id text not null,
+    source_url text not null,
+    factor_category text not null,
+    metric_name text not null,
+    geography text not null,
+    observation_date text not null,
+    method_version text not null,
+    source_name text not null,
+    publication_date text,
+    value real not null,
+    units text not null,
+    status text not null,
+    source_hash text not null,
+    retrieved_at text not null,
+    primary key(commodity_id, source_url, factor_category, metric_name, geography, observation_date)
+);
+"""
+
+
 def init_macro_tables(con):
     con.executescript(_MACRO_TABLES_DDL)
     con.executescript(_REGIONAL_TABLES_DDL)
     con.executescript(__COT_DDL)
     con.executescript(__SHFE_CU_DDL)
+    con.executescript(__NON_OIL_ATTRIBUTION_DDL)
     for col in [
         "source_hash",
         "publication_date_basis",
@@ -1017,3 +1042,116 @@ def load_shfe_cu_main_observations(con):
         item["roll_affected"] = bool(item["roll_affected"])
         result.append(item)
     return result
+
+
+__NON_OIL_ATTRIBUTION_REQUIRED_FIELDS = [
+    "method_version",
+    "commodity_id",
+    "source_name",
+    "source_url",
+    "factor_category",
+    "metric_name",
+    "geography",
+    "observation_date",
+    "value",
+    "units",
+    "status",
+]
+
+__NON_OIL_ATTRIBUTION_FACT_COLS = """
+    commodity_id, source_url, factor_category, metric_name, geography,
+    observation_date, method_version, source_name, publication_date,
+    value, units, status, source_hash, retrieved_at
+"""
+
+__NON_OIL_ATTRIBUTION_KEY = (
+    "commodity_id, source_url, factor_category, metric_name, geography, "
+    "observation_date"
+)
+
+
+def _non_oil_attribution_fact_value(fact):
+    for field in __NON_OIL_ATTRIBUTION_REQUIRED_FIELDS:
+        if fact.get(field) in (None, ""):
+            raise ValueError(
+                " non-oil attribution fact has a required field missing"
+            )
+    try:
+        value = float(fact["value"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(" non-oil attribution fact value is invalid") from exc
+    if not math.isfinite(value):
+        raise ValueError(" non-oil attribution fact value is invalid")
+    return value
+
+
+def _non_oil_attribution_source_hash(fact):
+    canonical = json.dumps(
+        {field: fact[field] for field in __NON_OIL_ATTRIBUTION_REQUIRED_FIELDS},
+        sort_keys=True,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _non_oil_attribution_retrieved_at():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def merge_non_oil_attribution_facts(con, facts, commit=True):
+    try:
+        retrieved_at = _non_oil_attribution_retrieved_at()
+        for fact in facts:
+            value = _non_oil_attribution_fact_value(fact)
+            con.execute(
+                f"""insert into non_oil_attribution_facts(
+                    {__NON_OIL_ATTRIBUTION_FACT_COLS}
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict({__NON_OIL_ATTRIBUTION_KEY}) do update set
+                    method_version = excluded.method_version,
+                    source_name = excluded.source_name,
+                    publication_date = excluded.publication_date,
+                    value = excluded.value,
+                    units = excluded.units,
+                    status = excluded.status,
+                    source_hash = excluded.source_hash,
+                    retrieved_at = excluded.retrieved_at""",
+                (
+                    fact["commodity_id"],
+                    fact["source_url"],
+                    fact["factor_category"],
+                    fact["metric_name"],
+                    fact["geography"],
+                    fact["observation_date"],
+                    fact["method_version"],
+                    fact["source_name"],
+                    fact.get("publication_date"),
+                    value,
+                    fact["units"],
+                    fact["status"],
+                    _non_oil_attribution_source_hash(fact),
+                    retrieved_at,
+                ),
+            )
+        if commit:
+            con.commit()
+    except Exception:
+        con.rollback()
+        raise
+
+
+def load_non_oil_attribution_facts(con, commodity_id=None):
+    if commodity_id is None:
+        rows = con.execute(
+            f"""select {__NON_OIL_ATTRIBUTION_FACT_COLS}
+                from non_oil_attribution_facts
+                order by geography, observation_date"""
+        ).fetchall()
+    else:
+        rows = con.execute(
+            f"""select {__NON_OIL_ATTRIBUTION_FACT_COLS}
+                from non_oil_attribution_facts
+                where commodity_id = ?
+                order by geography, observation_date""",
+            (str(commodity_id or "").strip().lower(),),
+        ).fetchall()
+    return [dict(row) for row in rows]
