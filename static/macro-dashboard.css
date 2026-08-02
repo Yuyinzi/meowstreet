@@ -769,6 +769,31 @@ h2 {
   margin-top: 8px;
 }
 
+.attribution-evidence,
+.evidence-manual {
+  margin-top: 8px;
+}
+
+.evidence-fact .source-link {
+  color: #8A5A28;
+  word-break: break-all;
+}
+
+.evidence-fact .source-link:hover {
+  color: #B77945;
+}
+
+.evidence-unavailable {
+  border-left: 3px solid #D7B789;
+  background: #F7F1EA;
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+
+.evidence-unavailable .raw-evidence {
+  margin-top: 8px;
+}
+
 .workflow-metrics {
   display: flex;
   flex-wrap: wrap;
