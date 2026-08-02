@@ -1,6 +1,7 @@
 import math
 from datetime import date
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 
 
@@ -161,6 +162,10 @@ def _trend_record(rows, metric_id, as_of):
         return _unavailable_trend(
             metric_id, "insufficient_history", vintages, latest_period
         )
+    if not _is_weekly_consecutive(sa_rows):
+        return _unavailable_trend(
+            metric_id, "insufficient_history", vintages, latest_period
+        )
     latest_mean, comparison_mean = _trend_means(sa_rows)
     if comparison_mean == 0:
         return _unavailable_trend(
@@ -214,6 +219,15 @@ def _parse_reference_period(value):
 
 def _is_stale(latest_period, as_of):
     return (as_of - latest_period).days > _STALENESS_CEILING_DAYS
+
+
+def _is_weekly_consecutive(sa_rows):
+    for previous, current in zip(sa_rows, sa_rows[1:]):
+        if current["reference_period"] - previous["reference_period"] != timedelta(
+            days=7
+        ):
+            return False
+    return True
 
 
 def _trend_means(sa_rows):

@@ -77,6 +77,14 @@ def _trend_rows(series_id, change_pct, comparison_level=100.0, latest=LATEST_WEE
     return _claim_rows(series_id, values, latest)
 
 
+def _rows_with_gap(series_id, change_pct, comparison_level=100.0, latest=LATEST_WEEK):
+    latest_level = comparison_level * (1 + change_pct)
+    values = [comparison_level] * 14 + [latest_level] * 4
+    rows = _claim_rows(series_id, values, latest)
+    del rows[len(rows) // 2]
+    return rows
+
+
 def initial_deteriorating():
     return _trend_rows("initial_claims_sa", 0.035)
 
@@ -175,6 +183,46 @@ def test_fewer_than_seventeen_observations_returns_insufficient_history():
     assert result["initial_claims"]["unavailable_reason"] == "insufficient_history"
     assert result["claims_direction"] == "unavailable"
     assert result["unavailable_reason"] == "insufficient_history"
+
+
+def test_missing_week_in_seventeen_observation_history_is_insufficient():
+    result = claims_confirmation.build_claims_confirmation(
+        _rows_with_gap("initial_claims_sa", 0.035),
+        _rows_with_gap("continuing_claims_sa", 0.035),
+        "growth_decelerating",
+        NOW,
+    )
+    assert len(result["initial_claims"]["vintages"]) == 17
+    assert result["initial_claims"]["classification"] == "unavailable"
+    assert result["initial_claims"]["unavailable_reason"] == "insufficient_history"
+    assert result["continuing_claims"]["classification"] == "unavailable"
+    assert result["continuing_claims"]["unavailable_reason"] == "insufficient_history"
+    assert result["claims_direction"] == "unavailable"
+    assert result["confirmation_status"] == "unavailable"
+    assert result["unavailable_reason"] == "insufficient_history"
+
+
+def test_consecutive_seventeen_observation_set_still_classifies():
+    result = claims_confirmation.build_claims_confirmation(
+        initial_deteriorating(), continuing_deteriorating(), "growth_decelerating", NOW
+    )
+    assert result["initial_claims"]["classification"] == "deteriorating"
+    assert result["continuing_claims"]["classification"] == "deteriorating"
+    assert result["confirmation_status"] == "confirming"
+
+
+def test_weekly_sequence_across_leap_year_boundary_is_consecutive():
+    latest = "2028-04-03"
+    as_of = "2028-04-05T12:00:00+00:00"
+    result = claims_confirmation.build_claims_confirmation(
+        _trend_rows("initial_claims_sa", 0.035, latest=latest),
+        _trend_rows("continuing_claims_sa", 0.0, latest=latest),
+        "growth_decelerating",
+        as_of,
+    )
+    assert result["initial_claims"]["classification"] == "deteriorating"
+    assert result["continuing_claims"]["classification"] == "stable"
+    assert result["claims_direction"] == "partially_deteriorating"
 
 
 def test_latest_reference_period_past_freshness_ceiling_returns_stale_data():
