@@ -150,7 +150,19 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
 
     assert exit_code == 0
     assert calls[:2] == [
-        ("benchmark", ["--all"]),
+        (
+            "benchmark",
+            [
+                "--benchmark-id",
+                "us_sp500",
+                "--benchmark-id",
+                "us_nasdaq_100",
+                "--benchmark-id",
+                "us_nasdaq_composite",
+                "--benchmark-id",
+                "us_djia",
+            ],
+        ),
         ("rates", ["--skip-credit-workbook"]),
     ]
     assert calls[2][0] == "consumer"
@@ -281,7 +293,21 @@ def test_main_can_stop_after_first_failure():
     )
 
     assert exit_code == 1
-    assert calls == [("benchmark", ["--all"])]
+    assert calls == [
+        (
+            "benchmark",
+            [
+                "--benchmark-id",
+                "us_sp500",
+                "--benchmark-id",
+                "us_nasdaq_100",
+                "--benchmark-id",
+                "us_nasdaq_composite",
+                "--benchmark-id",
+                "us_djia",
+            ],
+        )
+    ]
 
 
 def test_main_records_exceptions_as_failures(capsys):

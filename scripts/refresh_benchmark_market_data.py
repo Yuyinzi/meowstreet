@@ -17,13 +17,13 @@ def _benchmark_ids_from_args(args):
             for config in benchmark_market_data_tool.BENCHMARK_YAHOO_SYMBOLS
         ]
     if args.benchmark_id:
-        return [args.benchmark_id]
+        return args.benchmark_id
     raise ValueError("use --benchmark-id or --all")
 
 
 def main(argv=None, refresh_benchmarks=benchmark_market_data_tool.refresh_benchmarks):
     parser = argparse.ArgumentParser(description="Refresh benchmark market data")
-    parser.add_argument("--benchmark-id")
+    parser.add_argument("--benchmark-id", action="append")
     parser.add_argument("--all", action="store_true")
     parser.add_argument(
         "--benchmark-db-path",

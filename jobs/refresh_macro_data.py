@@ -105,7 +105,22 @@ def _planned_tasks(
 ):
     tasks = []
     if not args.skip_yahoo:
-        tasks.append(("benchmark_yahoo", benchmark_main, ["--all"]))
+        tasks.append(
+            (
+                "benchmark_yahoo",
+                benchmark_main,
+                [
+                    "--benchmark-id",
+                    "us_sp500",
+                    "--benchmark-id",
+                    "us_nasdaq_100",
+                    "--benchmark-id",
+                    "us_nasdaq_composite",
+                    "--benchmark-id",
+                    "us_djia",
+                ],
+            )
+        )
     if not args.skip_rates:
         tasks.append(("rates_fred", rates_main, ["--skip-credit-workbook"]))
     if not args.skip_consumer_sentiment:

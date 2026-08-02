@@ -60,6 +60,36 @@ def test_main_refreshes_one_benchmark(capsys):
     assert captured.err == ""
 
 
+def test_main_refreshes_multiple_explicit_benchmarks(capsys):
+    calls = []
+
+    def fake_refresh_benchmarks(
+        benchmark_ids, benchmark_db_path, market_db_path, today_date
+    ):
+        calls.append(benchmark_ids)
+        return []
+
+    exit_code = refresh_benchmark_market_data.main(
+        [
+            "--benchmark-id",
+            "us_sp500",
+            "--benchmark-id",
+            "us_nasdaq_100",
+            "--benchmark-id",
+            "us_nasdaq_composite",
+            "--benchmark-id",
+            "us_djia",
+        ],
+        refresh_benchmarks=fake_refresh_benchmarks,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        ["us_sp500", "us_nasdaq_100", "us_nasdaq_composite", "us_djia"]
+    ]
+    assert capsys.readouterr().err == ""
+
+
 def test_main_refreshes_all_configured_benchmarks(capsys):
     def fake_refresh_benchmarks(
         benchmark_ids, benchmark_db_path, market_db_path, today_date
