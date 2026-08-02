@@ -335,6 +335,29 @@
         return html;
       }
 
+      function renderAttributionReviewResources(resources) {
+        if (!resources || !resources.length) return "";
+        var html = '<section class="evidence-section attribution-review-resources">';
+        html += '<h3>Attribution review resources</h3>';
+        html += '<p class="section-intro">Method-listed sources to consult while reviewing the abnormal price move. These are review resources only, not a demand or supply conclusion.</p>';
+        html += '<details class="raw-evidence">';
+        html += '<summary>View review resources</summary>';
+        for (var i = 0; i < resources.length; i++) {
+          var resource = resources[i];
+          html += '<div class="workflow-row attribution-review-row">';
+          html += '<div class="workflow-label">' + h.escapeHtml(resource.source_name)
+            + '<span class="workflow-role">' + h.escapeHtml(resource.commodity_id) + '</span></div>';
+          html += '<div class="workflow-metrics">';
+          html += '<span>Coverage: ' + h.escapeHtml((resource.coverage || []).join(", ")) + '</span>';
+          html += '<span>Status: ' + h.escapeHtml(resource.status || "cataloged") + '</span>';
+          html += '<span><a class="source-link" href="' + h.escapeHtml(resource.source_url) + '" target="_blank" rel="noopener noreferrer">' + h.escapeHtml(resource.source_url) + '</a></span>';
+          html += '</div></div>';
+        }
+        html += '</details>';
+        html += '</section>';
+        return html;
+      }
+
       var read = payload.process_read || {};
       var attr = payload.commodity_attribution || {};
       var freshness = payload.freshness || {};
@@ -375,6 +398,8 @@
         html += renderNonOilRow(methodData[methodIds[ci]]);
       }
       html += '</section>';
+
+      html += renderAttributionReviewResources(payload.attribution_review_resources);
 
       html += '<section class="evidence-section">';
       html += '<h3>Market Corroboration</h3>';

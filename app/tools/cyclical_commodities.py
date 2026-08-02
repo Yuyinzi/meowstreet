@@ -17,6 +17,15 @@ _NON_OIL_DISTRIBUTION_START_DATE = "2016-01-01"
 _SHFE_DAILY_RETURN_DEFINITION = "shfe_cu_same_contract_close_to_close"
 _SHFE_WEEKLY_RETURN_DEFINITION = "shfe_cu_same_contract_roll_neutral_iso_week"
 
+_SERIES_COMMODITY_IDS = {
+    "copper_comex": "copper",
+    "copper_lme": "copper",
+    "copper_shanghai": "copper",
+    "iron_ore_62_cfr_china": "iron_ore",
+    "iron_ore_dce": "iron_ore",
+    "lumber_cme_lbr_yahoo_v1": "lumber",
+}
+
 _COMMODITY_DISPLAY = {
     "crude_oil_wti": "WTI Crude Oil (ICE Futures Europe)",
     "crude_oil_brent": "Brent Crude Oil (NYMEX)",
@@ -690,6 +699,7 @@ def build_cyclical_commodities_payload(
     oil_series_metadata_by_id=None,
     commodity_observations=None,
     shfe_cu_main_observations=None,
+    attribution_review_catalog=None,
 ):
     as_of = as_of_date or ""
     cot_payload, cot_available = _compute_cot_payload(cot_rows)
@@ -725,6 +735,49 @@ def build_cyclical_commodities_payload(
         "commodity_returns": _commodity_returns_summary(commodity),
         "card_status": "partial_official_evidence",
         "commodity_observation": commodity,
+        "attribution_review_resources": _attribution_review_resources(
+            commodity, attribution_review_catalog
+        ),
+    }
+
+
+def _attribution_review_resources(commodity, catalog):
+    if not catalog:
+        return []
+    resources = catalog.get("resources", [])
+    review_commodity_ids = sorted(
+        {
+            _SERIES_COMMODITY_IDS[sid]
+            for sid, entry in commodity.items()
+            if entry.get("review_status") == "review_required"
+            and sid in _SERIES_COMMODITY_IDS
+        }
+    )
+    if not review_commodity_ids:
+        return []
+    selected = [
+        _catalog_review_resource(resource)
+        for resource in resources
+        if resource.get("commodity_id") in review_commodity_ids
+    ]
+    return sorted(
+        selected,
+        key=lambda resource: (
+            resource["commodity_id"],
+            resource["source_name"],
+            resource["source_url"],
+        ),
+    )
+
+
+def _catalog_review_resource(resource):
+    return {
+        "commodity_id": resource["commodity_id"],
+        "source_name": resource["source_name"],
+        "source_url": resource["source_url"],
+        "source_type": resource["source_type"],
+        "coverage": list(resource["coverage"]),
+        "status": resource["status"],
     }
 
 
@@ -886,6 +939,7 @@ def build_cyclical_commodities_detail(payload):
         "steps": details,
         "freshness": _collect_freshness_metadata(payload),
         "non_oil_observation": payload.get("commodity_observation", {}),
+        "attribution_review_resources": payload.get("attribution_review_resources", []),
     }
 
 
