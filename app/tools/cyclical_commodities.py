@@ -488,6 +488,7 @@ def _shfe_shanghai_payload(meta, main_rows, as_of_date):
     if not eligible:
         return {
             "series_id": "copper_shanghai",
+            "commodity_id": "copper",
             "display_name": meta["display_name"],
             "status": "unavailable",
             "exchange_label": meta["exchange_label"],
@@ -548,6 +549,7 @@ def _shfe_shanghai_payload(meta, main_rows, as_of_date):
     review_status = _distribution_review_status(daily_distribution, weekly_distribution)
     return {
         "series_id": "copper_shanghai",
+        "commodity_id": "copper",
         "display_name": meta["display_name"],
         "exchange_label": meta["exchange_label"],
         "instrument": meta["instrument"],
@@ -600,6 +602,7 @@ def _commodity_payload(
             weekly_distribution = _observations_distribution([], "weekly")
             result[sid] = {
                 "series_id": sid,
+                "commodity_id": _SERIES_COMMODITY_IDS[sid],
                 "display_name": entry["display_name"],
                 "status": "unavailable",
                 "exchange_label": entry["exchange_label"],
@@ -630,6 +633,7 @@ def _commodity_payload(
         )
         result[sid] = {
             "series_id": sid,
+            "commodity_id": _SERIES_COMMODITY_IDS[sid],
             "display_name": entry["display_name"],
             "latest_date": latest["date"],
             "latest_value": latest["value"],

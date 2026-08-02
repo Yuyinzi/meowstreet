@@ -6701,7 +6701,7 @@ def test_renderer_renders_attribution_review_resources_without_conclusion():
     js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
 
     assert "attribution_review_resources" in js
-    assert "Attribution review resources" in js
+    assert "View attribution review resources" in js
     assert "source_url" in js
     assert "coverage" in js
     assert "cataloged" in js
@@ -6729,3 +6729,13 @@ def test_renderer_skips_attribution_review_resources_when_empty():
 
     assert 'if (!resources || !resources.length) return "";' in js
     assert "renderAttributionReviewResources" in js
+
+
+def test_non_oil_rows_label_backend_review_status_and_render_own_resources():
+    js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "renderNonOilReviewStatus(series)" in js
+    assert "reviewResourcesByCommodity" in js
+    assert "renderAttributionReviewResources(" in js
+    assert js.count("renderNonOilReviewStatus(series)") == 4
+    assert "reviewResourcesByCommodity[series.commodity_id]" in js
