@@ -6,10 +6,22 @@ import pytest
 
 from app.data_sources import commodity_attribution_catalog as catalog_source
 from app.data_sources import non_oil_attribution_source_audit as audit
+from app.services import non_oil_attribution_source_audit as service
 
 ROOT = Path(__file__).resolve().parents[1]
 
 CATALOG_JSON_PATH = (
+    ROOT
+    / "data"
+    / "local_system"
+    / "commodity_attribution_evidence_catalog.v1.json"
+)
+
+AUDIT_PATH = (
+    ROOT / "data" / "local_system" / "non_oil_attribution_source_audit.v1.json"
+)
+
+CATALOG_PATH = (
     ROOT
     / "data"
     / "local_system"
@@ -417,3 +429,51 @@ def test_validate_accepts_blocked_record_without_published_factual_metadata():
     assert audit.validate_non_oil_attribution_audits(
         [record], [catalog_record("copper", "https://example.test/copper")]
     ) == [record]
+
+
+def test_checked_in_audit_covers_every_non_oil_price_page_url():
+    payload = service.load_non_oil_attribution_source_audit(
+        AUDIT_PATH, CATALOG_PATH
+    )
+    assert len(payload["audits"]) == 20
+    assert {row["commodity_id"] for row in payload["audits"]} == {
+        "copper",
+        "lumber",
+        "iron_ore",
+    }
+    assert {row["audit_status"] for row in payload["audits"]} <= {
+        "structured_recurring_candidate",
+        "manual_review_only",
+        "blocked",
+    }
+
+
+def test_checked_in_audit_has_no_automatic_attribution_or_trade_fields():
+    payload = service.load_non_oil_attribution_source_audit(
+        AUDIT_PATH, CATALOG_PATH
+    )
+    forbidden = {
+        "conclusion",
+        "demand_led",
+        "supply_led",
+        "trade_signal",
+        "direction",
+        "score",
+    }
+    assert all(not (forbidden & set(row)) for row in payload["audits"])
+
+
+def test_checked_in_audit_outcome_counts_match_research():
+    payload = service.load_non_oil_attribution_source_audit(
+        AUDIT_PATH, CATALOG_PATH
+    )
+    assert Counter(row["audit_status"] for row in payload["audits"]) == {
+        "structured_recurring_candidate": 7,
+        "manual_review_only": 10,
+        "blocked": 3,
+    }
+    assert Counter(row["commodity_id"] for row in payload["audits"]) == {
+        "copper": 9,
+        "lumber": 5,
+        "iron_ore": 6,
+    }

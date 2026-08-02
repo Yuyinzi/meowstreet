@@ -186,7 +186,6 @@ def test_load_returns_artifact_and_rejects_invalid_version(tmp_path):
         service.load_non_oil_attribution_source_audit(invalid_path, catalog_path)
 
 
-@pytest.mark.skip(reason="audited records are seeded in task 3")
 def test_build_script_writes_audit_and_exits_zero(tmp_path):
     script = ROOT / "scripts" / "build_non_oil_attribution_source_audit.py"
     destination = tmp_path / "audit.v1.json"
