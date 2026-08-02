@@ -1616,6 +1616,23 @@ def test_review_required_copper_with_unavailable_refresh_status_is_unavailable()
     assert copper["next_action"]
 
 
+def test_review_required_copper_without_facts_but_failed_refresh_is_unavailable():
+    status = {
+        "commodity_id": "copper",
+        "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "status": "unavailable",
+        "error_message": "faostat fetch failed",
+        "refreshed_at": "2026-08-02T00:00:00+00:00",
+    }
+    detail = detail_for_review_required_copper_with_status(
+        iwcc_facts=[], refresh_status=[status]
+    )
+    copper = detail["non_oil_attribution_evidence"]["copper"]
+    assert copper["status"] == "unavailable"
+    assert copper["next_action"]
+    assert copper["facts"] == []
+
+
 def test_review_required_copper_with_available_refresh_status_stays_available():
     status = {
         "commodity_id": "copper",
@@ -1642,6 +1659,14 @@ def test_review_required_iron_reason_sources_text_from_usgs_audit_basis():
     iron = detail["non_oil_attribution_evidence"]["iron_ore"]
     assert "USGS" in iron["reason"]
     assert "ScienceBase transition" in iron["reason"]
+
+
+def test_review_required_iron_evidence_includes_next_action():
+    detail = detail_for_review_required_iron(facts=[], audit=audit_payload())
+    iron = detail["non_oil_attribution_evidence"]["iron_ore"]
+    assert iron["status"] == "unavailable"
+    assert iron["next_action"]
+    assert "Western Australia" in iron["next_action"]
 
 
 def test_review_required_iron_without_usgs_audit_row_still_emits_reason():

@@ -870,12 +870,11 @@ def _non_oil_attribution_evidence(commodity, facts, audit, refresh_status=None):
     facts_by_commodity = {}
     for fact in facts or []:
         facts_by_commodity.setdefault(fact["commodity_id"], []).append(fact)
-    status_by_source_url = {row["source_url"]: row for row in (refresh_status or [])}
+    status_by_commodity = {row["commodity_id"]: row for row in (refresh_status or [])}
     evidence = {}
     for commodity_id in review_commodity_ids:
-        commodity_facts = facts_by_commodity.get(commodity_id, [])
-        failed_status = _refresh_failed_status(commodity_facts, status_by_source_url)
-        if failed_status is not None:
+        failed_status = status_by_commodity.get(commodity_id)
+        if failed_status is not None and failed_status.get("status") == "unavailable":
             evidence[commodity_id] = {
                 "commodity_id": commodity_id,
                 "status": "unavailable",
@@ -887,6 +886,7 @@ def _non_oil_attribution_evidence(commodity, facts, audit, refresh_status=None):
                 "facts": [],
             }
             continue
+        commodity_facts = facts_by_commodity.get(commodity_id, [])
         if commodity_facts:
             evidence[commodity_id] = {
                 "commodity_id": commodity_id,
@@ -908,17 +908,13 @@ def _non_oil_attribution_evidence(commodity, facts, audit, refresh_status=None):
                 "commodity_id": commodity_id,
                 "status": "unavailable",
                 "reason": _iron_ore_unavailable_reason(audit),
+                "next_action": (
+                    "open the Western Australia manual review resources to inspect "
+                    "the method-listed Excel, Statistics Digest, and statistics-release URLs"
+                ),
                 "manual_review_resources": wa_resources,
             }
     return evidence
-
-
-def _refresh_failed_status(commodity_facts, status_by_source_url):
-    for fact in commodity_facts:
-        row = status_by_source_url.get(fact["source_url"])
-        if row is not None and row.get("status") == "unavailable":
-            return row
-    return None
 
 
 def build_cyclical_commodities_headline(payload):

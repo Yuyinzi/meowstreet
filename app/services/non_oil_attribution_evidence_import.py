@@ -31,13 +31,20 @@ def refresh_non_oil_attribution_evidence(
             failures[commodity_id] = exc
     if failures:
         con.rollback()
-        for commodity_id, exc in failures.items():
+        for commodity_id, source_url in __NON_OIL_ATTRIBUTION_SOURCES:
+            exc = failures.get(commodity_id)
+            if exc is not None:
+                error_message = str(exc)
+            else:
+                error_message = (
+                    "refresh did not persist because a sibling source failed"
+                )
             macro_indicators.merge_non_oil_attribution_refresh_status(
                 con,
                 commodity_id,
-                _source_url(commodity_id),
+                source_url,
                 "unavailable",
-                str(exc),
+                error_message,
                 commit=False,
             )
         con.commit()
@@ -67,7 +74,3 @@ def refresh_non_oil_attribution_evidence(
             )
         con.commit()
         raise
-
-
-def _source_url(commodity_id):
-    return dict(__NON_OIL_ATTRIBUTION_SOURCES)[commodity_id]
