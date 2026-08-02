@@ -837,6 +837,10 @@ h2 {
   padding: 10px 12px;
 }
 
+.oil-attribution-review {
+  margin-top: 12px;
+}
+
 .state-up,
 .state-draw {
   color: #155724;

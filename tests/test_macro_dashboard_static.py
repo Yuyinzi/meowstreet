@@ -6580,11 +6580,16 @@ def test_oil_renderer_shows_weekly_attribution_changes_without_conclusion():
 
 def test_oil_renderer_places_attribution_inputs_inside_review_required_branch():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
     review_start = source.index('if (review && review.status === "review_required")')
-    attribution_start = source.index("<h4>Attribution inputs</h4>")
+    attribution_start = source.index("Attribution inputs", review_start)
     review_end = source.index("      }", review_start)
 
     assert review_start < attribution_start < review_end
+    assert "oil-attribution-review" in source
+    assert "market-row-review" in source
+    assert "market-status-review" in source
+    assert ".oil-attribution-review" in css
 
 
 def test_oil_renderer_groups_attribution_rows_and_separates_role_from_metrics():
@@ -6642,7 +6647,7 @@ def test_cyclical_commodities_ui_renders_backend_distribution_labels():
     assert "oil-distribution-abnormal" in source
     assert ".oil-distribution-abnormal" in css
     assert "Within 1σ, Normal" in source
-    assert source.count("state-review-required") == 1
+    assert "market-status-review" in source
 
 
 def test_non_oil_renderer_displays_backend_distribution_evidence():

@@ -360,12 +360,13 @@
       html += renderOilBenchmarkSummary(oilObservation.benchmarks || {});
       var review = payload.oil_attribution_review;
       if (review && review.status === "review_required") {
-        html += '<div class="state state-review-required">'
-          + h.escapeHtml(review.label || "Evidence is ready for review")
+        html += '<div class="workflow-row market-row-review oil-attribution-review">';
+        html += '<div class="workflow-label">Attribution inputs'
+          + '<span class="market-status market-status-review">Review required</span>'
           + '</div>';
-        html += '<h4>Attribution inputs</h4>';
-        html += '<p class="summary-stat">' + h.escapeHtml(attr.review_label || reasonLabel(attr)) + ' — WoW changes are raw context for review; no automatic attribution is made.</p>';
+        html += '<p class="summary-stat">' + h.escapeHtml(review.label || attr.review_label || reasonLabel(attr)) + ' — WoW changes are raw context for review; no automatic attribution is made.</p>';
         html += renderAttributionRows(attr.metrics || []);
+        html += '</div>';
       }
       html += '</section>';
 
