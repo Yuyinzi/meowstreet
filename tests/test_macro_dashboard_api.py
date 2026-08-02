@@ -4646,11 +4646,16 @@ def test_non_oil_detail_composes_attribution_evidence_from_facts_and_audit(
     } == {"Government of Western Australia"}
 
 
-def test_growth_cycle_dashboard_forwards_non_oil_attribution_inputs(monkeypatch):
+def test_growth_cycle_dashboard_scrubs_non_oil_attribution_internals(monkeypatch):
+    import json
+
     from app import api
 
     class FakeCon(_FakeConStubs):
         pass
+
+    comex_rows = _copper_comex_abnormal_rows()
+    iron_rows = _iron_ore_abnormal_rows()
 
     monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
     monkeypatch.setattr(
@@ -4697,9 +4702,13 @@ def test_growth_cycle_dashboard_forwards_non_oil_attribution_inputs(monkeypatch)
         api.macro_indicators_db,
         "load_macro_indicator_observations_for_series",
         lambda con, series_ids: {
-            sid: [
-                {"date": "2026-07-21", "value": 120.0, "source_identifier": "DTWEXBGS"}
-            ]
+            sid: (
+                comex_rows
+                if sid == "copper_comex"
+                else iron_rows
+                if sid == "iron_ore_62_cfr_china"
+                else []
+            )
             for sid in series_ids
         },
     )
@@ -4720,11 +4729,14 @@ def test_growth_cycle_dashboard_forwards_non_oil_attribution_inputs(monkeypatch)
     assert response.status_code == 200
     body = response.json()
     payload = body["growth_cycle"]["cyclical_commodities_payload"]
-    assert payload["non_oil_attribution_facts"][0]["geography"] == "Global"
-    assert (
-        payload["non_oil_attribution_source_audit"]["version"]
-        == "non_oil_attribution_source_audit_v1"
-    )
+    assert "non_oil_attribution_facts" not in payload
+    assert "non_oil_attribution_source_audit" not in payload
+    assert "source_hash" not in json.dumps(payload)
+    assert "retrieved_at" not in json.dumps(payload)
+    evidence = payload["non_oil_attribution_evidence"]
+    assert evidence["copper"]["status"] == "available"
+    assert evidence["copper"]["facts"][0]["geography"] == "Global"
+    assert evidence["iron_ore"]["status"] == "unavailable"
 
 
 def test_non_oil_market_setup_is_identical_when_returns_change(monkeypatch):

@@ -1502,7 +1502,9 @@ def global_fact():
     }
 
 
-def detail_for_review_required_iron(facts=[], audit=audit_payload()):
+def detail_for_review_required_iron(facts=None, audit=audit_payload()):
+    if facts is None:
+        facts = []
     payload = .build_cyclical_commodities_payload(
         [],
         {},
@@ -1517,7 +1519,9 @@ def detail_for_review_required_iron(facts=[], audit=audit_payload()):
     return .build_cyclical_commodities_detail(payload)
 
 
-def detail_for_review_required_copper(iwcc_facts=[]):
+def detail_for_review_required_copper(iwcc_facts=None):
+    if iwcc_facts is None:
+        iwcc_facts = []
     payload = .build_cyclical_commodities_payload(
         [],
         {},
@@ -1530,7 +1534,9 @@ def detail_for_review_required_copper(iwcc_facts=[]):
     return .build_cyclical_commodities_detail(payload)
 
 
-def detail_for_normal_copper(iwcc_facts=[global_fact()]):
+def detail_for_normal_copper(iwcc_facts=None):
+    if iwcc_facts is None:
+        iwcc_facts = [global_fact()]
     payload = .build_cyclical_commodities_payload(
         [],
         {},

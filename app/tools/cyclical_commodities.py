@@ -33,6 +33,21 @@ _IRON_ORE_UNAVAILABLE_REASON = (
     "December 2025"
 )
 
+_NON_OIL_ATTRIBUTION_FACT_CONTRACT_KEYS = [
+    "method_version",
+    "commodity_id",
+    "source_name",
+    "source_url",
+    "factor_category",
+    "metric_name",
+    "geography",
+    "observation_date",
+    "publication_date",
+    "value",
+    "units",
+    "status",
+]
+
 _COMMODITY_DISPLAY = {
     "crude_oil_wti": "WTI Crude Oil (ICE Futures Europe)",
     "crude_oil_brent": "Brent Crude Oil (NYMEX)",
@@ -751,8 +766,11 @@ def build_cyclical_commodities_payload(
         "attribution_review_resources": _attribution_review_resources(
             commodity, attribution_review_catalog
         ),
-        "non_oil_attribution_facts": non_oil_attribution_facts,
-        "non_oil_attribution_source_audit": non_oil_attribution_source_audit,
+        "non_oil_attribution_evidence": _non_oil_attribution_evidence(
+            commodity,
+            non_oil_attribution_facts,
+            non_oil_attribution_source_audit,
+        ),
     }
 
 
@@ -800,6 +818,10 @@ def _catalog_review_resource(resource):
     }
 
 
+def _project_non_oil_attribution_fact(fact):
+    return {key: fact.get(key) for key in _NON_OIL_ATTRIBUTION_FACT_CONTRACT_KEYS}
+
+
 def _audit_manual_review_resource(row):
     return {
         "source_name": row["source_name"],
@@ -809,9 +831,12 @@ def _audit_manual_review_resource(row):
         "geography": row["geography"],
         "frequency": row["frequency"],
         "units": row["units"],
+        "publication_date_status": row["publication_date_status"],
+        "stability": row["stability"],
         "audit_basis": row["audit_basis"],
         "audited_at": row["audited_at"],
         "source_ref": row["source_ref"],
+        "status": row["audit_status"],
     }
 
 
@@ -829,14 +854,17 @@ def _non_oil_attribution_evidence(commodity, facts, audit):
             evidence[commodity_id] = {
                 "commodity_id": commodity_id,
                 "status": "available",
-                "facts": commodity_facts,
+                "facts": [
+                    _project_non_oil_attribution_fact(fact) for fact in commodity_facts
+                ],
             }
             continue
         if commodity_id == "iron_ore" and audit is not None:
             wa_resources = [
                 _audit_manual_review_resource(row)
                 for row in audit.get("audits", [])
-                if row.get("source_name") == _IRON_ORE_WA_SOURCE_NAME
+                if row.get("commodity_id") == "iron_ore"
+                and row.get("source_name") == _IRON_ORE_WA_SOURCE_NAME
                 and row.get("audit_status") == "manual_review_only"
             ]
             evidence[commodity_id] = {
@@ -1009,11 +1037,7 @@ def build_cyclical_commodities_detail(payload):
         "freshness": _collect_freshness_metadata(payload),
         "non_oil_observation": payload.get("commodity_observation", {}),
         "attribution_review_resources": payload.get("attribution_review_resources", []),
-        "non_oil_attribution_evidence": _non_oil_attribution_evidence(
-            payload.get("commodity_observation", {}),
-            payload.get("non_oil_attribution_facts"),
-            payload.get("non_oil_attribution_source_audit"),
-        ),
+        "non_oil_attribution_evidence": payload.get("non_oil_attribution_evidence", {}),
     }
 
 
