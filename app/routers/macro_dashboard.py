@@ -196,6 +196,7 @@ def macro_dashboard_growth_cycle():
                 "oil_series_metadata_by_id": oil_series_metadata,
                 "commodity_observations": method_observations,
                 "shfe_cu_main_observations": shfe_main_observations,
+                "attribution_review_catalog": api._load_attribution_catalog(),
                 "as_of_date": date.today().isoformat(),
             },
         )
@@ -584,6 +585,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             shfe_main_observations = (
                 macro_indicators_db.load_shfe_cu_main_observations(con)
             )
+            attribution_catalog = api._load_attribution_catalog()
             payload = tool.build_cyclical_commodities_payload(
                 cot_rows,
                 usd_observations,
@@ -592,6 +594,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 oil_series_metadata_by_id=oil_series_metadata,
                 commodity_observations=method_observations,
                 shfe_cu_main_observations=shfe_main_observations,
+                attribution_review_catalog=attribution_catalog,
             )
             return tool.build_cyclical_commodities_detail(payload)
         if detail_id == "ism_services":

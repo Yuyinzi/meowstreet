@@ -17,6 +17,7 @@ from app.routers import (
     ticker_workflow as ticker_workflow_router,
 )
 from app.services import consumer_sentiment_dashboard
+from app.services import commodity_attribution_catalog
 from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.tools import (
     ism_industry_analysis,
@@ -31,6 +32,12 @@ from app.routers.macro_dashboard import macro_dashboard_market_setup
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
 METHOD_PATH = ROOT / "data" / "local_system" / "synthesis" / "method.v1.json"
+_ATTRIBUTION_CATALOG_PATH = (
+    ROOT
+    / "data"
+    / "local_system"
+    / "commodity_attribution_evidence_catalog.v1.json"
+)
 
 US_BENCHMARK_IDS = ["us_sp500", "us_nasdaq_100", "us_nasdaq_composite", "us_djia"]
 
@@ -89,6 +96,16 @@ method_COMMODITY_SERIES_IDS = [
     "iron_ore_dce",
     "lumber_cme_lbr_yahoo_v1",
 ]
+
+
+def _load_attribution_catalog():
+    try:
+        return commodity_attribution_catalog.load_commodity_attribution_catalog(
+            _ATTRIBUTION_CATALOG_PATH
+        )
+    except (ValueError, TypeError, RuntimeError, OSError):
+        logging.warning(" attribution catalog load failed", exc_info=True)
+        return None
 
 
 def _load_market_phase_for_setup():

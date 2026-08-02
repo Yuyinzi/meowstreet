@@ -1226,3 +1226,126 @@ def test_review_labels_distinguish_no_observations_from_insufficient_history():
         assert "demand-led" not in label.lower()
         assert "supply-led" not in label.lower()
         assert "trade" not in label.lower()
+
+
+def _catalog_resource(commodity_id, source_name, source_url):
+    return {
+        "commodity_id": commodity_id,
+        "source_name": source_name,
+        "source_url": source_url,
+        "source_type": "official_data",
+        "coverage": ["production"],
+        "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "status": "cataloged",
+    }
+
+
+def _copper_lumber_oil_catalog():
+    return {
+        "version": "commodity_attribution_evidence_catalog_v1",
+        "generated_at": "2026-08-02T00:00:00+00:00",
+        "source_document": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "resources": [
+            _catalog_resource(
+                "copper", "International Copper Study Group", "https://www.icsg.org/"
+            ),
+            _catalog_resource(
+                "lumber",
+                "Food and Agriculture Organization of the United Nations",
+                "https://www.fao.org/faostat/en/#data/FO",
+            ),
+            _catalog_resource(
+                "oil",
+                "Energy Information Administration",
+                "https://www.eia.gov/petroleum/",
+            ),
+        ],
+    }
+
+
+def test_attribution_review_resources_expose_only_review_required_commodity():
+    payload = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        commodity_observations={"copper_comex": _comex_abnormal_rows()},
+        attribution_review_catalog=_copper_lumber_oil_catalog(),
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+
+    resources = detail["attribution_review_resources"]
+    assert [r["source_name"] for r in resources] == ["International Copper Study Group"]
+    assert all(r["commodity_id"] == "copper" for r in resources)
+    assert all(r["status"] == "cataloged" for r in resources)
+
+
+def test_attribution_review_resources_empty_for_normal_or_unavailable_distributions():
+    normal = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        commodity_observations={"copper_comex": _comex_normal_rows()},
+        attribution_review_catalog=_copper_lumber_oil_catalog(),
+    )
+    assert (
+        .build_cyclical_commodities_detail(normal)[
+            "attribution_review_resources"
+        ]
+        == []
+    )
+
+    unavailable = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        attribution_review_catalog=_copper_lumber_oil_catalog(),
+    )
+    assert (
+        .build_cyclical_commodities_detail(unavailable)[
+            "attribution_review_resources"
+        ]
+        == []
+    )
+
+
+def test_attribution_review_resources_empty_when_catalog_absent():
+    payload = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        commodity_observations={"copper_comex": _comex_abnormal_rows()},
+        attribution_review_catalog=None,
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+
+    assert detail["attribution_review_resources"] == []
+
+
+def test_attribution_review_resources_never_add_conclusion_fields():
+    payload = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        commodity_observations={"copper_comex": _comex_abnormal_rows()},
+        attribution_review_catalog=_copper_lumber_oil_catalog(),
+    )
+    resources = .build_cyclical_commodities_detail(payload)[
+        "attribution_review_resources"
+    ]
+
+    for resource in resources:
+        for field in (
+            "demand_led",
+            "supply_led",
+            "trade_bias",
+            "market_setup",
+            "ticker",
+        ):
+            assert field not in resource
+        assert resource["source_url"]
+        assert resource["coverage"]

@@ -6695,3 +6695,37 @@ def test_shanghai_copper_reuses_market_value_and_state_presentation():
     assert "Math.sqrt" not in source
     assert "demand-led" not in source.lower()
     assert "supply-led" not in source.lower()
+
+
+def test_renderer_renders_attribution_review_resources_without_conclusion():
+    js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "attribution_review_resources" in js
+    assert "Attribution review resources" in js
+    assert "source_url" in js
+    assert "coverage" in js
+    assert "cataloged" in js
+    assert "review resources only" in js
+    assert "demand-led" not in js.lower()
+    assert "supply-led" not in js.lower()
+    assert "buy" not in js.lower()
+    assert "sell" not in js.lower()
+
+
+def test_renderer_attribution_review_resources_uses_scoped_classes():
+    js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert "attribution-review-resources" in js
+    assert "attribution-review-row" in js
+    assert "source-link" in js
+    assert ".attribution-review-resources" in css
+    assert ".attribution-review-row" in css
+    assert ".source-link" in css
+
+
+def test_renderer_skips_attribution_review_resources_when_empty():
+    js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert 'if (!resources || !resources.length) return "";' in js
+    assert "renderAttributionReviewResources" in js

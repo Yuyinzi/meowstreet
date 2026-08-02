@@ -4215,6 +4215,189 @@ def test_non_oil_detail_propagates_distribution_review_evidence(monkeypatch):
     ]
 
 
+def _catalog_with_copper():
+    return {
+        "version": "commodity_attribution_evidence_catalog_v1",
+        "generated_at": "2026-08-02T00:00:00+00:00",
+        "source_document": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "resources": [
+            {
+                "commodity_id": "copper",
+                "source_name": "International Copper Study Group",
+                "source_url": "https://www.icsg.org/",
+                "source_type": "industry_body",
+                "coverage": ["production", "usage", "stocks", "forecasts"],
+                "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+                "status": "cataloged",
+            },
+            {
+                "commodity_id": "oil",
+                "source_name": "Energy Information Administration",
+                "source_url": "https://www.eia.gov/petroleum/",
+                "source_type": "official_data",
+                "coverage": ["prices"],
+                "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+                "status": "cataloged",
+            },
+        ],
+    }
+
+
+def test_non_oil_detail_exposes_review_resources_from_catalog(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    comex_rows = _copper_comex_abnormal_rows()
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: (comex_rows if sid == "copper_comex" else []) for sid in series_ids
+        },
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_attribution_catalog",
+        lambda: _catalog_with_copper(),
+    )
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    resources = body["attribution_review_resources"]
+    assert [r["source_name"] for r in resources] == ["International Copper Study Group"]
+    assert all(r["commodity_id"] == "copper" for r in resources)
+    assert all(r["status"] == "cataloged" for r in resources)
+
+
+def test_non_oil_detail_exposes_empty_review_resources_without_catalog(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    comex_rows = _copper_comex_abnormal_rows()
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: (comex_rows if sid == "copper_comex" else []) for sid in series_ids
+        },
+    )
+    monkeypatch.setattr(api, "_load_attribution_catalog", lambda: None)
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["attribution_review_resources"] == []
+    assert (
+        body["non_oil_observation"]["copper_comex"]["review_status"]
+        == "review_required"
+    )
+
+
 def test_non_oil_market_setup_is_identical_when_returns_change(monkeypatch):
     from app import api
 
