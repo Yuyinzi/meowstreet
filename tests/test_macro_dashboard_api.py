@@ -3594,6 +3594,180 @@ def test_detail_loads_active_investing_lme(monkeypatch):
     assert "return_transition_blocked" not in lme
 
 
+def _usd_weekday_rows():
+    rows = []
+    day = datetime.date(2016, 1, 4)
+    while len(rows) < 265:
+        if day.weekday() < 5:
+            rows.append(
+                {
+                    "date": day.isoformat(),
+                    "value": 100.0 * (1.0005 ** len(rows)),
+                }
+            )
+        day += datetime.timedelta(days=1)
+    return rows
+
+
+def test_usd_detail_propagates_distribution_and_review_state(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: list(_usd_weekday_rows()) for sid in series_ids
+        },
+    )
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    usd_step = next(
+        step
+        for step in response.json()["steps"]
+        if step["title"] == "Trade-Weighted USD"
+    )
+    usd_series = {series["series_id"]: series for series in usd_step["series"]}
+    assert set(usd_series) == {"usd_broad", "usd_afe", "usd_eme"}
+    for series in usd_series.values():
+        assert (
+            series["daily_distribution"]["method_version"]
+            == "usd_price_distribution_v1"
+        )
+        assert (
+            series["weekly_distribution"]["method_version"]
+            == "usd_price_distribution_v1"
+        )
+        assert series["review_status"] in {
+            "observation_available",
+            "review_required",
+            "unavailable",
+        }
+
+
+def test_market_setup_is_identical_when_usd_final_value_changes(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.market_phase,
+        "build_dashboard_payload",
+        lambda loader: None,
+    )
+    monkeypatch.setattr(
+        api.benchmark_market_data,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.gdp_market_relationships,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+
+    def _market_setup_response(rows):
+        monkeypatch.setattr(
+            api.macro_indicators_db,
+            "load_macro_indicator_observations_for_series",
+            lambda con, series_ids: {sid: list(rows) for sid in series_ids},
+        )
+        return TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+
+    normal_rows = _usd_weekday_rows()
+    abnormal_rows = list(normal_rows)
+    abnormal_rows[-1] = {
+        "date": abnormal_rows[-1]["date"],
+        "value": abnormal_rows[-2]["value"] * 1.5,
+    }
+
+    assert _market_setup_response(normal_rows) == _market_setup_response(abnormal_rows)
+
+
+def test_usd_distribution_never_reaches_ticker_workflow(monkeypatch):
+    import json
+
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
+    response = client.post(
+        "/api/ticker-workflow/evaluate",
+        json={"symbol": "XYZ", "observations": {}},
+    )
+
+    assert response.status_code == 200
+    assert "usd" not in json.dumps(response.json())
+
+
 def test_market_setup_is_identical_when_data_changes(monkeypatch):
     from app import api
 
