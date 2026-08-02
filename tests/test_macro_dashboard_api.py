@@ -4942,3 +4942,180 @@ def test_non_oil_ticker_workflow_output_has_no_field(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert "" not in json.dumps(payload)
+
+
+def _economic_confirmation_payload(as_of_timestamp):
+    return {
+        "as_of": as_of_timestamp,
+        "method_version": "economic_confirmation_v1.0",
+        "vintage_policy": "latest_official_vintage",
+        "claims_confirmation": {
+            "confirmation_status": "partial",
+            "method_version": "claims_confirmation_v1.0",
+        },
+        "labor_context": {"role": "context_only", "data_status": "missing"},
+        "real_activity": {
+            "data_status": "missing",
+            "method_status": "pending_approval",
+            "confirmation_status": "unavailable",
+            "unavailable_reason": "method_not_approved",
+        },
+        "event_risk": {"direction": "unknown", "next_event": None},
+        "economic_confirmation": {
+            "status": "limited_coverage",
+            "based_on": ["claims_confirmation_v1.0"],
+            "excluded_modules": [
+                {"module": "esr_labor_context", "reason": "method_not_approved"},
+                {"module": "real_activity", "reason": "method_not_approved"},
+            ],
+            "coverage": "claims_only",
+            "approved_directional_modules": 1,
+            "context_only_modules": 2,
+        },
+    }
+
+
+def test_economic_confirmation_api_returns_limited_coverage_payload(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation,
+        "connect",
+        lambda: type("C", (_FakeConStubs,), {})(),
+    )
+    captured = {}
+
+    def fake_load_overview(con, macro_growth_context, as_of_timestamp):
+        captured["macro_growth_context"] = macro_growth_context
+        return _economic_confirmation_payload(as_of_timestamp)
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation_dashboard,
+        "load_overview",
+        fake_load_overview,
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router,
+        "macro_dashboard_growth_cycle",
+        lambda: {
+            "headline": [
+                {"id": "survey_synthesis", "expected_gdp_direction": "slowing"}
+            ]
+        },
+    )
+
+    response = client.get("/api/macro-dashboard/economic-confirmation")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["economic_confirmation"]["status"] == "limited_coverage"
+    assert payload["real_activity"]["confirmation_status"] == "unavailable"
+    assert captured["macro_growth_context"] == {"expected_gdp_direction": "slowing"}
+
+
+def test_economic_confirmation_api_accepts_query_param_direction(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation,
+        "connect",
+        lambda: type("C", (_FakeConStubs,), {})(),
+    )
+    captured = {}
+
+    def fake_load_overview(con, macro_growth_context, as_of_timestamp):
+        captured["macro_growth_context"] = macro_growth_context
+        return _economic_confirmation_payload(as_of_timestamp)
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation_dashboard,
+        "load_overview",
+        fake_load_overview,
+    )
+
+    response = client.get(
+        "/api/macro-dashboard/economic-confirmation?expected_gdp_direction=falling"
+    )
+
+    assert response.status_code == 200
+    assert captured["macro_growth_context"] == {"expected_gdp_direction": "falling"}
+
+
+def test_economic_confirmation_api_returns_400_for_value_error(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation,
+        "connect",
+        lambda: type("C", (_FakeConStubs,), {})(),
+    )
+
+    def raising_load_overview(con, macro_growth_context, as_of_timestamp):
+        raise ValueError("claims confirmation is unavailable")
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation_dashboard,
+        "load_overview",
+        raising_load_overview,
+    )
+
+    response = client.get("/api/macro-dashboard/economic-confirmation")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "claims confirmation is unavailable"
+
+
+def test_economic_confirmation_detail_api_returns_payload(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation,
+        "connect",
+        lambda: type("C", (_FakeConStubs,), {})(),
+    )
+    captured = {}
+
+    def fake_load_detail(con, macro_growth_context, as_of_timestamp):
+        captured["macro_growth_context"] = macro_growth_context
+        payload = _economic_confirmation_payload(as_of_timestamp)
+        payload["vintage_policy"] = "point_in_time"
+        return payload
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation_dashboard,
+        "load_detail",
+        fake_load_detail,
+    )
+
+    response = client.get(
+        "/api/macro-dashboard/economic-confirmation/detail?expected_gdp_direction=improving"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["economic_confirmation"]["status"] == "limited_coverage"
+    assert captured["macro_growth_context"] == {"expected_gdp_direction": "improving"}
+    assert response.json()["vintage_policy"] == "point_in_time"
+
+
+def test_economic_confirmation_detail_api_returns_400_for_value_error(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation,
+        "connect",
+        lambda: type("C", (_FakeConStubs,), {})(),
+    )
+
+    def raising_load_detail(con, macro_growth_context, as_of_timestamp):
+        raise ValueError("claims confirmation is unavailable")
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation_dashboard,
+        "load_detail",
+        raising_load_detail,
+    )
+
+    response = client.get("/api/macro-dashboard/economic-confirmation/detail")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "claims confirmation is unavailable"

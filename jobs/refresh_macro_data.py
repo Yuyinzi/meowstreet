@@ -11,6 +11,7 @@ from scripts import fetch_ism_reports
 from scripts import generate_fomc_minutes_structure
 from scripts import generate_fomc_policy_tone
 from scripts import import_consumer_sentiment
+from scripts import import_economic_confirmation
 from scripts import import_fomc_calendar
 from scripts import import_gdp_market_relationships
 from scripts import import_ism_manufacturing
@@ -102,6 +103,7 @@ def _planned_tasks(
     lumber_main=import_lumber.main,
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
+    economic_confirmation_main=None,
 ):
     tasks = []
     if not args.skip_yahoo:
@@ -189,6 +191,8 @@ def _planned_tasks(
         tasks.append(("shfe_copper", shfe_copper_main, ["--incremental"]))
     if dce_iron_ore_sina_main is not None and not args.skip_dce_iron_ore_sina:
         tasks.append(("dce_iron_ore_sina", dce_iron_ore_sina_main, []))
+    if economic_confirmation_main is not None and not args.skip_economic_confirmation:
+        tasks.append(("economic_confirmation_official", economic_confirmation_main, []))
     return tasks
 
 
@@ -222,6 +226,7 @@ def main(
     lumber_main=import_lumber.main,
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
+    economic_confirmation_main=None,
 ):
     if main is None:
         main = import_cyclical_commodities.main
@@ -233,6 +238,8 @@ def main(
         shfe_copper_main = import_shfe_copper.main
     if dce_iron_ore_sina_main is None:
         dce_iron_ore_sina_main = import_dce_iron_ore_sina.main
+    if economic_confirmation_main is None:
+        economic_confirmation_main = import_economic_confirmation.main
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
     parser.add_argument("--skip-rates", action="store_true")
@@ -250,6 +257,7 @@ def main(
     parser.add_argument("--skip-lumber", action="store_true")
     parser.add_argument("--skip-shfe-copper", action="store_true")
     parser.add_argument("--skip-dce-iron-ore-sina", action="store_true")
+    parser.add_argument("--skip-economic-confirmation", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
     parser.add_argument(
         "--stop-on-error",
@@ -282,6 +290,7 @@ def main(
         lumber_main,
         shfe_copper_main,
         dce_iron_ore_sina_main,
+        economic_confirmation_main,
     ):
         result = _run_task(name, func, task_argv)
         results.append(result)

@@ -5,10 +5,12 @@ from fastapi import APIRouter, HTTPException
 
 from app import api
 from app.db import benchmark_market_data, consumer_sentiment, gdp_market_relationships
+from app.db import economic_confirmation
 from app.db import growth_cycle
 from app.db import macro_indicators as macro_indicators_db
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.services import consumer_sentiment_dashboard, ism_services_dashboard
+from app.services import economic_confirmation as economic_confirmation_dashboard
 from app.tools import (
     housing_permits,
     ism_industry_analysis,
@@ -43,6 +45,51 @@ def macro_dashboard_consumer_sentiment_detail():
     con = consumer_sentiment.connect()
     try:
         return consumer_sentiment_dashboard.load_detail(con)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        con.close()
+
+
+def _macro_growth_context(expected_gdp_direction):
+    if expected_gdp_direction:
+        return {"expected_gdp_direction": expected_gdp_direction}
+    growth_cycle_payload = macro_dashboard_growth_cycle()
+    survey_synthesis = next(
+        (
+            card
+            for card in growth_cycle_payload.get("headline", [])
+            if card.get("id") == "survey_synthesis"
+        ),
+        {},
+    )
+    return {"expected_gdp_direction": survey_synthesis.get("expected_gdp_direction")}
+
+
+@router.get("/economic-confirmation")
+def macro_dashboard_economic_confirmation(expected_gdp_direction=None):
+    con = economic_confirmation.connect()
+    try:
+        return economic_confirmation_dashboard.load_overview(
+            con,
+            _macro_growth_context(expected_gdp_direction),
+            date.today().isoformat(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        con.close()
+
+
+@router.get("/economic-confirmation/detail")
+def macro_dashboard_economic_confirmation_detail(expected_gdp_direction=None):
+    con = economic_confirmation.connect()
+    try:
+        return economic_confirmation_dashboard.load_detail(
+            con,
+            _macro_growth_context(expected_gdp_direction),
+            date.today().isoformat(),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
