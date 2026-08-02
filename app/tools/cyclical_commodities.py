@@ -26,6 +26,13 @@ _SERIES_COMMODITY_IDS = {
     "lumber_cme_lbr_yahoo_v1": "lumber",
 }
 
+_IRON_ORE_WA_SOURCE_NAME = "Government of Western Australia"
+_IRON_ORE_UNAVAILABLE_REASON = (
+    "USGS iron ore public data is unavailable: its monthly Mineral Industry "
+    "Survey posting is paused and the latest public observations are from "
+    "December 2025"
+)
+
 _COMMODITY_DISPLAY = {
     "crude_oil_wti": "WTI Crude Oil (ICE Futures Europe)",
     "crude_oil_brent": "Brent Crude Oil (NYMEX)",
@@ -704,6 +711,8 @@ def build_cyclical_commodities_payload(
     commodity_observations=None,
     shfe_cu_main_observations=None,
     attribution_review_catalog=None,
+    non_oil_attribution_facts=None,
+    non_oil_attribution_source_audit=None,
 ):
     as_of = as_of_date or ""
     cot_payload, cot_available = _compute_cot_payload(cot_rows)
@@ -742,14 +751,13 @@ def build_cyclical_commodities_payload(
         "attribution_review_resources": _attribution_review_resources(
             commodity, attribution_review_catalog
         ),
+        "non_oil_attribution_facts": non_oil_attribution_facts,
+        "non_oil_attribution_source_audit": non_oil_attribution_source_audit,
     }
 
 
-def _attribution_review_resources(commodity, catalog):
-    if not catalog:
-        return []
-    resources = catalog.get("resources", [])
-    review_commodity_ids = sorted(
+def _review_required_commodity_ids(commodity):
+    return sorted(
         {
             _SERIES_COMMODITY_IDS[sid]
             for sid, entry in commodity.items()
@@ -757,6 +765,13 @@ def _attribution_review_resources(commodity, catalog):
             and sid in _SERIES_COMMODITY_IDS
         }
     )
+
+
+def _attribution_review_resources(commodity, catalog):
+    if not catalog:
+        return []
+    resources = catalog.get("resources", [])
+    review_commodity_ids = _review_required_commodity_ids(commodity)
     if not review_commodity_ids:
         return []
     selected = [
@@ -783,6 +798,54 @@ def _catalog_review_resource(resource):
         "coverage": list(resource["coverage"]),
         "status": resource["status"],
     }
+
+
+def _audit_manual_review_resource(row):
+    return {
+        "source_name": row["source_name"],
+        "source_url": row["source_url"],
+        "access_method": row["access_method"],
+        "factor_categories": list(row["factor_categories"]),
+        "geography": row["geography"],
+        "frequency": row["frequency"],
+        "units": row["units"],
+        "audit_basis": row["audit_basis"],
+        "audited_at": row["audited_at"],
+        "source_ref": row["source_ref"],
+    }
+
+
+def _non_oil_attribution_evidence(commodity, facts, audit):
+    review_commodity_ids = _review_required_commodity_ids(commodity)
+    if not review_commodity_ids:
+        return {}
+    facts_by_commodity = {}
+    for fact in facts or []:
+        facts_by_commodity.setdefault(fact["commodity_id"], []).append(fact)
+    evidence = {}
+    for commodity_id in review_commodity_ids:
+        commodity_facts = facts_by_commodity.get(commodity_id, [])
+        if commodity_facts:
+            evidence[commodity_id] = {
+                "commodity_id": commodity_id,
+                "status": "available",
+                "facts": commodity_facts,
+            }
+            continue
+        if commodity_id == "iron_ore" and audit is not None:
+            wa_resources = [
+                _audit_manual_review_resource(row)
+                for row in audit.get("audits", [])
+                if row.get("source_name") == _IRON_ORE_WA_SOURCE_NAME
+                and row.get("audit_status") == "manual_review_only"
+            ]
+            evidence[commodity_id] = {
+                "commodity_id": commodity_id,
+                "status": "unavailable",
+                "reason": _IRON_ORE_UNAVAILABLE_REASON,
+                "manual_review_resources": wa_resources,
+            }
+    return evidence
 
 
 def build_cyclical_commodities_headline(payload):
@@ -946,6 +1009,11 @@ def build_cyclical_commodities_detail(payload):
         "freshness": _collect_freshness_metadata(payload),
         "non_oil_observation": payload.get("commodity_observation", {}),
         "attribution_review_resources": payload.get("attribution_review_resources", []),
+        "non_oil_attribution_evidence": _non_oil_attribution_evidence(
+            payload.get("commodity_observation", {}),
+            payload.get("non_oil_attribution_facts"),
+            payload.get("non_oil_attribution_source_audit"),
+        ),
     }
 
 

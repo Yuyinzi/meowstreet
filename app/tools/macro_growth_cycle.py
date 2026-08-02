@@ -2022,6 +2022,8 @@ def normalize_cyclical_commodities(payload):
     commodity_observations = payload.get("commodity_observations", {})
     shfe_cu_main_observations = payload.get("shfe_cu_main_observations")
     attribution_review_catalog = payload.get("attribution_review_catalog")
+    non_oil_attribution_facts = payload.get("non_oil_attribution_facts")
+    non_oil_attribution_source_audit = payload.get("non_oil_attribution_source_audit")
     as_of_date = payload.get("as_of_date", "2026-01-01")
     payload = tool.build_cyclical_commodities_payload(
         cot_rows,
@@ -2032,6 +2034,8 @@ def normalize_cyclical_commodities(payload):
         commodity_observations=commodity_observations,
         shfe_cu_main_observations=shfe_cu_main_observations,
         attribution_review_catalog=attribution_review_catalog,
+        non_oil_attribution_facts=non_oil_attribution_facts,
+        non_oil_attribution_source_audit=non_oil_attribution_source_audit,
     )
     card = tool.build_cyclical_commodities_headline(payload)
     return {
