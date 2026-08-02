@@ -213,9 +213,7 @@ def _compute_usd_series_payload(series_id, display_name, observations, as_of_dat
     latest = sorted_obs[-1]
     latest_val = latest["value"]
     prior = sorted_obs[-2] if len(sorted_obs) >= 2 else None
-    prior_5 = sorted_obs[-6] if len(sorted_obs) >= 6 else None
     prior_val = prior["value"] if prior else None
-    prior_5_val = prior_5["value"] if prior_5 else None
     return {
         "series_id": series_id,
         "display_name": display_name,
@@ -223,7 +221,7 @@ def _compute_usd_series_payload(series_id, display_name, observations, as_of_dat
         "latest_date": latest["date"],
         "latest_value": latest_val,
         "daily_return": _pct_change_ratio(latest_val, prior_val) if prior else None,
-        "weekly_return": _pct_change_ratio(latest_val, prior_5_val),
+        "weekly_return": weekly_distribution.get("current_return"),
         "source": "fred",
         "source_identifier": observations[0].get("source_identifier", ""),
         "daily_distribution": daily_distribution,

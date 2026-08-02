@@ -205,6 +205,30 @@ def test_usd_broad_mutation_leaves_afe_and_eme_payloads_identical():
     assert mutated["usd"]["usd_eme"] == base["usd"]["usd_eme"]
 
 
+def _usd_rows_missing_friday_with_start_of_week_latest():
+    rows = [row for row in usd_distribution_rows() if row["date"] <= "2016-12-29"]
+    rows.extend(
+        [
+            {"date": "2017-01-02", "value": 100.0 * (1.0005**260)},
+            {"date": "2017-01-03", "value": 100.0 * (1.0005**261)},
+        ]
+    )
+    return rows
+
+
+def test_usd_weekly_return_matches_distribution_current_return_across_missing_days():
+    rows = _usd_rows_missing_friday_with_start_of_week_latest()
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, {"usd_broad": rows}, None, "2017-01-03"
+    )
+    broad = payload["usd"]["usd_broad"]
+
+    assert broad["weekly_distribution"]["sample_count"] == 52
+    assert broad["weekly_return"] == broad["weekly_distribution"]["current_return"]
+    assert broad["weekly_return"] == pytest.approx((1.0005**3) - 1)
+    assert broad["weekly_return"] != pytest.approx((1.0005**6) - 1)
+
+
 def test_commodity_attribution_is_unavailable():
     payload = .build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
@@ -340,7 +364,8 @@ def test_detail_corroboration_summarizes_raw_evidence_without_trade_bias():
 
     assert detail["corroboration"]["cot"]["available_contract_count"] == 2
     assert detail["corroboration"]["cot"]["positive_flip_count"] == 1
-    assert detail["corroboration"]["usd"]["weekly_direction"] == "rising"
+    assert detail["corroboration"]["usd"]["daily_direction"] == "rising"
+    assert detail["corroboration"]["usd"]["weekly_direction"] == "unavailable"
     assert detail["corroboration"]["inflation"]["available_series_count"] == 3
     assert "trade_bias" not in detail["corroboration"]["cot"]
 
