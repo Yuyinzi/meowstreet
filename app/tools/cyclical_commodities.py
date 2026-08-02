@@ -872,6 +872,8 @@ def _oil_attribution_review(payload):
     oil_attribution = payload.get("commodity_attribution", {})
     if oil_observation.get("status") != "available":
         return None
+    if _oil_price_distribution_summary(payload).get("status") != "abnormal":
+        return None
     if oil_attribution.get("status") != "attribution_pending_review":
         return None
     return {
@@ -1035,6 +1037,21 @@ def _process_read(payload):
             "label": "Commodity narrative cannot be assessed",
             "reason": "commodity price observation and demand, supply, inventory attribution are unavailable",
             "next_action": "configure official commodity price and attribution sources",
+        }
+    distribution_summary = _oil_price_distribution_summary(payload)
+    if distribution_summary.get("status") == "incomplete":
+        return {
+            "status": "insufficient_for_commodity_narrative",
+            "label": "Oil price distribution is incomplete",
+            "reason": "oil price history is insufficient to determine whether an attribution review is required",
+            "next_action": "load complete oil price history for WTI and Brent",
+        }
+    if distribution_summary.get("status") == "normal":
+        return {
+            "status": "observation_available",
+            "label": "Oil observation is within its normal distribution",
+            "reason": "WTI and Brent are within 1σ across available daily and weekly observations; no attribution review is required",
+            "next_action": "continue monitoring oil price distributions and review attribution inputs after an abnormal move",
         }
     if oil_attribution.get("status") != "attribution_pending_review":
         return {

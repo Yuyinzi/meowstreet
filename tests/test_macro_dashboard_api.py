@@ -3753,7 +3753,15 @@ def test_detail_returns_oil_observation_and_pending_attribution(monkeypatch):
     assert summary["status"] in {"normal", "abnormal", "incomplete"}
     assert "trade" not in summary["label"].lower()
     assert "physical-market attribution remains required" in summary["detail"]
-    assert body["process_read"]["status"] == "review_required"
+    if summary["status"] == "abnormal":
+        assert body["process_read"]["status"] == "review_required"
+        assert body["oil_attribution_review"]["status"] == "review_required"
+    elif summary["status"] == "normal":
+        assert body["process_read"]["status"] == "observation_available"
+        assert body["oil_attribution_review"] is None
+    else:
+        assert body["process_read"]["status"] == "insufficient_for_commodity_narrative"
+        assert body["oil_attribution_review"] is None
 
 
 def test_market_setup_is_identical_when_oil_data_changes(monkeypatch):

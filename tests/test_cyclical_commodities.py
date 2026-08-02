@@ -297,8 +297,12 @@ def test_oil_observation_reports_raw_daily_and_weekly_returns_without_distributi
 def test_process_read_requires_price_and_all_five_attribution_inputs():
     oil_rows = dict(_OIL_ROWS)
     del oil_rows["oil_refinery_crude_input"]
-    payload = .build_cyclical_commodities_payload(
-        COT_ROWS, USD_ROWS, oil_rows, "2026-07-25"
+    payload = _payload_with_distribution_states(
+        wti_daily="abnormal_2sigma",
+        wti_weekly="normal",
+        brent_daily="normal",
+        brent_weekly="normal",
+        oil_rows=oil_rows,
     )
     detail = .build_cyclical_commodities_detail(payload)
 
@@ -308,8 +312,11 @@ def test_process_read_requires_price_and_all_five_attribution_inputs():
 
 
 def test_process_read_is_pending_review_when_prices_and_inputs_are_present():
-    payload = .build_cyclical_commodities_payload(
-        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+    payload = _payload_with_distribution_states(
+        wti_daily="abnormal_2sigma",
+        wti_weekly="normal",
+        brent_daily="normal",
+        brent_weekly="normal",
     )
     detail = .build_cyclical_commodities_detail(payload)
 
@@ -375,8 +382,11 @@ def test_attribution_data_never_creates_demand_or_supply_conclusion():
 
 
 def test_oil_state_contract_labels_raw_changes_without_trade_conclusion():
-    payload = .build_cyclical_commodities_payload(
-        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+    payload = _payload_with_distribution_states(
+        wti_daily="normal",
+        wti_weekly="normal",
+        brent_daily="abnormal_1sigma",
+        brent_weekly="normal",
     )
     detail = .build_cyclical_commodities_detail(payload)
     review = detail["oil_attribution_review"]
@@ -560,12 +570,17 @@ def test_oil_benchmark_distribution_is_unavailable_when_insufficient_history():
     assert benchmark["weekly_distribution"]["classification"] == "unavailable"
     assert benchmark["status"] == "available"
     detail = .build_cyclical_commodities_detail(payload)
-    assert detail["process_read"]["status"] == "review_required"
+    assert detail["process_read"]["status"] == "insufficient_for_commodity_narrative"
+    assert detail["process_read"]["next_action"] == (
+        "load complete oil price history for WTI and Brent"
+    )
 
 
-def _payload_with_distribution_states(wti_daily, wti_weekly, brent_daily, brent_weekly):
+def _payload_with_distribution_states(
+    wti_daily, wti_weekly, brent_daily, brent_weekly, oil_rows=None
+):
     payload = .build_cyclical_commodities_payload(
-        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+        COT_ROWS, USD_ROWS, oil_rows or _OIL_ROWS, "2026-07-25"
     )
     benchmarks = payload["oil_observation"]["benchmarks"]
     for series_id, daily, weekly in (
@@ -631,7 +646,7 @@ def test_oil_distribution_summary_is_incomplete_when_any_horizon_is_unavailable(
     assert summary["abnormal_observations"] == []
 
 
-def test_oil_distribution_summary_does_not_change_process_read():
+def test_oil_distribution_summary_requires_attribution_review_only_for_abnormal_move():
     normal_payload = _payload_with_distribution_states(
         wti_daily="normal",
         wti_weekly="normal",
@@ -648,7 +663,10 @@ def test_oil_distribution_summary_does_not_change_process_read():
     normal_detail = .build_cyclical_commodities_detail(normal_payload)
     abnormal_detail = .build_cyclical_commodities_detail(abnormal_payload)
 
-    assert normal_detail["process_read"] == abnormal_detail["process_read"]
+    assert normal_detail["process_read"]["status"] == "observation_available"
+    assert normal_detail["oil_attribution_review"] is None
+    assert abnormal_detail["process_read"]["status"] == "review_required"
+    assert abnormal_detail["oil_attribution_review"]["status"] == "review_required"
 
 
 def test_oil_distribution_v2_excludes_pre_2016_observations_from_returns():
