@@ -295,7 +295,7 @@ def test_fetch_iwcc_raises_on_non_200_source_page():
 
 def test_fetch_faostat_rejects_row_missing_required_source_field():
     payload = _faostat_payload()
-    del payload["data"][0]["area"]
+    del payload["data"][0]["unit"]
 
     def handler(request):
         return httpx.Response(200, json=payload)
@@ -307,6 +307,25 @@ def test_fetch_faostat_rejects_row_missing_required_source_field():
         evidence.fetch_faostat_lumber_facts(
             HttpClient(transport=httpx.MockTransport(handler))
         )
+
+
+def test_fetch_faostat_ignores_malformed_non_candidate_row():
+    payload = _faostat_payload()
+    payload["data"].append(
+        {"area": "World", "item": "Wood Fuel", "year": 2024, "element": "Production"}
+    )
+
+    def handler(request):
+        return httpx.Response(200, json=payload)
+
+    facts = evidence.fetch_faostat_lumber_facts(
+        HttpClient(transport=httpx.MockTransport(handler))
+    )
+    assert {row["metric_name"] for row in facts} == {
+        "Production",
+        "Import Quantity",
+        "Export Quantity",
+    }
 
 
 def test_fetch_faostat_rejects_non_numeric_selected_value():

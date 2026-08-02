@@ -4713,10 +4713,19 @@ def test_growth_cycle_dashboard_scrubs_non_oil_attribution_internals(monkeypatch
         },
     )
     monkeypatch.setattr(api, "_load_attribution_catalog", lambda: None)
+
+    def db_shaped_non_oil_fact():
+        fact = _non_oil_global_fact()
+        fact["source_hash"] = (
+            "f0e4c2f76c58916ec258f246851bea091d14d4247a2fc3e18694461b1816e13b"
+        )
+        fact["retrieved_at"] = "2026-08-02T00:00:00+00:00"
+        return fact
+
     monkeypatch.setattr(
         api.macro_indicators_db,
         "load_non_oil_attribution_facts",
-        lambda con: [_non_oil_global_fact()],
+        lambda con: [db_shaped_non_oil_fact()],
     )
     monkeypatch.setattr(
         api,
@@ -4736,6 +4745,8 @@ def test_growth_cycle_dashboard_scrubs_non_oil_attribution_internals(monkeypatch
     evidence = payload["non_oil_attribution_evidence"]
     assert evidence["copper"]["status"] == "available"
     assert evidence["copper"]["facts"][0]["geography"] == "Global"
+    assert "source_hash" not in evidence["copper"]["facts"][0]
+    assert "retrieved_at" not in evidence["copper"]["facts"][0]
     assert evidence["iron_ore"]["status"] == "unavailable"
 
 

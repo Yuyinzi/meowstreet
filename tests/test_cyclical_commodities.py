@@ -1586,3 +1586,26 @@ def test_review_required_copper_without_facts_or_audit_emits_no_evidence():
 def test_review_required_iron_without_audit_omits_evidence():
     detail = detail_for_review_required_iron(facts=[], audit=None)
     assert detail["non_oil_attribution_evidence"] == {}
+
+
+def test_review_required_iron_reason_sources_text_from_usgs_audit_basis():
+    detail = detail_for_review_required_iron(facts=[], audit=audit_payload())
+    iron = detail["non_oil_attribution_evidence"]["iron_ore"]
+    assert "USGS" in iron["reason"]
+    assert "ScienceBase transition" in iron["reason"]
+
+
+def test_review_required_iron_without_usgs_audit_row_still_emits_reason():
+    audit = audit_payload()
+    audit["audits"] = [
+        row
+        for row in audit["audits"]
+        if not (
+            row.get("commodity_id") == "iron_ore"
+            and row.get("source_name") == "US Geological Survey"
+        )
+    ]
+    detail = detail_for_review_required_iron(facts=[], audit=audit)
+    iron = detail["non_oil_attribution_evidence"]["iron_ore"]
+    assert iron["status"] == "unavailable"
+    assert "USGS" in iron["reason"]

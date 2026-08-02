@@ -26,12 +26,8 @@ _SERIES_COMMODITY_IDS = {
     "lumber_cme_lbr_yahoo_v1": "lumber",
 }
 
+_IRON_ORE_USGS_SOURCE_NAME = "US Geological Survey"
 _IRON_ORE_WA_SOURCE_NAME = "Government of Western Australia"
-_IRON_ORE_UNAVAILABLE_REASON = (
-    "USGS iron ore public data is unavailable: its monthly Mineral Industry "
-    "Survey posting is paused and the latest public observations are from "
-    "December 2025"
-)
 
 _NON_OIL_ATTRIBUTION_FACT_CONTRACT_KEYS = [
     "method_version",
@@ -840,6 +836,31 @@ def _audit_manual_review_resource(row):
     }
 
 
+def _iron_ore_usgs_audit_row(audit):
+    return next(
+        (
+            row
+            for row in audit.get("audits", [])
+            if row.get("commodity_id") == "iron_ore"
+            and row.get("source_name") == _IRON_ORE_USGS_SOURCE_NAME
+        ),
+        None,
+    )
+
+
+def _iron_ore_unavailable_reason(audit):
+    usgs_row = _iron_ore_usgs_audit_row(audit)
+    if usgs_row is not None:
+        return (
+            f"USGS ({usgs_row['source_name']}) iron ore public data is "
+            f"unavailable: {usgs_row['audit_basis']}"
+        )
+    return (
+        "USGS iron ore public data is unavailable and no USGS audit record is "
+        "configured"
+    )
+
+
 def _non_oil_attribution_evidence(commodity, facts, audit):
     review_commodity_ids = _review_required_commodity_ids(commodity)
     if not review_commodity_ids:
@@ -870,7 +891,7 @@ def _non_oil_attribution_evidence(commodity, facts, audit):
             evidence[commodity_id] = {
                 "commodity_id": commodity_id,
                 "status": "unavailable",
-                "reason": _IRON_ORE_UNAVAILABLE_REASON,
+                "reason": _iron_ore_unavailable_reason(audit),
                 "manual_review_resources": wa_resources,
             }
     return evidence

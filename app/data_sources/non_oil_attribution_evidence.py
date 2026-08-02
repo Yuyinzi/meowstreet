@@ -219,12 +219,14 @@ def _faostat_payload(content):
 
 def _faostat_raw_facts(payload):
     rows = payload["data"]
-    _require_faostat_source_fields(rows)
     candidates = [
         row
         for row in rows
-        if row.get("item") == FAOSTAT_ITEM and row.get("area") == FAOSTAT_AREA
+        if isinstance(row, dict)
+        and row.get("item") == FAOSTAT_ITEM
+        and row.get("area") == FAOSTAT_AREA
     ]
+    _require_faostat_source_fields(candidates)
     return [
         _faostat_raw_fact(element_label, candidates)
         for element_label in FAOSTAT_ELEMENT_FACTORS
