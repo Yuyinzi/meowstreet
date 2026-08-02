@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -106,6 +107,63 @@ def test_validate_accepts_one_audit_for_each_non_oil_catalog_url():
     )
 
 
+def test_validate_accepts_audit_record_with_exact_contract_keys():
+    record = audit_record("copper", "https://example.test/copper")
+
+    assert set(record) == {
+        "commodity_id",
+        "source_name",
+        "source_url",
+        "source_type",
+        "source_coverage",
+        "audit_status",
+        "access_method",
+        "factor_categories",
+        "geography",
+        "frequency",
+        "unit_status",
+        "units",
+        "publication_date_status",
+        "stability",
+        "audit_basis",
+        "audited_at",
+        "source_ref",
+    }
+    assert audit.validate_non_oil_attribution_audits(
+        [record], [catalog_record("copper", "https://example.test/copper")]
+    ) == [record]
+
+
+def test_validate_rejects_audit_record_with_missing_key():
+    record = audit_record("copper", "https://example.test/copper")
+    del record["audit_basis"]
+
+    with pytest.raises(ValueError, match="missing"):
+        audit.validate_non_oil_attribution_audits(
+            [record], [catalog_record("copper", "https://example.test/copper")]
+        )
+
+
+def test_validate_rejects_audit_record_with_extra_key():
+    record = audit_record("copper", "https://example.test/copper")
+    record["extra_key"] = "surplus"
+
+    with pytest.raises(ValueError, match="extra"):
+        audit.validate_non_oil_attribution_audits(
+            [record], [catalog_record("copper", "https://example.test/copper")]
+        )
+
+
+def test_validate_rejects_oil_commodity_audit():
+    record = audit_record("copper", "https://example.test/oil")
+    record["commodity_id"] = "oil"
+
+    with pytest.raises(ValueError, match="is not a valid commodity"):
+        audit.validate_non_oil_attribution_audits(
+            [record], [catalog_record("copper", "https://example.test/copper")]
+        )
+
+
 def test_validate_rejects_missing_catalog_url():
     with pytest.raises(ValueError, match="does not match a non-oil catalog resource"):
         audit.validate_non_oil_attribution_audits(
@@ -135,6 +193,11 @@ def test_validate_accepts_all_twenty_non_oil_catalog_resources():
     )
 
     assert len(validated) == 20
+    assert Counter(record["commodity_id"] for record in validated) == {
+        "copper": 9,
+        "lumber": 5,
+        "iron_ore": 6,
+    }
     assert {record["commodity_id"] for record in validated} == {
         "copper",
         "lumber",

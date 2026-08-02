@@ -2,7 +2,6 @@ import re
 from datetime import date
 
 from app.data_sources.commodity_attribution_catalog import (
-    SOURCE_REF,
     COVERAGE_VOCABULARY,
     VALID_SOURCE_TYPES,
 )
@@ -36,6 +35,27 @@ STABILITY_STATES = frozenset({"stable", "interactive", "manual", "blocked"})
 
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _CANDIDATE_STABILITIES = frozenset({"stable", "interactive"})
+_REQUIRED_RECORD_KEYS = frozenset(
+    {
+        "commodity_id",
+        "source_name",
+        "source_url",
+        "source_type",
+        "source_coverage",
+        "audit_status",
+        "access_method",
+        "factor_categories",
+        "geography",
+        "frequency",
+        "unit_status",
+        "units",
+        "publication_date_status",
+        "stability",
+        "audit_basis",
+        "audited_at",
+        "source_ref",
+    }
+)
 
 
 def validate_non_oil_attribution_audits(records, catalog_resources):
@@ -57,6 +77,7 @@ def validate_non_oil_attribution_audits(records, catalog_resources):
 
 
 def _validate_record(record, catalog_by_key, seen):
+    _reject_record_shape(record)
     _reject_unknown_field_values(record)
     key = (record["commodity_id"], record["source_url"])
     if key in seen:
@@ -78,6 +99,15 @@ def _validate_record(record, catalog_by_key, seen):
             " non-oil attribution blocked record access method must be blocked"
         )
     return record
+
+
+def _reject_record_shape(record):
+    missing = sorted(_REQUIRED_RECORD_KEYS - set(record))
+    extra = sorted(set(record) - _REQUIRED_RECORD_KEYS)
+    if missing or extra:
+        raise ValueError(
+            f" non-oil attribution audit record keys are not the audit contract: missing {missing}, extra {extra}"
+        )
 
 
 def _reject_unknown_field_values(record):
