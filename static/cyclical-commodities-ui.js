@@ -135,6 +135,9 @@
           if (evidence.reason) {
             html += '<p class="summary-stat">' + h.escapeHtml(evidence.reason) + '</p>';
           }
+          if (evidence.next_action) {
+            html += '<p class="summary-stat">Next: ' + h.escapeHtml(evidence.next_action) + '</p>';
+          }
           var resources = evidence.manual_review_resources || [];
           if (resources.length) {
             html += '<details class="raw-evidence evidence-manual">';

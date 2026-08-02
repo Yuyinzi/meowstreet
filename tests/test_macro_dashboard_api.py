@@ -4750,6 +4750,100 @@ def test_growth_cycle_dashboard_scrubs_non_oil_attribution_internals(monkeypatch
     assert evidence["iron_ore"]["status"] == "unavailable"
 
 
+def test_non_oil_detail_marks_facts_unavailable_when_refresh_failed(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    comex_rows = _copper_comex_abnormal_rows()
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: (comex_rows if sid == "copper_comex" else []) for sid in series_ids
+        },
+    )
+    monkeypatch.setattr(api, "_load_attribution_catalog", lambda: None)
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_facts",
+        lambda con: [_non_oil_global_fact()],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_refresh_status",
+        lambda con: [
+            {
+                "commodity_id": "copper",
+                "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+                "status": "unavailable",
+                "error_message": "faostat fetch failed",
+                "refreshed_at": "2026-08-02T00:00:00+00:00",
+            }
+        ],
+    )
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    copper = body["non_oil_attribution_evidence"]["copper"]
+    assert copper["status"] == "unavailable"
+    assert "faostat fetch failed" in copper["reason"]
+    assert copper["next_action"]
+    assert copper["facts"] == []
+
+
 def test_non_oil_market_setup_is_identical_when_returns_change(monkeypatch):
     from app import api
 

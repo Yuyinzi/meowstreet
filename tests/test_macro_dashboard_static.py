@@ -6818,6 +6818,17 @@ def test_evidence_renderer_shows_iron_unavailable_and_manual_review_resources():
     assert ".evidence-unavailable" in css
 
 
+def test_evidence_renderer_shows_refresh_failure_next_action():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderNonOilAttributionEvidence")
+    end = source.index("function renderAttributionReviewResources", start)
+    evidence_renderer = source[start:end]
+
+    assert "evidence.next_action" in evidence_renderer
+    assert "evidence.reason" in evidence_renderer
+    assert "facts || []" in evidence_renderer
+
+
 def test_evidence_map_wired_from_payload_at_call_site():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
 

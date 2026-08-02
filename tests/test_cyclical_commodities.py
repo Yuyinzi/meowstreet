@@ -1534,6 +1534,22 @@ def detail_for_review_required_copper(iwcc_facts=None):
     return .build_cyclical_commodities_detail(payload)
 
 
+def detail_for_review_required_copper_with_status(iwcc_facts=None, refresh_status=None):
+    if iwcc_facts is None:
+        iwcc_facts = []
+    payload = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        commodity_observations={"copper_comex": _comex_abnormal_rows()},
+        non_oil_attribution_facts=iwcc_facts,
+        non_oil_attribution_source_audit=None,
+        non_oil_attribution_refresh_status=refresh_status,
+    )
+    return .build_cyclical_commodities_detail(payload)
+
+
 def detail_for_normal_copper(iwcc_facts=None):
     if iwcc_facts is None:
         iwcc_facts = [global_fact()]
@@ -1581,6 +1597,39 @@ def test_review_required_copper_without_facts_or_audit_emits_no_evidence():
         detail_for_review_required_copper(iwcc_facts=[])["non_oil_attribution_evidence"]
         == {}
     )
+
+
+def test_review_required_copper_with_unavailable_refresh_status_is_unavailable():
+    status = {
+        "commodity_id": "copper",
+        "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "status": "unavailable",
+        "error_message": "faostat fetch failed",
+        "refreshed_at": "2026-08-02T00:00:00+00:00",
+    }
+    detail = detail_for_review_required_copper_with_status(
+        iwcc_facts=[global_fact()], refresh_status=[status]
+    )
+    copper = detail["non_oil_attribution_evidence"]["copper"]
+    assert copper["status"] == "unavailable"
+    assert "faostat fetch failed" in copper["reason"]
+    assert copper["next_action"]
+
+
+def test_review_required_copper_with_available_refresh_status_stays_available():
+    status = {
+        "commodity_id": "copper",
+        "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "status": "available",
+        "error_message": None,
+        "refreshed_at": "2026-08-02T00:00:00+00:00",
+    }
+    detail = detail_for_review_required_copper_with_status(
+        iwcc_facts=[global_fact()], refresh_status=[status]
+    )
+    copper = detail["non_oil_attribution_evidence"]["copper"]
+    assert copper["status"] == "available"
+    assert copper["facts"] == [global_fact()]
 
 
 def test_review_required_iron_without_audit_omits_evidence():

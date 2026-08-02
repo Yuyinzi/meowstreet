@@ -181,6 +181,14 @@ create table if not exists non_oil_attribution_facts (
     retrieved_at text not null,
     primary key(commodity_id, source_url, factor_category, metric_name, geography, observation_date)
 );
+create table if not exists non_oil_attribution_refresh_status (
+    commodity_id text not null,
+    source_url text not null,
+    status text not null,
+    error_message text,
+    refreshed_at text not null,
+    primary key(commodity_id, source_url)
+);
 """
 
 
@@ -1154,4 +1162,40 @@ def load_non_oil_attribution_facts(con, commodity_id=None):
                 order by geography, observation_date""",
             (str(commodity_id or "").strip().lower(),),
         ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def merge_non_oil_attribution_refresh_status(
+    con, commodity_id, source_url, status, error_message=None, commit=True
+):
+    try:
+        con.execute(
+            """insert into non_oil_attribution_refresh_status(
+                commodity_id, source_url, status, error_message, refreshed_at
+            ) values (?, ?, ?, ?, ?)
+            on conflict(commodity_id, source_url) do update set
+                status = excluded.status,
+                error_message = excluded.error_message,
+                refreshed_at = excluded.refreshed_at""",
+            (
+                str(commodity_id or "").strip().lower(),
+                str(source_url or "").strip(),
+                str(status or "").strip().lower(),
+                error_message,
+                _non_oil_attribution_retrieved_at(),
+            ),
+        )
+        if commit:
+            con.commit()
+    except Exception:
+        con.rollback()
+        raise
+
+
+def load_non_oil_attribution_refresh_status(con):
+    rows = con.execute(
+        """select commodity_id, source_url, status, error_message, refreshed_at
+            from non_oil_attribution_refresh_status
+            order by commodity_id, source_url"""
+    ).fetchall()
     return [dict(row) for row in rows]

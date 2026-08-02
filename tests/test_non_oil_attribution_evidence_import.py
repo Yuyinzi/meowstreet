@@ -51,6 +51,37 @@ def test_refresh_rolls_back_iwcc_when_faostat_fails(tmp_path):
     assert macro_indicators.load_non_oil_attribution_facts(con) == []
 
 
+def test_refresh_records_unavailable_status_for_failed_source(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market_data.sqlite")
+    with pytest.raises(ValueError, match="faostat"):
+        service.refresh_non_oil_attribution_evidence(
+            con,
+            iwcc_fetcher=lambda: [global_fact()],
+            faostat_fetcher=raising_faostat,
+        )
+    statuses = {
+        row["commodity_id"]: row
+        for row in macro_indicators.load_non_oil_attribution_refresh_status(con)
+    }
+    assert statuses["lumber"]["status"] == "unavailable"
+    assert statuses["lumber"]["error_message"] == "faostat fetch failed"
+
+
+def test_refresh_records_available_status_for_successful_refresh(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market_data.sqlite")
+    service.refresh_non_oil_attribution_evidence(
+        con,
+        iwcc_fetcher=lambda: [global_fact()],
+        faostat_fetcher=lambda: [lumber_fact()],
+    )
+    statuses = {
+        row["commodity_id"]: row
+        for row in macro_indicators.load_non_oil_attribution_refresh_status(con)
+    }
+    assert statuses["copper"]["status"] == "available"
+    assert statuses["lumber"]["status"] == "available"
+
+
 def test_refresh_persists_facts_from_both_fetchers(tmp_path):
     con = macro_indicators.connect(tmp_path / "market_data.sqlite")
     result = service.refresh_non_oil_attribution_evidence(

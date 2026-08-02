@@ -572,3 +572,25 @@ def test_load_non_oil_attribution_facts_returns_empty_for_unknown_commodity(
     con = macro_indicators.connect(tmp_path / "market_data.sqlite")
     macro_indicators.merge_non_oil_attribution_facts(con, [global_fact()])
     assert macro_indicators.load_non_oil_attribution_facts(con, "iron_ore") == []
+
+
+def test_merge_non_oil_attribution_refresh_status_upserts_same_source(tmp_path):
+    con = macro_indicators.connect(tmp_path / "market_data.sqlite")
+    macro_indicators.merge_non_oil_attribution_refresh_status(
+        con,
+        "copper",
+        "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "unavailable",
+        "boom",
+    )
+    macro_indicators.merge_non_oil_attribution_refresh_status(
+        con,
+        "copper",
+        "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "available",
+        None,
+    )
+    rows = macro_indicators.load_non_oil_attribution_refresh_status(con)
+    assert len(rows) == 1
+    assert rows[0]["status"] == "available"
+    assert rows[0]["error_message"] is None

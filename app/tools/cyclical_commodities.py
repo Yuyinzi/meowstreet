@@ -724,6 +724,7 @@ def build_cyclical_commodities_payload(
     attribution_review_catalog=None,
     non_oil_attribution_facts=None,
     non_oil_attribution_source_audit=None,
+    non_oil_attribution_refresh_status=None,
 ):
     as_of = as_of_date or ""
     cot_payload, cot_available = _compute_cot_payload(cot_rows)
@@ -766,6 +767,7 @@ def build_cyclical_commodities_payload(
             commodity,
             non_oil_attribution_facts,
             non_oil_attribution_source_audit,
+            non_oil_attribution_refresh_status,
         ),
     }
 
@@ -861,16 +863,30 @@ def _iron_ore_unavailable_reason(audit):
     )
 
 
-def _non_oil_attribution_evidence(commodity, facts, audit):
+def _non_oil_attribution_evidence(commodity, facts, audit, refresh_status=None):
     review_commodity_ids = _review_required_commodity_ids(commodity)
     if not review_commodity_ids:
         return {}
     facts_by_commodity = {}
     for fact in facts or []:
         facts_by_commodity.setdefault(fact["commodity_id"], []).append(fact)
+    status_by_source_url = {row["source_url"]: row for row in (refresh_status or [])}
     evidence = {}
     for commodity_id in review_commodity_ids:
         commodity_facts = facts_by_commodity.get(commodity_id, [])
+        failed_status = _refresh_failed_status(commodity_facts, status_by_source_url)
+        if failed_status is not None:
+            evidence[commodity_id] = {
+                "commodity_id": commodity_id,
+                "status": "unavailable",
+                "reason": (
+                    f"latest {failed_status['source_url']} refresh failed: "
+                    f"{failed_status['error_message']}"
+                ),
+                "next_action": "retry the source import before treating these facts as current",
+                "facts": [],
+            }
+            continue
         if commodity_facts:
             evidence[commodity_id] = {
                 "commodity_id": commodity_id,
@@ -895,6 +911,14 @@ def _non_oil_attribution_evidence(commodity, facts, audit):
                 "manual_review_resources": wa_resources,
             }
     return evidence
+
+
+def _refresh_failed_status(commodity_facts, status_by_source_url):
+    for fact in commodity_facts:
+        row = status_by_source_url.get(fact["source_url"])
+        if row is not None and row.get("status") == "unavailable":
+            return row
+    return None
 
 
 def build_cyclical_commodities_headline(payload):

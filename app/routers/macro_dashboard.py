@@ -179,6 +179,9 @@ def macro_dashboard_growth_cycle():
             macro_indicators_db.load_non_oil_attribution_facts(con)
         )
         non_oil_attribution_audit = api._load_non_oil_attribution_source_audit()
+        non_oil_attribution_refresh_status = (
+            macro_indicators_db.load_non_oil_attribution_refresh_status(con)
+        )
         dashboard = macro_growth_cycle.build_growth_cycle_dashboard(
             ism_manufacturing=ism_manufacturing,
             ism_services=ism_services_data["payload"],
@@ -203,6 +206,7 @@ def macro_dashboard_growth_cycle():
                 "attribution_review_catalog": api._load_attribution_catalog(),
                 "non_oil_attribution_facts": non_oil_attribution_facts,
                 "non_oil_attribution_source_audit": non_oil_attribution_audit,
+                "non_oil_attribution_refresh_status": non_oil_attribution_refresh_status,
                 "as_of_date": date.today().isoformat(),
             },
         )
@@ -597,6 +601,9 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             non_oil_attribution_audit = (
                 api._load_non_oil_attribution_source_audit()
             )
+            non_oil_attribution_refresh_status = (
+                macro_indicators_db.load_non_oil_attribution_refresh_status(con)
+            )
             attribution_catalog = api._load_attribution_catalog()
             payload = tool.build_cyclical_commodities_payload(
                 cot_rows,
@@ -609,6 +616,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 attribution_review_catalog=attribution_catalog,
                 non_oil_attribution_facts=non_oil_attribution_facts,
                 non_oil_attribution_source_audit=non_oil_attribution_audit,
+                non_oil_attribution_refresh_status=non_oil_attribution_refresh_status,
             )
             return tool.build_cyclical_commodities_detail(payload)
         if detail_id == "ism_services":
