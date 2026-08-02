@@ -34,19 +34,55 @@ def valid_fact():
     }
 
 
-def _iwcc_workbook_bytes():
+_IWCC_YEARS = list(range(2012, 2025))
+_IWCC_PRODUCTION_START_COL = 2
+_IWCC_DEMAND_START_COL = 15
+
+
+def _iwcc_real_layout_workbook(
+    production_2024=24100.0,
+    demand_2024=23900.0,
+    factor_label="Total Copper",
+    include_demand=True,
+    duplicate_global_rows=False,
+):
     wb = Workbook()
-    production = wb.active
-    production.title = "Production"
-    production.append(["", 2012, 2013, 2020, 2024])
-    production.append(["Global", 21400, 22000, 23000, 24100])
-    production.append(["Europe", 5000, 5100, 5200, 5300])
-    demand = wb.create_sheet("Demand")
-    demand.append(["", 2012, 2013, 2020, 2024])
-    demand.append(["Global", 21200, 21800, 22800, 23900])
+    ws = wb.active
+    ws.title = "Prod-Dem Summary External"
+    ws.cell(1, _IWCC_PRODUCTION_START_COL, factor_label)
+    ws.cell(2, _IWCC_PRODUCTION_START_COL, "Production")
+    if include_demand:
+        ws.cell(2, _IWCC_DEMAND_START_COL, "Demand")
+    for idx, year in enumerate(_IWCC_YEARS):
+        ws.cell(3, _IWCC_PRODUCTION_START_COL + idx, year)
+        if include_demand:
+            ws.cell(3, _IWCC_DEMAND_START_COL + idx, year)
+    ws.cell(4, 1, "EU27+UK")
+    for idx, year in enumerate(_IWCC_YEARS):
+        ws.cell(4, _IWCC_PRODUCTION_START_COL + idx, 1000 + year)
+        if include_demand:
+            ws.cell(4, _IWCC_DEMAND_START_COL + idx, 2000 + year)
+    ws.cell(5, 1, "World Total")
+    for idx, year in enumerate(_IWCC_YEARS):
+        ws.cell(5, _IWCC_PRODUCTION_START_COL + idx, 21000 + year)
+        if include_demand:
+            ws.cell(5, _IWCC_DEMAND_START_COL + idx, 22000 + year)
+    ws.cell(5, _IWCC_PRODUCTION_START_COL + len(_IWCC_YEARS) - 1, production_2024)
+    if include_demand:
+        ws.cell(5, _IWCC_DEMAND_START_COL + len(_IWCC_YEARS) - 1, demand_2024)
+    if duplicate_global_rows:
+        ws.cell(6, 1, "World Total")
+        for idx, year in enumerate(_IWCC_YEARS):
+            ws.cell(6, _IWCC_PRODUCTION_START_COL + idx, 21000 + year + 100)
+            if include_demand:
+                ws.cell(6, _IWCC_DEMAND_START_COL + idx, 22000 + year + 100)
     stream = io.BytesIO()
     wb.save(stream)
     return stream.getvalue()
+
+
+def _iwcc_workbook_bytes():
+    return _iwcc_real_layout_workbook()
 
 
 def iwcc_handler(request):
@@ -136,6 +172,66 @@ def test_fetch_iwcc_returns_latest_global_production_and_demand():
     }
 
 
+def test_fetch_iwcc_parses_real_single_sheet_dual_block_layout():
+    content = _iwcc_real_layout_workbook(production_2024=24100.0, demand_2024=23900.0)
+
+    def handler(request):
+        if unquote(str(request.url)) == _IWCC_PAGE_URL:
+            return httpx.Response(200, text=_IWCC_PAGE_HTML)
+        return httpx.Response(200, content=content)
+
+    facts = evidence.fetch_iwcc_copper_facts(
+        HttpClient(transport=httpx.MockTransport(handler))
+    )
+    assert {row["factor_category"] for row in facts} == {"supply", "demand"}
+    assert all(row["observation_date"] == "2024-12-31" for row in facts)
+    by_factor = {row["factor_category"]: row["value"] for row in facts}
+    assert by_factor == {"supply": 24100.0, "demand": 23900.0}
+    assert all(row["geography"] == "Global" for row in facts)
+
+
+def test_fetch_iwcc_uses_total_copper_block_when_multiple_product_blocks_present():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Prod-Dem Summary External"
+    for block_start, label, production_2024, demand_2024 in (
+        (1, "Copper Wire Rod", 7000.0, 7100.0),
+        (17, "Total Copper", 24100.0, 23900.0),
+        (33, "Alloy Wire", 5000.0, 5100.0),
+    ):
+        ws.cell(block_start, 2, label)
+        ws.cell(block_start + 1, 2, "Production")
+        ws.cell(block_start + 1, 15, "Demand")
+        for idx, year in enumerate(_IWCC_YEARS):
+            ws.cell(block_start + 2, 2 + idx, year)
+            ws.cell(block_start + 2, 15 + idx, year)
+        ws.cell(block_start + 3, 1, "EU27+UK")
+        for idx, year in enumerate(_IWCC_YEARS):
+            ws.cell(block_start + 3, 2 + idx, 1000 + year)
+            ws.cell(block_start + 3, 15 + idx, 2000 + year)
+        ws.cell(block_start + 4, 1, "World Total")
+        for idx, year in enumerate(_IWCC_YEARS):
+            ws.cell(block_start + 4, 2 + idx, 10000 + year)
+            ws.cell(block_start + 4, 15 + idx, 11000 + year)
+        ws.cell(block_start + 4, 2 + len(_IWCC_YEARS) - 1, production_2024)
+        ws.cell(block_start + 4, 15 + len(_IWCC_YEARS) - 1, demand_2024)
+    stream = io.BytesIO()
+    wb.save(stream)
+    content = stream.getvalue()
+
+    def handler(request):
+        if unquote(str(request.url)) == _IWCC_PAGE_URL:
+            return httpx.Response(200, text=_IWCC_PAGE_HTML)
+        return httpx.Response(200, content=content)
+
+    facts = evidence.fetch_iwcc_copper_facts(
+        HttpClient(transport=httpx.MockTransport(handler))
+    )
+    by_factor = {row["factor_category"]: row["value"] for row in facts}
+    assert by_factor == {"supply": 24100.0, "demand": 23900.0}
+    assert {row["metric_name"] for row in facts} == {"Production", "Demand"}
+
+
 def test_fetch_faostat_returns_production_import_and_export_with_source_fields():
     facts = evidence.fetch_faostat_lumber_facts(
         HttpClient(transport=httpx.MockTransport(faostat_handler))
@@ -206,14 +302,7 @@ def test_fetch_iwcc_rejects_missing_semis_workbook_anchor():
 
 
 def test_fetch_iwcc_rejects_workbook_missing_a_factor():
-    wb = Workbook()
-    production = wb.active
-    production.title = "Production"
-    production.append(["", 2012, 2024])
-    production.append(["Global", 21400, 24100])
-    stream = io.BytesIO()
-    wb.save(stream)
-    content = stream.getvalue()
+    content = _iwcc_real_layout_workbook(include_demand=False)
 
     def handler(request):
         if unquote(str(request.url)) == _IWCC_PAGE_URL:
@@ -230,17 +319,7 @@ def test_fetch_iwcc_rejects_workbook_missing_a_factor():
 
 
 def test_fetch_iwcc_rejects_non_numeric_global_cell():
-    wb = Workbook()
-    production = wb.active
-    production.title = "Production"
-    production.append(["", 2012, 2024])
-    production.append(["Global", 21400, "x"])
-    demand = wb.create_sheet("Demand")
-    demand.append(["", 2012, 2024])
-    demand.append(["Global", 21200, 23900])
-    stream = io.BytesIO()
-    wb.save(stream)
-    content = stream.getvalue()
+    content = _iwcc_real_layout_workbook(production_2024="x")
 
     def handler(request):
         if unquote(str(request.url)) == _IWCC_PAGE_URL:
@@ -257,18 +336,7 @@ def test_fetch_iwcc_rejects_non_numeric_global_cell():
 
 
 def test_fetch_iwcc_rejects_duplicate_global_rows():
-    wb = Workbook()
-    production = wb.active
-    production.title = "Production"
-    production.append(["", 2012, 2024])
-    production.append(["Global", 21400, 24100])
-    production.append(["Global", 21450, 24150])
-    demand = wb.create_sheet("Demand")
-    demand.append(["", 2012, 2024])
-    demand.append(["Global", 21200, 23900])
-    stream = io.BytesIO()
-    wb.save(stream)
-    content = stream.getvalue()
+    content = _iwcc_real_layout_workbook(duplicate_global_rows=True)
 
     def handler(request):
         if unquote(str(request.url)) == _IWCC_PAGE_URL:
@@ -277,7 +345,7 @@ def test_fetch_iwcc_rejects_duplicate_global_rows():
 
     with pytest.raises(
         ValueError,
-        match="iwcc semis production and demand workbook has duplicate global supply rows",
+        match="iwcc semis production and demand workbook has duplicate global rows",
     ):
         evidence.fetch_iwcc_copper_facts(
             HttpClient(transport=httpx.MockTransport(handler))

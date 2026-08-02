@@ -14,7 +14,12 @@ VERSION = "non_oil_attribution_evidence_v1"
 IWCC_SOURCE_NAME = "International Wrought Copper Council"
 IWCC_SOURCE_URL = "http://www.coppercouncil.org/iwcc-statistics-and-data"
 IWCC_WORKBOOK_ANCHOR = "Semis production and demand.xlsx"
-IWCC_SHEET_FACTORS = {"production": "supply", "demand": "demand"}
+IWCC_WORKSHEET_LABEL = "Prod-Dem Summary External"
+IWCC_TOTAL_BLOCK_LABEL = "Total Copper"
+IWCC_GLOBAL_ROW_LABEL = "World Total"
+IWCC_FACTOR_LABELS = {"Production": "supply", "Demand": "demand"}
+IWCC_PRODUCTION_COLUMN_RANGE = (2, 15)
+IWCC_DEMAND_COLUMN_RANGE = (15, 28)
 IWCC_GEOGRAPHY = "Global"
 IWCC_UNITS = "t"
 
@@ -94,42 +99,45 @@ def _iwcc_workbook_url(page_content):
 
 def _parse_iwcc_workbook(content):
     workbook = _load_iwcc_workbook(content)
-    raw_facts = []
-    seen_factors = set()
-    for sheet in workbook.worksheets:
-        factor_category = IWCC_SHEET_FACTORS.get(_normalize_anchor(sheet.title))
-        if factor_category is None:
-            continue
-        if factor_category in seen_factors:
-            raise ValueError(
-                f"iwcc semis production and demand workbook has duplicate {factor_category} sheets"
-            )
-        seen_factors.add(factor_category)
-        headers = _iwcc_year_headers(sheet)
-        global_rows = _iwcc_global_rows(sheet)
-        if not global_rows:
-            raise ValueError(
-                f"iwcc semis production and demand workbook is missing global {factor_category} cells"
-            )
-        if len(global_rows) > 1:
-            raise ValueError(
-                f"iwcc semis production and demand workbook has duplicate global {factor_category} rows"
-            )
-        newest_year = max(headers)
-        raw_facts.append(
-            _iwcc_raw_fact(
-                factor_category,
-                sheet.title,
-                newest_year,
-                global_rows[0],
-                headers[newest_year],
-            )
-        )
-    if seen_factors != set(IWCC_SHEET_FACTORS.values()):
+    sheet = _iwcc_summary_sheet(workbook)
+    block = _iwcc_total_copper_block(sheet)
+    production_columns = _iwcc_year_columns(
+        sheet, block["year_row"], IWCC_PRODUCTION_COLUMN_RANGE
+    )
+    demand_columns = _iwcc_year_columns(
+        sheet, block["year_row"], IWCC_DEMAND_COLUMN_RANGE
+    )
+    if not production_columns or not demand_columns:
         raise ValueError(
-            "iwcc semis production and demand workbook is missing a factor"
+            "iwcc semis production and demand workbook is missing year headers"
         )
-    return raw_facts
+    columns_by_factor = {
+        "Production": production_columns,
+        "Demand": demand_columns,
+    }
+    global_rows = _iwcc_global_rows(sheet, block)
+    if not global_rows:
+        raise ValueError(
+            "iwcc semis production and demand workbook is missing global cells"
+        )
+    if len(global_rows) > 1:
+        raise ValueError(
+            "iwcc semis production and demand workbook has duplicate global rows"
+        )
+    newest_year = max(set(production_columns) & set(demand_columns))
+    global_row = global_rows[0]
+    return [
+        _iwcc_raw_fact(
+            factor_category,
+            factor_label,
+            newest_year,
+            _iwcc_global_value(
+                global_row[columns_by_factor[factor_label][newest_year] - 1],
+                factor_category,
+            ),
+        )
+        for factor_label, factor_category in IWCC_FACTOR_LABELS.items()
+    ]
 
 
 def _load_iwcc_workbook(content):
@@ -141,41 +149,77 @@ def _load_iwcc_workbook(content):
         ) from exc
 
 
-def _iwcc_year_headers(sheet):
-    header_row = next(sheet.iter_rows(min_row=1, max_row=1), None)
-    if header_row is None:
-        raise ValueError("iwcc semis production and demand workbook is missing headers")
-    headers = {}
-    for cell in header_row:
-        try:
-            year = int(cell.value)
-        except (TypeError, ValueError):
-            continue
-        if 1000 <= year <= 9999:
-            headers[year] = cell.column
-    if not headers:
-        raise ValueError(
-            "iwcc semis production and demand workbook is missing year headers"
-        )
-    return headers
+def _iwcc_summary_sheet(workbook):
+    for sheet in workbook.worksheets:
+        if _normalize_anchor(sheet.title) == _normalize_anchor(IWCC_WORKSHEET_LABEL):
+            return sheet
+    raise ValueError(
+        "iwcc semis production and demand workbook is missing the summary sheet"
+    )
 
 
-def _iwcc_global_rows(sheet):
-    return [
-        row
-        for row in sheet.iter_rows(min_row=2)
-        if _normalize_anchor(row[0].value) == "global"
+def _iwcc_total_copper_block(sheet):
+    factor_rows = [
+        row_index
+        for row_index in range(1, sheet.max_row + 1)
+        if _normalize_anchor(sheet.cell(row_index, 2).value) == "production"
+        and _normalize_anchor(sheet.cell(row_index, 15).value) == "demand"
     ]
+    for row_index in factor_rows:
+        label = sheet.cell(row_index - 1, 2).value
+        if _normalize_anchor(label) == _normalize_anchor(IWCC_TOTAL_BLOCK_LABEL):
+            return {
+                "label_row": row_index - 1,
+                "factor_row": row_index,
+                "year_row": row_index + 1,
+            }
+    raise ValueError("iwcc semis production and demand workbook is missing a factor")
 
 
-def _iwcc_raw_fact(factor_category, metric_name, year, global_row, column):
-    value = _iwcc_global_value(global_row[column - 1].value, factor_category)
+def _iwcc_year_columns(sheet, year_row, column_range):
+    start, end = column_range
+    result = {}
+    for column in range(start, end):
+        value = sheet.cell(year_row, column).value
+        year = _as_year(value)
+        if year is not None and 1000 <= year <= 9999:
+            result[year] = column
+    return result
+
+
+def _as_year(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _iwcc_global_rows(sheet, block):
+    rows = []
+    for row_index in range(block["factor_row"] + 2, sheet.max_row + 1):
+        if (
+            _normalize_anchor(sheet.cell(row_index, 2).value) == "production"
+            and _normalize_anchor(sheet.cell(row_index, 15).value) == "demand"
+        ):
+            break
+        label = sheet.cell(row_index, 1).value
+        if _normalize_anchor(label) == _normalize_anchor(IWCC_GLOBAL_ROW_LABEL):
+            rows.append(
+                [
+                    sheet.cell(row_index, column).value
+                    for column in range(1, sheet.max_column + 1)
+                ]
+            )
+    return rows
+
+
+def _iwcc_raw_fact(factor_category, factor_label, year, value):
     return {
         "commodity_id": "copper",
         "source_name": IWCC_SOURCE_NAME,
         "source_url": IWCC_SOURCE_URL,
         "factor_category": factor_category,
-        "metric_name": metric_name,
+        "metric_name": factor_label,
         "geography": IWCC_GEOGRAPHY,
         "observation_date": f"{year}-12-31",
         "publication_date": None,
