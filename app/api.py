@@ -18,6 +18,7 @@ from app.routers import (
 )
 from app.services import consumer_sentiment_dashboard
 from app.services import commodity_attribution_catalog
+from app.services import non_oil_attribution_source_audit
 from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.tools import (
     ism_industry_analysis,
@@ -37,6 +38,9 @@ _ATTRIBUTION_CATALOG_PATH = (
     / "data"
     / "local_system"
     / "commodity_attribution_evidence_catalog.v1.json"
+)
+_NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH = (
+    ROOT / "data" / "local_system" / "non_oil_attribution_source_audit.v1.json"
 )
 
 US_BENCHMARK_IDS = ["us_sp500", "us_nasdaq_100", "us_nasdaq_composite", "us_djia"]
@@ -105,6 +109,18 @@ def _load_attribution_catalog():
         )
     except (ValueError, TypeError, RuntimeError, OSError):
         logging.warning(" attribution catalog load failed", exc_info=True)
+        return None
+
+
+def _load_non_oil_attribution_source_audit():
+    try:
+        return non_oil_attribution_source_audit.load_non_oil_attribution_source_audit(
+            _NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH, _ATTRIBUTION_CATALOG_PATH
+        )
+    except (ValueError, TypeError, RuntimeError, OSError):
+        logging.warning(
+            " non-oil attribution source audit load failed", exc_info=True
+        )
         return None
 
 

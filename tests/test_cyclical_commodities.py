@@ -1367,3 +1367,319 @@ def test_attribution_review_resources_never_add_conclusion_fields():
             assert field not in resource
         assert resource["source_url"]
         assert resource["coverage"]
+
+
+def _audit_row(
+    commodity_id,
+    source_name,
+    source_url,
+    audit_status,
+    factor_categories,
+    access_method,
+    geography,
+    frequency,
+    units,
+    audit_basis,
+):
+    return {
+        "commodity_id": commodity_id,
+        "source_name": source_name,
+        "source_url": source_url,
+        "source_type": "official_data",
+        "source_coverage": [],
+        "audit_status": audit_status,
+        "access_method": access_method,
+        "factor_categories": factor_categories,
+        "geography": geography,
+        "frequency": frequency,
+        "unit_status": "published",
+        "units": units,
+        "publication_date_status": "published",
+        "stability": "manual",
+        "audit_basis": audit_basis,
+        "audited_at": "2026-08-02",
+        "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+    }
+
+
+def audit_payload():
+    return {
+        "version": "non_oil_attribution_source_audit_v1",
+        "generated_at": "2026-08-02T00:00:00+00:00",
+        "source_catalog_version": "commodity_attribution_evidence_catalog_v1",
+        "source_catalog": "data/local_system/commodity_attribution_evidence_catalog.v1.json",
+        "audits": [
+            _audit_row(
+                "copper",
+                "International Wrought Copper Council",
+                "http://www.coppercouncil.org/iwcc-statistics-and-data",
+                "structured_recurring_candidate",
+                ["supply", "demand"],
+                "xlsx_download",
+                "Global (107 countries by region)",
+                "annual",
+                "t",
+                "Page exposes direct public XLSX downloads for global semis production and demand.",
+            ),
+            _audit_row(
+                "lumber",
+                "Food and Agriculture Organization of the United Nations",
+                "https://www.fao.org/faostat/en/#data/FO",
+                "structured_recurring_candidate",
+                ["supply", "trade"],
+                "api",
+                "Global by country",
+                "annual",
+                "t, m3, USD",
+                "FAOSTAT Forestry Production and Trade bulk-download dataset (FO).",
+            ),
+            _audit_row(
+                "iron_ore",
+                "US Geological Survey",
+                "https://www.usgs.gov/centers/nmic/iron-ore-statistics-and-information",
+                "manual_review_only",
+                ["supply", "demand"],
+                "xlsx_download",
+                "US and world",
+                "monthly",
+                "t",
+                "Public MIS posting is paused pending a ScienceBase transition.",
+            ),
+            _audit_row(
+                "iron_ore",
+                "Government of Western Australia",
+                "https://www.dmp.wa.gov.au/About-Us-Careers/Latest-Statistics-Release-4081.aspx",
+                "manual_review_only",
+                ["supply", "trade", "price"],
+                "xlsx_download",
+                "Western Australia",
+                "annual",
+                "kt, AUD m",
+                "Method URL redirects to the WA Resources industry data page.",
+            ),
+            _audit_row(
+                "iron_ore",
+                "Government of Western Australia",
+                "https://www.dmp.wa.gov.au/About-Us-Careers/Statistics-Digest-3962.aspx",
+                "manual_review_only",
+                ["supply", "trade", "price"],
+                "manual_report_download",
+                "Western Australia",
+                "annual",
+                "kt, AUD m",
+                "Method URL redirects to the WA Mineral and Petroleum statistics digest page.",
+            ),
+            _audit_row(
+                "iron_ore",
+                "World Bank Commodity Markets",
+                "https://www.worldbank.org/en/research/commodity-markets",
+                "structured_recurring_candidate",
+                ["price"],
+                "xlsx_download",
+                "Global",
+                "monthly",
+                "USD",
+                "Monthly Pink Sheet commodity prices.",
+            ),
+        ],
+    }
+
+
+def global_fact():
+    return {
+        "commodity_id": "copper",
+        "source_name": "International Wrought Copper Council",
+        "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "factor_category": "supply",
+        "metric_name": "Semis production",
+        "geography": "Global",
+        "observation_date": "2024-12-31",
+        "publication_date": None,
+        "value": 12345678.0,
+        "units": "t",
+        "status": "available",
+        "method_version": "non_oil_attribution_evidence_v1",
+    }
+
+
+def detail_for_review_required_iron(facts=None, audit=audit_payload()):
+    if facts is None:
+        facts = []
+    payload = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        commodity_observations={
+            "iron_ore_62_cfr_china": _comex_abnormal_rows()
+        },
+        non_oil_attribution_facts=facts,
+        non_oil_attribution_source_audit=audit,
+    )
+    return .build_cyclical_commodities_detail(payload)
+
+
+def detail_for_review_required_copper(iwcc_facts=None):
+    if iwcc_facts is None:
+        iwcc_facts = []
+    payload = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        commodity_observations={"copper_comex": _comex_abnormal_rows()},
+        non_oil_attribution_facts=iwcc_facts,
+        non_oil_attribution_source_audit=None,
+    )
+    return .build_cyclical_commodities_detail(payload)
+
+
+def detail_for_review_required_copper_with_status(iwcc_facts=None, refresh_status=None):
+    if iwcc_facts is None:
+        iwcc_facts = []
+    payload = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        commodity_observations={"copper_comex": _comex_abnormal_rows()},
+        non_oil_attribution_facts=iwcc_facts,
+        non_oil_attribution_source_audit=None,
+        non_oil_attribution_refresh_status=refresh_status,
+    )
+    return .build_cyclical_commodities_detail(payload)
+
+
+def detail_for_normal_copper(iwcc_facts=None):
+    if iwcc_facts is None:
+        iwcc_facts = [global_fact()]
+    payload = .build_cyclical_commodities_payload(
+        [],
+        {},
+        None,
+        "2017-01-06",
+        commodity_observations={"copper_comex": _comex_normal_rows()},
+        non_oil_attribution_facts=iwcc_facts,
+        non_oil_attribution_source_audit=None,
+    )
+    return .build_cyclical_commodities_detail(payload)
+
+
+def test_review_required_iron_reports_usgs_unavailable_and_wa_manual_resources():
+    detail = detail_for_review_required_iron(facts=[], audit=audit_payload())
+    iron = detail["non_oil_attribution_evidence"]["iron_ore"]
+    assert iron["status"] == "unavailable"
+    assert "USGS" in iron["reason"]
+    assert {row["source_name"] for row in iron["manual_review_resources"]} == {
+        "Government of Western Australia"
+    }
+
+
+def test_normal_price_row_has_no_attribution_evidence():
+    assert (
+        detail_for_normal_copper(iwcc_facts=[global_fact()])[
+            "non_oil_attribution_evidence"
+        ]
+        == {}
+    )
+
+
+def test_review_required_copper_emits_available_evidence_with_facts():
+    detail = detail_for_review_required_copper(iwcc_facts=[global_fact()])
+    copper = detail["non_oil_attribution_evidence"]["copper"]
+    assert copper["status"] == "available"
+    assert copper["commodity_id"] == "copper"
+    assert copper["facts"] == [global_fact()]
+
+
+def test_review_required_copper_without_facts_or_audit_emits_no_evidence():
+    assert (
+        detail_for_review_required_copper(iwcc_facts=[])["non_oil_attribution_evidence"]
+        == {}
+    )
+
+
+def test_review_required_copper_with_unavailable_refresh_status_is_unavailable():
+    status = {
+        "commodity_id": "copper",
+        "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "status": "unavailable",
+        "error_message": "faostat fetch failed",
+        "refreshed_at": "2026-08-02T00:00:00+00:00",
+    }
+    detail = detail_for_review_required_copper_with_status(
+        iwcc_facts=[global_fact()], refresh_status=[status]
+    )
+    copper = detail["non_oil_attribution_evidence"]["copper"]
+    assert copper["status"] == "unavailable"
+    assert "faostat fetch failed" in copper["reason"]
+    assert copper["next_action"]
+
+
+def test_review_required_copper_without_facts_but_failed_refresh_is_unavailable():
+    status = {
+        "commodity_id": "copper",
+        "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "status": "unavailable",
+        "error_message": "faostat fetch failed",
+        "refreshed_at": "2026-08-02T00:00:00+00:00",
+    }
+    detail = detail_for_review_required_copper_with_status(
+        iwcc_facts=[], refresh_status=[status]
+    )
+    copper = detail["non_oil_attribution_evidence"]["copper"]
+    assert copper["status"] == "unavailable"
+    assert copper["next_action"]
+    assert copper["facts"] == []
+
+
+def test_review_required_copper_with_available_refresh_status_stays_available():
+    status = {
+        "commodity_id": "copper",
+        "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "status": "available",
+        "error_message": None,
+        "refreshed_at": "2026-08-02T00:00:00+00:00",
+    }
+    detail = detail_for_review_required_copper_with_status(
+        iwcc_facts=[global_fact()], refresh_status=[status]
+    )
+    copper = detail["non_oil_attribution_evidence"]["copper"]
+    assert copper["status"] == "available"
+    assert copper["facts"] == [global_fact()]
+
+
+def test_review_required_iron_without_audit_omits_evidence():
+    detail = detail_for_review_required_iron(facts=[], audit=None)
+    assert detail["non_oil_attribution_evidence"] == {}
+
+
+def test_review_required_iron_reason_sources_text_from_usgs_audit_basis():
+    detail = detail_for_review_required_iron(facts=[], audit=audit_payload())
+    iron = detail["non_oil_attribution_evidence"]["iron_ore"]
+    assert "USGS" in iron["reason"]
+    assert "ScienceBase transition" in iron["reason"]
+
+
+def test_review_required_iron_evidence_includes_next_action():
+    detail = detail_for_review_required_iron(facts=[], audit=audit_payload())
+    iron = detail["non_oil_attribution_evidence"]["iron_ore"]
+    assert iron["status"] == "unavailable"
+    assert iron["next_action"]
+    assert "Western Australia" in iron["next_action"]
+
+
+def test_review_required_iron_without_usgs_audit_row_still_emits_reason():
+    audit = audit_payload()
+    audit["audits"] = [
+        row
+        for row in audit["audits"]
+        if not (
+            row.get("commodity_id") == "iron_ore"
+            and row.get("source_name") == "US Geological Survey"
+        )
+    ]
+    detail = detail_for_review_required_iron(facts=[], audit=audit)
+    iron = detail["non_oil_attribution_evidence"]["iron_ore"]
+    assert iron["status"] == "unavailable"
+    assert "USGS" in iron["reason"]

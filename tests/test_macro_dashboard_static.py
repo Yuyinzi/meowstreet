@@ -6762,3 +6762,87 @@ def test_non_oil_rows_use_status_background_classes():
     assert ".market-row-normal" in css
     assert ".market-row-review" in css
     assert ".market-row-unavailable" in css
+
+
+def test_renderer_places_evidence_before_method_resources_on_review_row():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    assert source.index("renderNonOilAttributionEvidence") < source.index(
+        "renderAttributionReviewResources"
+    )
+    assert "demand-led" not in source.lower()
+    assert "supply-led" not in source.lower()
+
+
+def test_evidence_renderer_guards_on_review_required_series():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderNonOilAttributionEvidence")
+    end = source.index("function renderAttributionReviewResources", start)
+    evidence_renderer = source[start:end]
+
+    assert (
+        'if (series.review_status !== "review_required") return "";'
+        in evidence_renderer
+    )
+
+
+def test_evidence_renderer_shows_available_fact_fields():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderNonOilAttributionEvidence")
+    end = source.index("function renderAttributionReviewResources", start)
+    evidence_renderer = source[start:end]
+
+    for field in [
+        "fact.source_name",
+        "fact.factor_category",
+        "fact.metric_name",
+        "fact.geography",
+        "fact.value",
+        "fact.units",
+        "fact.observation_date",
+        "fact.publication_date",
+        "fact.source_url",
+    ]:
+        assert field in evidence_renderer
+
+
+def test_evidence_renderer_shows_iron_unavailable_and_manual_review_resources():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    start = source.index("function renderNonOilAttributionEvidence")
+    end = source.index("function renderAttributionReviewResources", start)
+    evidence_renderer = source[start:end]
+
+    assert "evidence-unavailable" in evidence_renderer
+    assert "manual_review_resources" in evidence_renderer
+    assert "resource.source_url" in evidence_renderer
+    assert ".evidence-unavailable" in css
+
+
+def test_evidence_renderer_shows_refresh_failure_next_action():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderNonOilAttributionEvidence")
+    end = source.index("function renderAttributionReviewResources", start)
+    evidence_renderer = source[start:end]
+
+    assert "evidence.next_action" in evidence_renderer
+    assert "evidence.reason" in evidence_renderer
+    assert "facts || []" in evidence_renderer
+
+
+def test_evidence_map_wired_from_payload_at_call_site():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "payload.non_oil_attribution_evidence" in source
+    assert (
+        "renderNonOilRow(methodData[methodIds[ci]], reviewResourcesByCommodity, evidenceByCommodity)"
+        in source
+    )
+
+
+def test_evidence_css_has_scoped_classes():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".attribution-evidence" in css
+    assert ".evidence-fact" in css
+    assert ".evidence-unavailable" in css
+    assert ".evidence-manual" in css

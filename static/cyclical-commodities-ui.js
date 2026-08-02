@@ -98,6 +98,71 @@
         return "market-row-unavailable";
       }
 
+      function renderNonOilAttributionEvidence(series, evidence) {
+        if (series.review_status !== "review_required") return "";
+        if (!evidence) return "";
+        if (evidence.status === "available") {
+          var facts = evidence.facts || [];
+          if (!facts.length) return "";
+          var html = '<details class="raw-evidence attribution-evidence">';
+          html += '<summary>View attribution evidence</summary>';
+          for (var i = 0; i < facts.length; i++) {
+            var fact = facts[i];
+            html += '<div class="workflow-row evidence-fact">';
+            html += '<div class="workflow-label">' + h.escapeHtml(fact.source_name)
+              + '<span class="workflow-role">' + h.escapeHtml(fact.metric_name) + '</span></div>';
+            html += '<div class="workflow-metrics">';
+            html += '<span>Factor: ' + h.escapeHtml(fact.factor_category) + '</span>';
+            html += '<span>Geography: ' + h.escapeHtml(fact.geography) + '</span>';
+            html += '<span>Value: ' + h.escapeHtml(h.fmtNumber(fact.value)) + ' ' + h.escapeHtml(fact.units) + '</span>';
+            if (fact.observation_date) {
+              html += '<span>Observation: ' + h.escapeHtml(fact.observation_date) + '</span>';
+            }
+            if (fact.publication_date) {
+              html += '<span>Published: ' + h.escapeHtml(fact.publication_date) + '</span>';
+            }
+            if (fact.source_url) {
+              html += '<span><a class="source-link" href="' + h.escapeHtml(fact.source_url) + '" target="_blank" rel="noopener noreferrer">' + h.escapeHtml(fact.source_url) + '</a></span>';
+            }
+            html += '</div></div>';
+          }
+          html += '</details>';
+          return html;
+        }
+        if (evidence.status === "unavailable") {
+          var html = '<div class="evidence-unavailable">';
+          html += '<div class="workflow-label">Attribution evidence unavailable</div>';
+          if (evidence.reason) {
+            html += '<p class="summary-stat">' + h.escapeHtml(evidence.reason) + '</p>';
+          }
+          if (evidence.next_action) {
+            html += '<p class="summary-stat">Next: ' + h.escapeHtml(evidence.next_action) + '</p>';
+          }
+          var resources = evidence.manual_review_resources || [];
+          if (resources.length) {
+            html += '<details class="raw-evidence evidence-manual">';
+            html += '<summary>View manual review resources</summary>';
+            for (var j = 0; j < resources.length; j++) {
+              var resource = resources[j];
+              html += '<div class="workflow-row attribution-review-row">';
+              html += '<div class="workflow-label">' + h.escapeHtml(resource.source_name) + '</div>';
+              html += '<div class="workflow-metrics">';
+              html += '<span>Factors: ' + h.escapeHtml((resource.factor_categories || []).join(", ")) + '</span>';
+              html += '<span>Geography: ' + h.escapeHtml(resource.geography) + '</span>';
+              html += '<span>Frequency: ' + h.escapeHtml(resource.frequency) + '</span>';
+              html += '<span>Units: ' + h.escapeHtml(resource.units) + '</span>';
+              html += '<span>Access: ' + h.escapeHtml(resource.access_method) + '</span>';
+              html += '<span><a class="source-link" href="' + h.escapeHtml(resource.source_url) + '" target="_blank" rel="noopener noreferrer">' + h.escapeHtml(resource.source_url) + '</a></span>';
+              html += '</div></div>';
+            }
+            html += '</details>';
+          }
+          html += '</div>';
+          return html;
+        }
+        return "";
+      }
+
       function renderAttributionReviewResources(resources) {
         if (!resources || !resources.length) return "";
         var html = '<div class="attribution-review-resources">';
@@ -117,8 +182,9 @@
         return html;
       }
 
-      function renderNonOilRow(series, reviewResourcesByCommodity) {
+      function renderNonOilRow(series, reviewResourcesByCommodity, evidenceByCommodity) {
         var reviewResources = reviewResourcesByCommodity[series.commodity_id] || [];
+        var evidence = evidenceByCommodity[series.commodity_id] || null;
         if (series.status !== "available") {
           var unavailableLine = series.review_label
             || (series.source_class === "official_exchange"
@@ -157,6 +223,7 @@
             + (series.latest_date ? '<span>As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
             + '</div>'
             + renderDistributionReviewNote(series)
+            + renderNonOilAttributionEvidence(series, evidence)
             + renderAttributionReviewResources(reviewResources)
             + rollLine
             + '</div>';
@@ -179,6 +246,7 @@
           + (series.latest_date ? '<span>As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
           + '</div>'
           + renderDistributionReviewNote(series)
+          + renderNonOilAttributionEvidence(series, evidence)
           + renderAttributionReviewResources(reviewResources)
           + transitionNote
           + '</div>';
@@ -381,9 +449,10 @@
         commodityResources.push(attributionResource);
         reviewResourcesByCommodity[attributionResource.commodity_id] = commodityResources;
       }
+      var evidenceByCommodity = payload.non_oil_attribution_evidence || {};
       var methodIds = Object.keys(methodData).sort();
       for (var ci = 0; ci < methodIds.length; ci++) {
-        html += renderNonOilRow(methodData[methodIds[ci]], reviewResourcesByCommodity);
+        html += renderNonOilRow(methodData[methodIds[ci]], reviewResourcesByCommodity, evidenceByCommodity);
       }
       html += '</section>';
 

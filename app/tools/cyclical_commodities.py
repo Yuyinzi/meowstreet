@@ -26,6 +26,24 @@ _SERIES_COMMODITY_IDS = {
     "lumber_cme_lbr_yahoo_v1": "lumber",
 }
 
+_IRON_ORE_USGS_SOURCE_NAME = "US Geological Survey"
+_IRON_ORE_WA_SOURCE_NAME = "Government of Western Australia"
+
+_NON_OIL_ATTRIBUTION_FACT_CONTRACT_KEYS = [
+    "method_version",
+    "commodity_id",
+    "source_name",
+    "source_url",
+    "factor_category",
+    "metric_name",
+    "geography",
+    "observation_date",
+    "publication_date",
+    "value",
+    "units",
+    "status",
+]
+
 _COMMODITY_DISPLAY = {
     "crude_oil_wti": "WTI Crude Oil (ICE Futures Europe)",
     "crude_oil_brent": "Brent Crude Oil (NYMEX)",
@@ -704,6 +722,9 @@ def build_cyclical_commodities_payload(
     commodity_observations=None,
     shfe_cu_main_observations=None,
     attribution_review_catalog=None,
+    non_oil_attribution_facts=None,
+    non_oil_attribution_source_audit=None,
+    non_oil_attribution_refresh_status=None,
 ):
     as_of = as_of_date or ""
     cot_payload, cot_available = _compute_cot_payload(cot_rows)
@@ -742,14 +763,17 @@ def build_cyclical_commodities_payload(
         "attribution_review_resources": _attribution_review_resources(
             commodity, attribution_review_catalog
         ),
+        "non_oil_attribution_evidence": _non_oil_attribution_evidence(
+            commodity,
+            non_oil_attribution_facts,
+            non_oil_attribution_source_audit,
+            non_oil_attribution_refresh_status,
+        ),
     }
 
 
-def _attribution_review_resources(commodity, catalog):
-    if not catalog:
-        return []
-    resources = catalog.get("resources", [])
-    review_commodity_ids = sorted(
+def _review_required_commodity_ids(commodity):
+    return sorted(
         {
             _SERIES_COMMODITY_IDS[sid]
             for sid, entry in commodity.items()
@@ -757,6 +781,13 @@ def _attribution_review_resources(commodity, catalog):
             and sid in _SERIES_COMMODITY_IDS
         }
     )
+
+
+def _attribution_review_resources(commodity, catalog):
+    if not catalog:
+        return []
+    resources = catalog.get("resources", [])
+    review_commodity_ids = _review_required_commodity_ids(commodity)
     if not review_commodity_ids:
         return []
     selected = [
@@ -783,6 +814,107 @@ def _catalog_review_resource(resource):
         "coverage": list(resource["coverage"]),
         "status": resource["status"],
     }
+
+
+def _project_non_oil_attribution_fact(fact):
+    return {key: fact.get(key) for key in _NON_OIL_ATTRIBUTION_FACT_CONTRACT_KEYS}
+
+
+def _audit_manual_review_resource(row):
+    return {
+        "source_name": row["source_name"],
+        "source_url": row["source_url"],
+        "access_method": row["access_method"],
+        "factor_categories": list(row["factor_categories"]),
+        "geography": row["geography"],
+        "frequency": row["frequency"],
+        "units": row["units"],
+        "publication_date_status": row["publication_date_status"],
+        "stability": row["stability"],
+        "audit_basis": row["audit_basis"],
+        "audited_at": row["audited_at"],
+        "source_ref": row["source_ref"],
+        "status": row["audit_status"],
+    }
+
+
+def _iron_ore_usgs_audit_row(audit):
+    return next(
+        (
+            row
+            for row in audit.get("audits", [])
+            if row.get("commodity_id") == "iron_ore"
+            and row.get("source_name") == _IRON_ORE_USGS_SOURCE_NAME
+        ),
+        None,
+    )
+
+
+def _iron_ore_unavailable_reason(audit):
+    usgs_row = _iron_ore_usgs_audit_row(audit)
+    if usgs_row is not None:
+        return (
+            f"USGS ({usgs_row['source_name']}) iron ore public data is "
+            f"unavailable: {usgs_row['audit_basis']}"
+        )
+    return (
+        "USGS iron ore public data is unavailable and no USGS audit record is "
+        "configured"
+    )
+
+
+def _non_oil_attribution_evidence(commodity, facts, audit, refresh_status=None):
+    review_commodity_ids = _review_required_commodity_ids(commodity)
+    if not review_commodity_ids:
+        return {}
+    facts_by_commodity = {}
+    for fact in facts or []:
+        facts_by_commodity.setdefault(fact["commodity_id"], []).append(fact)
+    status_by_commodity = {row["commodity_id"]: row for row in (refresh_status or [])}
+    evidence = {}
+    for commodity_id in review_commodity_ids:
+        failed_status = status_by_commodity.get(commodity_id)
+        if failed_status is not None and failed_status.get("status") == "unavailable":
+            evidence[commodity_id] = {
+                "commodity_id": commodity_id,
+                "status": "unavailable",
+                "reason": (
+                    f"latest {failed_status['source_url']} refresh failed: "
+                    f"{failed_status['error_message']}"
+                ),
+                "next_action": "retry the source import before treating these facts as current",
+                "facts": [],
+            }
+            continue
+        commodity_facts = facts_by_commodity.get(commodity_id, [])
+        if commodity_facts:
+            evidence[commodity_id] = {
+                "commodity_id": commodity_id,
+                "status": "available",
+                "facts": [
+                    _project_non_oil_attribution_fact(fact) for fact in commodity_facts
+                ],
+            }
+            continue
+        if commodity_id == "iron_ore" and audit is not None:
+            wa_resources = [
+                _audit_manual_review_resource(row)
+                for row in audit.get("audits", [])
+                if row.get("commodity_id") == "iron_ore"
+                and row.get("source_name") == _IRON_ORE_WA_SOURCE_NAME
+                and row.get("audit_status") == "manual_review_only"
+            ]
+            evidence[commodity_id] = {
+                "commodity_id": commodity_id,
+                "status": "unavailable",
+                "reason": _iron_ore_unavailable_reason(audit),
+                "next_action": (
+                    "open the Western Australia manual review resources to inspect "
+                    "the method-listed Excel, Statistics Digest, and statistics-release URLs"
+                ),
+                "manual_review_resources": wa_resources,
+            }
+    return evidence
 
 
 def build_cyclical_commodities_headline(payload):
@@ -946,6 +1078,7 @@ def build_cyclical_commodities_detail(payload):
         "freshness": _collect_freshness_metadata(payload),
         "non_oil_observation": payload.get("commodity_observation", {}),
         "attribution_review_resources": payload.get("attribution_review_resources", []),
+        "non_oil_attribution_evidence": payload.get("non_oil_attribution_evidence", {}),
     }
 
 

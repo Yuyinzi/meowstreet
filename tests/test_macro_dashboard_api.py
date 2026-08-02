@@ -4138,6 +4138,147 @@ def _copper_comex_abnormal_rows():
     return _non_oil_weekday_rows(datetime.date(2016, 1, 4), 265, value_at)
 
 
+def _iron_ore_abnormal_rows():
+    def value_at(i):
+        if i == 264:
+            return 100.0 * (1.0005**263) * 1.5
+        return 100.0 * (1.0005**i)
+
+    return _non_oil_weekday_rows(datetime.date(2016, 1, 4), 265, value_at)
+
+
+def _non_oil_global_fact():
+    return {
+        "commodity_id": "copper",
+        "source_name": "International Wrought Copper Council",
+        "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+        "factor_category": "supply",
+        "metric_name": "Semis production",
+        "geography": "Global",
+        "observation_date": "2024-12-31",
+        "publication_date": None,
+        "value": 12345678.0,
+        "units": "t",
+        "status": "available",
+        "method_version": "non_oil_attribution_evidence_v1",
+    }
+
+
+def _non_oil_attribution_audit_payload():
+    def audit_row(
+        commodity_id,
+        source_name,
+        source_url,
+        audit_status,
+        factor_categories,
+        access_method,
+        geography,
+        frequency,
+        units,
+        audit_basis,
+    ):
+        return {
+            "commodity_id": commodity_id,
+            "source_name": source_name,
+            "source_url": source_url,
+            "source_type": "official_data",
+            "source_coverage": [],
+            "audit_status": audit_status,
+            "access_method": access_method,
+            "factor_categories": factor_categories,
+            "geography": geography,
+            "frequency": frequency,
+            "unit_status": "published",
+            "units": units,
+            "publication_date_status": "published",
+            "stability": "manual",
+            "audit_basis": audit_basis,
+            "audited_at": "2026-08-02",
+            "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        }
+
+    return {
+        "version": "non_oil_attribution_source_audit_v1",
+        "generated_at": "2026-08-02T00:00:00+00:00",
+        "source_catalog_version": "commodity_attribution_evidence_catalog_v1",
+        "source_catalog": "data/local_system/commodity_attribution_evidence_catalog.v1.json",
+        "audits": [
+            audit_row(
+                "copper",
+                "International Wrought Copper Council",
+                "http://www.coppercouncil.org/iwcc-statistics-and-data",
+                "structured_recurring_candidate",
+                ["supply", "demand"],
+                "xlsx_download",
+                "Global (107 countries by region)",
+                "annual",
+                "t",
+                "Page exposes direct public XLSX downloads for global semis production and demand.",
+            ),
+            audit_row(
+                "lumber",
+                "Food and Agriculture Organization of the United Nations",
+                "https://www.fao.org/faostat/en/#data/FO",
+                "structured_recurring_candidate",
+                ["supply", "trade"],
+                "api",
+                "Global by country",
+                "annual",
+                "t, m3, USD",
+                "FAOSTAT Forestry Production and Trade bulk-download dataset (FO).",
+            ),
+            audit_row(
+                "iron_ore",
+                "US Geological Survey",
+                "https://www.usgs.gov/centers/nmic/iron-ore-statistics-and-information",
+                "manual_review_only",
+                ["supply", "demand"],
+                "xlsx_download",
+                "US and world",
+                "monthly",
+                "t",
+                "Public MIS posting is paused pending a ScienceBase transition.",
+            ),
+            audit_row(
+                "iron_ore",
+                "Government of Western Australia",
+                "https://www.dmp.wa.gov.au/About-Us-Careers/Latest-Statistics-Release-4081.aspx",
+                "manual_review_only",
+                ["supply", "trade", "price"],
+                "xlsx_download",
+                "Western Australia",
+                "annual",
+                "kt, AUD m",
+                "Method URL redirects to the WA Resources industry data page.",
+            ),
+            audit_row(
+                "iron_ore",
+                "Government of Western Australia",
+                "https://www.dmp.wa.gov.au/About-Us-Careers/Statistics-Digest-3962.aspx",
+                "manual_review_only",
+                ["supply", "trade", "price"],
+                "manual_report_download",
+                "Western Australia",
+                "annual",
+                "kt, AUD m",
+                "Method URL redirects to the WA Mineral and Petroleum statistics digest page.",
+            ),
+            audit_row(
+                "iron_ore",
+                "World Bank Commodity Markets",
+                "https://www.worldbank.org/en/research/commodity-markets",
+                "structured_recurring_candidate",
+                ["price"],
+                "xlsx_download",
+                "Global",
+                "monthly",
+                "USD",
+                "Monthly Pink Sheet commodity prices.",
+            ),
+        ],
+    }
+
+
 def test_non_oil_detail_propagates_distribution_review_evidence(monkeypatch):
     from app import api
 
@@ -4404,6 +4545,303 @@ def test_non_oil_detail_exposes_empty_review_resources_without_catalog(monkeypat
         body["non_oil_observation"]["copper_comex"]["review_status"]
         == "review_required"
     )
+
+
+def test_non_oil_detail_composes_attribution_evidence_from_facts_and_audit(
+    monkeypatch,
+):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    comex_rows = _copper_comex_abnormal_rows()
+    iron_rows = _iron_ore_abnormal_rows()
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: (
+                comex_rows
+                if sid == "copper_comex"
+                else iron_rows
+                if sid == "iron_ore_62_cfr_china"
+                else []
+            )
+            for sid in series_ids
+        },
+    )
+    monkeypatch.setattr(api, "_load_attribution_catalog", lambda: None)
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_facts",
+        lambda con: [_non_oil_global_fact()],
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_non_oil_attribution_source_audit",
+        lambda: _non_oil_attribution_audit_payload(),
+    )
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    evidence = body["non_oil_attribution_evidence"]
+    assert evidence["copper"]["status"] == "available"
+    assert evidence["copper"]["facts"][0]["geography"] == "Global"
+    assert evidence["iron_ore"]["status"] == "unavailable"
+    assert "USGS" in evidence["iron_ore"]["reason"]
+    assert {
+        row["source_name"] for row in evidence["iron_ore"]["manual_review_resources"]
+    } == {"Government of Western Australia"}
+
+
+def test_growth_cycle_dashboard_scrubs_non_oil_attribution_internals(monkeypatch):
+    import json
+
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    comex_rows = _copper_comex_abnormal_rows()
+    iron_rows = _iron_ore_abnormal_rows()
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: (
+                comex_rows
+                if sid == "copper_comex"
+                else iron_rows
+                if sid == "iron_ore_62_cfr_china"
+                else []
+            )
+            for sid in series_ids
+        },
+    )
+    monkeypatch.setattr(api, "_load_attribution_catalog", lambda: None)
+
+    def db_shaped_non_oil_fact():
+        fact = _non_oil_global_fact()
+        fact["source_hash"] = (
+            "f0e4c2f76c58916ec258f246851bea091d14d4247a2fc3e18694461b1816e13b"
+        )
+        fact["retrieved_at"] = "2026-08-02T00:00:00+00:00"
+        return fact
+
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_facts",
+        lambda con: [db_shaped_non_oil_fact()],
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_non_oil_attribution_source_audit",
+        lambda: _non_oil_attribution_audit_payload(),
+    )
+
+    response = TestClient(api.app).get("/api/macro-dashboard/growth-cycle")
+
+    assert response.status_code == 200
+    body = response.json()
+    payload = body["growth_cycle"]["cyclical_commodities_payload"]
+    assert "non_oil_attribution_facts" not in payload
+    assert "non_oil_attribution_source_audit" not in payload
+    assert "source_hash" not in json.dumps(payload)
+    assert "retrieved_at" not in json.dumps(payload)
+    evidence = payload["non_oil_attribution_evidence"]
+    assert evidence["copper"]["status"] == "available"
+    assert evidence["copper"]["facts"][0]["geography"] == "Global"
+    assert "source_hash" not in evidence["copper"]["facts"][0]
+    assert "retrieved_at" not in evidence["copper"]["facts"][0]
+    assert evidence["iron_ore"]["status"] == "unavailable"
+
+
+def test_non_oil_detail_marks_facts_unavailable_when_refresh_failed(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    comex_rows = _copper_comex_abnormal_rows()
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_next_macro_event",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_approved_macro_event_tone",
+        lambda con, event_type, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db,
+        "load_latest_combined_fomc_policy_read",
+        lambda con, as_of_date: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: (comex_rows if sid == "copper_comex" else []) for sid in series_ids
+        },
+    )
+    monkeypatch.setattr(api, "_load_attribution_catalog", lambda: None)
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_facts",
+        lambda con: [_non_oil_global_fact()],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_refresh_status",
+        lambda con: [
+            {
+                "commodity_id": "copper",
+                "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+                "status": "unavailable",
+                "error_message": "faostat fetch failed",
+                "refreshed_at": "2026-08-02T00:00:00+00:00",
+            }
+        ],
+    )
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    copper = body["non_oil_attribution_evidence"]["copper"]
+    assert copper["status"] == "unavailable"
+    assert "faostat fetch failed" in copper["reason"]
+    assert copper["next_action"]
+    assert copper["facts"] == []
 
 
 def test_non_oil_market_setup_is_identical_when_returns_change(monkeypatch):
