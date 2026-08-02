@@ -6684,6 +6684,30 @@ def test_non_oil_css_has_distribution_review_note_styles():
     assert ".distribution-review-note" in css
 
 
+def test_usd_renderer_displays_backend_distribution_evidence():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    usd_start = source.index("function renderUSDRow(")
+    usd_end = source.index("function renderInflationRow(", usd_start)
+    usd_renderer = source[usd_start:usd_end]
+
+    assert "renderDistribution(series.daily_distribution" in usd_renderer
+    assert "renderDistribution(series.weekly_distribution" in usd_renderer
+    assert "series.review_status" in usd_renderer
+    assert "series.review_label" in usd_renderer
+
+
+def test_usd_renderer_has_no_client_side_statistics_or_macro_conclusion():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert "Math.sqrt" not in source
+    assert "standardDeviation" not in source
+    assert "sample_standard_deviation" not in source
+    assert "inflationary" not in source
+    assert "gdp growth" not in source
+    assert ".distribution-review-note" in css
+
+
 def test_shanghai_copper_reuses_market_value_and_state_presentation():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     start = source.index('if (series.source_class === "official_exchange")')

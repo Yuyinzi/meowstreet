@@ -285,13 +285,29 @@
       }
 
       function renderUSDRow(series) {
+        var reasonHtml = "";
+        if (series.review_status === "unavailable" && series.review_label) {
+          reasonHtml = '<span class="state-unavailable">'
+            + h.escapeHtml(series.review_label)
+            + '</span>';
+        }
+        var reviewNote = "";
+        if (series.review_status === "review_required") {
+          reviewNote = '<div class="distribution-review-note">'
+            + h.escapeHtml(series.review_label || "")
+            + '</div>';
+        }
         return '<div class="workflow-row">'
           + '<div class="workflow-label">' + h.escapeHtml(series.display_name || series.series_id) + '</div>'
           + '<div class="workflow-metrics">'
           + '<span>Latest: ' + h.escapeHtml(h.fmtNumber(series.latest_value)) + '</span>'
           + '<span>Daily: ' + renderValue(series.daily_return) + '</span>'
+          + renderDistribution(series.daily_distribution, "Daily")
           + '<span>Weekly: ' + renderValue(series.weekly_return) + '</span>'
+          + renderDistribution(series.weekly_distribution, "Weekly")
+          + reasonHtml
           + '</div>'
+          + reviewNote
           + '</div>';
       }
 
