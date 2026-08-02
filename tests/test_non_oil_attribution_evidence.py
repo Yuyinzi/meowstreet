@@ -246,6 +246,16 @@ def test_fetch_faostat_returns_production_import_and_export_with_source_fields()
     )
 
 
+def test_faostat_lumber_selection_is_fixed_sawnwood_world():
+    assert evidence.FAOSTAT_ITEM == "Sawnwood"
+    assert evidence.FAOSTAT_AREA == "World"
+    facts = evidence.fetch_faostat_lumber_facts(
+        HttpClient(transport=httpx.MockTransport(faostat_handler))
+    )
+    assert all(row["geography"] == "World" for row in facts)
+    assert all(row["commodity_id"] == "lumber" for row in facts)
+
+
 def test_normalize_rejects_missing_period_geography_unit_factor_or_numeric_value():
     for field, value in [
         ("observation_date", None),
