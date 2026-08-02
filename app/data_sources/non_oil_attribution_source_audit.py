@@ -35,6 +35,9 @@ STABILITY_STATES = frozenset({"stable", "interactive", "manual", "blocked"})
 
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _CANDIDATE_STABILITIES = frozenset({"stable", "interactive"})
+_CANDIDATE_ACCESS_METHODS = frozenset(
+    {"api", "csv_download", "xlsx_download", "html_table"}
+)
 _REQUIRED_RECORD_KEYS = frozenset(
     {
         "commodity_id",
@@ -224,7 +227,7 @@ AUDITED_RECORDS = [
         "source_url": "https://www.usgs.gov/centers/nmic/copper-statistics-and-information",
         "source_type": "official_data",
         "source_coverage": ["industry_surveys", "publications"],
-        "audit_status": "structured_recurring_candidate",
+        "audit_status": "manual_review_only",
         "access_method": "xlsx_download",
         "factor_categories": ["supply", "demand"],
         "geography": "US and world",
@@ -232,8 +235,8 @@ AUDITED_RECORDS = [
         "unit_status": "published",
         "units": "t",
         "publication_date_status": "published",
-        "stability": "stable",
-        "audit_basis": "Page exposes monthly Mineral Industry Surveys (PDF+XLSX) and annual Mineral Commodity Summaries (PDF) with production/consumption tables and data download links; MIS public posting is temporarily paused pending a ScienceBase transition, but the recurring download interface is documented and stable.",
+        "stability": "manual",
+        "audit_basis": "Page documents monthly Mineral Industry Surveys (PDF+XLSX) and annual Mineral Commodity Summaries (PDF) with data download links, but public MIS posting is paused pending a ScienceBase transition with the latest posted data dated December 2025 and no announced resumption date; the source cannot currently support a recurring importer and requires manual review.",
         "audited_at": _AUDITED_AT,
         "source_ref": _SOURCE_REF,
     },
@@ -449,7 +452,7 @@ AUDITED_RECORDS = [
         "source_url": "https://www.usgs.gov/centers/nmic/iron-ore-statistics-and-information",
         "source_type": "official_data",
         "source_coverage": ["industry_surveys", "publications"],
-        "audit_status": "structured_recurring_candidate",
+        "audit_status": "manual_review_only",
         "access_method": "xlsx_download",
         "factor_categories": ["supply", "demand"],
         "geography": "US and world",
@@ -457,8 +460,8 @@ AUDITED_RECORDS = [
         "unit_status": "published",
         "units": "t",
         "publication_date_status": "published",
-        "stability": "stable",
-        "audit_basis": "Page exposes monthly Mineral Industry Surveys (PDF+XLSX) and annual Mineral Commodity Summaries (PDF) with production/consumption tables and data download links; same recurring structure as the USGS copper statistics page.",
+        "stability": "manual",
+        "audit_basis": "Page documents monthly Mineral Industry Surveys (PDF+XLSX) and annual Mineral Commodity Summaries (PDF) with data download links, but public MIS posting is paused pending a ScienceBase transition with the latest posted data dated December 2025 and no announced resumption date; the source cannot currently support a recurring importer and requires manual review.",
         "audited_at": _AUDITED_AT,
         "source_ref": _SOURCE_REF,
     },
@@ -626,6 +629,14 @@ def _reject_candidate_missing_factual_metadata(record):
     if record["unit_status"] != "published":
         raise ValueError(
             " non-oil attribution structured recurring candidate requires published units"
+        )
+    if record["publication_date_status"] != "published":
+        raise ValueError(
+            " non-oil attribution structured recurring candidate requires a published publication date"
+        )
+    if record["access_method"] not in _CANDIDATE_ACCESS_METHODS:
+        raise ValueError(
+            " non-oil attribution structured recurring candidate requires a machine-readable access method"
         )
     if record["stability"] not in _CANDIDATE_STABILITIES:
         raise ValueError(

@@ -384,6 +384,36 @@ def test_validate_rejects_candidate_with_manual_stability():
         )
 
 
+def test_validate_rejects_candidate_without_published_publication_date():
+    record = audit_record("copper", "https://example.test/copper")
+    record["publication_date_status"] = "not_published"
+
+    with pytest.raises(ValueError, match="requires a published publication date"):
+        audit.validate_non_oil_attribution_audits(
+            [record], [catalog_record("copper", "https://example.test/copper")]
+        )
+
+
+def test_validate_rejects_candidate_with_non_machine_readable_access_method():
+    record = audit_record("copper", "https://example.test/copper")
+    record["access_method"] = "reference_page"
+
+    with pytest.raises(ValueError, match="requires a machine-readable access method"):
+        audit.validate_non_oil_attribution_audits(
+            [record], [catalog_record("copper", "https://example.test/copper")]
+        )
+
+
+def test_validate_rejects_candidate_with_manual_report_access_method():
+    record = audit_record("copper", "https://example.test/copper")
+    record["access_method"] = "manual_report_download"
+
+    with pytest.raises(ValueError, match="requires a machine-readable access method"):
+        audit.validate_non_oil_attribution_audits(
+            [record], [catalog_record("copper", "https://example.test/copper")]
+        )
+
+
 def test_validate_rejects_blocked_record_with_non_blocked_access_method():
     record = audit_record("copper", "https://example.test/copper")
     record["audit_status"] = "blocked"
@@ -461,8 +491,8 @@ def test_checked_in_audit_outcome_counts_match_research():
         AUDIT_PATH, CATALOG_PATH
     )
     assert Counter(row["audit_status"] for row in payload["audits"]) == {
-        "structured_recurring_candidate": 7,
-        "manual_review_only": 10,
+        "structured_recurring_candidate": 5,
+        "manual_review_only": 12,
         "blocked": 3,
     }
     assert Counter(row["commodity_id"] for row in payload["audits"]) == {
