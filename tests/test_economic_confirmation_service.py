@@ -152,6 +152,19 @@ def test_real_activity_block_is_exact(tmp_path):
     }
 
 
+def test_real_activity_is_missing_when_no_g17_series_stored(tmp_path):
+    con = economic_confirmation_db.connect(tmp_path / "market.sqlite")
+    economic_confirmation_db.record_vintage_batch(con, _claims_observations())
+    economic_confirmation_db.record_vintage_batch(con, _esr_observations())
+    payload = economic_confirmation.load_overview(
+        con, {"expected_gdp_direction": "growth_decelerating"}, NOW
+    )
+    assert payload["real_activity"]["data_status"] == "missing"
+    assert payload["real_activity"]["method_status"] == "pending_approval"
+    assert payload["real_activity"]["confirmation_status"] == "unavailable"
+    assert payload["real_activity"]["unavailable_reason"] == "method_not_approved"
+
+
 def test_event_risk_direction_is_unknown_and_independent(tmp_path):
     payload = economic_confirmation.load_overview(
         seeded_con(tmp_path), {"expected_gdp_direction": "growth_decelerating"}, NOW

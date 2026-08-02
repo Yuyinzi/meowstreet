@@ -155,7 +155,11 @@ def _metric_snapshot(row):
 
 
 def _real_activity(series):
-    available = any(rows for rows in series.values() if rows)
+    available = any(
+        rows
+        for rows in (series.get(sid) or [] for sid in _REAL_ACTIVITY_SERIES_IDS)
+        if rows
+    )
     return {
         "data_status": "available" if available else "missing",
         "method_status": "pending_approval",
