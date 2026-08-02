@@ -95,18 +95,22 @@ def fetch_claims_release(client, release_url):
 
 def parse_claims_release_text(text, source_url):
     release_date = _extract_release_date(text)
-    return [
-        _release_observation(
+    observations = []
+    observations.extend(
+        _release_observations(
             text, "initial claims", "initial_claims_sa", release_date, source_url
-        ),
-        _release_observation(
+        )
+    )
+    observations.extend(
+        _release_observations(
             text,
             "insured unemployment",
             "continuing_claims_sa",
             release_date,
             source_url,
-        ),
-    ]
+        )
+    )
+    return observations
 
 
 def parse_claims_history_csv(content, series_id, source_url):
@@ -226,7 +230,7 @@ def _extract_release_date(text):
     return _parse_month_day_year(match.group(1))
 
 
-def _release_observation(text, label, series_id, release_date, source_url):
+def _release_observations(text, label, series_id, release_date, source_url):
     paragraph = _series_paragraph(text, label)
     if paragraph is None:
         raise ValueError(
@@ -242,19 +246,54 @@ def _release_observation(text, label, series_id, release_date, source_url):
         )
     reference_period = _resolve_reference_date(value_match.group(1), release_date)
     value = _parse_number(value_match.group(2))
+    observations = [
+        _release_observation_payload(
+            series_id,
+            reference_period,
+            release_date,
+            source_url,
+            text,
+            value_at_release=value,
+            latest_revised_value=None,
+            revision_number=0,
+        )
+    ]
     revision_match = _REVISION_RE.search(paragraph, value_match.start())
     if revision_match:
-        latest_revised_value = _parse_number(revision_match.group(2))
-        revision_number = 1
-    else:
-        latest_revised_value = None
-        revision_number = 0
+        prior_reference_period = (
+            date.fromisoformat(reference_period) - timedelta(days=7)
+        ).isoformat()
+        observations.append(
+            _release_observation_payload(
+                series_id,
+                prior_reference_period,
+                release_date,
+                source_url,
+                text,
+                value_at_release=_parse_number(revision_match.group(1)),
+                latest_revised_value=_parse_number(revision_match.group(2)),
+                revision_number=1,
+            )
+        )
+    return observations
+
+
+def _release_observation_payload(
+    series_id,
+    reference_period,
+    release_date,
+    source_url,
+    text,
+    value_at_release,
+    latest_revised_value,
+    revision_number,
+):
     return {
         "series_id": series_id,
         "reference_period": reference_period,
         "release_date": release_date.isoformat(),
         "as_of_timestamp": datetime.now(timezone.utc).isoformat(),
-        "value_at_release": value,
+        "value_at_release": value_at_release,
         "latest_revised_value": latest_revised_value,
         "revision_number": revision_number,
         "vintage_id": f"{series_id}:{reference_period}:{release_date.isoformat()}",

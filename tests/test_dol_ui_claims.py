@@ -260,25 +260,72 @@ def test_parse_claims_history_csv_rejects_negative_value():
 
 def test_parse_claims_release_text_extracts_release_and_revision():
     observations = dol_ui_claims.parse_claims_release_text(_RELEASE_TEXT, RELEASE_URL)
-    initial = [o for o in observations if o["series_id"] == "initial_claims_sa"][0]
-    continuing = [o for o in observations if o["series_id"] == "continuing_claims_sa"][
-        0
-    ]
+    initial = [o for o in observations if o["series_id"] == "initial_claims_sa"]
+    continuing = [o for o in observations if o["series_id"] == "continuing_claims_sa"]
 
-    assert initial["reference_period"] == "2026-07-25"
-    assert initial["value_at_release"] == 197000.0
-    assert initial["latest_revised_value"] == 188000.0
-    assert initial["revision_number"] == 1
-    assert initial["release_date"] == "2026-07-30"
-    assert initial["seasonal_adjustment"] == "seasonally_adjusted"
-    assert initial["source_url"] == RELEASE_URL
-    assert initial["vintage_id"] == "initial_claims_sa:2026-07-25:2026-07-30"
+    assert len(initial) == 2
+    assert len(continuing) == 2
 
-    assert continuing["reference_period"] == "2026-07-18"
-    assert continuing["value_at_release"] == 1782000.0
-    assert continuing["latest_revised_value"] == 1789000.0
-    assert continuing["revision_number"] == 1
-    assert continuing["vintage_id"] == "continuing_claims_sa:2026-07-18:2026-07-30"
+    initial_current, initial_prior = initial
+    assert initial_current["reference_period"] == "2026-07-25"
+    assert initial_current["value_at_release"] == 197000.0
+    assert initial_current["latest_revised_value"] is None
+    assert initial_current["revision_number"] == 0
+    assert initial_current["release_date"] == "2026-07-30"
+    assert initial_current["seasonal_adjustment"] == "seasonally_adjusted"
+    assert initial_current["source_url"] == RELEASE_URL
+    assert initial_current["vintage_id"] == "initial_claims_sa:2026-07-25:2026-07-30"
+
+    assert initial_prior["reference_period"] == "2026-07-18"
+    assert initial_prior["value_at_release"] == 187000.0
+    assert initial_prior["latest_revised_value"] == 188000.0
+    assert initial_prior["revision_number"] == 1
+    assert initial_prior["release_date"] == "2026-07-30"
+    assert initial_prior["vintage_id"] == "initial_claims_sa:2026-07-18:2026-07-30"
+
+    continuing_current, continuing_prior = continuing
+    assert continuing_current["reference_period"] == "2026-07-18"
+    assert continuing_current["value_at_release"] == 1782000.0
+    assert continuing_current["latest_revised_value"] is None
+    assert continuing_current["revision_number"] == 0
+    assert (
+        continuing_current["vintage_id"] == "continuing_claims_sa:2026-07-18:2026-07-30"
+    )
+
+    assert continuing_prior["reference_period"] == "2026-07-11"
+    assert continuing_prior["value_at_release"] == 1796000.0
+    assert continuing_prior["latest_revised_value"] == 1789000.0
+    assert continuing_prior["revision_number"] == 1
+    assert continuing_prior["release_date"] == "2026-07-30"
+    assert (
+        continuing_prior["vintage_id"] == "continuing_claims_sa:2026-07-11:2026-07-30"
+    )
+
+
+def test_parse_claims_release_text_without_revision_yields_current_week_only():
+    text = _RELEASE_TEXT.replace(
+        " The previous week's level was revised up by 1,000 from 187,000 to 188,000.",
+        "",
+    ).replace(
+        " The previous week's level was revised down by "
+        "7,000 from 1,796,000 to 1,789,000.",
+        "",
+    )
+    observations = dol_ui_claims.parse_claims_release_text(text, RELEASE_URL)
+    initial = [o for o in observations if o["series_id"] == "initial_claims_sa"]
+    continuing = [o for o in observations if o["series_id"] == "continuing_claims_sa"]
+
+    assert len(initial) == 1
+    assert initial[0]["reference_period"] == "2026-07-25"
+    assert initial[0]["value_at_release"] == 197000.0
+    assert initial[0]["latest_revised_value"] is None
+    assert initial[0]["revision_number"] == 0
+
+    assert len(continuing) == 1
+    assert continuing[0]["reference_period"] == "2026-07-18"
+    assert continuing[0]["value_at_release"] == 1782000.0
+    assert continuing[0]["latest_revised_value"] is None
+    assert continuing[0]["revision_number"] == 0
 
 
 def test_parse_claims_release_text_rejects_missing_release_date():
@@ -325,11 +372,14 @@ def test_fetch_claims_release_downloads_and_parses_pdf():
     client = HttpClient(transport=httpx.MockTransport(handler))
     observations = dol_ui_claims.fetch_claims_release(client, RELEASE_URL)
 
-    initial = [o for o in observations if o["series_id"] == "initial_claims_sa"][0]
-    assert initial["value_at_release"] == 197000.0
-    assert initial["latest_revised_value"] == 188000.0
-    assert isinstance(initial["source_hash"], str)
-    assert len(initial["source_hash"]) == 64
+    initial = [o for o in observations if o["series_id"] == "initial_claims_sa"]
+    initial_current = initial[0]
+    assert initial_current["value_at_release"] == 197000.0
+    assert initial_current["latest_revised_value"] is None
+    assert isinstance(initial_current["source_hash"], str)
+    assert len(initial_current["source_hash"]) == 64
+    initial_prior = next(o for o in initial if o["revision_number"] == 1)
+    assert initial_prior["latest_revised_value"] == 188000.0
 
 
 def test_fetch_claims_release_raises_on_404():
