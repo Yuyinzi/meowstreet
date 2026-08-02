@@ -6578,6 +6578,15 @@ def test_oil_renderer_shows_weekly_attribution_changes_without_conclusion():
     assert "automatic attribution" in source
 
 
+def test_oil_renderer_places_attribution_inputs_inside_review_required_branch():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    review_start = source.index('if (review && review.status === "review_required")')
+    attribution_start = source.index("<h4>Attribution inputs</h4>")
+    review_end = source.index("      }", review_start)
+
+    assert review_start < attribution_start < review_end
+
+
 def test_oil_renderer_groups_attribution_rows_and_separates_role_from_metrics():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
@@ -6627,11 +6636,9 @@ def test_cyclical_commodities_ui_renders_backend_distribution_labels():
     assert "oil-price-line" in source
     assert "oil-price" in source
     assert "oil-distribution-line" in source
-    assert "oil-provenance" in source
     assert ".oil-distribution-summary" in css
     assert ".oil-price-line" in css
     assert ".oil-price" in css
-    assert ".oil-provenance" in css
     assert "oil-distribution-abnormal" in source
     assert ".oil-distribution-abnormal" in css
     assert "Within 1σ, Normal" in source
@@ -6657,13 +6664,6 @@ def test_non_oil_renderer_has_no_client_side_statistics():
     assert "sample_standard_deviation" not in source
 
 
-def test_non_oil_renderer_shows_backend_distribution_reason_when_unavailable():
-    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-
-    assert "dailyDistribution.reason || weeklyDistribution.reason" in source
-    assert '" · " + unavailableReason' in source
-
-
 def test_non_oil_renderer_surfaces_review_label_when_series_unavailable():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     start = source.index('if (series.status !== "available")')
@@ -6677,7 +6677,6 @@ def test_non_oil_css_has_distribution_review_note_styles():
     css = (ROOT / "static" / "macro-dashboard.css").read_text()
 
     assert ".distribution-review-note" in css
-    assert ".distribution-provenance" in css
 
 
 def test_shanghai_copper_reuses_market_value_and_state_presentation():
@@ -6705,7 +6704,6 @@ def test_renderer_renders_attribution_review_resources_without_conclusion():
     assert "source_url" in js
     assert "coverage" in js
     assert "cataloged" in js
-    assert "review resources only" in js
     assert "demand-led" not in js.lower()
     assert "supply-led" not in js.lower()
     assert "buy" not in js.lower()
@@ -6739,3 +6737,23 @@ def test_non_oil_rows_label_backend_review_status_and_render_own_resources():
     assert "renderAttributionReviewResources(" in js
     assert js.count("renderNonOilReviewStatus(series)") == 4
     assert "reviewResourcesByCommodity[series.commodity_id]" in js
+
+
+def test_non_oil_row_status_sits_on_title_line():
+    js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+
+    assert "h.escapeHtml(series.display_name) + renderNonOilReviewStatus(series)" in js
+    assert "renderNonOilRowStatusClass(series)" in js
+    assert "renderNonOilRowStatusClass(series) + '\">'" in js
+
+
+def test_non_oil_rows_use_status_background_classes():
+    js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert "market-row-normal" in js
+    assert "market-row-review" in js
+    assert "market-row-unavailable" in js
+    assert ".market-row-normal" in css
+    assert ".market-row-review" in css
+    assert ".market-row-unavailable" in css

@@ -67,34 +67,6 @@
           + '</div>';
       }
 
-      function renderDistributionProvenance(series) {
-        var dailyDistribution = series.daily_distribution || {};
-        var weeklyDistribution = series.weekly_distribution || {};
-        var distributionAvailable = dailyDistribution.classification != null
-          && dailyDistribution.classification !== "unavailable"
-          && weeklyDistribution.classification != null
-          && weeklyDistribution.classification !== "unavailable";
-        var distributionVersion = (dailyDistribution.method_version || "")
-          .replace("non_oil_price_distribution_", "") || "—";
-        var distributionWindow = dailyDistribution.distribution_window === "2016-01-01_to_latest_available"
-          ? "2016–latest"
-          : (dailyDistribution.distribution_window || "—").replace(/_/g, " ");
-        var provenance = distributionVersion + " · " + distributionWindow;
-        if (distributionAvailable) {
-          provenance += " · sample std · "
-            + String(dailyDistribution.sample_count || 0) + " daily / "
-            + String(weeklyDistribution.sample_count || 0) + " weekly returns";
-        } else {
-          var unavailableReason = dailyDistribution.reason || weeklyDistribution.reason;
-          if (unavailableReason) {
-            provenance += " · " + unavailableReason;
-          } else {
-            provenance += " · no distribution data";
-          }
-        }
-        return '<div class="distribution-provenance">' + h.escapeHtml(provenance) + '</div>';
-      }
-
       function renderDistributionReviewNote(series) {
         if (series.review_status !== "review_required") return "";
         return '<div class="distribution-review-note">'
@@ -109,20 +81,26 @@
           unavailable: "Insufficient history",
         };
         var status = series.review_status || "unavailable";
-        var state = status === "review_required"
-          ? "review-required"
+        var modifier = status === "review_required"
+          ? "review"
           : status === "observation_available"
-            ? "flat"
+            ? "normal"
             : "unavailable";
-        return '<span class="state state-' + h.escapeHtml(state) + '">'
+        return '<span class="market-status market-status-' + h.escapeHtml(modifier) + '">'
           + h.escapeHtml(labels[status] || labels.unavailable)
           + '</span>';
+      }
+
+      function renderNonOilRowStatusClass(series) {
+        var status = series.review_status || "unavailable";
+        if (status === "review_required") return "market-row-review";
+        if (status === "observation_available") return "market-row-normal";
+        return "market-row-unavailable";
       }
 
       function renderAttributionReviewResources(resources) {
         if (!resources || !resources.length) return "";
         var html = '<div class="attribution-review-resources">';
-        html += '<p class="section-intro">Method-listed sources to consult while reviewing this abnormal price move. These are review resources only, not a demand or supply conclusion.</p>';
         html += '<details class="raw-evidence">';
         html += '<summary>View attribution review resources</summary>';
         for (var i = 0; i < resources.length; i++) {
@@ -146,9 +124,9 @@
             || (series.source_class === "official_exchange"
               ? "Not available — SHFE official data not yet imported"
               : "Not available — commodity market data not yet fetched");
-          return '<div class="workflow-row">'
-            + '<div class="workflow-label">' + h.escapeHtml(series.display_name) + '</div>'
-            + '<div class="workflow-metrics"><span>' + h.escapeHtml(unavailableLine) + '</span>' + renderNonOilReviewStatus(series) + '</div>'
+          return '<div class="workflow-row ' + renderNonOilRowStatusClass(series) + '">'
+            + '<div class="workflow-label">' + h.escapeHtml(series.display_name) + renderNonOilReviewStatus(series) + '</div>'
+            + '<div class="workflow-metrics"><span>' + h.escapeHtml(unavailableLine) + '</span></div>'
             + '</div>';
         }
         if (series.source_class === "official_exchange") {
@@ -165,12 +143,12 @@
               + "'s own prior close; the unadjusted price gap is shown for audit only."
               + auditLine + '</div>';
           }
-          return '<div class="workflow-row">'
+          return '<div class="workflow-row ' + renderNonOilRowStatusClass(series) + '">'
             + '<div class="workflow-label">' + h.escapeHtml(series.display_name)
+            + renderNonOilReviewStatus(series)
             + '<span class="workflow-role">' + h.escapeHtml(series.selected_contract) + '</span></div>'
             + '<div class="workflow-metrics">'
             + '<span>Value: ' + h.escapeHtml(h.fmtNumber(series.latest_value)) + ' ' + h.escapeHtml(series.units || "CNY/tonne") + '</span>'
-            + renderNonOilReviewStatus(series)
             + '<span>' + renderState(h.fmtSignedPctDecimal(series.daily_return), series.daily_return_state, "Daily") + '</span>'
             + renderDistribution(series.daily_distribution, "Daily")
             + '<span>' + renderState(h.fmtSignedPctDecimal(series.weekly_return), series.weekly_return_state, "Weekly") + '</span>'
@@ -178,7 +156,6 @@
             + '<span>Source: SHFE official data via AKShare</span>'
             + (series.latest_date ? '<span>As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
             + '</div>'
-            + renderDistributionProvenance(series)
             + renderDistributionReviewNote(series)
             + renderAttributionReviewResources(reviewResources)
             + rollLine
@@ -190,11 +167,10 @@
             + h.escapeHtml(series.source_cutover_date)
             + '; return is withheld until same-source history is available.</div>';
         }
-        return '<div class="workflow-row">'
-          + '<div class="workflow-label">' + h.escapeHtml(series.display_name) + '</div>'
+        return '<div class="workflow-row ' + renderNonOilRowStatusClass(series) + '">'
+          + '<div class="workflow-label">' + h.escapeHtml(series.display_name) + renderNonOilReviewStatus(series) + '</div>'
           + '<div class="workflow-metrics">'
           + '<span>Value: ' + h.escapeHtml(h.fmtNumber(series.latest_value)) + '</span>'
-          + renderNonOilReviewStatus(series)
           + '<span>' + renderState(h.fmtSignedPctDecimal(series.daily_return), series.daily_return_state, "Daily") + '</span>'
           + renderDistribution(series.daily_distribution, "Daily")
           + '<span>' + renderState(h.fmtSignedPctDecimal(series.weekly_return), series.weekly_return_state, "Weekly") + '</span>'
@@ -202,7 +178,6 @@
           + '<span>Source: ' + h.escapeHtml(series.source_label) + '</span>'
           + (series.latest_date ? '<span>As of ' + h.escapeHtml(series.latest_date) + '</span>' : '')
           + '</div>'
-          + renderDistributionProvenance(series)
           + renderDistributionReviewNote(series)
           + renderAttributionReviewResources(reviewResources)
           + transitionNote
@@ -294,20 +269,10 @@
               + renderDistribution(b.daily_distribution, "Daily")
               + renderDistribution(b.weekly_distribution, "Weekly")
               + '</div>'
-              + '<div class="oil-provenance">'
-              + h.escapeHtml(b.reason || "No oil observation is available.")
-              + (b.source_identifier ? ' · Source: ' + h.escapeHtml(b.source_identifier) : "")
-              + '</div>'
               + '</div>';
             continue;
           }
           var unitStr = b.units || "$/BBL";
-          var dailyDistribution = b.daily_distribution || {};
-          var weeklyDistribution = b.weekly_distribution || {};
-          var distributionVersion = (dailyDistribution.method_version || "").replace("oil_distribution_", "") || "—";
-          var distributionWindow = dailyDistribution.distribution_window === "2016-01-01_to_latest_available"
-            ? "2016–latest available"
-            : (dailyDistribution.distribution_window || "—").replace(/_/g, " ");
           html += '<div class="workflow-row oil-benchmark">'
             + '<div class="oil-price-line"><strong>' + h.escapeHtml(_oilDisplayName(ids[i])) + '</strong><span class="oil-price">'
             + h.escapeHtml(h.fmtNumber(b.latest_value)) + ' ' + h.escapeHtml(unitStr) + '</span></div>'
@@ -317,11 +282,6 @@
             + renderState(h.fmtSignedPctDecimal(b.weekly_return), b.weekly_return_state, "Weekly")
             + renderDistribution(b.weekly_distribution, "Weekly")
             + '</div>'
-            + '<div class="oil-provenance">' + h.escapeHtml(distributionVersion) + ' · '
-            + h.escapeHtml(distributionWindow) + ' · sample std · '
-            + h.escapeHtml(String(dailyDistribution.sample_count || 0)) + ' daily / '
-            + h.escapeHtml(String(weeklyDistribution.sample_count || 0)) + ' weekly returns · Source: '
-            + h.escapeHtml(b.source_identifier || b.source_url || "") + '</div>'
             + '</div>';
         }
         return html;
@@ -403,10 +363,10 @@
         html += '<div class="state state-review-required">'
           + h.escapeHtml(review.label || "Evidence is ready for review")
           + '</div>';
+        html += '<h4>Attribution inputs</h4>';
+        html += '<p class="summary-stat">' + h.escapeHtml(attr.review_label || reasonLabel(attr)) + ' — WoW changes are raw context for review; no automatic attribution is made.</p>';
+        html += renderAttributionRows(attr.metrics || []);
       }
-      html += '<h4>Attribution inputs</h4>';
-      html += '<p class="summary-stat">' + h.escapeHtml(attr.review_label || reasonLabel(attr)) + ' — WoW changes are raw context for review; no automatic attribution is made.</p>';
-      html += renderAttributionRows(attr.metrics || []);
       html += '</section>';
 
       html += '<section class="evidence-section">';

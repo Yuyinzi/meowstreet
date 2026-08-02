@@ -794,6 +794,49 @@ h2 {
   white-space: nowrap;
 }
 
+.market-status {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.market-status-normal {
+  color: #155724;
+  background: #E8F4EA;
+}
+
+.market-status-review {
+  color: #7A4B14;
+  background: #FBF0DE;
+}
+
+.market-status-unavailable {
+  color: #6E6257;
+  background: #F3EEE8;
+}
+
+.market-row-normal {
+  background: #F4F9F4;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.market-row-review {
+  background: #FBF0DE;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.market-row-unavailable {
+  background: #F3EEE8;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
 .state-up,
 .state-draw {
   color: #155724;
@@ -878,18 +921,6 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 7px;
-}
-
-.oil-provenance {
-  color: #8A7B6D;
-  font-size: 11px;
-  margin-top: 7px;
-}
-
-.distribution-provenance {
-  color: #8A7B6D;
-  font-size: 11px;
   margin-top: 7px;
 }
 
