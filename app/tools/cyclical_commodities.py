@@ -8,6 +8,7 @@ from app.data_sources.lumber import _LUMBER_SERIES
 from app.tools import oil_distribution
 from app.tools import price_distribution
 from app.tools import shfe_copper
+from app.tools import usd_distribution
 
 _CYCLICAL_COMMODITIES_VERSION = "cyclical_commodities_v1"
 
@@ -63,6 +64,11 @@ _USD_SERIES_DISPLAY = {
     "usd_afe": "Trade-Weighted USD AFE (DTWEXAFEGS)",
     "usd_eme": "Trade-Weighted USD EME (DTWEXEMEGS)",
 }
+
+_USD_DISTRIBUTION_REVIEW_LABEL = (
+    "USD move is outside its historical distribution; review USD and "
+    "broader macro context. No macro attribution is made."
+)
 
 _INFLATION_SERIES_DISPLAY = {
     "cpi_all_items": "CPI All Items (CPIAUCSL)",
@@ -165,13 +171,43 @@ def _pct_change_ratio(latest_val, prior_val):
     return (latest_val / prior_val) - 1
 
 
+def _usd_review_state(daily_distribution, weekly_distribution):
+    classifications = (
+        daily_distribution.get("classification"),
+        weekly_distribution.get("classification"),
+    )
+    if any(c is not None and c.startswith("abnormal_") for c in classifications):
+        return {
+            "review_status": "review_required",
+            "review_label": _USD_DISTRIBUTION_REVIEW_LABEL,
+        }
+    if classifications == ("normal", "normal"):
+        return {"review_status": "observation_available", "review_label": None}
+    reasons = []
+    for distribution in (daily_distribution, weekly_distribution):
+        reason = distribution.get("reason")
+        if reason:
+            reasons.append(reason)
+    return {
+        "review_status": "unavailable",
+        "review_label": "; ".join(reasons) if reasons else None,
+    }
+
+
 def _compute_usd_series_payload(series_id, display_name, observations, as_of_date):
+    daily_distribution = usd_distribution.build_distribution(observations, "daily")
+    weekly_distribution = usd_distribution.build_distribution(
+        observations, "weekly"
+    )
+    review_state = _usd_review_state(daily_distribution, weekly_distribution)
     if not observations:
         return {
             "series_id": series_id,
             "display_name": display_name,
             "status": "unavailable",
-            "distribution_status": "not_configured",
+            "daily_distribution": daily_distribution,
+            "weekly_distribution": weekly_distribution,
+            **review_state,
         }
     sorted_obs = sorted(observations, key=lambda o: o["date"])
     latest = sorted_obs[-1]
@@ -190,7 +226,9 @@ def _compute_usd_series_payload(series_id, display_name, observations, as_of_dat
         "weekly_return": _pct_change_ratio(latest_val, prior_5_val),
         "source": "fred",
         "source_identifier": observations[0].get("source_identifier", ""),
-        "distribution_status": "not_configured",
+        "daily_distribution": daily_distribution,
+        "weekly_distribution": weekly_distribution,
+        **review_state,
     }
 
 

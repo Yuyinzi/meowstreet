@@ -92,11 +92,117 @@ def test_never_exposes_extreme_or_distribution_conclusions():
     )
 
     assert payload["cot"]["crude_oil_wti"]["extreme"] == "not_configured"
-    assert payload["usd"]["usd_broad"]["distribution_status"] == "not_configured"
     assert (
         payload["inflation"]["cpi_all_items"]["distribution_status"]
         == "not_configured"
     )
+
+
+def usd_distribution_rows():
+    return _weekday_observation_rows(
+        date(2016, 1, 4), 265, lambda i: 100.0 * (1.0005**i)
+    )
+
+
+def test_usd_series_distribution_is_observation_available_with_full_history():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, {"usd_broad": usd_distribution_rows()}, None, "2017-01-06"
+    )
+    broad = payload["usd"]["usd_broad"]
+
+    assert (
+        broad["daily_distribution"]["method_version"] == "usd_price_distribution_v1"
+    )
+    assert (
+        broad["weekly_distribution"]["method_version"]
+        == "usd_price_distribution_v1"
+    )
+    assert broad["daily_distribution"]["classification"] == "normal"
+    assert broad["weekly_distribution"]["classification"] == "normal"
+    assert broad["review_status"] == "observation_available"
+    assert broad["review_label"] is None
+
+
+def test_usd_abnormal_final_daily_move_requires_review_with_exact_label():
+    rows = usd_distribution_rows()
+    rows[-1] = {"date": rows[-1]["date"], "value": rows[-2]["value"] * 1.5}
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, {"usd_broad": rows}, None, "2017-01-06"
+    )
+    broad = payload["usd"]["usd_broad"]
+
+    assert broad["daily_distribution"]["classification"].startswith("abnormal_")
+    assert broad["review_status"] == "review_required"
+    assert broad["review_label"] == (
+        "USD move is outside its historical distribution; review USD and "
+        "broader macro context. No macro attribution is made."
+    )
+
+
+def test_usd_short_history_marks_review_unavailable_with_horizon_reasons():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, {"usd_broad": USD_ROWS["usd_broad"]}, None, "2026-07-25"
+    )
+    broad = payload["usd"]["usd_broad"]
+
+    assert broad["daily_distribution"]["classification"] == "unavailable"
+    assert broad["weekly_distribution"]["classification"] == "unavailable"
+    assert broad["review_status"] == "unavailable"
+    assert broad["review_label"] == (
+        "at least 252 daily returns are required; "
+        "at least 52 weekly returns are required"
+    )
+
+
+def test_usd_afe_only_input_leaves_broad_and_eme_unavailable():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, {"usd_afe": usd_distribution_rows()}, None, "2017-01-06"
+    )
+    afe = payload["usd"]["usd_afe"]
+    broad = payload["usd"]["usd_broad"]
+    eme = payload["usd"]["usd_eme"]
+
+    assert afe["status"] == "available"
+    assert afe["review_status"] == "observation_available"
+    assert broad["status"] == "unavailable"
+    assert broad["review_status"] == "unavailable"
+    assert eme["status"] == "unavailable"
+    assert eme["review_status"] == "unavailable"
+
+
+def test_usd_broad_mutation_leaves_afe_and_eme_payloads_identical():
+    afe_rows = usd_distribution_rows()
+    eme_rows = usd_distribution_rows()
+    broad_normal = usd_distribution_rows()
+    broad_abnormal = list(broad_normal)
+    broad_abnormal[-1] = {
+        "date": broad_abnormal[-1]["date"],
+        "value": broad_abnormal[-2]["value"] * 1.5,
+    }
+
+    base = .build_cyclical_commodities_payload(
+        COT_ROWS,
+        {
+            "usd_broad": broad_normal,
+            "usd_afe": afe_rows,
+            "usd_eme": eme_rows,
+        },
+        None,
+        "2017-01-06",
+    )
+    mutated = .build_cyclical_commodities_payload(
+        COT_ROWS,
+        {
+            "usd_broad": broad_abnormal,
+            "usd_afe": afe_rows,
+            "usd_eme": eme_rows,
+        },
+        None,
+        "2017-01-06",
+    )
+
+    assert mutated["usd"]["usd_afe"] == base["usd"]["usd_afe"]
+    assert mutated["usd"]["usd_eme"] == base["usd"]["usd_eme"]
 
 
 def test_commodity_attribution_is_unavailable():
