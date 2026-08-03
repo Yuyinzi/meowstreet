@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from app.db import economic_confirmation
@@ -261,3 +263,109 @@ def test_record_source_contract_rejects_empty_contract(tmp_path):
     con = economic_confirmation.connect(tmp_path / "market.sqlite")
     with pytest.raises(ValueError, match="non-empty dict"):
         economic_confirmation.record_source_contract(con, "initial_claims_sa", {})
+
+
+def test_replace_national_claims_history_batch_removes_only_legacy_monthly_continuing_rows(
+    tmp_path,
+):
+    con = economic_confirmation.connect(tmp_path / "market.sqlite")
+    legacy = history_vintage()
+    legacy.update(
+        series_id="continuing_claims_sa",
+        reference_period="2026-07",
+        vintage_id="history:continuing_claims_sa:2026-07:2026-08-03",
+        source_hash="legacy-monthly",
+    )
+    weekly = release_vintage()
+    weekly.update(
+        series_id="continuing_claims_sa",
+        reference_period="2026-07-18",
+        vintage_id="release:continuing_claims_sa:2026-07-18:2026-07-30",
+    )
+    initial = history_vintage()
+    initial.update(
+        series_id="initial_claims_sa",
+        reference_period="2026-07-18",
+        vintage_id="history:initial_claims_sa:2026-07-18:2026-08-03",
+        source_hash="initial-history",
+    )
+    national_initial = history_vintage()
+    national_initial.update(
+        series_id="initial_claims_sa",
+        reference_period="2026-07-04",
+        vintage_id="history:initial_claims_sa:2026-07-04:2026-08-03",
+        source_url="https://oui.doleta.gov/unemploy/wkclaims/report.asp",
+        source_hash="national-history",
+    )
+    national_continuing = dict(national_initial)
+    national_continuing.update(
+        series_id="continuing_claims_sa",
+        vintage_id="history:continuing_claims_sa:2026-07-04:2026-08-03",
+    )
+    economic_confirmation.record_vintage_batch(con, [legacy, weekly, initial])
+
+    assert (
+        economic_confirmation.replace_national_claims_history_batch(
+            con, [national_initial, national_continuing]
+        )
+        == 2
+    )
+
+    rows = economic_confirmation.load_current_series(
+        con, ["initial_claims_sa", "continuing_claims_sa"]
+    )
+    assert [row["reference_period"] for row in rows["continuing_claims_sa"]] == [
+        "2026-07-04",
+        "2026-07-18",
+    ]
+    assert [row["reference_period"] for row in rows["initial_claims_sa"]] == [
+        "2026-07-04",
+        "2026-07-18",
+    ]
+
+
+def test_replace_national_claims_history_batch_rolls_back_on_delete_failure(
+    tmp_path, monkeypatch
+):
+    con = economic_confirmation.connect(tmp_path / "market.sqlite")
+    legacy = history_vintage()
+    legacy.update(
+        series_id="continuing_claims_sa",
+        reference_period="2026-07",
+        vintage_id="history:continuing_claims_sa:2026-07:2026-08-03",
+        source_hash="legacy-monthly",
+    )
+    economic_confirmation.record_vintage_batch(con, [legacy])
+    national = history_vintage()
+    national.update(
+        series_id="continuing_claims_sa",
+        reference_period="2026-07-04",
+        vintage_id="history:continuing_claims_sa:2026-07-04:2026-08-03",
+        source_hash="national-history",
+    )
+
+    def raiser(con):
+        raise sqlite3.OperationalError("forced")
+
+    monkeypatch.setattr(
+        economic_confirmation, "_delete_legacy_monthly_continuing_claims", raiser
+    )
+    with pytest.raises(sqlite3.OperationalError, match="forced"):
+        economic_confirmation.replace_national_claims_history_batch(con, [national])
+
+    legacy_periods = [
+        row["reference_period"]
+        for row in con.execute(
+            "select reference_period from economic_confirmation_vintages "
+            "where series_id = 'continuing_claims_sa'"
+        ).fetchall()
+    ]
+    assert legacy_periods == ["2026-07"]
+    current_periods = [
+        row["reference_period"]
+        for row in con.execute(
+            "select reference_period from economic_confirmation_current_observations "
+            "where series_id = 'continuing_claims_sa'"
+        ).fetchall()
+    ]
+    assert current_periods == ["2026-07"]

@@ -90,46 +90,75 @@ def connect(db_path=DEFAULT_DB_PATH):
 
 def record_vintage_batch(con, observations):
     try:
-        inserted = 0
-        seen = {}
-        for observation in observations:
-            normalized = _normalize_observation(observation)
-            key = (
-                normalized["series_id"],
-                normalized["reference_period"],
-                normalized["vintage_id"],
-            )
-            prior = seen.get(key)
-            if prior is not None:
-                if prior["source_hash"] != normalized["source_hash"]:
-                    raise ValueError(
-                        f"conflicting duplicate vintage for {key[0]} {key[1]} {key[2]}"
-                    )
-                continue
-            seen[key] = normalized
-            existing = con.execute(
-                "select source_hash from economic_confirmation_vintages "
-                "where series_id = ? and reference_period = ? and vintage_id = ?",
-                (
-                    normalized["series_id"],
-                    normalized["reference_period"],
-                    normalized["vintage_id"],
-                ),
-            ).fetchone()
-            if existing is not None:
-                if existing["source_hash"] != normalized["source_hash"]:
-                    raise ValueError(
-                        f"conflicting duplicate vintage for {key[0]} {key[1]} {key[2]}"
-                    )
-                continue
-            _insert_vintage(con, normalized)
-            _upsert_current(con, normalized)
-            inserted += 1
+        inserted = _record_vintage_batch(con, observations)
         con.commit()
         return inserted
     except Exception:
         con.rollback()
         raise
+
+
+def replace_national_claims_history_batch(con, observations):
+    try:
+        inserted = _record_vintage_batch(con, observations)
+        _delete_legacy_monthly_continuing_claims(con)
+        con.commit()
+        return inserted
+    except Exception:
+        con.rollback()
+        raise
+
+
+def _record_vintage_batch(con, observations):
+    inserted = 0
+    seen = {}
+    for observation in observations:
+        normalized = _normalize_observation(observation)
+        key = (
+            normalized["series_id"],
+            normalized["reference_period"],
+            normalized["vintage_id"],
+        )
+        prior = seen.get(key)
+        if prior is not None:
+            if prior["source_hash"] != normalized["source_hash"]:
+                raise ValueError(
+                    f"conflicting duplicate vintage for {key[0]} {key[1]} {key[2]}"
+                )
+            continue
+        seen[key] = normalized
+        existing = con.execute(
+            "select source_hash from economic_confirmation_vintages "
+            "where series_id = ? and reference_period = ? and vintage_id = ?",
+            (
+                normalized["series_id"],
+                normalized["reference_period"],
+                normalized["vintage_id"],
+            ),
+        ).fetchone()
+        if existing is not None:
+            if existing["source_hash"] != normalized["source_hash"]:
+                raise ValueError(
+                    f"conflicting duplicate vintage for {key[0]} {key[1]} {key[2]}"
+                )
+            continue
+        _insert_vintage(con, normalized)
+        _upsert_current(con, normalized)
+        inserted += 1
+    return inserted
+
+
+def _delete_legacy_monthly_continuing_claims(con):
+    con.execute(
+        "delete from economic_confirmation_vintages "
+        "where series_id = 'continuing_claims_sa' "
+        "and reference_period glob '????-??'"
+    )
+    con.execute(
+        "delete from economic_confirmation_current_observations "
+        "where series_id = 'continuing_claims_sa' "
+        "and reference_period glob '????-??'"
+    )
 
 
 def load_current_series(con, ids):
