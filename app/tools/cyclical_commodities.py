@@ -51,7 +51,7 @@ _COMMODITY_DISPLAY = {
     "crude_oil_wti": "WTI Crude Oil (ICE Futures Europe)",
     "crude_oil_brent": "Brent Crude Oil (NYMEX)",
     "heating_oil": "NY Harbor ULSD Heating Oil (NYMEX)",
-    "natural_gas": "Natural Gas (ICE EP San Juan Index)",
+    "us_natural_gas": "Natural Gas (NYMEX Henry Hub)",
     "palladium": "Palladium (NYMEX)",
     "platinum": "Platinum (NYMEX)",
     "silver": "Silver (COMEX)",
@@ -101,10 +101,6 @@ _INFLATION_SERIES_DISPLAY = {
     "ppi_all_commodities": "PPI All Commodities (PPIACO)",
 }
 
-_CONTRACT_NOTE = {
-    "natural_gas": "CFTC reports a Natural Gas index contract (ICE EP San Juan), not the standard NYMEX Henry Hub benchmark. Henry Hub positioning is not available through this source.",
-}
-
 
 def _normalized_manager_position(latest_row):
     longs = latest_row["manager_longs"]
@@ -137,8 +133,7 @@ def _compute_cot_commodity(rows, as_of_date):
     prior = sorted_rows[-2] if len(sorted_rows) >= 2 else None
     current_norm = _normalized_manager_position(latest)
     prior_norm = _normalized_manager_position(prior) if prior else None
-    cid = latest.get("commodity_id", "")
-    result = {
+    return {
         "report_date": latest["report_date"],
         "manager_longs": latest["manager_longs"],
         "manager_shorts": latest["manager_shorts"],
@@ -149,10 +144,6 @@ def _compute_cot_commodity(rows, as_of_date):
         "publication_date": latest.get("publication_date", ""),
         "status": "available",
     }
-    note = _CONTRACT_NOTE.get(cid)
-    if note:
-        result["contract_note"] = note
-    return result
 
 
 def _cot_historical_extreme(commodity_id, entry, rows, as_of_date):
@@ -172,6 +163,21 @@ def _cot_historical_extreme(commodity_id, entry, rows, as_of_date):
         )
 
 
+def _cot_contract_code(active_entry, rows):
+    if active_entry and active_entry.get("contract_code"):
+        return active_entry["contract_code"]
+    if rows:
+        latest_row = sorted(rows, key=lambda row: row["report_date"])[-1]
+        return latest_row.get("cftc_contract_market_code")
+    return None
+
+
+def _cot_display_name(base_display_name, contract_code):
+    if not contract_code:
+        return base_display_name
+    return f"{base_display_name} · CFTC {contract_code}"
+
+
 def _compute_cot_payload(cot_rows, as_of_date, cot_historical_extreme_allowlist=None):
     by_commodity = {}
     for row in cot_rows:
@@ -187,10 +193,14 @@ def _compute_cot_payload(cot_rows, as_of_date, cot_historical_extreme_allowlist=
     for cid in sorted(_COMMODITY_DISPLAY):
         rows = by_commodity.get(cid, [])
         computed = _compute_cot_commodity(rows, None) if rows else None
+        display_name = _cot_display_name(
+            _COMMODITY_DISPLAY[cid],
+            _cot_contract_code(active_entries.get(cid), rows),
+        )
         if computed is None:
             result[cid] = {
                 "commodity_id": cid,
-                "display_name": _COMMODITY_DISPLAY[cid],
+                "display_name": display_name,
                 "status": "unavailable",
                 "review_evidence": {
                     "cot_historical_extreme": _cot_historical_extreme(
@@ -201,7 +211,7 @@ def _compute_cot_payload(cot_rows, as_of_date, cot_historical_extreme_allowlist=
             continue
         result[cid] = {
             "commodity_id": cid,
-            "display_name": _COMMODITY_DISPLAY[cid],
+            "display_name": display_name,
             **computed,
             "review_evidence": {
                 "cot_historical_extreme": _cot_historical_extreme(

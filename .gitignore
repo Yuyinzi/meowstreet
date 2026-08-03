@@ -1,4 +1,9 @@
 data/
+!data/
+data/*
+!data/local_system/
+data/local_system/*
+!data/local_system/cot_historical_extreme_allowlist.v1.json
 /data/private/investing_chrome_profile/
 /data/private/investing_chrome_trace/
 /data/private/investing_downloads/

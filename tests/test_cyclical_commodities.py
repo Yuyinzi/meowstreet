@@ -406,21 +406,83 @@ def test_detail_has_five_steps_in_correct_order():
     assert detail["steps"][6]["title"] == "CPI/PPI Confirmation"
 
 
-def test_cot_display_names_include_exchange():
+def test_cot_display_names_include_exchange_and_cftc_code():
     payload = .build_cyclical_commodities_payload(
-        COT_ROWS, USD_ROWS, None, "2026-07-25"
+        [
+            {**row, "cftc_contract_market_code": "067411"}
+            if row["commodity_id"] == "crude_oil_wti"
+            else {**row, "cftc_contract_market_code": "085692"}
+            for row in COT_ROWS
+        ],
+        USD_ROWS,
+        None,
+        "2026-07-25",
     )
 
     assert "(ICE Futures Europe)" in payload["cot"]["crude_oil_wti"]["display_name"]
+    assert payload["cot"]["crude_oil_wti"]["display_name"].endswith(" · CFTC 067411")
     assert "(COMEX)" in payload["cot"]["copper"]["display_name"]
+    assert payload["cot"]["copper"]["display_name"].endswith(" · CFTC 085692")
 
 
-def test_natural_gas_contract_note_explains_not_henry_hub():
+def test_cot_payload_excludes_legacy_natural_gas_and_uses_active_henry_hub():
     payload = .build_cyclical_commodities_payload(
         [
             {
                 "commodity_id": "natural_gas",
+                "report_date": "2026-03-03",
+                "manager_longs": 100000.0,
+                "manager_shorts": 90000.0,
+                "open_interest": 500000.0,
+                "publication_date": "2026-03-06",
+            },
+            {
+                "commodity_id": "us_natural_gas",
+                "report_date": "2026-07-14",
+                "cftc_contract_market_code": "023651",
+                "manager_longs": 180000.0,
+                "manager_shorts": 200000.0,
+                "open_interest": 1000000.0,
+                "publication_date": "2026-07-17",
+            },
+            {
+                "commodity_id": "us_natural_gas",
                 "report_date": "2026-07-21",
+                "cftc_contract_market_code": "023651",
+                "manager_longs": 200000.0,
+                "manager_shorts": 150000.0,
+                "open_interest": 1000000.0,
+                "publication_date": "2026-07-24",
+            },
+            {
+                "commodity_id": "copper",
+                "report_date": "2026-07-21",
+                "cftc_contract_market_code": "085692",
+                "manager_longs": 100000.0,
+                "manager_shorts": 90000.0,
+                "open_interest": 500000.0,
+                "publication_date": "2026-07-24",
+            },
+        ],
+        {},
+        None,
+        "2026-07-25",
+    )
+
+    assert "natural_gas" not in payload["cot"]
+    assert payload["cot"]["us_natural_gas"]["display_name"] == (
+        "Natural Gas (NYMEX Henry Hub) · CFTC 023651"
+    )
+    assert payload["cot"]["copper"]["display_name"].endswith(" · CFTC 085692")
+
+
+def test_active_natural_gas_shows_henry_hub_without_ep_san_juan_note():
+    payload = .build_cyclical_commodities_payload(
+        [
+            {
+                "commodity_id": "us_natural_gas",
+                "report_date": "2026-07-21",
+                "cftc_contract_market_code": "023651",
                 "manager_longs": 100000.0,
                 "manager_shorts": 90000.0,
                 "open_interest": 500000.0,
@@ -432,7 +494,10 @@ def test_natural_gas_contract_note_explains_not_henry_hub():
         "2026-07-25",
     )
 
-    assert "NYMEX Henry Hub" in payload["cot"]["natural_gas"]["contract_note"]
+    us_natural_gas = payload["cot"]["us_natural_gas"]
+    assert "Natural Gas (NYMEX Henry Hub)" in us_natural_gas["display_name"]
+    assert "EP San Juan" not in us_natural_gas["display_name"]
+    assert "contract_note" not in us_natural_gas
 
 
 def test_available_cot_usd_inflation_drive_step_availability():
