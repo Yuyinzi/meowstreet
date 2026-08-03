@@ -420,8 +420,15 @@
 
       function renderSpreadUnavailableEntry(entry) {
         var reasonLabels = {
-          incomparable_price_basis: "LME\u2013COMEX price basis is not yet comparable",
           fx_source_not_approved: "SHFE cross-market comparison awaits approved FX and comparability rules",
+          source_series_changed: "LME-COMEX copper series no longer matches the frozen contract",
+          field_definition_changed: "LME-COMEX copper field no longer matches the frozen close contract",
+          ambiguous_lme_unit: "LME copper unit is absent or is not USD/tonne",
+          ambiguous_comex_unit: "COMEX copper unit is absent or is not USD/lb",
+          invalid_or_non_numeric_price: "LME-COMEX copper price is missing or non-numeric",
+          missing_lme_price: "No eligible LME copper observation exists",
+          missing_comex_price: "No eligible COMEX copper observation exists",
+          no_exact_common_trading_date: "LME and COMEX copper have no exact common vendor-reported trading date",
           missing_brent_price: "No Brent spot price is available on a shared date",
           missing_wti_price: "No WTI spot price is available on a shared date",
           no_common_observation_date: "No exact common observation date between Brent and WTI",
@@ -466,6 +473,44 @@
         return html;
       }
 
+      function renderCopperLmeComexEntry(entry) {
+        var limitationCodes = [
+          "contract_tenor_not_confirmed_comparable",
+          "close_timing_not_synchronized",
+          "continuous_roll_rules_undocumented",
+        ];
+        var lme = entry.legs && entry.legs.lme;
+        var comex = entry.legs && entry.legs.comex;
+        if (!lme || !comex) return "";
+        var html = '<div class="workflow-row cross-market-available">';
+        html += '<div class="workflow-label">' + h.escapeHtml(entry.label || "LME\u2013COMEX Date-aligned Continuous-price Differential")
+          + '<span class="workflow-role">LME \u2212 COMEX</span></div>';
+        html += '<div class="workflow-metrics">';
+        html += '<span>LME Copper Grade A close: <strong>' + h.escapeHtml(h.fmtNumber(lme.value)) + '</strong> ' + h.escapeHtml(lme.unit || "USD/tonne") + '</span>';
+        html += '<span>COMEX HG close: <strong>' + h.escapeHtml(h.fmtNumber(comex.source_value)) + '</strong> ' + h.escapeHtml(comex.source_unit || "USD/lb") + '</span>';
+        html += '<span>COMEX HG converted: <strong>' + h.escapeHtml(h.fmtNumber(comex.normalized_value)) + '</strong> ' + h.escapeHtml(comex.normalized_unit || "USD/tonne") + '</span>';
+        html += '<span>Conversion factor: ' + h.escapeHtml(String(comex.conversion_factor)) + '</span>';
+        html += '<span>LME \u2212 COMEX: <strong>' + h.escapeHtml(h.fmtNumber(entry.value)) + '</strong> ' + h.escapeHtml(entry.unit || "USD/tonne") + '</span>';
+        if (entry.common_observation_date) {
+          html += '<span>Vendor-reported trading date: ' + h.escapeHtml(entry.common_observation_date) + '</span>';
+        }
+        html += '<span>Comparability: Limited</span>';
+        html += '</div>';
+        html += '<p class="cross-market-limitation">Continuous-series roll rules are undocumented. Apparent changes may reflect contract rolls rather than changes in cross-market pricing.</p>';
+        if (entry.limitations && entry.limitations.length) {
+          html += '<div class="workflow-metrics">';
+          html += '<span>Limitations:</span>';
+          for (var lm = 0; lm < entry.limitations.length; lm++) {
+            var limitation = entry.limitations[lm];
+            if (limitationCodes.indexOf(limitation) === -1) continue;
+            html += '<span>' + h.escapeHtml(limitation) + '</span>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+        return html;
+      }
+
       function renderCrossMarketSpreads() {
         var evidence = payload.review_evidence && payload.review_evidence.cross_market_spreads;
         if (!evidence || !evidence.spreads || !evidence.spreads.length) return "";
@@ -473,8 +518,12 @@
         html += '<p class="summary-stat">Raw date-aligned price differences only. No spread is a normal/abnormal state, arbitrage opportunity, directional view, or trade recommendation.</p>';
         for (var s = 0; s < evidence.spreads.length; s++) {
           var entry = evidence.spreads[s];
-          if (entry.status === "available") html += renderSpreadAvailableEntry(entry);
-          else html += renderSpreadUnavailableEntry(entry);
+          if (entry.status === "available") {
+            if (entry.spread_id === "lme_comex_copper") html += renderCopperLmeComexEntry(entry);
+            else html += renderSpreadAvailableEntry(entry);
+          } else {
+            html += renderSpreadUnavailableEntry(entry);
+          }
         }
         html += '</article>';
         return html;

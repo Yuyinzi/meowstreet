@@ -704,6 +704,16 @@ h2 {
   margin-top: 4px;
 }
 
+.cross-market-limitation {
+  color: #8A7F70;
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #F5F0E9;
+  border-left: 3px solid #D8C9B4;
+}
+
 .evidence-empty {
   display: grid;
   gap: 4px;

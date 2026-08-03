@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import re
 import subprocess
 import textwrap
 
@@ -7135,14 +7136,92 @@ def test_cross_market_spreads_renderer_renders_available_entry():
     assert "entry.formula" in renderer
 
 
+def test_cross_market_spreads_renderer_renders_limited_lme_comex_entry():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderCopperLmeComexEntry")
+    end = source.index("function renderCrossMarketSpreads", start)
+    renderer = source[start:end]
+
+    assert "Comparability: Limited" in renderer
+    assert "Vendor-reported trading date" in renderer
+    assert "LME \\u2212 COMEX" in renderer
+    assert "USD/tonne" in renderer
+    assert "USD/lb" in renderer
+    assert "contract_tenor_not_confirmed_comparable" in renderer
+    assert "close_timing_not_synchronized" in renderer
+    assert "continuous_roll_rules_undocumented" in renderer
+    assert "cross-market-limitation" in renderer
+    assert (
+        "Continuous-series roll rules are undocumented. Apparent changes may reflect contract rolls rather than changes in cross-market pricing."
+        in renderer
+    )
+
+
+def test_cross_market_spreads_renderer_copper_displays_backend_values_without_arithmetic():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderCopperLmeComexEntry")
+    end = source.index("function renderCrossMarketSpreads", start)
+    renderer = source[start:end]
+
+    assert "h.escapeHtml(h.fmtNumber(lme.value))" in renderer
+    assert "h.escapeHtml(h.fmtNumber(comex.source_value))" in renderer
+    assert "h.escapeHtml(h.fmtNumber(comex.normalized_value))" in renderer
+    assert "h.escapeHtml(String(comex.conversion_factor))" in renderer
+    assert "h.escapeHtml(h.fmtNumber(entry.value))" in renderer
+    assert "*" not in renderer
+    assert "entry.value -" not in renderer
+
+
+def test_cross_market_spreads_renderer_copper_rejects_conclusion_language():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderCopperLmeComexEntry")
+    end = source.index("function renderCrossMarketSpreads", start)
+    renderer = source[start:end].lower()
+
+    for marker in (
+        "premium",
+        "discount",
+        "arbitrage",
+        "basis",
+        "supply",
+        "demand",
+        "bullish",
+        "bearish",
+        "trade",
+        "widening",
+        "narrowing",
+        "trend",
+        "normal",
+        "abnormal",
+        "percentile",
+        "z-score",
+        "historical high",
+        "historical low",
+    ):
+        assert re.search(r"\b" + re.escape(marker) + r"\b", renderer) is None
+
+
+def test_cross_market_spreads_renderer_routes_lme_comex_copper_to_copper_renderer():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderCrossMarketSpreads")
+    end = source.index("function detail", start)
+    renderer = source[start:end]
+
+    assert 'entry.status === "available"' in renderer
+    assert 'entry.spread_id === "lme_comex_copper"' in renderer
+    assert "renderCopperLmeComexEntry(entry)" in renderer
+    assert "renderSpreadAvailableEntry(entry)" in renderer
+    assert "renderSpreadUnavailableEntry(entry)" in renderer
+
+
 def test_cross_market_spreads_renderer_renders_unavailable_reasons():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     start = source.index("function renderSpreadUnavailableEntry")
     end = source.index("function renderSpreadAvailableEntry", start)
     renderer = source[start:end]
 
-    assert "incomparable_price_basis" in renderer
-    assert "LME\\u2013COMEX price basis is not yet comparable" in renderer
+    assert "incomparable_price_basis" not in renderer
+    assert "LME\\u2013COMEX price basis is not yet comparable" not in renderer
     assert "fx_source_not_approved" in renderer
     assert (
         "SHFE cross-market comparison awaits approved FX and comparability rules"
@@ -7153,6 +7232,14 @@ def test_cross_market_spreads_renderer_renders_unavailable_reasons():
     assert "no_common_observation_date" in renderer
     assert "unit_mismatch" in renderer
     assert "price_type_mismatch" in renderer
+    assert "source_series_changed" in renderer
+    assert "field_definition_changed" in renderer
+    assert "ambiguous_lme_unit" in renderer
+    assert "ambiguous_comex_unit" in renderer
+    assert "invalid_or_non_numeric_price" in renderer
+    assert "missing_lme_price" in renderer
+    assert "missing_comex_price" in renderer
+    assert "no_exact_common_trading_date" in renderer
     assert "market-status-unavailable" in renderer
 
 
@@ -7170,7 +7257,7 @@ def test_cross_market_spreads_renderer_has_no_directional_or_trade_claim():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     start = source.index("function renderSpreadLegRow")
     end = source.index("renderCrossMarketSpreads()", start)
-    renderer = source[start:end]
+    renderer = source[start:end].lower()
 
     for marker in (
         "bullish",
@@ -7182,7 +7269,7 @@ def test_cross_market_spreads_renderer_has_no_directional_or_trade_claim():
         "sell",
         "trade recommendation",
     ):
-        assert marker not in renderer.lower()
+        assert re.search(r"\b" + re.escape(marker) + r"\b", renderer) is None
 
 
 def test_cross_market_spreads_renderer_escapes_source_and_formula_values():
@@ -7216,3 +7303,4 @@ def test_cross_market_spreads_css_uses_established_tokens():
     assert ".cross-market-spreads" in css
     assert ".market-status-unavailable" in css
     assert ".workflow-row" in css
+    assert ".cross-market-limitation" in css
