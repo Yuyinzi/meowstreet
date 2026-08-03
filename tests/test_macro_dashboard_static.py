@@ -6914,6 +6914,21 @@ def test_evidence_renderer_shows_iron_unavailable_and_manual_review_resources():
     assert ".evidence-unavailable" in css
 
 
+def test_iron_unavailable_copy_is_compact_and_uses_one_review_resource_section():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    evidence_start = source.index("function renderNonOilAttributionEvidence")
+    evidence_end = source.index("function renderAttributionReviewResources", evidence_start)
+    evidence_renderer = source[evidence_start:evidence_end]
+    row_start = source.index("function renderNonOilRow")
+    row_end = source.index("function renderValue", row_start)
+    row_renderer = source[row_start:row_end]
+
+    assert "No approved recurring iron-ore attribution source is currently available." in evidence_renderer
+    assert "View attribution review resources" in evidence_renderer
+    assert "evidence.manual_review_resources" in row_renderer
+    assert "reviewResources = []" in row_renderer
+
+
 def test_evidence_renderer_shows_refresh_failure_next_action():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     start = source.index("function renderNonOilAttributionEvidence")

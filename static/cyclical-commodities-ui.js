@@ -132,16 +132,18 @@
         if (evidence.status === "unavailable") {
           var html = '<div class="evidence-unavailable">';
           html += '<div class="workflow-label">Attribution evidence unavailable</div>';
-          if (evidence.reason) {
-            html += '<p class="summary-stat">' + h.escapeHtml(evidence.reason) + '</p>';
-          }
-          if (evidence.next_action) {
-            html += '<p class="summary-stat">Next: ' + h.escapeHtml(evidence.next_action) + '</p>';
-          }
           var resources = evidence.manual_review_resources || [];
           if (resources.length) {
+            html += '<p class="summary-stat">No approved recurring iron-ore attribution source is currently available.</p>';
+          } else if (evidence.reason) {
+            html += '<p class="summary-stat">' + h.escapeHtml(evidence.reason) + '</p>';
+          }
+          if (!resources.length && evidence.next_action) {
+            html += '<p class="summary-stat">Next: ' + h.escapeHtml(evidence.next_action) + '</p>';
+          }
+          if (resources.length) {
             html += '<details class="raw-evidence evidence-manual">';
-            html += '<summary>View manual review resources</summary>';
+            html += '<summary>View attribution review resources</summary>';
             for (var j = 0; j < resources.length; j++) {
               var resource = resources[j];
               html += '<div class="workflow-row attribution-review-row">';
@@ -185,6 +187,10 @@
       function renderNonOilRow(series, reviewResourcesByCommodity, evidenceByCommodity) {
         var reviewResources = reviewResourcesByCommodity[series.commodity_id] || [];
         var evidence = evidenceByCommodity[series.commodity_id] || null;
+        if (evidence && evidence.status === "unavailable"
+          && (evidence.manual_review_resources || []).length) {
+          reviewResources = [];
+        }
         if (series.status !== "available") {
           var unavailableLine = series.review_label
             || (series.source_class === "official_exchange"
