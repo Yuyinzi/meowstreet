@@ -11,6 +11,8 @@ from app.http_client import HttpClient
 INITIAL_PAGE_URL = "https://oui.doleta.gov/unemploy/Chartbook/a2.asp"
 CONTINUING_PAGE_URL = "https://oui.doleta.gov/unemploy/Chartbook/a3.asp"
 RELEASE_URL = "https://www.dol.gov/ui/data.pdf"
+REPORT_URL = "https://oui.doleta.gov/unemploy/wkclaims/report.asp"
+CLAIMS_PAGE_URL = "https://oui.doleta.gov/unemploy/claims.asp"
 
 _RELEASE_TEXT = (
     "TRANSMISSION OF MATERIALS IN THIS RELEASE IS EMBARGOED UNTIL\n"
@@ -476,3 +478,280 @@ def test_fetch_claims_release_rejects_invalid_pdf():
     client = HttpClient(transport=httpx.MockTransport(handler))
     with pytest.raises(ValueError, match="could not be read"):
         dol_ui_claims.fetch_claims_release(client, RELEASE_URL)
+
+
+def national_claims_history_html():
+    return b"""
+    <table summary="r539cy Report Table">
+      <tr><th id="report_date"></th><th id="sa_initial_claims">S.A.</th>
+          <th id="sa_continued_claims">S.A.</th></tr>
+      <tr><th id="01/04/2025">01/04/2025</th>
+          <td headers="01/04/2025 sa_initial_claims">206,000</td>
+          <td headers="01/04/2025 sa_continued_claims">1,850,000</td></tr>
+      <tr><th id="01/11/2025">01/11/2025</th>
+          <td headers="01/11/2025 sa_initial_claims">219,000</td>
+          <td headers="01/11/2025 sa_continued_claims">1,871,000</td></tr>
+    </table>
+    """
+
+
+def national_claims_page_html():
+    return (
+        "<html><body>"
+        '<form action="https://www.doleta.gov/gsearch.cfm" method="post">'
+        '<input type="text" name="search" />'
+        "</form>"
+        '<form name="wkclaim" method="post" action="wkclaims/report.asp">'
+        '<input type="radio" name="level" value="us" checked />National'
+        '<input type="radio" name="level" value="state" />State'
+        '<input type="hidden" name="final_yr" value="2027" />'
+        '<select name="strtdate"><option value="">Start</option></select>'
+        '<select name="enddate"><option value="">End</option></select>'
+        '<input type="radio" name="filetype" id="html" value="html" checked />'
+        '<input type="radio" name="filetype" value="xls" />'
+        '<input type="radio" name="filetype" value="xml" />'
+        '<input type="submit" name="submit" value="Submit" />'
+        "</form></body></html>"
+    ).encode("utf-8")
+
+
+def test_fetch_national_claims_history_posts_one_national_spreadsheet_request():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(200, content=national_claims_page_html())
+        assert str(request.url) == REPORT_URL
+        body = request.read().decode()
+        assert "level=us" in body
+        assert "strtdate=1967" in body
+        assert f"enddate={datetime.now().year}" in body
+        assert "filetype=xls" in body
+        return httpx.Response(200, content=national_claims_history_html())
+
+    rows = dol_ui_claims.fetch_national_claims_history(
+        HttpClient(transport=httpx.MockTransport(handler)), CLAIMS_PAGE_URL
+    )
+    assert len(requests) == 2
+    assert {row["series_id"] for row in rows} == {
+        "initial_claims_sa",
+        "continuing_claims_sa",
+    }
+
+
+def test_fetch_national_claims_history_rejects_page_without_national_form():
+    def handler(request):
+        return httpx.Response(200, content=b"<html><body>no form here</body></html>")
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(ValueError, match="claims page has no national report form"):
+        dol_ui_claims.fetch_national_claims_history(client, CLAIMS_PAGE_URL)
+
+
+def test_fetch_national_claims_history_rejects_report_form_without_national_radio():
+    def handler(request):
+        return httpx.Response(
+            200,
+            content=(
+                "<html><body>"
+                '<form action="wkclaims/report.asp" method="post">'
+                '<input type="radio" name="level" value="state" checked />'
+                "</form></body></html>"
+            ).encode("utf-8"),
+        )
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(ValueError, match="claims page has no national report form"):
+        dol_ui_claims.fetch_national_claims_history(client, CLAIMS_PAGE_URL)
+
+
+def test_fetch_national_claims_history_raises_on_page_404():
+    def handler(request):
+        return httpx.Response(404, content=b"not found")
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(ValueError, match="failed to fetch national claims page from"):
+        dol_ui_claims.fetch_national_claims_history(client, CLAIMS_PAGE_URL)
+
+
+def test_fetch_national_claims_history_raises_on_report_503():
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, content=national_claims_page_html())
+        return httpx.Response(503, content=b"unavailable")
+
+    client = HttpClient(
+        transport=httpx.MockTransport(handler), sleep=lambda _seconds: None
+    )
+    with pytest.raises(
+        ValueError, match="failed to fetch national claims history report from"
+    ):
+        dol_ui_claims.fetch_national_claims_history(client, CLAIMS_PAGE_URL)
+
+
+def test_fetch_national_claims_history_submits_discovered_final_yr():
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, content=national_claims_page_html())
+        body = request.read().decode()
+        assert "final_yr=2027" in body
+        assert "submit=Submit" in body
+        return httpx.Response(200, content=national_claims_history_html())
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    rows = dol_ui_claims.fetch_national_claims_history(client, CLAIMS_PAGE_URL)
+    assert len(rows) == 4
+
+
+def test_parse_national_claims_history_html_returns_both_sa_series():
+    rows = dol_ui_claims.parse_national_claims_history_html(
+        national_claims_history_html(), REPORT_URL
+    )
+    assert [
+        (row["series_id"], row["reference_period"], row["value_at_release"])
+        for row in rows
+    ] == [
+        ("initial_claims_sa", "2025-01-04", 206000.0),
+        ("continuing_claims_sa", "2025-01-04", 1850000.0),
+        ("initial_claims_sa", "2025-01-11", 219000.0),
+        ("continuing_claims_sa", "2025-01-11", 1871000.0),
+    ]
+
+
+def test_parse_national_claims_history_html_builds_history_observation_schema():
+    rows = dol_ui_claims.parse_national_claims_history_html(
+        national_claims_history_html(), REPORT_URL
+    )
+    assert len(rows) == 4
+    as_of_timestamps = {row["as_of_timestamp"] for row in rows}
+    assert len(as_of_timestamps) == 1
+    retrieval_date = rows[0]["as_of_timestamp"][:10]
+    for row in rows:
+        assert row["release_date"] is None
+        assert row["latest_revised_value"] is None
+        assert row["revision_number"] == 0
+        assert row["seasonal_adjustment"] == "seasonally_adjusted"
+        assert row["source_url"] == REPORT_URL
+        assert (
+            row["source_hash"]
+            == hashlib.sha256(national_claims_history_html()).hexdigest()
+        )
+        assert row["vintage_id"] == (
+            f"history:{row['series_id']}:{row['reference_period']}:{retrieval_date}"
+        )
+
+
+def test_parse_national_claims_history_html_ignores_non_sa_cells():
+    html = b"""
+    <table summary="r539cy Report Table">
+      <tr><th id="report_date"></th><th id="sa_initial_claims">S.A.</th>
+          <th id="sa_continued_claims">S.A.</th></tr>
+      <tr><th id="01/04/2025">01/04/2025</th>
+          <td headers="01/04/2025 sa_initial_claims">206,000</td>
+          <td headers="01/04/2025 sa_continued_claims">1,850,000</td>
+          <td headers="01/04/2025 sa_four_week_avg">208,000</td>
+          <td headers="01/04/2025 nsa_initial_claims">199,000</td></tr>
+    </table>
+    """
+    rows = dol_ui_claims.parse_national_claims_history_html(html, REPORT_URL)
+    assert len(rows) == 2
+    assert rows[0]["series_id"] == "initial_claims_sa"
+    assert rows[0]["value_at_release"] == 206000.0
+    assert rows[1]["series_id"] == "continuing_claims_sa"
+    assert rows[1]["value_at_release"] == 1850000.0
+
+
+def duplicate_initial_html():
+    return b"""
+    <table summary="r539cy Report Table">
+      <tr><th id="01/04/2025">01/04/2025</th>
+          <td headers="01/04/2025 sa_initial_claims">206,000</td></tr>
+      <tr><th id="01/04/2025">01/04/2025</th>
+          <td headers="01/04/2025 sa_initial_claims">207,000</td></tr>
+    </table>
+    """
+
+
+def single_series_initial_only_html():
+    return b"""
+    <table summary="r539cy Report Table">
+      <tr><th id="report_date"></th><th id="sa_initial_claims">S.A.</th></tr>
+      <tr><th id="01/04/2025">01/04/2025</th>
+          <td headers="01/04/2025 sa_initial_claims">206,000</td></tr>
+      <tr><th id="01/11/2025">01/11/2025</th>
+          <td headers="01/11/2025 sa_initial_claims">219,000</td></tr>
+    </table>
+    """
+
+
+def test_parse_national_claims_history_html_rejects_report_missing_continuing_series():
+    with pytest.raises(
+        ValueError,
+        match="national claims history report is missing continuing_claims_sa series",
+    ):
+        dol_ui_claims.parse_national_claims_history_html(
+            single_series_initial_only_html(), REPORT_URL
+        )
+
+
+def test_parse_national_claims_history_html_rejects_empty_report():
+    with pytest.raises(
+        ValueError,
+        match="national claims history report has no seasonally adjusted claims rows",
+    ):
+        dol_ui_claims.parse_national_claims_history_html(b"<table></table>", REPORT_URL)
+
+
+def test_parse_national_claims_history_html_rejects_duplicate_period_series():
+    with pytest.raises(
+        ValueError,
+        match="national claims history has duplicate initial_claims_sa period 2025-01-04",
+    ):
+        dol_ui_claims.parse_national_claims_history_html(
+            duplicate_initial_html(), REPORT_URL
+        )
+
+
+def test_parse_national_claims_history_html_rejects_invalid_date():
+    html = b"""
+    <table summary="r539cy Report Table">
+      <tr><th id="02/30/2025">02/30/2025</th>
+          <td headers="02/30/2025 sa_initial_claims">206,000</td></tr>
+    </table>
+    """
+    with pytest.raises(ValueError, match="invalid report date"):
+        dol_ui_claims.parse_national_claims_history_html(html, REPORT_URL)
+
+
+def test_parse_national_claims_history_html_rejects_non_numeric_value():
+    html = b"""
+    <table summary="r539cy Report Table">
+      <tr><th id="01/04/2025">01/04/2025</th>
+          <td headers="01/04/2025 sa_initial_claims">abc</td></tr>
+    </table>
+    """
+    with pytest.raises(ValueError, match="non-numeric value"):
+        dol_ui_claims.parse_national_claims_history_html(html, REPORT_URL)
+
+
+def test_parse_national_claims_history_html_rejects_negative_value():
+    html = b"""
+    <table summary="r539cy Report Table">
+      <tr><th id="01/04/2025">01/04/2025</th>
+          <td headers="01/04/2025 sa_initial_claims">-100</td></tr>
+    </table>
+    """
+    with pytest.raises(ValueError, match="negative initial_claims_sa value"):
+        dol_ui_claims.parse_national_claims_history_html(html, REPORT_URL)
+
+
+def test_parse_national_claims_history_html_rejects_value_without_paired_report_date():
+    html = b"""
+    <table summary="r539cy Report Table">
+      <tr><th id="01/04/2025">01/04/2025</th></tr>
+      <tr><td headers="01/11/2025 sa_initial_claims">219,000</td></tr>
+    </table>
+    """
+    with pytest.raises(ValueError, match="missing report date"):
+        dol_ui_claims.parse_national_claims_history_html(html, REPORT_URL)

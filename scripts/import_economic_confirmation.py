@@ -15,8 +15,7 @@ from app.http_client import HttpClient
 
 DEFAULT_DB_PATH = economic_confirmation.DEFAULT_DB_PATH
 
-DOL_INITIAL_CLAIMS_URL = "https://oui.doleta.gov/unemploy/Chartbook/a2.asp"
-DOL_CONTINUING_CLAIMS_URL = "https://oui.doleta.gov/unemploy/Chartbook/a3.asp"
+DOL_NATIONAL_CLAIMS_URL = "https://oui.doleta.gov/unemploy/claims.asp"
 DOL_RELEASE_URL = "https://www.dol.gov/ui/data.pdf"
 BLS_ESR_OVERVIEW_URL = "https://www.bls.gov/news.release/empsit.htm"
 BLS_ESR_HOUSEHOLD_URL = "https://www.bls.gov/news.release/empsit.a.htm"
@@ -99,8 +98,7 @@ def main(argv=None):
     )
     parser.add_argument("--db-path", type=Path, default=DEFAULT_DB_PATH)
     parser.add_argument("--cache-dir", type=Path, default=None)
-    parser.add_argument("--dol-initial-url", type=str, default=None)
-    parser.add_argument("--dol-continuing-url", type=str, default=None)
+    parser.add_argument("--dol-national-claims-url", type=str, default=None)
     parser.add_argument("--dol-release-url", type=str, default=None)
     parser.add_argument("--bls-overview-url", type=str, default=None)
     parser.add_argument("--bls-household-url", type=str, default=None)
@@ -109,8 +107,7 @@ def main(argv=None):
     parser.add_argument("--g17-data-url", type=str, default=None)
     args = parser.parse_args(argv)
     client = HttpClient()
-    initial_url = args.dol_initial_url or DOL_INITIAL_CLAIMS_URL
-    continuing_url = args.dol_continuing_url or DOL_CONTINUING_CLAIMS_URL
+    national_url = args.dol_national_claims_url or DOL_NATIONAL_CLAIMS_URL
     release_url = args.dol_release_url or DOL_RELEASE_URL
     esr_overview_url = args.bls_overview_url or BLS_ESR_OVERVIEW_URL
     esr_household_url = args.bls_household_url or BLS_ESR_HOUSEHOLD_URL
@@ -122,8 +119,8 @@ def main(argv=None):
         counts = {
             "claims_history": _import_source(
                 "claims_history",
-                lambda: dol_ui_claims.fetch_claims_history(
-                    client, initial_url, continuing_url
+                lambda: dol_ui_claims.fetch_national_claims_history(
+                    client, national_url
                 ),
                 lambda observations: economic_confirmation.record_vintage_batch(
                     con, observations
