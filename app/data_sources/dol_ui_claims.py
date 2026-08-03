@@ -6,6 +6,7 @@ from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from html.parser import HTMLParser
 from urllib.parse import urljoin
 
 import httpx
@@ -76,6 +77,46 @@ _DATE_COLUMN_NAMES = frozenset(
 )
 _MONTH_DAY_RE = re.compile(r"(\d{4})-(\d{1,2})")
 _FULL_DATE_RE = re.compile(r"(\d{4})-(\d{1,2})-(\d{1,2})")
+_REPORT_DATE_ID_RE = re.compile(r"\d{2}/\d{2}/\d{4}")
+_VALUE_HEADERS_RE = re.compile(
+    r"(\d{2}/\d{2}/\d{4}) (sa_initial_claims|sa_continued_claims)"
+)
+_SA_HEADER_SERIES = {
+    "sa_initial_claims": "initial_claims_sa",
+    "sa_continued_claims": "continuing_claims_sa",
+}
+
+
+class _NationalClaimsHistoryParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.report_dates = []
+        self.cells = []
+        self._current_cell = None
+        self._current_value = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "th":
+            cell_id = attrs.get("id") or ""
+            if _REPORT_DATE_ID_RE.fullmatch(cell_id):
+                self.report_dates.append(cell_id)
+        elif tag == "td":
+            match = _VALUE_HEADERS_RE.fullmatch((attrs.get("headers") or "").strip())
+            if match:
+                self._current_cell = (match.group(1), match.group(2))
+                self._current_value = []
+
+    def handle_data(self, data):
+        if self._current_cell is not None:
+            self._current_value.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "td" and self._current_cell is not None:
+            date_raw, header = self._current_cell
+            self.cells.append((date_raw, header, "".join(self._current_value).strip()))
+            self._current_cell = None
+            self._current_value = []
 
 
 def fetch_claims_history(client, initial_url, continuing_url):
@@ -163,6 +204,56 @@ def parse_claims_history_csv(content, series_id, source_url):
         )
     if not observations:
         raise ValueError(f"claims csv has no {series_id} observations")
+    return observations
+
+
+def parse_national_claims_history_html(content, source_url):
+    text = _decode_text(content)
+    source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    parser = _NationalClaimsHistoryParser()
+    parser.feed(text)
+    report_dates = {_parse_national_report_date(value) for value in parser.report_dates}
+    as_of_timestamp = datetime.now(timezone.utc).isoformat()
+    retrieval_date = as_of_timestamp[:10]
+    observations = []
+    seen = set()
+    for date_raw, header, value_raw in parser.cells:
+        series_id = _SA_HEADER_SERIES[header]
+        reference_period = _parse_national_report_date(date_raw)
+        if reference_period not in report_dates:
+            raise ValueError(
+                f"national claims history has {series_id} value for "
+                f"missing report date {reference_period}"
+            )
+        pair = (series_id, reference_period)
+        if pair in seen:
+            raise ValueError(
+                f"national claims history has duplicate {series_id} "
+                f"period {reference_period}"
+            )
+        seen.add(pair)
+        value = _parse_national_number(value_raw)
+        if value < 0:
+            raise ValueError(f"national claims history has negative {series_id} value")
+        observations.append(
+            {
+                "series_id": series_id,
+                "reference_period": reference_period,
+                "release_date": None,
+                "as_of_timestamp": as_of_timestamp,
+                "value_at_release": value,
+                "latest_revised_value": None,
+                "revision_number": 0,
+                "vintage_id": f"history:{series_id}:{reference_period}:{retrieval_date}",
+                "seasonal_adjustment": "seasonally_adjusted",
+                "source_url": source_url,
+                "source_hash": source_hash,
+            }
+        )
+    if not observations:
+        raise ValueError(
+            "national claims history report has no seasonally adjusted claims rows"
+        )
     return observations
 
 
@@ -418,6 +509,27 @@ def _parse_number(value):
         return float(text)
     except ValueError as exc:
         raise ValueError(f"claims csv has non-numeric value: {value!r}") from exc
+
+
+def _parse_national_report_date(value):
+    text = str(value).strip()
+    try:
+        parsed = datetime.strptime(text, "%m/%d/%Y").date()
+    except ValueError as exc:
+        raise ValueError(
+            f"national claims history has invalid report date {text!r}"
+        ) from exc
+    return parsed.isoformat()
+
+
+def _parse_national_number(value):
+    text = str(value).strip().replace(",", "")
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise ValueError(
+            f"national claims history has non-numeric value: {value!r}"
+        ) from exc
 
 
 def _decode_text(content):
