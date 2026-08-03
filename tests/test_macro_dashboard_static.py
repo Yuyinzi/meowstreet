@@ -6708,6 +6708,77 @@ def test_usd_renderer_has_no_client_side_statistics_or_macro_conclusion():
     assert ".distribution-review-note" in css
 
 
+def test_inflation_renderer_displays_backend_monthly_distribution_evidence():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    inflation_start = source.index("function renderInflationRow(")
+    inflation_end = source.index("function renderSpreadLegRow(", inflation_start)
+    inflation_renderer = source[inflation_start:inflation_end]
+
+    assert "renderDistribution(series.monthly_distribution" in inflation_renderer
+    assert "series.review_status" in inflation_renderer
+    assert "series.review_label" in inflation_renderer
+    assert "MoM:" in inflation_renderer
+    assert "YoY:" in inflation_renderer
+
+
+def test_inflation_renderer_has_no_client_side_statistics_or_directional_conclusion():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    inflation_start = source.index("function renderInflationRow(")
+    inflation_end = source.index("function renderSpreadLegRow(", inflation_start)
+    inflation_renderer = source[inflation_start:inflation_end]
+
+    assert "Math.sqrt" not in inflation_renderer
+    assert "standardDeviation" not in inflation_renderer
+    assert "sample_standard_deviation" not in inflation_renderer
+    assert "statistics.stdev" not in inflation_renderer
+    assert "buy" not in inflation_renderer.lower()
+    assert "sell" not in inflation_renderer.lower()
+    assert "long" not in inflation_renderer.lower()
+    assert "short" not in inflation_renderer.lower()
+
+
+def test_inflation_renderer_uses_neutral_review_copy_only():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    inflation_start = source.index("function renderInflationRow(")
+    inflation_end = source.index("function renderSpreadLegRow(", inflation_start)
+    inflation_renderer = source[inflation_start:inflation_end]
+
+    assert "review" in inflation_renderer
+    assert (
+        "No macro attribution" not in inflation_renderer
+        or "review" in inflation_renderer
+    )
+    assert "policy" not in inflation_renderer
+    assert "gdp" not in inflation_renderer.lower()
+    assert "direction" not in inflation_renderer.lower()
+    assert "trade" not in inflation_renderer.lower()
+
+
+def test_inflation_renderer_shows_unavailable_reason_from_backend():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    inflation_start = source.index("function renderInflationRow(")
+    inflation_end = source.index("function renderSpreadLegRow(", inflation_start)
+    inflation_renderer = source[inflation_start:inflation_end]
+
+    assert "series.review_label" in inflation_renderer
+    assert "state-unavailable" in inflation_renderer
+
+
+def test_inflation_renderer_sits_in_cpi_ppi_confirmation_not_headline():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    corroboration_start = source.index("CPI / PPI Confirmation")
+    corroboration_end = source.index("Method Boundaries", corroboration_start)
+    corroboration = source[corroboration_start:corroboration_end]
+
+    assert "renderInflationRow(inflation.series[inf])" in corroboration
+    assert 'inflation.status === "available"' in corroboration
+    card_start = source.index("renderCard: function")
+    card_end = source.index("renderDetail: function", card_start)
+    card = source[card_start:card_end]
+    assert "renderInflationRow" not in card
+    assert "monthly_distribution" not in card
+
+
 def test_shanghai_copper_reuses_market_value_and_state_presentation():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     start = source.index('if (series.source_class === "official_exchange")')

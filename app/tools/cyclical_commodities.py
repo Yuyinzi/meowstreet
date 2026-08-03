@@ -7,6 +7,7 @@ from app.data_sources.tracked_commodities import (
 from app.data_sources.lumber import _LUMBER_SERIES
 from app.tools import cot_historical_extremes
 from app.tools import cross_market_spreads
+from app.tools import inflation_distribution
 from app.tools import oil_distribution
 from app.tools import price_distribution
 from app.tools import shfe_copper
@@ -93,6 +94,11 @@ _USD_SERIES_DISPLAY = {
 _USD_DISTRIBUTION_REVIEW_LABEL = (
     "USD move is outside its historical distribution; review USD and "
     "broader macro context. No macro attribution is made."
+)
+
+_INFLATION_DISTRIBUTION_REVIEW_LABEL = (
+    "Monthly move is outside its historical distribution; review inflation "
+    "and broader macro context. No macro attribution is made."
 )
 
 _INFLATION_SERIES_DISPLAY = {
@@ -280,34 +286,49 @@ def _compute_usd_series_payload(series_id, display_name, observations, as_of_dat
     }
 
 
+def _inflation_review_state(monthly_distribution):
+    classification = monthly_distribution.get("classification")
+    if classification is not None and classification.startswith("abnormal_"):
+        return {
+            "review_status": "review_required",
+            "review_label": _INFLATION_DISTRIBUTION_REVIEW_LABEL,
+        }
+    if classification == "normal":
+        return {"review_status": "observation_available", "review_label": None}
+    reason = monthly_distribution.get("reason")
+    return {"review_status": "unavailable", "review_label": reason}
+
+
 def _compute_inflation_series_payload(
     series_id, display_name, observations, as_of_date
 ):
-    if not observations:
+    monthly_distribution = inflation_distribution.build_distribution(
+        observations, as_of_date or None
+    )
+    review_state = _inflation_review_state(monthly_distribution)
+    context = inflation_distribution.monthly_level_context(
+        observations, as_of_date or None
+    )
+    if context is None:
         return {
             "series_id": series_id,
             "display_name": display_name,
             "status": "unavailable",
-            "distribution_status": "not_configured",
+            "monthly_distribution": monthly_distribution,
+            **review_state,
         }
-    sorted_obs = sorted(observations, key=lambda o: o["date"])
-    latest = sorted_obs[-1]
-    latest_val = latest["value"]
-    prior_1 = sorted_obs[-2] if len(sorted_obs) >= 2 else None
-    prior_12 = sorted_obs[-13] if len(sorted_obs) >= 13 else None
-    mom = _pct_change_ratio(latest_val, prior_1["value"]) if prior_1 else None
-    yoy = _pct_change_ratio(latest_val, prior_12["value"]) if prior_12 else None
     return {
         "series_id": series_id,
         "display_name": display_name,
         "status": "available",
-        "latest_date": latest["date"],
-        "latest_value": latest_val,
-        "mom_pct": mom,
-        "yoy_pct": yoy,
+        "latest_date": context["latest_date"],
+        "latest_value": context["latest_value"],
+        "mom_pct": context["mom_pct"],
+        "yoy_pct": context["yoy_pct"],
         "source": "fred",
         "source_identifier": observations[0].get("source_identifier", ""),
-        "distribution_status": "not_configured",
+        "monthly_distribution": monthly_distribution,
+        **review_state,
     }
 
 
@@ -1270,7 +1291,7 @@ def _collect_series_details(payload):
             "CPI/PPI Confirmation",
             "available" if has_available(inf) else "unavailable",
             {
-                "note": "Distribution status not configured. See Inflation Context for Core PCE context.",
+                "note": "Monthly distribution review uses inflation_price_distribution_v1. See Inflation Context for Core PCE context.",
                 "series": list(inf.values()),
             },
         ),

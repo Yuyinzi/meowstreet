@@ -1,5 +1,7 @@
 import datetime
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from app.api import app
@@ -4257,12 +4259,328 @@ def test_market_setup_is_identical_across_cross_market_spread_states(monkeypatch
         {"oil_wti_spot": [], "oil_brent_spot": []},
     ]
     responses = []
-    for oil_rows in states:
+    for rows in states:
         monkeypatch.setattr(
             api.macro_indicators_db,
             "load_macro_indicator_observations_for_series",
-            lambda con, series_ids, rows=oil_rows: {
+            lambda con, series_ids, rows=rows: {
                 sid: list(rows.get(sid, [])) for sid in series_ids
+            },
+        )
+        responses.append(
+            TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+        )
+
+    assert all(response == responses[0] for response in responses)
+
+
+def _inflation_monthly_rows(
+    values=None, start="2016-01-01", source_identifier="CPIAUCSL"
+):
+    if values is None:
+        values = [100.0 * (1.002**index) for index in range(120)]
+    rows = []
+    year, month = int(start[:4]), int(start[5:7])
+    for value in values:
+        rows.append(
+            {
+                "date": f"{year:04d}-{month:02d}-01",
+                "value": value,
+                "source_identifier": source_identifier,
+            }
+        )
+        month += 1
+        if month == 13:
+            month = 1
+            year += 1
+    return rows
+
+
+def _stub_detail_route_with_inflation(monkeypatch, rows_by_series):
+    from app import api
+    from app.routers import macro_dashboard as macro_dashboard_module
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    class FakeDate:
+        @classmethod
+        def today(cls):
+            return datetime.date(2026, 8, 3)
+
+    monkeypatch.setattr(macro_dashboard_module, "date", FakeDate)
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: list(rows_by_series.get(sid, [])) for sid in series_ids
+        },
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_shfe_cu_main_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_facts",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_refresh_status",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_non_oil_attribution_source_audit",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_attribution_catalog",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_cot_historical_extreme_allowlist",
+        lambda: None,
+    )
+
+
+def test_inflation_detail_propagates_monthly_distribution_and_review_state(
+    monkeypatch,
+):
+    rows = _inflation_monthly_rows()
+    _stub_detail_route_with_inflation(monkeypatch, {"cpi_all_items": rows})
+
+    response = TestClient(app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    inflation_step = next(
+        step
+        for step in response.json()["steps"]
+        if step["title"] == "CPI/PPI Confirmation"
+    )
+    series = {s["series_id"]: s for s in inflation_step["series"]}
+    assert "cpi_all_items" in series
+    monthly = series["cpi_all_items"]["monthly_distribution"]
+    assert monthly["method_version"] == "inflation_price_distribution_v1"
+    assert monthly["classification"] == "normal"
+    assert series["cpi_all_items"]["review_status"] == "observation_available"
+    assert series["cpi_all_items"]["review_label"] is None
+
+
+def test_inflation_detail_propagates_each_abnormal_boundary(monkeypatch):
+    cases = [
+        ("cpi_all_items", "abnormal_1sigma"),
+        ("core_cpi", "abnormal_2sigma"),
+        ("ppi_all_commodities", "abnormal_3sigma"),
+    ]
+    for series_id, expected_classification in cases:
+        rows = _inflation_monthly_rows(
+            values=[100.0 * (1.002**index) for index in range(119)] + [150.0]
+        )
+        _stub_detail_route_with_inflation(monkeypatch, {series_id: rows})
+        response = TestClient(app).get(
+            "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+        )
+        assert response.status_code == 200
+        inflation_step = next(
+            step
+            for step in response.json()["steps"]
+            if step["title"] == "CPI/PPI Confirmation"
+        )
+        series = {s["series_id"]: s for s in inflation_step["series"]}
+        monthly = series[series_id]["monthly_distribution"]
+        assert monthly["classification"].startswith("abnormal_")
+        assert monthly["method_version"] == "inflation_price_distribution_v1"
+        assert series[series_id]["review_status"] == "review_required"
+        assert series[series_id]["review_label"] is not None
+        assert "no macro attribution" in series[series_id]["review_label"].lower()
+
+
+def test_inflation_detail_exposes_unavailable_state_with_exact_reason(monkeypatch):
+    rows = [
+        {"date": "2026-06-01", "value": 100.0, "source_identifier": "CPIAUCSL"},
+        {"date": "2026-07-01", "value": 102.0, "source_identifier": "CPIAUCSL"},
+    ]
+    _stub_detail_route_with_inflation(monkeypatch, {"cpi_all_items": rows})
+
+    response = TestClient(app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    inflation_step = next(
+        step
+        for step in response.json()["steps"]
+        if step["title"] == "CPI/PPI Confirmation"
+    )
+    series = {s["series_id"]: s for s in inflation_step["series"]}
+    monthly = series["cpi_all_items"]["monthly_distribution"]
+    assert monthly["classification"] == "unavailable"
+    assert monthly["reason"] == "at least 36 monthly returns are required"
+    assert series["cpi_all_items"]["review_status"] == "unavailable"
+    assert (
+        series["cpi_all_items"]["review_label"]
+        == "at least 36 monthly returns are required"
+    )
+
+
+def test_inflation_detail_no_look_ahead_uses_as_of_date(monkeypatch):
+    rows = _inflation_monthly_rows(
+        values=[100.0 * (1.002**index) for index in range(120)]
+    )
+    future = [{"date": "2026-09-01", "value": 160.0, "source_identifier": "CPIAUCSL"}]
+    _stub_detail_route_with_inflation(
+        monkeypatch, {"cpi_all_items": rows + future}
+    )
+
+    response = TestClient(app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    inflation_step = next(
+        step
+        for step in response.json()["steps"]
+        if step["title"] == "CPI/PPI Confirmation"
+    )
+    series = {s["series_id"]: s for s in inflation_step["series"]}
+    inflation = series["cpi_all_items"]
+    monthly = inflation["monthly_distribution"]
+    assert monthly["sample_end_date"] == "2025-12-01"
+    assert monthly["current_return"] is not None
+    assert monthly["current_return"] != pytest.approx(160.0 / 100.0 - 1)
+    assert inflation["latest_date"] == "2025-12-01"
+    assert inflation["latest_date"] != "2026-09-01"
+    assert inflation["latest_value"] != 160.0
+    assert inflation["mom_pct"] is not None
+    assert inflation["yoy_pct"] is not None
+
+
+def test_inflation_detail_has_no_recommendation_fields(monkeypatch):
+    rows = _inflation_monthly_rows(
+        values=[100.0 * (1.002**index) for index in range(119)] + [150.0]
+    )
+    _stub_detail_route_with_inflation(monkeypatch, {"cpi_all_items": rows})
+
+    response = TestClient(app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    inflation_step = next(
+        step
+        for step in response.json()["steps"]
+        if step["title"] == "CPI/PPI Confirmation"
+    )
+    series = {s["series_id"]: s for s in inflation_step["series"]}
+    for key in ("buy", "sell", "recommendation", "target_price"):
+        assert key not in series["cpi_all_items"]
+
+
+def test_market_setup_is_identical_across_inflation_distribution_states(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.market_phase,
+        "build_dashboard_payload",
+        lambda loader, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        api.benchmark_market_data,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.gdp_market_relationships,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+
+    states = [
+        _inflation_monthly_rows(),
+        _inflation_monthly_rows(
+            values=[100.0 * (1.002**index) for index in range(119)] + [150.0]
+        ),
+        [
+            {"date": "2026-06-01", "value": 100.0},
+            {"date": "2026-07-01", "value": 102.0},
+        ],
+    ]
+    responses = []
+    for rows in states:
+        monkeypatch.setattr(
+            api.macro_indicators_db,
+            "load_macro_indicator_observations_for_series",
+            lambda con, series_ids, rows=rows: {
+                sid: list(rows)
+                for sid in series_ids
+                if sid in api._OBSERVATION_SERIES_IDS
             },
         )
         responses.append(
@@ -4384,6 +4702,58 @@ def test_usd_distribution_never_reaches_ticker_workflow(monkeypatch):
 
     assert response.status_code == 200
     assert "usd" not in json.dumps(response.json())
+
+
+def test_inflation_distribution_never_reaches_ticker_workflow(monkeypatch):
+    import json
+
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
+    response = client.post(
+        "/api/ticker-workflow/evaluate",
+        json={"symbol": "XYZ", "observations": {}},
+    )
+
+    assert response.status_code == 200
+    assert "cpi" not in json.dumps(response.json())
+    assert "inflation" not in json.dumps(response.json())
+
+
+def test_ticker_classification_is_identical_across_inflation_states(monkeypatch):
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
+    states = [
+        _inflation_monthly_rows(),
+        _inflation_monthly_rows(
+            values=[100.0 * (1.002**index) for index in range(119)] + [150.0]
+        ),
+        [
+            {"date": "2026-06-01", "value": 100.0},
+            {"date": "2026-07-01", "value": 102.0},
+        ],
+    ]
+    responses = []
+    for rows in states:
+        response = client.post(
+            "/api/ticker-workflow/evaluate",
+            json={"symbol": "XYZ", "observations": {"inflation": rows}},
+        )
+        assert response.status_code == 200
+        responses.append(response.json())
+
+    assert all(response == responses[0] for response in responses)
 
 
 def test_market_setup_is_identical_when_data_changes(monkeypatch):

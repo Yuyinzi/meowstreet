@@ -96,10 +96,13 @@ def test_never_exposes_extreme_or_distribution_conclusions():
     ]
     assert extreme["status"] == "unavailable"
     assert extreme["reason_code"] == "unsupported_contract"
+    inflation = payload["inflation"]["cpi_all_items"]
     assert (
-        payload["inflation"]["cpi_all_items"]["distribution_status"]
-        == "not_configured"
+        inflation["monthly_distribution"]["method_version"]
+        == "inflation_price_distribution_v1"
     )
+    assert inflation["monthly_distribution"]["classification"] == "unavailable"
+    assert inflation["review_status"] == "unavailable"
 
 
 def _cot_history_rows(
@@ -2051,3 +2054,138 @@ def test_cross_market_spreads_do_not_appear_in_headline_output():
     headline = .build_cyclical_commodities_headline(payload)
     assert "spread" not in str(headline)
     assert "review_evidence" not in headline
+
+
+def _inflation_history_rows(
+    values=None, start="2016-01-01", source_identifier="CPIAUCSL"
+):
+    if values is None:
+        values = [100.0 + index for index in range(120)]
+    rows = []
+    year, month = int(start[:4]), int(start[5:7])
+    for value in values:
+        rows.append(
+            {
+                "date": f"{year:04d}-{month:02d}-01",
+                "value": value,
+                "source_identifier": source_identifier,
+            }
+        )
+        month += 1
+        if month == 13:
+            month = 1
+            year += 1
+    return rows
+
+
+def test_inflation_series_payload_includes_monthly_distribution_and_review_state():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, None, "2026-07-25"
+    )
+
+    inflation = payload["inflation"]["cpi_all_items"]
+    assert inflation["mom_pct"] is not None
+    assert (
+        inflation["monthly_distribution"]["method_version"]
+        == "inflation_price_distribution_v1"
+    )
+    assert inflation["monthly_distribution"]["classification"] == "unavailable"
+    assert inflation["review_status"] == "unavailable"
+    assert inflation["review_label"] is not None
+
+
+def test_inflation_normal_monthly_move_is_neutral_observation_evidence():
+    rows = _inflation_history_rows(
+        values=[100.0 * (1.002**index) for index in range(120)]
+    )
+    usd_rows = dict(USD_ROWS)
+    usd_rows["cpi_all_items"] = rows
+
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, usd_rows, None, "2026-07-25"
+    )
+    inflation = payload["inflation"]["cpi_all_items"]
+
+    assert inflation["monthly_distribution"]["classification"] == "normal"
+    assert inflation["review_status"] == "observation_available"
+    assert inflation["review_label"] is None
+
+
+def test_inflation_abnormal_monthly_move_is_review_required_not_directional():
+    rows = _inflation_history_rows(
+        values=[100.0 * (1.002**index) for index in range(119)] + [150.0]
+    )
+    usd_rows = dict(USD_ROWS)
+    usd_rows["cpi_all_items"] = rows
+
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, usd_rows, None, "2026-07-25"
+    )
+    inflation = payload["inflation"]["cpi_all_items"]
+
+    assert inflation["monthly_distribution"]["classification"].startswith("abnormal_")
+    assert inflation["review_status"] == "review_required"
+    assert inflation["review_label"] is not None
+    assert "review" in inflation["review_label"].lower()
+    assert "buy" not in inflation["review_label"].lower()
+    assert "sell" not in inflation["review_label"].lower()
+
+
+def test_inflation_monthly_distribution_does_not_change_headline():
+    base_rows = dict(USD_ROWS)
+    normal = .build_cyclical_commodities_payload(
+        COT_ROWS, base_rows, None, "2026-07-25"
+    )
+    abnormal_usd = dict(base_rows)
+    abnormal_usd["cpi_all_items"] = _inflation_history_rows(
+        values=[100.0 * (1.002**index) for index in range(119)] + [150.0]
+    )
+    abnormal = .build_cyclical_commodities_payload(
+        COT_ROWS, abnormal_usd, None, "2026-07-25"
+    )
+
+    assert .build_cyclical_commodities_headline(normal) == (
+        .build_cyclical_commodities_headline(abnormal)
+    )
+
+
+def test_inflation_raw_fields_respect_as_of_date_no_look_ahead():
+    base_rows = _inflation_history_rows(
+        values=[100.0 * (1.002**index) for index in range(120)]
+    )
+    future = [{"date": "2026-09-01", "value": 160.0, "source_identifier": "CPIAUCSL"}]
+    usd_rows = dict(USD_ROWS)
+    usd_rows["cpi_all_items"] = base_rows + future
+
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, usd_rows, None, "2026-08-03"
+    )
+    inflation = payload["inflation"]["cpi_all_items"]
+
+    assert inflation["latest_date"] == "2025-12-01"
+    assert inflation["latest_value"] == pytest.approx(100.0 * (1.002**119))
+    assert inflation["latest_date"] != "2026-09-01"
+    assert inflation["latest_value"] != 160.0
+    assert inflation["mom_pct"] is not None
+    assert inflation["yoy_pct"] is not None
+
+
+def test_inflation_raw_fields_do_not_bridge_missing_calendar_months():
+    rows = [
+        {"date": "2016-01-01", "value": 100.0, "source_identifier": "CPIAUCSL"},
+        {"date": "2016-02-01", "value": 101.0, "source_identifier": "CPIAUCSL"},
+        {"date": "2016-03-01", "value": 102.0, "source_identifier": "CPIAUCSL"},
+        {"date": "2016-05-01", "value": 110.0, "source_identifier": "CPIAUCSL"},
+    ]
+    usd_rows = dict(USD_ROWS)
+    usd_rows["cpi_all_items"] = rows
+
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, usd_rows, None, "2016-06-01"
+    )
+    inflation = payload["inflation"]["cpi_all_items"]
+
+    assert inflation["latest_date"] == "2016-05-01"
+    assert inflation["mom_pct"] is None
+    assert inflation["yoy_pct"] is None
+    assert inflation["monthly_distribution"]["classification"] == "unavailable"
