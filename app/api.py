@@ -18,6 +18,7 @@ from app.routers import (
 )
 from app.services import consumer_sentiment_dashboard
 from app.services import commodity_attribution_catalog
+from app.services import cot_historical_extremes_catalog
 from app.services import non_oil_attribution_source_audit
 from app.tools import benchmark_market_data as benchmark_market_data_tool
 from app.tools import (
@@ -41,6 +42,9 @@ _ATTRIBUTION_CATALOG_PATH = (
 )
 _NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH = (
     ROOT / "data" / "local_system" / "non_oil_attribution_source_audit.v1.json"
+)
+_COT_HISTORICAL_EXTREME_ALLOWLIST_PATH = (
+    ROOT / "data" / "local_system" / "cot_historical_extreme_allowlist.v1.json"
 )
 
 US_BENCHMARK_IDS = ["us_sp500", "us_nasdaq_100", "us_nasdaq_composite", "us_djia"]
@@ -120,6 +124,18 @@ def _load_non_oil_attribution_source_audit():
     except (ValueError, TypeError, RuntimeError, OSError):
         logging.warning(
             " non-oil attribution source audit load failed", exc_info=True
+        )
+        return None
+
+
+def _load_cot_historical_extreme_allowlist():
+    try:
+        return cot_historical_extremes_catalog.load_cot_historical_extreme_allowlist(
+            _COT_HISTORICAL_EXTREME_ALLOWLIST_PATH
+        )
+    except (ValueError, TypeError, RuntimeError, OSError):
+        logging.warning(
+            " cot historical extreme allowlist load failed", exc_info=True
         )
         return None
 

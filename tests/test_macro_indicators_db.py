@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import pytest
 
@@ -330,6 +331,8 @@ _COT_ROW = {
     "publication_date": "2026-07-24",
     "publication_date_basis": "estimated: report_date_plus_3_calendar_days",
     "report_type": "disaggregated_futures_only",
+    "cftc_contract_market_code": "067411",
+    "position_category": "managed_money",
     "source_url": "https://www.cftc.gov/files/dea/history/fut_disagg_txt_2026.zip",
     "source_hash": "abc123",
 }
@@ -370,6 +373,143 @@ def test_merge_cot_observations_updates_same_commodity_and_report_date(tmp_path)
     assert macro_indicators.load_cot_observations(con) == [
         {**_COT_ROW, "manager_longs": 201000.0}
     ]
+
+
+def test_merge_cot_observations_persists_contract_identity(tmp_path):
+    con = macro_indicators.connect(tmp_path / ".sqlite")
+    macro_indicators.merge_cot_observations(con, [_COT_ROW])
+
+    loaded = macro_indicators.load_cot_observations(con)[0]
+    assert loaded["cftc_contract_market_code"] == "067411"
+    assert loaded["position_category"] == "managed_money"
+    assert loaded["report_type"] == "disaggregated_futures_only"
+
+
+def test_merge_cot_observations_requires_contract_market_code(tmp_path):
+    con = macro_indicators.connect(tmp_path / ".sqlite")
+    with pytest.raises(ValueError, match=" cot contract market code is required"):
+        macro_indicators.merge_cot_observations(
+            con, [{**_COT_ROW, "cftc_contract_market_code": None}]
+        )
+
+
+def test_merge_cot_observations_requires_fixed_report_type(tmp_path):
+    con = macro_indicators.connect(tmp_path / ".sqlite")
+    with pytest.raises(ValueError, match=" cot report type must be"):
+        macro_indicators.merge_cot_observations(
+            con, [{**_COT_ROW, "report_type": "futures_and_options"}]
+        )
+
+
+def test_merge_cot_observations_requires_managed_money_category(tmp_path):
+    con = macro_indicators.connect(tmp_path / ".sqlite")
+    with pytest.raises(ValueError, match=" cot position category must be"):
+        macro_indicators.merge_cot_observations(
+            con, [{**_COT_ROW, "position_category": "commercial"}]
+        )
+
+
+def test_merge_cot_observations_rejects_exact_key_with_different_code(tmp_path):
+    con = macro_indicators.connect(tmp_path / ".sqlite")
+    macro_indicators.merge_cot_observations(con, [_COT_ROW])
+    with pytest.raises(ValueError, match="different contract market code"):
+        macro_indicators.merge_cot_observations(
+            con, [{**_COT_ROW, "cftc_contract_market_code": "999999"}]
+        )
+
+
+def test_replace_cot_history_rebuilds_scope_and_leaves_others(tmp_path):
+    con = macro_indicators.connect(tmp_path / ".sqlite")
+    copper_row = {
+        **_COT_ROW,
+        "commodity_id": "copper",
+        "cftc_contract_market_code": "085692",
+    }
+    macro_indicators.merge_cot_observations(con, [_COT_ROW, copper_row])
+
+    count = macro_indicators.replace_cot_history(
+        con,
+        [{**_COT_ROW, "manager_longs": 205000.0}],
+        ["crude_oil_wti"],
+    )
+
+    assert count == 1
+    loaded = macro_indicators.load_cot_observations(con)
+    by_id = {row["commodity_id"]: row for row in loaded}
+    assert by_id["crude_oil_wti"]["manager_longs"] == 205000.0
+    assert by_id["copper"]["manager_longs"] == 200000.0
+
+
+def test_replace_cot_history_rolls_back_on_invalid_row(tmp_path):
+    con = macro_indicators.connect(tmp_path / ".sqlite")
+    macro_indicators.merge_cot_observations(con, [_COT_ROW])
+
+    with pytest.raises(ValueError, match=" cot contract market code is required"):
+        macro_indicators.replace_cot_history(
+            con,
+            [{**_COT_ROW, "cftc_contract_market_code": None}],
+            ["crude_oil_wti"],
+        )
+
+    loaded = macro_indicators.load_cot_observations(con)
+    assert [row["commodity_id"] for row in loaded] == ["crude_oil_wti"]
+
+
+def test_connect_migrates_cot_identity_columns(tmp_path):
+    con = sqlite3.connect(tmp_path / "old.sqlite")
+    con.execute(
+        """create table cot_observations (
+            commodity_id text not null,
+            report_date text not null,
+            manager_longs real not null,
+            manager_shorts real not null,
+            open_interest real not null,
+            publication_date text,
+            report_type text,
+            source_url text,
+            source_hash text,
+            primary key(commodity_id, report_date)
+        )"""
+    )
+    con.commit()
+    con.close()
+
+    con = macro_indicators.connect(tmp_path / "old.sqlite")
+    cols = {
+        row["name"]
+        for row in con.execute("pragma table_info(cot_observations)").fetchall()
+    }
+    assert "cftc_contract_market_code" in cols
+    assert "position_category" in cols
+
+
+def test_legacy_null_identity_cot_row_remains_loadable(tmp_path):
+    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con.execute(
+        """insert into cot_observations(
+            commodity_id, report_date, manager_longs, manager_shorts, open_interest,
+            publication_date, report_type, source_url, source_hash,
+            cftc_contract_market_code, position_category
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "crude_oil_wti",
+            "2026-07-21",
+            200000.0,
+            150000.0,
+            1000000.0,
+            "2026-07-24",
+            "disaggregated_futures_only",
+            "https://example.test",
+            "abc",
+            None,
+            None,
+        ),
+    )
+    con.commit()
+
+    loaded = macro_indicators.load_cot_observations(con)[0]
+    assert loaded["cftc_contract_market_code"] is None
+    assert loaded["position_category"] is None
 
 
 def test_merge_macro_indicator_observations_persists_series_source_contract(tmp_path):

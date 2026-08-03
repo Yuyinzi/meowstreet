@@ -6870,3 +6870,85 @@ def test_evidence_css_has_scoped_classes():
     assert ".evidence-fact" in css
     assert ".evidence-unavailable" in css
     assert ".evidence-manual" in css
+
+
+def test_cot_review_evidence_renders_high_and_low_statuses():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderCOTHistoricalExtreme")
+    end = source.index("function renderCOTRow", start)
+    renderer = source[start:end]
+
+    assert "Managed Money Net Position: Historical High" in renderer
+    assert "Managed Money Net Position: Historical Low" in renderer
+    assert "latest_net_position" in renderer
+    assert "history_start_date" in renderer
+    assert "history_end_date" in renderer
+    assert "valid_observation_count" in renderer
+    assert "history_has_gaps" in renderer
+    assert "precede a reversal" in renderer
+    assert "persistent crowding" in renderer
+    assert "Review-only evidence" in renderer
+    assert "latest_net_tie_count" in renderer
+
+
+def test_cot_review_evidence_renders_normal_and_unavailable_statuses():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderCOTHistoricalExtreme")
+    end = source.index("function renderCOTRow", start)
+    renderer = source[start:end]
+
+    assert 'status === "not_extreme"' in renderer
+    assert "not at a historical high or low" in renderer
+    assert "Unavailable" in renderer
+    assert "insufficient_history" in renderer
+    assert "unsupported_contract" in renderer
+    assert "zero_range_history" in renderer
+    assert "reason_code" in renderer
+
+
+def test_cot_review_evidence_has_no_directional_or_trade_claim():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderCOTHistoricalExtreme")
+    end = source.index("function renderCOTRow", start)
+    renderer = source[start:end]
+
+    assert "bullish" not in renderer.lower()
+    assert "bearish" not in renderer.lower()
+    assert "buy" not in renderer.lower()
+    assert "sell" not in renderer.lower()
+    assert (
+        "No automatic attribution, directional conclusion, or trade recommendation is made."
+        in renderer
+    )
+
+
+def test_cot_review_evidence_is_wired_into_cot_row():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderCOTRow")
+    end = source.index("function renderUSDRow", start)
+    cot_row = source[start:end]
+
+    assert "renderCOTHistoricalExtreme(extreme)" in cot_row
+    assert "commodity.review_evidence" in cot_row
+    assert "cot_historical_extreme" in cot_row
+
+
+def test_cot_review_evidence_css_uses_established_tokens():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".cot-extreme-review" in css
+    assert ".cot-extreme-normal" in css
+    assert ".cot-extreme-unavailable" in css
+    assert ".market-status-review" in css
+    assert ".market-status-normal" in css
+    assert ".market-status-unavailable" in css
+
+
+def test_method_boundaries_no_longer_list_cot_extremes_as_unconfigured():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("Method Boundaries")
+    boundaries = source[start : source.index("</section>", start)]
+
+    assert "COT extreme detection" not in boundaries
+    assert "Commodity price attribution" in boundaries
+    assert "USD/CPI/PPI distribution classifications" in boundaries

@@ -263,6 +263,57 @@
         return (val > 0 ? "+" : "") + h.fmtNumber(val);
       }
 
+      function renderCOTHistoricalExtreme(extreme) {
+        if (!extreme) return "";
+        var status = extreme.status;
+        if (status === "historical_high" || status === "historical_low") {
+          var title = status === "historical_high"
+            ? "Managed Money Net Position: Historical High"
+            : "Managed Money Net Position: Historical Low";
+          var html = '<div class="cot-extreme-review">';
+          html += '<div class="workflow-label">' + h.escapeHtml(title)
+            + '<span class="market-status market-status-review">Review required</span></div>';
+          html += '<div class="workflow-metrics">';
+          html += '<span>Net: ' + h.escapeHtml(String(extreme.latest_net_position)) + ' contracts</span>';
+          html += '<span>History: ' + h.escapeHtml(extreme.history_start_date) + " \u2192 "
+            + h.escapeHtml(extreme.history_end_date) + ' (' + h.escapeHtml(String(extreme.valid_observation_count))
+            + ' reports, gaps: ' + h.escapeHtml(extreme.history_has_gaps ? "yes" : "no") + ')</span>';
+          html += '<span>As of: ' + h.escapeHtml(extreme.latest_report_date) + '</span>';
+          html += '</div>';
+          html += '<p class="summary-stat">A historical extreme can precede a reversal; review demand, supply, and inventory. A repeated extreme may reflect persistent crowding rather than a new record.</p>';
+          html += '<p class="summary-stat">Review-only evidence. No automatic attribution, directional conclusion, or trade recommendation is made.</p>';
+          html += '<details class="raw-evidence"><summary>View raw evidence</summary>';
+          html += '<div class="workflow-metrics">';
+          html += '<span>Method: ' + h.escapeHtml(extreme.method_version) + '</span>';
+          html += '<span>Contract: ' + h.escapeHtml(extreme.cftc_contract_market_code) + '</span>';
+          html += '<span>Report: ' + h.escapeHtml(extreme.report_type) + ' / ' + h.escapeHtml(extreme.position_category) + '</span>';
+          html += '<span>Latest net ties: ' + h.escapeHtml(String(extreme.latest_net_tie_count)) + '</span>';
+          html += '</div></details></div>';
+          return html;
+        }
+        if (status === "not_extreme") {
+          return '<div class="cot-extreme-normal">'
+            + '<span class="market-status market-status-normal">Normal</span>'
+            + '<span>Net position is not at a historical high or low within the imported history.</span>'
+            + '</div>';
+        }
+        var reasonLabels = {
+          unsupported_contract: "Contract not supported by the versioned allowlist",
+          insufficient_history: "Insufficient history — 260 valid reports over 5 calendar years required",
+          missing_latest_report: "No current CFTC report available",
+          missing_manager_positions: "Latest report lacks manager positions",
+          stale_latest_report: "Latest report is more than 14 days old",
+          contract_discontinuity: "Contract identity is discontinuous",
+          report_definition_changed: "Report definition changed",
+          zero_range_history: "Net position has zero range across history",
+        };
+        var label = reasonLabels[extreme.reason_code] || "Historical extreme review unavailable";
+        return '<div class="cot-extreme-unavailable">'
+          + '<span class="market-status market-status-unavailable">Unavailable</span>'
+          + '<span>' + h.escapeHtml(label) + '</span>'
+          + '</div>';
+      }
+
       function renderCOTRow(commodity) {
         var norm = commodity.normalized_manager_net_position;
         var normStr = norm != null ? norm.toFixed(4) : "--";
@@ -271,6 +322,7 @@
         if (commodity.contract_note) {
           noteHtml = '<p class="contract-note">' + h.escapeHtml(commodity.contract_note) + '</p>';
         }
+        var extreme = commodity.review_evidence && commodity.review_evidence.cot_historical_extreme;
         return '<div class="workflow-row">'
           + '<div class="workflow-label">' + h.escapeHtml(commodity.display_name || commodity.commodity_id) + '</div>'
           + noteHtml
@@ -281,6 +333,7 @@
           + '<span>Normalized: ' + h.escapeHtml(normStr) + '</span>'
           + '<span>Flip: <strong>' + h.escapeHtml(flipStr) + '</strong></span>'
           + '</div>'
+          + renderCOTHistoricalExtreme(extreme)
           + '</div>';
       }
 
@@ -529,7 +582,7 @@
       html += '</article></div></section>';
 
       html += '<section class="evidence-section boundaries"><h3>Method Boundaries</h3>';
-      html += '<p>Commodity price attribution, COT extreme detection, and USD/CPI/PPI distribution classifications are not configured. These gaps remain pending rather than being converted into a trading conclusion.</p>';
+      html += '<p>Commodity price attribution and USD/CPI/PPI distribution classifications are not configured. These gaps remain pending rather than being converted into a trading conclusion.</p>';
       html += '</section>';
 
       html += '</section>';

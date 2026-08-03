@@ -91,10 +91,131 @@ def test_never_exposes_extreme_or_distribution_conclusions():
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
 
-    assert payload["cot"]["crude_oil_wti"]["extreme"] == "not_configured"
+    extreme = payload["cot"]["crude_oil_wti"]["review_evidence"][
+        "cot_historical_extreme"
+    ]
+    assert extreme["status"] == "unavailable"
+    assert extreme["reason_code"] == "unsupported_contract"
     assert (
         payload["inflation"]["cpi_all_items"]["distribution_status"]
         == "not_configured"
+    )
+
+
+def _cot_history_rows(
+    count=300,
+    net_fn=None,
+    commodity_id="crude_oil_wti",
+    code="067411",
+    start="2021-01-05",
+):
+    rows = []
+    day = date.fromisoformat(start)
+    for index in range(count):
+        net = net_fn(index) if net_fn else 200000 - index
+        shorts = 20000
+        longs = shorts + net
+        rows.append(
+            {
+                "commodity_id": commodity_id,
+                "report_date": day.isoformat(),
+                "cftc_contract_market_code": code,
+                "report_type": "disaggregated_futures_only",
+                "position_category": "managed_money",
+                "manager_longs": longs,
+                "manager_shorts": shorts,
+                "open_interest": longs + shorts,
+                "publication_date": day.isoformat(),
+            }
+        )
+        day += timedelta(days=7)
+    return rows
+
+
+def _cot_allowlist(entries):
+    return {
+        "version": "cot_historical_extreme_allowlist_v1",
+        "report_type": "disaggregated_futures_only",
+        "position_category": "managed_money",
+        "entries": entries,
+    }
+
+
+def _wti_allowlist():
+    return _cot_allowlist(
+        [
+            {
+                "commodity_id": "crude_oil_wti",
+                "market_name": "CRUDE OIL, LIGHT SWEET-WTI - ICE FUTURES EUROPE",
+                "contract_code": "067411",
+                "active": True,
+            }
+        ]
+    )
+
+
+def test_cot_review_evidence_exposes_historical_high_and_provenance():
+    rows = _cot_history_rows(net_fn=lambda index: 100000 + index)
+    as_of = (
+        date.fromisoformat(rows[-1]["report_date"]) + timedelta(days=3)
+    ).isoformat()
+    payload = .build_cyclical_commodities_payload(
+        rows,
+        USD_ROWS,
+        None,
+        as_of,
+        cot_historical_extreme_allowlist=_wti_allowlist(),
+    )
+
+    extreme = payload["cot"]["crude_oil_wti"]["review_evidence"][
+        "cot_historical_extreme"
+    ]
+    assert extreme["status"] == "historical_high"
+    assert extreme["method_version"] == "cot_historical_extremes_v1"
+    assert extreme["cftc_contract_market_code"] == "067411"
+    assert extreme["valid_observation_count"] == 300
+    assert extreme["latest_net_position"] is not None
+    assert extreme["latest_report_date"] == rows[-1]["report_date"]
+
+
+def test_cot_review_evidence_is_unavailable_without_allowlist():
+    rows = _cot_history_rows(net_fn=lambda index: 100000 + index)
+    as_of = (
+        date.fromisoformat(rows[-1]["report_date"]) + timedelta(days=3)
+    ).isoformat()
+    payload = .build_cyclical_commodities_payload(rows, USD_ROWS, None, as_of)
+
+    extreme = payload["cot"]["crude_oil_wti"]["review_evidence"][
+        "cot_historical_extreme"
+    ]
+    assert extreme["status"] == "unavailable"
+    assert extreme["reason_code"] == "unsupported_contract"
+
+
+def test_cot_review_evidence_detail_step_includes_extreme_object():
+    rows = _cot_history_rows(net_fn=lambda index: 100000 - index)
+    as_of = (
+        date.fromisoformat(rows[-1]["report_date"]) + timedelta(days=3)
+    ).isoformat()
+    payload = .build_cyclical_commodities_payload(
+        rows,
+        USD_ROWS,
+        None,
+        as_of,
+        cot_historical_extreme_allowlist=_wti_allowlist(),
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+
+    cot_step = next(
+        step for step in detail["steps"] if step["title"] == "CFTC COT Positioning"
+    )
+    wti = next(
+        commodity
+        for commodity in cot_step["commodities"]
+        if commodity["commodity_id"] == "crude_oil_wti"
+    )
+    assert (
+        wti["review_evidence"]["cot_historical_extreme"]["status"] == "historical_low"
     )
 
 

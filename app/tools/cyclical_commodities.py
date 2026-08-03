@@ -5,6 +5,7 @@ from app.data_sources.tracked_commodities import (
     MARKET_SERIES,
 )
 from app.data_sources.lumber import _LUMBER_SERIES
+from app.tools import cot_historical_extremes
 from app.tools import oil_distribution
 from app.tools import price_distribution
 from app.tools import shfe_copper
@@ -122,7 +123,6 @@ def _compute_cot_commodity(rows, as_of_date):
         "flip": _detect_flip(current_norm, prior_norm),
         "source_url": latest.get("source_url", ""),
         "publication_date": latest.get("publication_date", ""),
-        "extreme": "not_configured",
         "status": "available",
     }
     note = _CONTRACT_NOTE.get(cid)
@@ -131,34 +131,59 @@ def _compute_cot_commodity(rows, as_of_date):
     return result
 
 
-def _compute_cot_payload(cot_rows):
+def _cot_historical_extreme(commodity_id, entry, rows, as_of_date):
+    if not as_of_date:
+        return cot_historical_extremes.invalid_input_unavailable(
+            commodity_id,
+            entry,
+            "dashboard observation date is unavailable",
+        )
+    try:
+        return cot_historical_extremes.evaluate(
+            commodity_id, entry, rows, as_of_date
+        )
+    except ValueError as exc:
+        return cot_historical_extremes.invalid_input_unavailable(
+            commodity_id, entry, str(exc)
+        )
+
+
+def _compute_cot_payload(cot_rows, as_of_date, cot_historical_extreme_allowlist=None):
     by_commodity = {}
     for row in cot_rows:
         cid = row["commodity_id"]
         by_commodity.setdefault(cid, []).append(row)
+    active_entries = {
+        entry["commodity_id"]: entry
+        for entry in (cot_historical_extreme_allowlist or {}).get("entries", [])
+        if entry.get("active") is True
+    }
     result = {}
     any_available = False
     for cid in sorted(_COMMODITY_DISPLAY):
         rows = by_commodity.get(cid, [])
-        if not rows:
-            result[cid] = {
-                "commodity_id": cid,
-                "display_name": _COMMODITY_DISPLAY[cid],
-                "status": "unavailable",
-            }
-            continue
-        computed = _compute_cot_commodity(rows, None)
+        computed = _compute_cot_commodity(rows, None) if rows else None
         if computed is None:
             result[cid] = {
                 "commodity_id": cid,
                 "display_name": _COMMODITY_DISPLAY[cid],
                 "status": "unavailable",
+                "review_evidence": {
+                    "cot_historical_extreme": _cot_historical_extreme(
+                        cid, active_entries.get(cid), rows, as_of_date
+                    ),
+                },
             }
             continue
         result[cid] = {
             "commodity_id": cid,
             "display_name": _COMMODITY_DISPLAY[cid],
             **computed,
+            "review_evidence": {
+                "cot_historical_extreme": _cot_historical_extreme(
+                    cid, active_entries.get(cid), rows, as_of_date
+                ),
+            },
         }
         if computed.get("status") == "available":
             any_available = True
@@ -762,9 +787,12 @@ def build_cyclical_commodities_payload(
     non_oil_attribution_facts=None,
     non_oil_attribution_source_audit=None,
     non_oil_attribution_refresh_status=None,
+    cot_historical_extreme_allowlist=None,
 ):
     as_of = as_of_date or ""
-    cot_payload, cot_available = _compute_cot_payload(cot_rows)
+    cot_payload, cot_available = _compute_cot_payload(
+        cot_rows, as_of, cot_historical_extreme_allowlist
+    )
     usd_payload = {}
     inflation_payload = {}
     for sid, display_name in _USD_SERIES_DISPLAY.items():

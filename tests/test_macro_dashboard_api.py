@@ -3682,6 +3682,289 @@ def test_usd_detail_propagates_distribution_and_review_state(monkeypatch):
         }
 
 
+def _cot_identity_rows(count=300, net_fn=None, start="2021-01-05"):
+    rows = []
+    day = datetime.date.fromisoformat(start)
+    for index in range(count):
+        net = net_fn(index) if net_fn else 200000 - index
+        shorts = 20000
+        longs = shorts + net
+        rows.append(
+            {
+                "commodity_id": "crude_oil_wti",
+                "report_date": day.isoformat(),
+                "cftc_contract_market_code": "067411",
+                "report_type": "disaggregated_futures_only",
+                "position_category": "managed_money",
+                "manager_longs": longs,
+                "manager_shorts": shorts,
+                "open_interest": longs + shorts,
+            }
+        )
+        day += datetime.timedelta(days=7)
+    return rows
+
+
+def _cot_allowlist():
+    return {
+        "version": "cot_historical_extreme_allowlist_v1",
+        "report_type": "disaggregated_futures_only",
+        "position_category": "managed_money",
+        "entries": [
+            {
+                "commodity_id": "crude_oil_wti",
+                "market_name": "CRUDE OIL, LIGHT SWEET-WTI - ICE FUTURES EUROPE",
+                "contract_code": "067411",
+                "active": True,
+            }
+        ],
+    }
+
+
+def _stub_detail_route(monkeypatch, cot_rows, allowlist):
+    from app import api
+    from app.routers import macro_dashboard as macro_dashboard_module
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    class FakeDate:
+        @classmethod
+        def today(cls):
+            return datetime.date(2026, 8, 3)
+
+    monkeypatch.setattr(macro_dashboard_module, "date", FakeDate)
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: cot_rows,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {},
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_shfe_cu_main_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_facts",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_refresh_status",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_non_oil_attribution_source_audit",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_attribution_catalog",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_cot_historical_extreme_allowlist",
+        lambda: allowlist,
+    )
+
+
+def test_cot_detail_propagates_all_four_extreme_statuses(monkeypatch):
+    cases = [
+        (_cot_identity_rows(net_fn=lambda i: 100000 + i), "historical_high", None),
+        (_cot_identity_rows(net_fn=lambda i: 100000 - i), "historical_low", None),
+        (
+            _cot_identity_rows(net_fn=lambda i: 100000 + (i % 40)),
+            "not_extreme",
+            None,
+        ),
+        (
+            _cot_identity_rows(count=10, start="2026-05-26"),
+            "unavailable",
+            "insufficient_history",
+        ),
+    ]
+    for rows, expected_status, expected_reason in cases:
+        _stub_detail_route(monkeypatch, rows, _cot_allowlist())
+        response = TestClient(app).get(
+            "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+        )
+        assert response.status_code == 200
+        cot_step = next(
+            step
+            for step in response.json()["steps"]
+            if step["title"] == "CFTC COT Positioning"
+        )
+        wti = next(
+            commodity
+            for commodity in cot_step["commodities"]
+            if commodity["commodity_id"] == "crude_oil_wti"
+        )
+        extreme = wti["review_evidence"]["cot_historical_extreme"]
+        assert extreme["status"] == expected_status
+        assert extreme["reason_code"] == expected_reason
+        assert extreme["method_version"] == "cot_historical_extremes_v1"
+        assert extreme["cftc_contract_market_code"] == "067411"
+        assert extreme["report_type"] == "disaggregated_futures_only"
+        assert extreme["position_category"] == "managed_money"
+        assert "latest_report_date" in extreme
+        assert "latest_net_position" in extreme
+        assert "history_start_date" in extreme
+        assert "history_end_date" in extreme
+        assert "valid_observation_count" in extreme
+        assert "history_has_gaps" in extreme
+
+
+def test_market_setup_is_identical_across_cot_extreme_statuses(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.market_phase,
+        "build_dashboard_payload",
+        lambda loader: None,
+    )
+    monkeypatch.setattr(
+        api.benchmark_market_data,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.gdp_market_relationships,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    statuses = [
+        _cot_identity_rows(net_fn=lambda i: 100000 + i),
+        _cot_identity_rows(net_fn=lambda i: 100000 - i),
+        _cot_identity_rows(net_fn=lambda i: 100000 + (i % 40)),
+        _cot_identity_rows(count=10),
+    ]
+    responses = []
+    for rows in statuses:
+        monkeypatch.setattr(
+            api.macro_indicators_db,
+            "load_cot_observations",
+            lambda con, rows=rows: rows,
+        )
+        responses.append(
+            TestClient(app).get("/api/macro-dashboard/market-setup").json()
+        )
+
+    assert all(response == responses[0] for response in responses)
+
+
+def test_cot_historical_extreme_never_reaches_ticker_workflow(monkeypatch):
+    import json
+
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
+    response = client.post(
+        "/api/ticker-workflow/evaluate",
+        json={"symbol": "XYZ", "observations": {}},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "cot_historical_extreme" not in json.dumps(payload)
+    assert "review_evidence" not in json.dumps(payload)
+
+
+def test_ticker_classification_is_identical_across_cot_extreme_observations(
+    monkeypatch,
+):
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
+    statuses = [
+        _cot_identity_rows(net_fn=lambda i: 100000 + i),
+        _cot_identity_rows(net_fn=lambda i: 100000 - i),
+        _cot_identity_rows(count=10),
+    ]
+    responses = []
+    for rows in statuses:
+        response = client.post(
+            "/api/ticker-workflow/evaluate",
+            json={"symbol": "XYZ", "observations": {"cot": rows}},
+        )
+        assert response.status_code == 200
+        responses.append(response.json())
+
+    assert all(response == responses[0] for response in responses)
+
+
 def test_market_setup_is_identical_when_usd_final_value_changes(monkeypatch):
     from app import api
 
