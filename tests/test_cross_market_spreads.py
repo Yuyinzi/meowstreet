@@ -378,18 +378,303 @@ def test_repeated_inputs_produce_byte_identical_payload():
     assert first == second
 
 
-def test_lme_comex_copper_is_fixed_unavailable():
+def test_lme_comex_copper_calculation_is_available_with_limited_comparability():
     payload = _build()
 
     entry = _copper_entry(payload, "lme_comex_copper")
+    assert entry["status"] == "available"
+    assert entry["comparability"] == "limited"
+    assert entry["evidence_type"] == "date_aligned_continuous_price_differential"
+    assert entry["method_version"] == "copper_lme_comex_differential_v1"
+    assert entry["label"] == "LME-COMEX Date-aligned Continuous-price Differential"
+    assert entry["formula"] == (
+        "LME Copper Grade A close - (COMEX HG close × 2204.62262185)"
+    )
+    assert entry["expression"] == "lme_close - comex_close_converted"
+    assert entry["unit"] == "USD/tonne"
+    assert entry["common_observation_date"] == "2026-07-24"
+    assert entry["value"] == pytest.approx(9500.0 - 4.5 * 2204.62262185)
+    lme = entry["legs"]["lme"]
+    assert lme["source_series"] == "copper_lme"
+    assert lme["instrument"] == "LME Copper Grade A"
+    assert lme["value"] == 9500.0
+    assert lme["unit"] == "USD/tonne"
+    assert lme["field"] == "close"
+    comex = entry["legs"]["comex"]
+    assert comex["source_series"] == "copper_comex"
+    assert comex["instrument"] == "Copper High Grade futures (HG)"
+    assert comex["source_value"] == 4.5
+    assert comex["source_unit"] == "USD/lb"
+    assert comex["normalized_value"] == pytest.approx(4.5 * 2204.62262185)
+    assert comex["normalized_unit"] == "USD/tonne"
+    assert comex["conversion_factor"] == 2204.62262185
+    assert comex["field"] == "close"
+    assert entry["limitations"] == [
+        "contract_tenor_not_confirmed_comparable",
+        "close_timing_not_synchronized",
+        "continuous_roll_rules_undocumented",
+    ]
+
+
+def test_lme_comex_uses_newest_exact_common_trading_date():
+    payload = _build(
+        copper_market_rows={
+            "copper_comex": [
+                wti_row("2026-07-22", 4.4),
+                wti_row("2026-07-23", 4.45),
+                wti_row("2026-07-24", 4.5),
+            ],
+            "copper_lme": [
+                wti_row("2026-07-22", 9400.0),
+                wti_row("2026-07-23", 9450.0),
+                wti_row("2026-07-24", 9500.0),
+            ],
+            "copper_shanghai": [wti_row("2026-07-24", 78000.0)],
+        }
+    )
+
+    entry = _copper_entry(payload, "lme_comex_copper")
+    assert entry["common_observation_date"] == "2026-07-24"
+    assert entry["value"] == pytest.approx(9500.0 - 4.5 * 2204.62262185)
+    assert entry["legs"]["lme"]["value"] == 9500.0
+    assert entry["legs"]["comex"]["source_value"] == 4.5
+
+
+def test_lme_comex_newest_common_date_respects_as_of():
+    payload = _build(
+        copper_market_rows={
+            "copper_comex": [
+                wti_row("2026-07-22", 4.4),
+                wti_row("2026-07-23", 4.45),
+                wti_row("2026-07-24", 4.5),
+            ],
+            "copper_lme": [
+                wti_row("2026-07-22", 9400.0),
+                wti_row("2026-07-23", 9450.0),
+                wti_row("2026-07-24", 9500.0),
+            ],
+            "copper_shanghai": [wti_row("2026-07-24", 78000.0)],
+        },
+        as_of_date="2026-07-23",
+    )
+
+    entry = _copper_entry(payload, "lme_comex_copper")
+    assert entry["common_observation_date"] == "2026-07-23"
+    assert entry["value"] == pytest.approx(9450.0 - 4.45 * 2204.62262185)
+    assert entry["legs"]["lme"]["value"] == 9450.0
+    assert entry["legs"]["comex"]["source_value"] == 4.45
+
+
+def test_lme_comex_future_rows_are_excluded_from_common_date():
+    payload = _build(
+        copper_market_rows={
+            "copper_comex": [
+                wti_row("2026-07-24", 4.5),
+                wti_row("2026-07-28", 4.8),
+            ],
+            "copper_lme": [
+                wti_row("2026-07-24", 9500.0),
+                wti_row("2026-07-28", 9600.0),
+            ],
+            "copper_shanghai": [wti_row("2026-07-24", 78000.0)],
+        },
+        as_of_date="2026-07-25",
+    )
+
+    entry = _copper_entry(payload, "lme_comex_copper")
+    assert entry["status"] == "available"
+    assert entry["common_observation_date"] == "2026-07-24"
+    assert entry["value"] == pytest.approx(9500.0 - 4.5 * 2204.62262185)
+
+
+def test_lme_comex_future_only_rows_never_become_common_date():
+    payload = _build(
+        copper_market_rows={
+            "copper_comex": [wti_row("2026-07-28", 4.5)],
+            "copper_lme": [wti_row("2026-07-28", 9500.0)],
+            "copper_shanghai": [wti_row("2026-07-24", 78000.0)],
+        },
+        as_of_date="2026-07-25",
+    )
+
+    entry = _copper_entry(payload, "lme_comex_copper")
     assert entry["status"] == "unavailable"
-    assert entry["reason"] == "incomparable_price_basis"
+    assert entry["reason"] == "missing_lme_price"
+
+
+def test_lme_comex_never_pairs_rows_across_dates():
+    payload = _build(
+        copper_market_rows={
+            "copper_comex": [wti_row("2026-07-24", 4.5)],
+            "copper_lme": [wti_row("2026-07-23", 9500.0)],
+            "copper_shanghai": [wti_row("2026-07-24", 78000.0)],
+        }
+    )
+
+    entry = _copper_entry(payload, "lme_comex_copper")
+    assert entry["status"] == "unavailable"
+    assert entry["reason"] == "no_exact_common_trading_date"
     assert "value" not in entry
-    legs = {leg["side"]: leg for leg in entry["legs"]}
-    assert legs["lme"]["source_series"] == "copper_lme"
-    assert legs["lme"]["unit"] == "USD/tonne"
-    assert legs["comex"]["source_series"] == "copper_comex"
-    assert legs["comex"]["unit"] == "USD/lb"
+    assert "common_observation_date" not in entry
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_reason"),
+    [
+        (
+            lambda m: m["copper_lme"].__setitem__("source_vendor", "different"),
+            "source_series_changed",
+        ),
+        (
+            lambda m: m["copper_comex"].__setitem__(
+                "price_basis", "realtime_continuous"
+            ),
+            "source_series_changed",
+        ),
+        (
+            lambda m: m["copper_lme"].__setitem__("roll_rule_documented", True),
+            "source_series_changed",
+        ),
+        (
+            lambda m: m["copper_comex"].__setitem__("field", "open"),
+            "field_definition_changed",
+        ),
+        (
+            lambda m: m["copper_lme"].__setitem__("units", "USD/lb"),
+            "ambiguous_lme_unit",
+        ),
+        (
+            lambda m: m["copper_comex"].pop("units"),
+            "ambiguous_comex_unit",
+        ),
+    ],
+)
+def test_lme_comex_metadata_contract_mutations_are_unavailable(
+    mutation, expected_reason
+):
+    metadata = _copper_metadata()
+    mutation(metadata)
+
+    payload = _build(copper_market_metadata=metadata)
+    entry = _copper_entry(payload, "lme_comex_copper")
+    assert entry["status"] == "unavailable"
+    assert entry["reason"] == expected_reason
+
+
+@pytest.mark.parametrize(
+    ("comex_rows", "lme_rows", "expected_reason"),
+    [
+        (
+            [{"date": "2026-07-24", "value": "not-a-number"}],
+            [wti_row("2026-07-24", 9500.0)],
+            "invalid_or_non_numeric_price",
+        ),
+        (
+            [wti_row("2026-07-24", 4.5)],
+            [],
+            "missing_lme_price",
+        ),
+        (
+            [],
+            [wti_row("2026-07-24", 9500.0)],
+            "missing_comex_price",
+        ),
+        (
+            [wti_row("2026-07-24", 4.5)],
+            [wti_row("2026-07-23", 9500.0)],
+            "no_exact_common_trading_date",
+        ),
+    ],
+)
+def test_lme_comex_row_cases_are_unavailable(comex_rows, lme_rows, expected_reason):
+    payload = _build(
+        copper_market_rows={
+            "copper_comex": comex_rows,
+            "copper_lme": lme_rows,
+            "copper_shanghai": [wti_row("2026-07-24", 78000.0)],
+        }
+    )
+
+    entry = _copper_entry(payload, "lme_comex_copper")
+    assert entry["status"] == "unavailable"
+    assert entry["reason"] == expected_reason
+
+
+def test_lme_comex_invalid_price_is_not_reported_as_missing():
+    payload = _build(
+        copper_market_rows={
+            "copper_comex": [{"date": "2026-07-24", "value": "oops"}],
+            "copper_lme": [wti_row("2026-07-24", 9500.0)],
+            "copper_shanghai": [wti_row("2026-07-24", 78000.0)],
+        }
+    )
+
+    entry = _copper_entry(payload, "lme_comex_copper")
+    assert entry["status"] == "unavailable"
+    assert entry["reason"] == "invalid_or_non_numeric_price"
+    assert "value" not in entry
+
+
+def test_lme_comex_unavailable_omits_differential_normalized_and_common_date():
+    payload = _build(
+        copper_market_rows={
+            "copper_comex": [wti_row("2026-07-24", 4.5)],
+            "copper_lme": [wti_row("2026-07-23", 9500.0)],
+            "copper_shanghai": [wti_row("2026-07-24", 78000.0)],
+        }
+    )
+
+    entry = _copper_entry(payload, "lme_comex_copper")
+    assert entry["status"] == "unavailable"
+    assert entry["reason"] == "no_exact_common_trading_date"
+    assert "value" not in entry
+    assert "common_observation_date" not in entry
+    assert "comparability" not in entry
+    assert "limitations" not in entry
+    assert "normalized_value" not in entry["legs"]["comex"]
+    assert "normalized_unit" not in entry["legs"]["comex"]
+    assert "conversion_factor" not in entry["legs"]["comex"]
+    assert entry["legs"]["lme"]["value"] == 9500.0
+    assert entry["legs"]["comex"]["source_value"] == 4.5
+
+
+def test_lme_comex_available_entry_omits_conclusion_fields():
+    payload = _build()
+
+    entry = _copper_entry(payload, "lme_comex_copper")
+    assert entry["status"] == "available"
+    conclusion_fields = (
+        "change",
+        "trend",
+        "percentile",
+        "z_score",
+        "extreme",
+        "normal",
+        "abnormal",
+    )
+    assert not any(key in entry for key in conclusion_fields)
+    for leg in entry["legs"].values():
+        assert not any(key in leg for key in conclusion_fields)
+
+
+def test_shfe_entries_stay_unavailable_before_and_after_lme_comex():
+    unavailable_metadata = _copper_metadata()
+    unavailable_metadata["copper_lme"]["roll_rule_documented"] = True
+
+    baseline = _build(copper_market_metadata=unavailable_metadata)
+    available = _build()
+
+    assert _copper_entry(baseline, "lme_comex_copper")["status"] == "unavailable"
+    assert _copper_entry(available, "lme_comex_copper")["status"] == "available"
+    for spread_id in ("shfe_lme_copper", "shfe_comex_copper"):
+        before = _copper_entry(baseline, spread_id)
+        after = _copper_entry(available, spread_id)
+        assert before == after
+        assert before["status"] == "unavailable"
+        assert before["reason"] == "fx_source_not_approved"
+        assert "value" not in before
+        for leg in before["legs"]:
+            assert "value" not in leg
 
 
 def test_shfe_pairs_are_fixed_unavailable_with_fx_reason():
@@ -405,38 +690,40 @@ def test_shfe_pairs_are_fixed_unavailable_with_fx_reason():
         assert legs["shfe"]["unit"] == "CNY/tonne"
 
 
-def test_copper_entries_include_latest_date_when_rows_available():
+def test_shfe_entries_include_latest_date_when_rows_available():
     payload = _build()
 
-    entry = _copper_entry(payload, "lme_comex_copper")
-    legs = {leg["side"]: leg for leg in entry["legs"]}
-    assert legs["lme"]["latest_date"] == "2026-07-24"
-    assert legs["comex"]["latest_date"] == "2026-07-24"
+    for spread_id in ("shfe_lme_copper", "shfe_comex_copper"):
+        entry = _copper_entry(payload, spread_id)
+        legs = {leg["side"]: leg for leg in entry["legs"]}
+        assert legs["shfe"]["latest_date"] == "2026-07-24"
 
 
-def test_copper_entries_omit_latest_date_without_rows():
+def test_shfe_entries_omit_latest_date_without_rows():
     payload = _build(copper_market_rows={})
 
-    entry = _copper_entry(payload, "lme_comex_copper")
-    legs = {leg["side"]: leg for leg in entry["legs"]}
-    assert "latest_date" not in legs["lme"]
-    assert "latest_date" not in legs["comex"]
+    for spread_id in ("shfe_lme_copper", "shfe_comex_copper"):
+        entry = _copper_entry(payload, spread_id)
+        for leg in entry["legs"]:
+            assert "latest_date" not in leg
 
 
-def test_copper_entries_keep_series_ids_without_metadata():
+def test_lme_comex_keeps_series_ids_without_metadata():
     payload = _build(copper_market_metadata=None)
 
     entry = _copper_entry(payload, "lme_comex_copper")
-    legs = {leg["side"]: leg for leg in entry["legs"]}
-    assert legs["lme"]["source_series"] == "copper_lme"
-    assert "unit" not in legs["lme"]
-    assert "instrument" not in legs["lme"]
+    assert entry["status"] == "unavailable"
+    assert entry["reason"] == "source_series_changed"
+    assert entry["legs"]["lme"]["source_series"] == "copper_lme"
+    assert entry["legs"]["comex"]["source_series"] == "copper_comex"
+    assert "unit" not in entry["legs"]["lme"]
+    assert "instrument" not in entry["legs"]["lme"]
 
 
-def test_copper_entries_never_expose_numerical_spread():
+def test_shfe_entries_never_expose_numerical_spread():
     payload = _build()
 
-    for spread_id in ("lme_comex_copper", "shfe_lme_copper", "shfe_comex_copper"):
+    for spread_id in ("shfe_lme_copper", "shfe_comex_copper"):
         entry = _copper_entry(payload, spread_id)
         assert "value" not in entry
         for leg in entry["legs"]:

@@ -33,16 +33,30 @@ _BRENT_WTI_SPREAD = {
     },
 }
 
+_COPPER_LME_COMEX_METHOD_VERSION = "copper_lme_comex_differential_v1"
+_COPPER_LME_COMEX_EVIDENCE_TYPE = "date_aligned_continuous_price_differential"
+_COPPER_LME_COMEX_LABEL = "LME-COMEX Date-aligned Continuous-price Differential"
+_COPPER_LME_COMEX_FORMULA = (
+    "LME Copper Grade A close - (COMEX HG close × 2204.62262185)"
+)
+_COPPER_LME_COMEX_EXPRESSION = "lme_close - comex_close_converted"
+_COPPER_LME_COMEX_LIMITATIONS = [
+    "contract_tenor_not_confirmed_comparable",
+    "close_timing_not_synchronized",
+    "continuous_roll_rules_undocumented",
+]
+_COPPER_LBS_PER_TONNE = 2204.62262185
+_COPPER_SOURCE_VENDOR = "Investing.com rendered-history"
+_COPPER_PRICE_BASIS = "vendor_continuous_series"
+_COPPER_FIELD_CLOSE = "close"
+_COPPER_LME_UNIT = "USD/tonne"
+_COPPER_COMEX_UNIT = "USD/lb"
+_COPPER_LME_COMEX_SERIES = {
+    "lme": "copper_lme",
+    "comex": "copper_comex",
+}
+
 _COPPER_UNAVAILABLE_CATALOG = [
-    {
-        "spread_id": _SPREAD_ID_LME_COMEX,
-        "reason": "incomparable_price_basis",
-        "label": "LME Copper - COMEX Copper",
-        "legs": [
-            {"side": "lme", "source_series": "copper_lme"},
-            {"side": "comex", "source_series": "copper_comex"},
-        ],
-    },
     {
         "spread_id": _SPREAD_ID_SHFE_LME,
         "reason": "fx_source_not_approved",
@@ -177,6 +191,178 @@ def _build_copper_unavailable_entry(
     }
 
 
+def _frozen_source_contract(meta):
+    return (
+        meta.get("source_vendor") == _COPPER_SOURCE_VENDOR
+        and meta.get("price_basis") == _COPPER_PRICE_BASIS
+        and meta.get("roll_rule_documented") is False
+    )
+
+
+def _copper_leg_rows(rows, as_of):
+    if as_of is None:
+        return {"latest_eligible": None, "latest_date_valid": None, "by_date": {}}
+    latest_eligible = None
+    latest_date_valid = None
+    by_date = {}
+    for row in rows or []:
+        row_date = _date_key(row.get("date"))
+        if row_date is None or row_date > as_of:
+            continue
+        if latest_date_valid is None or row_date >= latest_date_valid[0]:
+            latest_date_valid = (row_date, row)
+        value = _numeric_value(row.get("value"))
+        if value is None:
+            continue
+        by_date[row_date.isoformat()] = row
+        if latest_eligible is None or row_date >= latest_eligible[0]:
+            latest_eligible = (row_date, row)
+    return {
+        "latest_eligible": latest_eligible,
+        "latest_date_valid": latest_date_valid,
+        "by_date": by_date,
+    }
+
+
+def _copper_latest_invalid(leg):
+    latest = leg["latest_date_valid"]
+    return latest is not None and _numeric_value(latest[1].get("value")) is None
+
+
+def _lme_comex_unavailable_leg(side, meta, latest):
+    leg = {
+        "side": side,
+        "source_series": _COPPER_LME_COMEX_SERIES[side],
+    }
+    if meta.get("instrument"):
+        leg["instrument"] = meta["instrument"]
+    if meta.get("field"):
+        leg["field"] = meta["field"]
+    if side == "lme":
+        value_key = "value"
+        if meta.get("units"):
+            leg["unit"] = meta["units"]
+    else:
+        value_key = "source_value"
+        if meta.get("units"):
+            leg["source_unit"] = meta["units"]
+    if latest is not None:
+        leg[value_key] = _numeric_value(latest[1]["value"])
+        leg["date"] = latest[0].isoformat()
+    return leg
+
+
+def _unavailable_lme_comex_entry(
+    reason, lme_meta, comex_meta, lme_latest, comex_latest
+):
+    return {
+        "spread_id": _SPREAD_ID_LME_COMEX,
+        "status": "unavailable",
+        "reason": reason,
+        "method_version": _COPPER_LME_COMEX_METHOD_VERSION,
+        "label": _COPPER_LME_COMEX_LABEL,
+        "legs": {
+            "lme": _lme_comex_unavailable_leg("lme", lme_meta, lme_latest),
+            "comex": _lme_comex_unavailable_leg("comex", comex_meta, comex_latest),
+        },
+    }
+
+
+def _lme_comex_available_leg(side, meta, row):
+    leg = {"source_series": _COPPER_LME_COMEX_SERIES[side]}
+    if meta.get("instrument"):
+        leg["instrument"] = meta["instrument"]
+    value = _numeric_value(row["value"])
+    if side == "lme":
+        leg["value"] = value
+        leg["unit"] = meta.get("units")
+        leg["field"] = meta.get("field")
+    else:
+        leg["source_value"] = value
+        leg["source_unit"] = meta.get("units")
+        leg["normalized_value"] = round(value * _COPPER_LBS_PER_TONNE, 4)
+        leg["normalized_unit"] = _COPPER_LME_UNIT
+        leg["conversion_factor"] = _COPPER_LBS_PER_TONNE
+        leg["field"] = meta.get("field")
+    return leg
+
+
+def _available_lme_comex_entry(lme_meta, comex_meta, lme_row, comex_row, common_date):
+    lme_value = _numeric_value(lme_row["value"])
+    comex_value = _numeric_value(comex_row["value"])
+    differential = round(lme_value - comex_value * _COPPER_LBS_PER_TONNE, 4)
+    return {
+        "spread_id": _SPREAD_ID_LME_COMEX,
+        "status": "available",
+        "comparability": "limited",
+        "evidence_type": _COPPER_LME_COMEX_EVIDENCE_TYPE,
+        "method_version": _COPPER_LME_COMEX_METHOD_VERSION,
+        "label": _COPPER_LME_COMEX_LABEL,
+        "formula": _COPPER_LME_COMEX_FORMULA,
+        "expression": _COPPER_LME_COMEX_EXPRESSION,
+        "unit": _COPPER_LME_UNIT,
+        "common_observation_date": common_date,
+        "value": differential,
+        "legs": {
+            "lme": _lme_comex_available_leg("lme", lme_meta, lme_row),
+            "comex": _lme_comex_available_leg("comex", comex_meta, comex_row),
+        },
+        "limitations": list(_COPPER_LME_COMEX_LIMITATIONS),
+    }
+
+
+def _build_lme_comex_entry(copper_market_metadata, copper_market_rows, as_of_date):
+    metadata = copper_market_metadata or {}
+    rows = copper_market_rows or {}
+    lme_meta = metadata.get(_COPPER_LME_COMEX_SERIES["lme"], {})
+    comex_meta = metadata.get(_COPPER_LME_COMEX_SERIES["comex"], {})
+    as_of = _parsed_as_of(as_of_date)
+    lme_leg = _copper_leg_rows(
+        rows.get(_COPPER_LME_COMEX_SERIES["lme"], []) or [], as_of
+    )
+    comex_leg = _copper_leg_rows(
+        rows.get(_COPPER_LME_COMEX_SERIES["comex"], []) or [], as_of
+    )
+
+    if not _frozen_source_contract(lme_meta) or not _frozen_source_contract(comex_meta):
+        reason = "source_series_changed"
+    elif (
+        lme_meta.get("field") != _COPPER_FIELD_CLOSE
+        or comex_meta.get("field") != _COPPER_FIELD_CLOSE
+    ):
+        reason = "field_definition_changed"
+    elif lme_meta.get("units") != _COPPER_LME_UNIT:
+        reason = "ambiguous_lme_unit"
+    elif comex_meta.get("units") != _COPPER_COMEX_UNIT:
+        reason = "ambiguous_comex_unit"
+    elif _copper_latest_invalid(lme_leg) or _copper_latest_invalid(comex_leg):
+        reason = "invalid_or_non_numeric_price"
+    elif not lme_leg["by_date"]:
+        reason = "missing_lme_price"
+    elif not comex_leg["by_date"]:
+        reason = "missing_comex_price"
+    else:
+        common_dates = sorted(set(lme_leg["by_date"]) & set(comex_leg["by_date"]))
+        if not common_dates:
+            reason = "no_exact_common_trading_date"
+        else:
+            common_date = common_dates[-1]
+            return _available_lme_comex_entry(
+                lme_meta,
+                comex_meta,
+                lme_leg["by_date"][common_date],
+                comex_leg["by_date"][common_date],
+                common_date,
+            )
+    return _unavailable_lme_comex_entry(
+        reason,
+        lme_meta,
+        comex_meta,
+        lme_leg["latest_eligible"],
+        comex_leg["latest_eligible"],
+    )
+
+
 def _build_brent_wti_entry(wti_rows, brent_rows, as_of_date):
     brent_eligible = _eligible_rows(brent_rows, as_of_date)
     wti_eligible = _eligible_rows(wti_rows, as_of_date)
@@ -242,6 +428,9 @@ def build_cross_market_spreads(
     as_of_date=None,
 ):
     brent_wti = _build_brent_wti_entry(wti_rows, brent_rows, as_of_date)
+    lme_comex = _build_lme_comex_entry(
+        copper_market_metadata, copper_market_rows, as_of_date
+    )
     copper_entries = [
         _build_copper_unavailable_entry(
             entry, copper_market_metadata, copper_market_rows, as_of_date
@@ -250,5 +439,5 @@ def build_cross_market_spreads(
     ]
     return {
         "method_version": METHOD_VERSION,
-        "spreads": [brent_wti, *copper_entries],
+        "spreads": [brent_wti, lme_comex, *copper_entries],
     }
