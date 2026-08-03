@@ -3950,6 +3950,21 @@ def _oil_spread_rows(wti_value=68.0, brent_value=71.0):
     }
 
 
+def _lme_comex_copper_rows(lme_rows=None, comex_rows=None):
+    return {
+        "copper_lme": (
+            lme_rows
+            if lme_rows is not None
+            else [{"date": "2026-07-24", "value": 9500.0}]
+        ),
+        "copper_comex": (
+            comex_rows
+            if comex_rows is not None
+            else [{"date": "2026-07-24", "value": 4.5}]
+        ),
+    }
+
+
 def _stub_detail_route_with_oil(monkeypatch, oil_rows):
     from app import api
     from app.routers import macro_dashboard as macro_dashboard_module
@@ -3999,6 +4014,89 @@ def _stub_detail_route_with_oil(monkeypatch, oil_rows):
         "load_macro_indicator_observations_for_series",
         lambda con, series_ids: {
             sid: list(oil_rows.get(sid, [])) for sid in series_ids
+        },
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_shfe_cu_main_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_facts",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_refresh_status",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_non_oil_attribution_source_audit",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_attribution_catalog",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_cot_historical_extreme_allowlist",
+        lambda: None,
+    )
+
+
+def _stub_detail_route_with_copper(monkeypatch, copper_rows):
+    from app import api
+    from app.routers import macro_dashboard as macro_dashboard_module
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    class FakeDate:
+        @classmethod
+        def today(cls):
+            return datetime.date(2026, 8, 3)
+
+    monkeypatch.setattr(macro_dashboard_module, "date", FakeDate)
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: list(copper_rows.get(sid, [])) for sid in series_ids
         },
     )
     monkeypatch.setattr(
@@ -4270,6 +4368,241 @@ def test_market_setup_is_identical_across_cross_market_spread_states(monkeypatch
         responses.append(
             TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
         )
+
+    assert all(response == responses[0] for response in responses)
+
+
+def test_detail_propagates_lme_comex_differential_limited_contract(monkeypatch):
+    from app import api
+
+    _stub_detail_route_with_copper(monkeypatch, _lme_comex_copper_rows())
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    spreads = response.json()["review_evidence"]["cross_market_spreads"]
+    entry = next(
+        entry
+        for entry in spreads["spreads"]
+        if entry["spread_id"] == "lme_comex_copper"
+    )
+    assert entry["status"] == "available"
+    assert entry["comparability"] == "limited"
+    assert entry["evidence_type"] == "date_aligned_continuous_price_differential"
+    assert entry["method_version"] == "copper_lme_comex_differential_v1"
+    assert entry["common_observation_date"] == "2026-07-24"
+    assert entry["value"] == pytest.approx(-420.8018)
+    assert entry["legs"]["lme"]["value"] == 9500.0
+    assert entry["legs"]["comex"]["source_value"] == 4.5
+    assert entry["legs"]["comex"]["normalized_value"] == pytest.approx(9920.8018)
+    assert entry["legs"]["comex"]["normalized_unit"] == "USD/tonne"
+    assert entry["legs"]["comex"]["conversion_factor"] == 2204.62262185
+    assert entry["limitations"] == [
+        "contract_tenor_not_confirmed_comparable",
+        "close_timing_not_synchronized",
+        "continuous_roll_rules_undocumented",
+    ]
+    by_id = {entry["spread_id"]: entry for entry in spreads["spreads"]}
+    assert by_id["shfe_lme_copper"]["reason"] == "fx_source_not_approved"
+    assert by_id["shfe_comex_copper"]["reason"] == "fx_source_not_approved"
+
+
+def test_detail_propagates_unavailable_lme_comex_differential_states(monkeypatch):
+    from app import api
+
+    cases = [
+        (
+            {
+                "copper_lme": [],
+                "copper_comex": [{"date": "2026-07-24", "value": 4.5}],
+            },
+            "missing_lme_price",
+        ),
+        (
+            {
+                "copper_lme": [{"date": "2026-07-24", "value": 9500.0}],
+                "copper_comex": [],
+            },
+            "missing_comex_price",
+        ),
+    ]
+    for copper_rows, expected_reason in cases:
+        _stub_detail_route_with_copper(monkeypatch, copper_rows)
+        response = TestClient(api.app).get(
+            "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+        )
+        assert response.status_code == 200
+        spreads = response.json()["review_evidence"]["cross_market_spreads"]
+        entry = next(
+            entry
+            for entry in spreads["spreads"]
+            if entry["spread_id"] == "lme_comex_copper"
+        )
+        assert entry["status"] == "unavailable"
+        assert entry["reason"] == expected_reason
+
+
+def test_market_setup_is_identical_across_lme_comex_differential_states(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.market_phase,
+        "build_dashboard_payload",
+        lambda loader: None,
+    )
+    monkeypatch.setattr(
+        api.benchmark_market_data,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.gdp_market_relationships,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+
+    states = [
+        {},
+        _lme_comex_copper_rows(),
+        {
+            "copper_lme": [],
+            "copper_comex": _lme_comex_copper_rows()["copper_comex"],
+        },
+    ]
+    responses = []
+    for rows in states:
+        monkeypatch.setattr(
+            api.macro_indicators_db,
+            "load_macro_indicator_observations_for_series",
+            lambda con, series_ids, rows=rows: {
+                sid: list(rows.get(sid, [])) for sid in series_ids
+            },
+        )
+        responses.append(
+            TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+        )
+
+    assert all(response == responses[0] for response in responses)
+
+
+def test_lme_comex_differential_never_reaches_ticker_workflow(monkeypatch):
+    import json
+
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
+    response = client.post(
+        "/api/ticker-workflow/evaluate",
+        json={
+            "symbol": "XYZ",
+            "observations": {
+                "cross_market_spreads": {
+                    "method_version": "cross_market_spreads_v1",
+                    "spreads": [
+                        {
+                            "spread_id": "lme_comex_copper",
+                            "status": "available",
+                            "comparability": "limited",
+                            "value": -420.8018,
+                        }
+                    ],
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "cross_market_spreads" not in json.dumps(payload)
+    assert "lme_comex_copper" not in json.dumps(payload)
+    assert "review_evidence" not in json.dumps(payload)
+
+
+def test_ticker_classification_is_identical_across_lme_comex_differential_observations(
+    monkeypatch,
+):
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
+    observations = [
+        {"symbol": "XYZ", "observations": {}},
+        {
+            "symbol": "XYZ",
+            "observations": {
+                "cross_market_spreads": {
+                    "method_version": "cross_market_spreads_v1",
+                    "spreads": [
+                        {
+                            "spread_id": "lme_comex_copper",
+                            "status": "available",
+                            "value": -420.8018,
+                        }
+                    ],
+                }
+            },
+        },
+        {
+            "symbol": "XYZ",
+            "observations": {
+                "cross_market_spreads": {
+                    "method_version": "cross_market_spreads_v1",
+                    "spreads": [
+                        {
+                            "spread_id": "lme_comex_copper",
+                            "status": "unavailable",
+                            "reason": "missing_lme_price",
+                        }
+                    ],
+                }
+            },
+        },
+    ]
+    responses = []
+    for body in observations:
+        response = client.post("/api/ticker-workflow/evaluate", json=body)
+        assert response.status_code == 200
+        responses.append(response.json())
 
     assert all(response == responses[0] for response in responses)
 

@@ -2048,18 +2048,103 @@ def test_cross_market_spreads_use_oil_observations_exactly():
     assert brent_wti["legs"]["wti"]["source_series"] == "oil_wti_spot"
 
 
-def test_cross_market_spreads_copper_entries_are_fixed_unavailable():
+_COPPER_OBSERVATIONS = {
+    "copper_comex": [{"date": "2026-07-24", "value": 4.5}],
+    "copper_lme": [{"date": "2026-07-24", "value": 9500.0}],
+}
+
+
+def test_lme_comex_differential_available_entry_preserves_limited_contract():
     payload = .build_cyclical_commodities_payload(
-        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+        COT_ROWS,
+        USD_ROWS,
+        _OIL_ROWS,
+        "2026-07-25",
+        commodity_observations=_COPPER_OBSERVATIONS,
     )
 
     spreads = payload["review_evidence"]["cross_market_spreads"]["spreads"]
     by_id = {s["spread_id"]: s for s in spreads}
-    assert by_id["lme_comex_copper"]["reason"] == "incomparable_price_basis"
+    entry = by_id["lme_comex_copper"]
+
+    assert entry["status"] == "available"
+    assert entry["comparability"] == "limited"
+    assert entry["evidence_type"] == "date_aligned_continuous_price_differential"
+    assert entry["method_version"] == "copper_lme_comex_differential_v1"
+    assert entry["label"] == "LME-COMEX Date-aligned Continuous-price Differential"
+    assert entry["formula"] == (
+        "LME Copper Grade A close - (COMEX HG close × 2204.62262185)"
+    )
+    assert entry["expression"] == "lme_close - comex_close_converted"
+    assert entry["unit"] == "USD/tonne"
+    assert entry["common_observation_date"] == "2026-07-24"
+    assert entry["value"] == pytest.approx(-420.8018)
+    assert entry["legs"]["lme"]["source_series"] == "copper_lme"
+    assert entry["legs"]["lme"]["instrument"] == "LME Copper Grade A"
+    assert entry["legs"]["lme"]["value"] == 9500.0
+    assert entry["legs"]["lme"]["unit"] == "USD/tonne"
+    assert entry["legs"]["lme"]["field"] == "close"
+    assert entry["legs"]["comex"]["source_series"] == "copper_comex"
+    assert entry["legs"]["comex"]["instrument"] == "Copper High Grade futures (HG)"
+    assert entry["legs"]["comex"]["source_value"] == 4.5
+    assert entry["legs"]["comex"]["source_unit"] == "USD/lb"
+    assert entry["legs"]["comex"]["normalized_value"] == pytest.approx(9920.8018)
+    assert entry["legs"]["comex"]["normalized_unit"] == "USD/tonne"
+    assert entry["legs"]["comex"]["conversion_factor"] == 2204.62262185
+    assert entry["legs"]["comex"]["field"] == "close"
+    assert entry["limitations"] == [
+        "contract_tenor_not_confirmed_comparable",
+        "close_timing_not_synchronized",
+        "continuous_roll_rules_undocumented",
+    ]
     assert by_id["shfe_lme_copper"]["reason"] == "fx_source_not_approved"
     assert by_id["shfe_comex_copper"]["reason"] == "fx_source_not_approved"
-    for spread_id in ("lme_comex_copper", "shfe_lme_copper", "shfe_comex_copper"):
-        assert "value" not in by_id[spread_id]
+    assert "value" not in by_id["shfe_lme_copper"]
+    assert "value" not in by_id["shfe_comex_copper"]
+
+
+def test_lme_comex_differential_missing_lme_price_is_unavailable_with_leg_context():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS,
+        USD_ROWS,
+        _OIL_ROWS,
+        "2026-07-25",
+        commodity_observations={
+            "copper_comex": list(_COPPER_OBSERVATIONS["copper_comex"]),
+            "copper_lme": [],
+        },
+    )
+
+    spreads = payload["review_evidence"]["cross_market_spreads"]["spreads"]
+    entry = next(s for s in spreads if s["spread_id"] == "lme_comex_copper")
+    assert entry["status"] == "unavailable"
+    assert entry["reason"] == "missing_lme_price"
+    assert entry["legs"]["lme"]["source_series"] == "copper_lme"
+    assert entry["legs"]["comex"]["source_value"] == 4.5
+    assert entry["legs"]["comex"]["date"] == "2026-07-24"
+    assert "value" not in entry
+    assert "normalized_value" not in entry["legs"]["comex"]
+
+
+def test_lme_comex_differential_never_changes_headline():
+    def headline_for(commodity_observations):
+        payload = .build_cyclical_commodities_payload(
+            COT_ROWS,
+            USD_ROWS,
+            _OIL_ROWS,
+            "2026-07-25",
+            commodity_observations=commodity_observations,
+        )
+        return .build_cyclical_commodities_headline(payload)
+
+    unavailable = {
+        "copper_comex": list(_COPPER_OBSERVATIONS["copper_comex"]),
+        "copper_lme": [],
+    }
+    base = headline_for(None)
+    assert headline_for(_COPPER_OBSERVATIONS) == base
+    assert headline_for(unavailable) == base
+    assert "spread" not in str(base)
 
 
 def test_copper_cross_market_metadata_exposes_frozen_source_contract():
