@@ -3,7 +3,7 @@ from statistics import stdev
 
 
 _ISO_WEEK_DEFINITION = "iso_calendar_week_last_available_trading_day"
-_MINIMUM_SAMPLES = {"daily": 252, "weekly": 52}
+_MINIMUM_SAMPLES = {"daily": 252, "weekly": 52, "monthly": 36}
 _RETURN_DEFINITION = "arithmetic_close_to_close"
 _STANDARD_DEVIATION = "sample"
 
@@ -109,7 +109,7 @@ def build_distribution_from_returns(
     return_definition,
     minimum_samples=None,
 ):
-    if frequency not in ("daily", "weekly"):
+    if frequency not in ("daily", "weekly", "monthly"):
         raise ValueError(f"distribution frequency is invalid: {frequency}")
 
     if minimum_samples is None:
