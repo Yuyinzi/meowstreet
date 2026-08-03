@@ -49,8 +49,8 @@ def _claims_trend_observations(
 
 def _esr_observations():
     specs = {
-        "nonfarm_payrolls": 158200.0,
-        "payrolls_3m_average": 157700.0,
+        "nonfarm_payrolls_change": 57.0,
+        "payrolls_3m_average_change": 111.0,
         "unemployment_rate": 4.0,
         "average_weekly_hours": 34.4,
         "average_hourly_earnings": 36.7,
@@ -126,7 +126,7 @@ def test_labor_context_is_context_only_and_cannot_change_claims_status(tmp_path)
     labor = payload["labor_context"]
     assert labor["role"] == "context_only"
     assert labor["data_status"] == "available"
-    assert "nonfarm_payrolls" in labor["metrics"]
+    assert "nonfarm_payrolls_change" in labor["metrics"]
     assert "average_hourly_earnings" in labor["metrics"]
 
     claims_only_con = economic_confirmation_db.connect(tmp_path / "claims_only.sqlite")
@@ -138,6 +138,76 @@ def test_labor_context_is_context_only_and_cannot_change_claims_status(tmp_path)
     )
     assert sparse["labor_context"]["data_status"] == "missing"
     assert sparse["claims_confirmation"]["confirmation_status"] == "partial"
+
+
+def _html_esr_observations():
+    specs = {
+        "nonfarm_payrolls_change": 57.0,
+        "payrolls_3m_average_change": 111.0,
+        "unemployment_rate": 4.2,
+        "average_weekly_hours": 34.3,
+        "average_hourly_earnings": 37.64,
+    }
+    return [
+        _vintage_observation(series_id, "2026-06", value)
+        for series_id, value in specs.items()
+    ]
+
+
+def test_labor_context_available_from_html_imported_observations(tmp_path):
+    con = economic_confirmation_db.connect(tmp_path / "market.sqlite")
+    economic_confirmation_db.record_vintage_batch(con, _claims_observations())
+    economic_confirmation_db.record_vintage_batch(con, _html_esr_observations())
+    economic_confirmation_db.record_vintage_batch(con, _g17_observations())
+    economic_confirmation_db.record_scheduled_events(con, _scheduled_events())
+
+    payload = economic_confirmation.load_overview(
+        con, {"expected_gdp_direction": "growth_decelerating"}, NOW
+    )
+    assert payload["labor_context"]["data_status"] == "available"
+    assert payload["labor_context"]["method_status"] == "pending_approval"
+    assert payload["labor_context"]["confirmation_status"] == "unavailable"
+    assert payload["real_activity"]["confirmation_status"] == "unavailable"
+    assert payload["economic_confirmation"]["coverage"] == "claims_only"
+
+
+def test_later_bls_vintages_keep_point_in_time_snapshots(tmp_path):
+    con = economic_confirmation_db.connect(tmp_path / "market.sqlite")
+    economic_confirmation_db.record_vintage_batch(con, _claims_observations())
+    initial = _vintage_observation(
+        "nonfarm_payrolls_change",
+        "2026-06",
+        57.0,
+        as_of="2026-07-02T08:30:00+00:00",
+    )
+    revised = dict(initial)
+    revised["vintage_id"] = "nonfarm_payrolls_change:2026-06:2026-07-02:rev"
+    revised["as_of_timestamp"] = "2026-07-30T08:30:00+00:00"
+    revised["value_at_release"] = 58.0
+    revised["latest_revised_value"] = 58.0
+    revised["revision_number"] = 1
+    revised["source_hash"] = "hash:bls-revision"
+    economic_confirmation_db.record_vintage_batch(con, [initial, revised])
+
+    detail = economic_confirmation.load_detail(
+        con,
+        {"expected_gdp_direction": "growth_decelerating"},
+        "2026-07-02T12:00:00+00:00",
+    )
+    overview = economic_confirmation.load_overview(
+        con,
+        {"expected_gdp_direction": "growth_decelerating"},
+        "2026-07-29T12:00:00+00:00",
+    )
+    assert (
+        detail["labor_context"]["metrics"]["nonfarm_payrolls_change"][
+            "value_at_release"
+        ]
+        == 57.0
+    )
+    assert (
+        overview["labor_context"]["metrics"]["nonfarm_payrolls_change"]["value"] == 58.0
+    )
 
 
 def test_real_activity_block_is_exact(tmp_path):

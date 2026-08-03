@@ -5,8 +5,8 @@ ECONOMIC_CONFIRMATION_VERSION = "economic_confirmation_v1.0"
 
 _CLAIMS_SERIES_IDS = ["initial_claims_sa", "continuing_claims_sa"]
 _ESR_SERIES_IDS = [
-    "nonfarm_payrolls",
-    "payrolls_3m_average",
+    "nonfarm_payrolls_change",
+    "payrolls_3m_average_change",
     "unemployment_rate",
     "average_weekly_hours",
     "average_hourly_earnings",
@@ -137,7 +137,7 @@ def _labor_context(series):
 
 
 def _payroll_revisions(series):
-    rows = series.get("nonfarm_payrolls") or []
+    rows = series.get("nonfarm_payrolls_change") or []
     return [_metric_snapshot(row) for row in rows if row.get("revision_number", 0) > 0]
 
 

@@ -198,3 +198,191 @@ def test_parse_employment_situation_release_rejects_missing_next_event():
     )
     with pytest.raises(ValueError, match="next release event"):
         _parse(text)
+
+
+OVERVIEW_URL = "https://www.bls.gov/news.release/empsit.htm"
+HOUSEHOLD_URL = "https://www.bls.gov/news.release/empsit.a.htm"
+ESTABLISHMENT_URL = "https://www.bls.gov/news.release/empsit.b.htm"
+
+
+def current_overview_html():
+    return """
+    <pre>Transmission of material in this news release is embargoed until USDL-26-1125
+    8:30 a.m. (ET) Thursday, July 2, 2026
+    THE EMPLOYMENT SITUATION - JUNE 2026
+    The next Employment Situation for July 2026 is scheduled to be published on
+    Friday, August 7, 2026, at 8:30 a.m. (ET).</pre>
+    """
+
+
+def household_table_html():
+    return """
+    <table>
+    <tr><th>Category</th><th>June2025</th><th>Apr.2026</th><th>May2026</th><th>June2026</th><th>Change from: May2026-June2026</th></tr>
+    <tr><td>Employment status</td></tr>
+    <tr><td>Unemployment rate</td><td>4.1</td><td>4.3</td><td>4.3</td><td>4.2</td><td>-0.1</td></tr>
+    </table>
+    """
+
+
+_ESTABLISHMENT_HEADER = (
+    "<tr><th>Category</th><th>June2025</th><th>Apr.2026</th><th>May2026(p)</th>"
+    "<th>June2026(p)</th></tr>"
+)
+_OVER_THE_MONTH_SECTION = """<tr><td>EMPLOYMENT BY SELECTED INDUSTRY(Over-the-month change, in thousands)</td></tr>
+<tr><td>Total nonfarm</td><td>-20</td><td>148</td><td>129</td><td>57</td></tr>
+<tr><td>Total private</td><td>-45</td><td>150</td><td>97</td><td>49</td></tr>"""
+_THREE_MONTH_SECTION = """<tr><td>(3-month average change, in thousands)</td></tr>
+<tr><td>Total nonfarm</td><td>34</td><td>69</td><td>164</td><td>111</td></tr>
+<tr><td>Total private</td><td>25</td><td>68</td><td>150</td><td>99</td></tr>"""
+_HOURS_EARNINGS_SECTION = """<tr><td>HOURS AND EARNINGS ALL EMPLOYEES</td></tr>
+<tr><td>Total private</td></tr>
+<tr><td>Average weekly hours</td><td>34.2</td><td>34.3</td><td>34.3</td><td>34.3</td></tr>
+<tr><td>Average hourly earnings</td><td>$36.36</td><td>$37.41</td><td>$37.51</td><td>$37.64</td></tr>"""
+
+
+def establishment_table_html():
+    return f"""<table>
+    {_ESTABLISHMENT_HEADER}
+    {_OVER_THE_MONTH_SECTION}
+    {_THREE_MONTH_SECTION}
+    {_HOURS_EARNINGS_SECTION}
+    </table>
+    """
+
+
+def establishment_table_html_without_three_month_section():
+    return f"""<table>
+    {_ESTABLISHMENT_HEADER}
+    {_OVER_THE_MONTH_SECTION}
+    {_HOURS_EARNINGS_SECTION}
+    </table>
+    """
+
+
+def test_parse_employment_situation_html_returns_current_context_metrics():
+    result = bls_employment_situation.parse_employment_situation_html(
+        current_overview_html(),
+        household_table_html(),
+        establishment_table_html(),
+        OVERVIEW_URL,
+        HOUSEHOLD_URL,
+        ESTABLISHMENT_URL,
+    )
+    values = {
+        row["series_id"]: row["value_at_release"] for row in result["observations"]
+    }
+    assert result["release_date"] == "2026-07-02"
+    assert result["reference_period"] == "2026-06"
+    assert values == {
+        "nonfarm_payrolls_change": 57.0,
+        "payrolls_3m_average_change": 111.0,
+        "unemployment_rate": 4.2,
+        "average_weekly_hours": 34.3,
+        "average_hourly_earnings": 37.64,
+    }
+    assert result["scheduled_events"][0]["scheduled_at"] == "2026-08-07T08:30:00"
+
+
+def overview_html_with_revisions():
+    return current_overview_html().replace(
+        "</pre>",
+        "The change in total nonfarm payroll employment for April was revised down by "
+        "31,000, from +179,000 to +148,000, and the change for May was revised down by "
+        "43,000, from +172,000 to +129,000.</pre>",
+    )
+
+
+def household_table_html_missing_unemployment():
+    return household_table_html().replace(
+        "<tr><td>Unemployment rate</td><td>4.1</td><td>4.3</td><td>4.3</td>"
+        "<td>4.2</td><td>-0.1</td></tr>",
+        "",
+    )
+
+
+def establishment_table_html_duplicate_ahe():
+    return establishment_table_html().replace(
+        "<tr><td>Average hourly earnings</td><td>$36.36</td><td>$37.41</td>"
+        "<td>$37.51</td><td>$37.64</td></tr>",
+        "<tr><td>Average hourly earnings</td><td>$36.36</td><td>$37.41</td>"
+        "<td>$37.51</td><td>$37.64</td></tr>\n"
+        "    <tr><td>Average hourly earnings, private</td><td>$36.36</td><td>$37.41</td>"
+        "<td>$37.51</td><td>$37.64</td></tr>",
+    )
+
+
+def _parse_html(overview, household, establishment):
+    return bls_employment_situation.parse_employment_situation_html(
+        overview,
+        household,
+        establishment,
+        OVERVIEW_URL,
+        HOUSEHOLD_URL,
+        ESTABLISHMENT_URL,
+    )
+
+
+def test_parse_employment_situation_html_omits_unstated_three_month_payroll_average():
+    result = _parse_html(
+        current_overview_html(),
+        household_table_html(),
+        establishment_table_html_without_three_month_section(),
+    )
+    series_ids = {row["series_id"] for row in result["observations"]}
+    assert "payrolls_3m_average_change" not in series_ids
+
+
+def test_parse_employment_situation_html_extracts_table_three_month_payroll_average():
+    result = _parse_html(
+        current_overview_html(),
+        household_table_html(),
+        establishment_table_html(),
+    )
+    values = {
+        row["series_id"]: row["value_at_release"] for row in result["observations"]
+    }
+    assert values["payrolls_3m_average_change"] == 111.0
+
+
+def test_parse_employment_situation_html_rejects_missing_current_unemployment_rate():
+    with pytest.raises(
+        ValueError, match="employment situation html is missing unemployment_rate"
+    ):
+        _parse_html(
+            current_overview_html(),
+            household_table_html_missing_unemployment(),
+            establishment_table_html(),
+        )
+
+
+def test_parse_employment_situation_html_rejects_ambiguous_average_hourly_earnings_row():
+    with pytest.raises(
+        ValueError,
+        match="employment situation html has ambiguous average_hourly_earnings",
+    ):
+        _parse_html(
+            current_overview_html(),
+            household_table_html(),
+            establishment_table_html_duplicate_ahe(),
+        )
+
+
+def test_parse_employment_situation_html_extracts_payroll_revisions():
+    result = _parse_html(
+        overview_html_with_revisions(),
+        household_table_html(),
+        establishment_table_html(),
+    )
+    revisions = [
+        row for row in result["observations"] if row["latest_revised_value"] is not None
+    ]
+    assert len(revisions) == 2
+    by_period = {row["reference_period"]: row for row in revisions}
+    assert by_period["2026-04"]["series_id"] == "nonfarm_payrolls_change"
+    assert by_period["2026-04"]["value_at_release"] == 179.0
+    assert by_period["2026-04"]["latest_revised_value"] == 148.0
+    assert by_period["2026-04"]["revision_number"] == 1
+    assert by_period["2026-05"]["value_at_release"] == 172.0
+    assert by_period["2026-05"]["latest_revised_value"] == 129.0
+    assert by_period["2026-05"]["revision_number"] == 1

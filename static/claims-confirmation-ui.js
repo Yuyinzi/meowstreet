@@ -217,8 +217,8 @@
     if (labor.data_status === "available") {
       var metrics = labor.metrics || {};
       html += '<div class="claims-metric-grid">';
-      html += renderMetric(metrics.nonfarm_payrolls, "Nonfarm Payrolls", h);
-      html += renderMetric(metrics.payrolls_3m_average, "Payrolls 3M Average", h);
+      html += renderMetric(metrics.nonfarm_payrolls_change, "Nonfarm Payrolls Change", h);
+      html += renderMetric(metrics.payrolls_3m_average_change, "Payrolls 3M Avg Change", h);
       html += renderMetric(metrics.unemployment_rate, "Unemployment Rate", h);
       html += renderMetric(metrics.average_weekly_hours, "Average Weekly Hours", h);
       html += renderMetric(metrics.average_hourly_earnings, "Average Hourly Earnings", h);

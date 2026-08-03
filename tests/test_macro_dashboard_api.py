@@ -5927,3 +5927,115 @@ def test_economic_confirmation_detail_api_returns_400_for_value_error(monkeypatc
 
     assert response.status_code == 400
     assert response.json()["detail"] == "claims confirmation is unavailable"
+
+
+def _labor_snapshot(series_id, value, source_url):
+    return {
+        "series_id": series_id,
+        "reference_period": "2026-06",
+        "value": value,
+        "value_at_release": value,
+        "latest_revised_value": None,
+        "revision_number": 0,
+        "release_date": "2026-07-02",
+        "source_url": source_url,
+    }
+
+
+def _economic_confirmation_payload_with_labor(as_of_timestamp, vintage_policy):
+    payload = _economic_confirmation_payload(as_of_timestamp)
+    payload["vintage_policy"] = vintage_policy
+    payload["labor_context"] = {
+        "role": "context_only",
+        "method_status": "pending_approval",
+        "confirmation_status": "unavailable",
+        "unavailable_reason": "method_not_approved",
+        "data_status": "available",
+        "metrics": {
+            "nonfarm_payrolls_change": _labor_snapshot(
+                "nonfarm_payrolls_change",
+                57.0,
+                "https://www.bls.gov/news.release/empsit.b.htm",
+            ),
+            "payrolls_3m_average_change": _labor_snapshot(
+                "payrolls_3m_average_change",
+                111.0,
+                "https://www.bls.gov/news.release/empsit.b.htm",
+            ),
+            "unemployment_rate": _labor_snapshot(
+                "unemployment_rate",
+                4.2,
+                "https://www.bls.gov/news.release/empsit.a.htm",
+            ),
+            "average_weekly_hours": _labor_snapshot(
+                "average_weekly_hours",
+                34.3,
+                "https://www.bls.gov/news.release/empsit.b.htm",
+            ),
+            "average_hourly_earnings": _labor_snapshot(
+                "average_hourly_earnings",
+                37.64,
+                "https://www.bls.gov/news.release/empsit.b.htm",
+            ),
+        },
+    }
+    return payload
+
+
+def test_economic_confirmation_routes_serve_html_labor_snapshots(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation,
+        "connect",
+        lambda: type("C", (_FakeConStubs,), {})(),
+    )
+
+    def fake_load_overview(con, macro_growth_context, as_of_timestamp):
+        return _economic_confirmation_payload_with_labor(
+            as_of_timestamp, "latest_official_vintage"
+        )
+
+    def fake_load_detail(con, macro_growth_context, as_of_timestamp):
+        return _economic_confirmation_payload_with_labor(
+            as_of_timestamp, "point_in_time"
+        )
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation_dashboard,
+        "load_overview",
+        fake_load_overview,
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation_dashboard,
+        "load_detail",
+        fake_load_detail,
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router,
+        "macro_dashboard_growth_cycle",
+        lambda: {
+            "headline": [
+                {"id": "survey_synthesis", "expected_gdp_direction": "slowing"}
+            ]
+        },
+    )
+
+    overview = client.get("/api/macro-dashboard/economic-confirmation")
+    detail = client.get("/api/macro-dashboard/economic-confirmation/detail")
+
+    assert overview.status_code == 200
+    assert detail.status_code == 200
+    assert overview.json()["vintage_policy"] == "latest_official_vintage"
+    assert detail.json()["vintage_policy"] == "point_in_time"
+    detail_labor = detail.json()["labor_context"]
+    assert detail_labor["data_status"] == "available"
+    assert detail_labor["confirmation_status"] == "unavailable"
+    assert detail_labor["metrics"]["nonfarm_payrolls_change"]["value"] == 57.0
+    assert detail_labor["metrics"]["payrolls_3m_average_change"]["value"] == 111.0
+    assert detail_labor["metrics"]["unemployment_rate"]["value"] == 4.2
+    assert detail_labor["metrics"]["average_weekly_hours"]["value"] == 34.3
+    assert detail_labor["metrics"]["average_hourly_earnings"]["release_date"] == (
+        "2026-07-02"
+    )
+    assert detail.json()["economic_confirmation"]["coverage"] == "claims_only"
