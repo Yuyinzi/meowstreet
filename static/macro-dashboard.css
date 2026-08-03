@@ -714,6 +714,61 @@ h2 {
   border-left: 3px solid #D8C9B4;
 }
 
+.copper-differential-result {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.copper-differential-result strong {
+  color: #3C332D;
+  font-size: 18px;
+}
+
+.copper-differential-leg-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.copper-differential-leg {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  background: #F8F4EF;
+  border: 1px solid #E5DCD3;
+  border-radius: 6px;
+  color: #6E6257;
+  font-size: 12px;
+}
+
+.copper-differential-leg strong {
+  color: #3C332D;
+  font-size: 14px;
+}
+
+.copper-differential-observation {
+  margin: 12px 0 0;
+  color: #51463E;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cross-market-limitation summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.cross-market-limitation ul {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+
+.cross-market-limitation p {
+  margin: 8px 0 0;
+}
+
 .evidence-empty {
   display: grid;
   gap: 4px;
@@ -5734,6 +5789,10 @@ h2 {
 }
 
 @media (max-width: 768px) {
+  .copper-differential-leg-grid {
+    grid-template-columns: 1fr;
+  }
+
   .nfib-sbo-component-grid {
     grid-template-columns: 1fr;
   }
