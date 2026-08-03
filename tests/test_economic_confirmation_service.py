@@ -74,6 +74,19 @@ def _g17_observations():
     return rows
 
 
+def _vintage_snapshot(series_id):
+    return {
+        "series_id": series_id,
+        "reference_period": "2026-06",
+        "value": 100.0,
+        "value_at_release": 100.0,
+        "latest_revised_value": None,
+        "revision_number": 0,
+        "release_date": "2026-06",
+        "source_url": "https://oui.doleta.gov/unemploy/pdf/claims.pdf",
+    }
+
+
 def _scheduled_events():
     return [
         {
@@ -219,6 +232,13 @@ def test_real_activity_block_is_exact(tmp_path):
         "method_status": "pending_approval",
         "confirmation_status": "unavailable",
         "unavailable_reason": "method_not_approved",
+        "metrics": {
+            "manufacturing_production": _vintage_snapshot("manufacturing_production"),
+            "total_industrial_production": _vintage_snapshot(
+                "total_industrial_production"
+            ),
+            "capacity_utilization": _vintage_snapshot("capacity_utilization"),
+        },
     }
 
 
@@ -233,6 +253,7 @@ def test_real_activity_is_missing_when_no_g17_series_stored(tmp_path):
     assert payload["real_activity"]["method_status"] == "pending_approval"
     assert payload["real_activity"]["confirmation_status"] == "unavailable"
     assert payload["real_activity"]["unavailable_reason"] == "method_not_approved"
+    assert payload["real_activity"]["metrics"] == {}
 
 
 def test_event_risk_direction_is_unknown_and_independent(tmp_path):

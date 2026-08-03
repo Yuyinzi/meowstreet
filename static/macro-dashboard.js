@@ -309,6 +309,13 @@
     return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
 
+  function fmtInteger(value) {
+    if (value === null || value === undefined) return "n/a";
+    return Math.round(Number(value)).toLocaleString(undefined, {
+      maximumFractionDigits: 0,
+    });
+  }
+
   function fmtPercent(value) {
     if (value === null || value === undefined) return "n/a";
     return `${fmtNumber(value)}%`;
@@ -1187,7 +1194,6 @@
     "Overall Economic Confirmation": "总体经济确认",
     "Labor Context": "劳动力背景",
     "Real Activity": "实际活动",
-    "Event Risk": "事件风险",
     "Classification": "分类",
     "Observation Period": "观测周期",
     "Latest 4W Mean": "最新4周均值",
@@ -1205,6 +1211,9 @@
     "Direction": "方向",
     "Nonfarm Payrolls Change": "非农月度变化",
     "Payrolls 3M Avg Change": "非农3M平均变化",
+    "Manufacturing Production": "制造业生产",
+    "Total Industrial Production": "工业总生产",
+    "Capacity Utilization": "产能利用率",
     "Unemployment Rate": "失业率",
     "Average Weekly Hours": "平均每周工时",
     "Average Hourly Earnings": "平均时薪",
@@ -3339,6 +3348,7 @@ html += '</div>';
     if (!section || typeof section.querySelector !== "function") return;
     const head = section.querySelector(".relationship-head");
     if (!head) return;
+    head.querySelectorAll(".mock-pill").forEach((el) => el.remove());
     if (state.economicConfirmationError) {
       section.innerHTML = `${head.outerHTML}<div class="growth-empty" role="status">Failed to load economic confirmation data. <button type="button" class="ms-retry-btn" data-economic-confirmation-retry>Retry</button></div>`;
       const retryBtn = section.querySelector("[data-economic-confirmation-retry]");
@@ -3418,6 +3428,7 @@ html += '</div>';
           bilingualTitle,
           titleCaseToken,
           fmtNumber,
+          fmtInteger,
         });
       })
       .catch((error) => {

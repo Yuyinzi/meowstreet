@@ -164,8 +164,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-.claims-context-note {
+.claims-context-header {
+  display: flex;
+  justify-content: flex-end;
   margin: 0 0 0.6rem;
+}
+
+.claims-context-asof {
   font-size: 0.72rem;
   font-weight: 600;
   color: #8B7E74;

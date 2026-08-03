@@ -6950,6 +6950,15 @@ def test_claims_ui_renders_server_status_without_client_side_classification():
     assert "change_pct >=" not in source
 
 
+def test_claims_ui_labels_the_scheduled_release_as_an_upcoming_event():
+    source = Path("static/claims-confirmation-ui.js").read_text()
+    dashboard_source = Path("static/macro-dashboard.js").read_text()
+
+    assert 'bilingualTitle("Upcoming Event")' in source
+    assert '"Upcoming Event":' not in dashboard_source
+    assert '"Upcoming Economic Event"' not in source
+
+
 def test_economic_confirmation_section_mounts_after_survey_synthesis():
     html = (ROOT / "static" / "macro-dashboard.html").read_text()
 
@@ -7050,7 +7059,10 @@ def test_cot_review_evidence_renders_compact_normal_and_unavailable_statuses():
     assert "Net position is not at a historical high or low" not in renderer
     assert "function renderCOTNormalExplanation" in source
     assert 'class="cot-normal-note"' in source
-    assert "Normal means the net position is not at a historical high or low within the imported history." in source
+    assert (
+        "Normal means the net position is not at a historical high or low within the imported history."
+        in source
+    )
     assert "Unavailable" in renderer
     assert "insufficient_history" in renderer
     assert "unsupported_contract" in renderer

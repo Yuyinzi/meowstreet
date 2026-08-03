@@ -155,16 +155,18 @@ def _metric_snapshot(row):
 
 
 def _real_activity(series):
-    available = any(
-        rows
-        for rows in (series.get(sid) or [] for sid in _REAL_ACTIVITY_SERIES_IDS)
-        if rows
-    )
+    metrics = {}
+    for series_id in _REAL_ACTIVITY_SERIES_IDS:
+        rows = series.get(series_id) or []
+        if not rows:
+            continue
+        metrics[series_id] = _metric_snapshot(rows[-1])
     return {
-        "data_status": "available" if available else "missing",
+        "data_status": "available" if metrics else "missing",
         "method_status": "pending_approval",
         "confirmation_status": "unavailable",
         "unavailable_reason": "method_not_approved",
+        "metrics": metrics,
     }
 
 
