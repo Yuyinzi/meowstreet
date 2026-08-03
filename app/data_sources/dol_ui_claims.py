@@ -68,6 +68,7 @@ _INPUT_RE = re.compile(r"<input[^>]*>", re.IGNORECASE)
 _SELECT_RE = re.compile(r"<select[^>]*>.*?</select>", re.IGNORECASE | re.DOTALL)
 _OPTION_RE = re.compile(r"<option[^>]*>", re.IGNORECASE)
 _ATTR_RE = re.compile(r'([\w-]+)=["\']([^"\']*)["\']', re.IGNORECASE)
+_NATIONAL_REPORT_ACTION_SUFFIX = "report.asp"
 _SERIES_VALUE_COLUMNS = {
     "initial_claims_sa": ("initial claims",),
     "continuing_claims_sa": ("continued claims", "continuing claims"),
@@ -134,6 +135,14 @@ def fetch_claims_release(client, release_url):
     content = _fetch_bytes(client, release_url, "claims release pdf")
     text = _extract_pdf_text(content, "claims release pdf")
     return parse_claims_release_text(text, release_url)
+
+
+def fetch_national_claims_history(client, page_url):
+    page = _fetch_bytes(client, page_url, "national claims page")
+    endpoint, discovered = _discover_national_claims_form(page, page_url)
+    params = _national_claims_params(discovered)
+    report_content = _fetch_national_claims_report(client, endpoint, params)
+    return parse_national_claims_history_html(report_content, endpoint)
 
 
 def parse_claims_release_text(text, source_url):
@@ -282,6 +291,25 @@ def _discover_raw_data_form(page_html, page_url):
     raise ValueError(f"claims chartbook page has no raw data form at {page_url}")
 
 
+def _discover_national_claims_form(page_html, page_url):
+    html = _decode_text(page_html)
+    for action, body in _FORM_RE.findall(html):
+        endpoint = urljoin(page_url, action.strip())
+        if not endpoint.endswith(_NATIONAL_REPORT_ACTION_SUFFIX):
+            continue
+        inputs = {}
+        for tag in _INPUT_RE.findall(body):
+            attrs = dict(_ATTR_RE.findall(tag))
+            name = attrs.get("name")
+            if name:
+                inputs.setdefault(name, []).append(attrs.get("value", ""))
+        if "us" not in inputs.get("level", []):
+            continue
+        final_yr = inputs.get("final_yr", [""])[0]
+        return endpoint, {"final_yr": final_yr}
+    raise ValueError("claims page has no national report form")
+
+
 def _select_values(select_tag):
     attrs = dict(_ATTR_RE.findall(select_tag))
     name = attrs.get("name")
@@ -311,6 +339,29 @@ def _extend_history_window(params):
     params["begyr"] = str(discovered_beg if discovered_beg else 1967)
     params["endyr"] = str(max(discovered_end, current_year))
     return params
+
+
+def _national_claims_params(discovered):
+    params = {
+        "level": "us",
+        "strtdate": "1967",
+        "enddate": str(datetime.now().year),
+        "filetype": "xls",
+        "submit": "Submit",
+    }
+    if discovered.get("final_yr"):
+        params["final_yr"] = discovered["final_yr"]
+    return params
+
+
+def _fetch_national_claims_report(client, endpoint, params):
+    try:
+        response = client.request("POST", endpoint, data=params, timeout=60)
+    except httpx.HTTPError as exc:
+        raise ValueError(
+            f"failed to fetch national claims history report from {endpoint}: {exc}"
+        ) from exc
+    return response.content
 
 
 def _fetch_csv(client, endpoint, params):

@@ -12,6 +12,7 @@ INITIAL_PAGE_URL = "https://oui.doleta.gov/unemploy/Chartbook/a2.asp"
 CONTINUING_PAGE_URL = "https://oui.doleta.gov/unemploy/Chartbook/a3.asp"
 RELEASE_URL = "https://www.dol.gov/ui/data.pdf"
 REPORT_URL = "https://oui.doleta.gov/unemploy/wkclaims/report.asp"
+CLAIMS_PAGE_URL = "https://oui.doleta.gov/unemploy/claims.asp"
 
 _RELEASE_TEXT = (
     "TRANSMISSION OF MATERIALS IN THIS RELEASE IS EMBARGOED UNTIL\n"
@@ -492,6 +493,115 @@ def national_claims_history_html():
           <td headers="01/11/2025 sa_continued_claims">1,871,000</td></tr>
     </table>
     """
+
+
+def national_claims_page_html():
+    return (
+        "<html><body>"
+        '<form action="https://www.doleta.gov/gsearch.cfm" method="post">'
+        '<input type="text" name="search" />'
+        "</form>"
+        '<form name="wkclaim" method="post" action="wkclaims/report.asp">'
+        '<input type="radio" name="level" value="us" checked />National'
+        '<input type="radio" name="level" value="state" />State'
+        '<input type="hidden" name="final_yr" value="2027" />'
+        '<select name="strtdate"><option value="">Start</option></select>'
+        '<select name="enddate"><option value="">End</option></select>'
+        '<input type="radio" name="filetype" id="html" value="html" checked />'
+        '<input type="radio" name="filetype" value="xls" />'
+        '<input type="radio" name="filetype" value="xml" />'
+        '<input type="submit" name="submit" value="Submit" />'
+        "</form></body></html>"
+    ).encode("utf-8")
+
+
+def test_fetch_national_claims_history_posts_one_national_spreadsheet_request():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(200, content=national_claims_page_html())
+        assert str(request.url) == REPORT_URL
+        body = request.read().decode()
+        assert "level=us" in body
+        assert "strtdate=1967" in body
+        assert f"enddate={datetime.now().year}" in body
+        assert "filetype=xls" in body
+        return httpx.Response(200, content=national_claims_history_html())
+
+    rows = dol_ui_claims.fetch_national_claims_history(
+        HttpClient(transport=httpx.MockTransport(handler)), CLAIMS_PAGE_URL
+    )
+    assert len(requests) == 2
+    assert {row["series_id"] for row in rows} == {
+        "initial_claims_sa",
+        "continuing_claims_sa",
+    }
+
+
+def test_fetch_national_claims_history_rejects_page_without_national_form():
+    def handler(request):
+        return httpx.Response(200, content=b"<html><body>no form here</body></html>")
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(ValueError, match="claims page has no national report form"):
+        dol_ui_claims.fetch_national_claims_history(client, CLAIMS_PAGE_URL)
+
+
+def test_fetch_national_claims_history_rejects_report_form_without_national_radio():
+    def handler(request):
+        return httpx.Response(
+            200,
+            content=(
+                "<html><body>"
+                '<form action="wkclaims/report.asp" method="post">'
+                '<input type="radio" name="level" value="state" checked />'
+                "</form></body></html>"
+            ).encode("utf-8"),
+        )
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(ValueError, match="claims page has no national report form"):
+        dol_ui_claims.fetch_national_claims_history(client, CLAIMS_PAGE_URL)
+
+
+def test_fetch_national_claims_history_raises_on_page_404():
+    def handler(request):
+        return httpx.Response(404, content=b"not found")
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(ValueError, match="failed to fetch national claims page from"):
+        dol_ui_claims.fetch_national_claims_history(client, CLAIMS_PAGE_URL)
+
+
+def test_fetch_national_claims_history_raises_on_report_503():
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, content=national_claims_page_html())
+        return httpx.Response(503, content=b"unavailable")
+
+    client = HttpClient(
+        transport=httpx.MockTransport(handler), sleep=lambda _seconds: None
+    )
+    with pytest.raises(
+        ValueError, match="failed to fetch national claims history report from"
+    ):
+        dol_ui_claims.fetch_national_claims_history(client, CLAIMS_PAGE_URL)
+
+
+def test_fetch_national_claims_history_submits_discovered_final_yr():
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, content=national_claims_page_html())
+        body = request.read().decode()
+        assert "final_yr=2027" in body
+        assert "submit=Submit" in body
+        return httpx.Response(200, content=national_claims_history_html())
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    rows = dol_ui_claims.fetch_national_claims_history(client, CLAIMS_PAGE_URL)
+    assert len(rows) == 4
 
 
 def test_parse_national_claims_history_html_returns_both_sa_series():
