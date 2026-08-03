@@ -2027,6 +2027,7 @@ def normalize_cyclical_commodities(payload):
     non_oil_attribution_refresh_status = payload.get(
         "non_oil_attribution_refresh_status"
     )
+    cot_historical_extreme_allowlist = payload.get("cot_historical_extreme_allowlist")
     as_of_date = payload.get("as_of_date", "2026-01-01")
     payload = tool.build_cyclical_commodities_payload(
         cot_rows,
@@ -2040,6 +2041,7 @@ def normalize_cyclical_commodities(payload):
         non_oil_attribution_facts=non_oil_attribution_facts,
         non_oil_attribution_source_audit=non_oil_attribution_source_audit,
         non_oil_attribution_refresh_status=non_oil_attribution_refresh_status,
+        cot_historical_extreme_allowlist=cot_historical_extreme_allowlist,
     )
     card = tool.build_cyclical_commodities_headline(payload)
     return {

@@ -866,6 +866,39 @@ h2 {
   margin-top: 12px;
 }
 
+.cot-extreme-review {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #FBF0DE;
+}
+
+.cot-extreme-normal {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #F4F9F4;
+  font-size: 12px;
+  color: #4C6250;
+}
+
+.cot-extreme-unavailable {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #F3EEE8;
+  font-size: 12px;
+  color: #6E6257;
+}
+
+.cot-extreme-review .summary-stat {
+  margin: 6px 0 0;
+}
+
+.cot-extreme-review .raw-evidence {
+  margin-top: 8px;
+}
+
 .state-up,
 .state-draw {
   color: #155724;

@@ -4,9 +4,10 @@ from app.data_sources import cftc_cot
 from app.data_sources import usd
 from app.data_sources.fred import FredClient as _FredClient
 from app.db import macro_indicators
+from app.services import cot_historical_extremes_catalog as allowlist_service
 
 
-def _parse_cot_zip(zip_path, year):
+def _parse_cot_zip(zip_path, year, code_registry=None):
     import hashlib
     import io
     import zipfile
@@ -23,8 +24,11 @@ def _parse_cot_zip(zip_path, year):
         if txt_name is None:
             raise ValueError(f"no txt file in cftc zip for {year}")
         text = zf.read(txt_name).decode("utf-8", errors="replace")
-    rows = cftc_cot.parse_disaggregated_futures_only(text, source_url, "")
+    rows = cftc_cot.parse_disaggregated_futures_only(
+        text, source_url, "", code_registry=code_registry
+    )
     for r in rows:
+        r["position_category"] = "managed_money"
         try:
             report_dt = datetime.strptime(r["report_date"], "%Y-%m-%d")
             r["publication_date"] = (report_dt + timedelta(days=3)).strftime("%Y-%m-%d")
@@ -105,6 +109,66 @@ def import_cached_official_cot_only(con, cache_dir, years):
 def import_cached_official_usd_only(con, cache_dir):
     usd_count = _import_usd_observations(con, cache_dir)
     return {"cot_observations": 0, "usd_observations": usd_count}
+
+
+def _validate_cot_rows_against_allowlist(rows, active_entries):
+    persisted = []
+    for row in rows:
+        entry = active_entries.get(row["commodity_id"])
+        if entry is None:
+            continue
+        if row.get("cftc_contract_market_code") != entry["contract_code"]:
+            raise ValueError(
+                f" cot {row['commodity_id']} contract market code "
+                f"does not match the allowlist"
+            )
+        persisted.append(row)
+    return persisted
+
+
+def replace_cot_history(con, cache_dir, years, allowlist_path=None):
+    cache_dir = Path(cache_dir)
+    allowlist = allowlist_service.load_cot_historical_extreme_allowlist(
+        allowlist_path or allowlist_service.DEFAULT_ALLOWLIST_PATH
+    )
+    active_entries = allowlist_service.active_allowlist_entries(allowlist)
+    code_registry = {
+        entry["contract_code"]: entry["commodity_id"]
+        for entry in active_entries.values()
+    }
+    rows = []
+    for year in years:
+        zip_path = cache_dir / f"cftc-disaggregated-futures-only-{year}.zip"
+        if not zip_path.exists():
+            raise ValueError(f"missing cached cftc archive for {year}")
+        rows.extend(_parse_cot_zip(zip_path, year, code_registry=code_registry))
+    validated = _validate_cot_rows_against_allowlist(rows, active_entries)
+    scope = sorted(active_entries)
+    count = macro_indicators.replace_cot_history(con, validated, scope)
+    ranges = {}
+    for row in validated:
+        entry = ranges.setdefault(
+            row["commodity_id"],
+            {"count": 0, "start": row["report_date"], "end": row["report_date"]},
+        )
+        entry["count"] += 1
+        entry["start"] = min(entry["start"], row["report_date"])
+        entry["end"] = max(entry["end"], row["report_date"])
+    registry_commodities = set(cftc_cot.COT_COMMODITY_REGISTRY.values())
+    inactive = sorted(registry_commodities - set(active_entries))
+    return {
+        "cot_observations": count,
+        "usd_observations": 0,
+        "ranges": {
+            commodity_id: {
+                "count": details["count"],
+                "start": details["start"],
+                "end": details["end"],
+            }
+            for commodity_id, details in sorted(ranges.items())
+        },
+        "inactive_commodities": inactive,
+    }
 
 
 def refresh_official_(con, cache_dir, years, fred_client_factory=None):

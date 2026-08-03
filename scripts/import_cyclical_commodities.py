@@ -22,6 +22,7 @@ def main(argv=None):
     parser.add_argument("--import-cot", action="store_true")
     parser.add_argument("--fetch-usd", action="store_true")
     parser.add_argument("--import-usd", action="store_true")
+    parser.add_argument("--replace-cot-history", action="store_true")
     parser.add_argument("--cot-years", type=str, default=None)
     args = parser.parse_args(argv)
 
@@ -63,6 +64,28 @@ def main(argv=None):
                 )
             )
             print(f"usd: {result['usd_observations']} observations")
+            return 0
+
+        if args.replace_cot_history:
+            if not (args.start_year and args.end_year):
+                print(
+                    " error: --replace-cot-history requires --start-year and "
+                    "--end-year",
+                    file=sys.stderr,
+                )
+                return 1
+            years = list(range(args.start_year, args.end_year + 1))
+            cyclical_commodities_import.fetch_cot_zips(cache_dir, years)
+            result = cyclical_commodities_import.replace_cot_history(
+                con, cache_dir, years
+            )
+            print(f"cot: {result['cot_observations']} observations (history replaced)")
+            print("inactive commodities:", result["inactive_commodities"])
+            for commodity_id, details in result["ranges"].items():
+                print(
+                    f"{commodity_id}: {details['count']} reports "
+                    f"{details['start']} .. {details['end']}"
+                )
             return 0
 
         result = cyclical_commodities_import.refresh_official_(

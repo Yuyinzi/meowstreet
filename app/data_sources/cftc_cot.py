@@ -27,6 +27,7 @@ REPORT_URL_TEMPLATE = "https://www.cftc.gov/files/dea/history/fut_disagg_txt_{ye
 HEADER_MAPPING = {
     "Market_and_Exchange_Names": "market_name",
     "Report_Date_as_YYYY-MM-DD": "report_date",
+    "CFTC_Contract_Market_Code": "cftc_contract_market_code",
     "Open_Interest_All": "open_interest",
     "M_Money_Positions_Long_All": "manager_long",
     "M_Money_Positions_Short_All": "manager_short",
@@ -40,6 +41,7 @@ def _hash_text(text):
 _REQUIRED_HEADERS = [
     "Market_and_Exchange_Names",
     "Report_Date_as_YYYY-MM-DD",
+    "CFTC_Contract_Market_Code",
     "Open_Interest_All",
     "M_Money_Positions_Long_All",
     "M_Money_Positions_Short_All",
@@ -56,7 +58,9 @@ def _validate_headers(reader):
         )
 
 
-def parse_disaggregated_futures_only(text, source_url, publication_date):
+def parse_disaggregated_futures_only(
+    text, source_url, publication_date, code_registry=None
+):
     source_hash = _hash_text(text)
     reader = csv.DictReader(io.StringIO(text))
     _validate_headers(reader)
@@ -66,16 +70,26 @@ def parse_disaggregated_futures_only(text, source_url, publication_date):
         if "Market_and_Exchange_Names" not in raw:
             continue
         market_name = raw["Market_and_Exchange_Names"].strip()
+        contract_code = raw.get("CFTC_Contract_Market_Code", "").strip()
         commodity_id = COT_COMMODITY_REGISTRY.get(market_name)
         if commodity_id is None:
-            continue
+            if code_registry and contract_code in code_registry:
+                commodity_id = code_registry[contract_code]
+            else:
+                continue
 
         report_date = raw.get("Report_Date_as_YYYY-MM-DD", "").strip()
         raw_longs = raw.get("M_Money_Positions_Long_All", "").strip()
         raw_shorts = raw.get("M_Money_Positions_Short_All", "").strip()
         raw_oi = raw.get("Open_Interest_All", "").strip()
 
-        if not raw_longs or not raw_shorts or not raw_oi or not report_date:
+        if (
+            not raw_longs
+            or not raw_shorts
+            or not raw_oi
+            or not report_date
+            or not contract_code
+        ):
             missing = []
             if not raw_longs:
                 missing.append("manager long")
@@ -85,6 +99,8 @@ def parse_disaggregated_futures_only(text, source_url, publication_date):
                 missing.append("open interest")
             if not report_date:
                 missing.append("report_date")
+            if not contract_code:
+                missing.append("cftc contract market code")
             raise ValueError(
                 f"cftc row {commodity_id} is missing required field(s): {', '.join(missing)}"
             )
@@ -98,8 +114,6 @@ def parse_disaggregated_futures_only(text, source_url, publication_date):
                 f"cftc row has negative values for {commodity_id}: "
                 f"longs={manager_longs} shorts={manager_shorts} oi={open_interest}"
             )
-        if manager_longs == 0 and manager_shorts == 0:
-            raise ValueError(f"cftc row {commodity_id} has zero manager long and short")
         if manager_shorts > open_interest:
             raise ValueError(
                 f"cftc row {commodity_id} manager short exceeds open interest"
@@ -119,7 +133,9 @@ def parse_disaggregated_futures_only(text, source_url, publication_date):
         rows.append(
             {
                 "commodity_id": commodity_id,
+                "market_name": market_name,
                 "report_date": report_date,
+                "cftc_contract_market_code": contract_code,
                 "manager_longs": manager_longs,
                 "manager_shorts": manager_shorts,
                 "open_interest": open_interest,

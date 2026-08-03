@@ -252,6 +252,7 @@ def macro_dashboard_growth_cycle():
                 "non_oil_attribution_facts": non_oil_attribution_facts,
                 "non_oil_attribution_source_audit": non_oil_attribution_audit,
                 "non_oil_attribution_refresh_status": non_oil_attribution_refresh_status,
+                "cot_historical_extreme_allowlist": api._load_cot_historical_extreme_allowlist(),
                 "as_of_date": date.today().isoformat(),
             },
         )
@@ -662,6 +663,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 non_oil_attribution_facts=non_oil_attribution_facts,
                 non_oil_attribution_source_audit=non_oil_attribution_audit,
                 non_oil_attribution_refresh_status=non_oil_attribution_refresh_status,
+                cot_historical_extreme_allowlist=api._load_cot_historical_extreme_allowlist(),
             )
             return tool.build_cyclical_commodities_detail(payload)
         if detail_id == "ism_services":

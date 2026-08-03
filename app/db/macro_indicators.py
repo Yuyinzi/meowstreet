@@ -92,6 +92,8 @@ create table if not exists cot_observations (
     open_interest real not null,
     publication_date text,
     report_type text,
+    cftc_contract_market_code text,
+    position_category text,
     source_url text,
     source_hash text,
     primary key(commodity_id, report_date)
@@ -226,6 +228,11 @@ def init_macro_tables(con):
         )
     except sqlite3.OperationalError:
         pass
+    for col in ["cftc_contract_market_code", "position_category"]:
+        try:
+            con.execute(f"alter table cot_observations add column {col} text")
+        except sqlite3.OperationalError:
+            pass
 
 
 def connect(db_path=DEFAULT_DB_PATH):
@@ -718,65 +725,132 @@ __COT_REQUIRED_FIELDS = [
     "open_interest",
 ]
 
+__COT_REPORT_TYPE = "disaggregated_futures_only"
+__COT_POSITION_CATEGORY = "managed_money"
+
+
+def _cot_observation_fields(obs):
+    for field in __COT_REQUIRED_FIELDS:
+        if field not in obs:
+            raise ValueError(f" cot observation is missing required field: {field}")
+    commodity_id = str(obs["commodity_id"] or "").strip().lower()
+    if not commodity_id:
+        raise ValueError(" cot commodity_id is required")
+    report_date = str(obs["report_date"] or "").strip()
+    if not report_date:
+        raise ValueError(" cot report_date is required")
+    contract_code = str(obs.get("cftc_contract_market_code") or "").strip()
+    if not contract_code:
+        raise ValueError(" cot contract market code is required")
+    report_type = str(obs.get("report_type") or "").strip()
+    if report_type != __COT_REPORT_TYPE:
+        raise ValueError(" cot report type must be disaggregated_futures_only")
+    position_category = str(obs.get("position_category") or "").strip()
+    if position_category != __COT_POSITION_CATEGORY:
+        raise ValueError(" cot position category must be managed_money")
+    manager_longs = float(obs["manager_longs"])
+    manager_shorts = float(obs["manager_shorts"])
+    open_interest = float(obs["open_interest"])
+    if manager_longs < 0 or manager_shorts < 0 or open_interest < 0:
+        raise ValueError(f" cot {commodity_id} has negative values on {report_date}")
+    if manager_longs > open_interest:
+        raise ValueError(
+            f" cot {commodity_id} manager longs exceed open interest on {report_date}"
+        )
+    if manager_shorts > open_interest:
+        raise ValueError(
+            f" cot {commodity_id} manager shorts exceed open interest on {report_date}"
+        )
+    return {
+        "commodity_id": commodity_id,
+        "report_date": report_date,
+        "contract_code": contract_code,
+        "report_type": report_type,
+        "position_category": position_category,
+        "manager_longs": manager_longs,
+        "manager_shorts": manager_shorts,
+        "open_interest": open_interest,
+    }
+
+
+def _insert_cot_observation(con, obs):
+    fields = _cot_observation_fields(obs)
+    existing = con.execute(
+        """select cftc_contract_market_code
+           from cot_observations
+           where commodity_id = ? and report_date = ?""",
+        (fields["commodity_id"], fields["report_date"]),
+    ).fetchone()
+    if existing is not None and existing["cftc_contract_market_code"] not in (
+        None,
+        fields["contract_code"],
+    ):
+        raise ValueError(
+            f" cot {fields['commodity_id']} report date "
+            f"{fields['report_date']} has a different contract market code"
+        )
+    con.execute(
+        """insert into cot_observations(
+            commodity_id, report_date, manager_longs, manager_shorts,
+            open_interest, publication_date, publication_date_basis,
+            report_type, cftc_contract_market_code, position_category,
+            source_url, source_hash
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        on conflict(commodity_id, report_date) do update set
+            manager_longs = excluded.manager_longs,
+            manager_shorts = excluded.manager_shorts,
+            open_interest = excluded.open_interest,
+            publication_date = excluded.publication_date,
+            publication_date_basis = excluded.publication_date_basis,
+            report_type = excluded.report_type,
+            cftc_contract_market_code = excluded.cftc_contract_market_code,
+            position_category = excluded.position_category,
+            source_url = excluded.source_url,
+            source_hash = excluded.source_hash""",
+        (
+            fields["commodity_id"],
+            fields["report_date"],
+            fields["manager_longs"],
+            fields["manager_shorts"],
+            fields["open_interest"],
+            str(obs.get("publication_date", "") or ""),
+            str(obs.get("publication_date_basis", "") or ""),
+            fields["report_type"],
+            fields["contract_code"],
+            fields["position_category"],
+            str(obs.get("source_url", "") or ""),
+            str(obs.get("source_hash", "") or ""),
+        ),
+    )
+
 
 def merge_cot_observations(con, observations):
     try:
         for obs in observations:
-            for field in __COT_REQUIRED_FIELDS:
-                if field not in obs:
-                    raise ValueError(
-                        f" cot observation is missing required field: {field}"
-                    )
-            commodity_id = str(obs["commodity_id"] or "").strip().lower()
-            if not commodity_id:
-                raise ValueError(" cot commodity_id is required")
-            report_date = str(obs["report_date"] or "").strip()
-            if not report_date:
-                raise ValueError(" cot report_date is required")
-            manager_longs = float(obs["manager_longs"])
-            manager_shorts = float(obs["manager_shorts"])
-            open_interest = float(obs["open_interest"])
-            if manager_longs < 0 or manager_shorts < 0 or open_interest < 0:
-                raise ValueError(
-                    f" cot {commodity_id} has negative values on {report_date}"
-                )
-            if manager_longs > open_interest:
-                raise ValueError(
-                    f" cot {commodity_id} manager longs exceed open interest on {report_date}"
-                )
-            if manager_shorts > open_interest:
-                raise ValueError(
-                    f" cot {commodity_id} manager shorts exceed open interest on {report_date}"
-                )
-            con.execute(
-                """insert into cot_observations(
-                    commodity_id, report_date, manager_longs, manager_shorts,
-                    open_interest, publication_date, publication_date_basis,
-                    report_type, source_url, source_hash
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                on conflict(commodity_id, report_date) do update set
-                    manager_longs = excluded.manager_longs,
-                    manager_shorts = excluded.manager_shorts,
-                    open_interest = excluded.open_interest,
-                    publication_date = excluded.publication_date,
-                    publication_date_basis = excluded.publication_date_basis,
-                    report_type = excluded.report_type,
-                    source_url = excluded.source_url,
-                    source_hash = excluded.source_hash""",
-                (
-                    commodity_id,
-                    report_date,
-                    manager_longs,
-                    manager_shorts,
-                    open_interest,
-                    str(obs.get("publication_date", "") or ""),
-                    str(obs.get("publication_date_basis", "") or ""),
-                    str(obs.get("report_type", "") or ""),
-                    str(obs.get("source_url", "") or ""),
-                    str(obs.get("source_hash", "") or ""),
-                ),
-            )
+            _insert_cot_observation(con, obs)
         con.commit()
+        return len(observations)
+    except Exception:
+        con.rollback()
+        raise
+
+
+def replace_cot_history(con, observations, scope_commodities, commit=True):
+    try:
+        normalized_scope = sorted(
+            {str(commodity).strip().lower() for commodity in scope_commodities}
+        )
+        if not normalized_scope:
+            raise ValueError(" cot replace history requires a nonempty scope")
+        placeholders = ", ".join("?" for _ in normalized_scope)
+        con.execute(
+            f"delete from cot_observations where commodity_id in ({placeholders})",
+            normalized_scope,
+        )
+        for obs in observations:
+            _insert_cot_observation(con, obs)
+        if commit:
+            con.commit()
         return len(observations)
     except Exception:
         con.rollback()
@@ -785,7 +859,8 @@ def merge_cot_observations(con, observations):
 
 __COT_COLS = """
     commodity_id, report_date, manager_longs, manager_shorts, open_interest,
-    publication_date, publication_date_basis, report_type, source_url, source_hash
+    publication_date, publication_date_basis, report_type, source_url, source_hash,
+    cftc_contract_market_code, position_category
 """
 
 
