@@ -83,16 +83,48 @@ def g17_observation():
     }
 
 
+def initial_claim():
+    return {
+        "series_id": "initial_claims_sa",
+        "reference_period": "2026-07-25",
+        "vintage_id": "initial_claims_sa:2026-07-25:2026-08-03",
+        "as_of_timestamp": "2026-08-03T00:00:00+00:00",
+        "value_at_release": 230.0,
+        "seasonal_adjustment": "seasonally_adjusted",
+        "source_url": "https://oui.doleta.gov/unemploy/claims.asp",
+        "source_hash": "initial-claims-source-hash",
+    }
+
+
+def continuing_claim():
+    return {
+        "series_id": "continuing_claims_sa",
+        "reference_period": "2026-07-25",
+        "vintage_id": "continuing_claims_sa:2026-07-25:2026-08-03",
+        "as_of_timestamp": "2026-08-03T00:00:00+00:00",
+        "value_at_release": 1860.0,
+        "seasonal_adjustment": "seasonally_adjusted",
+        "source_url": "https://oui.doleta.gov/unemploy/claims.asp",
+        "source_hash": "continuing-claims-source-hash",
+    }
+
+
 def _patch_sources(monkeypatch, html_by_url, g17_observations=None):
+    patch_other_import_sources(monkeypatch, html_by_url, g17_observations)
+    monkeypatch.setattr(
+        import_economic_confirmation.dol_ui_claims,
+        "fetch_national_claims_history",
+        lambda *args: [],
+    )
+
+
+def patch_other_import_sources(monkeypatch, html_by_url=None, g17_observations=None):
+    if html_by_url is None:
+        html_by_url = _bls_html_by_url()
     monkeypatch.setattr(
         import_economic_confirmation,
         "HttpClient",
         lambda: _FakeHttpClient(html_by_url),
-    )
-    monkeypatch.setattr(
-        import_economic_confirmation.dol_ui_claims,
-        "fetch_claims_history",
-        lambda *args: [],
     )
     monkeypatch.setattr(
         import_economic_confirmation.dol_ui_claims,
@@ -207,7 +239,7 @@ def test_main_imports_g17_when_claims_history_fails(monkeypatch, tmp_path, capsy
 
     monkeypatch.setattr(
         import_economic_confirmation.dol_ui_claims,
-        "fetch_claims_history",
+        "fetch_national_claims_history",
         failing_claims_history,
     )
     monkeypatch.setattr(
@@ -248,3 +280,20 @@ def test_main_imports_g17_when_claims_history_fails(monkeypatch, tmp_path, capsy
         "claims_history: failed - claims chartbook is unavailable"
         in capsys.readouterr().err
     )
+
+
+def test_main_uses_one_national_claims_history_source(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(
+        import_economic_confirmation.dol_ui_claims,
+        "fetch_national_claims_history",
+        lambda client, url: calls.append(url) or [initial_claim(), continuing_claim()],
+    )
+    patch_other_import_sources(monkeypatch)
+    assert (
+        import_economic_confirmation.main(
+            ["--db-path", str(tmp_path / "market.sqlite")]
+        )
+        == 0
+    )
+    assert calls == [import_economic_confirmation.DOL_NATIONAL_CLAIMS_URL]
