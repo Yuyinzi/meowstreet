@@ -132,6 +132,22 @@ def test_service_composes_claims_confirmation_with_direction_and_status(tmp_path
     assert claims["confirmation_status"] == "partial"
 
 
+def test_national_claims_history_rows_classify_both_series(tmp_path):
+    initial = _claims_trend_observations("initial_claims_sa", 0.035)
+    continuing = _claims_trend_observations("continuing_claims_sa", 0.0)
+    assert len(initial) == 17
+    assert len(continuing) == 17
+    con = economic_confirmation_db.connect(tmp_path / "market.sqlite")
+    economic_confirmation_db.record_vintage_batch(con, initial + continuing)
+
+    payload = economic_confirmation.load_overview(
+        con, {"expected_gdp_direction": "growth_decelerating"}, NOW
+    )
+    claims = payload["claims_confirmation"]
+    assert claims["initial_claims"]["classification"] != "unavailable"
+    assert claims["continuing_claims"]["classification"] != "unavailable"
+
+
 def test_labor_context_is_context_only_and_cannot_change_claims_status(tmp_path):
     payload = economic_confirmation.load_overview(
         seeded_con(tmp_path), {"expected_gdp_direction": "growth_decelerating"}, NOW
