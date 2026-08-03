@@ -64,6 +64,14 @@ def _save_cache(cache_dir, name, content):
     return target
 
 
+def _import_source(name, fetch, store):
+    try:
+        return store(fetch())
+    except ValueError as exc:
+        print(f"{name}: failed - {exc}", file=sys.stderr)
+        return None
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Import economic confirmation source data"
@@ -77,60 +85,72 @@ def main(argv=None):
     parser.add_argument("--g17-page-url", type=str, default=None)
     parser.add_argument("--g17-data-url", type=str, default=None)
     args = parser.parse_args(argv)
+    client = HttpClient()
+    initial_url = args.dol_initial_url or DOL_INITIAL_CLAIMS_URL
+    continuing_url = args.dol_continuing_url or DOL_CONTINUING_CLAIMS_URL
+    release_url = args.dol_release_url or DOL_RELEASE_URL
+    esr_url = args.bls_esr_url or BLS_ESR_URL
+    g17_page_url = args.g17_page_url or G17_PAGE_URL
+    g17_data_url = args.g17_data_url or G17_DATA_URL
+    con = economic_confirmation.connect(args.db_path)
     try:
-        client = HttpClient()
-        initial_url = args.dol_initial_url or DOL_INITIAL_CLAIMS_URL
-        continuing_url = args.dol_continuing_url or DOL_CONTINUING_CLAIMS_URL
-        release_url = args.dol_release_url or DOL_RELEASE_URL
-        esr_url = args.bls_esr_url or BLS_ESR_URL
-        g17_page_url = args.g17_page_url or G17_PAGE_URL
-        g17_data_url = args.g17_data_url or G17_DATA_URL
-
-        claims_history = dol_ui_claims.fetch_claims_history(
-            client, initial_url, continuing_url
-        )
-        claims_release = dol_ui_claims.fetch_claims_release(client, release_url)
-
-        esr_pdf = _fetch_bytes(client, esr_url, "employment situation pdf")
-        _save_cache(args.cache_dir, "employment_situation.pdf", esr_pdf)
-        esr_result = bls_employment_situation.parse_employment_situation_release(
-            esr_pdf, esr_url
-        )
-
-        g17_result = federal_reserve_g17.fetch_g17_release(
-            client, g17_page_url, g17_data_url
-        )
-        _save_cache(args.cache_dir, "g17_ip.csv", g17_result["csv"])
-
-        counts = {}
-        con = economic_confirmation.connect(args.db_path)
-        try:
-            counts["claims_history"] = economic_confirmation.record_vintage_batch(
-                con, claims_history
-            )
-            counts["claims_release"] = economic_confirmation.record_vintage_batch(
-                con, claims_release
-            )
-            counts["esr"] = economic_confirmation.record_vintage_batch(
-                con, esr_result["observations"]
-            )
-            economic_confirmation.record_scheduled_events(
-                con, esr_result["scheduled_events"]
-            )
-            for series_id, contract in CLAIMS_SOURCE_CONTRACTS.items():
-                economic_confirmation.record_source_contract(con, series_id, contract)
-            counts["g17"] = economic_confirmation.record_vintage_batch(
-                con, g17_result["observations"]
-            )
-        finally:
-            con.close()
-        print(f"db: {args.db_path}")
-        for key, value in counts.items():
+        counts = {
+            "claims_history": _import_source(
+                "claims_history",
+                lambda: dol_ui_claims.fetch_claims_history(
+                    client, initial_url, continuing_url
+                ),
+                lambda observations: economic_confirmation.record_vintage_batch(
+                    con, observations
+                ),
+            ),
+            "claims_release": _import_source(
+                "claims_release",
+                lambda: dol_ui_claims.fetch_claims_release(client, release_url),
+                lambda observations: economic_confirmation.record_vintage_batch(
+                    con, observations
+                ),
+            ),
+            "esr": _import_source(
+                "esr",
+                lambda: bls_employment_situation.parse_employment_situation_release(
+                    _fetch_bytes(client, esr_url, "employment situation pdf"), esr_url
+                ),
+                lambda result: _record_esr(con, result),
+            ),
+            "g17": _import_source(
+                "g17",
+                lambda: federal_reserve_g17.fetch_g17_release(
+                    client, g17_page_url, g17_data_url
+                ),
+                lambda result: _record_g17(con, result, args.cache_dir),
+            ),
+        }
+        if counts["claims_history"] is not None:
+            _record_claims_contracts(con)
+    finally:
+        con.close()
+    print(f"db: {args.db_path}")
+    for key, value in counts.items():
+        if value is not None:
             print(f"{key}: {value}")
-        return 0
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+    return 1 if any(value is None for value in counts.values()) else 0
+
+
+def _record_claims_contracts(con):
+    for series_id, contract in CLAIMS_SOURCE_CONTRACTS.items():
+        economic_confirmation.record_source_contract(con, series_id, contract)
+
+
+def _record_esr(con, result):
+    count = economic_confirmation.record_vintage_batch(con, result["observations"])
+    economic_confirmation.record_scheduled_events(con, result["scheduled_events"])
+    return count
+
+
+def _record_g17(con, result, cache_dir):
+    _save_cache(cache_dir, "g17_ip.csv", result["csv"])
+    return economic_confirmation.record_vintage_batch(con, result["observations"])
 
 
 if __name__ == "__main__":
