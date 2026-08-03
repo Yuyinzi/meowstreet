@@ -35,6 +35,38 @@ def revision_vintage():
     }
 
 
+def history_vintage():
+    return {
+        "series_id": "initial_claims_sa",
+        "reference_period": "2026-07-25",
+        "vintage_id": "history:initial_claims_sa:2026-07-25:2026-07-30",
+        "release_date": None,
+        "as_of_timestamp": "2026-07-30T12:00:00+00:00",
+        "value_at_release": 197000,
+        "latest_revised_value": None,
+        "revision_number": 0,
+        "seasonal_adjustment": "seasonally_adjusted",
+        "source_url": "https://oui.doleta.gov/unemploy/Chartbook/createdf.php",
+        "source_hash": "hash-history",
+    }
+
+
+def release_day_vintage():
+    return {
+        "series_id": "initial_claims_sa",
+        "reference_period": "2026-07-25",
+        "vintage_id": "release:initial_claims_sa:2026-07-25:2026-07-30",
+        "release_date": "2026-07-30",
+        "as_of_timestamp": "2026-07-30T08:30:00+00:00",
+        "value_at_release": 197000,
+        "latest_revised_value": None,
+        "revision_number": 0,
+        "seasonal_adjustment": "seasonally_adjusted",
+        "source_url": "https://www.dol.gov/ui/data.pdf",
+        "source_hash": "hash-release",
+    }
+
+
 def test_vintage_read_excludes_future_revision(tmp_path):
     con = economic_confirmation.connect(tmp_path / "market.sqlite")
     economic_confirmation.record_vintage_batch(
@@ -112,6 +144,25 @@ def test_record_vintage_batch_ignores_identical_duplicate(tmp_path):
     assert count == 1
     result = economic_confirmation.load_current_series(con, ["initial_claims_sa"])
     assert len(result["initial_claims_sa"]) == 1
+
+
+def test_record_vintage_batch_accepts_history_and_release_on_same_day(tmp_path):
+    con = economic_confirmation.connect(tmp_path / "market.sqlite")
+    count = economic_confirmation.record_vintage_batch(
+        con, [history_vintage(), release_day_vintage()]
+    )
+    assert count == 2
+    vintage_ids = {
+        row["vintage_id"]
+        for row in con.execute(
+            "select vintage_id from economic_confirmation_vintages "
+            "where series_id = 'initial_claims_sa'"
+        ).fetchall()
+    }
+    assert vintage_ids == {
+        "history:initial_claims_sa:2026-07-25:2026-07-30",
+        "release:initial_claims_sa:2026-07-25:2026-07-30",
+    }
 
 
 def test_record_vintage_batch_rejects_non_seasonally_adjusted_claims(tmp_path):

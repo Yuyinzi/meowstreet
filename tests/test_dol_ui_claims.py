@@ -139,7 +139,7 @@ def test_fetch_claims_history_discovers_raw_data_forms_and_parses():
     assert initial[0]["seasonal_adjustment"] == "seasonally_adjusted"
     assert initial[0]["latest_revised_value"] is None
     assert initial[0]["revision_number"] == 0
-    assert initial[0]["vintage_id"].startswith("initial_claims_sa:2026-07-05:")
+    assert initial[0]["vintage_id"].startswith("history:initial_claims_sa:2026-07-05:")
     assert continuing[0]["reference_period"] == "2026-01"
     assert continuing[0]["value_at_release"] == 9.264
     assert continuing[0]["series_id"] == "continuing_claims_sa"
@@ -274,14 +274,19 @@ def test_parse_claims_release_text_extracts_release_and_revision():
     assert initial_current["release_date"] == "2026-07-30"
     assert initial_current["seasonal_adjustment"] == "seasonally_adjusted"
     assert initial_current["source_url"] == RELEASE_URL
-    assert initial_current["vintage_id"] == "initial_claims_sa:2026-07-25:2026-07-30"
+    assert (
+        initial_current["vintage_id"]
+        == "release:initial_claims_sa:2026-07-25:2026-07-30"
+    )
 
     assert initial_prior["reference_period"] == "2026-07-18"
     assert initial_prior["value_at_release"] == 187000.0
     assert initial_prior["latest_revised_value"] == 188000.0
     assert initial_prior["revision_number"] == 1
     assert initial_prior["release_date"] == "2026-07-30"
-    assert initial_prior["vintage_id"] == "initial_claims_sa:2026-07-18:2026-07-30"
+    assert (
+        initial_prior["vintage_id"] == "release:initial_claims_sa:2026-07-18:2026-07-30"
+    )
 
     continuing_current, continuing_prior = continuing
     assert continuing_current["reference_period"] == "2026-07-18"
@@ -289,7 +294,8 @@ def test_parse_claims_release_text_extracts_release_and_revision():
     assert continuing_current["latest_revised_value"] is None
     assert continuing_current["revision_number"] == 0
     assert (
-        continuing_current["vintage_id"] == "continuing_claims_sa:2026-07-18:2026-07-30"
+        continuing_current["vintage_id"]
+        == "release:continuing_claims_sa:2026-07-18:2026-07-30"
     )
 
     assert continuing_prior["reference_period"] == "2026-07-11"
@@ -298,7 +304,8 @@ def test_parse_claims_release_text_extracts_release_and_revision():
     assert continuing_prior["revision_number"] == 1
     assert continuing_prior["release_date"] == "2026-07-30"
     assert (
-        continuing_prior["vintage_id"] == "continuing_claims_sa:2026-07-11:2026-07-30"
+        continuing_prior["vintage_id"]
+        == "release:continuing_claims_sa:2026-07-11:2026-07-30"
     )
 
 
