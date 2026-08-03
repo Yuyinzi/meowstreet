@@ -3937,6 +3937,341 @@ def test_cot_historical_extreme_never_reaches_ticker_workflow(monkeypatch):
     assert "review_evidence" not in json.dumps(payload)
 
 
+def _oil_spread_rows(wti_value=68.0, brent_value=71.0):
+    return {
+        "oil_wti_spot": [
+            {"date": "2026-07-24", "value": wti_value, "source_identifier": "RWTC"},
+        ],
+        "oil_brent_spot": [
+            {"date": "2026-07-24", "value": brent_value, "source_identifier": "RBRTE"},
+        ],
+    }
+
+
+def _stub_detail_route_with_oil(monkeypatch, oil_rows):
+    from app import api
+    from app.routers import macro_dashboard as macro_dashboard_module
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    class FakeDate:
+        @classmethod
+        def today(cls):
+            return datetime.date(2026, 8, 3)
+
+    monkeypatch.setattr(macro_dashboard_module, "date", FakeDate)
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations_for_series",
+        lambda con, series_ids: {
+            sid: list(oil_rows.get(sid, [])) for sid in series_ids
+        },
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_shfe_cu_main_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_facts",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_non_oil_attribution_refresh_status",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_non_oil_attribution_source_audit",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_attribution_catalog",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_cot_historical_extreme_allowlist",
+        lambda: None,
+    )
+
+
+def test_detail_propagates_available_cross_market_spread(monkeypatch):
+    from app import api
+
+    _stub_detail_route_with_oil(monkeypatch, _oil_spread_rows())
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    spreads = body["review_evidence"]["cross_market_spreads"]
+    brent_wti = next(
+        entry for entry in spreads["spreads"] if entry["spread_id"] == "brent_wti_spot"
+    )
+    assert brent_wti["status"] == "available"
+    assert brent_wti["value"] == 3.0
+    assert brent_wti["common_observation_date"] == "2026-07-24"
+    assert brent_wti["unit"] == "USD/BBL"
+    assert brent_wti["expression"] == "brent_price - wti_price"
+    assert brent_wti["legs"]["brent"]["source_identifier"] == "RBRTE"
+    assert brent_wti["legs"]["wti"]["source_identifier"] == "RWTC"
+
+
+def test_detail_propagates_negative_cross_market_spread(monkeypatch):
+    from app import api
+
+    _stub_detail_route_with_oil(
+        monkeypatch, _oil_spread_rows(wti_value=75.0, brent_value=70.0)
+    )
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    body = response.json()
+    spreads = body["review_evidence"]["cross_market_spreads"]
+    brent_wti = next(
+        entry for entry in spreads["spreads"] if entry["spread_id"] == "brent_wti_spot"
+    )
+    assert brent_wti["status"] == "available"
+    assert brent_wti["value"] == -5.0
+
+
+def test_detail_propagates_unavailable_cross_market_spread_states(monkeypatch):
+    from app import api
+
+    cases = [
+        (_oil_spread_rows(wti_value=68.0), "available", None),
+        (_oil_spread_rows(wti_value=68.0, brent_value=71.0), "available", None),
+        ({"oil_wti_spot": [], "oil_brent_spot": []}, "unavailable", None),
+        (
+            {
+                "oil_wti_spot": [
+                    {"date": "2026-07-24", "value": 68.0, "source_identifier": "RWTC"}
+                ],
+                "oil_brent_spot": [
+                    {
+                        "date": "2026-07-23",
+                        "value": 71.0,
+                        "source_identifier": "RBRTE",
+                    }
+                ],
+            },
+            "unavailable",
+            "no_common_observation_date",
+        ),
+    ]
+    for oil_rows, expected_status, expected_reason in cases:
+        _stub_detail_route_with_oil(monkeypatch, oil_rows)
+        response = TestClient(api.app).get(
+            "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+        )
+        assert response.status_code == 200
+        spreads = response.json()["review_evidence"]["cross_market_spreads"]
+        brent_wti = next(
+            entry
+            for entry in spreads["spreads"]
+            if entry["spread_id"] == "brent_wti_spot"
+        )
+        assert brent_wti["status"] == expected_status
+        if expected_reason:
+            assert brent_wti["reason"] == expected_reason
+
+
+def test_detail_cross_market_spread_has_no_recommendation_fields(monkeypatch):
+    from app import api
+
+    _stub_detail_route_with_oil(monkeypatch, _oil_spread_rows())
+
+    response = TestClient(api.app).get(
+        "/api/macro-dashboard/growth-cycle/cyclical_commodities"
+    )
+
+    body = response.json()
+    spreads = body["review_evidence"]["cross_market_spreads"]
+    for entry in spreads["spreads"]:
+        for field in (
+            "bullish",
+            "bearish",
+            "recommendation",
+            "normal",
+            "abnormal",
+            "arbitrage",
+        ):
+            assert field not in entry
+            assert field not in str(entry.get("label", "").lower())
+
+
+def test_cross_market_spreads_never_reach_ticker_workflow(monkeypatch):
+    import json
+
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
+    response = client.post(
+        "/api/ticker-workflow/evaluate",
+        json={
+            "symbol": "XYZ",
+            "observations": {
+                "cross_market_spreads": {
+                    "method_version": "cross_market_spreads_v1",
+                    "spreads": [
+                        {
+                            "spread_id": "brent_wti_spot",
+                            "status": "available",
+                            "value": 3.0,
+                        }
+                    ],
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "cross_market_spreads" not in json.dumps(payload)
+    assert "brent_wti_spot" not in json.dumps(payload)
+    assert "review_evidence" not in json.dumps(payload)
+
+
+def test_ticker_classification_is_identical_across_cross_market_spread_observations(
+    monkeypatch,
+):
+    from app import api
+
+    monkeypatch.setattr(
+        api.tool_runner,
+        "apply_tools",
+        lambda method, observation_payload: observation_payload.get("observations", {}),
+    )
+
+    observations = [
+        {"symbol": "XYZ", "observations": {"oil_wti_spot": 68.0}},
+        {"symbol": "XYZ", "observations": {"oil_wti_spot": 90.0}},
+        {"symbol": "XYZ", "observations": {"cross_market_spreads": {"value": 3.0}}},
+        {"symbol": "XYZ", "observations": {}},
+    ]
+    responses = []
+    for body in observations:
+        response = client.post("/api/ticker-workflow/evaluate", json=body)
+        assert response.status_code == 200
+        responses.append(response.json())
+
+    assert all(response == responses[0] for response in responses)
+
+
+def test_market_setup_is_identical_across_cross_market_spread_states(monkeypatch):
+    from app import api
+
+    class FakeCon(_FakeConStubs):
+        pass
+
+    monkeypatch.setattr(api.us_rates_liquidity_db, "connect", lambda: FakeCon())
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points",
+        lambda con, series_id: [],
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_observations",
+        lambda con, sid: [],
+    )
+    monkeypatch.setattr(
+        api.market_phase,
+        "build_dashboard_payload",
+        lambda loader: None,
+    )
+    monkeypatch.setattr(
+        api.benchmark_market_data,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.gdp_market_relationships,
+        "connect",
+        lambda: FakeCon(),
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_industry_rankings",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_at_a_glance_rows",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        api.growth_cycle,
+        "load_latest_ism_report_snapshot",
+        lambda con: None,
+    )
+
+    states = [
+        _oil_spread_rows(wti_value=68.0, brent_value=71.0),
+        _oil_spread_rows(wti_value=75.0, brent_value=70.0),
+        {"oil_wti_spot": [], "oil_brent_spot": []},
+    ]
+    responses = []
+    for oil_rows in states:
+        monkeypatch.setattr(
+            api.macro_indicators_db,
+            "load_macro_indicator_observations_for_series",
+            lambda con, series_ids, rows=oil_rows: {
+                sid: list(rows.get(sid, [])) for sid in series_ids
+            },
+        )
+        responses.append(
+            TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+        )
+
+    assert all(response == responses[0] for response in responses)
+
+
 def test_ticker_classification_is_identical_across_cot_extreme_observations(
     monkeypatch,
 ):

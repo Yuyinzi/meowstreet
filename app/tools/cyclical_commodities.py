@@ -6,6 +6,7 @@ from app.data_sources.tracked_commodities import (
 )
 from app.data_sources.lumber import _LUMBER_SERIES
 from app.tools import cot_historical_extremes
+from app.tools import cross_market_spreads
 from app.tools import oil_distribution
 from app.tools import price_distribution
 from app.tools import shfe_copper
@@ -59,6 +60,29 @@ _COMMODITY_DISPLAY = {
     "aluminium": "Aluminum (COMEX)",
     "steel": "Steel HRC (COMEX)",
 }
+
+_COPPER_CROSS_MARKET_SERIES_IDS = (
+    "copper_comex",
+    "copper_lme",
+    "copper_shanghai",
+)
+
+
+def _copper_cross_market_metadata():
+    return {sid: MARKET_SERIES[sid] for sid in _COPPER_CROSS_MARKET_SERIES_IDS}
+
+
+def _copper_cross_market_rows(commodity_observations, shfe_cu_main_observations):
+    return {
+        "copper_comex": (commodity_observations or {}).get(
+            "copper_comex", []
+        ),
+        "copper_lme": (commodity_observations or {}).get(
+            "copper_lme", []
+        ),
+        "copper_shanghai": shfe_cu_main_observations or [],
+    }
+
 
 _USD_SERIES_DISPLAY = {
     "usd_broad": "Trade-Weighted USD Broad (DTWEXBGS)",
@@ -814,6 +838,12 @@ def build_cyclical_commodities_payload(
     commodity = _commodity_payload(
         commodity_observations or {}, as_of, shfe_cu_main_observations
     )
+    cross_market_spreads = _cross_market_spreads_payload(
+        oil_observations_by_series,
+        commodity_observations,
+        shfe_cu_main_observations,
+        as_of,
+    )
     return {
         "version": _CYCLICAL_COMMODITIES_VERSION,
         "as_of_date": as_of,
@@ -825,6 +855,9 @@ def build_cyclical_commodities_payload(
         "commodity_returns": _commodity_returns_summary(commodity),
         "card_status": "partial_official_evidence",
         "commodity_observation": commodity,
+        "review_evidence": {
+            "cross_market_spreads": cross_market_spreads,
+        },
         "attribution_review_resources": _attribution_review_resources(
             commodity, attribution_review_catalog
         ),
@@ -835,6 +868,24 @@ def build_cyclical_commodities_payload(
             non_oil_attribution_refresh_status,
         ),
     }
+
+
+def _cross_market_spreads_payload(
+    oil_observations_by_series,
+    commodity_observations,
+    shfe_cu_main_observations,
+    as_of_date,
+):
+    oil = oil_observations_by_series or {}
+    return cross_market_spreads.build_cross_market_spreads(
+        wti_rows=oil.get("oil_wti_spot", []),
+        brent_rows=oil.get("oil_brent_spot", []),
+        copper_market_metadata=_copper_cross_market_metadata(),
+        copper_market_rows=_copper_cross_market_rows(
+            commodity_observations, shfe_cu_main_observations
+        ),
+        as_of_date=as_of_date,
+    )
 
 
 def _review_required_commodity_ids(commodity):
@@ -1142,6 +1193,7 @@ def build_cyclical_commodities_detail(payload):
         "steps": details,
         "freshness": _collect_freshness_metadata(payload),
         "non_oil_observation": payload.get("commodity_observation", {}),
+        "review_evidence": payload.get("review_evidence", {}),
         "attribution_review_resources": payload.get("attribution_review_resources", []),
         "non_oil_attribution_evidence": payload.get("non_oil_attribution_evidence", {}),
     }

@@ -1947,3 +1947,107 @@ def test_review_required_iron_without_usgs_audit_row_still_emits_reason():
     iron = detail["non_oil_attribution_evidence"]["iron_ore"]
     assert iron["status"] == "unavailable"
     assert "USGS" in iron["reason"]
+
+
+def test_payload_attaches_cross_market_spreads_under_review_evidence():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+    )
+
+    spreads = payload["review_evidence"]["cross_market_spreads"]
+    assert spreads["method_version"] == "cross_market_spreads_v1"
+    spread_ids = [entry["spread_id"] for entry in spreads["spreads"]]
+    assert spread_ids == [
+        "brent_wti_spot",
+        "lme_comex_copper",
+        "shfe_lme_copper",
+        "shfe_comex_copper",
+    ]
+
+
+def test_cross_market_spreads_use_oil_observations_exactly():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+    )
+
+    spreads = payload["review_evidence"]["cross_market_spreads"]["spreads"]
+    brent_wti = next(s for s in spreads if s["spread_id"] == "brent_wti_spot")
+    assert brent_wti["status"] == "available"
+    assert brent_wti["common_observation_date"] == "2026-07-24"
+    assert brent_wti["value"] == pytest.approx(71.0 - 68.0)
+    assert brent_wti["legs"]["brent"]["source_series"] == "oil_brent_spot"
+    assert brent_wti["legs"]["wti"]["source_series"] == "oil_wti_spot"
+
+
+def test_cross_market_spreads_copper_entries_are_fixed_unavailable():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+    )
+
+    spreads = payload["review_evidence"]["cross_market_spreads"]["spreads"]
+    by_id = {s["spread_id"]: s for s in spreads}
+    assert by_id["lme_comex_copper"]["reason"] == "incomparable_price_basis"
+    assert by_id["shfe_lme_copper"]["reason"] == "fx_source_not_approved"
+    assert by_id["shfe_comex_copper"]["reason"] == "fx_source_not_approved"
+    for spread_id in ("lme_comex_copper", "shfe_lme_copper", "shfe_comex_copper"):
+        assert "value" not in by_id[spread_id]
+
+
+def test_cross_market_spreads_missing_leg_reasons_are_deterministic():
+    oil_rows = dict(_OIL_ROWS)
+    oil_rows["oil_brent_spot"] = []
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, oil_rows, "2026-07-25"
+    )
+
+    spreads = payload["review_evidence"]["cross_market_spreads"]["spreads"]
+    brent_wti = next(s for s in spreads if s["spread_id"] == "brent_wti_spot")
+    assert brent_wti["status"] == "unavailable"
+    assert brent_wti["reason"] == "missing_brent_price"
+
+
+def test_detail_propagates_cross_market_spreads_review_evidence():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+    )
+    detail = .build_cyclical_commodities_detail(payload)
+
+    spreads = detail["review_evidence"]["cross_market_spreads"]
+    assert spreads["method_version"] == "cross_market_spreads_v1"
+    brent_wti = next(
+        s for s in spreads["spreads"] if s["spread_id"] == "brent_wti_spot"
+    )
+    assert brent_wti["status"] == "available"
+
+
+def test_cross_market_spreads_never_change_headline():
+    base_oil = dict(_OIL_ROWS)
+
+    def headline_for(oil_rows):
+        payload = .build_cyclical_commodities_payload(
+            COT_ROWS, USD_ROWS, oil_rows, "2026-07-25"
+        )
+        return .build_cyclical_commodities_headline(payload)
+
+    positive = dict(base_oil)
+    negative = dict(base_oil)
+    negative["oil_wti_spot"] = [
+        {"date": "2026-07-24", "value": 90.0, "source_identifier": "RWTC"},
+    ]
+    missing = dict(base_oil)
+    missing["oil_brent_spot"] = []
+
+    base = headline_for(base_oil)
+    assert headline_for(positive) == base
+    assert headline_for(negative) == base
+    assert headline_for(missing) == base
+
+
+def test_cross_market_spreads_do_not_appear_in_headline_output():
+    payload = .build_cyclical_commodities_payload(
+        COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
+    )
+
+    headline = .build_cyclical_commodities_headline(payload)
+    assert "spread" not in str(headline)
+    assert "review_evidence" not in headline
