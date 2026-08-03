@@ -22,6 +22,10 @@ MARKET_SERIES = {
         "instrument": "Copper High Grade futures (HG)",
         "units": "USD/lb",
         "instrument_id": 8831,
+        "source_vendor": "Investing.com rendered-history",
+        "field": "close",
+        "price_basis": "vendor_continuous_series",
+        "roll_rule_documented": False,
     },
     "copper_lme": {
         "price_page_url": f"{INVESTING_BASE}/commodities/copper-historical-data?cid=959211",
@@ -31,6 +35,10 @@ MARKET_SERIES = {
         "units": "USD/tonne",
         "instrument_id": 959211,
         "rendered_title_token": "Copper",
+        "source_vendor": "Investing.com rendered-history",
+        "field": "close",
+        "price_basis": "vendor_continuous_series",
+        "roll_rule_documented": False,
     },
     "copper_shanghai": {
         "display_name": "Copper (Shanghai)",

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from app.data_sources.tracked_commodities import MARKET_SERIES
 from app.tools import cyclical_commodities as 
 from app.tools import oil_distribution
 
@@ -2059,6 +2060,19 @@ def test_cross_market_spreads_copper_entries_are_fixed_unavailable():
     assert by_id["shfe_comex_copper"]["reason"] == "fx_source_not_approved"
     for spread_id in ("lme_comex_copper", "shfe_lme_copper", "shfe_comex_copper"):
         assert "value" not in by_id[spread_id]
+
+
+def test_copper_cross_market_metadata_exposes_frozen_source_contract():
+    for series_id in ("copper_lme", "copper_comex"):
+        entry = MARKET_SERIES[series_id]
+        assert entry["source_vendor"] == "Investing.com rendered-history"
+        assert entry["field"] == "close"
+        assert entry["price_basis"] == "vendor_continuous_series"
+        assert entry["roll_rule_documented"] is False
+
+    forwarded = ._copper_cross_market_metadata()
+    for series_id in ("copper_lme", "copper_comex"):
+        assert forwarded[series_id] == MARKET_SERIES[series_id]
 
 
 def test_cross_market_spreads_missing_leg_reasons_are_deterministic():

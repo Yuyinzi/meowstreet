@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 
+from app.data_sources.tracked_commodities import MARKET_SERIES
 from app.tools import cross_market_spreads
 
 
@@ -25,10 +26,18 @@ def _copper_metadata():
         "copper_comex": {
             "instrument": "Copper High Grade futures (HG)",
             "units": "USD/lb",
+            "source_vendor": "Investing.com rendered-history",
+            "field": "close",
+            "price_basis": "vendor_continuous_series",
+            "roll_rule_documented": False,
         },
         "copper_lme": {
             "instrument": "LME Copper Grade A",
             "units": "USD/tonne",
+            "source_vendor": "Investing.com rendered-history",
+            "field": "close",
+            "price_basis": "vendor_continuous_series",
+            "roll_rule_documented": False,
         },
         "copper_shanghai": {
             "instrument": "SHFE Copper main contract (OI-selected)",
@@ -432,3 +441,16 @@ def test_copper_entries_never_expose_numerical_spread():
         assert "value" not in entry
         for leg in entry["legs"]:
             assert "value" not in leg
+
+
+def test_copper_metadata_exposes_frozen_source_contract():
+    for series_id in ("copper_comex", "copper_lme"):
+        entry = MARKET_SERIES[series_id]
+        assert entry["source_vendor"] == "Investing.com rendered-history"
+        assert entry["field"] == "close"
+        assert entry["price_basis"] == "vendor_continuous_series"
+        assert entry["roll_rule_documented"] is False
+
+    metadata = _copper_metadata()
+    assert metadata["copper_comex"]["units"] == "USD/lb"
+    assert metadata["copper_lme"]["units"] == "USD/tonne"
