@@ -148,6 +148,33 @@ def test_national_claims_history_rows_classify_both_series(tmp_path):
     assert claims["continuing_claims"]["classification"] != "unavailable"
 
 
+def test_national_history_replacement_removes_legacy_monthly_rows_before_claims_calculation(
+    tmp_path,
+):
+    legacy = _vintage_observation("continuing_claims_sa", "2026-07", 100.0)
+    legacy["vintage_id"] = "continuing_claims_sa:2026-07:legacy"
+    legacy["source_hash"] = "hash:continuing_claims_sa:2026-07:legacy"
+    con = economic_confirmation_db.connect(tmp_path / "market.sqlite")
+    economic_confirmation_db.record_vintage_batch(con, [legacy])
+
+    initial = _claims_trend_observations("initial_claims_sa", 0.035)
+    continuing = _claims_trend_observations("continuing_claims_sa", 0.0)
+    inserted = economic_confirmation_db.replace_national_claims_history_batch(
+        con, initial + continuing
+    )
+    assert inserted == 34
+
+    result = economic_confirmation.load_detail(
+        con,
+        {"expected_gdp_direction": "growth_decelerating"},
+        "2026-08-03T23:59:59+00:00",
+    )
+    trend = result["claims_confirmation"]["continuing_claims"]
+    assert trend["classification"] != "unavailable"
+    assert trend.get("unavailable_reason") is None
+    assert len(trend["observation_period"]) == 10
+
+
 def test_labor_context_is_context_only_and_cannot_change_claims_status(tmp_path):
     payload = economic_confirmation.load_overview(
         seeded_con(tmp_path), {"expected_gdp_direction": "growth_decelerating"}, NOW
