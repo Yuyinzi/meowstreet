@@ -474,38 +474,44 @@
       }
 
       function renderCopperLmeComexEntry(entry) {
-        var limitationCodes = [
-          "contract_tenor_not_confirmed_comparable",
-          "close_timing_not_synchronized",
-          "continuous_roll_rules_undocumented",
-        ];
+        var limitationLabels = {
+          contract_tenor_not_confirmed_comparable: "The underlying contract months are not confirmed to match.",
+          close_timing_not_synchronized: "The two market closes are not synchronized in time.",
+          continuous_roll_rules_undocumented: "Each vendor's continuous-series roll rule is undocumented.",
+        };
         var lme = entry.legs && entry.legs.lme;
         var comex = entry.legs && entry.legs.comex;
         if (!lme || !comex) return "";
-        var html = '<div class="workflow-row cross-market-available">';
+        var absoluteValue = Math.abs(entry.value || 0);
+        var observation = entry.value < 0
+          ? "LME numerical value is below the converted COMEX numerical value by "
+          : entry.value > 0
+            ? "LME numerical value is above the converted COMEX numerical value by "
+            : "LME numerical value matches the converted COMEX numerical value.";
+        var html = '<div class="workflow-row cross-market-available copper-differential-summary">';
         html += '<div class="workflow-label">' + h.escapeHtml(entry.label || "LME\u2013COMEX Date-aligned Continuous-price Differential")
           + '<span class="workflow-role">LME \u2212 COMEX</span></div>';
-        html += '<div class="workflow-metrics">';
-        html += '<span>LME Copper Grade A close: <strong>' + h.escapeHtml(h.fmtNumber(lme.value)) + '</strong> ' + h.escapeHtml(lme.unit || "USD/tonne") + '</span>';
-        html += '<span>COMEX HG close: <strong>' + h.escapeHtml(h.fmtNumber(comex.source_value)) + '</strong> ' + h.escapeHtml(comex.source_unit || "USD/lb") + '</span>';
-        html += '<span>COMEX HG converted: <strong>' + h.escapeHtml(h.fmtNumber(comex.normalized_value)) + '</strong> ' + h.escapeHtml(comex.normalized_unit || "USD/tonne") + '</span>';
-        html += '<span>Conversion factor: ' + h.escapeHtml(String(comex.conversion_factor)) + '</span>';
-        html += '<span>LME \u2212 COMEX: <strong>' + h.escapeHtml(h.fmtNumber(entry.value)) + '</strong> ' + h.escapeHtml(entry.unit || "USD/tonne") + '</span>';
+        html += '<div class="copper-differential-result">';
+        html += '<span class="workflow-role">Comparability: Limited</span>';
+        html += '<strong>LME \u2212 COMEX: ' + h.escapeHtml(h.fmtNumber(entry.value)) + ' ' + h.escapeHtml(entry.unit || "USD/tonne") + '</strong>';
         if (entry.common_observation_date) {
           html += '<span>Vendor-reported trading date: ' + h.escapeHtml(entry.common_observation_date) + '</span>';
         }
-        html += '<span>Comparability: Limited</span>';
         html += '</div>';
-        html += '<p class="cross-market-limitation">Continuous-series roll rules are undocumented. Apparent changes may reflect contract rolls rather than changes in cross-market pricing.</p>';
+        html += '<div class="copper-differential-leg-grid">';
+        html += '<div class="copper-differential-leg"><span>LME Copper Grade A close</span><strong>' + h.escapeHtml(h.fmtNumber(lme.value)) + ' ' + h.escapeHtml(lme.unit || "USD/tonne") + '</strong></div>';
+        html += '<div class="copper-differential-leg"><span>COMEX HG close</span><strong>' + h.escapeHtml(h.fmtNumber(comex.source_value)) + ' ' + h.escapeHtml(comex.source_unit || "USD/lb") + '</strong><span>= ' + h.escapeHtml(h.fmtNumber(comex.normalized_value)) + ' ' + h.escapeHtml(comex.normalized_unit || "USD/tonne") + '</span></div>';
+        html += '</div>';
+        html += '<p class="copper-differential-observation"><strong>Arithmetic observation</strong><br>' + h.escapeHtml(observation + (entry.value === 0 ? "" : h.fmtNumber(absoluteValue) + " " + (entry.unit || "USD/tonne") + ".")) + '</p>';
         if (entry.limitations && entry.limitations.length) {
-          html += '<div class="workflow-metrics">';
-          html += '<span>Limitations:</span>';
+          html += '<details class="cross-market-limitation"><summary>Why comparability is limited</summary><ul>';
           for (var lm = 0; lm < entry.limitations.length; lm++) {
             var limitation = entry.limitations[lm];
-            if (limitationCodes.indexOf(limitation) === -1) continue;
-            html += '<span>' + h.escapeHtml(limitation) + '</span>';
+            if (!limitationLabels[limitation]) continue;
+            html += '<li>' + h.escapeHtml(limitationLabels[limitation]) + '</li>';
           }
-          html += '</div>';
+          html += '</ul><p>Continuous-series roll rules are undocumented. Apparent changes may reflect contract rolls rather than changes in cross-market pricing.</p>';
+          html += '<p>Conversion factor: ' + h.escapeHtml(String(comex.conversion_factor)) + '</p></details>';
         }
         html += '</div>';
         return html;

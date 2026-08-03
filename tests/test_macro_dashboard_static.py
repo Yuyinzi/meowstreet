@@ -7143,6 +7143,11 @@ def test_cross_market_spreads_renderer_renders_limited_lme_comex_entry():
     renderer = source[start:end]
 
     assert "Comparability: Limited" in renderer
+    assert "Arithmetic observation" in renderer
+    assert "LME numerical value is below the converted COMEX numerical value by" in renderer
+    assert "copper-differential-summary" in renderer
+    assert "copper-differential-leg-grid" in renderer
+    assert "copper-differential-leg" in renderer
     assert "Vendor-reported trading date" in renderer
     assert "LME \\u2212 COMEX" in renderer
     assert "USD/tonne" in renderer
@@ -7151,10 +7156,24 @@ def test_cross_market_spreads_renderer_renders_limited_lme_comex_entry():
     assert "close_timing_not_synchronized" in renderer
     assert "continuous_roll_rules_undocumented" in renderer
     assert "cross-market-limitation" in renderer
+    assert "Why comparability is limited" in renderer
+    assert "The underlying contract months are not confirmed to match." in renderer
+    assert "The two market closes are not synchronized in time." in renderer
+    assert "Each vendor's continuous-series roll rule is undocumented." in renderer
     assert (
         "Continuous-series roll rules are undocumented. Apparent changes may reflect contract rolls rather than changes in cross-market pricing."
         in renderer
     )
+
+
+def test_lme_comex_leg_cards_stack_on_narrow_screens():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert (
+        "@media (max-width: 768px) {\n"
+        "  .copper-differential-leg-grid {\n"
+        "    grid-template-columns: 1fr;"
+    ) in css
 
 
 def test_cross_market_spreads_renderer_copper_displays_backend_values_without_arithmetic():
