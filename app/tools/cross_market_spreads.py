@@ -49,6 +49,8 @@ _COPPER_LBS_PER_TONNE = 2204.62262185
 _COPPER_SOURCE_VENDOR = "Investing.com rendered-history"
 _COPPER_PRICE_BASIS = "vendor_continuous_series"
 _COPPER_FIELD_CLOSE = "close"
+_COPPER_LME_INSTRUMENT = "LME Copper Grade A"
+_COPPER_COMEX_INSTRUMENT = "Copper High Grade futures (HG)"
 _COPPER_LME_UNIT = "USD/tonne"
 _COPPER_COMEX_UNIT = "USD/lb"
 _COPPER_LME_COMEX_SERIES = {
@@ -191,9 +193,10 @@ def _build_copper_unavailable_entry(
     }
 
 
-def _frozen_source_contract(meta):
+def _frozen_source_contract(meta, instrument):
     return (
-        meta.get("source_vendor") == _COPPER_SOURCE_VENDOR
+        meta.get("instrument") == instrument
+        and meta.get("source_vendor") == _COPPER_SOURCE_VENDOR
         and meta.get("price_basis") == _COPPER_PRICE_BASIS
         and meta.get("roll_rule_documented") is False
     )
@@ -324,7 +327,9 @@ def _build_lme_comex_entry(copper_market_metadata, copper_market_rows, as_of_dat
         rows.get(_COPPER_LME_COMEX_SERIES["comex"], []) or [], as_of
     )
 
-    if not _frozen_source_contract(lme_meta) or not _frozen_source_contract(comex_meta):
+    if not _frozen_source_contract(
+        lme_meta, _COPPER_LME_INSTRUMENT
+    ) or not _frozen_source_contract(comex_meta, _COPPER_COMEX_INSTRUMENT):
         reason = "source_series_changed"
     elif (
         lme_meta.get("field") != _COPPER_FIELD_CLOSE

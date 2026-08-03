@@ -536,6 +536,26 @@ def test_lme_comex_never_pairs_rows_across_dates():
             "source_series_changed",
         ),
         (
+            lambda m: m["copper_lme"].__setitem__(
+                "instrument", "LME Copper Wirebar"
+            ),
+            "source_series_changed",
+        ),
+        (
+            lambda m: m["copper_comex"].__setitem__(
+                "instrument", "Copper Grade A futures (CA)"
+            ),
+            "source_series_changed",
+        ),
+        (
+            lambda m: m["copper_lme"].pop("instrument"),
+            "source_series_changed",
+        ),
+        (
+            lambda m: m["copper_comex"].pop("instrument"),
+            "source_series_changed",
+        ),
+        (
             lambda m: m["copper_comex"].__setitem__("field", "open"),
             "field_definition_changed",
         ),
