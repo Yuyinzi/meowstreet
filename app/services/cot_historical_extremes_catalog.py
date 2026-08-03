@@ -91,7 +91,17 @@ def derive_allowlist_records(seed_records, pairs_by_commodity):
     records = []
     for seed in seed_records:
         observed = pairs_by_commodity.get(seed["commodity_id"], set())
-        if (seed["market_name"], seed["contract_code"]) in observed:
+        if seed.get("active") is False:
+            records.append(
+                {
+                    "commodity_id": seed["commodity_id"],
+                    "market_name": seed["market_name"],
+                    "contract_code": None,
+                    "active": False,
+                    "reason": _UNSUPPORTED_REASON,
+                }
+            )
+        elif (seed["market_name"], seed["contract_code"]) in observed:
             records.append(
                 {
                     "commodity_id": seed["commodity_id"],

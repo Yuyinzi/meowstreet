@@ -32,6 +32,7 @@ ALLOWLIST_RECORDS = [
         "commodity_id": "natural_gas",
         "market_name": "NATURAL GAS INDEX: EP SAN JUAN - ICE FUTURES ENERGY DIV",
         "contract_code": "0233AX",
+        "active": False,
     },
     {
         "commodity_id": "us_natural_gas",

@@ -1,3 +1,4 @@
+import importlib.util
 import io
 import json
 import zipfile
@@ -12,6 +13,8 @@ FIXTURE_PATH = (
     / "fixtures"
     / "cftc_disaggregated_futures_only_2026.txt"
 )
+
+ROOT = Path(__file__).resolve().parents[1]
 
 VERIFIED_CODES = {
     "crude_oil_wti": "067411",
@@ -263,3 +266,53 @@ def test_derive_allowlist_records_marks_unmatched_pair_inactive():
     assert records[1]["active"] is False
     assert records[1]["contract_code"] is None
     assert records[1]["reason"] == "unsupported_contract"
+
+
+def _load_build_script():
+    path = ROOT / "scripts" / "build_cot_historical_extreme_allowlist.py"
+    spec = importlib.util.spec_from_file_location(
+        "build_cot_historical_extreme_allowlist", path
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_build_script_regeneration_keeps_legacy_series_inactive(tmp_path):
+    module = _load_build_script()
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    _make_cached_zip(cache_dir, 2026)
+
+    pairs = catalog.scan_cftc_archive_contract_pairs(cache_dir, [2026])
+    records = catalog.derive_allowlist_records(module.ALLOWLIST_RECORDS, pairs)
+    by_id = {record["commodity_id"]: record for record in records}
+
+    assert by_id["us_natural_gas"]["active"] is True
+    assert by_id["us_natural_gas"]["contract_code"] == "023651"
+    assert by_id["natural_gas"]["active"] is False
+    assert by_id["natural_gas"]["contract_code"] is None
+    assert by_id["natural_gas"]["reason"] == "unsupported_contract"
+
+
+def test_derive_allowlist_records_keeps_explicitly_inactive_seed_inactive():
+    pairs = {
+        "natural_gas": {
+            ("NATURAL GAS INDEX: EP SAN JUAN - ICE FUTURES ENERGY DIV", "0233AX")
+        }
+    }
+    seeds = [
+        {
+            "commodity_id": "natural_gas",
+            "market_name": "NATURAL GAS INDEX: EP SAN JUAN - ICE FUTURES ENERGY DIV",
+            "contract_code": "0233AX",
+            "active": False,
+            "reason": "unsupported_contract",
+        },
+    ]
+
+    records = catalog.derive_allowlist_records(seeds, pairs)
+
+    assert records[0]["active"] is False
+    assert records[0]["contract_code"] is None
+    assert records[0]["reason"] == "unsupported_contract"
