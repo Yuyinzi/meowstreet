@@ -5013,7 +5013,7 @@ def test_economic_confirmation_api_returns_limited_coverage_payload(monkeypatch)
     assert captured["macro_growth_context"] == {"expected_gdp_direction": "slowing"}
 
 
-def test_economic_confirmation_api_accepts_query_param_direction(monkeypatch):
+def test_economic_confirmation_api_ignores_query_param_direction(monkeypatch):
     from app.routers import macro_dashboard as macro_dashboard_router
 
     monkeypatch.setattr(
@@ -5032,9 +5032,18 @@ def test_economic_confirmation_api_accepts_query_param_direction(monkeypatch):
         "load_overview",
         fake_load_overview,
     )
+    monkeypatch.setattr(
+        macro_dashboard_router,
+        "macro_dashboard_growth_cycle",
+        lambda: {
+            "headline": [
+                {"id": "survey_synthesis", "expected_gdp_direction": "falling"}
+            ]
+        },
+    )
 
     response = client.get(
-        "/api/macro-dashboard/economic-confirmation?expected_gdp_direction=falling"
+        "/api/macro-dashboard/economic-confirmation?expected_gdp_direction=growth_accelerating"
     )
 
     assert response.status_code == 200
@@ -5086,10 +5095,17 @@ def test_economic_confirmation_detail_api_returns_payload(monkeypatch):
         "load_detail",
         fake_load_detail,
     )
-
-    response = client.get(
-        "/api/macro-dashboard/economic-confirmation/detail?expected_gdp_direction=improving"
+    monkeypatch.setattr(
+        macro_dashboard_router,
+        "macro_dashboard_growth_cycle",
+        lambda: {
+            "headline": [
+                {"id": "survey_synthesis", "expected_gdp_direction": "improving"}
+            ]
+        },
     )
+
+    response = client.get("/api/macro-dashboard/economic-confirmation/detail")
 
     assert response.status_code == 200
     assert response.json()["economic_confirmation"]["status"] == "limited_coverage"

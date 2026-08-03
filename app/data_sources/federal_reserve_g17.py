@@ -6,6 +6,10 @@ import re
 from datetime import datetime
 from datetime import timezone
 
+import httpx
+
+from app.http_client import HttpClient
+
 _G17_SERIES_MAP = {
     "IP.B50001.S": "total_industrial_production",
     "IP.B00004.S": "manufacturing_production",
@@ -17,6 +21,71 @@ _SERIES_ORDER = [
     "capacity_utilization",
 ]
 _MONTH_COLUMN_RE = re.compile(r"\d{4}-\d{2}")
+_RELEASE_DATE_RE = re.compile(r"Release Date:\s*(\w+ \d{1,2}, \d{4})", re.IGNORECASE)
+_MONTH_NAMES = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
+
+
+def fetch_g17_release(client, page_url, data_url):
+    page = _fetch_bytes(client, page_url, "g17 release page")
+    release_date = _extract_release_date(page)
+    csv_value = _fetch_bytes(client, data_url, "g17 csv")
+    result = parse_g17_release(
+        {"release_date": release_date, "csv": csv_value}, page_url
+    )
+    result["csv"] = csv_value
+    return result
+
+
+def _fetch_bytes(client, url, label):
+    if not isinstance(client, HttpClient):
+        raise ValueError(f"g17 {label} requires an http client")
+    try:
+        response = client.request("GET", url, timeout=60)
+    except httpx.HTTPError as exc:
+        raise ValueError(f"failed to fetch {label} from {url}: {exc}") from exc
+    return response.content
+
+
+def _extract_release_date(page):
+    text = _decode_text(page)
+    match = _RELEASE_DATE_RE.search(text)
+    if not match:
+        raise ValueError("g17 release page is missing release date")
+    return _parse_release_date(match.group(1))
+
+
+def _parse_release_date(value):
+    parts = value.split()
+    if len(parts) != 3:
+        raise ValueError(f"g17 release page has invalid release date {value!r}")
+    month = _MONTH_NAMES.get(parts[0].lower())
+    day = parts[1].rstrip(",")
+    year = parts[2]
+    if month is None:
+        raise ValueError(f"g17 release page has invalid release date {value!r}")
+    try:
+        return (
+            datetime.strptime(f"{year}-{month:02d}-{int(day):02d}", "%Y-%m-%d")
+            .date()
+            .isoformat()
+        )
+    except ValueError as exc:
+        raise ValueError(
+            f"g17 release page has invalid release date {value!r}"
+        ) from exc
 
 
 def parse_g17_release(payload, source_url):

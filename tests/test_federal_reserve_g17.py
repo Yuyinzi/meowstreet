@@ -1,10 +1,17 @@
 import hashlib
 
+import httpx
 import pytest
 
 from app.data_sources import federal_reserve_g17
+from app.http_client import HttpClient
 
 SOURCE_URL = "https://www.federalreserve.gov/releases/g17/Current/default.htm"
+DATA_URL = (
+    "https://www.federalreserve.gov/datadownload/Output.aspx?rel=G17&series="
+    "809009461b1cba2fd5b4cf5557d9d663&lastobs=&from=&to=&filetype=csv"
+    "&label=include&layout=seriesrow&type=package"
+)
 
 
 def g17_payload():
@@ -141,3 +148,57 @@ def test_parse_g17_release_rejects_no_month_columns():
     )
     with pytest.raises(ValueError, match="no month columns"):
         _parse(payload)
+
+
+def test_fetch_g17_release_derives_release_date_and_parses():
+    def handler(request):
+        if str(request.url) == SOURCE_URL:
+            return httpx.Response(
+                200,
+                content=b"<html><body>Release Date: July 17, 2026</body></html>",
+            )
+        if str(request.url).startswith(DATA_URL):
+            return httpx.Response(200, content=g17_payload()["csv"].encode("utf-8"))
+        raise AssertionError(f"unexpected request {request.url}")
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    result = federal_reserve_g17.fetch_g17_release(client, SOURCE_URL, DATA_URL)
+
+    assert result["release_date"] == "2026-07-17"
+    assert result["data_status"] == "available"
+    assert result["method_status"] == "pending_approval"
+    assert {obs["series_id"] for obs in result["observations"]} == {
+        "manufacturing_production",
+        "total_industrial_production",
+        "capacity_utilization",
+    }
+
+
+def test_fetch_g17_release_raises_when_page_missing_release_date():
+    def handler(request):
+        return httpx.Response(200, content=b"<html><body>no date here</body></html>")
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(ValueError, match="missing release date"):
+        federal_reserve_g17.fetch_g17_release(client, SOURCE_URL, DATA_URL)
+
+
+def test_fetch_g17_release_requires_http_client():
+    with pytest.raises(ValueError, match="requires an http client"):
+        federal_reserve_g17.fetch_g17_release(None, SOURCE_URL, DATA_URL)
+
+
+def test_fetch_g17_release_raises_on_csv_503():
+    def handler(request):
+        if str(request.url) == SOURCE_URL:
+            return httpx.Response(
+                200,
+                content=b"<html><body>Release Date: July 17, 2026</body></html>",
+            )
+        return httpx.Response(503, content=b"unavailable")
+
+    client = HttpClient(
+        transport=httpx.MockTransport(handler), sleep=lambda _seconds: None
+    )
+    with pytest.raises(ValueError, match="failed to fetch g17 csv"):
+        federal_reserve_g17.fetch_g17_release(client, SOURCE_URL, DATA_URL)

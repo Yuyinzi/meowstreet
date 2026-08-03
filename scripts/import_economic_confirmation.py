@@ -19,7 +19,12 @@ DOL_INITIAL_CLAIMS_URL = "https://oui.doleta.gov/unemploy/Chartbook/a2.asp"
 DOL_CONTINUING_CLAIMS_URL = "https://oui.doleta.gov/unemploy/Chartbook/a3.asp"
 DOL_RELEASE_URL = "https://www.dol.gov/ui/data.pdf"
 BLS_ESR_URL = "https://www.bls.gov/news.release/pdf/empsit.pdf"
-G17_URL = "https://www.federalreserve.gov/releases/g17/Current/default.htm"
+G17_PAGE_URL = "https://www.federalreserve.gov/releases/g17/Current/default.htm"
+G17_DATA_URL = (
+    "https://www.federalreserve.gov/datadownload/Output.aspx?rel=G17&series="
+    "809009461b1cba2fd5b4cf5557d9d663&lastobs=&from=&to=&filetype=csv"
+    "&label=include&layout=seriesrow&type=package"
+)
 
 CLAIMS_SOURCE_CONTRACTS = {
     "initial_claims_sa": {
@@ -69,8 +74,8 @@ def main(argv=None):
     parser.add_argument("--dol-continuing-url", type=str, default=None)
     parser.add_argument("--dol-release-url", type=str, default=None)
     parser.add_argument("--bls-esr-url", type=str, default=None)
-    parser.add_argument("--g17-url", type=str, default=None)
-    parser.add_argument("--g17-release-date", type=str, default=None)
+    parser.add_argument("--g17-page-url", type=str, default=None)
+    parser.add_argument("--g17-data-url", type=str, default=None)
     args = parser.parse_args(argv)
     try:
         client = HttpClient()
@@ -78,7 +83,8 @@ def main(argv=None):
         continuing_url = args.dol_continuing_url or DOL_CONTINUING_CLAIMS_URL
         release_url = args.dol_release_url or DOL_RELEASE_URL
         esr_url = args.bls_esr_url or BLS_ESR_URL
-        g17_url = args.g17_url or G17_URL
+        g17_page_url = args.g17_page_url or G17_PAGE_URL
+        g17_data_url = args.g17_data_url or G17_DATA_URL
 
         claims_history = dol_ui_claims.fetch_claims_history(
             client, initial_url, continuing_url
@@ -90,6 +96,11 @@ def main(argv=None):
         esr_result = bls_employment_situation.parse_employment_situation_release(
             esr_pdf, esr_url
         )
+
+        g17_result = federal_reserve_g17.fetch_g17_release(
+            client, g17_page_url, g17_data_url
+        )
+        _save_cache(args.cache_dir, "g17_ip.csv", g17_result["csv"])
 
         counts = {}
         con = economic_confirmation.connect(args.db_path)
@@ -108,18 +119,9 @@ def main(argv=None):
             )
             for series_id, contract in CLAIMS_SOURCE_CONTRACTS.items():
                 economic_confirmation.record_source_contract(con, series_id, contract)
-            if args.g17_release_date:
-                g17_csv = _fetch_bytes(client, g17_url, "g17 csv")
-                _save_cache(args.cache_dir, "g17_ip.csv", g17_csv)
-                g17_result = federal_reserve_g17.parse_g17_release(
-                    {"release_date": args.g17_release_date, "csv": g17_csv},
-                    g17_url,
-                )
-                counts["g17"] = economic_confirmation.record_vintage_batch(
-                    con, g17_result["observations"]
-                )
-            else:
-                print("g17: skipped (no --g17-release-date)")
+            counts["g17"] = economic_confirmation.record_vintage_batch(
+                con, g17_result["observations"]
+            )
         finally:
             con.close()
         print(f"db: {args.db_path}")

@@ -69,6 +69,24 @@ def _page_html(chartnum):
     ).encode("utf-8")
 
 
+def _select_page_html(chartnum):
+    return (
+        "<html><body>"
+        '<form action="createdf.php" method="post">'
+        '<select name="begyr">'
+        '<option value="1990">1990</option>'
+        '<option value="1967" selected>1967</option>'
+        "</select>"
+        '<select name="endyr">'
+        '<option value="2000">2000</option>'
+        '<option value="1980" selected>1980</option>'
+        "</select>"
+        f'<input type="hidden" name="chartnum" value="{chartnum}" />'
+        '<input type="submit" value="Get the Raw Data!" />'
+        "</form></body></html>"
+    ).encode("utf-8")
+
+
 def _escape(text):
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
@@ -150,6 +168,59 @@ def test_fetch_claims_history_discovers_raw_data_forms_and_parses():
         observations[0]["source_hash"]
         == hashlib.sha256(initial_csv().encode("utf-8")).hexdigest()
     )
+
+
+def test_fetch_claims_history_discovers_year_select_fields():
+    def handler(request):
+        if str(request.url) == INITIAL_PAGE_URL:
+            return httpx.Response(200, content=_select_page_html("a2"))
+        if str(request.url) == CONTINUING_PAGE_URL:
+            return httpx.Response(200, content=_select_page_html("a3"))
+        if str(request.url) == "https://oui.doleta.gov/unemploy/Chartbook/createdf.php":
+            assert request.method == "POST"
+            body = request.read().decode()
+            assert "begyr=1967" in body
+            assert f"endyr={datetime.now().year}" in body
+            if "chartnum=a2" in body:
+                return httpx.Response(200, content=initial_csv().encode("utf-8"))
+            return httpx.Response(200, content=continuing_csv().encode("utf-8"))
+        raise AssertionError(f"unexpected request {request.url}")
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    observations = dol_ui_claims.fetch_claims_history(
+        client, INITIAL_PAGE_URL, CONTINUING_PAGE_URL
+    )
+    assert len(observations) == 6
+
+
+def test_fetch_claims_history_defaults_missing_years_explicitly():
+    def page_html(chartnum):
+        return (
+            "<html><body>"
+            '<form action="createdf.php" method="post">'
+            f'<input type="hidden" name="chartnum" value="{chartnum}" />'
+            "</form></body></html>"
+        ).encode("utf-8")
+
+    def handler(request):
+        if str(request.url) == INITIAL_PAGE_URL:
+            return httpx.Response(200, content=page_html("a2"))
+        if str(request.url) == CONTINUING_PAGE_URL:
+            return httpx.Response(200, content=page_html("a3"))
+        if str(request.url) == "https://oui.doleta.gov/unemploy/Chartbook/createdf.php":
+            body = request.read().decode()
+            assert "begyr=1967" in body
+            assert f"endyr={datetime.now().year}" in body
+            if "chartnum=a2" in body:
+                return httpx.Response(200, content=initial_csv().encode("utf-8"))
+            return httpx.Response(200, content=continuing_csv().encode("utf-8"))
+        raise AssertionError(f"unexpected request {request.url}")
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    observations = dol_ui_claims.fetch_claims_history(
+        client, INITIAL_PAGE_URL, CONTINUING_PAGE_URL
+    )
+    assert len(observations) == 6
 
 
 def test_fetch_claims_history_raises_on_page_404():

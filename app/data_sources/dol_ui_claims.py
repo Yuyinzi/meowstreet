@@ -64,6 +64,8 @@ _FORM_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _INPUT_RE = re.compile(r"<input[^>]*>", re.IGNORECASE)
+_SELECT_RE = re.compile(r"<select[^>]*>.*?</select>", re.IGNORECASE | re.DOTALL)
+_OPTION_RE = re.compile(r"<option[^>]*>", re.IGNORECASE)
 _ATTR_RE = re.compile(r'([\w-]+)=["\']([^"\']*)["\']', re.IGNORECASE)
 _SERIES_VALUE_COLUMNS = {
     "initial_claims_sa": ("initial claims",),
@@ -181,18 +183,41 @@ def _discover_raw_data_form(page_html, page_url):
             name = attrs.get("name")
             if name:
                 params[name] = attrs.get("value", "")
+        for select_tag in _SELECT_RE.findall(body):
+            params.update(_select_values(select_tag))
         if "chartnum" in params:
             endpoint = urljoin(page_url, action.strip())
             return endpoint, params
     raise ValueError(f"claims chartbook page has no raw data form at {page_url}")
 
 
+def _select_values(select_tag):
+    attrs = dict(_ATTR_RE.findall(select_tag))
+    name = attrs.get("name")
+    if not name:
+        return {}
+    options = _OPTION_RE.findall(select_tag)
+    for option in options:
+        if re.search(r"\bselected\b", option, re.IGNORECASE):
+            option_attrs = dict(_ATTR_RE.findall(option))
+            return {name: option_attrs.get("value", "")}
+    if options:
+        first_attrs = dict(_ATTR_RE.findall(options[0]))
+        return {name: first_attrs.get("value", "")}
+    return {}
+
+
 def _extend_history_window(params):
     current_year = datetime.now().year
+    try:
+        discovered_beg = int(params.get("begyr") or 0)
+    except (TypeError, ValueError):
+        discovered_beg = 0
     try:
         discovered_end = int(params.get("endyr") or 0)
     except (TypeError, ValueError):
         discovered_end = 0
+    params["begyr"] = str(discovered_beg if discovered_beg else 1967)
     params["endyr"] = str(max(discovered_end, current_year))
     return params
 

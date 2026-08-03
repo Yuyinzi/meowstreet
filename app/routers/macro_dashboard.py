@@ -51,9 +51,7 @@ def macro_dashboard_consumer_sentiment_detail():
         con.close()
 
 
-def _macro_growth_context(expected_gdp_direction):
-    if expected_gdp_direction:
-        return {"expected_gdp_direction": expected_gdp_direction}
+def _macro_growth_context():
     growth_cycle_payload = macro_dashboard_growth_cycle()
     survey_synthesis = next(
         (
@@ -67,12 +65,12 @@ def _macro_growth_context(expected_gdp_direction):
 
 
 @router.get("/economic-confirmation")
-def macro_dashboard_economic_confirmation(expected_gdp_direction=None):
+def macro_dashboard_economic_confirmation():
     con = economic_confirmation.connect()
     try:
         return economic_confirmation_dashboard.load_overview(
             con,
-            _macro_growth_context(expected_gdp_direction),
+            _macro_growth_context(),
             date.today().isoformat(),
         )
     except ValueError as exc:
@@ -82,12 +80,12 @@ def macro_dashboard_economic_confirmation(expected_gdp_direction=None):
 
 
 @router.get("/economic-confirmation/detail")
-def macro_dashboard_economic_confirmation_detail(expected_gdp_direction=None):
+def macro_dashboard_economic_confirmation_detail():
     con = economic_confirmation.connect()
     try:
         return economic_confirmation_dashboard.load_detail(
             con,
-            _macro_growth_context(expected_gdp_direction),
+            _macro_growth_context(),
             date.today().isoformat(),
         )
     except ValueError as exc:
