@@ -122,8 +122,10 @@ def main(argv=None):
                 lambda: dol_ui_claims.fetch_national_claims_history(
                     client, national_url
                 ),
-                lambda observations: economic_confirmation.record_vintage_batch(
-                    con, observations
+                lambda observations: (
+                    economic_confirmation.replace_national_claims_history_batch(
+                        con, observations
+                    )
                 ),
             ),
             "claims_release": _import_source(

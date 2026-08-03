@@ -237,10 +237,16 @@ def test_main_imports_g17_when_claims_history_fails(monkeypatch, tmp_path, capsy
     def failing_claims_history(*args):
         raise ValueError("claims chartbook is unavailable")
 
+    replacements = []
     monkeypatch.setattr(
         import_economic_confirmation.dol_ui_claims,
         "fetch_national_claims_history",
         failing_claims_history,
+    )
+    monkeypatch.setattr(
+        import_economic_confirmation.economic_confirmation,
+        "replace_national_claims_history_batch",
+        lambda con, rows: replacements.append(rows) or 2,
     )
     monkeypatch.setattr(
         import_economic_confirmation.dol_ui_claims,
@@ -276,6 +282,7 @@ def test_main_imports_g17_when_claims_history_fails(monkeypatch, tmp_path, capsy
 
     assert exit_code == 1
     assert rows["manufacturing_production"][0]["value"] == 100.0
+    assert replacements == []
     assert (
         "claims_history: failed - claims chartbook is unavailable"
         in capsys.readouterr().err
@@ -297,3 +304,28 @@ def test_main_uses_one_national_claims_history_source(monkeypatch, tmp_path):
         == 0
     )
     assert calls == [import_economic_confirmation.DOL_NATIONAL_CLAIMS_URL]
+
+
+def test_main_replaces_legacy_claims_history_after_national_fetch(
+    monkeypatch, tmp_path
+):
+    replacements = []
+    monkeypatch.setattr(
+        import_economic_confirmation.dol_ui_claims,
+        "fetch_national_claims_history",
+        lambda client, url: [initial_claim(), continuing_claim()],
+    )
+    monkeypatch.setattr(
+        import_economic_confirmation.economic_confirmation,
+        "replace_national_claims_history_batch",
+        lambda con, rows: replacements.append(rows) or 2,
+    )
+    patch_other_import_sources(monkeypatch)
+
+    assert (
+        import_economic_confirmation.main(
+            ["--db-path", str(tmp_path / "market.sqlite")]
+        )
+        == 0
+    )
+    assert replacements == [[initial_claim(), continuing_claim()]]
