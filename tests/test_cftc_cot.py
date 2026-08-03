@@ -46,6 +46,28 @@ def test_parse_disaggregated_futures_only_normalizes_wti_manager_fields():
     assert wti[0]["source_hash"] == cftc_cot._hash_text(FIXTURE_PATH.read_text())
 
 
+def test_parse_disaggregated_futures_only_normalizes_natural_gas_contracts():
+    rows = cftc_cot.parse_disaggregated_futures_only(
+        FIXTURE_PATH.read_text(),
+        "https://www.cftc.gov/files/dea/history/fut_disagg_txt_2026.zip",
+        "2026-07-24",
+    )
+
+    henry_hub = [r for r in rows if r["commodity_id"] == "us_natural_gas"]
+    assert len(henry_hub) == 1
+    assert henry_hub[0]["market_name"] == "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE"
+    assert henry_hub[0]["cftc_contract_market_code"] == "023651"
+    assert henry_hub[0]["report_date"] == "2026-07-21"
+
+    san_juan = [r for r in rows if r["commodity_id"] == "natural_gas"]
+    assert len(san_juan) == 1
+    assert san_juan[0]["market_name"] == (
+        "NATURAL GAS INDEX: EP SAN JUAN - ICE FUTURES ENERGY DIV"
+    )
+    assert san_juan[0]["cftc_contract_market_code"] == "0233AX"
+    assert san_juan[0]["report_date"] == "2026-03-03"
+
+
 def test_parse_disaggregated_futures_only_rejects_missing_manager_field():
     with pytest.raises(ValueError, match="cftc row.*manager short"):
         cftc_cot.parse_disaggregated_futures_only(
@@ -128,6 +150,7 @@ def test_cot_commodity_registry_preserves_the_video_12_energy_and_metals_univers
         "crude_oil_brent",
         "heating_oil",
         "natural_gas",
+        "us_natural_gas",
         "palladium",
         "platinum",
         "silver",
