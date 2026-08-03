@@ -6846,3 +6846,81 @@ def test_evidence_css_has_scoped_classes():
     assert ".evidence-fact" in css
     assert ".evidence-unavailable" in css
     assert ".evidence-manual" in css
+
+
+def test_claims_ui_renders_server_status_without_client_side_classification():
+    source = Path("static/claims-confirmation-ui.js").read_text()
+
+    assert "Claims-Based Labor Confirmation" in source
+    assert "change_pct >=" not in source
+
+
+def test_economic_confirmation_section_mounts_after_survey_synthesis():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+
+    market_setup = html.index('id="marketSetup"')
+    survey_synthesis = html.index('id="surveySynthesis"')
+    economic_confirmation = html.index('id="economicConfirmation"')
+    benchmarks = html.index('aria-label="Benchmark market phase overview"')
+
+    assert market_setup < survey_synthesis < economic_confirmation < benchmarks
+    assert 'aria-label="Economic confirmation decision layer"' in html
+    assert (
+        'aria-live="polite"'
+        in html[economic_confirmation : html.index(">", economic_confirmation)]
+    )
+    assert "<h2>Economic Confirmation</h2>" in html
+    assert html.count("<h2>Economic Confirmation</h2>") == 1
+    assert "Loading economic confirmation" in html
+
+
+def test_macro_dashboard_html_links_claims_confirmation_assets():
+    html = (ROOT / "static" / "macro-dashboard.html").read_text()
+
+    assert 'href="/claims-confirmation.css"' in html
+    assert 'src="/claims-confirmation-ui.js"' in html
+
+
+def test_macro_dashboard_js_fetches_economic_confirmation_overview_and_detail():
+    js = STATIC_JS.read_text()
+
+    assert 'fetch("/api/macro-dashboard/economic-confirmation")' in js
+    assert 'fetch("/api/macro-dashboard/economic-confirmation/detail")' in js
+    assert "renderEconomicConfirmation" in js
+    assert "renderEconomicConfirmationDetailInPanel" in js
+    assert "selectedEconomicConfirmationDetailId" in js
+
+
+def test_claims_ui_handles_all_confirmation_statuses():
+    source = (ROOT / "static" / "claims-confirmation-ui.js").read_text()
+
+    for marker in [
+        "confirming",
+        "partial",
+        "conflicting",
+        "not_confirming",
+        "unavailable",
+    ]:
+        assert marker in source
+
+
+def test_claims_ui_handles_unavailable_reason_codes():
+    source = (ROOT / "static" / "claims-confirmation-ui.js").read_text()
+
+    for marker in [
+        "data_missing",
+        "release_not_yet_available",
+        "insufficient_history",
+        "stale_data",
+        "calculation_error",
+        "method_not_approved",
+        "macro_growth_thesis_not_directional",
+    ]:
+        assert marker in source
+
+
+def test_claims_ui_has_no_client_side_trade_classification_copy():
+    source = (ROOT / "static" / "claims-confirmation-ui.js").read_text()
+
+    for marker in ["Buy", "Sell", "posture", "score", "long", "short"]:
+        assert marker not in source
