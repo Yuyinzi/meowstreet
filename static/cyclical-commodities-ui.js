@@ -294,7 +294,6 @@
         if (status === "not_extreme") {
           return '<div class="cot-extreme-normal">'
             + '<span class="market-status market-status-normal">Normal</span>'
-            + '<span>Net position is not at a historical high or low within the imported history.</span>'
             + '</div>';
         }
         var reasonLabels = {
@@ -312,6 +311,17 @@
           + '<span class="market-status market-status-unavailable">Unavailable</span>'
           + '<span>' + h.escapeHtml(label) + '</span>'
           + '</div>';
+      }
+
+      function renderCOTNormalExplanation(commodities) {
+        for (var i = 0; i < commodities.length; i++) {
+          var evidence = commodities[i].review_evidence || {};
+          var extreme = evidence.cot_historical_extreme || {};
+          if (extreme.status === "not_extreme") {
+            return '<p class="cot-normal-note">Normal means the net position is not at a historical high or low within the imported history.</p>';
+          }
+        }
+        return "";
       }
 
       function renderCOTRow(commodity) {
@@ -644,6 +654,7 @@
         html += '<details class="raw-evidence">';
         html += '<summary>View raw evidence</summary>';
         for (var c = 0; c < (cot.commodities || []).length; c++) html += renderCOTRow(cot.commodities[c]);
+        html += renderCOTNormalExplanation(cot.commodities || []);
         html += '</details>';
       }
       html += '</article>';

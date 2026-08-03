@@ -6272,6 +6272,8 @@ def test_economic_confirmation_detail_api_returns_payload(monkeypatch):
     assert response.status_code == 200
     assert response.json()["economic_confirmation"]["status"] == "limited_coverage"
     assert captured["macro_growth_context"] == {"expected_gdp_direction": "improving"}
+    assert "T" in response.json()["as_of"]
+    assert response.json()["as_of"].endswith("+00:00")
     assert response.json()["vintage_policy"] == "point_in_time"
 
 

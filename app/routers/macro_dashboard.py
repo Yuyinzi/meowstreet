@@ -1,5 +1,7 @@
 import logging
 from datetime import date
+from datetime import datetime
+from datetime import timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -64,6 +66,10 @@ def _macro_growth_context():
     return {"expected_gdp_direction": survey_synthesis.get("expected_gdp_direction")}
 
 
+def _utc_timestamp():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 @router.get("/economic-confirmation")
 def macro_dashboard_economic_confirmation():
     con = economic_confirmation.connect()
@@ -71,7 +77,7 @@ def macro_dashboard_economic_confirmation():
         return economic_confirmation_dashboard.load_overview(
             con,
             _macro_growth_context(),
-            date.today().isoformat(),
+            _utc_timestamp(),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -86,7 +92,7 @@ def macro_dashboard_economic_confirmation_detail():
         return economic_confirmation_dashboard.load_detail(
             con,
             _macro_growth_context(),
-            date.today().isoformat(),
+            _utc_timestamp(),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

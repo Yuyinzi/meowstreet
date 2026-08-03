@@ -904,6 +904,15 @@ h2 {
   color: #6E6257;
 }
 
+.cot-normal-note {
+  margin: 10px 0 0;
+  padding-left: 10px;
+  border-left: 3px solid #79B989;
+  color: #155724;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .cot-extreme-review .summary-stat {
   margin: 6px 0 0;
 }

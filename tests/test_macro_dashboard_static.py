@@ -7040,14 +7040,17 @@ def test_cot_review_evidence_renders_high_and_low_statuses():
     assert "latest_net_tie_count" in renderer
 
 
-def test_cot_review_evidence_renders_normal_and_unavailable_statuses():
+def test_cot_review_evidence_renders_compact_normal_and_unavailable_statuses():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     start = source.index("function renderCOTHistoricalExtreme")
     end = source.index("function renderCOTRow", start)
     renderer = source[start:end]
 
     assert 'status === "not_extreme"' in renderer
-    assert "not at a historical high or low" in renderer
+    assert "Net position is not at a historical high or low" not in renderer
+    assert "function renderCOTNormalExplanation" in source
+    assert 'class="cot-normal-note"' in source
+    assert "Normal means the net position is not at a historical high or low within the imported history." in source
     assert "Unavailable" in renderer
     assert "insufficient_history" in renderer
     assert "unsupported_contract" in renderer
@@ -7088,6 +7091,7 @@ def test_cot_review_evidence_css_uses_established_tokens():
     assert ".cot-extreme-review" in css
     assert ".cot-extreme-normal" in css
     assert ".cot-extreme-unavailable" in css
+    assert ".cot-normal-note" in css
     assert ".market-status-review" in css
     assert ".market-status-normal" in css
     assert ".market-status-unavailable" in css
