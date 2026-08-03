@@ -375,6 +375,77 @@
           + '</div>';
       }
 
+      function renderSpreadLegRow(leg) {
+        var label = leg.instrument || leg.source_series || leg.side || "";
+        var value = leg.value == null ? "" : ' ' + h.escapeHtml(h.fmtNumber(leg.value));
+        var unit = leg.unit ? ' ' + h.escapeHtml(leg.unit) : "";
+        return '<span>' + h.escapeHtml(label) + ':' + value + unit
+          + (leg.source_identifier ? ' (' + h.escapeHtml(leg.source_identifier) + ')' : '')
+          + '</span>';
+      }
+
+      function renderSpreadUnavailableEntry(entry) {
+        var reasonLabels = {
+          incomparable_price_basis: "LME\u2013COMEX price basis is not yet comparable",
+          fx_source_not_approved: "SHFE cross-market comparison awaits approved FX and comparability rules",
+          missing_brent_price: "No Brent spot price is available on a shared date",
+          missing_wti_price: "No WTI spot price is available on a shared date",
+          no_common_observation_date: "No exact common observation date between Brent and WTI",
+          unit_mismatch: "A leg unit differs from the approved USD/BBL spot contract",
+          price_type_mismatch: "A leg price type differs from the approved spot contract",
+        };
+        var label = entry.label || entry.spread_id;
+        var reason = reasonLabels[entry.reason] || "Comparison unavailable";
+        var html = '<div class="workflow-row cross-market-unavailable">';
+        html += '<div class="workflow-label">' + h.escapeHtml(label)
+          + '<span class="market-status market-status-unavailable">Unavailable</span></div>';
+        html += '<div class="workflow-metrics">';
+        html += '<span>' + h.escapeHtml(reason) + '</span>';
+        if (entry.legs) {
+          if (Array.isArray(entry.legs)) {
+            for (var li = 0; li < entry.legs.length; li++) html += renderSpreadLegRow(entry.legs[li]);
+          } else {
+            for (var side in entry.legs) html += renderSpreadLegRow(entry.legs[side]);
+          }
+        }
+        html += '</div>';
+        html += '</div>';
+        return html;
+      }
+
+      function renderSpreadAvailableEntry(entry) {
+        var brent = entry.legs && entry.legs.brent;
+        var wti = entry.legs && entry.legs.wti;
+        var html = '<div class="workflow-row cross-market-available">';
+        html += '<div class="workflow-label">' + h.escapeHtml(entry.label || "Date-aligned daily price spread")
+          + '<span class="workflow-role">Brent \u2212 WTI</span></div>';
+        html += '<div class="workflow-metrics">';
+        html += '<span>Spread: <strong>' + renderChange(entry.value) + ' ' + h.escapeHtml(entry.unit || "USD/BBL") + '</strong></span>';
+        if (entry.common_observation_date) {
+          html += '<span>As of: ' + h.escapeHtml(entry.common_observation_date) + '</span>';
+        }
+        html += renderSpreadLegRow(brent);
+        html += renderSpreadLegRow(wti);
+        html += '<span>Formula: ' + h.escapeHtml(entry.formula || "Brent spot price - WTI spot price") + '</span>';
+        html += '</div>';
+        html += '</div>';
+        return html;
+      }
+
+      function renderCrossMarketSpreads() {
+        var evidence = payload.review_evidence && payload.review_evidence.cross_market_spreads;
+        if (!evidence || !evidence.spreads || !evidence.spreads.length) return "";
+        var html = '<article class="evidence-card cross-market-spreads"><h4>Cross-Market Spreads</h4>';
+        html += '<p class="summary-stat">Raw date-aligned price differences only. No spread is a normal/abnormal state, arbitrage opportunity, directional view, or trade recommendation.</p>';
+        for (var s = 0; s < evidence.spreads.length; s++) {
+          var entry = evidence.spreads[s];
+          if (entry.status === "available") html += renderSpreadAvailableEntry(entry);
+          else html += renderSpreadUnavailableEntry(entry);
+        }
+        html += '</article>';
+        return html;
+      }
+
       function detail(number) {
         for (var index = 0; index < steps.length; index++) {
           if (steps[index].step === number) return steps[index];
@@ -579,7 +650,9 @@
         for (var inf = 0; inf < (inflation.series || []).length; inf++) html += renderInflationRow(inflation.series[inf]);
         html += '</details>';
       }
-      html += '</article></div></section>';
+      html += '</article>';
+      html += renderCrossMarketSpreads();
+      html += '</div></section>';
 
       html += '<section class="evidence-section boundaries"><h3>Method Boundaries</h3>';
       html += '<p>Commodity price attribution and USD/CPI/PPI distribution classifications are not configured. These gaps remain pending rather than being converted into a trading conclusion.</p>';

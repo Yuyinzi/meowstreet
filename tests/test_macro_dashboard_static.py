@@ -7030,3 +7030,102 @@ def test_method_boundaries_no_longer_list_cot_extremes_as_unconfigured():
     assert "COT extreme detection" not in boundaries
     assert "Commodity price attribution" in boundaries
     assert "USD/CPI/PPI distribution classifications" in boundaries
+
+
+def test_cross_market_spreads_renderer_renders_available_entry():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderSpreadAvailableEntry")
+    end = source.index("function renderCrossMarketSpreads", start)
+    renderer = source[start:end]
+
+    assert "Date-aligned daily price spread" in renderer
+    assert "Brent \\u2212 WTI" in renderer
+    assert "entry.value" in renderer
+    assert "common_observation_date" in renderer
+    assert "USD/BBL" in renderer
+    assert "renderSpreadLegRow(brent)" in renderer
+    assert "renderSpreadLegRow(wti)" in renderer
+    assert "entry.formula" in renderer
+
+
+def test_cross_market_spreads_renderer_renders_unavailable_reasons():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderSpreadUnavailableEntry")
+    end = source.index("function renderSpreadAvailableEntry", start)
+    renderer = source[start:end]
+
+    assert "incomparable_price_basis" in renderer
+    assert "LME\\u2013COMEX price basis is not yet comparable" in renderer
+    assert "fx_source_not_approved" in renderer
+    assert (
+        "SHFE cross-market comparison awaits approved FX and comparability rules"
+        in renderer
+    )
+    assert "missing_brent_price" in renderer
+    assert "missing_wti_price" in renderer
+    assert "no_common_observation_date" in renderer
+    assert "unit_mismatch" in renderer
+    assert "price_type_mismatch" in renderer
+    assert "market-status-unavailable" in renderer
+
+
+def test_cross_market_spreads_renderer_is_wired_into_market_corroboration():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    corroboration_start = source.index("Market Corroboration")
+    corroboration_end = source.index("Method Boundaries", corroboration_start)
+    corroboration = source[corroboration_start:corroboration_end]
+
+    assert "renderCrossMarketSpreads()" in corroboration
+    assert "Cross-Market Spreads" in source
+
+
+def test_cross_market_spreads_renderer_has_no_directional_or_trade_claim():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderSpreadLegRow")
+    end = source.index("renderCrossMarketSpreads()", start)
+    renderer = source[start:end]
+
+    for marker in (
+        "bullish",
+        "bearish",
+        "normal",
+        "abnormal",
+        "arbitrage opportunity",
+        "buy",
+        "sell",
+        "trade recommendation",
+    ):
+        assert marker not in renderer.lower()
+
+
+def test_cross_market_spreads_renderer_escapes_source_and_formula_values():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderSpreadLegRow")
+    end = source.index("function renderCrossMarketSpreads", start)
+    renderer = source[start:end]
+
+    assert "h.escapeHtml(label)" in renderer
+    assert "h.escapeHtml(h.fmtNumber(leg.value))" in renderer
+    assert "h.escapeHtml(leg.source_identifier)" in renderer
+    assert "h.escapeHtml(entry.formula" in renderer
+    assert "h.escapeHtml(reason)" in renderer
+    assert "h.escapeHtml(entry.label" in renderer
+
+
+def test_cross_market_spreads_renderer_states_no_conclusion():
+    source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
+    start = source.index("function renderCrossMarketSpreads")
+    end = source.index("</section>", start)
+    renderer = source[start:end]
+
+    assert "No spread is a normal/abnormal state" in renderer
+    assert "arbitrage opportunity" in renderer
+    assert "trade recommendation" in renderer
+
+
+def test_cross_market_spreads_css_uses_established_tokens():
+    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+
+    assert ".cross-market-spreads" in css
+    assert ".market-status-unavailable" in css
+    assert ".workflow-row" in css
