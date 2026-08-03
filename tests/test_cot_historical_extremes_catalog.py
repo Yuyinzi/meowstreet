@@ -17,7 +17,7 @@ VERIFIED_CODES = {
     "crude_oil_wti": "067411",
     "crude_oil_brent": "06765T",
     "heating_oil": "022651",
-    "natural_gas": "0233AX",
+    "us_natural_gas": "023651",
     "palladium": "075651",
     "platinum": "076651",
     "silver": "084691",
@@ -75,11 +75,15 @@ def test_load_accepts_the_checked_in_allowlist():
     assert payload["report_type"] == "disaggregated_futures_only"
     assert payload["position_category"] == "managed_money"
     entries = {entry["commodity_id"]: entry for entry in payload["entries"]}
-    assert set(entries) == set(VERIFIED_CODES)
+    assert set(entries) == set(VERIFIED_CODES) | {"natural_gas"}
     for commodity_id, code in VERIFIED_CODES.items():
         entry = entries[commodity_id]
         assert entry["active"] is True
         assert entry["contract_code"] == code
+    legacy = entries["natural_gas"]
+    assert legacy["active"] is False
+    assert legacy["contract_code"] is None
+    assert legacy["reason"] == "unsupported_contract"
 
 
 def test_active_entries_are_unambiguous():
@@ -92,6 +96,7 @@ def test_active_entries_are_unambiguous():
     active = catalog.active_allowlist_entries(payload)
 
     assert set(active) == set(VERIFIED_CODES)
+    assert "natural_gas" not in active
     for entry in active.values():
         assert entry["contract_code"] == VERIFIED_CODES[entry["commodity_id"]]
 

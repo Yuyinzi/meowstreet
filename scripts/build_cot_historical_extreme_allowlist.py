@@ -34,6 +34,11 @@ ALLOWLIST_RECORDS = [
         "contract_code": "0233AX",
     },
     {
+        "commodity_id": "us_natural_gas",
+        "market_name": "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE",
+        "contract_code": "023651",
+    },
+    {
         "commodity_id": "palladium",
         "market_name": "PALLADIUM - NEW YORK MERCANTILE EXCHANGE",
         "contract_code": "075651",

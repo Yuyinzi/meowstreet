@@ -84,10 +84,10 @@ def test_refresh_official_fetches_cot_and_all_three_usd_series(tmp_path):
         con, cache_dir, [2026]
     )
 
-    assert result["cot_observations"] == 2
+    assert result["cot_observations"] == 4
     assert result["usd_observations"] > 0
     loaded_cot = macro_indicators.load_cot_observations(con)
-    assert len(loaded_cot) == 2
+    assert len(loaded_cot) == 4
 
 
 def test_replace_cot_history_rebuilds_scope_with_contract_identity(tmp_path):
@@ -110,6 +110,93 @@ def test_replace_cot_history_rebuilds_scope_with_contract_identity(tmp_path):
     for row in loaded:
         assert row["position_category"] == "managed_money"
         assert row["report_type"] == "disaggregated_futures_only"
+
+
+def test_replace_cot_history_keeps_inactive_natural_gas_and_scopes_henry_hub(tmp_path):
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    _make_fake_cot_zip(cache_dir / "cftc-disaggregated-futures-only-2026.zip")
+
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    legacy_allowlist_path = _write_allowlist(
+        legacy_dir,
+        [
+            {
+                "commodity_id": "copper",
+                "market_name": "COPPER- #1 - COMMODITY EXCHANGE INC.",
+                "contract_code": "085692",
+                "active": True,
+            },
+            {
+                "commodity_id": "crude_oil_wti",
+                "market_name": "CRUDE OIL, LIGHT SWEET-WTI - ICE FUTURES EUROPE",
+                "contract_code": "067411",
+                "active": True,
+            },
+            {
+                "commodity_id": "natural_gas",
+                "market_name": "NATURAL GAS INDEX: EP SAN JUAN - ICE FUTURES ENERGY DIV",
+                "contract_code": "0233AX",
+                "active": True,
+            },
+        ],
+    )
+    new_dir = tmp_path / "new"
+    new_dir.mkdir()
+    new_allowlist_path = _write_allowlist(
+        new_dir,
+        [
+            {
+                "commodity_id": "copper",
+                "market_name": "COPPER- #1 - COMMODITY EXCHANGE INC.",
+                "contract_code": "085692",
+                "active": True,
+            },
+            {
+                "commodity_id": "crude_oil_wti",
+                "market_name": "CRUDE OIL, LIGHT SWEET-WTI - ICE FUTURES EUROPE",
+                "contract_code": "067411",
+                "active": True,
+            },
+            {
+                "commodity_id": "natural_gas",
+                "market_name": "NATURAL GAS INDEX: EP SAN JUAN - ICE FUTURES ENERGY DIV",
+                "contract_code": None,
+                "active": False,
+                "reason": "unsupported_contract",
+            },
+            {
+                "commodity_id": "us_natural_gas",
+                "market_name": "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE",
+                "contract_code": "023651",
+                "active": True,
+            },
+        ],
+    )
+
+    con = macro_indicators.connect(tmp_path / ".sqlite")
+    cyclical_commodities_import.replace_cot_history(
+        con, cache_dir, [2026], allowlist_path=legacy_allowlist_path
+    )
+    legacy_natural_gas = [
+        row
+        for row in macro_indicators.load_cot_observations(con)
+        if row["commodity_id"] == "natural_gas"
+    ]
+    assert len(legacy_natural_gas) == 1
+    assert legacy_natural_gas[0]["cftc_contract_market_code"] == "0233AX"
+
+    result = cyclical_commodities_import.replace_cot_history(
+        con, cache_dir, [2026], allowlist_path=new_allowlist_path
+    )
+
+    assert result["cot_observations"] == 3
+    loaded = macro_indicators.load_cot_observations(con)
+    by_id = {row["commodity_id"]: row for row in loaded}
+    assert set(by_id) == {"copper", "crude_oil_wti", "natural_gas", "us_natural_gas"}
+    assert by_id["us_natural_gas"]["cftc_contract_market_code"] == "023651"
+    assert by_id["natural_gas"]["cftc_contract_market_code"] == "0233AX"
 
 
 def test_replace_cot_history_rolls_back_on_missing_archive(tmp_path):
