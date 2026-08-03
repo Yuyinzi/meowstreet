@@ -649,14 +649,17 @@ def test_parse_national_claims_history_html_ignores_non_sa_cells():
           <th id="sa_continued_claims">S.A.</th></tr>
       <tr><th id="01/04/2025">01/04/2025</th>
           <td headers="01/04/2025 sa_initial_claims">206,000</td>
+          <td headers="01/04/2025 sa_continued_claims">1,850,000</td>
           <td headers="01/04/2025 sa_four_week_avg">208,000</td>
           <td headers="01/04/2025 nsa_initial_claims">199,000</td></tr>
     </table>
     """
     rows = dol_ui_claims.parse_national_claims_history_html(html, REPORT_URL)
-    assert len(rows) == 1
+    assert len(rows) == 2
     assert rows[0]["series_id"] == "initial_claims_sa"
     assert rows[0]["value_at_release"] == 206000.0
+    assert rows[1]["series_id"] == "continuing_claims_sa"
+    assert rows[1]["value_at_release"] == 1850000.0
 
 
 def duplicate_initial_html():
@@ -668,6 +671,28 @@ def duplicate_initial_html():
           <td headers="01/04/2025 sa_initial_claims">207,000</td></tr>
     </table>
     """
+
+
+def single_series_initial_only_html():
+    return b"""
+    <table summary="r539cy Report Table">
+      <tr><th id="report_date"></th><th id="sa_initial_claims">S.A.</th></tr>
+      <tr><th id="01/04/2025">01/04/2025</th>
+          <td headers="01/04/2025 sa_initial_claims">206,000</td></tr>
+      <tr><th id="01/11/2025">01/11/2025</th>
+          <td headers="01/11/2025 sa_initial_claims">219,000</td></tr>
+    </table>
+    """
+
+
+def test_parse_national_claims_history_html_rejects_report_missing_continuing_series():
+    with pytest.raises(
+        ValueError,
+        match="national claims history report is missing continuing_claims_sa series",
+    ):
+        dol_ui_claims.parse_national_claims_history_html(
+            single_series_initial_only_html(), REPORT_URL
+        )
 
 
 def test_parse_national_claims_history_html_rejects_empty_report():

@@ -263,6 +263,12 @@ def parse_national_claims_history_html(content, source_url):
         raise ValueError(
             "national claims history report has no seasonally adjusted claims rows"
         )
+    series_present = {observation["series_id"] for observation in observations}
+    for series_id in ("initial_claims_sa", "continuing_claims_sa"):
+        if series_id not in series_present:
+            raise ValueError(
+                f"national claims history report is missing {series_id} series"
+            )
     return observations
 
 
