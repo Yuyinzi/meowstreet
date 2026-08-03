@@ -1317,6 +1317,7 @@ def build_market_setup(
     consumer_sentiment_summary=None,
     housing_permits_signal=None,
     nfib_sbo_signal=None,
+    claims_confirmation_qualifier=None,
 ):
     market_env = build_market_environment(market_phase_payload)
     consumer_demand_outlook = build_consumer_demand_outlook(consumer_sentiment_summary)
@@ -1424,6 +1425,7 @@ def build_market_setup(
         "confirmation_conditions": confirmation_conditions,
         "missing_inputs": missing_inputs,
         "pending_confirmations": pending_confirmations,
+        "claims_confirmation_qualifier": claims_confirmation_qualifier,
         "limitations": [
             "This is a deterministic connection layer over Methods P2-P9. It does not calculate a numeric confidence score.",
             "Later-method leading-indicator modules may still change the outlook when implemented.",

@@ -12,6 +12,9 @@
     consumerSentiment: null,
     consumerSentimentError: null,
     selectedConsumerDetailId: null,
+    economicConfirmation: null,
+    economicConfirmationError: null,
+    selectedEconomicConfirmationDetailId: null,
     marketSetup: null,
     marketSetupError: null,
     selectedGrowthCycleSectionId: null,
@@ -47,6 +50,7 @@
     state.selectedRatesDetailId = null;
     state.selectedGrowthCycleDetailId = null;
     state.selectedConsumerDetailId = null;
+    state.selectedEconomicConfirmationDetailId = null;
     state.selectedIsmIndustry = null;
     state.selectedNominalCurrentDate = null;
     state.selectedNominalComparisonDate = null;
@@ -62,7 +66,7 @@
     const panel = $("detailPanel");
     if (!panel) return;
 
-    const anySelected = state.selectedBenchmarkId || state.selectedRatesDetailId || state.selectedGrowthCycleDetailId || state.selectedConsumerDetailId;
+    const anySelected = state.selectedBenchmarkId || state.selectedRatesDetailId || state.selectedGrowthCycleDetailId || state.selectedConsumerDetailId || state.selectedEconomicConfirmationDetailId;
     if (!anySelected) {
       shell.classList.remove("panel-open");
       syncDetailPanelWidthClass();
@@ -86,6 +90,8 @@
       }
     } else if (state.selectedConsumerDetailId) {
       title = "Consumer Sentiment";
+    } else if (state.selectedEconomicConfirmationDetailId) {
+      title = "Economic Confirmation";
     } else if (state.selectedGrowthCycleDetailId) {
       if (state.selectedGrowthCycleDetailId === "ism_manufacturing") {
         title = "ISM Manufacturing";
@@ -136,6 +142,8 @@
       renderRatesDetailInPanel(body);
     } else if (state.selectedConsumerDetailId) {
       renderConsumerDetailInPanel(body);
+    } else if (state.selectedEconomicConfirmationDetailId) {
+      renderEconomicConfirmationDetailInPanel(body);
     } else if (state.selectedGrowthCycleDetailId) {
       renderGrowthCycleDetailInPanel(body);
     }
@@ -1168,6 +1176,55 @@
     "Less Easing Pressure": "宽松减弱压力",
     // Survey Synthesis
     "Survey Synthesis": "调查综合",
+    // Economic Confirmation
+    "Economic Confirmation": "经济确认",
+    "Claims-Based Labor Confirmation": "基于申领数据的劳动力确认",
+    "Initial Claims": "初次申领",
+    "Continuing Claims": "持续申领",
+    "Claims Direction": "申领方向",
+    "Macro Growth Regime": "宏观增长机制",
+    "Coverage": "覆盖范围",
+    "Overall Economic Confirmation": "总体经济确认",
+    "Labor Context": "劳动力背景",
+    "Real Activity": "实际活动",
+    "Event Risk": "事件风险",
+    "Classification": "分类",
+    "Observation Period": "观测周期",
+    "Latest 4W Mean": "最新4周均值",
+    "Comparison 4W Mean": "对比4周均值",
+    "Reason": "原因",
+    "Method Version": "方法版本",
+    "Method Status": "方法状态",
+    "Vintages": "数据版本",
+    "Reference Period": "参考周期",
+    "Release Date": "发布日期",
+    "Source": "来源",
+    "Based On": "基于",
+    "Status": "状态",
+    "Next Event": "下一事件",
+    "Direction": "方向",
+    "Nonfarm Payrolls": "非农就业",
+    "Payrolls 3M Average": "非农3个月均值",
+    "Unemployment Rate": "失业率",
+    "Average Weekly Hours": "平均每周工时",
+    "Average Hourly Earnings": "平均时薪",
+    "Payroll Revisions": "非农修订",
+    "Wage Pressure Context": "薪资压力背景",
+    "As Of": "截至",
+    "Vintage Policy": "数据版本策略",
+    "Context only — does not change the confirmation result": "仅作背景参考 — 不影响确认结果",
+    "Data collected. Method pending approval — shown as context only.": "数据已收集。方法待审批 — 仅作背景参考。",
+    "No Real Activity data has been collected yet. Method pending approval.": "尚未收集实际活动数据。方法待审批。",
+    "Labor context data is not yet available.": "劳动力背景数据尚不可用。",
+    "No upcoming Employment Situation event is scheduled.": "暂无已安排的就业形势报告事件。",
+    "Revised payroll observations": "已修订的非农观测",
+    "At Release": "发布时值",
+    "Latest": "最新值",
+    "Revision #": "修订次数",
+    "Period": "周期",
+    "Value": "数值",
+    "Release": "发布",
+    "Open": "打开",
     "ISM Growth Direction": "ISM增长方向",
     "Both Expanding": "制造业与服务业均扩张",
     "Both Contracting": "制造业与服务业均收缩",
@@ -3273,6 +3330,110 @@ html += '</div>';
 
   async function loadConsumerSentimentDetail() {
     const response = await fetch("/api/macro-dashboard/consumer-sentiment/detail");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  }
+
+  function renderEconomicConfirmation() {
+    const section = $("economicConfirmation");
+    if (!section || typeof section.querySelector !== "function") return;
+    const head = section.querySelector(".relationship-head");
+    if (!head) return;
+    if (state.economicConfirmationError) {
+      section.innerHTML = `${head.outerHTML}<div class="growth-empty" role="status">Failed to load economic confirmation data. <button type="button" class="ms-retry-btn" data-economic-confirmation-retry>Retry</button></div>`;
+      const retryBtn = section.querySelector("[data-economic-confirmation-retry]");
+      if (retryBtn) {
+        retryBtn.addEventListener("click", () => {
+          state.economicConfirmation = null;
+          state.economicConfirmationError = null;
+          loadEconomicConfirmation();
+        });
+      }
+      return;
+    }
+    if (!state.economicConfirmation) {
+      section.innerHTML = `${head.outerHTML}<div class="economic-confirmation-loading" aria-busy="true">Loading economic confirmation…</div>`;
+      return;
+    }
+    if (!window.claimsConfirmationUi || !window.claimsConfirmationUi.renderCard) {
+      section.innerHTML = `${head.outerHTML}<p class="growth-empty">Economic confirmation data is not available.</p>`;
+      return;
+    }
+    const cardHtml = window.claimsConfirmationUi.renderCard(state.economicConfirmation, {
+      escapeHtml,
+      bilingualLabel,
+      bilingualTitle,
+      titleCaseToken,
+      fmtNumber,
+      isSelectedEconomicConfirmationDetailId: (id) => state.selectedEconomicConfirmationDetailId === id,
+    });
+    const asOf = state.economicConfirmation.as_of;
+    section.innerHTML = `
+      <div class="relationship-head">
+        ${head.innerHTML}
+        ${asOf ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDate(asOf))}</span>` : ""}
+      </div>
+      <div class="economic-confirmation-layer-body">${cardHtml}</div>
+    `;
+    section.querySelectorAll("[data-economic-confirmation-detail-id]").forEach((button) => {
+      bindConsumerSentimentDetailTrigger(button, () => {
+        state.selectedEconomicConfirmationDetailId = state.selectedEconomicConfirmationDetailId === button.dataset.economicConfirmationDetailId
+          ? null
+          : button.dataset.economicConfirmationDetailId;
+        state.selectedBenchmarkId = null;
+        state.selectedRatesDetailId = null;
+        state.selectedGrowthCycleDetailId = null;
+        state.selectedConsumerDetailId = null;
+        renderOverview();
+        renderUsRatesLiquidity();
+        renderEconomicConfirmation();
+        renderDetailPanel();
+      });
+    });
+  }
+
+  async function loadEconomicConfirmation() {
+    try {
+      const response = await fetch("/api/macro-dashboard/economic-confirmation");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      state.economicConfirmation = await response.json();
+      state.economicConfirmationError = null;
+    } catch (error) {
+      state.economicConfirmation = null;
+      state.economicConfirmationError = error.message;
+    }
+    renderEconomicConfirmation();
+  }
+
+  function renderEconomicConfirmationDetailInPanel(body) {
+    const detailId = state.selectedEconomicConfirmationDetailId;
+    if (!detailId) return;
+    body.innerHTML = `<p class="status">Loading economic confirmation detail…</p>`;
+    loadEconomicConfirmationDetail()
+      .then((payload) => {
+        if (!window.claimsConfirmationUi || !window.claimsConfirmationUi.renderDetail) return;
+        window.claimsConfirmationUi.renderDetail(body, payload, {
+          escapeHtml,
+          bilingualLabel,
+          bilingualTitle,
+          titleCaseToken,
+          fmtNumber,
+        });
+      })
+      .catch((error) => {
+        body.innerHTML = `<p class="status" role="status">Failed to load economic confirmation detail. <button type="button" class="ms-retry-btn" data-economic-confirmation-detail-retry>Retry</button></p>`;
+        const retryBtn = body.querySelector("[data-economic-confirmation-detail-retry]");
+        if (retryBtn) {
+          retryBtn.addEventListener("click", () => {
+            renderDetailPanel();
+          });
+        }
+        console.error(error);
+      });
+  }
+
+  async function loadEconomicConfirmationDetail() {
+    const response = await fetch("/api/macro-dashboard/economic-confirmation/detail");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
   }
@@ -5603,11 +5764,14 @@ html += '</div>';
       renderMarketSetup,
       bindEvidenceLinks,
       bindConsumerSentimentDetailTrigger,
+      renderEconomicConfirmation,
+      loadEconomicConfirmationDetail,
     };
   }
 
   loadGrowthCycle();
   loadConsumerSentiment();
+  loadEconomicConfirmation();
   loadMarketSetup();
 
   loadDashboard().catch((error) => {

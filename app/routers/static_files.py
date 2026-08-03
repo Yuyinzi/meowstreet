@@ -91,3 +91,18 @@ def cyclical_commodities_ui_js():
         api.STATIC_DIR / "cyclical-commodities-ui.js",
         media_type="application/javascript",
     )
+
+
+@router.get("/claims-confirmation-ui.js")
+def claims_confirmation_ui_js():
+    return FileResponse(
+        api.STATIC_DIR / "claims-confirmation-ui.js",
+        media_type="application/javascript",
+    )
+
+
+@router.get("/claims-confirmation.css")
+def claims_confirmation_css():
+    return FileResponse(
+        api.STATIC_DIR / "claims-confirmation.css", media_type="text/css"
+    )

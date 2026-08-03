@@ -1329,10 +1329,7 @@ def test_housing_permits_unavailable_preserves_pending_reason():
             "reason": "no observations loaded",
         },
     )
-    assert (
-        "Housing permits — no observations loaded"
-        in result["pending_confirmations"]
-    )
+    assert "Housing permits — no observations loaded" in result["pending_confirmations"]
 
 
 def test_market_setup_appends_nfib_conflict_without_changing_posture():
@@ -1424,4 +1421,47 @@ def test_nfib_pending_preserves_the_actual_reason():
     assert (
         "NFIB Small Business — nfib evidence is awaiting confirmation"
         in result["pending_confirmations"]
+    )
+
+
+def test_claims_qualifier_is_copied_without_changing_classification():
+    base = market_setup.build_market_setup(
+        _market_phase_payload("bull_market"),
+        _survey_synthesis(
+            economic_direction="aligned_expansion",
+            expected_gdp_direction="rising",
+            survey_portfolio_implication="long",
+            period="2026-06",
+        ),
+        _rates_liquidity_payload("steep", "healthy"),
+        _fomc_tone_headline("dovish", "cut"),
+    )
+    qualified = market_setup.build_market_setup(
+        _market_phase_payload("bull_market"),
+        _survey_synthesis(
+            economic_direction="aligned_expansion",
+            expected_gdp_direction="rising",
+            survey_portfolio_implication="long",
+            period="2026-06",
+        ),
+        _rates_liquidity_payload("steep", "healthy"),
+        _fomc_tone_headline("dovish", "cut"),
+        claims_confirmation_qualifier=(
+            "Claims are partially deteriorating, partly supporting the "
+            "decelerating growth thesis"
+        ),
+    )
+
+    assert base["claims_confirmation_qualifier"] is None
+    assert qualified["claims_confirmation_qualifier"] == (
+        "Claims are partially deteriorating, partly supporting the "
+        "decelerating growth thesis"
+    )
+    assert qualified["setup_type"] == base["setup_type"]
+    assert qualified["portfolio_posture"] == base["portfolio_posture"]
+    assert qualified["agreements"] == base["agreements"]
+    assert qualified["conflicts"] == base["conflicts"]
+    assert qualified["market_conclusion"] == base["market_conclusion"]
+    assert qualified["claims_confirmation_qualifier"] not in (
+        qualified["agreements"] + qualified["conflicts"]
     )
