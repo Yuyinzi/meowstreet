@@ -22,6 +22,8 @@ from app.tools import (
     macro_growth_cycle,
     market_phase,
     market_setup,
+    market_setup_v2,
+    market_setup_v2_relationships,
     nfib_sbo,
     cyclical_commodities as tool,
     us_rates_liquidity,
@@ -68,6 +70,167 @@ def _macro_growth_context():
 
 def _utc_timestamp():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _survey_direction_of(expected_growth):
+    if expected_growth is None:
+        return None
+    fact = expected_growth.get("facts", {}).get("survey_growth_direction")
+    if not isinstance(fact, dict):
+        return None
+    direction = fact.get("direction")
+    if (
+        direction
+        in market_setup_v2_relationships.UPSIDE_DIRECTIONS
+        | market_setup_v2_relationships.DOWNSIDE_DIRECTIONS
+    ):
+        return direction
+    return None
+
+
+def _relationship(fact_id, state, survey_direction):
+    return market_setup_v2_relationships.relationship_to_growth_direction(
+        fact_id, state, survey_direction
+    )
+
+
+def _monthly_source_period(period):
+    if not period:
+        return {}
+    reference = str(period)[:7]
+    return {
+        "effective_date": str(period),
+        "reference_period": reference,
+        "release_date": None,
+    }
+
+
+def _daily_source_period(period):
+    if not period:
+        return {}
+    return {
+        "effective_date": str(period),
+        "observation_date": str(period),
+    }
+
+
+def _normalize_expected_growth(survey_synthesis_result):
+    if survey_synthesis_result is None:
+        return None
+    fact = {
+        "direction": survey_synthesis_result.get("expected_gdp_direction"),
+        "status": survey_synthesis_result.get("status"),
+        "source_period": _monthly_source_period(survey_synthesis_result.get("period")),
+    }
+    return {
+        "source_module": "ism_survey_synthesis",
+        "method_version": "ism_survey_synthesis_v1",
+        "facts": {"survey_growth_direction": fact},
+    }
+
+
+def _normalize_market_environment(market_phase_payload):
+    market_env = market_setup.build_market_environment(market_phase_payload)
+    if market_env.get("data_status") == "missing":
+        return None
+    period = market_env.get("observation_period")
+    return {
+        "source_module": "market_phase",
+        "method_version": "market_phase_v1",
+        "facts": {
+            "sp500_market_phase": {
+                "phase": market_env.get("state"),
+                "source_period": _daily_source_period(period),
+            }
+        },
+    }
+
+
+def _normalize_financial_conditions(rates_liquidity_payload, survey_direction):
+    if rates_liquidity_payload is None:
+        return None
+    derived = rates_liquidity_payload.get("derived", {})
+    financial_state = market_setup.build_financial_conditions(
+        rates_liquidity_payload
+    ).get("state")
+    as_of = rates_liquidity_payload.get("as_of")
+    period = _daily_source_period(as_of)
+    return {
+        "source_module": "us_rates_liquidity",
+        "method_version": "us_rates_liquidity_v1",
+        "facts": {
+            "macro_financial_conditions": {
+                "relationship_to_growth_direction": _relationship(
+                    "macro_financial_conditions", financial_state, survey_direction
+                ),
+                "source_period": dict(period),
+            },
+            "credit_conditions": {
+                "status": derived.get("credit_conditions_status"),
+                "source_period": dict(period),
+            },
+            "vix_level": {
+                "level": derived.get("vix"),
+                "source_period": dict(period),
+            },
+        },
+    }
+
+
+def _normalize_policy_response(
+    fomc_tone_headline,
+    m2_headline,
+    inflation_context,
+    fed_balance_sheet,
+    survey_direction,
+):
+    policy_state = market_setup.build_policy_response(
+        fomc_tone_headline,
+        m2_headline,
+        inflation_context,
+        fed_balance_sheet,
+    ).get("state")
+    m2_period = (m2_headline or {}).get("period")
+    return {
+        "source_module": "fomc_policy_tone",
+        "method_version": "fomc_policy_tone_v1",
+        "facts": {
+            "macro_policy_response": {
+                "relationship_to_growth_direction": _relationship(
+                    "macro_policy_response", policy_state, survey_direction
+                ),
+                "source_period": _monthly_source_period(
+                    (fomc_tone_headline or {}).get("period") or m2_period
+                ),
+            },
+            "m2_liquidity": {
+                "status": (m2_headline or {}).get("status"),
+                "source_period": _monthly_source_period(m2_period),
+            },
+        },
+    }
+
+
+def _normalize_consumer_demand(consumer_sentiment_summary, survey_direction):
+    if consumer_sentiment_summary is None:
+        return None
+    consumer_state = market_setup.build_consumer_demand_outlook(
+        consumer_sentiment_summary
+    ).get("state")
+    return {
+        "source_module": "consumer_sentiment",
+        "method_version": "market_setup_v2_consumer_demand_v1",
+        "facts": {
+            "consumer_demand_outlook": {
+                "relationship_to_growth_direction": _relationship(
+                    "consumer_demand_outlook", consumer_state, survey_direction
+                ),
+                "source_period": _monthly_source_period(
+                    consumer_sentiment_summary.get("aligned_month")
+                ),
+            }
+        },
+    }
 
 
 @router.get("/economic-confirmation")
@@ -518,23 +681,29 @@ def macro_dashboard_market_setup():
             survey_synthesis_result,
             date.today().isoformat(),
         )
-        payload = market_setup.build_market_setup(
-            market_phase_payload=market_phase_payload,
-            survey_synthesis=survey_synthesis_result,
-            rates_liquidity_payload=rates_liquidity_payload,
-            fomc_tone=fomc_tone_headline,
-            m2_headline=m2_headline,
-            inflation_context=inflation_context,
-            fed_balance_sheet=fed_balance_sheet,
-            consumer_sentiment_summary=consumer_sentiment_summary,
-            housing_permits_signal=housing_permits_signal,
-            nfib_sbo_signal=nfib_sbo_signal_result,
+        expected_growth = _normalize_expected_growth(survey_synthesis_result)
+        survey_direction = _survey_direction_of(expected_growth)
+        market_environment = _normalize_market_environment(market_phase_payload)
+        financial_conditions = _normalize_financial_conditions(
+            rates_liquidity_payload, survey_direction
         )
-        return {
-            k: v
-            for k, v in payload.items()
-            if k not in ("idea_generation", "limitations")
-        }
+        policy_response = _normalize_policy_response(
+            fomc_tone_headline,
+            m2_headline,
+            inflation_context,
+            fed_balance_sheet,
+            survey_direction,
+        )
+        consumer_demand = _normalize_consumer_demand(
+            consumer_sentiment_summary, survey_direction
+        )
+        return market_setup_v2.build_market_setup_v2(
+            expected_growth=expected_growth,
+            market_environment=market_environment,
+            financial_conditions=financial_conditions,
+            policy_response=policy_response,
+            consumer_demand=consumer_demand,
+        )
     finally:
         con.close()
 

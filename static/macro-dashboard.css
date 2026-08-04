@@ -4441,6 +4441,130 @@ h2 {
   vertical-align: middle;
 }
 
+/* Four-layer card strip */
+
+.ms-layer-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 14px 0 0;
+}
+
+.ms-layer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #FAF7F4;
+  border: 1px solid #F0EAE4;
+  min-width: 0;
+}
+
+.ms-layer-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #A89B91;
+}
+
+.ms-layer-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #3B3530;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.ms-layer-detail {
+  color: #6F6257;
+  font-size: 0.72rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Action and trigger columns */
+
+.ms-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 0 0 14px;
+}
+
+.ms-action-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: #FAF8F5;
+  border: 1px solid #E8E0D6;
+  border-radius: 10px;
+}
+
+.ms-action-col h4 {
+  font-size: 10px;
+  font-weight: 700;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8B7E74;
+}
+
+.ms-action-col ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ms-action-col li {
+  font-size: 12px;
+  color: #3B3530;
+  line-height: 1.45;
+  padding-left: 10px;
+  position: relative;
+}
+
+.ms-action-col li::before {
+  content: "\00B7";
+  position: absolute;
+  left: 0;
+  color: #A89B91;
+}
+
+.ms-trigger-list,
+.ms-watch-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ms-trigger-list li,
+.ms-watch-list li {
+  font-size: 12px;
+  color: #5B5349;
+  line-height: 1.45;
+  padding-left: 10px;
+  position: relative;
+}
+
+.ms-trigger-list li::before,
+.ms-watch-list li::before {
+  content: "\00B7";
+  position: absolute;
+  left: 0;
+  color: #A89B91;
+}
+
+.ms-interpretation {
+  font-size: 13px;
+  color: #5B5349;
+  line-height: 1.5;
+  margin: 0;
+}
+
 /* State strip */
 
 .ms-state-strip {
@@ -5061,6 +5185,9 @@ h2 {
   .ms-state-strip {
     grid-template-columns: 1fr 1fr;
   }
+  .ms-layer-strip {
+    grid-template-columns: 1fr 1fr;
+  }
   .ms-conflict-row {
     grid-template-columns: 1fr;
   }
@@ -5083,6 +5210,12 @@ h2 {
     font-size: 22px;
   }
   .ms-state-strip {
+    grid-template-columns: 1fr;
+  }
+  .ms-layer-strip {
+    grid-template-columns: 1fr;
+  }
+  .ms-action-grid {
     grid-template-columns: 1fr;
   }
   .ms-component-grid {

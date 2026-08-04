@@ -27,6 +27,7 @@ from app.tools import (
     macro_growth_cycle,
     market_phase,
     market_setup,
+    market_setup_v2,
     us_rates_liquidity,
 )
 from app.routers.macro_dashboard import macro_dashboard_market_setup

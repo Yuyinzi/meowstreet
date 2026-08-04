@@ -1701,25 +1701,6 @@
     }
   }
 
-  function setupStateLabel(state) {
-    return titleCaseToken(state || "unavailable");
-  }
-
-  function setupPostureLabel(posture) {
-    return titleCaseToken(posture || "neutral");
-  }
-
-  function computeSignalAgreement(setup) {
-    if (!setup) return "incomplete";
-    var missing = setup.missing_inputs || [];
-    var conflicts = setup.conflicts || [];
-    var agreements = setup.agreements || [];
-    if (missing.length > 0) return "incomplete";
-    if (conflicts.length > 0) return "conflicting";
-    if (agreements.length > 0) return "aligned";
-    return "mixed";
-  }
-
   var MARKET_SETUP_SENTIMENT_CLASSES = {
     bull_market: "constructive",
     growth_and_conditions_aligned: "constructive",
@@ -1771,87 +1752,26 @@
     return MARKET_SETUP_SENTIMENT_CLASSES[String(value).toLowerCase()] || "neutral-state";
   }
 
-  function buildConsumerDemandComponent(cd) {
-    if (!cd) {
-      return null;
-    }
-    if (cd.state === "unavailable") {
-      return { state: "unavailable" };
-    }
-    var labels = {
-      confirms_expansion: "Confirms Expansion",
-      confirms_downside_risk: "Confirms Downside Risk",
-      transition: "Transition",
-    };
-    return {
-      state: cd.state || null,
-      label: labels[cd.state] || titleCaseToken(cd.state),
-      percentileLabel: cd.percentile_label || null,
-      zone: cd.percentile_zone ? titleCaseToken(cd.percentile_zone) : null,
-      momentum: cd.momentum ? titleCaseToken(cd.momentum) : null,
-      date: cd.observation_period || null,
-      links: cd.evidence_links || [],
-    };
-  }
-
   function buildMarketSetupPresentation(setup) {
     if (!setup) return null;
-    var mc = setup.market_conclusion || {};
-    var me = setup.market_environment || {};
-    var pg = setup.portfolio_guidance || {};
-    var ec = setup.evidence_chain || [];
-    var cl = setup.conviction_limits || {};
-    var cc = setup.confirmation_conditions || {};
     return {
-      conclusion: mc.code || null,
-      conclusionTitle: mc.title || "",
-      summary: mc.summary || "",
-      asOf: setup.as_of || null,
-      status: setup.status || "unavailable",
-      isInsufficient: setup.setup_type === "insufficient_data" || mc.code === "insufficient_evidence",
-      convictionLimitCount: (cl.offsets || []).length,
-      marketPhase: me.state || null,
-      macroSetup: setup.setup_type || null,
-      portfolioPosture: setup.portfolio_posture || null,
-      signalAgreement: computeSignalAgreement(setup),
-      primaryEvidence: ec.map(function(g) {
-        return {
-          id: g.id || "",
-          title: g.title || "",
-          finding: g.finding || "",
-          implication: g.implication || "",
-          tone: g.tone || "caution",
-          observations: g.evidence || [],
-          links: g.evidence_links || [],
-        };
-      }),
-      offsets: (cl.offsets || []).map(function(o) {
-        return { finding: o.finding || "", effect: o.effect || "", links: o.evidence_links || [] };
-      }),
+      version: setup.version || null,
+      generatedAt: setup.generated_at || null,
+      evidenceThrough: setup.evidence_through || null,
+      macroRegime: setup.macro_regime || {},
+      marketConfirmation: setup.market_confirmation || {},
+      marketSetup: setup.market_setup || {},
+      portfolioPosture: setup.portfolio_posture || {},
+      signalAgreement: (setup.market_setup || {}).agreement || null,
+      interpretation: setup.interpretation || "",
+      supports: setup.supports || [],
       conflicts: setup.conflicts || [],
-      convictionSummary: cl.summary || "",
-      doActions: pg.actions || [],
-      avoidActions: pg.avoid || [],
-      moreDefensive: cc.more_defensive || [],
-      moreConstructive: cc.more_constructive || [],
-      pendingConfirmations: setup.pending_confirmations || [],
+      offsets: setup.offsets || [],
+      excludedInputs: setup.excluded_inputs || [],
+      methodVersions: setup.method_versions || {},
       missingInputs: setup.missing_inputs || [],
-      components: {
-        marketEnvironment: { state: me.state || null, sentiment: stateSentimentClass(me.state) },
-        expectedGrowth: {
-          state: (setup.expected_growth || {}).state || null,
-          direction: (setup.expected_growth || {}).expected_gdp_direction || null,
-          momentum: (setup.expected_growth || {}).growth_momentum || null,
-          surveyAlignment: (setup.expected_growth || {}).survey_alignment || null,
-          demandAlignment: (setup.expected_growth || {}).demand_alignment || null,
-          components: (setup.expected_growth || {}).components || {},
-          links: (setup.expected_growth || {}).evidence_links || [],
-          sentiment: stateSentimentClass((setup.expected_growth || {}).state),
-          consumerDemand: buildConsumerDemandComponent((setup.expected_growth || {}).consumer_demand),
-        },
-        financialConditions: { state: (setup.financial_conditions || {}).state || null, sentiment: stateSentimentClass((setup.financial_conditions || {}).state) },
-        policyResponse: { state: (setup.policy_response || {}).state || null, sentiment: stateSentimentClass((setup.policy_response || {}).state) },
-      },
+      nextTriggers: setup.next_triggers || [],
+      watchItems: setup.watch_items || [],
     };
   }
 
@@ -1864,90 +1784,52 @@
       '</div>';
   }
 
+  function renderLayerCard(label, value, detail) {
+    var escapedLabel = escapeHtml(label);
+    var escapedValue = value ? escapeHtml(value) : "\u2014";
+    var html = '<div class="ms-layer-card">';
+    html += '<span class="ms-layer-label">' + escapedLabel + '</span>';
+    html += '<span class="ms-layer-value">' + escapedValue + '</span>';
+    if (detail) {
+      html += '<span class="ms-layer-detail">' + escapeHtml(detail) + '</span>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function agreementLabel(agreement) {
+    var labels = {
+      aligned: "Aligned",
+      mixed: "Mixed",
+      conflicting: "Conflicting",
+      incomplete: "Incomplete",
+    };
+    return labels[agreement] || titleCaseToken(agreement);
+  }
+
   function renderDecisionHero(pr) {
     if (!pr) return "";
-    var statusBadge = "";
-    if (pr.status === "partial" || pr.isInsufficient) {
-      statusBadge = '<span class="ms-badge-partial">' + escapeHtml(pr.isInsufficient ? "Insufficient Data" : "Partial Data") + '</span>';
-    }
     var html = '<div class="ms-hero">';
     html += '<div class="ms-hero-head">';
-    html += '<h2 class="ms-hero-conclusion">' + escapeHtml(pr.conclusionTitle) + statusBadge + '</h2>';
-    if (pr.asOf) {
-      html += '<span class="ms-hero-date">Evidence through ' + escapeHtml(pr.asOf) + '</span>';
-    }
-    if (pr.summary) {
-      html += '<p class="ms-hero-summary">' + escapeHtml(pr.summary) + '</p>';
+    html += '<h2 class="ms-hero-conclusion">Market Setup</h2>';
+    if (pr.evidenceThrough) {
+      html += '<span class="ms-hero-date">Evidence through ' + escapeHtml(pr.evidenceThrough) + '</span>';
     }
     html += '</div>';
-    html += '<div class="ms-state-strip">';
-    html += renderStateCell("Market Phase", pr.marketPhase, stateSentimentClass(pr.marketPhase));
-    html += renderStateCell("Macro Setup", pr.macroSetup, stateSentimentClass(pr.macroSetup));
-    html += renderStateCell("Portfolio Posture", pr.portfolioPosture, stateSentimentClass(pr.portfolioPosture));
-    html += renderStateCell("Signal Agreement", pr.signalAgreement, stateSentimentClass(pr.signalAgreement));
+    html += '<div class="ms-layer-strip">';
+    html += renderLayerCard("MACRO REGIME", pr.macroRegime.label, null);
+    html += renderLayerCard("MARKET CONFIRMATION", pr.marketConfirmation.label, null);
+    html += renderLayerCard("MARKET SETUP", pr.marketSetup.label, pr.signalAgreement ? "Signal Agreement: " + escapeHtml(agreementLabel(pr.signalAgreement)) : null);
+    html += renderLayerCard("PORTFOLIO POSTURE", pr.portfolioPosture.label, null);
     html += '</div>';
-    var hasOffsets = pr.offsets.length > 0;
-    var hasConflicts = pr.conflicts.length > 0;
-    if (pr.primaryEvidence.length > 0 || hasOffsets || hasConflicts) {
-      html += '<div class="ms-conflict-row">';
-      html += '<div class="ms-conflict-col">';
-      html += '<h3>Primary Evidence</h3>';
-      pr.primaryEvidence.forEach(function(item) {
-        var sourceHtml = item.id === "growth_path"
-          ? '<span class="ms-evidence-sources">ISM Manufacturing + ISM Services</span>'
-          : "";
-        html += '<div class="ms-evidence-item ' + escapeHtml(item.tone) + '">' +
-          '<span>' + escapeHtml(item.finding || item.title) + '</span>' +
-          sourceHtml +
-          '</div>';
-      });
-      html += '</div>';
-      if (hasOffsets || hasConflicts) {
-        html += '<div class="ms-conflict-col">';
-        html += '<h3>Offsets &amp; Conflicts</h3>';
-        if (hasOffsets) {
-          pr.offsets.forEach(function(offset) {
-            html += '<div class="ms-evidence-item caution">' + escapeHtml(offset.finding) + '</div>';
-          });
-        }
-        pr.conflicts.forEach(function(c) {
-          html += '<div class="ms-evidence-item caution">' + escapeHtml(c) + '</div>';
-        });
-        html += '</div>';
-      }
-      html += '</div>';
+    if (pr.interpretation) {
+      html += '<p class="ms-hero-summary">' + escapeHtml(pr.interpretation) + '</p>';
     }
-    if (pr.convictionLimitCount > 0) {
-      html += '<p class="ms-conviction-brief">Conviction limited by ' +
-        escapeHtml(String(pr.convictionLimitCount)) +
-        (pr.convictionLimitCount === 1 ? ' offset: ' : ' offsets: ') +
-        escapeHtml(pr.offsets.map(function(offset) { return offset.finding; }).join(" \u00B7 ")) +
-        '</p>';
-    }
-    if (pr.isInsufficient) {
+    if (pr.missingInputs.length) {
       html += '<div class="ms-hero-missing">';
       html += '<strong>Required Inputs</strong>';
-      if (pr.missingInputs.length) {
-        html += '<p>' + escapeHtml(pr.missingInputs.join(" \u00B7 ")) + '</p>';
-      } else {
-        html += '<p>Required evidence is not yet available.</p>';
-      }
+      html += '<p>' + escapeHtml(pr.missingInputs.join(" \u00B7 ")) + '</p>';
       html += '</div>';
-    } else if (pr.doActions.length > 0) {
-      html += '<div class="ms-guidance-hero">';
-      html += '<h3>Practical Guidance</h3>';
-      html += '<div class="ms-guidance-hero-actions">';
-      html += '<div class="ms-guidance-do">';
-      html += '<h4>Do</h4><ul>';
-      pr.doActions.forEach(function(a) { html += '<li>' + escapeHtml(a) + '</li>'; });
-      html += '</ul></div>';
-      if (pr.avoidActions.length) {
-        html += '<div class="ms-guidance-avoid">';
-        html += '<h4>Avoid</h4><ul>';
-        pr.avoidActions.forEach(function(a) { html += '<li>' + escapeHtml(a) + '</li>'; });
-        html += '</ul></div>';
-      }
-      html += '</div></div>';
     }
     html += '</div>';
     return html;
@@ -1983,136 +1865,87 @@
   function renderDetailedReasoning(pr) {
     if (!pr) return "";
     var html = '<div class="ms-detailed">';
-    if (pr.primaryEvidence.length) {
+    var macroEvidence = pr.supports.concat(pr.conflicts);
+    if (macroEvidence.length) {
       html += '<div class="ms-detailed-section">';
-      html += '<h3>Evidence Details</h3>';
-      pr.primaryEvidence.forEach(function(item, index) {
-        var id = "ms-evidence-" + index;
-        html += '<details class="ms-evidence-card" id="' + id + '">';
-        html += '<summary><span class="ms-evidence-tone-tag ms-evidence-tone-' + escapeHtml(item.tone) + '">' + escapeHtml(item.tone) + '</span> ' + escapeHtml(item.title) + '</summary>';
-        html += '<div class="ms-evidence-card-body">';
-        html += '<p><strong>Finding:</strong> ' + escapeHtml(item.finding) + '</p>';
-        if (item.implication) {
-          html += '<p><strong>Implication:</strong> ' + escapeHtml(item.implication) + '</p>';
+      html += '<h3>Macro Evidence</h3>';
+      macroEvidence.forEach(function(entry) {
+        html += '<div class="ms-evidence-item">' + escapeHtml(entry.finding || entry.source_id || "");
+        var links = entry.evidence_links || [];
+        if (links.length) {
+          html += '<div class="ms-evidence-links">' + links.map(renderEvidenceLink).join("") + '</div>';
         }
-        if (item.observations.length) {
-          html += '<ul class="ms-obs-list">';
-          item.observations.forEach(function(obs) { html += '<li>' + escapeHtml(obs) + '</li>'; });
-          html += '</ul>';
-        }
-        if (item.links.length) {
-          html += '<div class="ms-evidence-links">';
-          item.links.forEach(function(link) {
-            html += renderEvidenceLink(link);
-          });
-          html += '</div>';
-        }
-        html += '</div></details>';
+        html += '</div>';
       });
       html += '</div>';
     }
-    if (pr.moreDefensive.length || pr.moreConstructive.length) {
-      html += '<div class="ms-change-view">';
-      html += '<h3>What Would Change the View</h3>';
-      html += '<div class="ms-change-grid">';
-      if (pr.moreDefensive.length) {
-        html += '<div class="ms-change-side"><h4 class="ms-change-defensive">More defensive</h4><ul>';
-        pr.moreDefensive.forEach(function(c) { html += '<li>' + escapeHtml(c) + '</li>'; });
-        html += '</ul></div>';
-      }
-      if (pr.moreConstructive.length) {
-        html += '<div class="ms-change-side"><h4 class="ms-change-constructive">More constructive</h4><ul>';
-        pr.moreConstructive.forEach(function(c) { html += '<li>' + escapeHtml(c) + '</li>'; });
-        html += '</ul></div>';
-      }
-      html += '</div></div>';
-    }
-    if (pr.convictionSummary || pr.offsets.length) {
-      html += '<div class="ms-conviction">';
-      html += '<h3>Why Conviction Is Limited</h3>';
-      if (pr.convictionSummary) {
-        html += '<p class="ms-conviction-summary">' + escapeHtml(pr.convictionSummary) + '</p>';
-      }
-      if (pr.offsets.length) {
-        html += '<ul class="ms-conviction-list">';
-        pr.offsets.forEach(function(offset) {
-          html += '<li class="ms-conviction-item">';
-          html += '<span class="ms-conviction-finding">' + escapeHtml(offset.finding) + '</span>';
-          if (offset.effect) html += '<span class="ms-conviction-effect">' + escapeHtml(offset.effect) + '</span>';
-          if (offset.links && offset.links.length) {
-            html += '<div class="ms-evidence-links">';
-            offset.links.forEach(function(link) {
-              html += renderEvidenceLink(link);
-            });
-            html += '</div>';
-          }
-          html += '</li>';
-        });
-        html += '</ul>';
-      }
-      html += '</div>';
-    }
-    if (pr.pendingConfirmations.length) {
-      html += '<div class="ms-pending-confirmations">';
-      html += '<h3>Pending Confirmations</h3>';
-      html += '<ul>';
-      pr.pendingConfirmations.forEach(function (confirmation) {
-        html += '<li>' + escapeHtml(confirmation) + '</li>';
+    var confirmation = pr.marketConfirmation || {};
+    var evidenceEntries = confirmation.evidence || {};
+    var evidenceKeys = Object.keys(evidenceEntries);
+    if (evidenceKeys.length || pr.offsets.length) {
+      html += '<div class="ms-detailed-section">';
+      html += '<h3>Market Confirmation &amp; Offsets</h3>';
+      evidenceKeys.forEach(function(key) {
+        var record = evidenceEntries[key];
+        if (!record) return;
+        html += '<div class="ms-evidence-item">' + escapeHtml(record.finding || key) + '</div>';
       });
-      html += '</ul>';
+      pr.offsets.forEach(function(offset) {
+        html += '<div class="ms-evidence-item caution">' + escapeHtml(offset.finding || offset.id || "");
+        var links = offset.evidence_links || [];
+        if (links.length) {
+          html += '<div class="ms-evidence-links">' + links.map(renderEvidenceLink).join("") + '</div>';
+        }
+        html += '</div>';
+      });
       html += '</div>';
     }
-    if (pr.missingInputs.length && pr.status !== "insufficient") {
+    html += '<div class="ms-detailed-section">';
+    html += '<h3>Current Interpretation</h3>';
+    html += '<p class="ms-interpretation">' + escapeHtml(pr.interpretation || "") + '</p>';
+    html += '</div>';
+    var posture = pr.portfolioPosture || {};
+    var positioning = posture.positioning || [];
+    var avoid = posture.avoid || [];
+    if (positioning.length || avoid.length) {
+      html += '<div class="ms-action-grid">';
+      if (positioning.length) {
+        html += '<div class="ms-action-col">';
+        html += '<h4>Positioning</h4><ul>';
+        positioning.forEach(function(action) { html += '<li>' + escapeHtml(action) + '</li>'; });
+        html += '</ul></div>';
+      }
+      if (avoid.length) {
+        html += '<div class="ms-action-col">';
+        html += '<h4>Avoid</h4><ul>';
+        avoid.forEach(function(action) { html += '<li>' + escapeHtml(action) + '</li>'; });
+        html += '</ul></div>';
+      }
+      html += '</div>';
+    }
+    if (pr.nextTriggers.length) {
+      html += '<div class="ms-detailed-section">';
+      html += '<h3>Next Triggers</h3>';
+      html += '<ul class="ms-trigger-list">';
+      pr.nextTriggers.forEach(function(trigger) {
+        html += '<li>' + escapeHtml(trigger.label || trigger.id || "") + '</li>';
+      });
+      html += '</ul></div>';
+    }
+    if (pr.watchItems.length) {
+      html += '<div class="ms-detailed-section">';
+      html += '<h3>Watch Items</h3>';
+      html += '<ul class="ms-watch-list">';
+      pr.watchItems.forEach(function(item) {
+        html += '<li>' + escapeHtml(item.label || item.id || "") + '</li>';
+      });
+      html += '</ul></div>';
+    }
+    if (pr.missingInputs.length) {
       html += '<div class="ms-pending-confirmations ms-missing-inputs">';
       html += '<h3>Missing Inputs</h3>';
       html += '<p>' + escapeHtml(pr.missingInputs.join(" \u00B7 ")) + '</p>';
       html += '</div>';
-    }
-    var comps = pr.components;
-    if (comps && (comps.marketEnvironment.state || comps.expectedGrowth.state || comps.financialConditions.state || comps.policyResponse.state || comps.expectedGrowth.consumerDemand)) {
-      html += '<details class="ms-component-data">';
-      html += '<summary class="ms-component-summary">Component Data</summary>';
-      html += '<div class="ms-component-grid">';
-      html += '<div class="ms-component-cell"><span class="ms-component-label">Market Environment</span><span class="ms-component-value ' + comps.marketEnvironment.sentiment + '">' + escapeHtml(titleCaseToken(comps.marketEnvironment.state)) + '</span></div>';
-      html += '<div class="ms-component-cell ms-component-cell-growth">';
-html += '<span class="ms-component-label">Expected Growth</span>';
-html += '<span class="ms-component-value ' + comps.expectedGrowth.sentiment + '">' +
-  escapeHtml(titleCaseToken(comps.expectedGrowth.state)) + '</span>';
-html += '<span class="ms-component-meta">GDP ' +
-  escapeHtml(titleCaseToken(comps.expectedGrowth.direction)) + ' · Momentum ' +
-  escapeHtml(titleCaseToken(comps.expectedGrowth.momentum)) + '</span>';
-html += '<span class="ms-component-meta">Surveys ' +
-  escapeHtml(titleCaseToken(comps.expectedGrowth.surveyAlignment)) + ' · Demand ' +
-  escapeHtml(titleCaseToken(comps.expectedGrowth.demandAlignment)) + '</span>';
-html += '<div class="ms-evidence-links">' +
-  comps.expectedGrowth.links.map(renderEvidenceLink).join("") +
-  '</div>';
-html += '</div>';
-      var cd = comps.expectedGrowth.consumerDemand;
-      if (cd && cd.state !== "unavailable") {
-        html += '<div class="ms-component-cell ms-component-cell-consumer-demand">';
-        html += '<span class="ms-component-label">Consumer Demand</span>';
-        html += '<span class="ms-component-value ' + stateSentimentClass(cd.state) + '">' + escapeHtml(cd.label) + '</span>';
-        if (cd.percentileLabel) {
-          html += '<span class="ms-component-meta">' + escapeHtml(cd.percentileLabel) + ' · ' + escapeHtml(cd.zone || "") + ' · ' + escapeHtml(cd.momentum || "") + '</span>';
-        }
-        if (cd.date) {
-          html += '<span class="ms-component-meta">' + escapeHtml(fmtMonthYear(cd.date)) + '</span>';
-        }
-        if (cd.links.length) {
-          html += '<div class="ms-evidence-links">' +
-            cd.links.map(renderEvidenceLink).join("") +
-            '</div>';
-        }
-        html += '</div>';
-      } else if (cd) {
-        html += '<div class="ms-component-cell ms-component-cell-consumer-demand ms-component-cell-awaiting">';
-        html += '<span class="ms-component-value muted">Consumer Demand: Awaiting aligned percentile data</span>';
-        html += '</div>';
-      }
-      html += '<div class="ms-component-cell"><span class="ms-component-label">Financial Conditions</span><span class="ms-component-value ' + comps.financialConditions.sentiment + '">' + escapeHtml(titleCaseToken(comps.financialConditions.state)) + '</span></div>';
-      html += '<div class="ms-component-cell"><span class="ms-component-label">Policy Response</span><span class="ms-component-value ' + comps.policyResponse.sentiment + '">' + escapeHtml(titleCaseToken(comps.policyResponse.state)) + '</span></div>';
-      html += '</div></details>';
     }
     html += '</div>';
     return html;
@@ -2181,13 +2014,13 @@ html += '</div>';
       announceStatus("Market setup failed to load");
       return;
     }
-    if (!setup || setup.status === "unavailable") {
+    if (!setup) {
       section.innerHTML = '<div class="market-setup-loading">Market setup data is not available.</div>';
       return;
     }
     var presentation = buildMarketSetupPresentation(setup);
     section.innerHTML = renderDecisionHero(presentation) + renderDetailedReasoning(presentation);
-    announceStatus("Market setup \u2014 " + (presentation.portfolioPosture || "loaded"));
+    announceStatus("Market setup \u2014 " + (presentation.portfolioPosture.label || "loaded"));
     bindEvidenceLinks(section);
   }
 
@@ -5762,7 +5595,6 @@ html += '</div>';
       renderGrowthCycleTabs,
       bindGrowthCycleTabs,
       renderCard,
-      computeSignalAgreement,
       buildMarketSetupPresentation,
       stateSentimentClass,
       renderStateCell,

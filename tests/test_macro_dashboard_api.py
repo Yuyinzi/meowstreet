@@ -10,6 +10,12 @@ from app.api import app
 client = TestClient(app)
 
 
+def _market_setup_payload():
+    payload = client.get("/api/macro-dashboard/market-setup").json()
+    payload.pop("generated_at", None)
+    return payload
+
+
 class _FakeCursor:
     def fetchall(self):
         return []
@@ -3195,7 +3201,7 @@ def _consumer_sentiment_summary(zone="elevated", momentum="improving"):
     }
 
 
-def test_market_setup_api_passes_consumer_sentiment_to_market_setup(monkeypatch):
+def test_market_setup_api_passes_consumer_demand_to_v2_builder(monkeypatch):
     from app import api
 
     captured = {}
@@ -3206,17 +3212,20 @@ def test_market_setup_api_passes_consumer_sentiment_to_market_setup(monkeypatch)
         lambda con: _consumer_sentiment_summary(zone="depressed", momentum="weakening"),
     )
     monkeypatch.setattr(
-        api.market_setup,
-        "build_market_setup",
+        api.market_setup_v2,
+        "build_market_setup_v2",
         lambda **kwargs: captured.setdefault("payload", kwargs) or {},
     )
 
     api.macro_dashboard_market_setup()
 
-    assert captured["payload"]["consumer_sentiment_summary"]["method_version"] == 2
+    consumer_facts = captured["payload"]["consumer_demand"]["facts"][
+        "consumer_demand_outlook"
+    ]
+    assert "relationship_to_growth_direction" in consumer_facts
 
 
-def test_market_setup_api_keeps_existing_setup_when_consumer_data_is_unavailable(
+def test_market_setup_api_keeps_v2_insufficient_when_consumer_data_is_unavailable(
     monkeypatch,
 ):
     from app import api
@@ -3230,9 +3239,8 @@ def test_market_setup_api_keeps_existing_setup_when_consumer_data_is_unavailable
     response = TestClient(api.app).get("/api/macro-dashboard/market-setup")
 
     assert response.status_code == 200
-    assert (
-        response.json()["expected_growth"]["consumer_demand"]["state"] == "unavailable"
-    )
+    assert response.json()["version"] == "market_setup_v2"
+    assert "consumer_demand" not in response.json()["macro_regime"]
     assert "Consumer Sentiment" not in response.json()["missing_inputs"]
 
 
@@ -3910,9 +3918,7 @@ def test_market_setup_is_identical_across_cot_extreme_statuses(monkeypatch):
             "load_cot_observations",
             lambda con, rows=rows: rows,
         )
-        responses.append(
-            TestClient(app).get("/api/macro-dashboard/market-setup").json()
-        )
+        responses.append(_market_setup_payload())
 
     assert all(response == responses[0] for response in responses)
 
@@ -4365,9 +4371,7 @@ def test_market_setup_is_identical_across_cross_market_spread_states(monkeypatch
                 sid: list(rows.get(sid, [])) for sid in series_ids
             },
         )
-        responses.append(
-            TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
-        )
+        responses.append(_market_setup_payload())
 
     assert all(response == responses[0] for response in responses)
 
@@ -4509,9 +4513,7 @@ def test_market_setup_is_identical_across_lme_comex_differential_states(monkeypa
                 sid: list(rows.get(sid, [])) for sid in series_ids
             },
         )
-        responses.append(
-            TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
-        )
+        responses.append(_market_setup_payload())
 
     assert all(response == responses[0] for response in responses)
 
@@ -4916,9 +4918,7 @@ def test_market_setup_is_identical_across_inflation_distribution_states(monkeypa
                 if sid in api._OBSERVATION_SERIES_IDS
             },
         )
-        responses.append(
-            TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
-        )
+        responses.append(_market_setup_payload())
 
     assert all(response == responses[0] for response in responses)
 
@@ -5005,7 +5005,7 @@ def test_market_setup_is_identical_when_usd_final_value_changes(monkeypatch):
             "load_macro_indicator_observations_for_series",
             lambda con, series_ids: {sid: list(rows) for sid in series_ids},
         )
-        return TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+        return _market_setup_payload()
 
     normal_rows = _usd_weekday_rows()
     abnormal_rows = list(normal_rows)
@@ -5137,13 +5137,13 @@ def test_market_setup_is_identical_when_data_changes(monkeypatch):
         lambda con: None,
     )
 
-    first = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+    first = _market_setup_payload()
     monkeypatch.setattr(
         api.macro_indicators_db,
         "load_cot_observations",
         lambda con: [{"commodity_id": "crude_oil_wti", "report_date": "2026-07-21"}],
     )
-    second = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+    second = _market_setup_payload()
 
     assert second == first
 
@@ -5322,7 +5322,7 @@ def test_market_setup_is_identical_when_oil_data_changes(monkeypatch):
                 for sid in series_ids
             },
         )
-        return TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+        return _market_setup_payload()
 
     assert _market_setup_response(60.0) == _market_setup_response(90.0)
 
@@ -5387,7 +5387,7 @@ def test_oil_review_states_do_not_change_market_setup(monkeypatch):
                 for sid in series_ids
             },
         )
-        return TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+        return _market_setup_payload()
 
     assert _response(60.0) == _response(90.0)
 
@@ -5532,7 +5532,7 @@ def test_oil_full_history_injects_distributions_and_market_setup_unchanged(
                 for sid in series_ids
             },
         )
-        return TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+        return _market_setup_payload()
 
     assert _market_setup_response(60.0) == _market_setup_response(90.0)
 
@@ -5597,15 +5597,13 @@ def test_market_setup_is_identical_when_active_lbr_data_changes(monkeypatch):
         ]
         return result
 
-    baseline = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+    baseline = _market_setup_payload()
     monkeypatch.setattr(
         api.macro_indicators_db,
         "load_macro_indicator_observations_for_series",
         changed_lbr_loader,
     )
-    assert (
-        TestClient(api.app).get("/api/macro-dashboard/market-setup").json() == baseline
-    )
+    assert _market_setup_payload() == baseline
 
 
 def _non_oil_weekday_rows(start, count, value_at):
@@ -6396,7 +6394,7 @@ def test_non_oil_market_setup_is_identical_when_returns_change(monkeypatch):
         result["copper_comex"] = copper_rows
         return result
 
-    baseline = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+    baseline = _market_setup_payload()
     monkeypatch.setattr(
         api.macro_indicators_db,
         "load_macro_indicator_observations_for_series",
@@ -6404,7 +6402,7 @@ def test_non_oil_market_setup_is_identical_when_returns_change(monkeypatch):
             con, series_ids, _copper_comex_normal_rows()
         ),
     )
-    normal = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+    normal = _market_setup_payload()
     monkeypatch.setattr(
         api.macro_indicators_db,
         "load_macro_indicator_observations_for_series",
@@ -6412,7 +6410,7 @@ def test_non_oil_market_setup_is_identical_when_returns_change(monkeypatch):
             con, series_ids, _copper_comex_abnormal_rows()
         ),
     )
-    abnormal = TestClient(api.app).get("/api/macro-dashboard/market-setup").json()
+    abnormal = _market_setup_payload()
 
     assert normal == baseline
     assert abnormal == baseline
@@ -6744,3 +6742,76 @@ def test_economic_confirmation_routes_serve_html_labor_snapshots(monkeypatch):
         "2026-07-02"
     )
     assert detail.json()["economic_confirmation"]["coverage"] == "claims_only"
+
+
+def test_market_setup_api_returns_the_v2_layered_contract(monkeypatch):
+    from app import api
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    monkeypatch.setattr(
+        macro_dashboard_router.market_setup_v2,
+        "build_market_setup_v2",
+        lambda **kwargs: {
+            "version": "market_setup_v2",
+            "macro_regime": {"code": "growth_decelerating"},
+            "market_confirmation": {"code": "not_confirming_downside"},
+            "market_setup": {"code": "macro_weakening_price_not_confirming"},
+            "portfolio_posture": {"code": "neutral_selective"},
+        },
+    )
+    response = TestClient(api.app).get("/api/macro-dashboard/market-setup")
+    assert response.status_code == 200
+    assert response.json()["version"] == "market_setup_v2"
+    assert "setup_type" not in response.json()
+    assert "market_conclusion" not in response.json()
+
+
+def _assert_market_setup_does_not_reach_excluded_evidence(monkeypatch, patcher):
+    from app import api
+
+    def excluded(*args, **kwargs):
+        raise AssertionError("excluded evidence must not reach Market Setup v2")
+
+    patcher(monkeypatch, excluded)
+
+    response = TestClient(api.app).get("/api/macro-dashboard/market-setup")
+
+    assert response.status_code == 200
+    assert response.json()["version"] == "market_setup_v2"
+
+
+def test_market_setup_v2_does_not_load_economic_confirmation(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    _assert_market_setup_does_not_reach_excluded_evidence(
+        monkeypatch,
+        lambda monkeypatch, excluded: monkeypatch.setattr(
+            macro_dashboard_router.economic_confirmation, "connect", excluded
+        ),
+    )
+
+
+def test_market_setup_v2_does_not_load_cyclical_commodities(monkeypatch):
+    from app import api
+
+    _assert_market_setup_does_not_reach_excluded_evidence(
+        monkeypatch,
+        lambda monkeypatch, excluded: monkeypatch.setattr(
+            api.macro_indicators_db,
+            "load_cot_observations",
+            excluded,
+        ),
+    )
+
+
+def test_market_setup_v2_does_not_load_regional_nfib(monkeypatch):
+    from app import api
+
+    _assert_market_setup_does_not_reach_excluded_evidence(
+        monkeypatch,
+        lambda monkeypatch, excluded: monkeypatch.setattr(
+            api.macro_indicators_db,
+            "load_all_nfib_regional_observations",
+            excluded,
+        ),
+    )

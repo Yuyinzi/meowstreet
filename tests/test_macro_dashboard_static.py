@@ -2763,11 +2763,70 @@ def test_macro_dashboard_js_renders_survey_synthesis_as_standalone_layer():
 # --- Market Setup Decision Hero Tests ---
 
 
-def test_market_setup_hero_aligned_signal():
+def _v2_setup_payload(regime, confirmation, setup, posture, extra=None):
+    payload = {
+        "version": "market_setup_v2",
+        "generated_at": "2026-07-01T12:00:00+00:00",
+        "evidence_through": "2026-06-15",
+        "macro_regime": {
+            "code": regime["code"],
+            "label": regime["label"],
+            "primary_source": "ism_survey_synthesis",
+            "supports": regime.get("supports", []),
+            "conflicts": regime.get("conflicts", []),
+            "missing_inputs": [],
+            "excluded_inputs": [],
+            "method_version": "market_setup_v2_macro_regime_v1",
+            "source_periods": {},
+        },
+        "market_confirmation": {
+            "code": confirmation["code"],
+            "label": confirmation["label"],
+            "confirmation_test_count": confirmation.get("confirmation_test_count"),
+            "evidence": confirmation.get("evidence", {}),
+            "offsets": confirmation.get("offsets", []),
+            "missing_inputs": confirmation.get("missing_inputs", []),
+            "method_version": "market_setup_v2_market_confirmation_v1",
+            "source_periods": {},
+        },
+        "market_setup": {
+            "code": setup["code"],
+            "label": setup["label"],
+            "agreement": setup["agreement"],
+        },
+        "portfolio_posture": {
+            "code": posture["code"],
+            "label": posture["label"],
+            "net_exposure": posture.get("net_exposure", "neutral"),
+            "gross_exposure": posture.get("gross_exposure", "moderate"),
+            "implementation": posture.get("implementation", "selective_positions"),
+            "broad_beta": posture.get("broad_beta", "avoid_large_directional_exposure"),
+            "positioning": posture.get("positioning", []),
+            "avoid": posture.get("avoid", []),
+            "method_version": "market_setup_v2_portfolio_posture_v1",
+        },
+        "interpretation": setup.get(
+            "interpretation",
+            "Macro downside risk is rising, but market prices do not yet validate a broad risk-off setup.",
+        ),
+        "supports": setup.get("supports", []),
+        "conflicts": setup.get("conflicts", []),
+        "offsets": setup.get("offsets", []),
+        "excluded_inputs": [],
+        "method_versions": {},
+        "missing_inputs": setup.get("missing_inputs", []),
+        "next_triggers": setup.get("next_triggers", []),
+        "watch_items": setup.get("watch_items", []),
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def _market_setup_v2_hero_script(setup_json, checks):
     script = textwrap.dedent("""\
         const fs = require("fs");
         const vm = require("vm");
-
         const elements = {
           dashboardStatus: {},
           marketGrid: { innerHTML: "", querySelectorAll: () => [] },
@@ -2775,7 +2834,6 @@ def test_market_setup_hero_aligned_signal():
           marketSetup: { innerHTML: "", querySelectorAll: () => [] },
           marketSetupStatus: { textContent: "" },
         };
-
         global.window = { __MEOWSTREET_TEST__: true };
         global.document = {
           getElementById: (id) => elements[id],
@@ -2786,375 +2844,281 @@ def test_market_setup_hero_aligned_signal():
           status: 200,
           json: async () => ({ markets: [] }),
         });
-
         vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
-
-        const setup = {
-          version: "market_setup_v1",
-          status: "available",
-          as_of: "2026-06-17",
-          market_environment: { state: "bull_market" },
-          expected_growth: { state: "expansion" },
-          financial_conditions: { state: "accommodative" },
-          policy_response: { state: "restrictive" },
-          setup_type: "growth_and_conditions_aligned",
-          portfolio_posture: "long",
-          agreements: ["Growth and conditions are aligned"],
-          conflicts: [],
-          missing_inputs: [],
-          pending_confirmations: [
-            "Housing permits — permits could not confirm the ISM path",
-            "NFIB Small Business — NFIB has not yet confirmed the ISM-implied growth path",
-          ],
-          market_conclusion: {
-            code: "qualified_long_candidate",
-            title: "Qualified Long Candidate",
-            summary: "Growth is slowing but conditions remain supportive.",
-          },
-          portfolio_guidance: {
-            posture: "long",
-            summary: "Maintain long posture",
-            actions: ["Maintain broad-market long exposure"],
-            avoid: ["Avoid adding defensive positions"],
-          },
-          evidence_chain: [{
-            title: "Growth Trend",
-            finding: "Growth is slowing but above trend",
-            implication: "Supports moderate long exposure",
-            tone: "constructive",
-            evidence: ["ISM Manufacturing at 52.3"],
-            evidence_links: ["ism_manufacturing"],
-          }],
-          conviction_limits: {
-            summary: "Some offsets limit conviction",
-            offsets: [{ finding: "Bull market intact", effect: "Offset", evidence_links: ["market_phase"] }],
-          },
-          confirmation_conditions: {
-            more_defensive: ["ISM drops below 50"],
-            more_constructive: ["Services sector confirms expansion"],
-          },
-        };
-
+        const setup = %s;
         const pr = hooks.buildMarketSetupPresentation(setup);
-
+        const hero = hooks.renderDecisionHero(pr);
+        const detail = hooks.renderDetailedReasoning(pr);
         console.log(JSON.stringify({
-          signalAgreement: pr.signalAgreement,
-          conclusionTitle: pr.conclusionTitle,
-          asOf: pr.asOf,
-          hasEvidence: pr.primaryEvidence.length === 1,
-          hasOffsets: pr.offsets.length === 1,
-          hasDoActions: pr.doActions.length === 1,
-          hasAvoidActions: pr.avoidActions.length === 1,
-          hasPending: pr.pendingConfirmations.length === 2,
-          marketPhaseSentiment: hooks.stateSentimentClass(pr.marketPhase),
-          heroHtml: hooks.renderDecisionHero(pr),
-          detailedHtml: hooks.renderDetailedReasoning(pr),
-          offsetLinks: pr.offsets[0].links,
+          macroRegime: pr.macroRegime.label,
+          marketConfirmation: pr.marketConfirmation.label,
+          marketSetup: pr.marketSetup.label,
+          portfolioPosture: pr.portfolioPosture.label,
+          evidenceThrough: pr.evidenceThrough,
+          interpretation: pr.interpretation,
+          hero: hero,
+          detail: detail,
+          %s
         }));
     """)
+    checks_src = ",\n          ".join(f"{key}: {expr}" for key, expr in checks.items())
+    return script % (json.dumps(setup_json), checks_src)
 
-    result = subprocess.run(
-        ["node", "-e", script],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
+
+def test_market_setup_hero_aligned_upside():
+    setup = _v2_setup_payload(
+        regime={"code": "growth_accelerating", "label": "Growth Accelerating"},
+        confirmation={
+            "code": "confirming_upside",
+            "label": "Upside Broadly Confirmed",
+            "confirmation_test_count": 3,
+            "evidence": {
+                "equity_trend": {
+                    "state": "bull_market",
+                    "confirms": True,
+                    "finding": "S&P 500 market phase confirms the directional regime",
+                }
+            },
+            "offsets": [],
+        },
+        setup={
+            "code": "macro_improving_market_confirming",
+            "label": "Macro Improving, Market Confirming",
+            "agreement": "aligned",
+            "interpretation": "Economic expectations are improving and market pricing broadly confirms the upside environment.",
+            "supports": [
+                {
+                    "source_id": "macro_financial_conditions",
+                    "finding": "macro_financial_conditions is consistent with the survey growth direction",
+                    "evidence_links": ["macro_financial_conditions"],
+                }
+            ],
+        },
+        posture={
+            "code": "risk_on",
+            "label": "Risk-On",
+            "net_exposure": "long",
+            "gross_exposure": "normal",
+            "positioning": ["maintain_long_net_exposure"],
+            "avoid": ["ignoring_risk_controls"],
+        },
     )
-    payload = json.loads(result.stdout)
-
-    assert payload["signalAgreement"] == "aligned"
-    assert payload["conclusionTitle"] == "Qualified Long Candidate"
-    assert payload["asOf"] == "2026-06-17"
-    assert payload["hasEvidence"] is True
-    assert payload["hasOffsets"] is True
-    assert payload["offsetLinks"] == ["market_phase"]
-    assert payload["hasDoActions"] is True
-    assert payload["hasAvoidActions"] is True
-    assert payload["hasPending"] is True
-    assert payload["marketPhaseSentiment"] == "constructive"
-    assert "ms-hero" in payload["heroHtml"]
-    assert "ms-state-strip" in payload["heroHtml"]
-    assert "ms-state-cell" in payload["heroHtml"]
-    assert "Qualified Long Candidate" in payload["heroHtml"]
-    assert "Evidence through" in payload["heroHtml"]
-    assert "Practical Guidance" in payload["heroHtml"]
-    assert "Conviction limited by 1 offset" in payload["heroHtml"]
-    assert "Bull Market" in payload["heroHtml"]
-    assert "bull_market" not in payload["heroHtml"]
-    assert "ms-detailed" in payload["detailedHtml"]
-    assert "ms-evidence-card" in payload["detailedHtml"]
-    assert "ms-change-view" in payload["detailedHtml"]
-    assert "ms-conviction" in payload["detailedHtml"]
-    assert "ms-evidence-link" in payload["detailedHtml"]
-    assert "evidence-market-phase" in payload["detailedHtml"]
-    assert "ms-pending-confirmations" in payload["detailedHtml"]
-    assert "<ul>" in payload["detailedHtml"]
-    assert (
-        "<li>Housing permits — permits could not confirm the ISM path</li>"
-        in payload["detailedHtml"]
-    )
-    assert (
-        "<li>NFIB Small Business — NFIB has not yet confirmed the ISM-implied growth path</li>"
-        in payload["detailedHtml"]
-    )
-    assert "ms-component-data" in payload["detailedHtml"]
-
-
-def test_market_setup_hero_preserves_compound_macro_conclusion():
-    script = textwrap.dedent("""\
-        const fs = require("fs");
-        const vm = require("vm");
-        const elements = {
-          dashboardStatus: {},
-          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
-          marketDetail: { innerHTML: "" },
-          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
-          marketSetupStatus: { textContent: "" },
-        };
-        global.window = { __MEOWSTREET_TEST__: true };
-        global.document = {
-          getElementById: (id) => elements[id],
-          querySelectorAll: () => [],
-        };
-        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
-        const hooks = window.__macroDashboardTestHooks;
-        const presentation = hooks.buildMarketSetupPresentation({
-          status: "available",
-          as_of: "2026-06-01",
-          market_environment: { state: "bull_market" },
-          setup_type: "contraction_risk_aligned",
-          portfolio_posture: "neutral",
-          agreements: [],
-          conflicts: ["Bull market conflicts with contraction risk"],
-          missing_inputs: [],
-          market_conclusion: {
-            code: "macro_risk_rising_bull_intact",
-            title: "Macro Risk Rising; Bull Market Intact",
-            summary: "Macro risk is rising, but the bull phase remains intact."
-          },
-          portfolio_guidance: { actions: ["Maintain balanced exposure"], avoid: [] },
-          evidence_chain: [],
-          conviction_limits: {},
-          confirmation_conditions: {}
-        });
-        const html = hooks.renderDecisionHero(presentation);
-        console.log(JSON.stringify({
-          headline: html.includes("Macro Risk Rising; Bull Market Intact"),
-          phase: html.includes("Bull Market"),
-          setup: html.includes("Contraction Risk Aligned"),
-          posture: html.includes("Neutral")
-        }));
-    """)
+    checks = {
+        "hasMacroRegime": 'hero.indexOf("MACRO REGIME") !== -1',
+        "hasRegimeLabel": 'hero.indexOf("Growth Accelerating") !== -1',
+        "hasConfirmationLabel": 'hero.indexOf("Upside Broadly Confirmed") !== -1',
+        "hasSetupLabel": 'hero.indexOf("Macro Improving, Market Confirming") !== -1',
+        "hasPostureLabel": 'hero.indexOf("Risk-On") !== -1',
+        "hasEvidence": 'detail.indexOf("Macro Evidence") !== -1',
+        "hasInterpretation": 'detail.indexOf("Current Interpretation") !== -1',
+        "hasPositioning": 'detail.indexOf("Positioning") !== -1',
+        "hasAvoid": 'detail.indexOf("Avoid") !== -1',
+        "hasNoConviction": 'detail.indexOf("Conviction") === -1',
+        "hasNoScore": 'detail.indexOf("score") === -1',
+    }
+    script = _market_setup_v2_hero_script(setup, checks)
     result = subprocess.run(
         ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
     )
-    assert all(json.loads(result.stdout).values())
+    payload = json.loads(result.stdout)
+    assert payload["macroRegime"] == "Growth Accelerating"
+    assert payload["marketSetup"] == "Macro Improving, Market Confirming"
+    assert payload["portfolioPosture"] == "Risk-On"
+    assert payload["hasMacroRegime"] is True
+    assert payload["hasRegimeLabel"] is True
+    assert payload["hasConfirmationLabel"] is True
+    assert payload["hasSetupLabel"] is True
+    assert payload["hasPostureLabel"] is True
+    assert payload["hasEvidence"] is True
+    assert payload["hasInterpretation"] is True
+    assert payload["hasPositioning"] is True
+    assert payload["hasAvoid"] is True
+    assert payload["hasNoConviction"] is True
+    assert payload["hasNoScore"] is True
+
+
+def test_market_setup_hero_partially_confirmed_downside():
+    setup = _v2_setup_payload(
+        regime={"code": "growth_decelerating", "label": "Growth Decelerating"},
+        confirmation={
+            "code": "partially_confirming_downside",
+            "label": "Downside Partially Confirmed",
+            "confirmation_test_count": 2,
+            "evidence": {
+                "equity_trend": {
+                    "state": "bear_market",
+                    "confirms": True,
+                    "finding": "S&P 500 market phase confirms the directional regime",
+                },
+                "credit": {
+                    "state": "risk_rising",
+                    "confirms": True,
+                    "finding": "credit conditions confirm the directional regime",
+                },
+                "volatility": {
+                    "state": "normal",
+                    "confirms": False,
+                    "finding": "volatility does not confirm the directional regime",
+                },
+            },
+            "offsets": [],
+        },
+        setup={
+            "code": "macro_weakening_partially_confirmed",
+            "label": "Macro Weakening, Partially Confirmed",
+            "agreement": "mixed",
+            "interpretation": "Macro downside risk is rising, with partial confirmation from market pricing.",
+        },
+        posture={
+            "code": "mild_risk_off",
+            "label": "Mild Risk-Off",
+            "net_exposure": "modest_defensive",
+            "gross_exposure": "moderate",
+            "positioning": ["maintain_modest_defensive_exposure"],
+            "avoid": ["large_directional_long_exposure"],
+        },
+    )
+    checks = {
+        "hasConfirmationLabel": 'hero.indexOf("Downside Partially Confirmed") !== -1',
+        "hasSetupLabel": 'hero.indexOf("Macro Weakening, Partially Confirmed") !== -1',
+        "hasPostureLabel": 'hero.indexOf("Mild Risk-Off") !== -1',
+        "hasOffsetSection": 'detail.indexOf("Market Confirmation &amp; Offsets") !== -1',
+    }
+    script = _market_setup_v2_hero_script(setup, checks)
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasConfirmationLabel"] is True
+    assert payload["hasSetupLabel"] is True
+    assert payload["hasPostureLabel"] is True
+    assert payload["hasOffsetSection"] is True
 
 
 def test_market_setup_hero_conflicting_signal():
-    script = textwrap.dedent("""\
-        const fs = require("fs");
-        const vm = require("vm");
-
-        const elements = {
-          dashboardStatus: {},
-          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
-          marketDetail: { innerHTML: "" },
-          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
-          marketSetupStatus: { textContent: "" },
-        };
-
-        global.window = { __MEOWSTREET_TEST__: true };
-        global.document = {
-          getElementById: (id) => elements[id],
-          querySelectorAll: () => [],
-        };
-        global.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ markets: [] }),
-        });
-
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
-        const hooks = window.__macroDashboardTestHooks;
-
-        const pr = hooks.buildMarketSetupPresentation({
-          status: "available",
-          as_of: "2026-06-17",
-          market_environment: { state: "bull_market" },
-          setup_type: "conflicting_evidence",
-          portfolio_posture: "neutral",
-          agreements: [],
-          conflicts: ["Growth slowing but conditions supportive"],
-          missing_inputs: [],
-          pending_confirmations: [],
-          market_conclusion: { code: "conflicting_evidence", title: "Conflicting Evidence", summary: "Mixed signals" },
-          portfolio_guidance: { actions: ["Be selective"] },
-          evidence_chain: [{ title: "Risk", finding: "Mixed signals", tone: "caution" }],
-          conviction_limits: {},
-          confirmation_conditions: {},
-        });
-
-        const heroHtml = hooks.renderDecisionHero(pr);
-
-        console.log(JSON.stringify({
-          signalAgreement: pr.signalAgreement,
-          hasConflicts: heroHtml.indexOf("Offsets &amp; Conflicts") !== -1,
-          hasPrimary: heroHtml.indexOf("Primary Evidence") !== -1,
-        }));
-    """)
-
+    setup = _v2_setup_payload(
+        regime={"code": "growth_decelerating", "label": "Growth Decelerating"},
+        confirmation={
+            "code": "not_confirming_downside",
+            "label": "Downside Not Broadly Confirmed",
+            "confirmation_test_count": 0,
+            "evidence": {
+                "equity_trend": {
+                    "state": "bull_market",
+                    "confirms": False,
+                    "finding": "S&P 500 market phase does not confirm the directional regime",
+                }
+            },
+            "offsets": [
+                {
+                    "id": "m2_liquidity_support",
+                    "finding": "M2 money supply is expanding or in shock, providing liquidity support",
+                    "evidence_links": ["m2_money_supply"],
+                }
+            ],
+        },
+        setup={
+            "code": "macro_weakening_price_not_confirming",
+            "label": "Macro Weakening, Price Not Confirming",
+            "agreement": "conflicting",
+            "conflicts": [
+                {
+                    "source_id": "macro_policy_response",
+                    "finding": "macro_policy_response conflicts with the survey growth direction",
+                    "evidence_links": ["macro_policy_response"],
+                }
+            ],
+            "offsets": [
+                {
+                    "id": "m2_liquidity_support",
+                    "finding": "M2 money supply is expanding or in shock, providing liquidity support",
+                    "evidence_links": ["m2_money_supply"],
+                }
+            ],
+            "interpretation": "Macro downside risk is rising, but market prices do not yet validate a broad risk-off setup.",
+        },
+        posture={
+            "code": "neutral_selective",
+            "label": "Neutral / Selective",
+            "net_exposure": "neutral",
+            "gross_exposure": "moderate",
+            "positioning": ["maintain_neutral_net_exposure"],
+            "avoid": ["large_broad_beta_directional_exposure"],
+        },
+    )
+    checks = {
+        "hasSetupLabel": 'hero.indexOf("Macro Weakening, Price Not Confirming") !== -1',
+        "hasPostureLabel": 'hero.indexOf("Neutral / Selective") !== -1',
+        "hasConflictEvidence": 'detail.indexOf("conflicts with the survey growth direction") !== -1',
+        "hasOffset": 'detail.indexOf("providing liquidity support") !== -1',
+        "hasOffsetEvidenceLink": 'detail.indexOf("evidence-m2-money-supply") !== -1',
+        "hasNoMarketPhase": 'hero.indexOf("Market Phase") === -1',
+        "hasNoMacroSetup": 'hero.indexOf("Macro Setup") === -1',
+    }
+    script = _market_setup_v2_hero_script(setup, checks)
     result = subprocess.run(
-        ["node", "-e", script],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
     )
     payload = json.loads(result.stdout)
-    assert payload["signalAgreement"] == "conflicting"
-    assert payload["hasConflicts"] is True
-    assert payload["hasPrimary"] is True
-
-
-def test_market_setup_hero_incomplete_state():
-    script = textwrap.dedent("""\
-        const fs = require("fs");
-        const vm = require("vm");
-
-        const elements = {
-          dashboardStatus: {},
-          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
-          marketDetail: { innerHTML: "" },
-          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
-          marketSetupStatus: { textContent: "" },
-        };
-
-        global.window = { __MEOWSTREET_TEST__: true };
-        global.document = {
-          getElementById: (id) => elements[id],
-          querySelectorAll: () => [],
-        };
-        global.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ markets: [] }),
-        });
-
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
-        const hooks = window.__macroDashboardTestHooks;
-
-        const pr = hooks.buildMarketSetupPresentation({
-          status: "partial",
-          as_of: "2026-06-17",
-          market_environment: { state: "bull_market" },
-          setup_type: "insufficient_data",
-          portfolio_posture: "neutral",
-          agreements: [],
-          conflicts: [],
-          missing_inputs: ["ISM manufacturing signal", "US rates data"],
-          pending_confirmations: [],
-          market_conclusion: { code: "insufficient_evidence", title: "Insufficient Evidence", summary: "Partial data" },
-          portfolio_guidance: {
-            posture: "neutral",
-            summary: "Conflicting signals or insufficient evidence support a neutral posture",
-            actions: ["Maintain balanced exposure with no net directional bias"],
-            avoid: ["Building large directional positions without clearer alignment"],
-          },
-          evidence_chain: [],
-          conviction_limits: {},
-          confirmation_conditions: {},
-        });
-
-        const heroHtml = hooks.renderDecisionHero(pr);
-
-        console.log(JSON.stringify({
-          signalAgreement: pr.signalAgreement,
-          hasInsufficientBadge: heroHtml.indexOf("Insufficient Data") !== -1,
-          hasMissingInputs: heroHtml.indexOf("ISM manufacturing signal") !== -1,
-          hasNoGuidance: heroHtml.indexOf("Practical Guidance") === -1,
-        }));
-    """)
-
-    result = subprocess.run(
-        ["node", "-e", script],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    payload = json.loads(result.stdout)
-    assert payload["signalAgreement"] == "incomplete"
-    assert payload["hasInsufficientBadge"] is True
-    assert payload["hasMissingInputs"] is True
-    assert payload["hasNoGuidance"] is True
+    assert payload["hasSetupLabel"] is True
+    assert payload["hasPostureLabel"] is True
+    assert payload["hasConflictEvidence"] is True
+    assert payload["hasOffset"] is True
+    assert payload["hasOffsetEvidenceLink"] is True
+    assert payload["hasNoMarketPhase"] is True
+    assert payload["hasNoMacroSetup"] is True
 
 
 def test_market_setup_hero_insufficient_state():
-    script = textwrap.dedent("""\
-        const fs = require("fs");
-        const vm = require("vm");
-
-        const elements = {
-          dashboardStatus: {},
-          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
-          marketDetail: { innerHTML: "" },
-          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
-          marketSetupStatus: { textContent: "" },
-        };
-
-        global.window = { __MEOWSTREET_TEST__: true };
-        global.document = {
-          getElementById: (id) => elements[id],
-          querySelectorAll: () => [],
-        };
-        global.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ markets: [] }),
-        });
-
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
-        const hooks = window.__macroDashboardTestHooks;
-
-        const pr = hooks.buildMarketSetupPresentation({
-          status: "insufficient",
-          market_environment: {},
-          setup_type: "insufficient_data",
-          portfolio_posture: null,
-          agreements: [],
-          conflicts: [],
-          missing_inputs: ["All inputs unavailable"],
-          pending_confirmations: [],
-          market_conclusion: { code: "insufficient_evidence" },
-          portfolio_guidance: {},
-          evidence_chain: [],
-          conviction_limits: {},
-          confirmation_conditions: {},
-        });
-
-        const heroHtml = hooks.renderDecisionHero(pr);
-
-        console.log(JSON.stringify({
-          signalAgreement: pr.signalAgreement,
-          hasInsufficientBadge: heroHtml.indexOf("Insufficient Data") !== -1,
-          hasRequiredInputs: heroHtml.indexOf("Required Inputs") !== -1,
-        }));
-    """)
-
+    setup = _v2_setup_payload(
+        regime={"code": "insufficient_data", "label": "Insufficient Macro Evidence"},
+        confirmation={
+            "code": "insufficient_data",
+            "label": "Insufficient Market Confirmation Evidence",
+            "confirmation_test_count": None,
+            "evidence": {},
+            "offsets": [],
+            "missing_inputs": ["S&P 500 market phase", "credit conditions", "VIX"],
+        },
+        setup={
+            "code": "insufficient_data",
+            "label": "Insufficient Data",
+            "agreement": "incomplete",
+            "missing_inputs": [
+                "ISM survey synthesis",
+                "S&P 500 market phase",
+                "credit conditions",
+                "VIX",
+            ],
+            "interpretation": "Required evidence is missing or stale, so a complete market setup cannot be determined.",
+        },
+        posture={
+            "code": "insufficient_data",
+            "label": "Insufficient Data",
+            "net_exposure": "neutral",
+            "gross_exposure": "reduced",
+            "positioning": ["maintain_neutral_net_exposure"],
+            "avoid": ["large_broad_beta_directional_exposure"],
+        },
+    )
+    checks = {
+        "hasSetupLabel": 'hero.indexOf("Insufficient Data") !== -1',
+        "hasPostureLabel": 'hero.indexOf("Insufficient Data") !== -1',
+        "hasRequiredInputs": 'hero.indexOf("Required Inputs") !== -1',
+        "hasMissingLabel": 'hero.indexOf("ISM survey synthesis") !== -1',
+        "hasNoGuidance": 'hero.indexOf("Positioning") === -1',
+    }
+    script = _market_setup_v2_hero_script(setup, checks)
     result = subprocess.run(
-        ["node", "-e", script],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
     )
     payload = json.loads(result.stdout)
-    assert payload["signalAgreement"] == "incomplete"
-    assert payload["hasInsufficientBadge"] is True
+    assert payload["hasSetupLabel"] is True
+    assert payload["hasPostureLabel"] is True
     assert payload["hasRequiredInputs"] is True
+    assert payload["hasMissingLabel"] is True
+    assert payload["hasNoGuidance"] is True
 
 
 def test_market_setup_hero_error_state():
@@ -3314,68 +3278,87 @@ def test_market_setup_hero_state_sentiment_class():
     assert payload["nullValue"] == "neutral-state"
 
 
-def test_market_setup_component_sentiments_use_renderable_classes():
-    script = textwrap.dedent("""\
-        const fs = require("fs");
-        const vm = require("vm");
-
-        const elements = {
-          dashboardStatus: {},
-          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
-          marketDetail: { innerHTML: "" },
-          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
-          marketSetupStatus: { textContent: "" },
-        };
-
-        global.window = { __MEOWSTREET_TEST__: true };
-        global.document = {
-          getElementById: (id) => elements[id],
-          querySelectorAll: () => [],
-        };
-        global.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ markets: [] }),
-        });
-
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
-        const hooks = window.__macroDashboardTestHooks;
-        const presentation = hooks.buildMarketSetupPresentation({
-          market_environment: { state: "bull_market" },
-          expected_growth: { state: "expansion_rising" },
-          financial_conditions: { state: "confirms_contraction_risk" },
-          policy_response: { state: "policy_liquidity_conflict" },
-        });
-
-        console.log(JSON.stringify({
-          market: presentation.components.marketEnvironment.sentiment,
-          growth: presentation.components.expectedGrowth.sentiment,
-          conditions: presentation.components.financialConditions.sentiment,
-          policy: presentation.components.policyResponse.sentiment,
-        }));
-    """)
-
-    result = subprocess.run(
-        ["node", "-e", script],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
+def test_market_setup_v2_renders_offsets_and_macro_evidence_separately():
+    setup = _v2_setup_payload(
+        regime={"code": "growth_decelerating", "label": "Growth Decelerating"},
+        confirmation={
+            "code": "partially_confirming_downside",
+            "label": "Downside Partially Confirmed",
+            "confirmation_test_count": 1,
+            "evidence": {
+                "equity_trend": {
+                    "state": "bear_market",
+                    "confirms": True,
+                    "finding": "S&P 500 market phase confirms the directional regime",
+                },
+                "liquidity": {
+                    "state": "expanding",
+                    "confirms": True,
+                    "finding": "M2 money supply is supportive of liquidity",
+                },
+            },
+            "offsets": [
+                {
+                    "id": "m2_liquidity_support",
+                    "finding": "M2 money supply is expanding or in shock, providing liquidity support",
+                    "evidence_links": ["m2_money_supply"],
+                }
+            ],
+        },
+        setup={
+            "code": "macro_weakening_partially_confirmed",
+            "label": "Macro Weakening, Partially Confirmed",
+            "agreement": "mixed",
+            "supports": [
+                {
+                    "source_id": "macro_financial_conditions",
+                    "finding": "macro_financial_conditions is consistent with the survey growth direction",
+                    "evidence_links": ["macro_financial_conditions"],
+                }
+            ],
+            "conflicts": [],
+            "offsets": [
+                {
+                    "id": "m2_liquidity_support",
+                    "finding": "M2 money supply is expanding or in shock, providing liquidity support",
+                    "evidence_links": ["m2_money_supply"],
+                }
+            ],
+        },
+        posture={
+            "code": "mild_risk_off",
+            "label": "Mild Risk-Off",
+            "net_exposure": "modest_defensive",
+            "gross_exposure": "moderate",
+            "positioning": ["maintain_modest_defensive_exposure"],
+            "avoid": ["large_directional_long_exposure"],
+        },
     )
-    payload = json.loads(result.stdout)
-    assert payload == {
-        "market": "constructive",
-        "growth": "constructive",
-        "conditions": "defensive",
-        "policy": "caution",
+    checks = {
+        "hasMacroEvidence": 'detail.indexOf("Macro Evidence") !== -1',
+        "hasSupportFinding": 'detail.indexOf("is consistent with the survey growth direction") !== -1',
+        "hasConfirmationSection": 'detail.indexOf("Market Confirmation &amp; Offsets") !== -1',
+        "hasOffset": 'detail.indexOf("providing liquidity support") !== -1',
+        "hasNoPrimaryEvidence": 'detail.indexOf("Primary Evidence") === -1',
+        "hasNoConviction": 'detail.indexOf("Why Conviction Is Limited") === -1',
     }
+    script = _market_setup_v2_hero_script(setup, checks)
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasMacroEvidence"] is True
+    assert payload["hasSupportFinding"] is True
+    assert payload["hasConfirmationSection"] is True
+    assert payload["hasOffset"] is True
+    assert payload["hasNoPrimaryEvidence"] is True
+    assert payload["hasNoConviction"] is True
 
 
-def test_market_setup_hero_compute_signal_agreement():
+def test_market_setup_hero_has_no_js_agreement_classifier():
     script = textwrap.dedent("""\
         const fs = require("fs");
         const vm = require("vm");
-
         const elements = {
           dashboardStatus: {},
           marketGrid: { innerHTML: "", querySelectorAll: () => [] },
@@ -3383,41 +3366,27 @@ def test_market_setup_hero_compute_signal_agreement():
           marketSetup: { innerHTML: "", querySelectorAll: () => [] },
           marketSetupStatus: { textContent: "" },
         };
-
         global.window = { __MEOWSTREET_TEST__: true };
         global.document = {
           getElementById: (id) => elements[id],
           querySelectorAll: () => [],
         };
-        global.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ markets: [] }),
-        });
-
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
         vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
-
         console.log(JSON.stringify({
-          aligned: hooks.computeSignalAgreement({ agreements: ["ok"], conflicts: [], missing_inputs: [], status: "available" }),
-          conflicting: hooks.computeSignalAgreement({ agreements: ["ok"], conflicts: ["bad"], missing_inputs: [], status: "available" }),
-          incomplete: hooks.computeSignalAgreement({ agreements: [], conflicts: [], missing_inputs: ["x"], status: "partial" }),
-          mixed: hooks.computeSignalAgreement({ agreements: [], conflicts: [], missing_inputs: [], status: "available" }),
+          hasAgreementClassifier: typeof hooks.computeSignalAgreement !== "undefined",
+          hasJsClassifier: typeof hooks.marketSetupClassifier !== "undefined",
+          hasPostureClassifier: typeof hooks.computePortfolioPosture !== "undefined",
         }));
     """)
-
     result = subprocess.run(
-        ["node", "-e", script],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
     )
     payload = json.loads(result.stdout)
-    assert payload["aligned"] == "aligned"
-    assert payload["conflicting"] == "conflicting"
-    assert payload["incomplete"] == "incomplete"
-    assert payload["mixed"] == "mixed"
+    assert payload["hasAgreementClassifier"] is False
+    assert payload["hasJsClassifier"] is False
+    assert payload["hasPostureClassifier"] is False
 
 
 def test_market_setup_evidence_links_are_semantic_deep_links():
@@ -3561,112 +3530,59 @@ def test_market_setup_evidence_navigation_updates_hash_and_respects_motion():
     ]
 
 
-def test_market_setup_hero_names_ism_survey_sources():
-    script = textwrap.dedent("""\
-        const fs = require("fs");
-        const vm = require("vm");
-
-        const elements = {
-          dashboardStatus: {},
-          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
-          marketDetail: { innerHTML: "" },
-          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
-          marketSetupStatus: { textContent: "" },
-        };
-
-        global.window = { __MEOWSTREET_TEST__: true };
-        global.document = {
-          getElementById: (id) => elements[id],
-          querySelectorAll: () => [],
-        };
-        global.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ markets: [] }),
-        });
-
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
-        const hooks = window.__macroDashboardTestHooks;
-
-        const setup = {
-          version: "market_setup_v1",
-          status: "available",
-          as_of: "2026-06-17",
-          market_environment: { state: "bull_market" },
-          expected_growth: {
-            state: "aligned_expansion",
-            expected_gdp_direction: "slowing",
-            growth_momentum: "falling",
-            survey_alignment: "aligned",
-            demand_alignment: "aligned_falling",
-            evidence_links: ["ism_manufacturing", "ism_services"],
-            components: {
-              manufacturing: { level: "expanding", momentum: "falling" },
-              services: { level: "expanding", momentum: "falling" },
+def test_market_setup_v2_renders_evidence_links_in_macro_and_confirmation_sections():
+    setup = _v2_setup_payload(
+        regime={"code": "growth_decelerating", "label": "Growth Decelerating"},
+        confirmation={
+            "code": "partially_confirming_downside",
+            "label": "Downside Partially Confirmed",
+            "confirmation_test_count": 1,
+            "evidence": {
+                "equity_trend": {
+                    "state": "bear_market",
+                    "confirms": True,
+                    "finding": "S&P 500 market phase confirms the directional regime",
+                }
             },
-          },
-          financial_conditions: { state: "accommodative" },
-          policy_response: { state: "restrictive" },
-          setup_type: "growth_and_conditions_aligned",
-          portfolio_posture: "long",
-          agreements: ["Growth and conditions are aligned"],
-          conflicts: [],
-          missing_inputs: [],
-          pending_confirmations: [],
-          market_conclusion: {
-            code: "qualified_long_candidate",
-            title: "Qualified Long Candidate",
-            summary: "Growth is slowing but conditions remain supportive.",
-          },
-          portfolio_guidance: {
-            posture: "long",
-            summary: "Maintain long posture",
-            actions: [],
-            avoid: [],
-          },
-          evidence_chain: [{
-            id: "growth_path",
-            title: "Growth Trend",
-            finding: "Growth is slowing but above trend",
-            implication: "Supports moderate long exposure",
-            tone: "constructive",
-            evidence: ["ISM Manufacturing at 52.3", "ISM Services at 54.1"],
-            evidence_links: ["ism_manufacturing", "ism_services"],
-          }],
-          conviction_limits: {},
-          confirmation_conditions: {},
-        };
-
-        const pr = hooks.buildMarketSetupPresentation(setup);
-        const hero = hooks.renderDecisionHero(pr);
-        const detail = hooks.renderDetailedReasoning(pr);
-
-        console.log(JSON.stringify({
-          heroNamesManufacturing: hero.indexOf("ISM Manufacturing") !== -1,
-          heroNamesServices: hero.indexOf("ISM Services") !== -1,
-          detailShowsGrowthDirection: detail.indexOf("Slowing") !== -1,
-          detailShowsSurveyAlignment: detail.indexOf("Aligned") !== -1,
-          manufacturingLinkExists: detail.indexOf("evidence-ism-manufacturing") !== -1,
-          servicesLinkExists: detail.indexOf("evidence-ism-services") !== -1,
-        }));
-    """)
-
+            "offsets": [],
+        },
+        setup={
+            "code": "macro_weakening_partially_confirmed",
+            "label": "Macro Weakening, Partially Confirmed",
+            "agreement": "mixed",
+            "supports": [
+                {
+                    "source_id": "ism_survey_synthesis",
+                    "finding": "ISM survey synthesis supports the current regime",
+                    "evidence_links": ["ism_manufacturing", "ism_services"],
+                }
+            ],
+            "conflicts": [],
+        },
+        posture={
+            "code": "mild_risk_off",
+            "label": "Mild Risk-Off",
+            "net_exposure": "modest_defensive",
+            "gross_exposure": "moderate",
+            "positioning": ["maintain_modest_defensive_exposure"],
+            "avoid": ["large_directional_long_exposure"],
+        },
+    )
+    checks = {
+        "hasSupportFinding": 'detail.indexOf("ISM survey synthesis supports the current regime") !== -1',
+        "manufacturingLinkExists": 'detail.indexOf("evidence-ism-manufacturing") !== -1',
+        "servicesLinkExists": 'detail.indexOf("evidence-ism-services") !== -1',
+        "confirmationFinding": 'detail.indexOf("S&amp;P 500 market phase confirms the directional regime") !== -1',
+    }
+    script = _market_setup_v2_hero_script(setup, checks)
     result = subprocess.run(
-        ["node", "-e", script],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
     )
     payload = json.loads(result.stdout)
-    assert payload == {
-        "heroNamesManufacturing": True,
-        "heroNamesServices": True,
-        "detailShowsGrowthDirection": True,
-        "detailShowsSurveyAlignment": True,
-        "manufacturingLinkExists": True,
-        "servicesLinkExists": True,
-    }
+    assert payload["hasSupportFinding"] is True
+    assert payload["manufacturingLinkExists"] is True
+    assert payload["servicesLinkExists"] is True
+    assert payload["confirmationFinding"] is True
 
 
 def test_macro_dashboard_renders_stable_evidence_target_ids():
@@ -3719,6 +3635,45 @@ def test_market_setup_css_has_hero_styles():
     assert "@media (prefers-reduced-motion: reduce)" in css
 
 
+def test_market_setup_css_renders_four_layer_cards_with_responsive_stacking():
+    css = STATIC_CSS.read_text()
+
+    assert ".ms-layer-strip {" in css
+    assert "grid-template-columns: repeat(4, 1fr);" in css
+    assert ".ms-layer-card {" in css
+    assert ".ms-layer-label {" in css
+    assert ".ms-layer-value {" in css
+    assert "@media (max-width: 480px)" in css
+    assert "grid-template-columns: 1fr;" in css
+
+
+def test_market_setup_css_renders_evidence_and_action_columns():
+    css = STATIC_CSS.read_text()
+
+    assert ".ms-action-grid {" in css
+    assert ".ms-action-col {" in css
+    assert ".ms-trigger-list" in css
+    assert ".ms-watch-list" in css
+    assert ".ms-interpretation {" in css
+
+
+def test_market_setup_css_labels_are_independent_of_color():
+    css = STATIC_CSS.read_text()
+
+    assert ".ms-layer-label {" in css
+    assert "font-weight: 700;" in css
+    assert "text-transform: uppercase;" in css
+    assert "color: #A89B91;" in css
+
+
+def test_market_setup_css_has_visible_focus():
+    css = STATIC_CSS.read_text()
+
+    assert ".ms-evidence-link:focus-visible" in css
+    assert ".ms-evidence-card summary:focus-visible" in css
+    assert ".ms-retry-btn:focus-visible" in css
+
+
 def test_macro_dashboard_html_has_benchmark_indices_heading():
     html = (ROOT / "static" / "macro-dashboard.html").read_text()
     assert "<h2>Benchmark Indices</h2>" in html
@@ -3755,6 +3710,166 @@ def test_market_setup_detailed_reasoning_uses_css_classes_not_inline_styles():
     assert 'style="' not in source
     assert "ms-evidence-links" in source
     assert "ms-missing-inputs" in source
+
+
+def test_market_setup_v2_hero_renders_four_layer_contract():
+    setup = {
+        "version": "market_setup_v2",
+        "generated_at": "2026-07-01T12:00:00+00:00",
+        "evidence_through": "2026-06-15",
+        "macro_regime": {
+            "code": "growth_decelerating",
+            "label": "Growth Decelerating",
+            "primary_source": "ism_survey_synthesis",
+            "supports": [],
+            "conflicts": [
+                {
+                    "source_id": "macro_policy_response",
+                    "finding": "macro_policy_response conflicts with the survey growth direction",
+                    "evidence_links": ["macro_policy_response"],
+                }
+            ],
+            "missing_inputs": [],
+            "excluded_inputs": ["macro_financial_conditions"],
+            "method_version": "market_setup_v2_macro_regime_v1",
+            "source_periods": {},
+        },
+        "market_confirmation": {
+            "code": "not_confirming_downside",
+            "label": "Downside Not Broadly Confirmed",
+            "confirmation_test_count": 0,
+            "evidence": {
+                "equity_trend": {
+                    "state": "bull_market",
+                    "confirms": False,
+                    "finding": "S&P 500 market phase does not confirm the directional regime",
+                },
+                "credit": {
+                    "state": "healthy",
+                    "confirms": False,
+                    "finding": "credit conditions do not confirm the directional regime",
+                },
+                "volatility": {
+                    "state": "normal",
+                    "confirms": False,
+                    "finding": "volatility does not confirm the directional regime",
+                },
+                "liquidity": {
+                    "state": "expanding",
+                    "confirms": True,
+                    "finding": "M2 money supply is supportive of liquidity",
+                },
+            },
+            "offsets": [
+                {
+                    "id": "m2_liquidity_support",
+                    "finding": "M2 money supply is expanding or in shock, providing liquidity support",
+                    "evidence_links": ["m2_money_supply"],
+                }
+            ],
+            "missing_inputs": [],
+            "method_version": "market_setup_v2_market_confirmation_v1",
+            "source_periods": {},
+        },
+        "market_setup": {
+            "code": "macro_weakening_price_not_confirming",
+            "label": "Macro Weakening, Price Not Confirming",
+            "agreement": "conflicting",
+        },
+        "portfolio_posture": {
+            "code": "neutral_selective",
+            "label": "Neutral / Selective",
+            "net_exposure": "neutral",
+            "gross_exposure": "moderate",
+            "implementation": "selective_positions",
+            "broad_beta": "avoid_large_directional_exposure",
+            "positioning": [
+                "maintain_neutral_net_exposure",
+                "use_moderate_position_sizing",
+                "prefer_selective_positions",
+            ],
+            "avoid": [
+                "large_broad_beta_directional_exposure",
+                "increasing_leverage_without_confirmation",
+            ],
+            "method_version": "market_setup_v2_portfolio_posture_v1",
+        },
+        "interpretation": "Macro downside risk is rising, but market prices do not yet validate a broad risk-off setup.",
+        "supports": [],
+        "conflicts": [
+            {
+                "source_id": "macro_policy_response",
+                "finding": "macro_policy_response conflicts with the survey growth direction",
+                "evidence_links": ["macro_policy_response"],
+            }
+        ],
+        "offsets": [
+            {
+                "id": "m2_liquidity_support",
+                "finding": "M2 money supply is expanding or in shock, providing liquidity support",
+                "evidence_links": ["m2_money_supply"],
+            }
+        ],
+        "excluded_inputs": ["macro_financial_conditions"],
+        "method_versions": {},
+        "missing_inputs": [],
+        "next_triggers": [
+            {
+                "id": "ism_survey_direction_change",
+                "label": "ISM survey direction changes from slowing",
+                "condition_ref": "ism_survey_synthesis_v1",
+                "effect": "recompute Macro Regime",
+            }
+        ],
+        "watch_items": [],
+    }
+    checks = {
+        "hasMacroRegime": 'hero.indexOf("MACRO REGIME") !== -1',
+        "hasRegimeLabel": 'hero.indexOf("Growth Decelerating") !== -1',
+        "hasMarketConfirmation": 'hero.indexOf("MARKET CONFIRMATION") !== -1',
+        "hasConfirmationLabel": 'hero.indexOf("Downside Not Broadly Confirmed") !== -1',
+        "hasMarketSetup": 'hero.indexOf("MARKET SETUP") !== -1',
+        "hasSetupLabel": 'hero.indexOf("Macro Weakening, Price Not Confirming") !== -1',
+        "hasPortfolioPosture": 'hero.indexOf("PORTFOLIO POSTURE") !== -1',
+        "hasPostureLabel": 'hero.indexOf("Neutral / Selective") !== -1',
+        "hasNoMarketPhase": 'hero.indexOf("Market Phase") === -1',
+        "hasNoMacroSetup": 'hero.indexOf("Macro Setup") === -1',
+        "hasNoConvictionLimited": 'hero.indexOf("Conviction limited by") === -1',
+        "hasInterpretation": 'hero.indexOf("Macro downside risk is rising") !== -1',
+        "hasSignalAgreement": 'hero.indexOf("Signal Agreement: Conflicting") !== -1',
+        "hasNoRawCode": 'hero.indexOf("macro_weakening_price_not_confirming") === -1',
+    }
+    script = _market_setup_v2_hero_script(setup, checks)
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["macroRegime"] == "Growth Decelerating"
+    assert payload["marketConfirmation"] == "Downside Not Broadly Confirmed"
+    assert payload["marketSetup"] == "Macro Weakening, Price Not Confirming"
+    assert payload["portfolioPosture"] == "Neutral / Selective"
+    assert payload["evidenceThrough"] == "2026-06-15"
+    assert payload["interpretation"] == (
+        "Macro downside risk is rising, but market prices do not yet validate a broad risk-off setup."
+    )
+    assert payload["hasMacroRegime"] is True
+    assert payload["hasRegimeLabel"] is True
+    assert payload["hasMarketConfirmation"] is True
+    assert payload["hasConfirmationLabel"] is True
+    assert payload["hasMarketSetup"] is True
+    assert payload["hasSetupLabel"] is True
+    assert payload["hasPortfolioPosture"] is True
+    assert payload["hasPostureLabel"] is True
+    assert payload["hasNoMarketPhase"] is True
+    assert payload["hasNoMacroSetup"] is True
+    assert payload["hasNoConvictionLimited"] is True
+    assert payload["hasInterpretation"] is True
+    assert payload["hasSignalAgreement"] is True
+    assert payload["hasNoRawCode"] is True
 
 
 def test_macro_dashboard_html_loads_ism_services_assets():
@@ -5859,120 +5974,112 @@ def test_consumer_sentiment_detail_shows_missing_drivers():
     ]
 
 
-def test_market_setup_presentation_exposes_consumer_demand_outlook():
-    script = textwrap.dedent("""
-        const fs = require("fs");
-        const vm = require("vm");
-
-        const elements = {
-          dashboardStatus: {},
-          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
-          marketDetail: { innerHTML: "" },
-        };
-
-        global.window = { __MEOWSTREET_TEST__: true };
-        global.document = {
-          getElementById: (id) => elements[id],
-        };
-        global.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ markets: [] }),
-        });
-
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
-        const hooks = window.__macroDashboardTestHooks;
-
-        const payload = {
-            expected_growth: {
-                state: "aligned_expansion",
-                expected_gdp_direction: "rising",
-                consumer_demand: {
-                    state: "confirms_expansion",
-                    percentile_label: "91st percentile",
-                    percentile_zone: "elevated",
-                    momentum: "improving",
-                    observation_period: "2026-06-01",
-                    evidence_links: ["consumer_sentiment"],
+def test_market_setup_v2_renders_watch_items_without_condition_ref():
+    setup = _v2_setup_payload(
+        regime={"code": "growth_stable", "label": "Growth Stable"},
+        confirmation={
+            "code": "not_applicable",
+            "label": "Confirmation Pending a Directional Regime",
+            "confirmation_test_count": None,
+            "evidence": {},
+            "offsets": [],
+        },
+        setup={
+            "code": "mixed_or_transition",
+            "label": "Mixed or Transitioning Environment",
+            "agreement": "mixed",
+            "watch_items": [
+                {
+                    "id": "equity_breadth",
+                    "label": "Equity breadth",
+                    "source_id": "equity_breadth",
+                    "reason": "observation evidence without a defined decision effect",
+                    "decision_effect": "none",
                 },
-                consumer_demand_agreement: true,
-                consumer_demand_conflict: false,
-                evidence_links: ["ism_manufacturing", "ism_services", "consumer_sentiment"],
-            },
-        };
-
-        const pr = hooks.buildMarketSetupPresentation(payload);
-        const html = hooks.renderDetailedReasoning(pr);
-
-        console.log(JSON.stringify({
-            hasConsumerDemand: html.indexOf("Consumer Demand") >= 0,
-            hasPercentile: html.indexOf("91st percentile") >= 0,
-            hasDataEvidenceTarget: html.indexOf('data-evidence-target="consumerSentiment"') >= 0,
-        }));
-    """)
-
+                {
+                    "id": "jobless_claims",
+                    "label": "Jobless claims",
+                    "source_id": "jobless_claims",
+                    "reason": "observation evidence without a defined decision effect",
+                    "decision_effect": "none",
+                },
+            ],
+        },
+        posture={
+            "code": "neutral_selective",
+            "label": "Neutral / Selective",
+            "net_exposure": "neutral",
+            "gross_exposure": "moderate",
+            "positioning": ["maintain_neutral_net_exposure"],
+            "avoid": ["large_broad_beta_directional_exposure"],
+        },
+    )
+    checks = {
+        "hasWatchSection": 'detail.indexOf("Watch Items") !== -1',
+        "hasEquityBreadth": 'detail.indexOf("Equity breadth") !== -1',
+        "hasJoblessClaims": 'detail.indexOf("Jobless claims") !== -1',
+        "hasNoConditionRef": 'detail.indexOf("condition_ref") === -1',
+    }
+    script = _market_setup_v2_hero_script(setup, checks)
     result = subprocess.run(
-        ["node", "-e", script],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
     )
     payload = json.loads(result.stdout)
+    assert payload["hasWatchSection"] is True
+    assert payload["hasEquityBreadth"] is True
+    assert payload["hasJoblessClaims"] is True
+    assert payload["hasNoConditionRef"] is True
 
-    assert payload["hasConsumerDemand"] is True
-    assert payload["hasPercentile"] is True
-    assert payload["hasDataEvidenceTarget"] is True
 
-
-def test_market_setup_presentation_marks_unavailable_consumer_demand_as_pending():
-    script = textwrap.dedent("""
-        const fs = require("fs");
-        const vm = require("vm");
-
-        const elements = {
-          dashboardStatus: {},
-          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
-          marketDetail: { innerHTML: "" },
-        };
-
-        global.window = { __MEOWSTREET_TEST__: true };
-        global.document = {
-          getElementById: (id) => elements[id],
-        };
-        global.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ markets: [] }),
-        });
-
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
-        const hooks = window.__macroDashboardTestHooks;
-
-        const payload = {
-            expected_growth: {
-                consumer_demand: { state: "unavailable" },
+def test_market_setup_v2_renders_next_triggers_from_backend():
+    setup = _v2_setup_payload(
+        regime={"code": "growth_decelerating", "label": "Growth Decelerating"},
+        confirmation={
+            "code": "partially_confirming_downside",
+            "label": "Downside Partially Confirmed",
+            "confirmation_test_count": 1,
+            "evidence": {
+                "equity_trend": {
+                    "state": "bear_market",
+                    "confirms": True,
+                    "finding": "S&P 500 market phase confirms the directional regime",
+                }
             },
-        };
-
-        const pr = hooks.buildMarketSetupPresentation(payload);
-        const html = hooks.renderDetailedReasoning(pr);
-
-        console.log(JSON.stringify({
-            hasAwaiting: html.indexOf("Consumer Demand: Awaiting aligned percentile data") >= 0,
-        }));
-    """)
-
+            "offsets": [],
+        },
+        setup={
+            "code": "macro_weakening_partially_confirmed",
+            "label": "Macro Weakening, Partially Confirmed",
+            "agreement": "mixed",
+            "next_triggers": [
+                {
+                    "id": "sp500_market_phase_change",
+                    "label": "S&P 500 market phase changes from bear_market",
+                    "condition_ref": "market_phase_v1",
+                    "effect": "recompute Market Confirmation",
+                }
+            ],
+        },
+        posture={
+            "code": "mild_risk_off",
+            "label": "Mild Risk-Off",
+            "net_exposure": "modest_defensive",
+            "gross_exposure": "moderate",
+            "positioning": ["maintain_modest_defensive_exposure"],
+            "avoid": ["large_directional_long_exposure"],
+        },
+    )
+    checks = {
+        "hasTriggerSection": 'detail.indexOf("Next Triggers") !== -1',
+        "hasTriggerLabel": 'detail.indexOf("S&amp;P 500 market phase changes from bear_market") !== -1',
+    }
+    script = _market_setup_v2_hero_script(setup, checks)
     result = subprocess.run(
-        ["node", "-e", script],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
     )
     payload = json.loads(result.stdout)
-
-    assert payload["hasAwaiting"] is True
+    assert payload["hasTriggerSection"] is True
+    assert payload["hasTriggerLabel"] is True
 
 
 def test_housing_permits_card_uses_existing_growth_card_and_detail_hooks():
@@ -6917,13 +7024,18 @@ def test_evidence_renderer_shows_iron_unavailable_and_manual_review_resources():
 def test_iron_unavailable_copy_is_compact_and_uses_one_review_resource_section():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
     evidence_start = source.index("function renderNonOilAttributionEvidence")
-    evidence_end = source.index("function renderAttributionReviewResources", evidence_start)
+    evidence_end = source.index(
+        "function renderAttributionReviewResources", evidence_start
+    )
     evidence_renderer = source[evidence_start:evidence_end]
     row_start = source.index("function renderNonOilRow")
     row_end = source.index("function renderValue", row_start)
     row_renderer = source[row_start:row_end]
 
-    assert "No approved recurring iron-ore attribution source is currently available." in evidence_renderer
+    assert (
+        "No approved recurring iron-ore attribution source is currently available."
+        in evidence_renderer
+    )
     assert "View attribution review resources" in evidence_renderer
     assert "evidence.manual_review_resources" in row_renderer
     assert "reviewResources = []" in row_renderer
@@ -7159,7 +7271,10 @@ def test_cross_market_spreads_renderer_renders_limited_lme_comex_entry():
 
     assert "Comparability: Limited" in renderer
     assert "Arithmetic observation" in renderer
-    assert "LME numerical value is below the converted COMEX numerical value by" in renderer
+    assert (
+        "LME numerical value is below the converted COMEX numerical value by"
+        in renderer
+    )
     assert "copper-differential-summary" in renderer
     assert "copper-differential-leg-grid" in renderer
     assert "copper-differential-leg" in renderer

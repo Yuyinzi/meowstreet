@@ -1465,3 +1465,8 @@ def test_claims_qualifier_is_copied_without_changing_classification():
     assert qualified["claims_confirmation_qualifier"] not in (
         qualified["agreements"] + qualified["conflicts"]
     )
+
+
+def test_direct_v1_callers_still_return_market_setup_v1():
+    result = market_setup.build_market_setup()
+    assert result["version"] == "market_setup_v1"
