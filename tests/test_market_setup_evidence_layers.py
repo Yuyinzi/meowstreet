@@ -274,6 +274,41 @@ def _groups(layer):
     return {group["id"]: group for group in layer["groups"]}
 
 
+def _downside_case_kwargs():
+    return {
+        "market_setup_result": _market_setup_result(),
+        "survey_synthesis": _survey_synthesis(),
+        "expected_growth": _expected_growth(),
+        "financial_conditions": _financial_conditions(),
+        "policy_response": _policy_response(),
+        "consumer_demand": _consumer_demand(),
+        "economic_confirmation_overview": _economic_confirmation_overview(),
+        "gdp_rows": _gdp_rows(),
+    }
+
+
+def leading_expectations_layer_for_downside_case():
+    layers = market_setup_evidence_layers.build_evidence_layers(
+        **_downside_case_kwargs()
+    )
+    return layers["leading_expectations"]
+
+
+def market_pricing_layer_for_downside_case():
+    layers = market_setup_evidence_layers.build_evidence_layers(
+        **_downside_case_kwargs()
+    )
+    return layers["market_pricing"]
+
+
+def evidence_layers_for_downside_case():
+    return market_setup_evidence_layers.build_evidence_layers(**_downside_case_kwargs())
+
+
+def group_by_id(groups, group_id):
+    return next(group for group in groups if group["id"] == group_id)
+
+
 # Keys whose values are internal codes/coloring fields, not user-facing copy.
 _CODE_KEYS = {
     "version",
@@ -283,6 +318,7 @@ _CODE_KEYS = {
     "posture_code",
     "method_versions",
     "excluded_inputs",
+    "kind",
 }
 
 _RAW_CODE_PATTERN = re.compile(r"[a-z]+_[a-z_]+")
@@ -291,6 +327,8 @@ _RAW_CODE_PATTERN = re.compile(r"[a-z]+_[a-z_]+")
 def _iter_strings(node, key=None):
     if isinstance(node, dict):
         for child_key, value in node.items():
+            if _is_code_key(child_key):
+                continue
             yield from _iter_strings(value, key=child_key)
     elif isinstance(node, list):
         for value in node:
@@ -485,6 +523,44 @@ def test_leading_expectations_group_roles_and_fields():
     assert consumer["decision_effect"] == "None"
 
 
+def test_leading_expectations_assigns_one_selector_and_three_non_voting_roles():
+    layer = leading_expectations_layer_for_downside_case()
+
+    roles = {group["id"]: group["group_role"] for group in layer["groups"]}
+    assert roles == {
+        "growth_surveys": "regime_selector",
+        "financial_conditions": "supporting_evidence",
+        "monetary_policy": "supporting_evidence",
+        "consumer_demand": "supporting_evidence",
+    }
+    assert "credit_conditions" not in layer
+    assert "vix_level" not in layer
+
+
+def test_market_pricing_exposes_exactly_three_confirmation_tests_and_one_non_voting_m2_offset():
+    layer = market_pricing_layer_for_downside_case()
+
+    assert [test["id"] for test in layer["tests"]] == [
+        "equity_trend",
+        "credit",
+        "volatility",
+    ]
+    assert layer["tests_passed"] == 1
+    assert layer["tests_total"] == 3
+    assert layer["liquidity_offset"]["test_contribution"] == "None"
+
+
+def test_evidence_layer_display_values_do_not_expose_internal_codes():
+    layers = evidence_layers_for_downside_case()
+    financial = group_by_id(
+        layers["leading_expectations"]["groups"], "financial_conditions"
+    )
+
+    assert financial["title"] == "Financial Conditions"
+    assert "macro_financial_conditions" not in financial["interpretation"]
+    assert layers["market_pricing"]["tests"][0]["state_label"] == "Bull Market"
+
+
 def test_financial_conditions_group_has_no_credit_or_vix():
     layers = market_setup_evidence_layers.build_evidence_layers(**_full_kwargs())
     groups = _groups(layers["leading_expectations"])
@@ -518,9 +594,11 @@ def test_market_pricing_exposes_tests_and_liquidity_offset():
     ]
 
     offset = pricing["liquidity_offset"]
-    assert offset["label"] == "M2 Liquidity"
+    assert offset["label"] == "Liquidity Offset"
     assert offset["state_label"] == "Expanding"
     assert offset["sentiment"] == "expanding"
+    assert offset["decision_effect"] == "Offset only"
+    assert offset["test_contribution"] == "None"
     assert offset["finding"] == "M2 money supply is supportive of liquidity"
     assert (
         offset["note"] == "Offset only — not included in the confirmation test count."

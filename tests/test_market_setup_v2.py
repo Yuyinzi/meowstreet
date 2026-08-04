@@ -443,6 +443,23 @@ class TestMacroRegime:
         assert "macro_policy_response" in source_ids
         assert "consumer_demand_outlook" in source_ids
 
+    def test_macro_regime_findings_use_display_names_not_fact_ids(self):
+        result = market_setup_v2.build_macro_regime(
+            _expected_growth("slowing"),
+            _financial_conditions("confirms_contraction_risk"),
+            _policy_response("restrictive_confirmed"),
+        )
+        findings = [entry["finding"] for entry in result["supports"]]
+        assert (
+            "Financial Conditions is consistent with the survey growth direction"
+            in findings
+        )
+        assert (
+            "Monetary Policy is consistent with the survey growth direction" in findings
+        )
+        assert "macro_financial_conditions" not in " ".join(findings)
+        assert "macro_policy_response" not in " ".join(findings)
+
     def test_macro_regime_method_version_and_source_periods(self):
         result = market_setup_v2.build_macro_regime(
             _expected_growth("slowing"),
@@ -864,6 +881,16 @@ class TestMarketSetupV2Composite:
             assert isinstance(entry["net_exposure"], str)
             assert entry["net_exposure"]
 
+    def test_portfolio_posture_actions_are_code_and_label_objects(self):
+        for config in market_setup_v2._PORTFOLIO_POSTURE_MATRIX.values():
+            posture = market_setup_v2.build_portfolio_posture({"code": config["code"]})
+            for action in posture["positioning"] + posture["avoid"]:
+                assert set(action) == {"code", "label"}
+                assert action["label"]
+                assert "_" not in action["label"]
+            assert posture["positioning"]
+            assert posture["avoid"]
+
     def test_v2_growth_stable_is_mixed_or_transition(self):
         result = market_setup_v2.build_market_setup_v2(
             expected_growth=_expected_growth("stable"),
@@ -1016,10 +1043,12 @@ class TestTriggersAndWatchItems:
             **_downside_not_confirmed_inputs()
         )
         labels = {trigger["label"] for trigger in result["next_triggers"]}
-        assert "S&P 500 market phase changes from bull_market" in labels
+        assert "S&P 500 market phase changes from bull market" in labels
         assert "Credit Conditions changes from healthy" in labels
         assert "VIX crosses the approved confirmation threshold from normal" in labels
         assert "ISM survey direction changes from slowing" in labels
+        for label in labels:
+            assert "_" not in label
 
     def test_growth_stable_emits_only_ism_trigger_and_projects_market_facts_as_watch(
         self,

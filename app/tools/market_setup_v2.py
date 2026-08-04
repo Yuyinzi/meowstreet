@@ -56,6 +56,12 @@ _FINDINGS = {
     "unavailable": "is unavailable or stale for this decision",
 }
 
+_SOURCE_DISPLAY_NAMES = {
+    "macro_financial_conditions": "Financial Conditions",
+    "macro_policy_response": "Monetary Policy",
+    "consumer_demand_outlook": "Consumer Demand Outlook",
+}
+
 
 def load_input_registry(path=REGISTRY_PATH):
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -197,7 +203,8 @@ def _source_record(fact_id, finding):
 
 def _relationship_finding(fact_id, relationship):
     template = _FINDINGS.get(relationship, _FINDINGS["neutral"])
-    return _source_record(fact_id, f"{fact_id} {template}")
+    display_name = _SOURCE_DISPLAY_NAMES.get(fact_id, fact_id.replace("_", " ").title())
+    return _source_record(fact_id, f"{display_name} {template}")
 
 
 def build_macro_regime(
@@ -884,11 +891,49 @@ def _market_setup_agreement(macro_regime, market_confirmation):
     return "mixed"
 
 
+_POSTURE_ACTION_LABELS = {
+    "maintain_long_net_exposure": "Maintain long net exposure",
+    "use_normal_position_sizing": "Use normal position sizing",
+    "allow_broad_and_selective_positions": "Allow broad and selective positions",
+    "maintain_modest_long_exposure": "Maintain modest long exposure",
+    "use_moderate_position_sizing": "Use moderate position sizing",
+    "prefer_selective_positions": "Prefer selective positions",
+    "maintain_neutral_net_exposure": "Maintain neutral net exposure",
+    "maintain_reduced_net_exposure": "Maintain reduced net exposure",
+    "use_reduced_position_sizing": "Use reduced position sizing",
+    "prefer_defensive_or_hedged_positions": "Prefer defensive or hedged positions",
+    "maintain_modest_defensive_exposure": "Maintain modest defensive exposure",
+    "prefer_selective_defensive_positions": "Prefer selective defensive positions",
+    "defer_new_directional_exposure": "Defer new directional exposure",
+    "ignoring_risk_controls": "Ignoring risk controls",
+    "adding_leverage_without_position_limits": "Adding leverage without position limits",
+    "large_broad_beta_directional_exposure": "Large broad-beta directional exposure",
+    "increasing_leverage_without_confirmation": "Increasing leverage without confirmation",
+    "large_directional_long_exposure": "Large directional long exposure",
+    "unhedged_broad_beta_exposure": "Unhedged broad-beta exposure",
+    "increasing_leverage_during_confirmed_risk_off": "Increasing leverage during a confirmed risk-off",
+    "increasing_leverage_without_complete_evidence": "Increasing leverage without complete evidence",
+}
+
+
+def _posture_actions(codes):
+    return [
+        {
+            "code": code,
+            "label": _POSTURE_ACTION_LABELS.get(code, code.replace("_", " ").title()),
+        }
+        for code in codes
+    ]
+
+
 def build_portfolio_posture(market_setup):
     config = _PORTFOLIO_POSTURE_MATRIX.get(
         market_setup.get("code"), _PORTFOLIO_POSTURE_MATRIX["insufficient_data"]
     )
-    return dict(config, method_version=PORTFOLIO_POSTURE_VERSION)
+    posture = dict(config, method_version=PORTFOLIO_POSTURE_VERSION)
+    posture["positioning"] = _posture_actions(config["positioning"])
+    posture["avoid"] = _posture_actions(config["avoid"])
+    return posture
 
 
 _TRIGGER_DEFS = {
@@ -921,17 +966,48 @@ _OBSERVATION_WATCH_ITEMS = {
     "jobless_claims": "Jobless claims",
 }
 
+_TRIGGER_STATE_LABELS = {
+    "bull_market": "bull market",
+    "bear_market": "bear market",
+    "healthy": "healthy",
+    "supportive": "supportive",
+    "weak_credit_warning": "weak credit warning",
+    "mixed": "mixed",
+    "selective": "selective",
+    "risk_rising": "risk rising",
+    "crisis_stress": "crisis stress",
+    "stress": "stressed",
+    "risk_off": "risk off",
+    "serious_deterioration": "serious deterioration",
+    "stress_zone": "stress",
+    "normal": "normal",
+    "rising": "rising",
+    "slowing": "slowing",
+    "falling": "falling",
+    "improving": "improving",
+    "rebound_risk": "rebound risk",
+    "stable": "stable",
+}
+
+
+def _trigger_state_label(value):
+    if value is None:
+        return "unavailable"
+    return _TRIGGER_STATE_LABELS.get(str(value), str(value).replace("_", " "))
+
 
 def _trigger_label(trigger_id, fact):
     if trigger_id == "sp500_market_phase_change":
-        return f"S&P 500 market phase changes from {fact.get('phase')}"
+        return f"S&P 500 market phase changes from {_trigger_state_label(fact.get('phase'))}"
     if trigger_id == "credit_conditions_risk_state":
-        return f"Credit Conditions changes from {fact.get('status')}"
+        return (
+            f"Credit Conditions changes from {_trigger_state_label(fact.get('status'))}"
+        )
     if trigger_id == "vix_stress_threshold":
         zone = _vix_zone(fact.get("level"))
-        return f"VIX crosses the approved confirmation threshold from {zone}"
+        return f"VIX crosses the approved confirmation threshold from {_trigger_state_label(zone)}"
     if trigger_id == "ism_survey_direction_change":
-        return f"ISM survey direction changes from {fact.get('direction')}"
+        return f"ISM survey direction changes from {_trigger_state_label(fact.get('direction'))}"
     return ""
 
 

@@ -14,6 +14,12 @@ _FINAL_CONFIRMATION_SCOPE_NOTE = (
 
 _LIQUIDITY_OFFSET_NOTE = "Offset only — not included in the confirmation test count."
 
+_LIQUIDITY_OFFSET_LABEL = "Liquidity Offset"
+
+_OFFSET_DECISION_EFFECT = "Offset only"
+
+_OFFSET_TEST_CONTRIBUTION = "None"
+
 _REAL_ACTIVITY_REASON = "Trend window and classification method are pending approval."
 
 _DECISION_EFFECT_NONE = "None in Market Setup v2"
@@ -161,7 +167,11 @@ _BROAD_BETA_LABELS = {
     "reduce_large_directional_exposure": "Reduce large directional exposure",
 }
 
-_GDP_DIRECTION_LABELS = {1: ("rising", "Rising"), -1: ("falling", "Falling"), 0: ("flat", "Flat")}
+_GDP_DIRECTION_LABELS = {
+    1: ("rising", "Rising"),
+    -1: ("falling", "Falling"),
+    0: ("flat", "Flat"),
+}
 
 _MARKET_PRICING_TEST_LABELS = {
     "equity_trend": "S&P 500 Trend",
@@ -231,7 +241,15 @@ def _metric(label, value, period=None, sentiment=None):
 
 def _survey_direction(expected_growth, survey_synthesis):
     fact = _fact(expected_growth, "survey_growth_direction") or {}
-    return fact.get("direction") or _dict(survey_synthesis).get("expected_gdp_direction")
+    return fact.get("direction") or _dict(survey_synthesis).get(
+        "expected_gdp_direction"
+    )
+
+
+def _test_contribution(confirms, state):
+    if state is None:
+        return None
+    return "1 of 3" if confirms else "0 of 3"
 
 
 def _confirmation_tests(confirmation):
@@ -240,13 +258,15 @@ def _confirmation_tests(confirmation):
     for test_id in _TEST_ORDER:
         record = _dict(evidence.get(test_id))
         state = record.get("state")
+        confirms = bool(record.get("confirms"))
         tests.append(
             {
                 "id": test_id,
                 "label": _MARKET_PRICING_TEST_LABELS[test_id],
                 "state_label": _display(state, _STATE_LABELS),
                 "sentiment": state,
-                "passed": bool(record.get("confirms")),
+                "passed": confirms,
+                "test_contribution": _test_contribution(confirms, state),
                 "finding": record.get("finding"),
             }
         )
@@ -345,7 +365,9 @@ def _survey_interpretation(level_key, direction):
         return template
     noun = _SURVEY_LEVEL_NOUNS[level_key]
     direction_text = str(_display(direction, _DIRECTION_LABELS)).lower()
-    return f"Surveys indicate {noun}, with the expected growth direction {direction_text}."
+    return (
+        f"Surveys indicate {noun}, with the expected growth direction {direction_text}."
+    )
 
 
 def _growth_surveys_group(survey_synthesis, expected_growth, macro_regime):
@@ -400,6 +422,16 @@ def _growth_surveys_group(survey_synthesis, expected_growth, macro_regime):
     }
 
 
+def _relationship_interpretation(title, relationship):
+    if relationship == "supports":
+        return f"{title} supports the survey growth direction."
+    if relationship == "conflicts":
+        return f"{title} conflicts with the survey growth direction."
+    if relationship == "neutral":
+        return f"{title} is neutral relative to the survey growth direction."
+    return None
+
+
 def _relationship_group(group_id, title, bundle, fact_id):
     bundle = _dict(bundle)
     fact = _fact(bundle, fact_id) or {}
@@ -421,6 +453,7 @@ def _relationship_group(group_id, title, bundle, fact_id):
         "decision_effect": decision_effect,
         "period": _period_label(fact.get("source_period")),
         "data_status": "available" if fact else "missing",
+        "interpretation": _relationship_interpretation(title, relationship),
     }
 
 
@@ -476,9 +509,11 @@ def _market_pricing_layer(market_setup_result):
     if liquidity:
         state = liquidity.get("state")
         liquidity_offset = {
-            "label": "M2 Liquidity",
+            "label": _LIQUIDITY_OFFSET_LABEL,
             "state_label": _display(state, _STATE_LABELS),
             "sentiment": state,
+            "decision_effect": _OFFSET_DECISION_EFFECT,
+            "test_contribution": _OFFSET_TEST_CONTRIBUTION,
             "finding": liquidity.get("finding"),
             "note": _LIQUIDITY_OFFSET_NOTE,
         }
@@ -643,7 +678,9 @@ def _real_activity_group(overview):
 
     coverage_parts = []
     for series_id, (label, _suffix) in _REAL_ACTIVITY_METRICS.items():
-        status = "available" if isinstance(snapshots.get(series_id), dict) else "missing"
+        status = (
+            "available" if isinstance(snapshots.get(series_id), dict) else "missing"
+        )
         coverage_parts.append(f"{label}: {status}")
     coverage = " · ".join(coverage_parts) if real_activity else None
 
@@ -667,7 +704,9 @@ def _economic_reality_layer(economic_confirmation_overview):
     labor = _labor_group(economic_confirmation_overview)
     real_activity = _real_activity_group(economic_confirmation_overview)
     labor_coverage = (
-        "Labor: partial" if labor["data_status"] == "available" else "Labor: data missing"
+        "Labor: partial"
+        if labor["data_status"] == "available"
+        else "Labor: data missing"
     )
     real_activity_coverage = (
         "Real Activity: data available, method pending"
@@ -717,7 +756,10 @@ def _economic_output_group(gdp_rows):
     if direction_label:
         details_metrics.append(
             _metric(
-                "GDP Direction", direction_label, period=period, sentiment=direction_code
+                "GDP Direction",
+                direction_label,
+                period=period,
+                sentiment=direction_code,
             )
         )
     return {
