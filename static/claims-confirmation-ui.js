@@ -147,11 +147,11 @@
     }
     if (record.latest_4w_mean !== null && record.latest_4w_mean !== undefined) {
       html += '<div class="claims-trend-row"><span>' + h.bilingualLabel("Latest 4W Mean")
-        + '</span><strong>' + h.escapeHtml(h.fmtNumber(record.latest_4w_mean)) + '</strong></div>';
+        + '</span><strong>' + h.escapeHtml(h.fmtInteger(record.latest_4w_mean)) + '</strong></div>';
     }
     if (record.comparison_4w_mean !== null && record.comparison_4w_mean !== undefined) {
       html += '<div class="claims-trend-row"><span>' + h.bilingualLabel("Comparison 4W Mean")
-        + '</span><strong>' + h.escapeHtml(h.fmtNumber(record.comparison_4w_mean)) + '</strong></div>';
+        + '</span><strong>' + h.escapeHtml(h.fmtInteger(record.comparison_4w_mean)) + '</strong></div>';
     }
     html += '</div>';
     return html;
