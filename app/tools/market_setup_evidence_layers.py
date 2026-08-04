@@ -693,7 +693,7 @@ def _real_activity_group(overview):
         "title": "Real Activity",
         "formal_signal": "Classification unavailable",
         "reason": _REAL_ACTIVITY_REASON,
-        "decision_effect": "None",
+        "decision_effect": _DECISION_EFFECT_NONE,
         "coverage": coverage,
         "data_status": data_status,
         "details_metrics": details_metrics,

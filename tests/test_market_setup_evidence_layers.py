@@ -309,6 +309,20 @@ def group_by_id(groups, group_id):
     return next(group for group in groups if group["id"] == group_id)
 
 
+def economic_reality_layer_with_available_activity_data():
+    layers = market_setup_evidence_layers.build_evidence_layers(
+        **_downside_case_kwargs()
+    )
+    return layers["economic_reality"]
+
+
+def labor_group_with_claims_and_esr_data():
+    layers = market_setup_evidence_layers.build_evidence_layers(
+        **_downside_case_kwargs()
+    )
+    return _groups(layers["economic_reality"])["labor"]
+
+
 # Keys whose values are internal codes/coloring fields, not user-facing copy.
 _CODE_KEYS = {
     "version",
@@ -666,7 +680,7 @@ def test_economic_reality_groups_carry_explanation_fields():
     assert real_activity["reason"] == (
         "Trend window and classification method are pending approval."
     )
-    assert real_activity["decision_effect"] == "None"
+    assert real_activity["decision_effect"] == "None in Market Setup v2"
     assert real_activity["coverage"] == (
         "Manufacturing Production: available · "
         "Total Industrial Production: available · "
@@ -676,6 +690,26 @@ def test_economic_reality_groups_carry_explanation_fields():
     metrics = {metric["label"]: metric for metric in real_activity["details_metrics"]}
     assert metrics["Manufacturing Production"]["value"] == "97.9"
     assert metrics["Capacity Utilization"]["value"] == "77.4%"
+
+
+def test_economic_reality_keeps_unapproved_real_activity_values_in_details():
+    layer = economic_reality_layer_with_available_activity_data()
+    activity = group_by_id(layer["groups"], "real_activity")
+
+    assert activity["formal_signal"] == "Classification unavailable"
+    assert activity["reason"] == (
+        "Trend window and classification method are pending approval."
+    )
+    assert activity["decision_effect"] == "None in Market Setup v2"
+    assert activity["details_metrics"]
+
+
+def test_labor_separates_claims_signal_from_context_only_labor_metrics():
+    labor = labor_group_with_claims_and_esr_data()
+
+    assert labor["formal_signal"] == "Claims trend: Stable"
+    assert labor["relation_to_thesis"] == "Not confirming, not conflicting"
+    assert labor["coverage"] == "Claims classified; Employment Situation context only"
 
 
 def test_final_confirmation_keeps_only_gdp_group():
