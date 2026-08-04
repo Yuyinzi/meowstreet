@@ -3225,6 +3225,16 @@ def test_market_setup_api_passes_consumer_demand_to_v2_builder(monkeypatch):
     assert "relationship_to_growth_direction" in consumer_facts
 
 
+def test_market_setup_api_exposes_decision_path_without_expanding_decision_authority():
+    payload = client.get("/api/macro-dashboard/market-setup").json()
+
+    assert payload["version"] == "market_setup_v2"
+    assert payload["evidence_layers"]["decision_path"]["steps"]
+    assert payload["evidence_layers"]["economic_reality"]["role"] == "supplementary"
+    assert payload["evidence_layers"]["final_confirmation"]["role"] == "review_only"
+    assert "economic_confirmation" not in payload["method_versions"]
+
+
 def test_market_setup_api_keeps_v2_insufficient_when_consumer_data_is_unavailable(
     monkeypatch,
 ):
