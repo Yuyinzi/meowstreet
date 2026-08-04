@@ -330,6 +330,11 @@
     return value || "n/a";
   }
 
+  function fmtDateOnly(value) {
+    if (value === null || value === undefined) return "n/a";
+    return String(value).slice(0, 10);
+  }
+
   function lineLabel(labels, key) {
     const label = labels?.[key] || key;
     const zh = zhLabel(label);
@@ -1745,6 +1750,14 @@
     no_clear_response: "caution",
     unavailable: "caution",
     wait_for_timing: "caution",
+    growth_decelerating: "caution",
+    partially_confirming: "caution",
+    mild_risk_off: "caution",
+    slowing: "caution",
+    risk_rising: "defensive",
+    conflicts: "defensive",
+    supports: "constructive",
+    expanding: "constructive",
   };
 
   function stateSentimentClass(value) {
@@ -1772,6 +1785,7 @@
       missingInputs: setup.missing_inputs || [],
       nextTriggers: setup.next_triggers || [],
       watchItems: setup.watch_items || [],
+      evidenceLayers: setup.evidence_layers || null,
     };
   }
 
@@ -1912,13 +1926,13 @@
       if (positioning.length) {
         html += '<div class="ms-action-col">';
         html += '<h4>Positioning</h4><ul>';
-        positioning.forEach(function(action) { html += '<li>' + escapeHtml(action) + '</li>'; });
+        positioning.forEach(function(action) { html += '<li>' + escapeHtml(action.label || action.code || action) + '</li>'; });
         html += '</ul></div>';
       }
       if (avoid.length) {
         html += '<div class="ms-action-col">';
         html += '<h4>Avoid</h4><ul>';
-        avoid.forEach(function(action) { html += '<li>' + escapeHtml(action) + '</li>'; });
+        avoid.forEach(function(action) { html += '<li>' + escapeHtml(action.label || action.code || action) + '</li>'; });
         html += '</ul></div>';
       }
       html += '</div>';
@@ -2000,6 +2014,583 @@
     });
   }
 
+  var EVIDENCE_LAYER_ROLE_LABELS = {
+    decision_input: "Decision Input",
+    supplementary: "Supplementary",
+    review_only: "Review Only",
+    decision_output: "Decision Output",
+  };
+
+  function evidenceRoleLabel(role) {
+    if (!role) return "";
+    return EVIDENCE_LAYER_ROLE_LABELS[role] || titleCaseToken(role);
+  }
+
+  function renderEvidenceLayerHead(layer, index) {
+    var html = '<div class="ms-el-head">';
+    var title = layer.title || layer.layer_id || "";
+    html += '<h3 class="ms-el-title">' + escapeHtml(index != null ? index + " \u00B7 " + title : title) + '</h3>';
+    var roleLabel = evidenceRoleLabel(layer.role);
+    if (roleLabel) {
+      html += '<span class="ms-el-badge ms-el-badge-' + escapeHtml(layer.role) + '">' + escapeHtml(roleLabel) + '</span>';
+    }
+    html += '</div>';
+    if (layer.scope_note) {
+      html += '<p class="ms-el-scope">' + escapeHtml(layer.scope_note) + '</p>';
+    }
+    return html;
+  }
+
+  function renderEvidenceGroupCard(group) {
+    if (!group) return "";
+    var html = '<div class="ms-el-group">';
+    html += '<div class="ms-el-group-head">';
+    html += '<h4 class="ms-el-group-title">' + escapeHtml(group.title || group.id || "") + '</h4>';
+    if (group.method_status === "pending_approval") {
+      html += '<span class="ms-el-method-pending">Method pending</span>';
+    }
+    html += '</div>';
+    if (group.summary) {
+      html += '<p class="ms-el-summary ' + stateSentimentClass(group.sentiment) + '">' + escapeHtml(group.summary) + '</p>';
+    }
+    if (group.data_status && group.data_status !== "available") {
+      var statusLabel = group.data_status === "missing" ? "Data not available"
+        : group.data_status === "not_collected" ? "Not yet collected"
+        : titleCaseToken(group.data_status);
+      html += '<p class="ms-el-data-status">' + escapeHtml(statusLabel) + '</p>';
+    }
+    var metrics = group.metrics || [];
+    if (metrics.length) {
+      html += '<ul class="ms-el-metrics">';
+      metrics.forEach(function(metric) {
+        html += '<li class="ms-el-metric">';
+        html += '<span class="ms-el-metric-label">' + escapeHtml(metric.label || "") + '</span>';
+        html += '<span class="ms-el-metric-value ' + stateSentimentClass(metric.sentiment) + '">' +
+          escapeHtml(metric.value != null ? metric.value : "\u2014") + '</span>';
+        if (metric.period) {
+          html += '<span class="ms-el-metric-period">' + escapeHtml(metric.period) + '</span>';
+        }
+        html += '</li>';
+      });
+      html += '</ul>';
+    }
+    if (group.note) {
+      html += '<p class="ms-el-note">' + escapeHtml(group.note) + '</p>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderEvidenceGroupsLayer(layer, index) {
+    if (!layer) return "";
+    var html = '<section class="ms-evidence-layer ms-el-section">';
+    html += renderEvidenceLayerHead(layer, index);
+    var groups = layer.groups || [];
+    if (groups.length) {
+      html += '<div class="ms-el-groups">';
+      groups.forEach(function(group) {
+        html += renderEvidenceGroupCard(group);
+      });
+      html += '</div>';
+    }
+    html += '</section>';
+    return html;
+  }
+
+  function renderEvidenceFindings(title, entries) {
+    var list = entries || [];
+    if (!list.length) return "";
+    var html = '<div class="ms-el-findings">';
+    html += '<h4 class="ms-el-findings-title">' + escapeHtml(title) + '</h4>';
+    html += '<ul>';
+    list.forEach(function(entry) {
+      html += '<li>' + escapeHtml(entry.finding || entry.id || "") + '</li>';
+    });
+    html += '</ul></div>';
+    return html;
+  }
+
+  function renderEvidenceStringList(title, entries, listClass) {
+    var list = entries || [];
+    if (!list.length) return "";
+    var html = '<div class="ms-el-list-block">';
+    html += '<h4 class="ms-el-findings-title">' + escapeHtml(title) + '</h4>';
+    html += '<ul class="' + listClass + '">';
+    list.forEach(function(item) {
+      html += '<li>' + escapeHtml((item && item.label) || (item && item.id) || item) + '</li>';
+    });
+    html += '</ul></div>';
+    return html;
+  }
+
+  function renderMarketPricingLayer(layer, index) {
+    if (!layer) return "";
+    var html = '<section class="ms-evidence-layer ms-el-section">';
+    html += renderEvidenceLayerHead(layer, index);
+    var testsTotal = layer.tests_total != null ? layer.tests_total : 3;
+    var testsPassed = layer.tests_passed != null ? layer.tests_passed : 0;
+    html += '<p class="ms-el-tests-summary">Approved confirmation tests: ' +
+      escapeHtml(testsPassed + " / " + testsTotal) + '</p>';
+    var tests = layer.tests || [];
+    if (tests.length) {
+      html += '<ul class="ms-el-tests">';
+      tests.forEach(function(test) {
+        html += '<li class="ms-el-test">';
+        html += '<span class="ms-el-test-label">' + escapeHtml(test.label || test.id || "") + '</span>';
+        if (test.state) {
+          html += '<span class="ms-el-test-state ' + stateSentimentClass(test.state) + '">' +
+            escapeHtml(titleCaseToken(test.state)) + '</span>';
+        }
+        html += '<span class="ms-el-test-verdict">' + (test.confirms_downside ? "Confirmed" : "Not confirmed") + '</span>';
+        html += '</li>';
+      });
+      html += '</ul>';
+    }
+    html += renderEvidenceFindings("Offsets", layer.offsets);
+    html += renderEvidenceFindings("Context (non-voting)", layer.context);
+    html += '</section>';
+    return html;
+  }
+
+  function renderPortfolioConclusionLayer(layer, index) {
+    if (!layer) return "";
+    var html = '<section class="ms-evidence-layer ms-el-section">';
+    html += renderEvidenceLayerHead(layer, index);
+    if (layer.posture_label) {
+      html += '<p class="ms-el-posture ' + stateSentimentClass(layer.posture_code) + '">' +
+        escapeHtml(layer.posture_label) + '</p>';
+    }
+    var positioning = layer.positioning || [];
+    var avoid = layer.avoid || [];
+    if (positioning.length || avoid.length) {
+      html += '<div class="ms-el-action-grid">';
+      if (positioning.length) {
+        html += '<div class="ms-el-action-col"><h4>Positioning</h4><ul>';
+        positioning.forEach(function(item) {
+          html += '<li>' + escapeHtml((item && item.label) || item) + '</li>';
+        });
+        html += '</ul></div>';
+      }
+      if (avoid.length) {
+        html += '<div class="ms-el-action-col"><h4>Avoid</h4><ul>';
+        avoid.forEach(function(item) {
+          html += '<li>' + escapeHtml((item && item.label) || item) + '</li>';
+        });
+        html += '</ul></div>';
+      }
+      html += '</div>';
+    }
+    html += renderEvidenceStringList("Next Triggers", layer.next_triggers, "ms-el-trigger-list");
+    html += renderEvidenceStringList("Watch Items", layer.watch_items, "ms-el-watch-list");
+    var excluded = layer.excluded_inputs || [];
+    if (excluded.length) {
+      html += '<p class="ms-el-excluded">Excluded from v2: ' + escapeHtml(excluded.join(" \u00B7 ")) + '</p>';
+    }
+    html += '</section>';
+    return html;
+  }
+
+  function renderEvidenceLayersV1(layers) {
+    if (!layers) return "";
+    var html = '<div class="ms-el">';
+    html += renderEvidenceGroupsLayer(layers.leading_expectations, 1);
+    html += renderEvidenceGroupsLayer(layers.economic_reality, 2);
+    html += renderEvidenceGroupsLayer(layers.final_confirmation, 3);
+    html += renderMarketPricingLayer(layers.market_pricing, 4);
+    html += renderPortfolioConclusionLayer(layers.portfolio_conclusion, 5);
+    html += '</div>';
+    return html;
+  }
+
+  function renderEvidencePartition(title, note) {
+    var html = '<div class="ms-el-partition">';
+    html += '<h3 class="ms-el-partition-title">' + escapeHtml(title) + '</h3>';
+    if (note) {
+      html += '<p class="ms-el-partition-note">' + escapeHtml(note) + '</p>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderDecisionPathOutput(output, extraClass) {
+    if (!output || !output.label) return "";
+    return '<span class="ms-dp-output ' + (extraClass ? extraClass + " " : "") +
+      stateSentimentClass(output.sentiment) + '">' + escapeHtml(output.label) + '</span>';
+  }
+
+  function renderDecisionPathArrow() {
+    return '<span class="ms-dp-arrow" aria-hidden="true">→</span>';
+  }
+
+  function renderDecisionPathStep(step) {
+    if (!step) return "";
+    var kind = step.kind || "";
+    var html = '<div class="ms-dp-step">';
+    html += '<div class="ms-dp-step-head">';
+    if (step.n != null) {
+      html += '<span class="ms-dp-step-n">' + escapeHtml(String(step.n)) + '</span>';
+    }
+    html += '<span class="ms-dp-step-title">' + escapeHtml(step.title || "") + '</span>';
+    html += '</div>';
+    html += '<div class="ms-dp-step-body">';
+    var output = step.output || null;
+    if (kind === "macro_thesis") {
+      var input = step.input || {};
+      var hasInput = !!(input.label || input.value);
+      if (hasInput) {
+        html += '<span class="ms-dp-io">' + escapeHtml(input.label || "");
+        if (input.value) {
+          html += (input.label ? ": " : "") + '<strong>' + escapeHtml(input.value) + '</strong>';
+        }
+        html += '</span>';
+      }
+      if (hasInput && output && output.label) {
+        html += renderDecisionPathArrow();
+      }
+      html += renderDecisionPathOutput(output);
+    } else if (kind === "market_test") {
+      var tests = step.tests || [];
+      if (tests.length) {
+        html += '<ul class="ms-dp-tests">';
+        tests.forEach(function(test) {
+          html += '<li class="ms-dp-test">';
+          html += '<span class="ms-dp-test-mark ' + (test.passed ? "constructive" : "defensive") + '">' +
+            (test.passed ? "✓" : "✕") + '</span>';
+          html += '<span class="ms-dp-test-label">' + escapeHtml(test.label || test.id || "") + '</span>';
+          if (test.state_label) {
+            html += '<span class="ms-dp-test-state ' + stateSentimentClass(test.sentiment) + '">' +
+              escapeHtml(test.state_label) + '</span>';
+          }
+          html += '</li>';
+        });
+        html += '</ul>';
+      }
+      if (step.passed_count != null && step.total != null) {
+        html += '<span class="ms-dp-test-count">' +
+          escapeHtml(String(step.passed_count) + " / " + String(step.total)) + ' confirmed</span>';
+      }
+      if (output && output.label) {
+        html += renderDecisionPathArrow();
+        html += renderDecisionPathOutput(output);
+      }
+    } else if (kind === "relationship") {
+      var inputs = step.inputs || [];
+      if (inputs.length) {
+        html += '<span class="ms-dp-io">' + escapeHtml(inputs.join(" + ")) + '</span>';
+      }
+      if (output && output.label) {
+        if (inputs.length) {
+          html += renderDecisionPathArrow();
+        }
+        html += renderDecisionPathOutput(output);
+        if (output.agreement) {
+          html += '<span class="ms-dp-agreement">Agreement: ' + escapeHtml(output.agreement) + '</span>';
+        }
+      }
+    } else if (kind === "action") {
+      if (output && output.label) {
+        html += renderDecisionPathArrow();
+        html += renderDecisionPathOutput(output, "ms-dp-output-lg");
+      }
+    } else {
+      html += renderDecisionPathOutput(output);
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderDecisionPath(decisionPath) {
+    if (!decisionPath) return "";
+    var steps = decisionPath.steps || [];
+    if (!steps.length) return "";
+    var html = '<section class="ms-evidence-layer ms-el-section ms-dp">';
+    html += '<div class="ms-el-head"><h3 class="ms-el-title">Why This Setup?</h3></div>';
+    html += '<div class="ms-dp-steps">';
+    steps.forEach(function(step, index) {
+      html += renderDecisionPathStep(step);
+      if (index < steps.length - 1) {
+        html += '<div class="ms-dp-connector" aria-hidden="true">↓</div>';
+      }
+    });
+    html += '</div></section>';
+    return html;
+  }
+
+  function renderFieldRows(rows) {
+    var items = (rows || []).filter(function(row) {
+      return row.value != null && row.value !== "";
+    });
+    if (!items.length) return "";
+    var html = '<div class="ms-el-metrics">';
+    items.forEach(function(row) {
+      html += '<div class="ms-el-metric">';
+      html += '<span class="ms-el-metric-label">' + escapeHtml(row.label) + '</span>';
+      html += '<span class="ms-el-metric-value' + (row.sentiment ? " " + stateSentimentClass(row.sentiment) : "") + '">' +
+        escapeHtml(row.value) + '</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function renderDetailsMetrics(metrics) {
+    var list = metrics || [];
+    if (!list.length) return "";
+    var html = '<details class="ms-el-details"><summary>Underlying metrics</summary>';
+    html += '<ul class="ms-el-metrics">';
+    list.forEach(function(metric) {
+      html += '<li class="ms-el-metric">';
+      html += '<span class="ms-el-metric-label">' + escapeHtml(metric.label || "") + '</span>';
+      html += '<span class="ms-el-metric-value ' + stateSentimentClass(metric.sentiment) + '">' +
+        escapeHtml(metric.value != null ? metric.value : "—") + '</span>';
+      if (metric.period) {
+        html += '<span class="ms-el-metric-period">' + escapeHtml(metric.period) + '</span>';
+      }
+      html += '</li>';
+    });
+    html += '</ul></details>';
+    return html;
+  }
+
+  function renderLeadingExpectationGroup(group) {
+    if (!group) return "";
+    var html = '<div class="ms-el-group">';
+    html += '<div class="ms-el-group-head">';
+    html += '<h4 class="ms-el-group-title">' + escapeHtml(group.title || group.id || "") + '</h4>';
+    if (group.group_role_label) {
+      var roleClass = group.group_role === "regime_selector"
+        ? "ms-el-role-badge-regime"
+        : "ms-el-role-badge-supporting";
+      html += '<span class="ms-el-role-badge ' + roleClass + '">' + escapeHtml(group.group_role_label) + '</span>';
+    }
+    html += '</div>';
+    html += renderFieldRows([
+      { label: "Current state", value: group.current_state, sentiment: group.sentiment },
+      { label: "Relationship to macro thesis", value: group.relationship_label },
+      { label: "Decision effect", value: group.decision_effect },
+      { label: "Period", value: group.period },
+    ]);
+    if (group.interpretation) {
+      html += '<p class="ms-el-interpretation">' + escapeHtml(group.interpretation) + '</p>';
+    }
+    if (group.data_status && group.data_status !== "available") {
+      html += '<p class="ms-el-data-status">Data not available</p>';
+    }
+    if (group.note) {
+      html += '<p class="ms-el-note">' + escapeHtml(group.note) + '</p>';
+    }
+    html += renderDetailsMetrics(group.details_metrics);
+    html += '</div>';
+    return html;
+  }
+
+  function renderLeadingExpectations(layer) {
+    if (!layer) return "";
+    var html = '<section class="ms-evidence-layer ms-el-section">';
+    html += renderEvidenceLayerHead(layer, null);
+    var groups = layer.groups || [];
+    if (groups.length) {
+      html += '<div class="ms-el-groups">';
+      groups.forEach(function(group) {
+        html += renderLeadingExpectationGroup(group);
+      });
+      html += '</div>';
+    }
+    html += '</section>';
+    return html;
+  }
+
+  function renderMarketPricing(layer) {
+    if (!layer) return "";
+    var html = '<section class="ms-evidence-layer ms-el-section">';
+    html += renderEvidenceLayerHead(layer, null);
+    if (layer.tests_summary) {
+      html += '<p class="ms-el-tests-summary">' + escapeHtml(layer.tests_summary) + '</p>';
+    }
+    var tests = layer.tests || [];
+    if (tests.length) {
+      html += '<ul class="ms-el-tests">';
+      tests.forEach(function(test) {
+        html += '<li class="ms-el-test">';
+        html += '<span class="ms-el-test-label">' + escapeHtml(test.label || test.id || "") + '</span>';
+        if (test.state_label) {
+          html += '<span class="ms-el-test-state ' + stateSentimentClass(test.sentiment) + '">' +
+            escapeHtml(test.state_label) + '</span>';
+        }
+        if (test.passed != null) {
+          html += '<span class="ms-el-test-verdict">' + (test.passed ? "Confirmed" : "Not confirmed") + '</span>';
+        }
+        if (test.finding) {
+          html += '<span class="ms-el-test-finding">' + escapeHtml(test.finding) + '</span>';
+        }
+        html += '</li>';
+      });
+      html += '</ul>';
+    }
+    var liquidityOffset = layer.liquidity_offset;
+    if (liquidityOffset) {
+      html += '<div class="ms-el-liquidity-offset">';
+      html += '<h4 class="ms-el-findings-title">' + escapeHtml(liquidityOffset.label || "Liquidity Offset") + '</h4>';
+      html += '<div class="ms-el-test">';
+      if (liquidityOffset.state_label) {
+        html += '<span class="ms-el-test-state ' + stateSentimentClass(liquidityOffset.sentiment) + '">' +
+          escapeHtml(liquidityOffset.state_label) + '</span>';
+      }
+      if (liquidityOffset.finding) {
+        html += '<span class="ms-el-test-finding">' + escapeHtml(liquidityOffset.finding) + '</span>';
+      }
+      if (liquidityOffset.decision_effect) {
+        html += '<span class="ms-el-test-finding">' + escapeHtml(liquidityOffset.decision_effect) + '</span>';
+      }
+      html += '</div>';
+      if (liquidityOffset.test_contribution) {
+        html += '<p class="ms-el-note">Not included in test count</p>';
+      }
+      if (liquidityOffset.note) {
+        html += '<p class="ms-el-note">' + escapeHtml(liquidityOffset.note) + '</p>';
+      }
+      html += '</div>';
+    }
+    html += renderEvidenceFindings("Offsets", layer.offsets);
+    html += renderEvidenceFindings("Context (non-voting)", layer.context);
+    html += '</section>';
+    return html;
+  }
+
+  function renderPortfolioConclusion(layer) {
+    if (!layer) return "";
+    var html = '<section class="ms-evidence-layer ms-el-section">';
+    html += renderEvidenceLayerHead(layer, null);
+    if (layer.posture_label) {
+      html += '<p class="ms-el-posture ' + stateSentimentClass(layer.posture_code) + '">' +
+        escapeHtml(layer.posture_label) + '</p>';
+    }
+    html += renderFieldRows([
+      { label: "Net exposure", value: layer.net_exposure },
+      { label: "Gross exposure", value: layer.gross_exposure },
+      { label: "Implementation", value: layer.implementation },
+      { label: "Broad beta", value: layer.broad_beta },
+    ]);
+    var positioning = layer.positioning || [];
+    var avoid = layer.avoid || [];
+    if (positioning.length || avoid.length) {
+      html += '<div class="ms-el-action-grid">';
+      if (positioning.length) {
+        html += '<div class="ms-el-action-col"><h4>Positioning</h4><ul>';
+        positioning.forEach(function(item) {
+          html += '<li>' + escapeHtml((item && item.label) || item) + '</li>';
+        });
+        html += '</ul></div>';
+      }
+      if (avoid.length) {
+        html += '<div class="ms-el-action-col"><h4>Avoid</h4><ul>';
+        avoid.forEach(function(item) {
+          html += '<li>' + escapeHtml((item && item.label) || item) + '</li>';
+        });
+        html += '</ul></div>';
+      }
+      html += '</div>';
+    }
+    html += renderEvidenceStringList("Next Triggers", layer.next_triggers, "ms-el-trigger-list");
+    html += renderEvidenceStringList("Watch Items", layer.watch_items, "ms-el-watch-list");
+    var excluded = layer.excluded_inputs || [];
+    if (excluded.length) {
+      html += '<p class="ms-el-excluded">Excluded from v2: ' + escapeHtml(excluded.join(" · ")) + '</p>';
+    }
+    html += '</section>';
+    return html;
+  }
+
+  function renderRealityGroupCard(group) {
+    if (!group) return "";
+    var html = '<div class="ms-el-group">';
+    html += '<div class="ms-el-group-head">';
+    html += '<h4 class="ms-el-group-title">' + escapeHtml(group.title || group.id || "") + '</h4>';
+    html += '</div>';
+    if (group.formal_signal) {
+      html += '<p class="ms-el-summary ' + stateSentimentClass(group.sentiment) + '">' +
+        escapeHtml(group.formal_signal) + '</p>';
+    }
+    if (group.relation_to_thesis) {
+      html += '<p class="ms-el-note">' + escapeHtml(group.relation_to_thesis) + '</p>';
+    }
+    if (group.reason) {
+      html += '<p class="ms-el-note">' + escapeHtml(group.reason) + '</p>';
+    }
+    if (group.decision_effect) {
+      html += '<p class="ms-el-note">' + escapeHtml(group.decision_effect) + '</p>';
+    }
+    if (group.coverage) {
+      html += '<p class="ms-el-note">' + escapeHtml(group.coverage) + '</p>';
+    }
+    if (group.period) {
+      html += '<p class="ms-el-note">' + escapeHtml(group.period) + '</p>';
+    }
+    if (group.data_status && group.data_status !== "available") {
+      html += '<p class="ms-el-data-status">Data not available</p>';
+    }
+    html += renderDetailsMetrics(group.details_metrics);
+    html += '</div>';
+    return html;
+  }
+
+  function renderRealityLayer(layer) {
+    if (!layer) return "";
+    var html = '<section class="ms-evidence-layer ms-el-section">';
+    html += renderEvidenceLayerHead(layer, null);
+    var coverage = layer.coverage_summary || [];
+    if (coverage.length) {
+      html += '<p class="ms-el-coverage">' + escapeHtml(coverage.join(" · ")) + '</p>';
+    }
+    var groups = layer.groups || [];
+    if (groups.length) {
+      html += '<div class="ms-el-groups">';
+      groups.forEach(function(group) {
+        html += renderRealityGroupCard(group);
+      });
+      html += '</div>';
+    }
+    html += '</section>';
+    return html;
+  }
+
+  function renderEconomicReality(layer) {
+    return renderRealityLayer(layer);
+  }
+
+  function renderFinalConfirmation(layer) {
+    return renderRealityLayer(layer);
+  }
+
+  function renderEvidenceLayers(layers) {
+    if (!layers) return "";
+    if (layers.version !== "market_setup_evidence_layers_v2") {
+      return renderEvidenceLayersV1(layers);
+    }
+    var html = '<div class="ms-el">';
+    html += renderDecisionPath(layers.decision_path);
+    html += renderEvidencePartition("Decision Evidence", null);
+    html += renderLeadingExpectations(layers.leading_expectations);
+    html += renderMarketPricing(layers.market_pricing);
+    html += renderPortfolioConclusion(layers.portfolio_conclusion);
+    var supplementaryNote = layers.boundary_note;
+    if (!supplementaryNote) {
+      var scopeNotes = [];
+      if (layers.economic_reality && layers.economic_reality.scope_note) {
+        scopeNotes.push(layers.economic_reality.scope_note);
+      }
+      if (layers.final_confirmation && layers.final_confirmation.scope_note) {
+        scopeNotes.push(layers.final_confirmation.scope_note);
+      }
+      supplementaryNote = scopeNotes.join(" ");
+    }
+    html += renderEvidencePartition("Supplementary Context", supplementaryNote || null);
+    html += renderEconomicReality(layers.economic_reality);
+    html += renderFinalConfirmation(layers.final_confirmation);
+    html += '</div>';
+    return html;
+  }
+
   function renderMarketSetup() {
     var section = $("marketSetup");
     if (!section) return;
@@ -2019,7 +2610,8 @@
       return;
     }
     var presentation = buildMarketSetupPresentation(setup);
-    section.innerHTML = renderDecisionHero(presentation) + renderDetailedReasoning(presentation);
+    section.innerHTML = renderDecisionHero(presentation) +
+      (presentation.evidenceLayers ? renderEvidenceLayers(presentation.evidenceLayers) : renderDetailedReasoning(presentation));
     announceStatus("Market setup \u2014 " + (presentation.portfolioPosture.label || "loaded"));
     bindEvidenceLinks(section);
   }
@@ -3214,7 +3806,7 @@
     section.innerHTML = `
       <div class="relationship-head">
         ${head.innerHTML}
-        ${asOf ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDate(asOf))}</span>` : ""}
+        ${asOf ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDateOnly(asOf))}</span>` : ""}
       </div>
       <div class="economic-confirmation-layer-body">${cardHtml}</div>
     `;
@@ -5600,6 +6192,8 @@
       renderStateCell,
       renderDecisionHero,
       renderDetailedReasoning,
+      renderEvidenceLayers,
+      renderDecisionPath,
       evidenceTargetId,
       renderEvidenceLink,
       renderMarketSetupLoading,

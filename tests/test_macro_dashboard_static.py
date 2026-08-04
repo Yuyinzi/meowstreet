@@ -4,6 +4,8 @@ import re
 import subprocess
 import textwrap
 
+from app.tools import market_setup_evidence_layers
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_JS = ROOT / "static" / "macro-dashboard.js"
@@ -2763,6 +2765,36 @@ def test_macro_dashboard_js_renders_survey_synthesis_as_standalone_layer():
 # --- Market Setup Decision Hero Tests ---
 
 
+def _posture_actions(codes):
+    labels = {
+        "maintain_long_net_exposure": "Maintain long net exposure",
+        "use_normal_position_sizing": "Use normal position sizing",
+        "allow_broad_and_selective_positions": "Allow broad and selective positions",
+        "maintain_modest_long_exposure": "Maintain modest long exposure",
+        "use_moderate_position_sizing": "Use moderate position sizing",
+        "prefer_selective_positions": "Prefer selective positions",
+        "maintain_neutral_net_exposure": "Maintain neutral net exposure",
+        "maintain_reduced_net_exposure": "Maintain reduced net exposure",
+        "use_reduced_position_sizing": "Use reduced position sizing",
+        "prefer_defensive_or_hedged_positions": "Prefer defensive or hedged positions",
+        "maintain_modest_defensive_exposure": "Maintain modest defensive exposure",
+        "prefer_selective_defensive_positions": "Prefer selective defensive positions",
+        "defer_new_directional_exposure": "Defer new directional exposure",
+        "ignoring_risk_controls": "Ignoring risk controls",
+        "adding_leverage_without_position_limits": "Adding leverage without position limits",
+        "large_broad_beta_directional_exposure": "Large broad-beta directional exposure",
+        "increasing_leverage_without_confirmation": "Increasing leverage without confirmation",
+        "large_directional_long_exposure": "Large directional long exposure",
+        "unhedged_broad_beta_exposure": "Unhedged broad-beta exposure",
+        "increasing_leverage_during_confirmed_risk_off": "Increasing leverage during a confirmed risk-off",
+        "increasing_leverage_without_complete_evidence": "Increasing leverage without complete evidence",
+    }
+    return [
+        {"code": code, "label": labels.get(code, code.replace("_", " ").title())}
+        for code in codes
+    ]
+
+
 def _v2_setup_payload(regime, confirmation, setup, posture, extra=None):
     payload = {
         "version": "market_setup_v2",
@@ -2801,8 +2833,8 @@ def _v2_setup_payload(regime, confirmation, setup, posture, extra=None):
             "gross_exposure": posture.get("gross_exposure", "moderate"),
             "implementation": posture.get("implementation", "selective_positions"),
             "broad_beta": posture.get("broad_beta", "avoid_large_directional_exposure"),
-            "positioning": posture.get("positioning", []),
-            "avoid": posture.get("avoid", []),
+            "positioning": _posture_actions(posture.get("positioning", [])),
+            "avoid": _posture_actions(posture.get("avoid", [])),
             "method_version": "market_setup_v2_portfolio_posture_v1",
         },
         "interpretation": setup.get(
@@ -2890,7 +2922,7 @@ def test_market_setup_hero_aligned_upside():
             "supports": [
                 {
                     "source_id": "macro_financial_conditions",
-                    "finding": "macro_financial_conditions is consistent with the survey growth direction",
+                    "finding": "Financial Conditions is consistent with the survey growth direction",
                     "evidence_links": ["macro_financial_conditions"],
                 }
             ],
@@ -3025,7 +3057,7 @@ def test_market_setup_hero_conflicting_signal():
             "conflicts": [
                 {
                     "source_id": "macro_policy_response",
-                    "finding": "macro_policy_response conflicts with the survey growth direction",
+                    "finding": "Monetary Policy conflicts with the survey growth direction",
                     "evidence_links": ["macro_policy_response"],
                 }
             ],
@@ -3312,7 +3344,7 @@ def test_market_setup_v2_renders_offsets_and_macro_evidence_separately():
             "supports": [
                 {
                     "source_id": "macro_financial_conditions",
-                    "finding": "macro_financial_conditions is consistent with the survey growth direction",
+                    "finding": "Financial Conditions is consistent with the survey growth direction",
                     "evidence_links": ["macro_financial_conditions"],
                 }
             ],
@@ -3725,7 +3757,7 @@ def test_market_setup_v2_hero_renders_four_layer_contract():
             "conflicts": [
                 {
                     "source_id": "macro_policy_response",
-                    "finding": "macro_policy_response conflicts with the survey growth direction",
+                    "finding": "Monetary Policy conflicts with the survey growth direction",
                     "evidence_links": ["macro_policy_response"],
                 }
             ],
@@ -7123,6 +7155,20 @@ def test_macro_dashboard_js_fetches_economic_confirmation_overview_and_detail():
     assert "selectedEconomicConfirmationDetailId" in js
 
 
+def test_economic_confirmation_as_of_pill_shows_date_only():
+    js = (ROOT / "static" / "macro-dashboard.js").read_text(encoding="utf-8")
+
+    render_start = js.index("function renderEconomicConfirmation()")
+    render_end = js.index(
+        "function renderEconomicConfirmationDetailInPanel", render_start
+    )
+    render_body = js[render_start:render_end]
+
+    assert "Data as of ${escapeHtml(fmtDateOnly(asOf))}" in render_body
+    assert "fmtDateOnly" in js
+    assert "Data as of ${escapeHtml(fmtDate(asOf))}" not in render_body
+
+
 def test_claims_ui_handles_all_confirmation_statuses():
     source = (ROOT / "static" / "claims-confirmation-ui.js").read_text()
 
@@ -7156,6 +7202,58 @@ def test_claims_ui_has_no_client_side_trade_classification_copy():
 
     for marker in ["Buy", "Sell", "posture", "score", "long", "short"]:
         assert marker not in source
+
+
+def test_claims_ui_renders_4w_means_as_person_integers():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = {};
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/claims-confirmation-ui.js", "utf8"));
+
+        const helpers = {
+          escapeHtml: function (value) { return String(value || "").replace(/</g, "&lt;").replace(/>/g, "&gt;"); },
+          bilingualLabel: function (value) { return value; },
+          bilingualTitle: function (value) { return value; },
+          fmtNumber: function (value) { return "NUM:" + value; },
+          fmtInteger: function (value) { return "INT:" + value; },
+          isSelectedEconomicConfirmationDetailId: function () { return false; },
+        };
+        const payload = {
+          claims_confirmation: {
+            confirmation_status: "confirming",
+            initial_claims: { classification: "stable", observation_period: "2026-07-04", latest_4w_mean: 1797500, comparison_4w_mean: 1795000 },
+            continuing_claims: { classification: "stable", observation_period: "2026-07-18", latest_4w_mean: 1797500, comparison_4w_mean: 1795000 },
+            vintages: [],
+          },
+          labor_context: {},
+          real_activity: {},
+          event_risk: {},
+          economic_confirmation: { status: "limited", coverage: "claims_only", based_on: [], excluded: [] },
+        };
+        const body = { innerHTML: "" };
+        window.claimsConfirmationUi.renderDetail(body, payload, helpers);
+
+        console.log(JSON.stringify({
+          latestUsesInteger: body.innerHTML.includes("INT:1797500"),
+          comparisonUsesInteger: body.innerHTML.includes("INT:1795000"),
+          latestAvoidsDecimalFormatter: !body.innerHTML.includes("NUM:1797500"),
+          comparisonAvoidsDecimalFormatter: !body.innerHTML.includes("NUM:1795000"),
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+
+    assert json.loads(result.stdout) == {
+        "latestUsesInteger": True,
+        "comparisonUsesInteger": True,
+        "latestAvoidsDecimalFormatter": True,
+        "comparisonAvoidsDecimalFormatter": True,
+    }
 
 
 def test_cot_review_evidence_renders_high_and_low_statuses():
@@ -7453,3 +7551,469 @@ def test_cross_market_spreads_css_uses_established_tokens():
     assert ".market-status-unavailable" in css
     assert ".workflow-row" in css
     assert ".cross-market-limitation" in css
+
+
+# --- Market Setup Evidence Layers Tests ---
+
+
+def test_market_setup_js_has_evidence_layers_renderer_with_fallback():
+    js = STATIC_JS.read_text()
+
+    assert "function renderEvidenceLayers(" in js
+    assert "evidenceLayers: setup.evidence_layers || null," in js
+    assert (
+        "presentation.evidenceLayers ? renderEvidenceLayers(presentation.evidenceLayers) : renderDetailedReasoning(presentation)"
+        in js
+    )
+    assert "function renderDetailedReasoning(" in js
+    assert "renderEvidenceLayers," in js
+
+
+def test_market_setup_css_has_evidence_layer_styles():
+    css = STATIC_CSS.read_text()
+
+    assert ".ms-el-section" in css
+    assert ".ms-el-head" in css
+    assert ".ms-el-badge" in css
+    assert ".ms-el-groups" in css
+    assert ".ms-el-group" in css
+    assert ".ms-el-metrics" in css
+    assert ".ms-el-note" in css
+
+
+def test_market_setup_css_has_decision_path_and_partition_styles():
+    css = STATIC_CSS.read_text()
+
+    assert ".ms-dp-steps" in css
+    assert ".ms-dp-step" in css
+    assert ".ms-dp-step-n" in css
+    assert ".ms-dp-test-mark" in css
+    assert ".ms-el-partition-title" in css
+    assert ".ms-el-role-badge-regime" in css
+    assert ".ms-el-details summary:focus-visible" in css
+    assert ".ms-el-liquidity-offset" in css
+
+
+def _evidence_layers_payload():
+    return {
+        "version": "market_setup_evidence_layers_v1",
+        "boundary_note": "Layers 2-3 are supplementary evidence and do not participate in Market Setup v2 classification.",
+        "leading_expectations": {
+            "layer_id": "leading_expectations",
+            "title": "Leading Expectations",
+            "role": "decision_input",
+            "groups": [
+                {
+                    "id": "growth_surveys",
+                    "title": "Growth Surveys",
+                    "summary": "ISM synthesis: Slowing",
+                    "sentiment": "expansion_slowing",
+                    "method_status": "approved",
+                    "data_status": "available",
+                    "metrics": [
+                        {
+                            "label": "Manufacturing PMI",
+                            "value": "48.2",
+                            "period": "2026-06",
+                            "sentiment": "falling",
+                        }
+                    ],
+                },
+                {
+                    "id": "policy_liquidity",
+                    "title": "Policy & Liquidity",
+                    "summary": None,
+                    "sentiment": None,
+                    "method_status": "pending_approval",
+                    "data_status": "not_collected",
+                    "metrics": [],
+                    "note": "Method pending — context only",
+                },
+            ],
+        },
+        "economic_reality": {
+            "layer_id": "economic_reality",
+            "title": "Economic Reality Confirmation",
+            "role": "supplementary",
+            "scope_note": "Supplementary evidence — not used in Market Setup v2 classification.",
+            "groups": [
+                {
+                    "id": "labor",
+                    "title": "Labor",
+                    "summary": None,
+                    "sentiment": None,
+                    "data_status": "missing",
+                    "metrics": [],
+                }
+            ],
+        },
+        "final_confirmation": {
+            "layer_id": "final_confirmation",
+            "title": "Final / Lagging Confirmation",
+            "role": "review_only",
+            "scope_note": "Review only — does not participate in Market Setup v2 classification.",
+            "groups": [],
+        },
+        "market_pricing": {
+            "layer_id": "market_pricing",
+            "title": "Market Pricing",
+            "role": "decision_input",
+            "tests_passed": 1,
+            "tests_total": 3,
+            "tests": [
+                {
+                    "id": "yield_curve",
+                    "label": "Yield Curve",
+                    "state": "confirms_downside_risk",
+                    "confirms_downside": True,
+                },
+                {
+                    "id": "credit",
+                    "label": "Credit Spreads",
+                    "state": "stable",
+                    "confirms_downside": False,
+                },
+            ],
+            "offsets": [
+                {"id": "offset_1", "finding": "Credit spreads remain contained."}
+            ],
+            "context": [
+                {"id": "ctx_1", "finding": "VIX elevated but below stress threshold."}
+            ],
+        },
+        "portfolio_conclusion": {
+            "layer_id": "portfolio_conclusion",
+            "title": "Portfolio Conclusion",
+            "role": "decision_output",
+            "posture_label": "Cautious Neutral",
+            "posture_code": "neutral",
+            "positioning": ["Maintain modest long exposure"],
+            "avoid": ["Adding leverage without confirmation"],
+            "next_triggers": ["Yield curve re-steepening"],
+            "watch_items": ["Initial claims trend"],
+            "excluded_inputs": ["gdp_nowcast", "earnings_revision"],
+            "method_versions": {},
+        },
+    }
+
+
+def _market_setup_v2_evidence_result():
+    return {
+        "version": "market_setup_v2",
+        "macro_regime": {"code": "growth_decelerating", "label": "Growth Decelerating"},
+        "market_confirmation": {
+            "code": "partially_confirming_downside",
+            "label": "Downside Partially Confirmed",
+            "confirmation_test_count": 1,
+            "evidence": {
+                "equity_trend": {
+                    "state": "bull_market",
+                    "confirms": False,
+                    "finding": "S&P 500 market phase does not confirm the directional regime",
+                },
+                "credit": {
+                    "state": "risk_rising",
+                    "confirms": True,
+                    "finding": "credit conditions confirm the directional regime",
+                },
+                "volatility": {
+                    "state": "normal",
+                    "confirms": False,
+                    "finding": "volatility does not confirm the directional regime",
+                },
+                "liquidity": {
+                    "state": "expanding",
+                    "confirms": True,
+                    "finding": "M2 money supply is supportive of liquidity",
+                },
+            },
+            "offsets": [],
+        },
+        "market_setup": {
+            "code": "macro_weakening_partially_confirmed",
+            "label": "Macro Weakening, Partially Confirmed",
+            "agreement": "mixed",
+        },
+        "portfolio_posture": {
+            "code": "mild_risk_off",
+            "label": "Mild Risk-Off",
+            "net_exposure": "modest_defensive",
+            "gross_exposure": "moderate",
+            "implementation": "selective_defensive_positions",
+            "broad_beta": "reduce_large_directional_exposure",
+            "positioning": [
+                {
+                    "code": "maintain_modest_defensive_exposure",
+                    "label": "Maintain modest defensive exposure",
+                }
+            ],
+            "avoid": [],
+        },
+        "next_triggers": [],
+        "watch_items": [],
+        "excluded_inputs": [],
+        "method_versions": {},
+    }
+
+
+def _market_setup_v2_evidence_layers():
+    return market_setup_evidence_layers.build_evidence_layers(
+        market_setup_result=_market_setup_v2_evidence_result(),
+        survey_synthesis={
+            "period": "2026-06",
+            "economic_direction": "aligned_expansion",
+            "growth_momentum": "falling",
+            "expected_gdp_direction": "slowing",
+            "components": {
+                "manufacturing": {"level": "expanding"},
+                "services": {"level": "expanding"},
+            },
+        },
+        expected_growth={
+            "facts": {
+                "survey_growth_direction": {
+                    "direction": "slowing",
+                    "status": "available",
+                    "source_period": {
+                        "effective_date": "2026-06-30",
+                        "reference_period": "2026-06",
+                    },
+                }
+            }
+        },
+        financial_conditions={
+            "facts": {
+                "macro_financial_conditions": {
+                    "relationship_to_growth_direction": "supports",
+                    "source_period": {"effective_date": "2026-07-26"},
+                }
+            }
+        },
+        policy_response={
+            "facts": {
+                "macro_policy_response": {
+                    "relationship_to_growth_direction": "conflicts",
+                    "source_period": {"reference_period": "2026-06"},
+                }
+            }
+        },
+        consumer_demand={
+            "facts": {
+                "consumer_demand_outlook": {
+                    "relationship_to_growth_direction": "neutral",
+                    "source_period": {"reference_period": "2026-06"},
+                }
+            }
+        },
+        economic_confirmation_overview={
+            "claims_confirmation": {
+                "initial_claims": {
+                    "classification": "stable",
+                    "observation_period": "2026-07-25",
+                    "latest_4w_mean": 240000.0,
+                },
+                "continuing_claims": {
+                    "classification": "stable",
+                    "observation_period": "2026-07-25",
+                    "latest_4w_mean": 1900000.0,
+                },
+                "claims_direction": "stable",
+                "confirmation_status": "not_confirming",
+            },
+            "labor_context": {
+                "role": "context_only",
+                "method_status": "pending_approval",
+                "data_status": "available",
+                "metrics": {
+                    "nonfarm_payrolls_change": {
+                        "value": 147.0,
+                        "reference_period": "2026-06",
+                    }
+                },
+            },
+            "real_activity": {
+                "data_status": "available",
+                "method_status": "pending_approval",
+                "metrics": {
+                    "manufacturing_production": {
+                        "value": 97.9,
+                        "reference_period": "2026-06",
+                    }
+                },
+            },
+        },
+        gdp_rows=[
+            {
+                "date": "2026-06-30",
+                "period_label": "2026 Q2",
+                "gdp_level": 23400.0,
+                "gdp_direction": -1,
+            }
+        ],
+    )
+
+
+def _render_market_setup_v2_fixture():
+    setup = _v2_setup_payload(
+        regime={"code": "growth_decelerating", "label": "Growth Decelerating"},
+        confirmation={
+            "code": "partially_confirming_downside",
+            "label": "Downside Partially Confirmed",
+            "confirmation_test_count": 1,
+            "evidence": {},
+            "offsets": [],
+        },
+        setup={
+            "code": "macro_weakening_partially_confirmed",
+            "label": "Macro Weakening, Partially Confirmed",
+            "agreement": "mixed",
+        },
+        posture={"code": "mild_risk_off", "label": "Mild Risk-Off"},
+        extra={"evidence_layers": _market_setup_v2_evidence_layers()},
+    )
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const pr = hooks.buildMarketSetupPresentation(%s);
+        const html = hooks.renderDecisionHero(pr) + hooks.renderEvidenceLayers(pr.evidenceLayers);
+        console.log(JSON.stringify({ html: html }));
+    """)
+    result = subprocess.run(
+        ["node", "-e", script % json.dumps(setup)],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    return json.loads(result.stdout)["html"]
+
+
+def test_market_setup_renders_decision_path_before_partitioned_evidence():
+    html = _render_market_setup_v2_fixture()
+
+    assert html.index("Why This Setup?") < html.index("Decision Evidence")
+    assert html.index("Decision Evidence") < html.index("Supplementary Context")
+    assert "Growth Surveys" in html
+    assert "Regime Selector" in html
+    assert "Approved confirmation tests: 1 / 3" in html
+    assert "Liquidity Offset" in html
+    assert "Supplementary — does not affect Market Setup v2" in html
+
+
+def test_market_setup_v2_rendering_hides_machine_codes_and_details_are_collapsed():
+    html = _render_market_setup_v2_fixture()
+
+    assert "macro_financial_conditions" not in html
+    assert "maintain_modest_defensive_exposure" not in html
+    assert "bear_market" not in html
+    assert "<summary>Underlying metrics</summary>" in html
+
+
+def test_market_setup_evidence_layers_render_and_legacy_fallback():
+    setup = _v2_setup_payload(
+        regime={"code": "growth_slowing", "label": "Growth Slowing"},
+        confirmation={"code": "partially_confirming", "label": "Partially Confirming"},
+        setup={
+            "code": "macro_weakening_price_not_confirming",
+            "label": "Macro Weakening, Price Not Confirming",
+            "agreement": "mixed",
+        },
+        posture={"code": "neutral", "label": "Neutral"},
+        extra={"evidence_layers": _evidence_layers_payload()},
+    )
+    checks = {
+        "hasLayers": 'layerHtml.indexOf("ms-evidence-layer") !== -1',
+        "fallbackIsEmpty": 'emptyLayers === ""',
+        "legacyUsesDetailed": 'legacyHtml.indexOf("ms-detailed") !== -1 && legacyHtml.indexOf("ms-evidence-layer") === -1',
+        "layeredOmitsDetailed": 'layeredHtml.indexOf("ms-detailed") === -1',
+    }
+    script = _market_setup_v2_hero_script(setup, checks)
+    script = script.replace(
+        "const detail = hooks.renderDetailedReasoning(pr);",
+        "\n".join(
+            [
+                "const detail = hooks.renderDetailedReasoning(pr);",
+                "const layerHtml = hooks.renderEvidenceLayers(pr.evidenceLayers);",
+                "const emptyLayers = hooks.renderEvidenceLayers(null);",
+                "const layeredHtml = hooks.renderDecisionHero(pr) + hooks.renderEvidenceLayers(pr.evidenceLayers);",
+                "const legacyPr = hooks.buildMarketSetupPresentation(Object.assign({}, setup, { evidence_layers: undefined }));",
+                "const legacyHtml = hooks.renderDecisionHero(legacyPr) +",
+                "  (legacyPr.evidenceLayers ? hooks.renderEvidenceLayers(legacyPr.evidenceLayers) : hooks.renderDetailedReasoning(legacyPr));",
+            ]
+        ),
+    )
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["hasLayers"] is True
+    assert payload["fallbackIsEmpty"] is True
+    assert payload["legacyUsesDetailed"] is True
+    assert payload["layeredOmitsDetailed"] is True
+
+    layer_script = script.replace(
+        "console.log(JSON.stringify({",
+        "console.log(JSON.stringify({ layerMarkup: layerHtml,",
+    )
+    result = subprocess.run(
+        ["node", "-e", layer_script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    layer_markup = json.loads(result.stdout)["layerMarkup"]
+
+    assert layer_markup.count('class="ms-evidence-layer ms-el-section"') == 5
+    assert "1 · Leading Expectations" in layer_markup
+    assert "2 · Economic Reality Confirmation" in layer_markup
+    assert "3 · Final / Lagging Confirmation" in layer_markup
+    assert "4 · Market Pricing" in layer_markup
+    assert "5 · Portfolio Conclusion" in layer_markup
+    assert "Decision Input" in layer_markup
+    assert "Supplementary" in layer_markup
+    assert "Review Only" in layer_markup
+    assert "Decision Output" in layer_markup
+    assert "not used in Market Setup v2 classification" in layer_markup
+    assert "ISM synthesis: Slowing" in layer_markup
+    assert "Not yet collected" in layer_markup
+    assert "Data not available" in layer_markup
+    assert "Method pending" in layer_markup
+    assert "Method pending — context only" in layer_markup
+    assert "Manufacturing PMI" in layer_markup
+    assert "48.2" in layer_markup
+    assert "2026-06" in layer_markup
+    assert "Approved confirmation tests: 1 / 3" in layer_markup
+    assert "Yield Curve" in layer_markup
+    assert "Confirmed" in layer_markup
+    assert "Not confirmed" in layer_markup
+    assert "Offsets" in layer_markup
+    assert "Context (non-voting)" in layer_markup
+    assert "Credit spreads remain contained." in layer_markup
+    assert "VIX elevated but below stress threshold." in layer_markup
+    assert "Cautious Neutral" in layer_markup
+    assert "Maintain modest long exposure" in layer_markup
+    assert "Adding leverage without confirmation" in layer_markup
+    assert "Yield curve re-steepening" in layer_markup
+    assert "Initial claims trend" in layer_markup
+    assert "Excluded from v2: gdp_nowcast · earnings_revision" in layer_markup
