@@ -22,6 +22,7 @@ from app.tools import (
     macro_growth_cycle,
     market_phase,
     market_setup,
+    market_setup_evidence_layers,
     market_setup_v2,
     market_setup_v2_relationships,
     nfib_sbo,
@@ -697,13 +698,52 @@ def macro_dashboard_market_setup():
         consumer_demand = _normalize_consumer_demand(
             consumer_sentiment_summary, survey_direction
         )
-        return market_setup_v2.build_market_setup_v2(
+        setup_result = market_setup_v2.build_market_setup_v2(
             expected_growth=expected_growth,
             market_environment=market_environment,
             financial_conditions=financial_conditions,
             policy_response=policy_response,
             consumer_demand=consumer_demand,
         )
+        economic_confirmation_overview = None
+        try:
+            economic_confirmation_overview = economic_confirmation_dashboard.load_overview(
+                con,
+                {"expected_gdp_direction": survey_direction},
+                date.today().isoformat(),
+            )
+        except Exception:
+            logging.warning(
+                "economic confirmation overview load failed for market setup",
+                exc_info=True,
+            )
+        gdp_rows = None
+        try:
+            gdp_con = gdp_market_relationships.connect()
+            try:
+                gdp_rows = gdp_market_relationships.load_quad_rows(
+                    gdp_con,
+                    "us_sp500_gdp",
+                )
+            finally:
+                gdp_con.close()
+        except Exception:
+            logging.warning(
+                "gdp quad rows load failed for market setup", exc_info=True
+            )
+        setup_result["evidence_layers"] = (
+            market_setup_evidence_layers.build_evidence_layers(
+                market_setup_result=setup_result,
+                survey_synthesis=survey_synthesis_result,
+                expected_growth=expected_growth,
+                financial_conditions=financial_conditions,
+                policy_response=policy_response,
+                consumer_demand=consumer_demand,
+                economic_confirmation_overview=economic_confirmation_overview,
+                gdp_rows=gdp_rows,
+            )
+        )
+        return setup_result
     finally:
         con.close()
 

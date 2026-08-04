@@ -75,6 +75,13 @@ _RELATIONSHIP_STATE_LABELS = {
     "unavailable": "Unavailable",
 }
 
+_RELATIONSHIP_LABELS = {
+    "supports": "Supports",
+    "conflicts": "Conflicts",
+    "neutral": "Neutral",
+    "unavailable": "Unavailable",
+}
+
 _SURVEY_LEVEL_LABELS = {
     "aligned_expansion": "Broad expansion",
     "aligned_contraction": "Broad contraction",
@@ -450,6 +457,7 @@ def _relationship_group(group_id, title, bundle, fact_id):
         "current_state": _RELATIONSHIP_STATE_LABELS.get(relationship),
         "sentiment": relationship,
         "relationship": relationship,
+        "relationship_label": _RELATIONSHIP_LABELS.get(relationship),
         "decision_effect": decision_effect,
         "period": _period_label(fact.get("source_period")),
         "data_status": "available" if fact else "missing",
