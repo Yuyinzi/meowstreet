@@ -811,6 +811,8 @@ def test_labor_separates_claims_signal_from_context_only_labor_metrics():
 def test_final_confirmation_keeps_only_gdp_group():
     layers = market_setup_evidence_layers.build_evidence_layers(**_full_kwargs())
     final = layers["final_confirmation"]
+    assert final["layer_id"] == "final_confirmation"
+    assert final["title"] == "Lagging Outcomes & Cycle Review"
     assert final["coverage_summary"] == [
         "GDP: available",
         "Corporate results: not implemented",
@@ -826,6 +828,48 @@ def test_final_confirmation_keeps_only_gdp_group():
     metrics = {metric["label"]: metric for metric in output["details_metrics"]}
     assert metrics["GDP Level"]["value"] == 23400.0
     assert metrics["GDP Direction"]["value"] == "Falling"
+
+
+def test_governance_statuses_cover_supplementary_groups():
+    layers = market_setup_evidence_layers.build_evidence_layers(**_full_kwargs())
+
+    reality = _groups(layers["economic_reality"])
+    assert reality["labor"]["governance_status"] == "context_only"
+    assert reality["labor"]["governance_status_label"] == "Context Only"
+    assert reality["real_activity"]["governance_status"] == "method_pending"
+    assert reality["real_activity"]["governance_status_label"] == "Method Pending"
+
+    output = layers["final_confirmation"]["groups"][0]
+    assert output["governance_status"] == "review_only"
+    assert output["governance_status_label"] == "Review Only"
+
+    labels = [
+        group["governance_status_label"]
+        for layer in (layers["economic_reality"], layers["final_confirmation"])
+        for group in layer["groups"]
+    ]
+    assert all("_" not in label for label in labels)
+
+
+def test_governance_legend_is_ordered_and_covers_all_statuses():
+    layers = market_setup_evidence_layers.build_evidence_layers(**_full_kwargs())
+
+    legend = layers["governance_legend"]
+    assert [entry["status"] for entry in legend] == [
+        "context_only",
+        "method_pending",
+        "review_only",
+        "not_implemented",
+    ]
+    assert all(entry["label"] for entry in legend)
+    assert all(entry["description"] for entry in legend)
+
+
+def test_m2_appears_only_as_liquidity_offset():
+    layer = market_pricing_layer_for_downside_case()
+
+    assert layer["liquidity_offset"] is not None
+    assert layer["offsets"] == []
 
 
 def test_no_raw_underscore_codes_in_user_facing_strings():

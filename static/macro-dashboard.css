@@ -5478,7 +5478,18 @@ h2 {
   flex-direction: column;
 }
 
+.ms-dp-tracks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ms-dp-track {
+  min-width: 0;
+}
+
 .ms-dp-step {
+  height: 100%;
   padding: 10px 12px;
   border: 1px solid #E8E0D6;
   border-radius: 8px;
@@ -5664,6 +5675,47 @@ h2 {
 .ms-el-role-badge-regime { background: #E7EFE9; color: #2D7A4A; }
 .ms-el-role-badge-supporting { background: #F0EAE4; color: #6F6257; }
 
+.ms-el-governance-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #D8CFC6;
+  background: #F7F4F1;
+  color: #6F6257;
+}
+
+.ms-el-governance-context_only { border-color: #C4D6CA; background: #EEF3EF; color: #2D7A4A; }
+.ms-el-governance-method_pending { border-color: #E0D2B4; background: #F8F1E1; color: #8B7030; }
+.ms-el-governance-review_only { border-color: #C3D2E4; background: #EAF0F7; color: #3B5F85; }
+.ms-el-governance-not_implemented { border-color: #D8CFC6; background: #F0EAE4; color: #A89B91; }
+
+.ms-el-governance-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid #E8E0D6;
+  border-radius: 8px;
+  background: #FAF8F5;
+}
+
+.ms-el-legend-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ms-el-legend-desc {
+  font-size: 11px;
+  color: #8B7E74;
+  line-height: 1.4;
+}
+
 .ms-el-interpretation {
   font-size: 12px;
   color: #3B3530;
@@ -5733,6 +5785,9 @@ h2 {
 }
 
 @media (max-width: 640px) {
+  .ms-dp-tracks {
+    grid-template-columns: 1fr;
+  }
   .ms-dp-step {
     padding: 8px 10px;
   }

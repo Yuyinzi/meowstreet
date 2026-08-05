@@ -2310,9 +2310,23 @@
     var html = '<section class="ms-evidence-layer ms-el-section ms-dp">';
     html += '<div class="ms-el-head"><h3 class="ms-el-title">Why This Setup?</h3></div>';
     html += '<div class="ms-dp-steps">';
-    steps.forEach(function(step, index) {
+    var tracks = steps.filter(function(step) {
+      return step.kind === "macro_thesis" || step.kind === "market_test";
+    });
+    var downstream = steps.filter(function(step) {
+      return step.kind !== "macro_thesis" && step.kind !== "market_test";
+    });
+    if (tracks.length) {
+      html += '<div class="ms-dp-tracks">';
+      tracks.forEach(function(step) {
+        html += '<div class="ms-dp-track">' + renderDecisionPathStep(step) + '</div>';
+      });
+      html += '</div>';
+      html += '<div class="ms-dp-connector" aria-hidden="true">↓</div>';
+    }
+    downstream.forEach(function(step, index) {
       html += renderDecisionPathStep(step);
-      if (index < steps.length - 1) {
+      if (index < downstream.length - 1) {
         html += '<div class="ms-dp-connector" aria-hidden="true">↓</div>';
       }
     });
@@ -2509,6 +2523,7 @@
     var html = '<div class="ms-el-group">';
     html += '<div class="ms-el-group-head">';
     html += '<h4 class="ms-el-group-title">' + escapeHtml(group.title || group.id || "") + '</h4>';
+    html += renderGovernanceBadge(group.governance_status, group.governance_status_label);
     html += '</div>';
     if (group.formal_signal) {
       html += '<p class="ms-el-summary ' + stateSentimentClass(group.sentiment) + '">' +
@@ -2565,6 +2580,26 @@
     return renderRealityLayer(layer);
   }
 
+  function renderGovernanceBadge(status, label) {
+    if (!status || !label) return "";
+    return '<span class="ms-el-governance-badge ms-el-governance-' + escapeHtml(status) + '">' +
+      escapeHtml(label) + '</span>';
+  }
+
+  function renderGovernanceLegend(legend) {
+    var items = legend || [];
+    if (!items.length) return "";
+    var html = '<div class="ms-el-governance-legend">';
+    items.forEach(function(entry) {
+      html += '<div class="ms-el-legend-item">';
+      html += renderGovernanceBadge(entry.status, entry.label);
+      html += '<span class="ms-el-legend-desc">' + escapeHtml(entry.description) + '</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   function renderEvidenceLayers(layers) {
     if (!layers) return "";
     if (layers.version !== "market_setup_evidence_layers_v2") {
@@ -2572,7 +2607,7 @@
     }
     var html = '<div class="ms-el">';
     html += renderDecisionPath(layers.decision_path);
-    html += renderEvidencePartition("Decision Evidence", null);
+    html += renderEvidencePartition("Decision Inputs", null);
     html += renderLeadingExpectations(layers.leading_expectations);
     html += renderMarketPricing(layers.market_pricing);
     html += renderPortfolioConclusion(layers.portfolio_conclusion);
@@ -2587,7 +2622,8 @@
       }
       supplementaryNote = scopeNotes.join(" ");
     }
-    html += renderEvidencePartition("Supplementary Context", supplementaryNote || null);
+    html += renderEvidencePartition("Supplementary Macro Context", supplementaryNote || null);
+    html += renderGovernanceLegend(layers.governance_legend);
     html += renderEconomicReality(layers.economic_reality);
     html += renderFinalConfirmation(layers.final_confirmation);
     html += '</div>';

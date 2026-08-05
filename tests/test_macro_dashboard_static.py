@@ -7926,8 +7926,8 @@ def _render_market_setup_v2_fixture():
 def test_market_setup_renders_decision_path_before_partitioned_evidence():
     html = _render_market_setup_v2_fixture()
 
-    assert html.index("Why This Setup?") < html.index("Decision Evidence")
-    assert html.index("Decision Evidence") < html.index("Supplementary Context")
+    assert html.index("Why This Setup?") < html.index("Decision Inputs")
+    assert html.index("Decision Inputs") < html.index("Supplementary Macro Context")
     assert "Growth Surveys" in html
     assert "Regime Selector" in html
     assert "Approved confirmation tests: 1 / 3" in html
@@ -8023,6 +8023,24 @@ def _render_market_setup_v2_non_directional_fixture():
         text=True,
     )
     return json.loads(result.stdout)["html"]
+
+
+def test_market_setup_renders_two_tracks_and_governance_legend():
+    html = _render_market_setup_v2_fixture()
+
+    assert 'class="ms-dp-tracks"' in html
+    assert html.count('class="ms-dp-track"') == 2
+    assert "Macro Thesis" in html
+    assert "Market Test" in html
+    assert html.count('class="ms-el-governance-legend"') == 1
+    assert "Context Only" in html
+    assert "Method Pending" in html
+    assert "Review Only" in html
+    assert "Not Implemented" in html
+    assert "Lagging Outcomes" in html
+    assert "Cycle Review" in html
+    assert "Decision Inputs" in html
+    assert "Supplementary Macro Context" in html
 
 
 def test_market_setup_non_directional_confirmation_shows_status_not_test_marks():
