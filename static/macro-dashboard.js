@@ -2019,7 +2019,7 @@
     decision_input: "Decision Input",
     supplementary: "Supplementary",
     review_only: "Review Only",
-    decision_output: "Decision Output",
+    decision_output: "Action",
   };
 
   function evidenceRoleLabel(role) {
@@ -2472,11 +2472,10 @@
     }
     var html = '<div class="ms-el">';
     html += renderDecisionPath(layers.decision_path);
+    html += renderPortfolioConclusion(layers.portfolio_conclusion);
     html += renderEvidencePartition("Decision Inputs", null);
     html += renderLeadingExpectations(layers.leading_expectations);
     html += renderMarketPricing(layers.market_pricing);
-    html += renderEvidencePartition("Decision Output", null);
-    html += renderPortfolioConclusion(layers.portfolio_conclusion);
     var supplementaryNote = layers.boundary_note;
     if (!supplementaryNote) {
       var scopeNotes = [];

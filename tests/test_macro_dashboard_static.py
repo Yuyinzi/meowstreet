@@ -7647,10 +7647,20 @@ def _market_setup_v2_evidence_result():
                     "label": "Maintain modest defensive exposure",
                 }
             ],
-            "avoid": [],
+            "avoid": [
+                {
+                    "code": "large_directional_long_exposure",
+                    "label": "Large directional long exposure",
+                }
+            ],
         },
-        "next_triggers": [],
-        "watch_items": [],
+        "next_triggers": [
+            {
+                "id": "vix_confirmation_threshold",
+                "label": "VIX crosses the approved confirmation threshold",
+            }
+        ],
+        "watch_items": [{"id": "jobless_claims", "label": "Jobless claims"}],
         "excluded_inputs": ["consumer_demand_outlook"],
         "method_versions": {},
     }
@@ -7823,14 +7833,27 @@ def _render_market_setup_v2_fixture():
 def test_market_setup_renders_decision_path_before_partitioned_evidence():
     html = _render_market_setup_v2_fixture()
 
-    assert html.index("Why This Setup?") < html.index("Decision Inputs")
-    assert html.index("Decision Inputs") < html.index("Decision Output")
-    assert html.index("Decision Output") < html.index("Supplementary Macro Context")
+    assert html.index("Why This Setup?") < html.index("Positioning")
+    assert html.index("Positioning") < html.index("Decision Inputs")
+    assert html.index("Decision Inputs") < html.index("Supplementary Macro Context")
     assert "Growth Surveys" in html
     assert "Regime Selector" in html
     assert "Approved confirmation tests: 1 / 3" in html
     assert "Liquidity Offset" in html
     assert "None affects Market Setup v2" in html
+    assert "Decision Output" not in html
+
+
+def test_market_setup_portfolio_conclusion_keeps_unique_fields():
+    html = _render_market_setup_v2_fixture()
+
+    assert "Positioning" in html
+    assert "Avoid" in html
+    assert "Next Triggers" in html
+    assert "Watch Items" in html
+    assert "Excluded from v2" in html
+    assert "Maintain modest defensive exposure" in html
+    assert "Large directional long exposure" in html
 
 
 def test_market_setup_v2_rendering_hides_machine_codes_and_details_are_collapsed():
@@ -7938,6 +7961,7 @@ def test_market_setup_renders_two_tracks_and_governance_legend():
     assert "Lagging Outcomes" in html
     assert "Cycle Review" in html
     assert "Decision Inputs" in html
+    assert "Decision Output" not in html
     assert "Supplementary Macro Context" in html
 
 
