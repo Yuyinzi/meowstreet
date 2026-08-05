@@ -22,7 +22,7 @@ _OFFSET_TEST_CONTRIBUTION = "None"
 
 _REAL_ACTIVITY_REASON = "Trend window and classification method are pending approval."
 
-_DECISION_EFFECT_NONE = "None in Market Setup v2"
+_DECISION_EFFECT_NONE = "No effect on Market Setup v2"
 
 _SUPPORTING_EVIDENCE_EFFECT = "Supporting evidence only"
 

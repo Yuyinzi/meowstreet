@@ -722,7 +722,7 @@ def test_economic_reality_groups_carry_explanation_fields():
     labor = groups["labor"]
     assert labor["formal_signal"] == "Claims trend: Stable"
     assert labor["relation_to_thesis"] == "Not confirming, not conflicting"
-    assert labor["decision_effect"] == "None in Market Setup v2"
+    assert labor["decision_effect"] == "No effect on Market Setup v2"
     assert labor["coverage"] == "Claims classified; Employment Situation context only"
     assert labor["sentiment"] == "stable"
     assert labor["data_status"] == "available"
@@ -738,7 +738,7 @@ def test_economic_reality_groups_carry_explanation_fields():
     assert real_activity["reason"] == (
         "Trend window and classification method are pending approval."
     )
-    assert real_activity["decision_effect"] == "None in Market Setup v2"
+    assert real_activity["decision_effect"] == "No effect on Market Setup v2"
     assert real_activity["coverage"] == (
         "Manufacturing Production: available · "
         "Total Industrial Production: available · "
@@ -758,7 +758,7 @@ def test_economic_reality_keeps_unapproved_real_activity_values_in_details():
     assert activity["reason"] == (
         "Trend window and classification method are pending approval."
     )
-    assert activity["decision_effect"] == "None in Market Setup v2"
+    assert activity["decision_effect"] == "No effect on Market Setup v2"
     assert activity["details_metrics"]
 
 
@@ -782,7 +782,7 @@ def test_final_confirmation_keeps_only_gdp_group():
     assert output["id"] == "economic_output"
     assert output["formal_signal"] == "GDP: Falling"
     assert output["sentiment"] == "falling"
-    assert output["decision_effect"] == "None in Market Setup v2"
+    assert output["decision_effect"] == "No effect on Market Setup v2"
     assert output["period"] == "2026 Q2"
     assert output["data_status"] == "available"
     metrics = {metric["label"]: metric for metric in output["details_metrics"]}
