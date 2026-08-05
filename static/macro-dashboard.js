@@ -2265,6 +2265,9 @@
         });
         html += '</ul>';
       }
+      if (step.missing_inputs && step.missing_inputs.length) {
+        html += '<span class="ms-dp-test-count">Missing: ' + escapeHtml(step.missing_inputs.join(", ")) + '</span>';
+      }
       if (step.passed_count != null && step.total != null) {
         html += '<span class="ms-dp-test-count">' +
           escapeHtml(String(step.passed_count) + " / " + String(step.total)) + ' confirmed</span>';
@@ -2426,6 +2429,11 @@
         html += '</li>';
       });
       html += '</ul>';
+    } else if (layer.status_label) {
+      html += '<p class="ms-el-test-verdict">' + escapeHtml(layer.status_label) + '</p>';
+    }
+    if (layer.missing_inputs && layer.missing_inputs.length) {
+      html += '<p class="ms-el-note">Missing inputs: ' + escapeHtml(layer.missing_inputs.join(", ")) + '</p>';
     }
     var liquidityOffset = layer.liquidity_offset;
     if (liquidityOffset) {

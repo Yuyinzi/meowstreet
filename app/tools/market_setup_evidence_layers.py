@@ -193,6 +193,20 @@ _GROUP_ROLE_LABELS = {
     "supporting_evidence": "Supporting Evidence",
 }
 
+_EXCLUDED_FACT_LABELS = {
+    "macro_financial_conditions": "Financial Conditions",
+    "macro_policy_response": "Monetary Policy",
+    "consumer_demand_outlook": "Consumer Demand Outlook",
+    "economic_confirmation": "Economic Confirmation",
+    "cyclical_commodities": " Cyclical Commodities",
+    "nfib_regional_evidence": "NFIB Regional Evidence",
+    "sp500_market_phase": "S&P 500 Market Phase",
+    "credit_conditions": "Credit Conditions",
+    "vix_level": "VIX",
+    "m2_liquidity": "M2 Liquidity",
+    "survey_growth_direction": "Survey Growth Direction",
+}
+
 _LABOR_CONTEXT_METRICS = {
     "nonfarm_payrolls_change": ("Nonfarm Payrolls Change", "K"),
     "payrolls_3m_average_change": ("Nonfarm Payrolls 3M Avg Change", "K"),
@@ -260,6 +274,10 @@ def _test_contribution(confirms, state):
 
 
 def _confirmation_tests(confirmation):
+    test_count = confirmation.get("confirmation_test_count")
+    has_count = isinstance(test_count, int) and not isinstance(test_count, bool)
+    if not has_count:
+        return []
     evidence = _dict(confirmation.get("evidence"))
     tests = []
     for test_id in _TEST_ORDER:
@@ -312,6 +330,7 @@ def _decision_path(market_setup_result, expected_growth, survey_synthesis):
             "tests": _confirmation_tests(confirmation),
             "passed_count": test_count if has_count else None,
             "total": 3 if has_count else None,
+            "missing_inputs": confirmation.get("missing_inputs") or [],
             "output": {
                 "label": confirmation.get("label"),
                 "sentiment": confirmation.get("code"),
@@ -538,6 +557,8 @@ def _market_pricing_layer(market_setup_result):
         "tests_summary": (
             f"Approved confirmation tests: {test_count} / 3" if has_count else None
         ),
+        "status_label": confirmation.get("label") if not has_count else None,
+        "missing_inputs": confirmation.get("missing_inputs") or [],
         "tests_passed": test_count if has_count else None,
         "tests_total": 3 if has_count else None,
         "tests": _confirmation_tests(confirmation),
@@ -564,6 +585,13 @@ def _action_labels(items):
     return labels
 
 
+def _excluded_input_labels(fact_ids):
+    return [
+        _EXCLUDED_FACT_LABELS.get(fact_id, fact_id.replace("_", " ").title())
+        for fact_id in (fact_ids or [])
+    ]
+
+
 def _portfolio_conclusion_layer(market_setup_result):
     result = _dict(market_setup_result)
     posture = _dict(result.get("portfolio_posture"))
@@ -585,7 +613,7 @@ def _portfolio_conclusion_layer(market_setup_result):
         "avoid": _action_labels(posture.get("avoid")),
         "next_triggers": _action_labels(result.get("next_triggers")),
         "watch_items": _action_labels(result.get("watch_items")),
-        "excluded_inputs": list(result.get("excluded_inputs") or []),
+        "excluded_inputs": _excluded_input_labels(result.get("excluded_inputs")),
         "method_versions": dict(_dict(result.get("method_versions"))),
     }
 

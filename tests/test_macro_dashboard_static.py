@@ -7751,9 +7751,22 @@ def _market_setup_v2_evidence_result():
         },
         "next_triggers": [],
         "watch_items": [],
-        "excluded_inputs": [],
+        "excluded_inputs": ["consumer_demand_outlook"],
         "method_versions": {},
     }
+
+
+def _market_setup_v2_non_directional_result():
+    result = _market_setup_v2_evidence_result()
+    result["market_confirmation"] = {
+        "code": "insufficient_data",
+        "label": "Insufficient Market Confirmation Evidence",
+        "confirmation_test_count": None,
+        "evidence": {},
+        "offsets": [],
+        "missing_inputs": ["S&P 500 market phase"],
+    }
+    return result
 
 
 def _market_setup_v2_evidence_layers():
@@ -7925,7 +7938,97 @@ def test_market_setup_v2_rendering_hides_machine_codes_and_details_are_collapsed
     assert "macro_financial_conditions" not in html
     assert "maintain_modest_defensive_exposure" not in html
     assert "bear_market" not in html
+    assert "consumer_demand_outlook" not in html
+    assert "Consumer Demand Outlook" in html
     assert "<summary>Underlying metrics</summary>" in html
+
+
+def _render_market_setup_v2_non_directional_fixture():
+    setup = _v2_setup_payload(
+        regime={"code": "growth_decelerating", "label": "Growth Decelerating"},
+        confirmation={
+            "code": "insufficient_data",
+            "label": "Insufficient Market Confirmation Evidence",
+            "confirmation_test_count": None,
+            "evidence": {},
+            "offsets": [],
+        },
+        setup={
+            "code": "insufficient_data",
+            "label": "Insufficient Data",
+            "agreement": "incomplete",
+        },
+        posture={"code": "insufficient_data", "label": "Insufficient Data"},
+        extra={
+            "evidence_layers": market_setup_evidence_layers.build_evidence_layers(
+                market_setup_result=_market_setup_v2_non_directional_result(),
+                survey_synthesis={
+                    "period": "2026-06",
+                    "economic_direction": "aligned_expansion",
+                    "growth_momentum": "falling",
+                    "expected_gdp_direction": "slowing",
+                },
+                expected_growth={
+                    "facts": {
+                        "survey_growth_direction": {
+                            "direction": "slowing",
+                            "status": "available",
+                            "source_period": {
+                                "effective_date": "2026-06-30",
+                                "reference_period": "2026-06",
+                            },
+                        }
+                    }
+                },
+                financial_conditions={},
+                policy_response={},
+                consumer_demand={},
+            )
+        },
+    )
+    script = textwrap.dedent("""\
+        const fs = require("fs");
+        const vm = require("vm");
+        const elements = {
+          dashboardStatus: {},
+          marketGrid: { innerHTML: "", querySelectorAll: () => [] },
+          marketDetail: { innerHTML: "" },
+          marketSetup: { innerHTML: "", querySelectorAll: () => [] },
+          marketSetupStatus: { textContent: "" },
+        };
+        global.window = { __MEOWSTREET_TEST__: true };
+        global.document = {
+          getElementById: (id) => elements[id],
+          querySelectorAll: () => [],
+        };
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ markets: [] }),
+        });
+        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        const hooks = window.__macroDashboardTestHooks;
+        const pr = hooks.buildMarketSetupPresentation(%s);
+        const html = hooks.renderDecisionHero(pr) + hooks.renderEvidenceLayers(pr.evidenceLayers);
+        console.log(JSON.stringify({ html: html }));
+    """)
+    result = subprocess.run(
+        ["node", "-e", script % json.dumps(setup)],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    return json.loads(result.stdout)["html"]
+
+
+def test_market_setup_non_directional_confirmation_shows_status_not_test_marks():
+    html = _render_market_setup_v2_non_directional_fixture()
+
+    assert "ms-dp-test-mark" not in html
+    assert "Insufficient Market Confirmation Evidence" in html
+    assert "Missing: " in html
+    assert "market phase" in html
 
 
 def test_market_setup_evidence_layers_render_and_legacy_fallback():

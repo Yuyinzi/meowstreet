@@ -484,14 +484,72 @@ def test_decision_path_degrades_when_test_count_is_none():
     step2 = layers["decision_path"]["steps"][1]
     assert step2["passed_count"] is None
     assert step2["total"] is None
-    assert all(test["state_label"] is None for test in step2["tests"])
-    assert all(test["passed"] is False for test in step2["tests"])
+    assert step2["tests"] == []
+    assert step2["missing_inputs"] == []
     assert step2["output"]["label"] == "Confirmation Pending a Directional Regime"
 
     pricing = layers["market_pricing"]
     assert pricing["tests_passed"] is None
     assert pricing["tests_total"] is None
     assert pricing["tests_summary"] is None
+    assert pricing["tests"] == []
+    assert pricing["status_label"] == "Confirmation Pending a Directional Regime"
+    assert pricing["missing_inputs"] == []
+
+
+def test_insufficient_confirmation_does_not_render_fake_test_votes():
+    result = _market_setup_result()
+    result["market_confirmation"] = {
+        "code": "insufficient_data",
+        "label": "Insufficient Market Confirmation Evidence",
+        "confirmation_test_count": None,
+        "evidence": {},
+        "offsets": [],
+        "missing_inputs": ["S&P 500 market phase", "credit conditions"],
+    }
+    layers = market_setup_evidence_layers.build_evidence_layers(
+        market_setup_result=result
+    )
+    step2 = layers["decision_path"]["steps"][1]
+    assert step2["tests"] == []
+    assert step2["passed_count"] is None
+    assert step2["total"] is None
+    assert step2["missing_inputs"] == ["S&P 500 market phase", "credit conditions"]
+    assert step2["output"]["label"] == "Insufficient Market Confirmation Evidence"
+
+    pricing = layers["market_pricing"]
+    assert pricing["tests"] == []
+    assert pricing["tests_passed"] is None
+    assert pricing["tests_total"] is None
+    assert pricing["tests_summary"] is None
+    assert pricing["status_label"] == "Insufficient Market Confirmation Evidence"
+    assert pricing["missing_inputs"] == ["S&P 500 market phase", "credit conditions"]
+
+
+def test_directional_confirmation_still_exposes_three_tests():
+    layers = market_setup_evidence_layers.build_evidence_layers(**_full_kwargs())
+    step2 = layers["decision_path"]["steps"][1]
+    assert [test["id"] for test in step2["tests"]] == [
+        "equity_trend",
+        "credit",
+        "volatility",
+    ]
+    assert step2["passed_count"] == 1
+    assert step2["missing_inputs"] == []
+    assert layers["market_pricing"]["tests_passed"] == 1
+    assert layers["market_pricing"]["tests_total"] == 3
+    assert layers["market_pricing"]["status_label"] is None
+
+
+def test_excluded_inputs_use_display_labels_not_fact_ids():
+    layers = market_setup_evidence_layers.build_evidence_layers(**_full_kwargs())
+
+    assert layers["portfolio_conclusion"]["excluded_inputs"] == [
+        "Consumer Demand Outlook"
+    ]
+    assert all(
+        "_" not in label for label in layers["portfolio_conclusion"]["excluded_inputs"]
+    )
 
 
 def test_leading_expectations_group_roles_and_fields():
@@ -646,7 +704,7 @@ def test_portfolio_conclusion_maps_exposure_fields():
         "VIX crosses the approved confirmation threshold from normal"
     ]
     assert conclusion["watch_items"] == ["Jobless claims"]
-    assert conclusion["excluded_inputs"] == ["consumer_demand_outlook"]
+    assert conclusion["excluded_inputs"] == ["Consumer Demand Outlook"]
     assert conclusion["method_versions"]["market_setup"] == "market_setup_v2"
 
 
@@ -753,6 +811,8 @@ def test_none_inputs_degrade_without_errors():
     assert steps[0]["output"]["label"] is None
     assert steps[1]["passed_count"] is None
     assert steps[1]["total"] is None
+    assert steps[1]["tests"] == []
+    assert steps[1]["missing_inputs"] == []
     assert steps[2]["output"]["label"] is None
     assert steps[3]["output"]["label"] is None
 
@@ -763,6 +823,9 @@ def test_none_inputs_degrade_without_errors():
     pricing = layers["market_pricing"]
     assert pricing["tests_passed"] is None
     assert pricing["tests_total"] is None
+    assert pricing["tests"] == []
+    assert pricing["status_label"] is None
+    assert pricing["missing_inputs"] == []
     assert pricing["liquidity_offset"] is None
     assert pricing["offsets"] == []
     assert pricing["context"] == []
@@ -771,6 +834,7 @@ def test_none_inputs_degrade_without_errors():
     assert conclusion["posture_code"] is None
     assert conclusion["net_exposure"] is None
     assert conclusion["positioning"] == []
+    assert conclusion["excluded_inputs"] == []
     assert conclusion["method_versions"] == {}
 
     reality = _groups(layers["economic_reality"])
