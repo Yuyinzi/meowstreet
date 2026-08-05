@@ -2187,13 +2187,7 @@
         html += '<div class="ms-dp-track">' + renderDecisionPathStep(step) + '</div>';
       });
       html += '</div>';
-      html += '<div class="ms-dp-converge">';
-      html += '<div class="ms-dp-converge-lines" aria-hidden="true">';
-      html += '<span class="ms-dp-converge-line-left"></span>';
-      html += '<span class="ms-dp-converge-line-right"></span>';
-      html += '</div>';
-      html += '<span class="ms-dp-converge-label">Converges into</span>';
-      html += '</div>';
+      html += '<div class="ms-dp-connector" aria-hidden="true">↓</div>';
     }
     downstream.forEach(function(step, index) {
       html += renderDecisionPathStep(step);
