@@ -231,10 +231,6 @@ _GOVERNANCE_LEGEND = [
     },
 ]
 
-_GOVERNANCE_DESCRIPTIONS = {
-    entry["status"]: entry["description"] for entry in _GOVERNANCE_LEGEND
-}
-
 _EXCLUDED_FACT_LABELS = {
     "macro_financial_conditions": "Financial Conditions",
     "macro_policy_response": "Monetary Policy",

@@ -7927,7 +7927,8 @@ def test_market_setup_renders_decision_path_before_partitioned_evidence():
     html = _render_market_setup_v2_fixture()
 
     assert html.index("Why This Setup?") < html.index("Decision Inputs")
-    assert html.index("Decision Inputs") < html.index("Supplementary Macro Context")
+    assert html.index("Decision Inputs") < html.index("Decision Output")
+    assert html.index("Decision Output") < html.index("Supplementary Macro Context")
     assert "Growth Surveys" in html
     assert "Regime Selector" in html
     assert "Approved confirmation tests: 1 / 3" in html
