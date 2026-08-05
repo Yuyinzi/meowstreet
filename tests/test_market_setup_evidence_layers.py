@@ -865,13 +865,6 @@ def test_governance_legend_is_ordered_and_covers_all_statuses():
     assert all(entry["description"] for entry in legend)
 
 
-def test_m2_appears_only_as_liquidity_offset():
-    layer = market_pricing_layer_for_downside_case()
-
-    assert layer["liquidity_offset"] is not None
-    assert layer["offsets"] == []
-
-
 def test_no_raw_underscore_codes_in_user_facing_strings():
     layers = market_setup_evidence_layers.build_evidence_layers(**_full_kwargs())
     offenders = []

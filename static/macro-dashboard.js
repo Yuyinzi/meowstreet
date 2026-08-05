@@ -2042,62 +2042,6 @@
     return html;
   }
 
-  function renderEvidenceGroupCard(group) {
-    if (!group) return "";
-    var html = '<div class="ms-el-group">';
-    html += '<div class="ms-el-group-head">';
-    html += '<h4 class="ms-el-group-title">' + escapeHtml(group.title || group.id || "") + '</h4>';
-    if (group.method_status === "pending_approval") {
-      html += '<span class="ms-el-method-pending">Method pending</span>';
-    }
-    html += '</div>';
-    if (group.summary) {
-      html += '<p class="ms-el-summary ' + stateSentimentClass(group.sentiment) + '">' + escapeHtml(group.summary) + '</p>';
-    }
-    if (group.data_status && group.data_status !== "available") {
-      var statusLabel = group.data_status === "missing" ? "Data not available"
-        : group.data_status === "not_collected" ? "Not yet collected"
-        : titleCaseToken(group.data_status);
-      html += '<p class="ms-el-data-status">' + escapeHtml(statusLabel) + '</p>';
-    }
-    var metrics = group.metrics || [];
-    if (metrics.length) {
-      html += '<ul class="ms-el-metrics">';
-      metrics.forEach(function(metric) {
-        html += '<li class="ms-el-metric">';
-        html += '<span class="ms-el-metric-label">' + escapeHtml(metric.label || "") + '</span>';
-        html += '<span class="ms-el-metric-value ' + stateSentimentClass(metric.sentiment) + '">' +
-          escapeHtml(metric.value != null ? metric.value : "\u2014") + '</span>';
-        if (metric.period) {
-          html += '<span class="ms-el-metric-period">' + escapeHtml(metric.period) + '</span>';
-        }
-        html += '</li>';
-      });
-      html += '</ul>';
-    }
-    if (group.note) {
-      html += '<p class="ms-el-note">' + escapeHtml(group.note) + '</p>';
-    }
-    html += '</div>';
-    return html;
-  }
-
-  function renderEvidenceGroupsLayer(layer, index) {
-    if (!layer) return "";
-    var html = '<section class="ms-evidence-layer ms-el-section">';
-    html += renderEvidenceLayerHead(layer, index);
-    var groups = layer.groups || [];
-    if (groups.length) {
-      html += '<div class="ms-el-groups">';
-      groups.forEach(function(group) {
-        html += renderEvidenceGroupCard(group);
-      });
-      html += '</div>';
-    }
-    html += '</section>';
-    return html;
-  }
-
   function renderEvidenceFindings(title, entries) {
     var list = entries || [];
     if (!list.length) return "";
@@ -2121,85 +2065,6 @@
       html += '<li>' + escapeHtml((item && item.label) || (item && item.id) || item) + '</li>';
     });
     html += '</ul></div>';
-    return html;
-  }
-
-  function renderMarketPricingLayer(layer, index) {
-    if (!layer) return "";
-    var html = '<section class="ms-evidence-layer ms-el-section">';
-    html += renderEvidenceLayerHead(layer, index);
-    var testsTotal = layer.tests_total != null ? layer.tests_total : 3;
-    var testsPassed = layer.tests_passed != null ? layer.tests_passed : 0;
-    html += '<p class="ms-el-tests-summary">Approved confirmation tests: ' +
-      escapeHtml(testsPassed + " / " + testsTotal) + '</p>';
-    var tests = layer.tests || [];
-    if (tests.length) {
-      html += '<ul class="ms-el-tests">';
-      tests.forEach(function(test) {
-        html += '<li class="ms-el-test">';
-        html += '<span class="ms-el-test-label">' + escapeHtml(test.label || test.id || "") + '</span>';
-        if (test.state) {
-          html += '<span class="ms-el-test-state ' + stateSentimentClass(test.state) + '">' +
-            escapeHtml(titleCaseToken(test.state)) + '</span>';
-        }
-        html += '<span class="ms-el-test-verdict">' + (test.confirms_downside ? "Confirmed" : "Not confirmed") + '</span>';
-        html += '</li>';
-      });
-      html += '</ul>';
-    }
-    html += renderEvidenceFindings("Offsets", layer.offsets);
-    html += renderEvidenceFindings("Context (non-voting)", layer.context);
-    html += '</section>';
-    return html;
-  }
-
-  function renderPortfolioConclusionLayer(layer, index) {
-    if (!layer) return "";
-    var html = '<section class="ms-evidence-layer ms-el-section">';
-    html += renderEvidenceLayerHead(layer, index);
-    if (layer.posture_label) {
-      html += '<p class="ms-el-posture ' + stateSentimentClass(layer.posture_code) + '">' +
-        escapeHtml(layer.posture_label) + '</p>';
-    }
-    var positioning = layer.positioning || [];
-    var avoid = layer.avoid || [];
-    if (positioning.length || avoid.length) {
-      html += '<div class="ms-el-action-grid">';
-      if (positioning.length) {
-        html += '<div class="ms-el-action-col"><h4>Positioning</h4><ul>';
-        positioning.forEach(function(item) {
-          html += '<li>' + escapeHtml((item && item.label) || item) + '</li>';
-        });
-        html += '</ul></div>';
-      }
-      if (avoid.length) {
-        html += '<div class="ms-el-action-col"><h4>Avoid</h4><ul>';
-        avoid.forEach(function(item) {
-          html += '<li>' + escapeHtml((item && item.label) || item) + '</li>';
-        });
-        html += '</ul></div>';
-      }
-      html += '</div>';
-    }
-    html += renderEvidenceStringList("Next Triggers", layer.next_triggers, "ms-el-trigger-list");
-    html += renderEvidenceStringList("Watch Items", layer.watch_items, "ms-el-watch-list");
-    var excluded = layer.excluded_inputs || [];
-    if (excluded.length) {
-      html += '<p class="ms-el-excluded">Excluded from v2: ' + escapeHtml(excluded.join(" \u00B7 ")) + '</p>';
-    }
-    html += '</section>';
-    return html;
-  }
-
-  function renderEvidenceLayersV1(layers) {
-    if (!layers) return "";
-    var html = '<div class="ms-el">';
-    html += renderEvidenceGroupsLayer(layers.leading_expectations, 1);
-    html += renderEvidenceGroupsLayer(layers.economic_reality, 2);
-    html += renderEvidenceGroupsLayer(layers.final_confirmation, 3);
-    html += renderMarketPricingLayer(layers.market_pricing, 4);
-    html += renderPortfolioConclusionLayer(layers.portfolio_conclusion, 5);
-    html += '</div>';
     return html;
   }
 
@@ -2609,7 +2474,7 @@
   function renderEvidenceLayers(layers) {
     if (!layers) return "";
     if (layers.version !== "market_setup_evidence_layers_v2") {
-      return renderEvidenceLayersV1(layers);
+      return "";
     }
     var html = '<div class="ms-el">';
     html += renderDecisionPath(layers.decision_path);
