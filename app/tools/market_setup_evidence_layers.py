@@ -641,8 +641,6 @@ def _market_pricing_layer(market_setup_result):
         ),
         "status_label": confirmation.get("label") if not has_count else None,
         "missing_inputs": confirmation.get("missing_inputs") or [],
-        "tests_passed": test_count if has_count else None,
-        "tests_total": 3 if has_count else None,
         "tests": _confirmation_tests(confirmation),
         "liquidity_offset": liquidity_offset,
         "offsets": offsets,

@@ -502,8 +502,6 @@ def test_decision_path_degrades_when_test_count_is_none():
     assert step2["output"]["label"] == "Confirmation Pending a Directional Regime"
 
     pricing = layers["market_pricing"]
-    assert pricing["tests_passed"] is None
-    assert pricing["tests_total"] is None
     assert pricing["tests_summary"] is None
     assert pricing["tests"] == []
     assert pricing["status_label"] == "Confirmation Pending a Directional Regime"
@@ -532,8 +530,6 @@ def test_insufficient_confirmation_does_not_render_fake_test_votes():
 
     pricing = layers["market_pricing"]
     assert pricing["tests"] == []
-    assert pricing["tests_passed"] is None
-    assert pricing["tests_total"] is None
     assert pricing["tests_summary"] is None
     assert pricing["status_label"] == "Insufficient Market Confirmation Evidence"
     assert pricing["missing_inputs"] == ["S&P 500 market phase", "credit conditions"]
@@ -549,8 +545,6 @@ def test_directional_confirmation_still_exposes_three_tests():
     ]
     assert step2["passed_count"] == 1
     assert step2["missing_inputs"] == []
-    assert layers["market_pricing"]["tests_passed"] == 1
-    assert layers["market_pricing"]["tests_total"] == 3
     assert layers["market_pricing"]["status_label"] is None
 
 
@@ -654,8 +648,6 @@ def test_market_pricing_exposes_exactly_three_confirmation_tests_and_one_non_vot
         "credit",
         "volatility",
     ]
-    assert layer["tests_passed"] == 1
-    assert layer["tests_total"] == 3
     assert layer["liquidity_offset"]["test_contribution"] == "None"
     assert layer["offsets"] == []
 
@@ -695,8 +687,6 @@ def test_market_pricing_exposes_tests_and_liquidity_offset():
     layers = market_setup_evidence_layers.build_evidence_layers(**_full_kwargs())
     pricing = layers["market_pricing"]
     assert pricing["tests_summary"] == "Approved confirmation tests: 1 / 3"
-    assert pricing["tests_passed"] == 1
-    assert pricing["tests_total"] == 3
     assert [test["id"] for test in pricing["tests"]] == [
         "equity_trend",
         "credit",
@@ -896,8 +886,6 @@ def test_none_inputs_degrade_without_errors():
         assert group["current_state"] is None
 
     pricing = layers["market_pricing"]
-    assert pricing["tests_passed"] is None
-    assert pricing["tests_total"] is None
     assert pricing["tests"] == []
     assert pricing["status_label"] is None
     assert pricing["missing_inputs"] == []
