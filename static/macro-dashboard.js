@@ -2266,7 +2266,7 @@
         html += '</ul>';
       }
       if (step.missing_inputs && step.missing_inputs.length) {
-        html += '<span class="ms-dp-test-count">Missing: ' + escapeHtml(step.missing_inputs.join(", ")) + '</span>';
+        html += '<span class="ms-dp-test-count ms-dp-missing">Missing: ' + escapeHtml(step.missing_inputs.join(", ")) + '</span>';
       }
       if (step.passed_count != null && step.total != null) {
         html += '<span class="ms-dp-test-count">' +
