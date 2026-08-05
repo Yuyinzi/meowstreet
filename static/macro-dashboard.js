@@ -1827,7 +1827,8 @@
     html += '<div class="ms-hero-head">';
     html += '<h2 class="ms-hero-conclusion">Market Setup</h2>';
     if (pr.evidenceThrough) {
-      html += '<span class="ms-hero-date">Evidence through ' + escapeHtml(pr.evidenceThrough) + '</span>';
+      html += '<span class="ms-hero-date" title="Common evidence cutoff — individual source periods may differ">' +
+        'Common evidence cutoff: ' + escapeHtml(pr.evidenceThrough) + '</span>';
     }
     html += '</div>';
     html += '<div class="ms-layer-strip">';
@@ -2247,12 +2248,13 @@
         evidence += '<ul class="ms-dp-tests">';
         tests.forEach(function(test) {
           evidence += '<li class="ms-dp-test">';
-          evidence += '<span class="ms-dp-test-mark ' + (test.passed ? "constructive" : "defensive") + '">' +
-            (test.passed ? "✓" : "✕") + '</span>';
           evidence += '<span class="ms-dp-test-label">' + escapeHtml(test.label || test.id || "") + '</span>';
           if (test.state_label) {
             evidence += '<span class="ms-dp-test-state ' + stateSentimentClass(test.sentiment) + '">' +
               escapeHtml(test.state_label) + '</span>';
+          }
+          if (test.verdict_label) {
+            evidence += '<span class="ms-dp-test-verdict">' + escapeHtml(test.verdict_label) + '</span>';
           }
           evidence += '</li>';
         });
@@ -2269,6 +2271,19 @@
       var inputs = step.inputs || [];
       if (inputs.length) {
         evidence += '<span class="ms-dp-io">' + escapeHtml(inputs.join(" + ")) + '</span>';
+      }
+    } else if (kind === "action") {
+      var fields = output.fields || [];
+      if (fields.length) {
+        evidence += '<ul class="ms-dp-posture-fields">';
+        fields.forEach(function(field) {
+          if (!field.value) return;
+          evidence += '<li class="ms-dp-posture-field">';
+          evidence += '<span class="ms-dp-posture-field-label">' + escapeHtml(field.label) + '</span>';
+          evidence += '<span class="ms-dp-posture-field-value">' + escapeHtml(field.value) + '</span>';
+          evidence += '</li>';
+        });
+        evidence += '</ul>';
       }
     }
     if (evidence) {
@@ -2406,8 +2421,8 @@
           html += '<span class="ms-el-test-state ' + stateSentimentClass(test.sentiment) + '">' +
             escapeHtml(test.state_label) + '</span>';
         }
-        if (test.passed != null) {
-          html += '<span class="ms-el-test-verdict">' + (test.passed ? "Confirmed" : "Not confirmed") + '</span>';
+        if (test.verdict_label) {
+          html += '<span class="ms-el-test-verdict">' + escapeHtml(test.verdict_label) + '</span>';
         }
         if (test.finding) {
           html += '<span class="ms-el-test-finding">' + escapeHtml(test.finding) + '</span>';

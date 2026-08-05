@@ -273,11 +273,27 @@ def _test_contribution(confirms, state):
     return "1 of 3" if confirms else "0 of 3"
 
 
+def _test_verdict(confirms, direction):
+    if confirms:
+        return f"Confirms {direction}" if direction else "Confirms"
+    return "Does not confirm"
+
+
+def _thesis_direction(confirmation):
+    code = str(confirmation.get("code") or "")
+    if code.endswith("_downside"):
+        return "downside"
+    if code.endswith("_upside"):
+        return "upside"
+    return None
+
+
 def _confirmation_tests(confirmation):
     test_count = confirmation.get("confirmation_test_count")
     has_count = isinstance(test_count, int) and not isinstance(test_count, bool)
     if not has_count:
         return []
+    direction = _thesis_direction(confirmation)
     evidence = _dict(confirmation.get("evidence"))
     tests = []
     for test_id in _TEST_ORDER:
@@ -291,6 +307,7 @@ def _confirmation_tests(confirmation):
                 "state_label": _display(state, _STATE_LABELS),
                 "sentiment": state,
                 "passed": confirms,
+                "verdict_label": _test_verdict(confirms, direction),
                 "test_contribution": _test_contribution(confirms, state),
                 "finding": record.get("finding"),
             }
@@ -354,6 +371,32 @@ def _decision_path(market_setup_result, expected_growth, survey_synthesis):
             "output": {
                 "label": posture.get("label"),
                 "sentiment": posture.get("code"),
+                "fields": [
+                    {
+                        "label": "Net exposure",
+                        "value": _display(
+                            posture.get("net_exposure"), _NET_EXPOSURE_LABELS
+                        ),
+                    },
+                    {
+                        "label": "Gross exposure",
+                        "value": _display(
+                            posture.get("gross_exposure"), _GROSS_EXPOSURE_LABELS
+                        ),
+                    },
+                    {
+                        "label": "Implementation",
+                        "value": _display(
+                            posture.get("implementation"), _IMPLEMENTATION_LABELS
+                        ),
+                    },
+                    {
+                        "label": "Broad beta",
+                        "value": _display(
+                            posture.get("broad_beta"), _BROAD_BETA_LABELS
+                        ),
+                    },
+                ],
             },
         },
     ]

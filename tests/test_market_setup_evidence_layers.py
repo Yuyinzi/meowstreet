@@ -443,13 +443,16 @@ def test_decision_path_maps_the_four_steps():
     assert credit["state_label"] == "Risk Rising"
     assert credit["sentiment"] == "risk_rising"
     assert credit["passed"] is True
+    assert credit["verdict_label"] == "Confirms downside"
     assert credit["finding"] == "credit conditions confirm the directional regime"
     equity = step2["tests"][0]
     assert equity["label"] == "S&P 500 Trend"
     assert equity["state_label"] == "Bull Market"
     assert equity["passed"] is False
+    assert equity["verdict_label"] == "Does not confirm"
     volatility = step2["tests"][2]
     assert volatility["state_label"] == "Normal"
+    assert volatility["verdict_label"] == "Does not confirm"
     assert step2["passed_count"] == 1
     assert step2["total"] == 3
     assert step2["output"] == {
@@ -466,7 +469,14 @@ def test_decision_path_maps_the_four_steps():
     }
 
     step4 = steps[3]
-    assert step4["output"] == {"label": "Mild Risk-Off", "sentiment": "mild_risk_off"}
+    assert step4["output"]["label"] == "Mild Risk-Off"
+    assert step4["output"]["sentiment"] == "mild_risk_off"
+    assert step4["output"]["fields"] == [
+        {"label": "Net exposure", "value": "Modest defensive"},
+        {"label": "Gross exposure", "value": "Moderate"},
+        {"label": "Implementation", "value": "Selective defensive positions"},
+        {"label": "Broad beta", "value": "Reduce large directional exposure"},
+    ]
 
 
 def test_decision_path_degrades_when_test_count_is_none():
@@ -539,6 +549,30 @@ def test_directional_confirmation_still_exposes_three_tests():
     assert layers["market_pricing"]["tests_passed"] == 1
     assert layers["market_pricing"]["tests_total"] == 3
     assert layers["market_pricing"]["status_label"] is None
+
+
+def test_confirmation_test_verdicts_follow_thesis_direction():
+    result = _market_setup_result()
+    result["market_confirmation"] = {
+        "code": "partially_confirming_upside",
+        "label": "Upside Partially Confirmed",
+        "confirmation_test_count": 2,
+        "evidence": {
+            "equity_trend": {"state": "bull_market", "confirms": True},
+            "credit": {"state": "stable", "confirms": True},
+            "volatility": {"state": "normal", "confirms": False},
+        },
+        "offsets": [],
+    }
+    layers = market_setup_evidence_layers.build_evidence_layers(
+        market_setup_result=result
+    )
+    step2 = layers["decision_path"]["steps"][1]
+    assert [test["verdict_label"] for test in step2["tests"]] == [
+        "Confirms upside",
+        "Confirms upside",
+        "Does not confirm",
+    ]
 
 
 def test_excluded_inputs_use_display_labels_not_fact_ids():
