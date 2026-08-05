@@ -2433,13 +2433,7 @@
       if (liquidityOffset.finding) {
         html += '<span class="ms-el-test-finding">' + escapeHtml(liquidityOffset.finding) + '</span>';
       }
-      if (liquidityOffset.decision_effect) {
-        html += '<span class="ms-el-test-finding">' + escapeHtml(liquidityOffset.decision_effect) + '</span>';
-      }
       html += '</div>';
-      if (liquidityOffset.test_contribution) {
-        html += '<p class="ms-el-note">Not included in test count</p>';
-      }
       if (liquidityOffset.note) {
         html += '<p class="ms-el-note">' + escapeHtml(liquidityOffset.note) + '</p>';
       }
