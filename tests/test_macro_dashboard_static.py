@@ -7591,7 +7591,6 @@ def test_market_setup_css_has_decision_path_and_partition_styles():
     assert ".ms-dp-conclusion" in css
     assert ".ms-dp-test-verdict" in css
     assert ".ms-dp-posture-fields" in css
-    assert ".ms-el-partition-title" in css
     assert ".ms-el-role-badge-regime" in css
     assert ".ms-el-details summary:focus-visible" in css
     assert ".ms-el-liquidity-offset" in css

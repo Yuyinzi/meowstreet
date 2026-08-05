@@ -5451,28 +5451,6 @@ h2 {
   }
 }
 
-.ms-el-partition {
-  margin: 18px 0 8px;
-  padding-top: 12px;
-  border-top: 1px solid #E8E0D6;
-}
-
-.ms-el-partition-title {
-  font-size: 13px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #3B3530;
-  margin: 0 0 4px;
-}
-
-.ms-el-partition-note {
-  font-size: 11px;
-  color: #A89B91;
-  line-height: 1.4;
-  margin: 0;
-}
-
 .ms-el-collapsible {
   margin: 0 0 14px;
   border: 1px solid #E8E0D6;
