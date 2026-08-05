@@ -5,22 +5,30 @@ _BOUNDARY_NOTE = (
     "do not participate in Market Setup v2 classification."
 )
 
-_ECONOMIC_REALITY_SCOPE_NOTE = "Supplementary — does not affect Market Setup v2."
+_ECONOMIC_REALITY_SCOPE_NOTE = (
+    "Supplementary economic evidence — modules may be context-only, "
+    "method-pending, or not implemented. None affects Market Setup v2."
+)
 
 _FINAL_CONFIRMATION_SCOPE_NOTE = (
-    "Used for cycle positioning and review — does not participate in "
-    "Market Setup v2 classification."
+    "Lagging outcomes are used for cycle positioning and retrospective "
+    "review. They are intentionally excluded from Market Setup v2."
 )
 
 _LIQUIDITY_OFFSET_NOTE = "Offset only — not included in the confirmation test count."
 
 _LIQUIDITY_OFFSET_LABEL = "Liquidity Offset"
 
+_LIQUIDITY_OFFSET_ID = "m2_liquidity_support"
+
 _OFFSET_DECISION_EFFECT = "Offset only"
 
 _OFFSET_TEST_CONTRIBUTION = "None"
 
-_REAL_ACTIVITY_REASON = "Trend window and classification method are pending approval."
+_REAL_ACTIVITY_REASON = (
+    "Data are available, but no directional classification method has been "
+    "approved. No current decision effect."
+)
 
 _DECISION_EFFECT_NONE = "No effect on Market Setup v2"
 
@@ -191,6 +199,40 @@ _TEST_ORDER = ("equity_trend", "credit", "volatility")
 _GROUP_ROLE_LABELS = {
     "regime_selector": "Regime Selector",
     "supporting_evidence": "Supporting Evidence",
+}
+
+_GOVERNANCE_STATUS_LABELS = {
+    "context_only": "Context Only",
+    "method_pending": "Method Pending",
+    "review_only": "Review Only",
+    "not_implemented": "Not Implemented",
+}
+
+_GOVERNANCE_LEGEND = [
+    {
+        "status": "context_only",
+        "label": "Context Only",
+        "description": "Approved contextual role; no classification effect.",
+    },
+    {
+        "status": "method_pending",
+        "label": "Method Pending",
+        "description": "Data available; classification method not approved.",
+    },
+    {
+        "status": "review_only",
+        "label": "Review Only",
+        "description": "Used for cycle review; intentionally non-decision.",
+    },
+    {
+        "status": "not_implemented",
+        "label": "Not Implemented",
+        "description": "Data or module not yet available.",
+    },
+]
+
+_GOVERNANCE_DESCRIPTIONS = {
+    entry["status"]: entry["description"] for entry in _GOVERNANCE_LEGEND
 }
 
 _EXCLUDED_FACT_LABELS = {
@@ -591,6 +633,7 @@ def _market_pricing_layer(market_setup_result):
     offsets = [
         {"id": _dict(offset).get("id"), "finding": _dict(offset).get("finding")}
         for offset in confirmation.get("offsets") or []
+        if _dict(offset).get("id") != _LIQUIDITY_OFFSET_ID
     ]
 
     return {
@@ -702,6 +745,13 @@ def _claims_metric(label, trend):
     )
 
 
+def _governance(status):
+    return {
+        "governance_status": status,
+        "governance_status_label": _GOVERNANCE_STATUS_LABELS[status],
+    }
+
+
 def _labor_group(overview):
     claims = _dict(_dict(overview).get("claims_confirmation"))
     labor_context = _dict(_dict(overview).get("labor_context"))
@@ -747,6 +797,7 @@ def _labor_group(overview):
         "sentiment": claims_direction,
         "data_status": "available" if details_metrics else "missing",
         "details_metrics": details_metrics,
+        **_governance("context_only"),
     }
 
 
@@ -776,6 +827,7 @@ def _real_activity_group(overview):
         "coverage": coverage,
         "data_status": data_status,
         "details_metrics": details_metrics,
+        **_governance("method_pending"),
     }
 
 
@@ -823,9 +875,10 @@ def _economic_output_group(gdp_rows):
             "period": None,
             "data_status": "missing",
             "details_metrics": [],
+            **_governance("review_only"),
         }
     latest = rows[-1]
-    direction_code, direction_label = _GDP_DIRECTION_LABELS.get(
+    _, direction_label = _GDP_DIRECTION_LABELS.get(
         latest.get("gdp_direction"), (None, None)
     )
     period = latest.get("period_label") or latest.get("date")
@@ -833,23 +886,17 @@ def _economic_output_group(gdp_rows):
         _metric("GDP Level", latest.get("gdp_level"), period=period),
     ]
     if direction_label:
-        details_metrics.append(
-            _metric(
-                "GDP Direction",
-                direction_label,
-                period=period,
-                sentiment=direction_code,
-            )
-        )
+        details_metrics.append(_metric("GDP Direction", direction_label, period=period))
     return {
         "id": "economic_output",
         "title": "Economic Output (GDP)",
         "formal_signal": f"GDP: {direction_label}" if direction_label else None,
-        "sentiment": direction_code,
+        "sentiment": None,
         "decision_effect": _DECISION_EFFECT_NONE,
         "period": period,
         "data_status": "available",
         "details_metrics": details_metrics,
+        **_governance("review_only"),
     }
 
 
@@ -862,7 +909,7 @@ def _final_confirmation_layer(gdp_rows):
     )
     return {
         "layer_id": "final_confirmation",
-        "title": "Final / Lagging Confirmation",
+        "title": "Lagging Outcomes & Cycle Review",
         "role": "review_only",
         "scope_note": _FINAL_CONFIRMATION_SCOPE_NOTE,
         "coverage_summary": [gdp_coverage, "Corporate results: not implemented"],
@@ -888,6 +935,7 @@ def build_evidence_layers(
     return {
         "version": EVIDENCE_LAYERS_VERSION,
         "boundary_note": _BOUNDARY_NOTE,
+        "governance_legend": list(_GOVERNANCE_LEGEND),
         "decision_path": _decision_path(
             market_setup_result, expected_growth, survey_synthesis
         ),

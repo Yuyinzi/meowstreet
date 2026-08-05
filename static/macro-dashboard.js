@@ -1827,8 +1827,8 @@
     html += '<div class="ms-hero-head">';
     html += '<h2 class="ms-hero-conclusion">Market Setup</h2>';
     if (pr.evidenceThrough) {
-      html += '<span class="ms-hero-date" title="Common evidence cutoff — individual source periods may differ">' +
-        'Common evidence cutoff: ' + escapeHtml(pr.evidenceThrough) + '</span>';
+      html += '<span class="ms-hero-date" title="Individual source periods vary and may be more recent">' +
+        'Oldest required evidence date: ' + escapeHtml(pr.evidenceThrough) + '</span>';
     }
     html += '</div>';
     html += '<div class="ms-layer-strip">';

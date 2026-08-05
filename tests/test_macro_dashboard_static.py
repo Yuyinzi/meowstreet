@@ -7932,7 +7932,7 @@ def test_market_setup_renders_decision_path_before_partitioned_evidence():
     assert "Regime Selector" in html
     assert "Approved confirmation tests: 1 / 3" in html
     assert "Liquidity Offset" in html
-    assert "Supplementary — does not affect Market Setup v2" in html
+    assert "None affects Market Setup v2" in html
 
 
 def test_market_setup_v2_rendering_hides_machine_codes_and_details_are_collapsed():

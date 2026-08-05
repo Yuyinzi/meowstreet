@@ -333,6 +333,8 @@ _CODE_KEYS = {
     "method_versions",
     "excluded_inputs",
     "kind",
+    "governance_status",
+    "status",
 }
 
 _RAW_CODE_PATTERN = re.compile(r"[a-z]+_[a-z_]+")
@@ -385,6 +387,7 @@ def test_full_inputs_build_the_v2_contract():
     assert set(layers) == {
         "version",
         "boundary_note",
+        "governance_legend",
         "decision_path",
         "leading_expectations",
         "market_pricing",
@@ -654,6 +657,7 @@ def test_market_pricing_exposes_exactly_three_confirmation_tests_and_one_non_vot
     assert layer["tests_passed"] == 1
     assert layer["tests_total"] == 3
     assert layer["liquidity_offset"]["test_contribution"] == "None"
+    assert layer["offsets"] == []
 
 
 def test_evidence_layer_display_values_do_not_expose_internal_codes():
@@ -710,12 +714,7 @@ def test_market_pricing_exposes_tests_and_liquidity_offset():
         offset["note"] == "Offset only — not included in the confirmation test count."
     )
 
-    assert pricing["offsets"] == [
-        {
-            "id": "m2_liquidity_support",
-            "finding": "M2 money supply is expanding or in shock, providing liquidity support",
-        }
-    ]
+    assert pricing["offsets"] == []
     assert pricing["context"] == []
 
 
@@ -745,7 +744,10 @@ def test_portfolio_conclusion_maps_exposure_fields():
 def test_economic_reality_groups_carry_explanation_fields():
     layers = market_setup_evidence_layers.build_evidence_layers(**_full_kwargs())
     reality = layers["economic_reality"]
-    assert reality["scope_note"] == "Supplementary — does not affect Market Setup v2."
+    assert reality["scope_note"] == (
+        "Supplementary economic evidence — modules may be context-only, "
+        "method-pending, or not implemented. None affects Market Setup v2."
+    )
     assert reality["coverage_summary"] == [
         "Labor: partial",
         "Real Activity: data available, method pending",
@@ -770,7 +772,8 @@ def test_economic_reality_groups_carry_explanation_fields():
     real_activity = groups["real_activity"]
     assert real_activity["formal_signal"] == "Classification unavailable"
     assert real_activity["reason"] == (
-        "Trend window and classification method are pending approval."
+        "Data are available, but no directional classification method has been "
+        "approved. No current decision effect."
     )
     assert real_activity["decision_effect"] == "No effect on Market Setup v2"
     assert real_activity["coverage"] == (
@@ -790,7 +793,8 @@ def test_economic_reality_keeps_unapproved_real_activity_values_in_details():
 
     assert activity["formal_signal"] == "Classification unavailable"
     assert activity["reason"] == (
-        "Trend window and classification method are pending approval."
+        "Data are available, but no directional classification method has been "
+        "approved. No current decision effect."
     )
     assert activity["decision_effect"] == "No effect on Market Setup v2"
     assert activity["details_metrics"]
@@ -815,7 +819,7 @@ def test_final_confirmation_keeps_only_gdp_group():
     output = final["groups"][0]
     assert output["id"] == "economic_output"
     assert output["formal_signal"] == "GDP: Falling"
-    assert output["sentiment"] == "falling"
+    assert output["sentiment"] is None
     assert output["decision_effect"] == "No effect on Market Setup v2"
     assert output["period"] == "2026 Q2"
     assert output["data_status"] == "available"
