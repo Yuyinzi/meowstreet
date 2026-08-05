@@ -2218,10 +2218,6 @@
       stateSentimentClass(output.sentiment) + '">' + escapeHtml(output.label) + '</span>';
   }
 
-  function renderDecisionPathArrow() {
-    return '<span class="ms-dp-arrow" aria-hidden="true">→</span>';
-  }
-
   function renderDecisionPathStep(step) {
     if (!step) return "";
     var kind = step.kind || "";
@@ -2234,69 +2230,59 @@
     html += '</div>';
     html += '<div class="ms-dp-step-body">';
     var output = step.output || null;
+    var evidence = "";
     if (kind === "macro_thesis") {
       var input = step.input || {};
       var hasInput = !!(input.label || input.value);
       if (hasInput) {
-        html += '<span class="ms-dp-io">' + escapeHtml(input.label || "");
+        evidence += '<span class="ms-dp-io">' + escapeHtml(input.label || "");
         if (input.value) {
-          html += (input.label ? ": " : "") + '<strong>' + escapeHtml(input.value) + '</strong>';
+          evidence += (input.label ? ": " : "") + '<strong>' + escapeHtml(input.value) + '</strong>';
         }
-        html += '</span>';
+        evidence += '</span>';
       }
-      if (hasInput && output && output.label) {
-        html += renderDecisionPathArrow();
-      }
-      html += renderDecisionPathOutput(output);
     } else if (kind === "market_test") {
       var tests = step.tests || [];
       if (tests.length) {
-        html += '<ul class="ms-dp-tests">';
+        evidence += '<ul class="ms-dp-tests">';
         tests.forEach(function(test) {
-          html += '<li class="ms-dp-test">';
-          html += '<span class="ms-dp-test-mark ' + (test.passed ? "constructive" : "defensive") + '">' +
+          evidence += '<li class="ms-dp-test">';
+          evidence += '<span class="ms-dp-test-mark ' + (test.passed ? "constructive" : "defensive") + '">' +
             (test.passed ? "✓" : "✕") + '</span>';
-          html += '<span class="ms-dp-test-label">' + escapeHtml(test.label || test.id || "") + '</span>';
+          evidence += '<span class="ms-dp-test-label">' + escapeHtml(test.label || test.id || "") + '</span>';
           if (test.state_label) {
-            html += '<span class="ms-dp-test-state ' + stateSentimentClass(test.sentiment) + '">' +
+            evidence += '<span class="ms-dp-test-state ' + stateSentimentClass(test.sentiment) + '">' +
               escapeHtml(test.state_label) + '</span>';
           }
-          html += '</li>';
+          evidence += '</li>';
         });
-        html += '</ul>';
+        evidence += '</ul>';
       }
       if (step.missing_inputs && step.missing_inputs.length) {
-        html += '<span class="ms-dp-test-count ms-dp-missing">Missing: ' + escapeHtml(step.missing_inputs.join(", ")) + '</span>';
+        evidence += '<span class="ms-dp-test-count ms-dp-missing">Missing: ' + escapeHtml(step.missing_inputs.join(", ")) + '</span>';
       }
       if (step.passed_count != null && step.total != null) {
-        html += '<span class="ms-dp-test-count">' +
+        evidence += '<span class="ms-dp-test-count">' +
           escapeHtml(String(step.passed_count) + " / " + String(step.total)) + ' confirmed</span>';
-      }
-      if (output && output.label) {
-        html += renderDecisionPathArrow();
-        html += renderDecisionPathOutput(output);
       }
     } else if (kind === "relationship") {
       var inputs = step.inputs || [];
       if (inputs.length) {
-        html += '<span class="ms-dp-io">' + escapeHtml(inputs.join(" + ")) + '</span>';
+        evidence += '<span class="ms-dp-io">' + escapeHtml(inputs.join(" + ")) + '</span>';
       }
-      if (output && output.label) {
-        if (inputs.length) {
-          html += renderDecisionPathArrow();
-        }
-        html += renderDecisionPathOutput(output);
-        if (output.agreement) {
-          html += '<span class="ms-dp-agreement">Agreement: ' + escapeHtml(output.agreement) + '</span>';
-        }
+    }
+    if (evidence) {
+      html += '<div class="ms-dp-evidence">' + evidence + '</div>';
+    }
+    if (output && (output.label || output.agreement)) {
+      html += '<div class="ms-dp-conclusion">';
+      if (output.label) {
+        html += renderDecisionPathOutput(output, kind === "action" ? "ms-dp-output-lg" : "");
       }
-    } else if (kind === "action") {
-      if (output && output.label) {
-        html += renderDecisionPathArrow();
-        html += renderDecisionPathOutput(output, "ms-dp-output-lg");
+      if (output.agreement) {
+        html += '<span class="ms-dp-agreement">Agreement: ' + escapeHtml(output.agreement) + '</span>';
       }
-    } else {
-      html += renderDecisionPathOutput(output);
+      html += '</div>';
     }
     html += '</div></div>';
     return html;
