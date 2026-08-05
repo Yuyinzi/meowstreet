@@ -5473,6 +5473,48 @@ h2 {
   margin: 0;
 }
 
+.ms-el-collapsible {
+  margin: 0 0 14px;
+  border: 1px solid #E8E0D6;
+  border-radius: 10px;
+  background: #FDFAF7;
+  padding: 10px 14px;
+}
+
+.ms-el-collapsible-summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #3B3530;
+  padding: 2px 0;
+}
+
+.ms-el-collapsible[open] .ms-el-collapsible-summary {
+  margin-bottom: 8px;
+}
+
+.ms-el-collapsible-note {
+  font-size: 11px;
+  color: #8B7E74;
+  line-height: 1.4;
+  margin: 0 0 8px;
+}
+
+.ms-el-collapsible-body {
+  margin-top: 4px;
+}
+
+.ms-el-collapsible-body .ms-el-section {
+  margin: 0 0 12px;
+  background: #FFFFFF;
+}
+
+.ms-el-collapsible-body .ms-el-section:last-child {
+  margin-bottom: 0;
+}
+
 .ms-dp-steps {
   display: flex;
   flex-direction: column;

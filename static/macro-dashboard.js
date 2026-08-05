@@ -2068,13 +2068,16 @@
     return html;
   }
 
-  function renderEvidencePartition(title, note) {
-    var html = '<div class="ms-el-partition">';
-    html += '<h3 class="ms-el-partition-title">' + escapeHtml(title) + '</h3>';
-    if (note) {
-      html += '<p class="ms-el-partition-note">' + escapeHtml(note) + '</p>';
+  function renderCollapsibleSection(title, bodyHtml, options) {
+    var opts = options || {};
+    if (!title || !bodyHtml) return "";
+    var html = '<details class="ms-el-collapsible"' + (opts.open ? " open" : "") + '>';
+    html += '<summary class="ms-el-collapsible-summary">' + escapeHtml(title) + '</summary>';
+    if (opts.note) {
+      html += '<p class="ms-el-collapsible-note">' + escapeHtml(opts.note) + '</p>';
     }
-    html += '</div>';
+    html += '<div class="ms-el-collapsible-body">' + bodyHtml + '</div>';
+    html += '</details>';
     return html;
   }
 
@@ -2168,13 +2171,13 @@
     return html;
   }
 
+  var DECISION_PATH_TITLE = "Why This Setup?";
+
   function renderDecisionPath(decisionPath) {
     if (!decisionPath) return "";
     var steps = decisionPath.steps || [];
     if (!steps.length) return "";
-    var html = '<section class="ms-evidence-layer ms-el-section ms-dp">';
-    html += '<div class="ms-el-head"><h3 class="ms-el-title">Why This Setup?</h3></div>';
-    html += '<div class="ms-dp-steps">';
+    var html = '<div class="ms-dp-steps">';
     var tracks = steps.filter(function(step) {
       return step.kind === "macro_thesis" || step.kind === "market_test";
     });
@@ -2195,7 +2198,7 @@
         html += '<div class="ms-dp-connector" aria-hidden="true">↓</div>';
       }
     });
-    html += '</div></section>';
+    html += '</div>';
     return html;
   }
 
@@ -2471,11 +2474,13 @@
       return "";
     }
     var html = '<div class="ms-el">';
-    html += renderDecisionPath(layers.decision_path);
+    html += renderCollapsibleSection(DECISION_PATH_TITLE, renderDecisionPath(layers.decision_path));
     html += renderPortfolioConclusion(layers.portfolio_conclusion);
-    html += renderEvidencePartition("Decision Inputs", null);
-    html += renderLeadingExpectations(layers.leading_expectations);
-    html += renderMarketPricing(layers.market_pricing);
+    html += renderCollapsibleSection(
+      "Decision Inputs",
+      renderLeadingExpectations(layers.leading_expectations) +
+        renderMarketPricing(layers.market_pricing)
+    );
     var supplementaryNote = layers.boundary_note;
     if (!supplementaryNote) {
       var scopeNotes = [];
@@ -2487,10 +2492,13 @@
       }
       supplementaryNote = scopeNotes.join(" ");
     }
-    html += renderEvidencePartition("Supplementary Macro Context", supplementaryNote || null);
-    html += renderGovernanceLegend(layers.governance_legend);
-    html += renderEconomicReality(layers.economic_reality);
-    html += renderFinalConfirmation(layers.final_confirmation);
+    html += renderCollapsibleSection(
+      "Supplementary Macro Context",
+      renderGovernanceLegend(layers.governance_legend) +
+        renderEconomicReality(layers.economic_reality) +
+        renderFinalConfirmation(layers.final_confirmation),
+      { note: supplementaryNote || null }
+    );
     html += '</div>';
     return html;
   }

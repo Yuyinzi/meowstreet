@@ -7856,6 +7856,36 @@ def test_market_setup_portfolio_conclusion_keeps_unique_fields():
     assert "Large directional long exposure" in html
 
 
+def test_market_setup_regions_are_independent_collapsibles():
+    html = _render_market_setup_v2_fixture()
+
+    assert html.count('<details class="ms-el-collapsible">') == 3
+    assert '<details class="ms-el-collapsible" open' not in html
+    assert (
+        '<summary class="ms-el-collapsible-summary">Why This Setup?</summary>' in html
+    )
+    assert (
+        '<summary class="ms-el-collapsible-summary">Decision Inputs</summary>' in html
+    )
+    assert (
+        '<summary class="ms-el-collapsible-summary">Supplementary Macro Context</summary>'
+        in html
+    )
+
+    firstDetailsEnd = html.index("</details>")
+    secondDetailsStart = html.index(
+        '<details class="ms-el-collapsible">', firstDetailsEnd + 1
+    )
+    assert firstDetailsEnd < html.index("Positioning") < secondDetailsStart
+
+    assert "Growth Surveys" in html
+    assert "Approved confirmation tests: 1 / 3" in html
+    assert "Liquidity Offset" in html
+    assert "Lagging Outcomes" in html
+    assert "Context Only" in html
+    assert "None affects Market Setup v2" in html
+
+
 def test_market_setup_v2_rendering_hides_machine_codes_and_details_are_collapsed():
     html = _render_market_setup_v2_fixture()
 
