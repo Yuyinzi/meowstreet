@@ -961,6 +961,13 @@ _CONFIRMATION_MARKET_TRIGGERS = (
     "vix_stress_threshold",
 )
 
+_TRIGGER_FACT_IDS = {
+    "sp500_market_phase_change": "sp500_market_phase",
+    "credit_conditions_risk_state": "credit_conditions",
+    "vix_stress_threshold": "vix_level",
+    "ism_survey_direction_change": "survey_growth_direction",
+}
+
 _OBSERVATION_WATCH_ITEMS = {
     "equity_breadth": "Equity breadth",
     "jobless_claims": "Jobless claims",
@@ -991,9 +998,7 @@ _TRIGGER_STATE_LABELS = {
 
 
 def _trigger_state_label(value):
-    if value is None:
-        return "unavailable"
-    return _TRIGGER_STATE_LABELS.get(str(value), str(value).replace("_", " "))
+    return _TRIGGER_STATE_LABELS.get(str(value))
 
 
 def _trigger_label(trigger_id, fact):
@@ -1047,7 +1052,9 @@ def _build_triggers(
     )
 
     if direction == "stable":
-        if survey is not None:
+        if survey is not None and _fact_value_is_valid(
+            "survey_growth_direction", survey
+        ):
             triggers.append(
                 {
                     "id": "ism_survey_direction_change",
@@ -1072,6 +1079,8 @@ def _build_triggers(
         fact = facts[trigger_id]
         if fact is None:
             continue
+        if not _fact_value_is_valid(_TRIGGER_FACT_IDS[trigger_id], fact):
+            continue
         triggers.append(
             {
                 "id": trigger_id,
@@ -1080,7 +1089,7 @@ def _build_triggers(
                 "effect": _TRIGGER_DEFS[trigger_id]["effect"],
             }
         )
-    if survey is not None:
+    if survey is not None and _fact_value_is_valid("survey_growth_direction", survey):
         triggers.append(
             {
                 "id": "ism_survey_direction_change",

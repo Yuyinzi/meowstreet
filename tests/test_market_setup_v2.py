@@ -757,6 +757,33 @@ class TestMarketSetupV2Composite:
         assert result["market_setup"]["agreement"] == "aligned"
         assert result["portfolio_posture"]["code"] == "defensive"
 
+    def test_v2_downside_one_test_partially_confirmed_is_mild_risk_off(self):
+        result = market_setup_v2.build_market_setup_v2(
+            expected_growth=_expected_growth("slowing"),
+            market_environment=_market_environment("bear_market"),
+            financial_conditions=_financial_conditions("healthy", vix=15.0),
+            policy_response=_policy_response("support_confirmed"),
+        )
+        assert result["market_confirmation"]["code"] == "partially_confirming_downside"
+        assert result["market_confirmation"]["confirmation_test_count"] == 1
+        assert result["market_setup"]["code"] == "macro_weakening_partially_confirmed"
+        assert result["market_setup"]["agreement"] == "mixed"
+        assert result["portfolio_posture"]["code"] == "mild_risk_off"
+
+    def test_v2_downside_two_tests_partially_confirmed_is_mild_risk_off(self):
+        result = market_setup_v2.build_market_setup_v2(
+            expected_growth=_expected_growth("slowing"),
+            market_environment=_market_environment("bear_market"),
+            financial_conditions=_financial_conditions(
+                "healthy", vix=15.0, credit_status="risk_rising"
+            ),
+            policy_response=_policy_response("support_confirmed"),
+        )
+        assert result["market_confirmation"]["code"] == "partially_confirming_downside"
+        assert result["market_confirmation"]["confirmation_test_count"] == 2
+        assert result["market_setup"]["agreement"] == "mixed"
+        assert result["portfolio_posture"]["code"] == "mild_risk_off"
+
     def test_v2_upside_zero_tests_is_neutral_selective(self):
         result = market_setup_v2.build_market_setup_v2(
             expected_growth=_expected_growth("rising"),
@@ -929,6 +956,23 @@ class TestMarketSetupV2Composite:
         inputs["observation_only"] = {"cyclical_commodities": {"status": "extreme"}}
         changed = market_setup_v2.build_market_setup_v2(**inputs)
         assert _decision_tuple(changed) == _decision_tuple(baseline)
+        assert "cyclical_commodities" in changed["excluded_inputs"]
+
+    def test_context_only_input_does_not_change_v2_result(self):
+        inputs = _downside_not_confirmed_inputs()
+        baseline = market_setup_v2.build_market_setup_v2(**inputs)
+        inputs["context_only"] = ["economic_confirmation"]
+        changed = market_setup_v2.build_market_setup_v2(**inputs)
+        assert _decision_tuple(changed) == _decision_tuple(baseline)
+        assert "economic_confirmation" in changed["excluded_inputs"]
+
+    def test_manual_review_input_does_not_change_v2_result(self):
+        inputs = _downside_not_confirmed_inputs()
+        baseline = market_setup_v2.build_market_setup_v2(**inputs)
+        inputs["manual_review"] = ["nfib_regional_evidence"]
+        changed = market_setup_v2.build_market_setup_v2(**inputs)
+        assert _decision_tuple(changed) == _decision_tuple(baseline)
+        assert "nfib_regional_evidence" in changed["excluded_inputs"]
 
     def test_v2_evidence_through_is_earliest_required_effective_date(self):
         result = market_setup_v2.build_market_setup_v2(
@@ -955,6 +999,22 @@ class TestMarketSetupV2Composite:
             ),
         )
         assert result["evidence_through"] is None
+
+    def test_v2_evidence_through_is_survey_date_when_growth_stable_and_market_facts_have_no_date(
+        self,
+    ):
+        result = market_setup_v2.build_market_setup_v2(
+            expected_growth=_expected_growth(
+                "stable", source_period=_monthly_period(effective_date="2026-06-15")
+            ),
+            market_environment=_market_environment("bull_market", source_period={}),
+            financial_conditions=_financial_conditions("healthy", vix=15.0),
+            policy_response=_policy_response(
+                "support_confirmed", m2_status="expanding"
+            ),
+        )
+        assert result["macro_regime"]["code"] == "growth_stable"
+        assert result["evidence_through"] == "2026-06-15"
 
     def test_macro_financial_fact_cannot_change_market_confirmation(self):
         baseline = market_setup_v2.build_market_setup_v2(
@@ -1120,3 +1180,45 @@ class TestTriggersAndWatchItems:
         trigger_ids = [trigger["id"] for trigger in result["next_triggers"]]
         assert "equity_breadth" not in trigger_ids
         assert "jobless_claims" not in trigger_ids
+
+    def test_fresh_credit_fact_with_unknown_status_emits_no_trigger(self):
+        financial_conditions = _financial_conditions(
+            "healthy", vix=15.0, credit_status="mystery"
+        )
+        result = market_setup_v2.build_market_setup_v2(
+            expected_growth=_expected_growth("slowing"),
+            market_environment=_market_environment("bull_market"),
+            financial_conditions=financial_conditions,
+            policy_response=_policy_response("support_confirmed"),
+        )
+        trigger_ids = [trigger["id"] for trigger in result["next_triggers"]]
+        assert "credit_conditions_risk_state" not in trigger_ids
+        assert "credit conditions" in result["missing_inputs"]
+        assert result["market_confirmation"]["code"] == "insufficient_data"
+
+    def test_fresh_unknown_market_phase_emits_no_trigger(self):
+        result = market_setup_v2.build_market_setup_v2(
+            expected_growth=_expected_growth("slowing"),
+            market_environment=_market_environment("mystery_phase"),
+            financial_conditions=_financial_conditions("healthy", vix=15.0),
+            policy_response=_policy_response("support_confirmed"),
+        )
+        trigger_ids = [trigger["id"] for trigger in result["next_triggers"]]
+        assert "sp500_market_phase_change" not in trigger_ids
+        assert "S&P 500 market phase" in result["missing_inputs"]
+
+    def test_fresh_vix_fact_with_null_level_emits_no_trigger(self):
+        financial_conditions = _financial_conditions("healthy", vix=None)
+        financial_conditions["facts"]["vix_level"] = {
+            "level": None,
+            "source_period": _daily_period(),
+        }
+        result = market_setup_v2.build_market_setup_v2(
+            expected_growth=_expected_growth("slowing"),
+            market_environment=_market_environment("bull_market"),
+            financial_conditions=financial_conditions,
+            policy_response=_policy_response("support_confirmed"),
+        )
+        trigger_ids = [trigger["id"] for trigger in result["next_triggers"]]
+        assert "vix_stress_threshold" not in trigger_ids
+        assert "VIX" in result["missing_inputs"]

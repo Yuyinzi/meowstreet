@@ -698,25 +698,54 @@ def macro_dashboard_market_setup():
         consumer_demand = _normalize_consumer_demand(
             consumer_sentiment_summary, survey_direction
         )
-        setup_result = market_setup_v2.build_market_setup_v2(
-            expected_growth=expected_growth,
-            market_environment=market_environment,
-            financial_conditions=financial_conditions,
-            policy_response=policy_response,
-            consumer_demand=consumer_demand,
-        )
         economic_confirmation_overview = None
         try:
-            economic_confirmation_overview = economic_confirmation_dashboard.load_overview(
-                con,
-                {"expected_gdp_direction": survey_direction},
-                date.today().isoformat(),
+            economic_confirmation_overview = (
+                economic_confirmation_dashboard.load_overview(
+                    con,
+                    {"expected_gdp_direction": survey_direction},
+                    date.today().isoformat(),
+                )
             )
         except Exception:
             logging.warning(
                 "economic confirmation overview load failed for market setup",
                 exc_info=True,
             )
+        observation = None
+        try:
+            cot_rows = macro_indicators_db.load_cot_observations(con)
+            usd_observations = (
+                macro_indicators_db.load_macro_indicator_observations_for_series(
+                    con, api._OBSERVATION_SERIES_IDS
+                )
+            )
+            payload = tool.build_cyclical_commodities_payload(
+                cot_rows,
+                usd_observations,
+                as_of_date=date.today().isoformat(),
+            )
+            if payload:
+                observation = {"cyclical_commodities": payload}
+        except Exception:
+            logging.warning(
+                " load failed for market setup",
+                exc_info=True,
+            )
+        setup_result = market_setup_v2.build_market_setup_v2(
+            expected_growth=expected_growth,
+            market_environment=market_environment,
+            financial_conditions=financial_conditions,
+            policy_response=policy_response,
+            consumer_demand=consumer_demand,
+            observation_only=observation,
+            context_only=(
+                ["economic_confirmation"] if economic_confirmation_overview else None
+            ),
+            manual_review=(
+                ["nfib_regional_evidence"] if nfib_sbo_signal_result else None
+            ),
+        )
         gdp_rows = None
         try:
             gdp_con = gdp_market_relationships.connect()
@@ -728,9 +757,7 @@ def macro_dashboard_market_setup():
             finally:
                 gdp_con.close()
         except Exception:
-            logging.warning(
-                "gdp quad rows load failed for market setup", exc_info=True
-            )
+            logging.warning("gdp quad rows load failed for market setup", exc_info=True)
         setup_result["evidence_layers"] = (
             market_setup_evidence_layers.build_evidence_layers(
                 market_setup_result=setup_result,

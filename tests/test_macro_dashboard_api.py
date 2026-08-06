@@ -16,6 +16,123 @@ def _market_setup_payload():
     return payload
 
 
+def _decision_snapshot(payload):
+    return {
+        "macro_regime.code": payload["macro_regime"]["code"],
+        "market_confirmation.code": payload["market_confirmation"]["code"],
+        "market_confirmation.confirmation_test_count": payload["market_confirmation"][
+            "confirmation_test_count"
+        ],
+        "market_setup.code": payload["market_setup"]["code"],
+        "market_setup.agreement": payload["market_setup"]["agreement"],
+        "portfolio_posture.code": payload["portfolio_posture"]["code"],
+        "missing_inputs": payload["missing_inputs"],
+        "next_triggers": payload["next_triggers"],
+    }
+
+
+def _present_display_only_inputs(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation_dashboard,
+        "load_overview",
+        lambda con, params, as_of: {"claims_confirmation": {}},
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router.macro_indicators_db,
+        "load_cot_observations",
+        lambda con: [],
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router.tool,
+        "build_cyclical_commodities_payload",
+        lambda *args, **kwargs: {"cot": {}},
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router.nfib_sbo,
+        "build_nfib_sbo_signal",
+        lambda observations, survey_synthesis, as_of: {"status": "ok"},
+    )
+
+
+def _absent_display_only_inputs(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    def raise_on_call(*args, **kwargs):
+        raise RuntimeError("display-only input absent")
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation_dashboard,
+        "load_overview",
+        raise_on_call,
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router.macro_indicators_db,
+        "load_cot_observations",
+        raise_on_call,
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router.nfib_sbo,
+        "build_nfib_sbo_signal",
+        lambda observations, survey_synthesis, as_of: None,
+    )
+
+
+def test_market_setup_payload_declares_loaded_display_only_evidence_as_excluded(
+    monkeypatch,
+):
+    _present_display_only_inputs(monkeypatch)
+
+    payload = client.get("/api/macro-dashboard/market-setup").json()
+
+    excluded = set(payload["excluded_inputs"])
+    assert {
+        "economic_confirmation",
+        "cyclical_commodities",
+        "nfib_regional_evidence",
+    } <= excluded
+
+
+def test_market_setup_payload_includes_equity_breadth_and_jobless_claims_watch_items(
+    monkeypatch,
+):
+    from app import api
+
+    captured = {}
+    original_build = api.market_setup_v2.build_market_setup_v2
+    monkeypatch.setattr(
+        api.market_setup_v2,
+        "build_market_setup_v2",
+        lambda **kwargs: captured.setdefault("payload", dict(kwargs)) and {},
+    )
+
+    api.macro_dashboard_market_setup()
+
+    observation_only = dict(captured["payload"].get("observation_only") or {})
+    observation_only["equity_breadth"] = {"state": "broad"}
+    observation_only["jobless_claims"] = {"state": "elevated"}
+    result = original_build(
+        **{**captured["payload"], "observation_only": observation_only}
+    )
+    watch_ids = {item["id"] for item in result["watch_items"]}
+    assert "equity_breadth" in watch_ids
+    assert "jobless_claims" in watch_ids
+    for item in result["watch_items"]:
+        if item["id"] in ("equity_breadth", "jobless_claims"):
+            assert item["decision_effect"] == "none"
+            assert "condition_ref" not in item
+
+
+def test_display_only_inputs_do_not_change_decision_outputs(monkeypatch):
+    _present_display_only_inputs(monkeypatch)
+    with_payload = client.get("/api/macro-dashboard/market-setup").json()
+    _absent_display_only_inputs(monkeypatch)
+    without_payload = client.get("/api/macro-dashboard/market-setup").json()
+
+    assert _decision_snapshot(with_payload) == _decision_snapshot(without_payload)
+
+
 class _FakeCursor:
     def fetchall(self):
         return []
@@ -3275,20 +3392,19 @@ def test_growth_cycle_endpoint_returns_housing_card_with_visible_unavailable_sta
     assert card["reason"]
 
 
-def test_market_setup_does_not_load_regional_nfib_evidence(monkeypatch):
-    from app import api
+def test_market_setup_display_only_regional_nfib_keeps_decision_outputs(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
 
+    _present_display_only_inputs(monkeypatch)
+    with_payload = client.get("/api/macro-dashboard/market-setup").json()
     monkeypatch.setattr(
-        api.macro_indicators_db,
-        "load_all_nfib_regional_observations",
-        lambda con: (_ for _ in ()).throw(
-            AssertionError("P2 must not reach Market Setup")
-        ),
+        macro_dashboard_router.nfib_sbo,
+        "build_nfib_sbo_signal",
+        lambda observations, survey_synthesis, as_of: None,
     )
+    without_payload = client.get("/api/macro-dashboard/market-setup").json()
 
-    response = TestClient(api.app).get("/api/macro-dashboard/market-setup")
-
-    assert response.status_code == 200
+    assert _decision_snapshot(with_payload) == _decision_snapshot(without_payload)
 
 
 def test_housing_detail_endpoint_returns_level_and_smoothed_yoy_charts(monkeypatch):
@@ -5155,7 +5271,7 @@ def test_market_setup_is_identical_when_data_changes(monkeypatch):
     )
     second = _market_setup_payload()
 
-    assert second == first
+    assert _decision_snapshot(second) == _decision_snapshot(first)
 
 
 def _stub_eia_observations(monkeypatch):
@@ -6774,54 +6890,3 @@ def test_market_setup_api_returns_the_v2_layered_contract(monkeypatch):
     assert response.json()["version"] == "market_setup_v2"
     assert "setup_type" not in response.json()
     assert "market_conclusion" not in response.json()
-
-
-def _assert_market_setup_does_not_reach_excluded_evidence(monkeypatch, patcher):
-    from app import api
-
-    def excluded(*args, **kwargs):
-        raise AssertionError("excluded evidence must not reach Market Setup v2")
-
-    patcher(monkeypatch, excluded)
-
-    response = TestClient(api.app).get("/api/macro-dashboard/market-setup")
-
-    assert response.status_code == 200
-    assert response.json()["version"] == "market_setup_v2"
-
-
-def test_market_setup_v2_does_not_load_economic_confirmation(monkeypatch):
-    from app.routers import macro_dashboard as macro_dashboard_router
-
-    _assert_market_setup_does_not_reach_excluded_evidence(
-        monkeypatch,
-        lambda monkeypatch, excluded: monkeypatch.setattr(
-            macro_dashboard_router.economic_confirmation, "connect", excluded
-        ),
-    )
-
-
-def test_market_setup_v2_does_not_load_cyclical_commodities(monkeypatch):
-    from app import api
-
-    _assert_market_setup_does_not_reach_excluded_evidence(
-        monkeypatch,
-        lambda monkeypatch, excluded: monkeypatch.setattr(
-            api.macro_indicators_db,
-            "load_cot_observations",
-            excluded,
-        ),
-    )
-
-
-def test_market_setup_v2_does_not_load_regional_nfib(monkeypatch):
-    from app import api
-
-    _assert_market_setup_does_not_reach_excluded_evidence(
-        monkeypatch,
-        lambda monkeypatch, excluded: monkeypatch.setattr(
-            api.macro_indicators_db,
-            "load_all_nfib_regional_observations",
-            excluded,
-        ),
-    )

@@ -3868,7 +3868,7 @@ def test_market_setup_v2_hero_renders_four_layer_contract():
         "hasNoMacroSetup": 'hero.indexOf("Macro Setup") === -1',
         "hasNoConvictionLimited": 'hero.indexOf("Conviction limited by") === -1',
         "hasInterpretation": 'hero.indexOf("Macro downside risk is rising") !== -1',
-        "hasSignalAgreement": 'hero.indexOf("Signal Agreement: Conflicting") !== -1',
+        "hasNoSignalAgreement": 'hero.indexOf("Signal Agreement:") === -1',
         "hasNoRawCode": 'hero.indexOf("macro_weakening_price_not_confirming") === -1',
     }
     script = _market_setup_v2_hero_script(setup, checks)
@@ -3900,7 +3900,7 @@ def test_market_setup_v2_hero_renders_four_layer_contract():
     assert payload["hasNoMacroSetup"] is True
     assert payload["hasNoConvictionLimited"] is True
     assert payload["hasInterpretation"] is True
-    assert payload["hasSignalAgreement"] is True
+    assert payload["hasNoSignalAgreement"] is True
     assert payload["hasNoRawCode"] is True
 
 
@@ -7894,6 +7894,23 @@ def test_market_setup_v2_rendering_hides_machine_codes_and_details_are_collapsed
     assert "consumer_demand_outlook" not in html
     assert "Consumer Demand Outlook" in html
     assert "<summary>Underlying metrics</summary>" in html
+
+
+def test_market_pricing_renders_per_test_contribution():
+    html = _render_market_setup_v2_fixture()
+
+    assert html.count('class="ms-el-test-contribution"') == 3
+    assert "1 of 3" in html
+    assert "0 of 3" in html
+
+
+def test_agreement_display_comes_from_backend_label():
+    js = STATIC_JS.read_text()
+    assert "function agreementLabel" not in js
+
+    html = _render_market_setup_v2_fixture()
+    assert "Agreement: Mixed" in html
+    assert "macro_weakening_partially_confirmed" not in html
 
 
 def _render_market_setup_v2_non_directional_fixture():

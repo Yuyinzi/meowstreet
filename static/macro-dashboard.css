@@ -5342,6 +5342,12 @@ h2 {
   font-size: 11px;
 }
 
+.ms-el-test-contribution {
+  color: #A89B91;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .ms-el-findings {
   margin: 0 0 10px;
 }

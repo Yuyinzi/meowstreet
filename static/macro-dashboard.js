@@ -1775,7 +1775,6 @@
       marketConfirmation: setup.market_confirmation || {},
       marketSetup: setup.market_setup || {},
       portfolioPosture: setup.portfolio_posture || {},
-      signalAgreement: (setup.market_setup || {}).agreement || null,
       interpretation: setup.interpretation || "",
       supports: setup.supports || [],
       conflicts: setup.conflicts || [],
@@ -1811,16 +1810,6 @@
     return html;
   }
 
-  function agreementLabel(agreement) {
-    var labels = {
-      aligned: "Aligned",
-      mixed: "Mixed",
-      conflicting: "Conflicting",
-      incomplete: "Incomplete",
-    };
-    return labels[agreement] || titleCaseToken(agreement);
-  }
-
   function renderDecisionHero(pr) {
     if (!pr) return "";
     var html = '<div class="ms-hero">';
@@ -1834,7 +1823,7 @@
     html += '<div class="ms-layer-strip">';
     html += renderLayerCard("MACRO REGIME", pr.macroRegime.label, null);
     html += renderLayerCard("MARKET CONFIRMATION", pr.marketConfirmation.label, null);
-    html += renderLayerCard("MARKET SETUP", pr.marketSetup.label, pr.signalAgreement ? "Signal Agreement: " + escapeHtml(agreementLabel(pr.signalAgreement)) : null);
+    html += renderLayerCard("MARKET SETUP", pr.marketSetup.label, null);
     html += renderLayerCard("PORTFOLIO POSTURE", pr.portfolioPosture.label, null);
     html += '</div>';
     if (pr.interpretation) {
@@ -2024,7 +2013,7 @@
 
   function evidenceRoleLabel(role) {
     if (!role) return "";
-    return EVIDENCE_LAYER_ROLE_LABELS[role] || titleCaseToken(role);
+    return EVIDENCE_LAYER_ROLE_LABELS[role] || "";
   }
 
   function renderEvidenceLayerHead(layer, index) {
@@ -2305,6 +2294,9 @@
         }
         if (test.verdict_label) {
           html += '<span class="ms-el-test-verdict">' + escapeHtml(test.verdict_label) + '</span>';
+        }
+        if (test.test_contribution) {
+          html += '<span class="ms-el-test-contribution">' + escapeHtml(test.test_contribution) + '</span>';
         }
         if (test.finding) {
           html += '<span class="ms-el-test-finding">' + escapeHtml(test.finding) + '</span>';
