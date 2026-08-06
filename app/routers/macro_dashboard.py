@@ -732,13 +732,30 @@ def macro_dashboard_market_setup():
                 " load failed for market setup",
                 exc_info=True,
             )
+        observation_only = {"equity_breadth": {"state": "unavailable"}}
+        if observation:
+            observation_only.update(observation)
+        if economic_confirmation_overview:
+            claims_confirmation = (economic_confirmation_overview or {}).get(
+                "claims_confirmation"
+            )
+            if isinstance(claims_confirmation, dict) and claims_confirmation:
+                observation_only["jobless_claims"] = {
+                    "claims_direction": claims_confirmation.get("claims_direction"),
+                    "confirmation_status": claims_confirmation.get(
+                        "confirmation_status"
+                    ),
+                    "observation_period": (
+                        claims_confirmation.get("initial_claims") or {}
+                    ).get("observation_period"),
+                }
         setup_result = market_setup_v2.build_market_setup_v2(
             expected_growth=expected_growth,
             market_environment=market_environment,
             financial_conditions=financial_conditions,
             policy_response=policy_response,
             consumer_demand=consumer_demand,
-            observation_only=observation,
+            observation_only=observation_only,
             context_only=(
                 ["economic_confirmation"] if economic_confirmation_overview else None
             ),

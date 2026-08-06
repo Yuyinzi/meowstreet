@@ -37,7 +37,28 @@ def _present_display_only_inputs(monkeypatch):
     monkeypatch.setattr(
         macro_dashboard_router.economic_confirmation_dashboard,
         "load_overview",
-        lambda con, params, as_of: {"claims_confirmation": {}},
+        lambda con, params, as_of: {
+            "claims_confirmation": {
+                "initial_claims": {
+                    "classification": "stable",
+                    "observation_period": "2026-07-25",
+                    "latest_4w_mean": 240000.0,
+                },
+                "continuing_claims": {
+                    "classification": "stable",
+                    "observation_period": "2026-07-25",
+                    "latest_4w_mean": 1900000.0,
+                },
+                "claims_direction": "stable",
+                "confirmation_status": "not_confirming",
+            },
+            "labor_context": {
+                "role": "context_only",
+                "method_status": "pending_approval",
+                "data_status": "available",
+                "metrics": {},
+            },
+        },
     )
     monkeypatch.setattr(
         macro_dashboard_router.macro_indicators_db,
@@ -97,28 +118,14 @@ def test_market_setup_payload_declares_loaded_display_only_evidence_as_excluded(
 def test_market_setup_payload_includes_equity_breadth_and_jobless_claims_watch_items(
     monkeypatch,
 ):
-    from app import api
+    _present_display_only_inputs(monkeypatch)
 
-    captured = {}
-    original_build = api.market_setup_v2.build_market_setup_v2
-    monkeypatch.setattr(
-        api.market_setup_v2,
-        "build_market_setup_v2",
-        lambda **kwargs: captured.setdefault("payload", dict(kwargs)) and {},
-    )
+    payload = client.get("/api/macro-dashboard/market-setup").json()
 
-    api.macro_dashboard_market_setup()
-
-    observation_only = dict(captured["payload"].get("observation_only") or {})
-    observation_only["equity_breadth"] = {"state": "broad"}
-    observation_only["jobless_claims"] = {"state": "elevated"}
-    result = original_build(
-        **{**captured["payload"], "observation_only": observation_only}
-    )
-    watch_ids = {item["id"] for item in result["watch_items"]}
+    watch_ids = {item["id"] for item in payload["watch_items"]}
     assert "equity_breadth" in watch_ids
     assert "jobless_claims" in watch_ids
-    for item in result["watch_items"]:
+    for item in payload["watch_items"]:
         if item["id"] in ("equity_breadth", "jobless_claims"):
             assert item["decision_effect"] == "none"
             assert "condition_ref" not in item
