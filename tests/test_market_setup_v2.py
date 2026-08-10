@@ -1222,3 +1222,66 @@ class TestTriggersAndWatchItems:
         trigger_ids = [trigger["id"] for trigger in result["next_triggers"]]
         assert "vix_stress_threshold" not in trigger_ids
         assert "VIX" in result["missing_inputs"]
+
+
+class TestExplanationMethodContracts:
+    def test_explanation_method_contracts_embed_predicates_by_ref_and_value(self):
+        contracts = market_setup_v2.build_explanation_method_contracts()
+        vix = contracts["methods"]["vix_confirmation_v2"]
+        assert vix["kind"] == "predicate_method"
+        assert vix["decision_contract"]["input_contract"] == {
+            "fact_id": "vix_level",
+            "field_id": "level",
+            "type": "number",
+            "unit": "index",
+        }
+        downside = vix["decision_contract"]["predicates"]["downside"]
+        assert downside["predicate_ref"] == {
+            "method_id": "vix_confirmation_v2",
+            "method_version": "vix_confirmation_v2",
+            "predicate_id": "downside",
+        }
+        assert downside["predicate"] == {
+            "predicate_id": "downside",
+            "field_id": "level",
+            "operator": "gte",
+            "operand": 20.0,
+        }
+
+    def test_each_method_splits_decision_and_explanation_contracts(self):
+        contracts = market_setup_v2.build_explanation_method_contracts()
+        for method in contracts["methods"].values():
+            assert "decision_contract" in method
+            assert "explanation_contract" in method
+        selector = contracts["methods"]["macro_regime_selector"]
+        assert selector["decision_contract"]["direction_to_regime"]
+        assert selector["explanation_contract"]["missing_input_label"] == (
+            "ISM survey synthesis"
+        )
+        aggregation = contracts["methods"]["confirmation_aggregation"]
+        assert aggregation["decision_contract"]["test_count_to_code"]["downside"][
+            3
+        ] == ("confirming_downside")
+
+    def test_explanation_method_contracts_expose_setup_and_posture_matrices(self):
+        contracts = market_setup_v2.build_explanation_method_contracts()
+        setup = contracts["methods"]["setup_matrix"]
+        setup_cells = setup["decision_contract"]["cells"]
+        assert any(
+            cell["setup_code"] == "macro_weakening_price_not_confirming"
+            for cell in setup_cells
+        )
+        assert setup["explanation_contract"]["interpretations"]
+        posture = contracts["methods"]["posture_matrix"]
+        assert (
+            posture["decision_contract"]["postures"][
+                "macro_improving_market_confirming"
+            ]["code"]
+            == "risk_on"
+        )
+        assert "action_labels" in posture["explanation_contract"]
+
+    def test_explanation_method_contracts_are_deterministic(self):
+        first = market_setup_v2.build_explanation_method_contracts()
+        second = market_setup_v2.build_explanation_method_contracts()
+        assert first == second

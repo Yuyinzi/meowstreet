@@ -327,6 +327,30 @@ _NEUTRAL_CREDIT_STATES = {"weak_credit_warning", "mixed", "selective"}
 
 _METHOD_CONTRACTS = market_setup_predicates.load_method_contracts()
 
+_CONFIRMATION_CODE_BY_COUNT = {
+    "downside": {
+        3: "confirming_downside",
+        2: "partially_confirming_downside",
+        1: "partially_confirming_downside",
+        0: "not_confirming_downside",
+    },
+    "upside": {
+        3: "confirming_upside",
+        2: "partially_confirming_upside",
+        1: "partially_confirming_upside",
+        0: "not_confirming_upside",
+    },
+}
+
+_CONFIRMATION_LABELS = {
+    "confirming_downside": "Downside Broadly Confirmed",
+    "partially_confirming_downside": "Downside Partially Confirmed",
+    "not_confirming_downside": "Downside Not Broadly Confirmed",
+    "confirming_upside": "Upside Broadly Confirmed",
+    "partially_confirming_upside": "Upside Partially Confirmed",
+    "not_confirming_upside": "Upside Not Broadly Confirmed",
+}
+
 
 def _credit_confirmation_states(contracts):
     downside = market_setup_predicates.confirmation_predicate(
@@ -532,30 +556,8 @@ def build_market_confirmation(
 
     test_count = sum(1 for record in (equity, credit, volatility) if record["confirms"])
 
-    if direction == "downside":
-        code = {
-            3: "confirming_downside",
-            2: "partially_confirming_downside",
-            1: "partially_confirming_downside",
-            0: "not_confirming_downside",
-        }[test_count]
-        label = {
-            "confirming_downside": "Downside Broadly Confirmed",
-            "partially_confirming_downside": "Downside Partially Confirmed",
-            "not_confirming_downside": "Downside Not Broadly Confirmed",
-        }[code]
-    else:
-        code = {
-            3: "confirming_upside",
-            2: "partially_confirming_upside",
-            1: "partially_confirming_upside",
-            0: "not_confirming_upside",
-        }[test_count]
-        label = {
-            "confirming_upside": "Upside Broadly Confirmed",
-            "partially_confirming_upside": "Upside Partially Confirmed",
-            "not_confirming_upside": "Upside Not Broadly Confirmed",
-        }[code]
+    code = _CONFIRMATION_CODE_BY_COUNT[direction][test_count]
+    label = _CONFIRMATION_LABELS[code]
 
     offsets = []
     if liquidity["confirms"]:
@@ -1402,4 +1404,104 @@ def build_market_setup_v2(
         "missing_inputs": missing_inputs,
         "next_triggers": next_triggers,
         "watch_items": watch_items,
+    }
+
+
+EXPLANATION_METHODS_VERSION = "market_setup_explanation_methods_v1"
+RELATIONSHIP_ADAPTER_VERSION = "market_setup_v2_relationship_v1"
+
+
+def build_explanation_method_contracts():
+    predicate_contracts = market_setup_predicates.load_method_contracts()
+    methods = {}
+    methods["macro_regime_selector"] = {
+        "method_version": MACRO_REGIME_VERSION,
+        "kind": "selector_mapping",
+        "decision_contract": {
+            "selector_fact_id": "survey_growth_direction",
+            "direction_to_regime": [
+                {"direction": direction, "code": code}
+                for direction, (code, _label) in sorted(_DIRECTION_TO_REGIME.items())
+            ],
+        },
+        "explanation_contract": {
+            "missing_input_label": _SURVEY_MISSING_INPUT_LABEL,
+            "code_to_label": {
+                code: label
+                for _direction, (code, label) in _DIRECTION_TO_REGIME.items()
+            },
+        },
+    }
+    methods["confirmation_aggregation"] = {
+        "method_version": MARKET_CONFIRMATION_VERSION,
+        "kind": "confirmation_aggregation",
+        "decision_contract": {"test_count_to_code": _CONFIRMATION_CODE_BY_COUNT},
+        "explanation_contract": {"code_to_label": _CONFIRMATION_LABELS},
+    }
+    for method_id in (
+        "equity_confirmation_v2",
+        "credit_confirmation_v2",
+        "vix_confirmation_v2",
+    ):
+        method = predicate_contracts["methods"][method_id]
+        predicates = {}
+        for predicate_id, predicate in method["predicates"].items():
+            predicates[predicate_id] = {
+                "predicate_ref": market_setup_predicates.predicate_ref(
+                    method_id, predicate_id, predicate_contracts
+                ),
+                "predicate": predicate,
+            }
+        methods[method_id] = {
+            "method_version": method["method_version"],
+            "kind": "predicate_method",
+            "decision_contract": {
+                "input_contract": method["input_contract"],
+                "predicates": predicates,
+            },
+            "explanation_contract": {},
+        }
+    methods["setup_matrix"] = {
+        "method_version": MARKET_SETUP_VERSION,
+        "kind": "setup_matrix",
+        "decision_contract": {
+            "cells": [
+                {
+                    "macro_regime": regime,
+                    "market_confirmation": confirmation,
+                    "setup_code": code,
+                }
+                for (regime, confirmation), (code, _label) in sorted(
+                    _MARKET_SETUP_MATRIX.items()
+                )
+            ],
+        },
+        "explanation_contract": {
+            "code_to_label": {
+                code: label
+                for (_regime, _confirmation), (
+                    code,
+                    label,
+                ) in _MARKET_SETUP_MATRIX.items()
+            },
+            "interpretations": dict(_INTERPRETATIONS),
+        },
+    }
+    methods["posture_matrix"] = {
+        "method_version": PORTFOLIO_POSTURE_VERSION,
+        "kind": "posture_matrix",
+        "decision_contract": {"postures": dict(_PORTFOLIO_POSTURE_MATRIX)},
+        "explanation_contract": {"action_labels": dict(_POSTURE_ACTION_LABELS)},
+    }
+    methods["relationship_adapter"] = {
+        "method_version": RELATIONSHIP_ADAPTER_VERSION,
+        "kind": "relationship_adapter",
+        "decision_contract": {
+            "relationship_values": ["supports", "conflicts", "neutral", "unavailable"],
+        },
+        "explanation_contract": {"findings": dict(_FINDINGS)},
+    }
+    return {
+        "version": EXPLANATION_METHODS_VERSION,
+        "methods": methods,
     }
