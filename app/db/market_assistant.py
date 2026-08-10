@@ -107,12 +107,6 @@ def connect(db_path=DEFAULT_DB_PATH):
     return con
 
 
-def _serialize_document(payload):
-    return json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    )
-
-
 def _verify_duplicated_columns(row, snapshot):
     for column in _SNAPSHOT_DUPLICATE_COLUMNS:
         if row[column] != snapshot[column]:
@@ -156,7 +150,8 @@ def get_or_create_snapshot(con, snapshot_state, *, context_id, created_at):
     finalized = finalize_snapshot(
         snapshot_state, context_id=context_id, created_at=created_at
     )
-    snapshot_json = _serialize_document(finalized)
+    snapshot_json = canonical_json(finalized).decode("utf-8")
+    persisted = validate_snapshot(json.loads(snapshot_json))
     try:
         con.execute(
             """
@@ -169,22 +164,22 @@ def get_or_create_snapshot(con, snapshot_state, *, context_id, created_at):
             on conflict(explanation_fingerprint) do nothing
             """,
             (
-                finalized["context_id"],
-                finalized["created_at"],
-                finalized["as_of"],
-                finalized["evidence_through"],
-                finalized["market_setup_version"],
-                finalized["snapshot_schema_version"],
-                finalized["decision_fingerprint"],
-                finalized["explanation_fingerprint"],
-                finalized["snapshot_hash"],
+                persisted["context_id"],
+                persisted["created_at"],
+                persisted["as_of"],
+                persisted["evidence_through"],
+                persisted["market_setup_version"],
+                persisted["snapshot_schema_version"],
+                persisted["decision_fingerprint"],
+                persisted["explanation_fingerprint"],
+                persisted["snapshot_hash"],
                 snapshot_json,
             ),
         )
         snapshot = _load_validated_snapshot(
             con,
             "where explanation_fingerprint = ?",
-            (finalized["explanation_fingerprint"],),
+            (persisted["explanation_fingerprint"],),
         )
         con.commit()
     except Exception:

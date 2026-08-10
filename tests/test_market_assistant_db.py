@@ -293,6 +293,24 @@ class TestSnapshotRepository:
         assert first["explanation_fingerprint"] == expected["explanation_fingerprint"]
         assert first["snapshot_hash"] == expected["snapshot_hash"]
 
+    def test_snapshot_json_column_stores_canonical_json(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        expected = market_setup_explanation_snapshot.canonical_json(
+            market_setup_explanation_snapshot.finalize_snapshot(
+                snapshot_state(),
+                context_id="ctx_A",
+                created_at="2026-08-10T01:00:00Z",
+            )
+        ).decode("utf-8")
+        market_assistant.get_or_create_snapshot(
+            con, snapshot_state(), context_id="ctx_A", created_at="2026-08-10T01:00:00Z"
+        )
+        row = con.execute(
+            "select snapshot_json from explanation_snapshots where context_id = ?",
+            ("ctx_A",),
+        ).fetchone()
+        assert row["snapshot_json"] == expected
+
     def test_load_snapshot_returns_none_for_unknown_context(self, tmp_path):
         con = market_assistant.connect(tmp_path / "assistant.sqlite")
         assert market_assistant.load_snapshot(con, "missing_ctx") is None

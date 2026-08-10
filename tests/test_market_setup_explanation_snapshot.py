@@ -278,6 +278,15 @@ class TestSnapshotHashes:
         )
         assert first != second
 
+    def test_canonical_json_preserves_governance_order(self):
+        first = market_setup_explanation_snapshot.canonical_json(
+            {"governance": [{"fact_id": "b"}, {"fact_id": "a"}]}
+        )
+        second = market_setup_explanation_snapshot.canonical_json(
+            {"governance": [{"fact_id": "a"}, {"fact_id": "b"}]}
+        )
+        assert first != second
+
     def test_canonical_json_sorts_dict_keys_recursively(self):
         first = market_setup_explanation_snapshot.canonical_json(
             {"b": 1, "a": {"d": 2, "c": 3}}

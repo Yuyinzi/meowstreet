@@ -38,6 +38,7 @@ _ORDERED_LIST_KEYS = frozenset(
         "rows",
         "time_series",
         "history",
+        "governance",
     }
 )
 
