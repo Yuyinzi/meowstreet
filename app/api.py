@@ -141,56 +141,6 @@ def _load_cot_historical_extreme_allowlist():
         return None
 
 
-def _load_market_phase_for_setup():
-    try:
-        con = benchmark_market_data.connect()
-    except (ValueError, TypeError, RuntimeError):
-        logging.warning(
-            "benchmark market data connect failed for market setup", exc_info=True
-        )
-        return None
-    try:
-        return market_phase.build_dashboard_payload(
-            lambda benchmark_id: benchmark_market_data.load_price_rows(
-                con, benchmark_id
-            ),
-            benchmark_ids=US_BENCHMARK_IDS,
-        )
-    except (ValueError, TypeError, RuntimeError):
-        logging.warning("market phase load failed for market setup", exc_info=True)
-        return None
-    finally:
-        con.close()
-
-
-def _load_rates_liquidity_for_setup(con):
-    try:
-        latest_points = us_rates_liquidity_db.load_latest_points(con)
-        if not latest_points:
-            return None
-        latest_macro = macro_indicators_db.load_latest_macro_indicator_points(con)
-        credit_rate_points = us_rates_liquidity_db.load_rate_points_for_series(
-            con, ["treasury_10y"]
-        )
-        credit_macro_points = (
-            macro_indicators_db.load_macro_indicator_points_for_series(
-                con,
-                ["aaa_corporate_yield", "bbb_corporate_yield", "ccc_corporate_yield"],
-            )
-        )
-        return us_rates_liquidity.build_dashboard_payload(
-            us_rates_liquidity_db.load_rate_series(con),
-            latest_points,
-            latest_macro,
-            credit_rate_points=credit_rate_points,
-            credit_macro_points=credit_macro_points,
-            credit_macro_series_points=credit_macro_points,
-        )
-    except (ValueError, TypeError, RuntimeError):
-        logging.warning("rates liquidity load failed for market setup", exc_info=True)
-        return None
-
-
 def _load_ism_industry_analysis_for_setup(con, latest_ism_report, ism_at_a_glance):
     if not latest_ism_report:
         return None
