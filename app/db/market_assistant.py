@@ -203,6 +203,13 @@ def load_latest_snapshot(con):
     )
 
 
+_TRACE_GENERATION_STATUSES = frozenset(
+    {"validated_first_pass", "validated_after_repair", "fallback"}
+)
+
+_FINGERPRINT_SECRET_MARKERS = ("api_key", "apikey", "secret", "token", "password")
+
+
 def _validate_answer_trace_shape(answer_trace):
     if not isinstance(answer_trace, dict):
         raise ValueError("answer trace is required")
@@ -210,6 +217,58 @@ def _validate_answer_trace_shape(answer_trace):
         raise ValueError("answer trace id is required")
     if not str(answer_trace.get("message_id") or "").strip():
         raise ValueError("answer trace message id is required")
+    resolution = answer_trace.get("resolution")
+    if not isinstance(resolution, dict) or not isinstance(resolution.get("mode"), str):
+        raise ValueError("answer trace resolution is invalid")
+    if not str(answer_trace.get("explanation_context_id") or "").strip():
+        raise ValueError("answer trace explanation context id is required")
+    for key in (
+        "knowledge_references",
+        "exploration_result_ids",
+        "research_result_ids",
+    ):
+        if not isinstance(answer_trace.get(key), list):
+            raise ValueError(f"answer trace {key} is invalid")
+    if not isinstance(answer_trace.get("plan"), dict):
+        raise ValueError("answer trace plan is invalid")
+    claims = answer_trace.get("structured_claims")
+    if claims is not None and not isinstance(claims, list):
+        raise ValueError("answer trace structured claims are invalid")
+    generation_status = answer_trace.get("generation_status")
+    if generation_status not in _TRACE_GENERATION_STATUSES:
+        raise ValueError("answer trace generation status is invalid")
+    attempts = answer_trace.get("attempts")
+    if not isinstance(attempts, dict):
+        raise ValueError("answer trace attempts are invalid")
+    if not isinstance(answer_trace.get("validation_error_codes"), list):
+        raise ValueError("answer trace validation error codes are invalid")
+    prompt = answer_trace.get("prompt")
+    if not isinstance(prompt, dict):
+        raise ValueError("answer trace prompt is invalid")
+    if not str(prompt.get("version") or "").strip():
+        raise ValueError("answer trace prompt version is invalid")
+    if not str(prompt.get("hash") or "").strip():
+        raise ValueError("answer trace prompt hash is invalid")
+    fingerprint = answer_trace.get("model_configuration_fingerprint")
+    if not isinstance(fingerprint, dict):
+        raise ValueError("answer trace model configuration fingerprint is invalid")
+    if _fingerprint_has_secret(fingerprint):
+        raise ValueError("answer trace fingerprint is invalid")
+    if not isinstance(answer_trace.get("tool_schema_versions"), dict):
+        raise ValueError("answer trace tool schema versions are invalid")
+    if not isinstance(answer_trace.get("answer_text"), str):
+        raise ValueError("answer trace answer text is required")
+    if not str(answer_trace.get("answer_text_hash") or "").strip():
+        raise ValueError("answer trace answer text hash is required")
+    if not str(answer_trace.get("generated_time") or "").strip():
+        raise ValueError("answer trace generated time is required")
+
+
+def _fingerprint_has_secret(fingerprint):
+    return any(
+        any(marker in str(key).lower() for marker in _FINGERPRINT_SECRET_MARKERS)
+        for key in fingerprint
+    )
 
 
 def _insert_artifact(con, artifact):

@@ -241,10 +241,42 @@ def answer_trace():
     return {
         "answer_trace_id": "trace_123",
         "message_id": "msg_456",
-        "resolution": {"mode": "current"},
-        "explanation_context_id": "ctx_A",
+        "resolution": {
+            "mode": "current",
+            "resolved_at": "2026-08-10T02:00:00Z",
+            "previous_context_id": "ctx_A",
+            "current_context_id": "ctx_B",
+            "context_changed": True,
+        },
+        "explanation_context_id": "ctx_B",
+        "knowledge_references": ["vix_definition"],
+        "exploration_result_ids": [],
+        "research_result_ids": [],
+        "plan": {
+            "intent": "decision_explanation",
+            "context_mode": "current",
+            "operations": [
+                {"operation_id": "resolve_current_explanation", "parameters": {}}
+            ],
+            "answer_depth": "standard",
+            "research_tier": None,
+        },
+        "structured_claims": None,
         "generation_status": "validated_first_pass",
-        "rendered_answer_text": "Market Setup remains macro_improving.",
+        "attempts": {"plan": 1, "draft": 1, "repair": 0},
+        "validation_error_codes": [],
+        "prompt": {"version": "market_assistant_prompt_v1", "hash": "a" * 64},
+        "model_configuration_fingerprint": {
+            "provider": "openai_responses",
+            "model": "assistant-model",
+            "research_model": "research-model",
+            "tool_schema_versions": {"artifacts": "market_assistant_artifact_v1"},
+            "assistant_policy_version": "market_assistant_policy_v1",
+            "prompt_version": "market_assistant_prompt_v1",
+        },
+        "tool_schema_versions": {"artifacts": "market_assistant_artifact_v1"},
+        "answer_text": "Market Setup remains macro_improving.",
+        "answer_text_hash": "b" * 64,
         "generated_time": "2026-08-10T02:00:00Z",
     }
 
@@ -479,6 +511,70 @@ class TestAnswerBundle:
         for table in ("knowledge_records", "exploration_results", "research_results"):
             row = con.execute(f"select count(*) from {table}").fetchone()
             assert row[0] == 1
+
+    def test_full_answer_trace_round_trips_all_design_19_fields(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        trace = answer_trace()
+        trace["structured_claims"] = [
+            {
+                "kind": "decision",
+                "claims": [
+                    {
+                        "claim_id": "c1",
+                        "purpose": "decision_explanation",
+                        "authority": "decision_fact",
+                        "refs": [
+                            {
+                                "artifact_id": "ctx_B",
+                                "object_type": "confirmation_test",
+                                "object_id": "vix_downside",
+                            }
+                        ],
+                        "template": "The test is {result}.",
+                        "bindings": {
+                            "result": {
+                                "value": "not confirming",
+                                "source": {
+                                    "artifact_id": "ctx_B",
+                                    "object_type": "confirmation_test",
+                                    "object_id": "vix_downside",
+                                    "field": "result",
+                                },
+                            }
+                        },
+                    }
+                ],
+            }
+        ]
+        trace["validation_error_codes"] = ["UNBOUND_FACTUAL_LITERAL"]
+        trace["attempts"] = {"plan": 1, "draft": 2, "repair": 1}
+        market_assistant.save_answer_bundle(
+            con, artifacts=[knowledge_record_artifact()], answer_trace=trace
+        )
+        loaded = market_assistant.load_answer_trace(con, trace["answer_trace_id"])
+        assert loaded == trace
+
+    def test_save_answer_bundle_rejects_invalid_trace_requiring_full_shape(
+        self, tmp_path
+    ):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        trace = answer_trace()
+        trace["generation_status"] = "unexpected_status"
+        with pytest.raises(
+            ValueError, match="answer trace generation status is invalid"
+        ):
+            market_assistant.save_answer_bundle(con, artifacts=[], answer_trace=trace)
+        assert market_assistant.load_answer_trace(con, trace["answer_trace_id"]) is None
+
+    def test_save_answer_bundle_rejects_trace_with_secret_in_fingerprint(
+        self, tmp_path
+    ):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        trace = answer_trace()
+        trace["model_configuration_fingerprint"]["api_key"] = "sk-secret"
+        with pytest.raises(ValueError, match="answer trace fingerprint is invalid"):
+            market_assistant.save_answer_bundle(con, artifacts=[], answer_trace=trace)
+        assert market_assistant.load_answer_trace(con, trace["answer_trace_id"]) is None
 
     def test_save_answer_bundle_rejects_invalid_artifact_atomically(self, tmp_path):
         con = market_assistant.connect(tmp_path / "assistant.sqlite")
