@@ -354,13 +354,26 @@ class TestEvidenceFactsSemantics:
 
 
 class TestGovernanceIndex:
+    def test_governance_index_returns_a_list_of_entries_with_fact_id(self):
+        facts = build_facts()
+        governance = market_setup_evidence_facts.build_governance_index(facts)
+        assert isinstance(governance, list)
+        assert len(governance) == len(facts)
+        for entry in governance:
+            assert "fact_id" in entry
+
     def test_governance_index_is_an_exact_derived_index(self):
         facts = build_facts()
         governance = market_setup_evidence_facts.build_governance_index(facts)
-        assert list(governance) == [fact["fact_id"] for fact in facts]
+        assert [entry["fact_id"] for entry in governance] == [
+            fact["fact_id"] for fact in facts
+        ]
         for fact in facts:
-            entry = governance[fact["fact_id"]]
+            entry = next(
+                entry for entry in governance if entry["fact_id"] == fact["fact_id"]
+            )
             assert entry == {
+                "fact_id": fact["fact_id"],
                 "decision_scope": fact["role"]["decision_scope"],
                 "function": fact["role"]["function"],
                 "target_layer": fact["role"]["target_layer"],
@@ -376,7 +389,7 @@ class TestGovernanceIndex:
             "reason_code": "data_missing",
         }
         governance = market_setup_evidence_facts.build_governance_index(facts)
-        assert (
-            governance[facts[0]["fact_id"]]["participation"]
-            == facts[0]["participation"]
+        entry = next(
+            entry for entry in governance if entry["fact_id"] == facts[0]["fact_id"]
         )
+        assert entry["participation"] == facts[0]["participation"]

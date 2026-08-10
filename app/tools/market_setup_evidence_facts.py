@@ -348,24 +348,29 @@ def build_evidence_facts(*, setup_result, inputs, evidence_layers, surface):
 
 
 def build_governance_index(evidence):
-    index = {}
+    index = []
+    seen = set()
     for fact in evidence:
         if not isinstance(fact, dict) or not fact.get("fact_id"):
             raise ValueError("governance index requires evidence fact records")
         fact_id = fact["fact_id"]
-        if fact_id in index:
+        if fact_id in seen:
             raise ValueError(f"governance index fact is duplicated: {fact_id}")
         role = fact.get("role")
         decision_result = fact.get("decision_result")
         if not isinstance(role, dict) or not isinstance(decision_result, dict):
             raise ValueError(f"governance index fact is incomplete: {fact_id}")
-        index[fact_id] = {
-            "decision_scope": role["decision_scope"],
-            "function": role["function"],
-            "target_layer": role["target_layer"],
-            "participation": fact["participation"],
-            "decision_result_kind": decision_result["kind"],
-        }
+        index.append(
+            {
+                "fact_id": fact_id,
+                "decision_scope": role["decision_scope"],
+                "function": role["function"],
+                "target_layer": role["target_layer"],
+                "participation": fact["participation"],
+                "decision_result_kind": decision_result["kind"],
+            }
+        )
+        seen.add(fact_id)
     return index
 
 
