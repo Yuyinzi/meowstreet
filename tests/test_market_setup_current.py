@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from types import ModuleType
 
 import pytest
@@ -6,6 +7,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import app
+from app.db import growth_cycle
+from app.db import macro_indicators as macro_indicators_db
+from app.db import market_assistant as market_assistant_db
 from app.services import market_setup_current
 
 
@@ -102,6 +106,80 @@ def test_current_state_reads_one_pre_commit_view_during_uncommitted_write(tmp_pa
     assert (
         after["evidence_layers"]["final_confirmation"]["coverage_summary"][0]
         == "GDP: available"
+    )
+
+
+def test_init_schema_keeps_begin_transaction_open_on_seeded_db(tmp_path):
+    db_path = tmp_path / "market.sqlite"
+    market_setup_current.read_current_setup_state(db_path, as_of_date="2026-08-10")
+    con = market_assistant_db.connect(db_path)
+    try:
+        con.execute("begin")
+        assert con.in_transaction is True
+        market_setup_current._init_schema(con)
+        assert con.in_transaction is True
+        macro_indicators_db.load_macro_indicator_points(con, "m2_money_stock")
+        assert con.in_transaction is True
+    finally:
+        con.rollback()
+        con.close()
+
+
+def test_current_state_ignores_commit_landing_between_two_reads(tmp_path, monkeypatch):
+    db_path = tmp_path / "market.sqlite"
+    market_setup_current.read_current_setup_state(db_path, as_of_date="2026-08-10")
+    seed_con = sqlite3.connect(db_path)
+    seed_con.execute(
+        "insert into gdp_relationships(relationship_id, title) values ('us_sp500_gdp', 'US S&P 500 / GDP')"
+    )
+    seed_con.commit()
+    seed_con.close()
+    baseline = market_setup_current.read_current_setup_state(
+        db_path, as_of_date="2026-08-10"
+    )
+    assert (
+        baseline["evidence_layers"]["final_confirmation"]["coverage_summary"][0]
+        == "GDP: missing"
+    )
+    reader_at_loader = threading.Event()
+    writer_committed = threading.Event()
+    release_reader = threading.Event()
+    original_loader = growth_cycle.load_latest_ism_at_a_glance_rows
+
+    def blocking_loader(con):
+        reader_at_loader.set()
+        assert release_reader.wait(timeout=10)
+        return original_loader(con)
+
+    monkeypatch.setattr(
+        growth_cycle, "load_latest_ism_at_a_glance_rows", blocking_loader
+    )
+
+    def writer_commit_mid_read():
+        assert reader_at_loader.wait(timeout=10)
+        writer_con = sqlite3.connect(db_path)
+        writer_con.execute("begin")
+        writer_con.execute(
+            "insert into gdp_quad_rows(relationship_id, date, period_label) values ('us_sp500_gdp', '2026-06-30', '2026 Q2')"
+        )
+        writer_con.commit()
+        writer_con.close()
+        writer_committed.set()
+        release_reader.set()
+
+    writer = threading.Thread(target=writer_commit_mid_read)
+    writer.start()
+    try:
+        payload = market_setup_current.read_current_setup_state(
+            db_path, as_of_date="2026-08-10"
+        )
+    finally:
+        release_reader.set()
+        writer.join(timeout=10)
+    assert writer_committed.is_set()
+    assert (
+        payload["evidence_layers"]["final_confirmation"]["coverage_summary"][0]
+        == "GDP: missing"
     )
 
 

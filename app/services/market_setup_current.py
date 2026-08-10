@@ -331,7 +331,68 @@ def _context_id_for(explanation_fingerprint, created_at):
     return f"ctx_{digest[:12]}"
 
 
+_REQUIRED_SCHEMA_TABLES = frozenset(
+    {
+        "benchmark_prices",
+        "economic_confirmation_current_observations",
+        "economic_confirmation_scheduled_events",
+        "economic_confirmation_source_contracts",
+        "economic_confirmation_vintages",
+        "gdp_lag_rows",
+        "gdp_quad_rows",
+        "gdp_raw_source_rows",
+        "gdp_relationships",
+        "ism_ai_extractions",
+        "ism_ai_section_extractions",
+        "ism_ai_summary_runs",
+        "ism_at_a_glance_rows",
+        "ism_industry_comments",
+        "ism_industry_rankings",
+        "ism_report_ai_summaries",
+        "ism_report_comments",
+        "ism_report_commodities",
+        "ism_report_industry_signal_coverage",
+        "ism_report_industry_signals",
+        "ism_report_narrative_facts",
+        "ism_report_snapshots",
+        "ism_report_source_snapshots",
+        "macro_ai_interpretations",
+        "macro_event_documents",
+        "macro_event_tone_extractions",
+        "macro_events",
+        "macro_indicator_observation_metadata",
+        "macro_indicator_points",
+        "macro_indicator_regional_observation_metadata",
+        "macro_indicator_regional_observations",
+        "macro_indicator_regional_series",
+        "macro_indicator_series",
+        "macro_indicator_series_contracts",
+        "cot_observations",
+        "lumber_overlap_audits",
+        "non_oil_attribution_facts",
+        "non_oil_attribution_refresh_status",
+        "shfe_cu_contract_daily",
+        "shfe_cu_main_daily",
+        "vendor_series_overlap_audits",
+        "us_rate_points",
+        "us_rate_series",
+    }
+)
+
+
+def _schema_tables_present(con):
+    placeholders = ", ".join("?" for _ in _REQUIRED_SCHEMA_TABLES)
+    rows = con.execute(
+        f"select count(*) as total from sqlite_master "
+        f"where type = 'table' and name in ({placeholders})",
+        tuple(_REQUIRED_SCHEMA_TABLES),
+    ).fetchone()
+    return rows["total"] == len(_REQUIRED_SCHEMA_TABLES)
+
+
 def _init_schema(con):
+    if _schema_tables_present(con):
+        return
     macro_indicators_db.init_macro_tables(con)
     growth_cycle.init_db(con)
     con.executescript(_RATES_LIQUIDITY_SCHEMA_DDL)
