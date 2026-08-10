@@ -46,7 +46,11 @@ def _validate_record(record, seen):
         subject = _record_subject(record)
         raise ValueError(f"{subject} is missing required fields: {', '.join(missing)}")
     record_id = record["record_id"]
+    if not isinstance(record_id, str) or not record_id:
+        raise ValueError("knowledge record id is required")
     version = record["version"]
+    if not isinstance(version, str) or not version:
+        raise ValueError(f"knowledge record {record_id} version is required")
     version_key = (record_id, version)
     if version_key in seen:
         raise ValueError(
