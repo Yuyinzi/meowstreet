@@ -233,6 +233,9 @@ def build_research_result(*, task, provider_payload, result_id, searched_at):
     validated_task = validate_research_task(task, explicit_deep=True)
     provider = _validate_provider_payload(provider_payload)
     sources = _normalize_sources(provider["sources"], searched_at)
+    tier = validated_task["depth_tier"]
+    if len(sources) > research_limits(tier)["max_sources"]:
+        raise ValueError(f"research result exceeds the {tier} source limit")
     source_by_canonical = {source["canonical_url"]: source for source in sources}
     findings = _normalize_findings(provider["findings"], source_by_canonical)
     search_calls = _normalize_search_calls(provider["search_calls"])

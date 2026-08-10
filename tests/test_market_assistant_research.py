@@ -119,6 +119,49 @@ def test_query_count_limit_rejected_per_tier(tier, excess_queries):
         )
 
 
+def provider_payload_with_sources(count):
+    return valid_provider_payload(
+        sources=[
+            {
+                "url": f"https://example.com/source/{index}",
+                "title": f"Source {index}",
+                "cited_spans": [f"span {index}"],
+            }
+            for index in range(count)
+        ],
+        findings=[],
+    )
+
+
+@pytest.mark.parametrize(
+    ("tier", "max_sources"),
+    [("focused", 3), ("standard", 6), ("deep", 12)],
+)
+def test_retained_source_limit_rejected_per_tier(tier, max_sources):
+    payload = provider_payload_with_sources(max_sources + 1)
+    with pytest.raises(ValueError, match=f"exceeds the {tier} source limit"):
+        build_research_result(
+            task=valid_task(tier=tier),
+            provider_payload=payload,
+            result_id="res_srclimit",
+            searched_at="2026-08-10T02:00:00Z",
+        )
+
+
+@pytest.mark.parametrize(
+    ("tier", "max_sources"),
+    [("focused", 3), ("standard", 6), ("deep", 12)],
+)
+def test_retained_source_limit_boundary_accepted(tier, max_sources):
+    result = build_research_result(
+        task=valid_task(tier=tier),
+        provider_payload=provider_payload_with_sources(max_sources),
+        result_id="res_srclimit_ok",
+        searched_at="2026-08-10T02:00:00Z",
+    )
+    assert len(result["sources"]) == max_sources
+
+
 def test_queries_empty_rejected():
     with pytest.raises(ValueError, match="queries are required"):
         validate_research_task(valid_task(queries=[]), explicit_deep=False)
