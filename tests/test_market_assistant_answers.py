@@ -1,6 +1,7 @@
 import pytest
 
 from app.tools.market_assistant_artifacts import validate_artifact
+from app.tools.market_assistant_answers import _SECTION_BY_PURPOSE
 from app.tools.market_assistant_answers import DraftValidationError
 from app.tools.market_assistant_answers import build_validation_report
 from app.tools.market_assistant_answers import calculate_hypothetical
@@ -8,17 +9,6 @@ from app.tools.market_assistant_answers import collect_citations
 from app.tools.market_assistant_answers import render_answer
 from app.tools.market_assistant_answers import render_fallback
 from app.tools.market_assistant_answers import validate_answer_draft
-
-_SECTION_BY_PURPOSE = {
-    "decision_explanation": "decision",
-    "counterfactual_explanation": "decision",
-    "method_explanation": "knowledge",
-    "source_explanation": "research",
-    "governance_explanation": "governance",
-    "observation": "observation",
-    "bounded_interpretation": "observation",
-    "illustration": "illustration",
-}
 
 
 def snapshot_artifact():
@@ -583,6 +573,24 @@ def test_unbound_factual_enum_rejected():
         validate_answer_draft(draft(claim), artifacts())
 
 
+def test_non_hypothetical_scalar_binding_rejected():
+    claim = valid_claim(
+        template="Current VIX is {vix_value}.",
+        bindings={"vix_value": 99.9},
+    )
+    with pytest.raises(ValueError, match="unbound factual literal"):
+        validate_answer_draft(draft(claim), artifacts())
+
+
+def test_hypothetical_scalar_binding_is_valid():
+    claim = hypothetical_claim(
+        "If the VIX were {vix_value}, the test would flip.",
+        bindings={"vix_value": 25.0},
+    )
+    validated = validate_answer_draft(draft(claim, kind="illustration"), artifacts())
+    assert validated is not None
+
+
 def test_decision_language_rejected_for_observation_claim():
     claim = observation_claim("You should buy when the VIX exceeds {first}.")
     with pytest.raises(ValueError, match="prohibited decision claim"):
@@ -787,11 +795,23 @@ def test_duplicate_claim_ids_rejected():
     payload = {
         "sections": [
             {"kind": "decision", "claims": [valid_claim(claim_id="dup")]},
-            {"kind": "observation", "claims": [valid_claim(claim_id="dup")]},
+            {"kind": "decision", "claims": [valid_claim(claim_id="dup")]},
         ]
     }
     with pytest.raises(ValueError, match="claim id is duplicated"):
         validate_answer_draft(payload, artifacts())
+
+
+def test_section_kind_mismatch_rejected():
+    claim = valid_claim()
+    with pytest.raises(ValueError, match="claim purpose does not match section kind"):
+        validate_answer_draft(draft(claim, kind="research"), artifacts())
+
+
+def test_claim_in_matching_section_is_valid():
+    claim = valid_claim()
+    validated = validate_answer_draft(draft(claim, kind="decision"), artifacts())
+    assert validated is not None
 
 
 def test_claim_limit_exceeded_rejected():

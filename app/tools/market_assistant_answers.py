@@ -27,6 +27,17 @@ _SECTION_HEADINGS = {
     "notice": "Notes",
 }
 
+_SECTION_BY_PURPOSE = {
+    "decision_explanation": "decision",
+    "counterfactual_explanation": "decision",
+    "method_explanation": "knowledge",
+    "source_explanation": "research",
+    "governance_explanation": "governance",
+    "observation": "observation",
+    "bounded_interpretation": "observation",
+    "illustration": "illustration",
+}
+
 _AUTHORITIES = (
     "decision_fact",
     "method_knowledge",
@@ -58,6 +69,7 @@ _ERROR_CODES = frozenset(
     {
         "SCHEMA_INVALID",
         "AUTHORITY_PURPOSE_MISMATCH",
+        "SECTION_KIND_MISMATCH",
         "REFERENCE_NOT_FOUND",
         "REFERENCE_AUTHORITY_MISMATCH",
         "FIELD_NOT_FOUND",
@@ -224,6 +236,7 @@ def _collect_errors(payload, artifacts):
         return schema_errors
     errors = []
     errors.extend(_duplicate_claim_errors(normalized))
+    errors.extend(_section_purpose_errors(normalized))
     errors.extend(_limit_errors(normalized))
     for section in normalized["sections"]:
         for claim in section["claims"]:
@@ -307,6 +320,25 @@ def _duplicate_claim_errors(normalized):
                     )
                 )
             seen.add(claim_id)
+    return errors
+
+
+def _section_purpose_errors(normalized):
+    errors = []
+    for section in normalized["sections"]:
+        section_kind = section["kind"]
+        for claim in section["claims"]:
+            expected_kind = _SECTION_BY_PURPOSE.get(claim["purpose"])
+            if expected_kind is not None and expected_kind != section_kind:
+                errors.append(
+                    _error(
+                        "SECTION_KIND_MISMATCH",
+                        "claim purpose does not match section kind",
+                        claim_id=claim["claim_id"],
+                        expected=expected_kind,
+                        actual=section_kind,
+                    )
+                )
     return errors
 
 
@@ -521,22 +553,35 @@ def _validate_claim_bindings(claim, artifacts):
     errors = []
     claim_id = claim["claim_id"]
     for key, binding in (claim.get("bindings") or {}).items():
-        if claim["authority"] == "hypothetical" and isinstance(binding, dict):
+        if isinstance(binding, dict):
+            if claim["authority"] == "hypothetical":
+                errors.append(
+                    _error(
+                        "HYPOTHETICAL_REFERENCE_FORBIDDEN",
+                        "hypothetical claim cannot reference artifacts",
+                        claim_id=claim_id,
+                        field_id=key,
+                    )
+                )
+                continue
+            if "value" in binding and "source" in binding:
+                errors.extend(
+                    _validate_annotated_binding(claim, key, binding, artifacts)
+                )
+            elif "artifact_id" in binding:
+                errors.extend(
+                    _validate_field_ref_binding(claim, key, binding, artifacts)
+                )
+            continue
+        if claim["authority"] != "hypothetical":
             errors.append(
                 _error(
-                    "HYPOTHETICAL_REFERENCE_FORBIDDEN",
-                    "hypothetical claim cannot reference artifacts",
+                    "UNBOUND_FACTUAL_LITERAL",
+                    "unbound factual literal",
                     claim_id=claim_id,
                     field_id=key,
                 )
             )
-            continue
-        if not isinstance(binding, dict):
-            continue
-        if "value" in binding and "source" in binding:
-            errors.extend(_validate_annotated_binding(claim, key, binding, artifacts))
-        elif "artifact_id" in binding:
-            errors.extend(_validate_field_ref_binding(claim, key, binding, artifacts))
     return errors
 
 
