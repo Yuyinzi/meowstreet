@@ -4,6 +4,8 @@ from datetime import datetime
 from datetime import timezone
 from pathlib import Path
 
+from app.tools import market_setup_predicates
+
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = ROOT / "data" / "local_system" / "market_setup_input_registry.v1.json"
 
@@ -321,23 +323,24 @@ MARKET_CONFIRMATION_VERSION = "market_setup_v2_market_confirmation_v1"
 _DOWNSIDE_REGIMES = {"growth_decelerating", "contraction_risk_rising"}
 _UPSIDE_REGIMES = {"growth_accelerating", "early_recovery"}
 
-_RISK_CREDIT_STATES = {
-    "risk_rising",
-    "crisis_stress",
-    "stress",
-    "risk_off",
-    "serious_deterioration",
-}
-
-_SUPPORTIVE_CREDIT_STATES = {"healthy", "supportive"}
-
 _NEUTRAL_CREDIT_STATES = {"weak_credit_warning", "mixed", "selective"}
 
-_KNOWN_CREDIT_STATES = (
-    _SUPPORTIVE_CREDIT_STATES | _RISK_CREDIT_STATES | _NEUTRAL_CREDIT_STATES
-)
+_METHOD_CONTRACTS = market_setup_predicates.load_method_contracts()
 
-_VIX_STRESS_THRESHOLD = 20
+
+def _credit_confirmation_states(contracts):
+    downside = market_setup_predicates.confirmation_predicate(
+        "credit_confirmation_v2", "downside", contracts
+    )["operand"]
+    upside = market_setup_predicates.confirmation_predicate(
+        "credit_confirmation_v2", "upside", contracts
+    )["operand"]
+    return set(downside) | set(upside)
+
+
+_KNOWN_CREDIT_STATES = (
+    _credit_confirmation_states(_METHOD_CONTRACTS) | _NEUTRAL_CREDIT_STATES
+)
 
 _MARKET_CONFIRMATION_MISSING_LABELS = {
     "sp500_market_phase": "S&P 500 market phase",
@@ -359,65 +362,69 @@ def _direction_of_regime(macro_regime):
     return None
 
 
-def _credit_is_risk_state(status):
-    return status in _RISK_CREDIT_STATES
-
-
 def _vix_zone(vix):
     if vix is None:
         return None
-    if vix >= _VIX_STRESS_THRESHOLD:
-        return "stress"
-    return "normal"
+    predicate = market_setup_predicates.confirmation_predicate(
+        "vix_confirmation_v2", "downside", _METHOD_CONTRACTS
+    )
+    evaluation = market_setup_predicates.evaluate_predicate({"value": vix}, predicate)
+    return "stress" if evaluation["result"] else "normal"
+
+
+def _confirmation_evidence(
+    method_id, direction, actual_value, state, confirming, not_confirming
+):
+    predicate = market_setup_predicates.confirmation_predicate(
+        method_id, direction, _METHOD_CONTRACTS
+    )
+    evaluation = market_setup_predicates.evaluate_predicate(
+        {"value": actual_value}, predicate
+    )
+    confirms = evaluation["result"]
+    return {
+        "state": state,
+        "confirms": confirms,
+        "finding": confirming if confirms else not_confirming,
+        "predicate_ref": market_setup_predicates.predicate_ref(
+            method_id, direction, _METHOD_CONTRACTS
+        ),
+        "predicate": predicate,
+        "evaluation": evaluation,
+    }
 
 
 def _equity_trend_evidence(direction, phase):
-    if direction == "downside":
-        confirms = phase == "bear_market"
-    else:
-        confirms = phase == "bull_market"
-    return {
-        "state": phase,
-        "confirms": confirms,
-        "finding": (
-            "S&P 500 market phase confirms the directional regime"
-            if confirms
-            else "S&P 500 market phase does not confirm the directional regime"
-        ),
-    }
+    return _confirmation_evidence(
+        "equity_confirmation_v2",
+        direction,
+        phase,
+        phase,
+        "S&P 500 market phase confirms the directional regime",
+        "S&P 500 market phase does not confirm the directional regime",
+    )
 
 
 def _credit_evidence(direction, status):
-    if direction == "downside":
-        confirms = _credit_is_risk_state(status)
-    else:
-        confirms = status in _SUPPORTIVE_CREDIT_STATES
-    return {
-        "state": status,
-        "confirms": confirms,
-        "finding": (
-            "credit conditions confirm the directional regime"
-            if confirms
-            else "credit conditions do not confirm the directional regime"
-        ),
-    }
+    return _confirmation_evidence(
+        "credit_confirmation_v2",
+        direction,
+        status,
+        status,
+        "credit conditions confirm the directional regime",
+        "credit conditions do not confirm the directional regime",
+    )
 
 
 def _volatility_evidence(direction, vix):
-    zone = _vix_zone(vix)
-    if direction == "downside":
-        confirms = zone == "stress"
-    else:
-        confirms = zone == "normal"
-    return {
-        "state": zone,
-        "confirms": confirms,
-        "finding": (
-            "volatility confirms the directional regime"
-            if confirms
-            else "volatility does not confirm the directional regime"
-        ),
-    }
+    return _confirmation_evidence(
+        "vix_confirmation_v2",
+        direction,
+        vix,
+        _vix_zone(vix),
+        "volatility confirms the directional regime",
+        "volatility does not confirm the directional regime",
+    )
 
 
 def _liquidity_evidence(m2_fact):
