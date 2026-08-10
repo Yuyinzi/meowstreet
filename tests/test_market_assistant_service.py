@@ -2,9 +2,11 @@ import json
 
 import pytest
 
+from app.db import market_assistant as market_assistant_db
 from app.services import market_assistant
 from app.services.market_assistant import ASSISTANT_POLICY_VERSION
 from app.services.market_assistant import PROMPT_VERSION
+from app.services.market_setup_current import resolve_current_explanation
 from app.tools.market_assistant_plans import validate_task_plan
 
 
@@ -507,6 +509,125 @@ def fake_dependencies(plan, draft, repair=None, **kwargs):
     return FakeDependencies(plan, draft, repair=repair, **kwargs)
 
 
+class RealPersistenceDeps:
+    def __init__(self, db_path):
+        self.db_path = str(db_path)
+        self.config = _config()
+
+    def connect(self, db_path):
+        return market_assistant_db.connect(db_path)
+
+    def save_bundle(self, con, *, artifacts, answer_trace):
+        market_assistant_db.save_answer_bundle(
+            con, artifacts=artifacts, answer_trace=answer_trace
+        )
+
+    def resolve_current_explanation(self, db_path, *, previous_context_id, resolved_at):
+        return resolve_current_explanation(
+            db_path, previous_context_id=previous_context_id, resolved_at=resolved_at
+        )
+
+    async def plan_llm(self, *, question, context_summary):
+        return validate_task_plan(
+            {
+                "intent": "decision_explanation",
+                "context_mode": "current",
+                "operations": [
+                    {"operation_id": "resolve_current_explanation", "parameters": {}},
+                    {
+                        "operation_id": "get_indicator_definition",
+                        "parameters": {"indicator_id": "vix_level"},
+                    },
+                ],
+                "answer_depth": "standard",
+                "research_tier": None,
+            }
+        )
+
+    async def synthesize_llm(self, *, question, plan, context_summary, artifacts):
+        snapshot_artifact = next(
+            artifact
+            for artifact in artifacts.values()
+            if artifact["artifact_kind"] == "explanation_snapshot"
+        )
+        context_id = snapshot_artifact["artifact_id"]
+        regime = snapshot_artifact["payload"]["results"]["macro_regime"]
+        knowledge_artifact = next(
+            artifact
+            for artifact in artifacts.values()
+            if artifact["artifact_kind"] == "knowledge_record"
+        )
+        return {
+            "sections": [
+                {
+                    "kind": "decision",
+                    "claims": [
+                        {
+                            "claim_id": "c1",
+                            "purpose": "decision_explanation",
+                            "authority": "decision_fact",
+                            "refs": [
+                                {
+                                    "artifact_id": context_id,
+                                    "object_type": "market_setup_result",
+                                    "object_id": "macro_regime",
+                                }
+                            ],
+                            "template": "The macro regime is {regime}.",
+                            "bindings": {
+                                "regime": {
+                                    "value": regime["code"],
+                                    "source": {
+                                        "artifact_id": context_id,
+                                        "object_type": "market_setup_result",
+                                        "object_id": "macro_regime",
+                                        "field": "code",
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                },
+                {
+                    "kind": "knowledge",
+                    "claims": [
+                        {
+                            "claim_id": "k1",
+                            "purpose": "method_explanation",
+                            "authority": "method_knowledge",
+                            "refs": [
+                                {
+                                    "artifact_id": knowledge_artifact["artifact_id"],
+                                    "object_type": "indicator_definition",
+                                    "object_id": knowledge_artifact["artifact_id"],
+                                }
+                            ],
+                            "template": "The approved instrument is {title}.",
+                            "bindings": {
+                                "title": {
+                                    "value": "CBOE Volatility Index",
+                                    "source": {
+                                        "artifact_id": knowledge_artifact[
+                                            "artifact_id"
+                                        ],
+                                        "object_type": "indicator_definition",
+                                        "object_id": knowledge_artifact["artifact_id"],
+                                        "field": "title",
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                },
+            ]
+        }
+
+    async def repair_llm(
+        self, *, question, plan, context_summary, artifacts, draft, validation_report
+    ):
+        raise AssertionError("repair must not run")
+
+
 @pytest.mark.asyncio
 async def test_answer_uses_one_structured_synthesis_and_persists_trace():
     deps = fake_dependencies(valid_plan(), valid_draft())
@@ -712,14 +833,9 @@ async def test_external_and_local_claims_keep_separate_authorities():
         for claim in section["claims"]
     }
     assert authorities == {"decision_fact", "external_research"}
-    snapshot_artifact = next(
-        artifact
+    assert not any(
+        artifact["artifact_kind"] == "explanation_snapshot"
         for artifact in deps.saved_artifacts
-        if artifact["artifact_kind"] == "explanation_snapshot"
-    )
-    assert (
-        snapshot_artifact["payload"]["results"]["macro_regime"]["code"]
-        == "growth_decelerating"
     )
     research_artifact = next(
         artifact
@@ -804,7 +920,7 @@ async def test_answer_trace_has_design_19_fields_and_no_secrets():
 
 
 @pytest.mark.asyncio
-async def test_only_referenced_artifacts_are_persisted():
+async def test_only_referenced_persistable_artifacts_are_saved():
     plan = valid_plan(
         operations=[
             {"operation_id": "resolve_current_explanation", "parameters": {}},
@@ -819,11 +935,78 @@ async def test_only_referenced_artifacts_are_persisted():
         ],
         research_tier="focused",
     )
-    deps = fake_dependencies(plan, valid_draft(), research=research_result())
+    draft = {
+        "sections": [
+            {"kind": "decision", "claims": [valid_claim()]},
+            {"kind": "research", "claims": [_research_claim()]},
+        ]
+    }
+    deps = fake_dependencies(plan, draft, research=research_result())
     await market_assistant.answer_question(current_question(), dependencies=deps)
 
     persisted_ids = [artifact["artifact_id"] for artifact in deps.saved_artifacts]
-    assert persisted_ids == ["ctx_123"]
+    assert persisted_ids == ["res_1"]
+
+
+@pytest.mark.asyncio
+async def test_persistence_excludes_pre_durable_snapshot_artifact():
+    deps = fake_dependencies(valid_plan(), valid_draft())
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert deps.saved_artifacts == []
+    assert deps.saved_trace["generation_status"] == "validated_first_pass"
+
+
+@pytest.mark.asyncio
+async def test_unimplemented_operation_returns_deterministic_fallback():
+    plan = {
+        "intent": "counterfactual",
+        "context_mode": "current",
+        "operations": [
+            {
+                "operation_id": "get_counterfactuals",
+                "parameters": {"context_id": "ctx_123"},
+            }
+        ],
+        "answer_depth": "standard",
+        "research_tier": None,
+    }
+    deps = fake_dependencies(plan, valid_draft())
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "fallback"
+    assert deps.llm_calls == ["plan"]
+    assert deps.saved_trace["generation_status"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_answer_question_persists_real_bundle_with_durable_snapshot(tmp_path):
+    db_path = tmp_path / "assistant.sqlite"
+    deps = RealPersistenceDeps(db_path)
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    con = market_assistant_db.connect(db_path)
+    try:
+        trace = market_assistant_db.load_answer_trace(con, response["answer_trace_id"])
+        assert trace is not None
+        snapshot = market_assistant_db.load_snapshot(
+            con, trace["explanation_context_id"]
+        )
+        assert snapshot is not None
+        assert trace["knowledge_references"] == ["vix_definition"]
+        for table in ("knowledge_records", "exploration_results", "research_results"):
+            row = con.execute(f"select count(*) from {table}").fetchone()
+            assert row[0] == (1 if table == "knowledge_records" else 0)
+    finally:
+        con.close()
 
 
 @pytest.mark.asyncio
@@ -870,8 +1053,8 @@ def _knowledge_draft():
     return {"sections": [{"kind": "knowledge", "claims": [claim]}]}
 
 
-def _research_draft():
-    claim = {
+def _research_claim():
+    return {
         "claim_id": "r1",
         "purpose": "source_explanation",
         "authority": "external_research",
@@ -895,7 +1078,10 @@ def _research_draft():
             }
         },
     }
-    return {"sections": [{"kind": "research", "claims": [claim]}]}
+
+
+def _research_draft():
+    return {"sections": [{"kind": "research", "claims": [_research_claim()]}]}
 
 
 def _exploration_draft():

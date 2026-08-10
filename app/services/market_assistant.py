@@ -134,9 +134,13 @@ async def answer_question(request, *, dependencies):
     db_path = _dependency(deps, "db_path")
     resolution = _resolve_request_context(request, deps, db_path)
     plan, plan_attempts = await _plan_or_fallback(request, resolution, deps)
-    artifacts = await _acquire_registered_artifacts(request, plan, resolution, deps)
+    artifacts, unsupported_operation_id = await _acquire_registered_artifacts(
+        request, plan, resolution, deps
+    )
     frozen_artifacts = deepcopy(artifacts)
-    draft = await _synthesize(request, plan, resolution, frozen_artifacts, deps)
+    draft = None
+    if unsupported_operation_id is None:
+        draft = await _synthesize(request, plan, resolution, frozen_artifacts, deps)
     (
         validated,
         generation_status,
@@ -265,6 +269,7 @@ def _plan_validation_report(exc):
 
 async def _acquire_registered_artifacts(request, plan, resolution, deps):
     artifacts = {}
+    unsupported_operation_id = None
     for operation in plan.get("operations") or []:
         operation_id = operation["operation_id"]
         if operation_id == "resolve_current_explanation":
@@ -276,9 +281,13 @@ async def _acquire_registered_artifacts(request, plan, resolution, deps):
         elif operation_id in _RESEARCH_TIER:
             artifact = await _research_artifact(request, operation, deps)
         else:
-            raise ValueError(f"operation is not implemented: {operation_id}")
+            unsupported_operation_id = operation_id
+            break
         artifacts[artifact["artifact_id"]] = artifact
-    return artifacts
+    if unsupported_operation_id is not None:
+        snapshot_artifact = _snapshot_artifact(resolution["snapshot"])
+        artifacts[snapshot_artifact["artifact_id"]] = snapshot_artifact
+    return artifacts, unsupported_operation_id
 
 
 def _snapshot_artifact(snapshot):
@@ -584,9 +593,16 @@ def _collect_claim_artifact_ids(claim, referenced_ids):
 
 
 def _persist_bundle(deps, db_path, artifacts, trace):
+    durable_artifacts = [
+        artifact
+        for artifact in artifacts
+        if artifact["artifact_kind"] != "explanation_snapshot"
+    ]
     con = _dependency(deps, "connect")(db_path)
     try:
-        _dependency(deps, "save_bundle")(con, artifacts=artifacts, answer_trace=trace)
+        _dependency(deps, "save_bundle")(
+            con, artifacts=durable_artifacts, answer_trace=trace
+        )
     except Exception as exc:
         raise ValueError("answer trace persistence failed") from exc
     finally:
