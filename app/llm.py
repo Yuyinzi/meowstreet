@@ -91,11 +91,18 @@ def load_market_assistant_config(args=None, root=ROOT):
         )
         if config["base_url"] and not supports_web_search:
             raise RuntimeError("web search support must be explicitly enabled")
+    claim_validation_value = os.getenv("MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED")
+    claim_validation_enabled = (
+        True
+        if claim_validation_value is None
+        else _parse_market_bool(claim_validation_value)
+    )
     return {
         "api_key": config["api_key"],
         "base_url": config["base_url"],
         "model": model,
         "structured_output_mode": structured_output_mode,
+        "claim_validation_enabled": claim_validation_enabled,
         "research_model": research_model,
         "provider": provider,
         "research_enabled": research_enabled,

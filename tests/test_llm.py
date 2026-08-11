@@ -11,6 +11,7 @@ MARKET_ENV_NAMES = (
     "OPENAI_BASE_URL",
     "MARKET_ASSISTANT_MODEL",
     "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE",
+    "MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED",
     "MARKET_ASSISTANT_RESEARCH_MODEL",
     "MARKET_ASSISTANT_RESEARCH_PROVIDER",
     "MARKET_ASSISTANT_RESEARCH_ENABLED",
@@ -30,6 +31,7 @@ def write_env(tmp_path, **overrides):
     key_map = {
         "model": "MARKET_ASSISTANT_MODEL",
         "structured_output_mode": "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE",
+        "claim_validation": "MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED",
         "research_model": "MARKET_ASSISTANT_RESEARCH_MODEL",
         "provider": "MARKET_ASSISTANT_RESEARCH_PROVIDER",
         "base_url": "OPENAI_BASE_URL",
@@ -257,6 +259,40 @@ def test_load_market_assistant_config_rejects_unknown_structured_output_mode(
     with pytest.raises(
         RuntimeError,
         match="MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE must be json_schema or json_object",
+    ):
+        llm.load_market_assistant_config(root=tmp_path)
+
+
+def test_load_market_assistant_config_enables_claim_validation_by_default(
+    tmp_path, monkeypatch
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path)
+
+    config = llm.load_market_assistant_config(root=tmp_path)
+
+    assert config["claim_validation_enabled"] is True
+
+
+def test_load_market_assistant_config_can_disable_claim_validation(
+    tmp_path, monkeypatch
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path, claim_validation="false")
+
+    config = llm.load_market_assistant_config(root=tmp_path)
+
+    assert config["claim_validation_enabled"] is False
+
+
+def test_load_market_assistant_config_rejects_invalid_claim_validation_flag(
+    tmp_path, monkeypatch
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path, claim_validation="sometimes")
+
+    with pytest.raises(
+        RuntimeError, match="market assistant boolean must be true or false"
     ):
         llm.load_market_assistant_config(root=tmp_path)
 
