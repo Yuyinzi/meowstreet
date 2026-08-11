@@ -13,6 +13,7 @@ from app.db import macro_indicators as macro_indicators_db
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.routers import (
     macro_dashboard as macro_dashboard_router,
+    market_assistant as market_assistant_router,
     static_files as static_files_router,
     ticker_workflow as ticker_workflow_router,
 )
@@ -228,3 +229,4 @@ if STATIC_DIR.exists():
 app.include_router(static_files_router.router)
 app.include_router(ticker_workflow_router.router)
 app.include_router(macro_dashboard_router.router)
+app.include_router(market_assistant_router.router)
