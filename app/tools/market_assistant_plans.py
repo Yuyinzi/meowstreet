@@ -96,6 +96,14 @@ _SOURCE_MARKERS = ("source of", "where does", "come from", "origin of")
 
 _METHOD_MARKERS = ("formula", "calculated", "method", "how does", "how is", "measured")
 
+_DECISION_QUESTION_PREFIXES = (
+    "why is the current setup",
+    "why is the current market setup",
+    "why this setup",
+    "explain the market setup",
+    "explain the current market setup",
+)
+
 
 def _valid_iso_date(value):
     try:
@@ -411,7 +419,7 @@ def _research_parameters(lowered):
 
 
 def _is_decision_question(lowered):
-    return lowered.startswith("why is the current setup") or lowered.startswith(
+    return lowered.startswith(_DECISION_QUESTION_PREFIXES) or lowered.startswith(
         "why is the current"
     )
 

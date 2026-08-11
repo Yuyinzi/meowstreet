@@ -116,8 +116,19 @@ def test_current_intent_cannot_select_historical_context():
         validate_task_plan(payload)
 
 
-def test_decision_explanation_does_not_search_when_snapshot_is_sufficient():
-    plan = deterministic_plan("Why is the current setup Mild Risk-Off?")
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Why is the current setup Mild Risk-Off?",
+        "Explain the market setup",
+        "Explain the current market setup",
+        "Why this setup?",
+    ],
+)
+def test_decision_explanation_does_not_search_when_snapshot_is_sufficient(question):
+    plan = deterministic_plan(question)
+
+    assert plan["intent"] == "decision_explanation"
     assert [operation["operation_id"] for operation in plan["operations"]] == [
         "resolve_current_explanation"
     ]
