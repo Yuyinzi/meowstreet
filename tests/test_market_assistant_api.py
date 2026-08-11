@@ -218,6 +218,26 @@ def test_question_artifact_corruption_maps_to_409(assistant_env, monkeypatch):
     assert response.json()["detail"] == "answer trace is invalid"
 
 
+def test_question_artifact_corruption_with_expanded_message_maps_to_409(
+    assistant_env, monkeypatch
+):
+    async def raise_corruption(request, *, dependencies):
+        raise ValueError("artifact object is duplicated: evidence_fact.vix_level")
+
+    monkeypatch.setattr(market_assistant_service, "answer_question", raise_corruption)
+
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={"question": "Why?", "mode": "current"},
+    )
+
+    assert response.status_code == 409
+    assert (
+        response.json()["detail"]
+        == "artifact object is duplicated: evidence_fact.vix_level"
+    )
+
+
 def test_question_unexpected_error_maps_to_503_without_stack_trace(
     assistant_env, monkeypatch
 ):

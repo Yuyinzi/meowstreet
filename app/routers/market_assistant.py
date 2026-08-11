@@ -21,14 +21,10 @@ from app.tools.market_assistant_knowledge import load_knowledge_catalog
 
 router = APIRouter(prefix="/api/market-assistant", tags=["market-assistant"])
 
-_ARTIFACT_CORRUPTION_MESSAGES = frozenset(
+_ARTIFACT_CORRUPTION_PREFIXES = frozenset(
     {
         "answer trace is invalid",
         "explanation snapshot integrity check failed",
-        "snapshot duplicated column is invalid",
-        "decision path reference is invalid",
-        "counterfactual reference is invalid",
-        "counterfactual predicate reference is invalid",
         "artifact payload is invalid",
         "artifact object index is required",
         "artifact object is invalid",
@@ -173,7 +169,10 @@ def _validate_question_request(body):
 
 
 def _is_artifact_corruption(exc):
-    return isinstance(exc, ValueError) and str(exc) in _ARTIFACT_CORRUPTION_MESSAGES
+    if not isinstance(exc, ValueError):
+        return False
+    message = str(exc)
+    return any(message.startswith(prefix) for prefix in _ARTIFACT_CORRUPTION_PREFIXES)
 
 
 @router.post("/questions")
