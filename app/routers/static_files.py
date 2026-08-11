@@ -106,3 +106,15 @@ def claims_confirmation_css():
     return FileResponse(
         api.STATIC_DIR / "claims-confirmation.css", media_type="text/css"
     )
+
+
+@router.get("/market-assistant.js")
+def market_assistant_js():
+    return FileResponse(
+        api.STATIC_DIR / "market-assistant.js", media_type="application/javascript"
+    )
+
+
+@router.get("/market-assistant.css")
+def market_assistant_css():
+    return FileResponse(api.STATIC_DIR / "market-assistant.css", media_type="text/css")

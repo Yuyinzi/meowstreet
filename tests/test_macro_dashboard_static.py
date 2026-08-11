@@ -10,6 +10,8 @@ from app.tools import market_setup_evidence_layers
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_JS = ROOT / "static" / "macro-dashboard.js"
 STATIC_CSS = ROOT / "static" / "macro-dashboard.css"
+STATIC_HTML = ROOT / "static" / "macro-dashboard.html"
+ASSISTANT_JS = ROOT / "static" / "market-assistant.js"
 
 
 def test_macro_dashboard_html_links_assets_and_app_root():
@@ -18,6 +20,20 @@ def test_macro_dashboard_html_links_assets_and_app_root():
     assert 'id="macroDashboardApp"' in html
     assert 'href="/macro-dashboard.css"' in html
     assert 'src="/macro-dashboard.js"' in html
+
+
+def test_macro_dashboard_includes_market_assistant_assets():
+    html = STATIC_HTML.read_text(encoding="utf-8")
+    assert 'id="marketAssistant"' in html
+    assert 'src="/market-assistant.js"' in html
+    assert 'href="/market-assistant.css"' in html
+
+
+def test_assistant_renderer_uses_text_content_and_clickable_citations():
+    script = ASSISTANT_JS.read_text(encoding="utf-8")
+    assert "textContent" in script
+    assert 'target="_blank"' in script
+    assert 'rel="noopener noreferrer"' in script
 
 
 def test_nfib_regional_ui_renders_factual_read_and_component_comparisons():
@@ -8018,3 +8034,292 @@ def test_market_setup_non_directional_confirmation_shows_status_not_test_marks()
     assert "Insufficient Market Confirmation Evidence" in html
     assert "Missing: " in html
     assert "market phase" in html
+
+
+def _market_assistant_harness(test_js):
+    return textwrap.dedent(
+        f"""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        function makeEl(tag) {{
+          return {{
+            tagName: tag,
+            children: [],
+            className: "",
+            textContent: "",
+            value: "",
+            disabled: false,
+            checked: false,
+            attrs: {{}},
+            listeners: {{}},
+            classList: {{ add() {{}}, remove() {{}} }},
+            appendChild(child) {{ this.children.push(child); return child; }},
+            setAttribute(name, value) {{ this.attrs[name] = value; }},
+            addEventListener(type, fn) {{ this.listeners[type] = fn; }},
+            focus() {{}},
+          }};
+        }}
+
+        const elements = {{
+          marketAssistantLog: makeEl("div"),
+          marketAssistantForm: makeEl("form"),
+          marketAssistantQuestion: makeEl("input"),
+          marketAssistantSubmit: makeEl("button"),
+          marketAssistantExternalSearch: makeEl("input"),
+          marketAssistantDeepResearch: makeEl("input"),
+          marketAssistantStatus: makeEl("div"),
+        }};
+
+        global.window = {{ __MEOWSTREET_TEST__: true }};
+        global.document = {{
+          getElementById: (id) => elements[id],
+          createElement: (tag) => makeEl(tag),
+        }};
+        global.fetch = async () => {{ throw new Error("fetch not stubbed"); }};
+
+        vm.runInThisContext(fs.readFileSync("static/market-assistant.js", "utf8"));
+        const hooks = window.__MEOWSTREET_TEST__;
+
+        (async () => {{
+          {test_js}
+        }})();
+        """
+    )
+
+
+def _run_market_assistant_harness(test_js):
+    script = _market_assistant_harness(test_js)
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    return json.loads(result.stdout)
+
+
+def test_market_assistant_build_payload_uses_current_mode_and_context_id():
+    payload = _run_market_assistant_harness(
+        """
+        const first = hooks.buildPayload("What supports the setup?");
+        hooks.state.lastContextId = "ctx_B";
+        const second = hooks.buildPayload("What next?");
+        console.log(JSON.stringify({
+          question: first.question,
+          mode: first.mode,
+          hasPreviousContext: Object.prototype.hasOwnProperty.call(first, "previous_context_id"),
+          previousContextId: second.previous_context_id,
+          deepResearchDefault: first.deep_research_requested,
+          conversationId: typeof first.conversation_id === "string" && first.conversation_id.length > 0,
+        }));
+        """
+    )
+
+    assert payload == {
+        "question": "What supports the setup?",
+        "mode": "current",
+        "hasPreviousContext": False,
+        "previousContextId": "ctx_B",
+        "deepResearchDefault": False,
+        "conversationId": True,
+    }
+
+
+def test_market_assistant_enter_submits_and_disables_submit_during_request():
+    payload = _run_market_assistant_harness(
+        """
+        let resolveFetch;
+        let capturedBody;
+        global.fetch = (url, options) => {
+          capturedBody = JSON.parse(options.body);
+          return new Promise((resolve) => { resolveFetch = resolve; });
+        };
+        elements.marketAssistantQuestion.value = "What supports the setup?";
+        elements.marketAssistantQuestion.listeners.keydown({ key: "Enter", preventDefault() {} });
+        const disabledDuring = elements.marketAssistantSubmit.disabled === true;
+        resolveFetch({ ok: true, status: 200, json: async () => ({
+          resolution: { mode: "current", current_context_id: "ctx_B", context_changed: true, resolved_at: "2026-08-10T02:00:00Z" },
+          answer_text: "Market Setup remains macro_improving.",
+          citations: [],
+          generation_status: "validated_first_pass",
+          answer_trace_id: "trace_123",
+        }) });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        console.log(JSON.stringify({
+          disabledDuring,
+          disabledAfter: elements.marketAssistantSubmit.disabled === false,
+          question: capturedBody.question,
+          mode: capturedBody.mode,
+          lastContextId: hooks.state.lastContextId,
+          logChildren: elements.marketAssistantLog.children.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "disabledDuring": True,
+        "disabledAfter": True,
+        "question": "What supports the setup?",
+        "mode": "current",
+        "lastContextId": "ctx_B",
+        "logChildren": 2,
+    }
+
+
+def test_market_assistant_response_updates_context_for_next_payload():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({
+          resolution: { mode: "current", current_context_id: "ctx_NEW", context_changed: true, resolved_at: "2026-08-10T02:00:00Z" },
+          answer_text: "Market Setup is improving.",
+          citations: [],
+          generation_status: "validated_first_pass",
+          answer_trace_id: "trace_1",
+        }) });
+        elements.marketAssistantQuestion.value = "Question one";
+        await hooks.handleSubmit();
+        const nextPayload = hooks.buildPayload("Question two");
+        console.log(JSON.stringify({
+          storedContext: hooks.state.lastContextId,
+          previousContextId: nextPayload.previous_context_id,
+          conversationIdMatches: nextPayload.conversation_id === hooks.state.conversationId,
+        }));
+        """
+    )
+
+    assert payload == {
+        "storedContext": "ctx_NEW",
+        "previousContextId": "ctx_NEW",
+        "conversationIdMatches": True,
+    }
+
+
+def test_market_assistant_renderer_shows_context_fallback_and_evidence_notices():
+    payload = _run_market_assistant_harness(
+        """
+        const message = hooks.renderMessage({
+          role: "assistant",
+          text: "The setup is improving.",
+          contextChanged: true,
+          fallback: true,
+          evidenceDate: "2026-08-10",
+          citations: [{ source_id: "s1", title: "ISM Manufacturing Report", url: "https://example.com/ism", publisher: "ISM", event_date: "2026-08-01" }],
+        });
+        const textEl = message.children.find((child) => child.className === "market-assistant-message-text");
+        const contextNotice = message.children.find((child) => child.className === "market-assistant-notice market-assistant-notice-context");
+        const fallbackNotice = message.children.find((child) => child.className === "market-assistant-notice market-assistant-notice-fallback");
+        const evidenceEl = message.children.find((child) => child.className === "market-assistant-evidence-date");
+        const headingEl = message.children.find((child) => child.className === "market-assistant-citations-heading");
+        const citations = message.children.find((child) => child.className === "market-assistant-citations");
+        const citationLink = citations.children[0].children[0];
+        const citationDate = citations.children[0].children[1];
+        const plain = hooks.renderMessage({ role: "assistant", text: "Plain answer.", citations: [] });
+        console.log(JSON.stringify({
+          answerText: textEl.textContent,
+          hasContextNotice: Boolean(contextNotice),
+          hasFallbackNotice: Boolean(fallbackNotice),
+          evidenceLabel: evidenceEl.textContent,
+          externalHeading: headingEl.textContent,
+          citationHref: citationLink.attrs.href,
+          citationTarget: citationLink.attrs.target,
+          citationRel: citationLink.attrs.rel,
+          citationTitle: citationLink.textContent,
+          citationDate: citationDate.textContent,
+          contextNoticePrecedesAnswer: message.children.indexOf(contextNotice) < message.children.indexOf(textEl),
+          plainHasNoNotices: plain.children.length === 1,
+        }));
+        """
+    )
+
+    assert payload == {
+        "answerText": "The setup is improving.",
+        "hasContextNotice": True,
+        "hasFallbackNotice": True,
+        "evidenceLabel": "Market Setup evidence through 2026-08-10",
+        "externalHeading": "External research",
+        "citationHref": "https://example.com/ism",
+        "citationTarget": "_blank",
+        "citationRel": "noopener noreferrer",
+        "citationTitle": "ISM Manufacturing Report",
+        "citationDate": "2026-08-01",
+        "contextNoticePrecedesAnswer": True,
+        "plainHasNoNotices": True,
+    }
+
+
+def test_market_assistant_accepted_evidence_date_derives_from_resolution():
+    payload = _run_market_assistant_harness(
+        """
+        console.log(JSON.stringify({
+          explicitThrough: hooks.acceptedEvidenceDate({ evidence_through: "2026-08-05T00:00:00Z" }),
+          derivedFromResolvedAt: hooks.acceptedEvidenceDate({ resolved_at: "2026-08-10T02:00:00Z" }),
+          snapshotThrough: hooks.acceptedEvidenceDate({ snapshot: { evidence_through: "2026-07-01T00:00:00Z" } }),
+          missingResolution: hooks.acceptedEvidenceDate(null),
+        }));
+        """
+    )
+
+    assert payload == {
+        "explicitThrough": "2026-08-05",
+        "derivedFromResolvedAt": "2026-08-10",
+        "snapshotThrough": "2026-07-01",
+        "missingResolution": None,
+    }
+
+
+def test_market_assistant_deep_research_requires_external_search():
+    payload = _run_market_assistant_harness(
+        """
+        const plainFlag = hooks.buildPayload("plain").deep_research_requested;
+        const initiallyDisabled = elements.marketAssistantDeepResearch.disabled === true;
+        elements.marketAssistantExternalSearch.checked = true;
+        elements.marketAssistantExternalSearch.listeners.change({ target: { checked: true } });
+        const enabledAfterExternal = elements.marketAssistantDeepResearch.disabled === false;
+        elements.marketAssistantDeepResearch.checked = true;
+        elements.marketAssistantDeepResearch.listeners.change({ target: { checked: true } });
+        const payload = hooks.buildPayload("What next?");
+        const optionPayload = hooks.buildPayload("Deep?", { deepResearchRequested: true });
+        console.log(JSON.stringify({
+          initiallyDisabled,
+          enabledAfterExternal,
+          deepResearchFlag: payload.deep_research_requested,
+          optionFlag: optionPayload.deep_research_requested,
+          plainFlag,
+        }));
+        """
+    )
+
+    assert payload == {
+        "initiallyDisabled": True,
+        "enabledAfterExternal": True,
+        "deepResearchFlag": True,
+        "optionFlag": True,
+        "plainFlag": False,
+    }
+
+
+def test_market_assistant_error_recovery_preserves_question():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => { throw new Error("network down"); };
+        elements.marketAssistantQuestion.value = "Will this work?";
+        await hooks.handleSubmit();
+        console.log(JSON.stringify({
+          hasError: hooks.state.error !== null,
+          statusText: elements.marketAssistantStatus.textContent,
+          questionPreserved: elements.marketAssistantQuestion.value === "Will this work?",
+          submitEnabled: elements.marketAssistantSubmit.disabled === false,
+          logChildren: elements.marketAssistantLog.children.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "hasError": True,
+        "statusText": "The assistant could not answer right now. Your question is preserved.",
+        "questionPreserved": True,
+        "submitEnabled": True,
+        "logChildren": 1,
+    }

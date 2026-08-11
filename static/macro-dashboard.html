@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/ism-services.css" />
   <link rel="stylesheet" href="/consumer-sentiment.css" />
   <link rel="stylesheet" href="/claims-confirmation.css" />
+  <link rel="stylesheet" href="/market-assistant.css" />
 </head>
 <body>
   <a href="#macroDashboardApp" class="skip-link">Skip to main content</a>
@@ -39,6 +40,33 @@
           </div>
         </div>
         <div class="market-setup-loading" aria-busy="true">Loading market setup…</div>
+      </section>
+      <section class="market-assistant" id="marketAssistant" aria-label="Market Setup assistant">
+        <div class="market-assistant-head">
+          <div>
+            <h2>Market Setup Assistant</h2>
+            <p class="subtitle">Ask questions about the current market setup and its supporting evidence.</p>
+          </div>
+        </div>
+        <div class="market-assistant-log" id="marketAssistantLog" aria-live="polite" aria-atomic="true"></div>
+        <form class="market-assistant-form" id="marketAssistantForm">
+          <label for="marketAssistantQuestion">Your question</label>
+          <div class="market-assistant-input-row">
+            <input type="text" id="marketAssistantQuestion" name="question" autocomplete="off" placeholder="e.g. What supports the current market setup?" />
+            <button type="submit" id="marketAssistantSubmit">Ask</button>
+          </div>
+          <div class="market-assistant-controls">
+            <label class="market-assistant-option">
+              <input type="checkbox" id="marketAssistantExternalSearch" />
+              <span>Search external sources</span>
+            </label>
+            <label class="market-assistant-option">
+              <input type="checkbox" id="marketAssistantDeepResearch" />
+              <span>Deep research</span>
+            </label>
+          </div>
+        </form>
+        <div class="market-assistant-status" id="marketAssistantStatus" aria-live="polite"></div>
       </section>
       <section class="survey-synthesis-layer" id="surveySynthesis" aria-label="ISM survey synthesis decision layer" aria-live="polite" aria-atomic="true">
         <div class="relationship-head">
@@ -100,6 +128,7 @@
   <script src="/nfib-sbo-ui.js"></script>
   <script src="/cyclical-commodities-ui.js"></script>
   <script src="/claims-confirmation-ui.js"></script>
+  <script src="/market-assistant.js"></script>
   <script src="/macro-dashboard.js"></script>
 </body>
 </html>
