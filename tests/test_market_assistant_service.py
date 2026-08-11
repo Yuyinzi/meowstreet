@@ -708,9 +708,9 @@ def test_decision_explanation_projection_excludes_non_decision_display_objects()
         {"ctx_123": artifact}, valid_plan()
     )
 
-    assert [
-        item["object_id"] for item in projected["ctx_123"]["object_index"]
-    ] == ["survey_growth_direction"]
+    assert [item["object_id"] for item in projected["ctx_123"]["object_index"]] == [
+        "survey_growth_direction"
+    ]
 
 
 @pytest.mark.asyncio
@@ -722,6 +722,70 @@ async def test_failed_repair_uses_deterministic_fallback_without_new_tools():
 
     assert response["generation_status"] == "fallback"
     assert deps.tool_execution_count == 1
+    assert deps.llm_calls == ["plan", "draft", "repair"]
+
+
+@pytest.mark.asyncio
+async def test_disabled_claim_validation_returns_unvalidated_debug_draft():
+    deps = fake_dependencies(
+        valid_plan(),
+        invalid_draft(),
+        invalid_repair(),
+        config=_config(claim_validation_enabled=False),
+    )
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "unvalidated_debug"
+    assert response["answer_text"].startswith("UNVALIDATED DEEPSEEK DEBUG OUTPUT\n")
+    assert deps.llm_calls == ["plan", "draft"]
+    assert deps.saved_trace["generation_status"] == "unvalidated_debug"
+    assert deps.saved_trace["structured_claims"] == invalid_draft()["sections"]
+    assert deps.saved_trace["validation_error_codes"] == []
+    assert deps.saved_trace["attempts"] == {
+        "plan": 1,
+        "draft": 1,
+        "repair": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_disabled_claim_validation_still_falls_back_for_invalid_schema():
+    deps = fake_dependencies(
+        valid_plan(),
+        {"sections": []},
+        invalid_repair(),
+        config=_config(claim_validation_enabled=False),
+    )
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "fallback"
+    assert deps.llm_calls == ["plan", "draft"]
+    assert deps.saved_trace["structured_claims"] is None
+    assert deps.saved_trace["validation_error_codes"] == ["SCHEMA_INVALID"]
+
+
+@pytest.mark.asyncio
+async def test_claim_validation_remains_enabled_when_config_key_is_absent():
+    config = _config()
+    config.pop("claim_validation_enabled", None)
+    deps = fake_dependencies(
+        valid_plan(),
+        invalid_draft(),
+        invalid_repair(),
+        config=config,
+    )
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "fallback"
     assert deps.llm_calls == ["plan", "draft", "repair"]
 
 

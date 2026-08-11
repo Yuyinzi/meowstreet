@@ -259,7 +259,7 @@ def _validate_draft_schema(payload):
         validated = _AnswerDraft.model_validate(payload)
     except ValidationError as exc:
         return None, _translate_schema_errors(payload, exc)
-    return validated.model_dump(), []
+    return validated.model_dump(exclude_none=True), []
 
 
 def _translate_schema_errors(payload, exc):

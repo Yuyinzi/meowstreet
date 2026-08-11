@@ -214,7 +214,12 @@ def load_latest_snapshot(con):
 
 
 _TRACE_GENERATION_STATUSES = frozenset(
-    {"validated_first_pass", "validated_after_repair", "fallback"}
+    {
+        "validated_first_pass",
+        "validated_after_repair",
+        "unvalidated_debug",
+        "fallback",
+    }
 )
 
 _FINGERPRINT_SECRET_MARKERS = ("api_key", "apikey", "secret", "token", "password")

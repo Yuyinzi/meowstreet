@@ -19,7 +19,9 @@ from app.tools.market_assistant_answers import build_validation_report
 from app.tools.market_assistant_answers import collect_citations
 from app.tools.market_assistant_answers import render_answer
 from app.tools.market_assistant_answers import render_fallback
+from app.tools.market_assistant_answers import render_unvalidated_debug_answer
 from app.tools.market_assistant_answers import validate_answer_draft
+from app.tools.market_assistant_answers import validate_answer_draft_schema
 from app.tools.market_assistant_artifacts import build_object_index
 from app.tools.market_assistant_artifacts import validate_artifact
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
@@ -177,7 +179,10 @@ async def answer_question(request, *, dependencies):
         request, plan, resolution, frozen_artifacts, draft, deps
     )
     attempts["plan"] = plan_attempts
-    if validated is not None:
+    if generation_status == "unvalidated_debug":
+        answer_text = render_unvalidated_debug_answer(validated)
+        citations = []
+    elif validated is not None:
         answer_text = render_answer(validated, frozen_artifacts, [])
         citations = collect_citations(validated, frozen_artifacts)
     else:
@@ -740,6 +745,16 @@ async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, 
     if draft is None:
         return None, "fallback", attempts, validation_error_codes
     attempts["draft"] += 1
+    claim_validation_enabled = _runtime_config(deps).get(
+        "claim_validation_enabled", True
+    )
+    if not claim_validation_enabled:
+        try:
+            normalized = validate_answer_draft_schema(draft)
+        except DraftValidationError as exc:
+            validation_error_codes = sorted({error["code"] for error in exc.errors})
+            return None, "fallback", attempts, validation_error_codes
+        return normalized, "unvalidated_debug", attempts, validation_error_codes
     try:
         validated = validate_answer_draft(draft, artifacts)
         return validated, "validated_first_pass", attempts, validation_error_codes
@@ -893,6 +908,7 @@ def _model_configuration_fingerprint(config):
         "provider": config.get("provider"),
         "model": config.get("model"),
         "structured_output_mode": config.get("structured_output_mode"),
+        "claim_validation_enabled": config.get("claim_validation_enabled", True),
         "research_model": config.get("research_model"),
         "tool_schema_versions": TOOL_SCHEMA_VERSIONS,
         "assistant_policy_version": ASSISTANT_POLICY_VERSION,
