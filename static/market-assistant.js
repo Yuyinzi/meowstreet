@@ -82,7 +82,7 @@
     const notice = document.createElement("p");
     notice.className = "market-assistant-notice market-assistant-notice-fallback";
     notice.textContent =
-      "Deterministic fallback answer - some sources or live research were unavailable.";
+      "A deterministic fallback was used because a validated assistant response was unavailable.";
     return notice;
   }
 
@@ -181,11 +181,11 @@
     }
   }
 
-  function renderStatus(text) {
+  function renderStatus(text, isError) {
     const el = elements();
     if (!el.status) return;
     el.status.textContent = text;
-    el.status.className = text
+    el.status.className = text && isError
       ? "market-assistant-status market-assistant-status-error"
       : "market-assistant-status";
   }
@@ -220,16 +220,18 @@
     if (!question || state.busy) return;
     state.busy = true;
     el.submit.disabled = true;
+    renderStatus("Generating a grounded answer...", false);
     appendMessage({ role: "user", text: question });
     el.question.value = "";
     try {
       const data = await submitQuestion(question);
       appendMessage(assistantMessageFrom(data));
-      renderStatus("");
+      renderStatus("", false);
     } catch (error) {
       state.error = String(error.message || "request failed");
       renderStatus(
-        "The assistant could not answer right now. Your question is preserved."
+        "The assistant could not answer right now. Your question is preserved.",
+        true
       );
       el.question.value = question;
     } finally {

@@ -8129,6 +8129,22 @@ def test_market_assistant_build_payload_uses_current_mode_and_context_id():
     }
 
 
+def test_market_assistant_fallback_notice_does_not_invent_research_failure():
+    payload = _run_market_assistant_harness(
+        """
+        const notice = hooks.renderFallbackNotice();
+        console.log(JSON.stringify({ text: notice.textContent }));
+        """
+    )
+
+    assert payload == {
+        "text": (
+            "A deterministic fallback was used because a validated assistant "
+            "response was unavailable."
+        )
+    }
+
+
 def test_market_assistant_enter_submits_and_disables_submit_during_request():
     payload = _run_market_assistant_harness(
         """
@@ -8141,6 +8157,8 @@ def test_market_assistant_enter_submits_and_disables_submit_during_request():
         elements.marketAssistantQuestion.value = "What supports the setup?";
         elements.marketAssistantQuestion.listeners.keydown({ key: "Enter", preventDefault() {} });
         const disabledDuring = elements.marketAssistantSubmit.disabled === true;
+        const statusDuring = elements.marketAssistantStatus.textContent;
+        const statusClassDuring = elements.marketAssistantStatus.className;
         resolveFetch({ ok: true, status: 200, json: async () => ({
           resolution: { mode: "current", current_context_id: "ctx_B", context_changed: true, resolved_at: "2026-08-10T02:00:00Z" },
           answer_text: "Market Setup remains macro_improving.",
@@ -8152,6 +8170,9 @@ def test_market_assistant_enter_submits_and_disables_submit_during_request():
         console.log(JSON.stringify({
           disabledDuring,
           disabledAfter: elements.marketAssistantSubmit.disabled === false,
+          statusDuring,
+          statusClassDuring,
+          statusAfter: elements.marketAssistantStatus.textContent,
           question: capturedBody.question,
           mode: capturedBody.mode,
           lastContextId: hooks.state.lastContextId,
@@ -8163,6 +8184,9 @@ def test_market_assistant_enter_submits_and_disables_submit_during_request():
     assert payload == {
         "disabledDuring": True,
         "disabledAfter": True,
+        "statusDuring": "Generating a grounded answer...",
+        "statusClassDuring": "market-assistant-status",
+        "statusAfter": "",
         "question": "What supports the setup?",
         "mode": "current",
         "lastContextId": "ctx_B",
