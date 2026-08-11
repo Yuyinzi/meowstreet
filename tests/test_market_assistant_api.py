@@ -39,6 +39,7 @@ def _stored_trace():
         },
         "explanation_context_id": "ctx_B",
         "knowledge_references": ["vix_definition"],
+        "snapshot_artifact_ids": [],
         "exploration_result_ids": [],
         "research_result_ids": [],
         "plan": {
@@ -279,6 +280,35 @@ def test_question_unexpected_error_maps_to_503_without_stack_trace(
     assert response.status_code == 503
     assert "Traceback" not in response.text
     assert "boom" not in response.text
+
+
+def test_missing_market_assistant_config_falls_back_not_503(monkeypatch):
+    for name in (
+        "MARKET_ASSISTANT_MODEL",
+        "MARKET_ASSISTANT_RESEARCH_MODEL",
+        "MARKET_ASSISTANT_RESEARCH_PROVIDER",
+        "MARKET_ASSISTANT_RESEARCH_ENABLED",
+        "MARKET_ASSISTANT_RESEARCH_SUPPORTS_WEB_SEARCH",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("MARKET_ASSISTANT_MODEL", raising=False)
+
+    async def fake_answer_question(request, *, dependencies):
+        return {"resolution": {"mode": "current"}, "generation_status": "fallback"}
+
+    monkeypatch.setattr(
+        market_assistant_service, "answer_question", fake_answer_question
+    )
+
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={"question": "Why?", "mode": "current"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["generation_status"] == "fallback"
 
 
 def test_question_endpoint_has_no_refresh_side_effects(assistant_env, monkeypatch):

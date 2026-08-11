@@ -23,6 +23,7 @@ from app.tools.market_assistant_artifacts import validate_artifact
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
 from app.tools.market_assistant_plans import deterministic_plan
 from app.tools.market_assistant_research import RESEARCH_SCHEMA_VERSION
+from app.tools.market_setup_explanation_snapshot import build_semantic_delta
 from app.tools.market_setup_explanation_snapshot import canonical_json
 
 PROMPT_VERSION = "market_assistant_prompt_v1"
@@ -229,6 +230,7 @@ def _resolve_request_context(request, deps, db_path):
                 "previous_context_id": request.get("previous_context_id"),
                 "current_context_id": context_id,
                 "context_changed": (request.get("previous_context_id") != context_id),
+                "evidence_through": snapshot.get("evidence_through"),
             },
             "delta": {"results_changed": False, "changes": []},
             "snapshot": snapshot,
@@ -290,6 +292,14 @@ async def _acquire_registered_artifacts(request, plan, resolution, deps):
         operation_id = operation["operation_id"]
         if operation_id == "resolve_current_explanation":
             artifact = _snapshot_artifact(resolution["snapshot"])
+        elif operation_id == "get_historical_snapshot":
+            artifact = _historical_snapshot_artifact(operation, resolution, deps)
+        elif operation_id == "get_snapshot_object":
+            artifact = _snapshot_object_artifact(operation, resolution)
+        elif operation_id == "get_counterfactuals":
+            artifact = _counterfactuals_artifact(operation, resolution, deps)
+        elif operation_id == "compare_snapshots":
+            artifact = _compare_snapshots_artifact(operation, resolution, deps)
         elif operation_id in _KNOWLEDGE_OBJECT_TYPE:
             artifact = _knowledge_artifact(operation, deps)
         elif operation_id in _EXPLORATION_QUERY_KIND:
@@ -309,7 +319,131 @@ async def _acquire_registered_artifacts(request, plan, resolution, deps):
     return artifacts, unsupported_operation_id
 
 
+def _load_snapshot_by_context_id(deps, context_id):
+    con = _dependency(deps, "connect")(_dependency(deps, "db_path"))
+    try:
+        return _dependency(deps, "load_snapshot")(con, context_id)
+    finally:
+        con.close()
+
+
+def _historical_snapshot_artifact(operation, resolution, deps):
+    context_id = operation["parameters"]["context_id"]
+    snapshot = resolution["snapshot"]
+    if snapshot.get("context_id") != context_id:
+        return None
+    return _snapshot_artifact(snapshot)
+
+
+def _snapshot_object_artifact(operation, resolution):
+    object_type = operation["parameters"]["object_type"]
+    object_id = operation["parameters"]["object_id"]
+    snapshot = resolution["snapshot"]
+    object_entry = _find_snapshot_object(snapshot, object_type, object_id)
+    if object_entry is None:
+        return None
+    envelope = {
+        "artifact_id": f"{snapshot['context_id']}_{object_type}_{object_id}",
+        "artifact_kind": "explanation_snapshot",
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
+        "primary_authority": "decision_fact",
+        "market_setup_relation": "authoritative_snapshot",
+        "payload": snapshot,
+        "object_index": build_object_index([object_entry]),
+    }
+    return _finalize_envelope(envelope)
+
+
+def _find_snapshot_object(snapshot, object_type, object_id):
+    for candidate in _snapshot_objects(snapshot):
+        if (
+            candidate["object_type"] == object_type
+            and candidate["object_id"] == object_id
+        ):
+            return candidate
+    return None
+
+
+def _counterfactuals_artifact(operation, resolution, deps):
+    context_id = operation["parameters"]["context_id"]
+    snapshot = resolution["snapshot"]
+    if snapshot.get("context_id") != context_id:
+        return None
+    objects = [
+        _artifact_object(
+            counterfactual["object_type"],
+            counterfactual["object_id"],
+            "decision_fact",
+            counterfactual,
+        )
+        for counterfactual in snapshot.get("counterfactuals") or []
+    ]
+    if not objects:
+        return None
+    envelope = {
+        "artifact_id": f"{snapshot['context_id']}_counterfactuals",
+        "artifact_kind": "explanation_snapshot",
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
+        "primary_authority": "decision_fact",
+        "market_setup_relation": "authoritative_snapshot",
+        "payload": snapshot,
+        "object_index": build_object_index(objects),
+    }
+    return _finalize_envelope(envelope)
+
+
+def _compare_snapshots_artifact(operation, resolution, deps):
+    context_a_id = operation["parameters"]["context_a_id"]
+    context_b_id = operation["parameters"]["context_b_id"]
+    resolution_context_id = resolution["snapshot"]["context_id"]
+    if resolution_context_id not in (context_a_id, context_b_id):
+        return None
+    snapshot_a = (
+        resolution["snapshot"]
+        if context_a_id == resolution_context_id
+        else _load_snapshot_by_context_id(deps, context_a_id)
+    )
+    snapshot_b = (
+        resolution["snapshot"]
+        if context_b_id == resolution_context_id
+        else _load_snapshot_by_context_id(deps, context_b_id)
+    )
+    if snapshot_a is None or snapshot_b is None:
+        return None
+    delta = build_semantic_delta(snapshot_a, snapshot_b)
+    artifact_id = f"cmp_{context_a_id}_{context_b_id}"
+    envelope = {
+        "artifact_id": artifact_id,
+        "artifact_kind": "explanation_snapshot",
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
+        "primary_authority": "decision_fact",
+        "market_setup_relation": "authoritative_snapshot",
+        "payload": {
+            "context_a_id": context_a_id,
+            "context_b_id": context_b_id,
+            "delta": delta,
+        },
+        "object_index": build_object_index(
+            [_artifact_object("snapshot_delta", artifact_id, "decision_fact", delta)]
+        ),
+    }
+    return _finalize_envelope(envelope)
+
+
 def _snapshot_artifact(snapshot):
+    envelope = {
+        "artifact_id": snapshot["context_id"],
+        "artifact_kind": "explanation_snapshot",
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
+        "primary_authority": "decision_fact",
+        "market_setup_relation": "authoritative_snapshot",
+        "payload": snapshot,
+        "object_index": build_object_index(_snapshot_objects(snapshot)),
+    }
+    return _finalize_envelope(envelope)
+
+
+def _snapshot_objects(snapshot):
     objects = []
     results = snapshot.get("results") or {}
     for layer_id in _RESULT_LAYERS:
@@ -338,16 +472,7 @@ def _snapshot_artifact(snapshot):
                 counterfactual,
             )
         )
-    envelope = {
-        "artifact_id": snapshot["context_id"],
-        "artifact_kind": "explanation_snapshot",
-        "schema_version": ARTIFACT_SCHEMA_VERSION,
-        "primary_authority": "decision_fact",
-        "market_setup_relation": "authoritative_snapshot",
-        "payload": snapshot,
-        "object_index": build_object_index(objects),
-    }
-    return _finalize_envelope(envelope)
+    return objects
 
 
 def _artifact_object(object_type, object_id, authority, payload):
@@ -614,10 +739,12 @@ def _collect_claim_artifact_ids(claim, referenced_ids):
 
 
 def _persist_bundle(deps, db_path, artifacts, trace):
+    explanation_context_id = trace["explanation_context_id"]
     durable_artifacts = [
         artifact
         for artifact in artifacts
         if artifact["artifact_kind"] != "explanation_snapshot"
+        or artifact["artifact_id"] != explanation_context_id
     ]
     con = _dependency(deps, "connect")(db_path)
     try:
@@ -650,6 +777,9 @@ def build_answer_trace(
         "resolution": resolution["resolution"],
         "explanation_context_id": resolution["snapshot"]["context_id"],
         "knowledge_references": _artifact_ids_by_kind(artifacts, "knowledge_record"),
+        "snapshot_artifact_ids": _artifact_ids_by_kind(
+            artifacts, "explanation_snapshot"
+        ),
         "exploration_result_ids": _artifact_ids_by_kind(
             artifacts, "exploration_result"
         ),

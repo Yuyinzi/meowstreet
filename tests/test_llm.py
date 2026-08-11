@@ -245,6 +245,24 @@ def test_load_market_assistant_config_parses_disabled_research(tmp_path, monkeyp
     assert config["research_enabled"] is False
 
 
+def test_load_market_assistant_config_disabled_research_does_not_require_research_model(
+    tmp_path, monkeypatch
+):
+    clear_market_env(monkeypatch)
+    write_env(
+        tmp_path,
+        enabled="false",
+        research_model="",
+        provider="",
+    )
+
+    config = llm.load_market_assistant_config(root=tmp_path)
+
+    assert config["research_enabled"] is False
+    assert config["research_model"] is None
+    assert config["provider"] is None
+
+
 def test_load_market_assistant_config_builds_client_via_build_async_client(
     tmp_path, monkeypatch
 ):

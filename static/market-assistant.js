@@ -64,10 +64,10 @@
 
   function acceptedEvidenceDate(resolution) {
     if (!resolution) return null;
-    const snapshot = resolution.snapshot || {};
-    const evidenceThrough = resolution.evidence_through || snapshot.evidence_through;
+    const evidenceThrough =
+      resolution.evidence_through ||
+      (resolution.snapshot || {}).evidence_through;
     if (evidenceThrough) return String(evidenceThrough).slice(0, 10);
-    if (resolution.resolved_at) return String(resolution.resolved_at).slice(0, 10);
     return null;
   }
 

@@ -8256,7 +8256,7 @@ def test_market_assistant_accepted_evidence_date_derives_from_resolution():
         """
         console.log(JSON.stringify({
           explicitThrough: hooks.acceptedEvidenceDate({ evidence_through: "2026-08-05T00:00:00Z" }),
-          derivedFromResolvedAt: hooks.acceptedEvidenceDate({ resolved_at: "2026-08-10T02:00:00Z" }),
+          resolvedAtOnly: hooks.acceptedEvidenceDate({ resolved_at: "2026-08-10T02:00:00Z" }),
           snapshotThrough: hooks.acceptedEvidenceDate({ snapshot: { evidence_through: "2026-07-01T00:00:00Z" } }),
           missingResolution: hooks.acceptedEvidenceDate(null),
         }));
@@ -8265,7 +8265,7 @@ def test_market_assistant_accepted_evidence_date_derives_from_resolution():
 
     assert payload == {
         "explicitThrough": "2026-08-05",
-        "derivedFromResolvedAt": "2026-08-10",
+        "resolvedAtOnly": None,
         "snapshotThrough": "2026-07-01",
         "missingResolution": None,
     }

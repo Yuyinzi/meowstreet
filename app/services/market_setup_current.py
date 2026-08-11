@@ -320,6 +320,7 @@ def resolve_current_explanation(db_path, *, previous_context_id, resolved_at):
             "previous_context_id": previous_context_id,
             "current_context_id": snapshot["context_id"],
             "context_changed": previous_context_id != snapshot["context_id"],
+            "evidence_through": snapshot.get("evidence_through"),
         },
         "delta": delta,
         "snapshot": snapshot,

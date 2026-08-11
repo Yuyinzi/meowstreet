@@ -177,6 +177,26 @@ def snapshot_state(equity_breadth=50.0, vix=15.0):
     )
 
 
+def snapshot_artifact():
+    return {
+        "artifact_id": "ctx_123_counterfactuals",
+        "artifact_kind": "explanation_snapshot",
+        "schema_version": "market_assistant_artifact_v1",
+        "primary_authority": "decision_fact",
+        "market_setup_relation": "authoritative_snapshot",
+        "payload": {"context_id": "ctx_123", "counterfactuals": []},
+        "object_index": [
+            {
+                "object_type": "confirmation_test",
+                "object_id": "vix_downside",
+                "authority": "decision_fact",
+                "payload": {},
+            }
+        ],
+        "integrity_hash": "e" * 64,
+    }
+
+
 def knowledge_record_artifact():
     return {
         "artifact_id": "krec_vix_level_v1",
@@ -250,6 +270,7 @@ def answer_trace():
         },
         "explanation_context_id": "ctx_B",
         "knowledge_references": ["vix_definition"],
+        "snapshot_artifact_ids": [],
         "exploration_result_ids": [],
         "research_result_ids": [],
         "plan": {
@@ -496,6 +517,7 @@ class TestAnswerBundle:
     def test_save_answer_bundle_round_trip(self, tmp_path):
         con = market_assistant.connect(tmp_path / "assistant.sqlite")
         artifacts = [
+            snapshot_artifact(),
             knowledge_record_artifact(),
             exploration_result_artifact(),
             research_result_artifact(),
@@ -508,9 +530,64 @@ class TestAnswerBundle:
             market_assistant.load_answer_trace(con, trace["answer_trace_id"]) == trace
         )
         assert market_assistant.load_answer_trace(con, "missing_trace") is None
-        for table in ("knowledge_records", "exploration_results", "research_results"):
+        for table in (
+            "snapshot_artifacts",
+            "knowledge_records",
+            "exploration_results",
+            "research_results",
+        ):
             row = con.execute(f"select count(*) from {table}").fetchone()
             assert row[0] == 1
+
+    def test_save_answer_bundle_identical_artifact_is_idempotent(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        artifact = knowledge_record_artifact()
+        first = answer_trace()
+        second = answer_trace()
+        second["answer_trace_id"] = "trace_second"
+        second["message_id"] = "msg_second"
+        market_assistant.save_answer_bundle(
+            con, artifacts=[artifact], answer_trace=first
+        )
+        market_assistant.save_answer_bundle(
+            con, artifacts=[artifact], answer_trace=second
+        )
+        assert (
+            market_assistant.load_answer_trace(con, first["answer_trace_id"]) == first
+        )
+        assert (
+            market_assistant.load_answer_trace(con, second["answer_trace_id"]) == second
+        )
+        row = con.execute(
+            "select count(*) from knowledge_records where artifact_id = ?",
+            (artifact["artifact_id"],),
+        ).fetchone()
+        assert row[0] == 1
+
+    def test_save_answer_bundle_conflicting_artifact_id_raises(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        first = knowledge_record_artifact()
+        conflicting = knowledge_record_artifact()
+        conflicting["integrity_hash"] = "b" * 64
+        first_trace = answer_trace()
+        second_trace = answer_trace()
+        second_trace["answer_trace_id"] = "trace_conflict"
+        second_trace["message_id"] = "msg_conflict"
+        market_assistant.save_answer_bundle(
+            con, artifacts=[first], answer_trace=first_trace
+        )
+        with pytest.raises(ValueError, match="artifact id conflicts"):
+            market_assistant.save_answer_bundle(
+                con, artifacts=[conflicting], answer_trace=second_trace
+            )
+        assert (
+            market_assistant.load_answer_trace(con, first_trace["answer_trace_id"])
+            == first_trace
+        )
+        assert (
+            market_assistant.load_answer_trace(con, second_trace["answer_trace_id"])
+            is None
+        )
 
     def test_full_answer_trace_round_trips_all_design_19_fields(self, tmp_path):
         con = market_assistant.connect(tmp_path / "assistant.sqlite")

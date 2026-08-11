@@ -731,8 +731,6 @@ def _validate_unbound_literals(claim):
 
 
 def _validate_claim_language(claim, artifacts):
-    if claim["authority"] in ("decision_fact", "hypothetical"):
-        return []
     errors = []
     claim_id = claim["claim_id"]
     stripped = _PLACEHOLDER_RE.sub("", claim["template"])

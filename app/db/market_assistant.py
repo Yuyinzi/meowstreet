@@ -30,6 +30,7 @@ _SNAPSHOT_DUPLICATE_COLUMNS = (
 )
 
 _ARTIFACT_TABLE_BY_KIND = {
+    "explanation_snapshot": "snapshot_artifacts",
     "knowledge_record": "knowledge_records",
     "exploration_result": "exploration_results",
     "research_result": "research_results",
@@ -61,6 +62,15 @@ create unique index if not exists uq_explanation_snapshots_fingerprint
 on explanation_snapshots(explanation_fingerprint);
 create index if not exists idx_explanation_snapshots_context
 on explanation_snapshots(context_id);
+create table if not exists snapshot_artifacts (
+    artifact_id text primary key,
+    artifact_kind text not null,
+    schema_version text not null,
+    primary_authority text not null,
+    market_setup_relation text not null,
+    integrity_hash text not null,
+    artifact_json text not null
+);
 create table if not exists knowledge_records (
     artifact_id text primary key,
     artifact_kind text not null,
@@ -224,6 +234,7 @@ def _validate_answer_trace_shape(answer_trace):
         raise ValueError("answer trace explanation context id is required")
     for key in (
         "knowledge_references",
+        "snapshot_artifact_ids",
         "exploration_result_ids",
         "research_result_ids",
     ):
@@ -279,6 +290,17 @@ def _insert_artifact(con, artifact):
             f"artifact kind is not persistable: {artifact['artifact_kind']}"
         )
     canonical_text = canonical_json(artifact).decode("utf-8")
+    existing = con.execute(
+        f"select integrity_hash, artifact_json from {table} where artifact_id = ?",
+        (artifact["artifact_id"],),
+    ).fetchone()
+    if existing is not None:
+        if (
+            existing["integrity_hash"] == artifact["integrity_hash"]
+            and existing["artifact_json"] == canonical_text
+        ):
+            return
+        raise ValueError("artifact id conflicts with a stored artifact")
     con.execute(
         f"""insert into {table}({_ARTIFACT_TABLE_COLUMNS})
             values ({_ARTIFACT_TABLE_PLACEHOLDERS})""",

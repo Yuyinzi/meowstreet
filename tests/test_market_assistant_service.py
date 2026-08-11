@@ -152,6 +152,8 @@ def fake_snapshot():
                 "label": "VIX",
                 "accepted_values": {"level": 18.4},
                 "data_status": {"state": "available"},
+                "participation": {"state": "applied"},
+                "decision_result": {"evaluation": {"state": "evaluated"}},
             }
         ],
         "method_contracts": {
@@ -426,6 +428,7 @@ class FakeDependencies:
         self.saved_trace = None
         self.saved_artifacts = None
         self.acquired_research_kwargs = None
+        self.acquired_artifacts = None
         self.db_path = ":memory:"
         self.config = config if config is not None else _config()
         self._plan = plan
@@ -450,6 +453,7 @@ class FakeDependencies:
 
     async def synthesize_llm(self, *, question, plan, context_summary, artifacts):
         self.llm_calls.append("draft")
+        self.acquired_artifacts = artifacts
         if isinstance(self._draft, Exception):
             raise self._draft
         return self._draft
@@ -966,7 +970,93 @@ async def test_persistence_excludes_pre_durable_snapshot_artifact():
 
 
 @pytest.mark.asyncio
-async def test_unimplemented_operation_returns_deterministic_fallback():
+async def test_counterfactuals_mismatched_context_falls_back():
+    plan = {
+        "intent": "counterfactual",
+        "context_mode": "current",
+        "operations": [
+            {
+                "operation_id": "get_counterfactuals",
+                "parameters": {"context_id": "ctx_old"},
+            }
+        ],
+        "answer_depth": "standard",
+        "research_tier": None,
+    }
+    snapshot = fake_snapshot()
+    snapshot["counterfactuals"] = [
+        {
+            "counterfactual_id": "cf_1",
+            "object_type": "confirmation_test",
+            "object_id": "vix_downside_confirmation",
+            "transition": "accepted_value_crosses_boundary",
+            "decision_effect": "confirmation_test_result_change",
+        }
+    ]
+    resolve = resolution_envelope()
+    resolve["snapshot"] = snapshot
+    deps = fake_dependencies(plan, valid_draft(), resolve=resolve)
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "fallback"
+    assert deps.saved_trace["generation_status"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_historical_snapshot_mismatched_context_falls_back():
+    plan = {
+        "intent": "historical_snapshot",
+        "context_mode": "historical",
+        "operations": [
+            {
+                "operation_id": "get_historical_snapshot",
+                "parameters": {"context_id": "ctx_old"},
+            }
+        ],
+        "answer_depth": "standard",
+        "research_tier": None,
+    }
+    deps = fake_dependencies(plan, valid_draft())
+    response = await market_assistant.answer_question(
+        current_question(mode="historical", context_id="ctx_123"),
+        dependencies=deps,
+    )
+
+    assert response["generation_status"] == "fallback"
+    assert deps.saved_trace["generation_status"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_compare_snapshots_requires_resolution_context():
+    plan = {
+        "intent": "snapshot_comparison",
+        "context_mode": "historical",
+        "operations": [
+            {
+                "operation_id": "compare_snapshots",
+                "parameters": {
+                    "context_a_id": "ctx_A",
+                    "context_b_id": "ctx_B",
+                },
+            }
+        ],
+        "answer_depth": "standard",
+        "research_tier": None,
+    }
+    deps = fake_dependencies(plan, valid_draft())
+    response = await market_assistant.answer_question(
+        current_question(mode="historical", context_id="ctx_123"),
+        dependencies=deps,
+    )
+
+    assert response["generation_status"] == "fallback"
+    assert deps.saved_trace["generation_status"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_missing_counterfactuals_returns_deterministic_fallback():
     plan = {
         "intent": "counterfactual",
         "context_mode": "current",
@@ -987,6 +1077,240 @@ async def test_unimplemented_operation_returns_deterministic_fallback():
     assert response["generation_status"] == "fallback"
     assert deps.llm_calls == ["plan"]
     assert deps.saved_trace["generation_status"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_historical_snapshot_operation_acquires_snapshot_artifact():
+    plan = {
+        "intent": "historical_snapshot",
+        "context_mode": "historical",
+        "operations": [
+            {
+                "operation_id": "get_historical_snapshot",
+                "parameters": {"context_id": "ctx_123"},
+            }
+        ],
+        "answer_depth": "standard",
+        "research_tier": None,
+    }
+    draft = {
+        "sections": [
+            {
+                "kind": "decision",
+                "claims": [
+                    {
+                        "claim_id": "h1",
+                        "purpose": "decision_explanation",
+                        "authority": "decision_fact",
+                        "refs": [
+                            {
+                                "artifact_id": "ctx_123",
+                                "object_type": "market_setup_result",
+                                "object_id": "macro_regime",
+                            }
+                        ],
+                        "template": "The macro regime was {regime}.",
+                        "bindings": {
+                            "regime": {
+                                "value": "growth_decelerating",
+                                "source": {
+                                    "artifact_id": "ctx_123",
+                                    "object_type": "market_setup_result",
+                                    "object_id": "macro_regime",
+                                    "field": "code",
+                                },
+                            }
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+    deps = fake_dependencies(plan, draft)
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert any(
+        artifact["artifact_kind"] == "explanation_snapshot"
+        for artifact in deps.acquired_artifacts.values()
+    )
+
+
+@pytest.mark.asyncio
+async def test_snapshot_object_operation_acquires_focused_artifact():
+    plan = {
+        "intent": "decision_explanation",
+        "context_mode": "current",
+        "operations": [
+            {
+                "operation_id": "get_snapshot_object",
+                "parameters": {
+                    "object_type": "market_setup_result",
+                    "object_id": "macro_regime",
+                },
+            }
+        ],
+        "answer_depth": "standard",
+        "research_tier": None,
+    }
+    draft = {
+        "sections": [
+            {
+                "kind": "decision",
+                "claims": [
+                    {
+                        "claim_id": "s1",
+                        "purpose": "decision_explanation",
+                        "authority": "decision_fact",
+                        "refs": [
+                            {
+                                "artifact_id": "ctx_123_market_setup_result_macro_regime",
+                                "object_type": "market_setup_result",
+                                "object_id": "macro_regime",
+                            }
+                        ],
+                        "template": "The macro regime is {regime}.",
+                        "bindings": {
+                            "regime": {
+                                "value": "growth_decelerating",
+                                "source": {
+                                    "artifact_id": "ctx_123_market_setup_result_macro_regime",
+                                    "object_type": "market_setup_result",
+                                    "object_id": "macro_regime",
+                                    "field": "code",
+                                },
+                            }
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+    deps = fake_dependencies(plan, draft)
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+
+
+@pytest.mark.asyncio
+async def test_counterfactuals_operation_acquires_artifact_when_present():
+    plan = {
+        "intent": "counterfactual",
+        "context_mode": "current",
+        "operations": [
+            {
+                "operation_id": "get_counterfactuals",
+                "parameters": {"context_id": "ctx_123"},
+            }
+        ],
+        "answer_depth": "standard",
+        "research_tier": None,
+    }
+    snapshot = fake_snapshot()
+    snapshot["counterfactuals"] = [
+        {
+            "counterfactual_id": "cf_1",
+            "object_type": "confirmation_test",
+            "object_id": "vix_downside_confirmation",
+            "transition": "accepted_value_crosses_boundary",
+            "decision_effect": "confirmation_test_result_change",
+        }
+    ]
+    resolve = resolution_envelope()
+    resolve["snapshot"] = snapshot
+    draft = {
+        "sections": [
+            {
+                "kind": "decision",
+                "claims": [
+                    {
+                        "claim_id": "cf1",
+                        "purpose": "counterfactual_explanation",
+                        "authority": "decision_fact",
+                        "refs": [
+                            {
+                                "artifact_id": "ctx_123_counterfactuals",
+                                "object_type": "confirmation_test",
+                                "object_id": "vix_downside_confirmation",
+                            }
+                        ],
+                        "template": "The approved test would flip.",
+                        "bindings": {},
+                    }
+                ],
+            }
+        ]
+    }
+    deps = fake_dependencies(plan, draft, resolve=resolve)
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert "ctx_123_counterfactuals" in deps.saved_trace["snapshot_artifact_ids"]
+    assert "ctx_123_counterfactuals" in [
+        artifact["artifact_id"] for artifact in deps.saved_artifacts
+    ]
+
+
+@pytest.mark.asyncio
+async def test_compare_snapshots_operation_acquires_delta_artifact():
+    plan = {
+        "intent": "snapshot_comparison",
+        "context_mode": "historical",
+        "operations": [
+            {
+                "operation_id": "compare_snapshots",
+                "parameters": {
+                    "context_a_id": "ctx_A",
+                    "context_b_id": "ctx_123",
+                },
+            }
+        ],
+        "answer_depth": "standard",
+        "research_tier": None,
+    }
+    draft = {
+        "sections": [
+            {
+                "kind": "decision",
+                "claims": [
+                    {
+                        "claim_id": "cmp1",
+                        "purpose": "decision_explanation",
+                        "authority": "decision_fact",
+                        "refs": [
+                            {
+                                "artifact_id": "cmp_ctx_A_ctx_123",
+                                "object_type": "snapshot_delta",
+                                "object_id": "cmp_ctx_A_ctx_123",
+                            }
+                        ],
+                        "template": "The snapshots are compared.",
+                        "bindings": {},
+                    }
+                ],
+            }
+        ]
+    }
+    deps = fake_dependencies(plan, draft)
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert any(
+        artifact["artifact_id"] == "cmp_ctx_A_ctx_123"
+        for artifact in deps.acquired_artifacts.values()
+    )
+    assert "cmp_ctx_A_ctx_123" in deps.saved_trace["snapshot_artifact_ids"]
+    assert "cmp_ctx_A_ctx_123" in [
+        artifact["artifact_id"] for artifact in deps.saved_artifacts
+    ]
 
 
 @pytest.mark.asyncio

@@ -115,6 +115,46 @@ def response_with_search_call_and_citations():
     )
 
 
+def response_with_two_sources():
+    text = "The Federal Reserve reported a rate decision."
+    start = text.index("reported")
+    end = text.index("rate decision")
+    return FakeResponse(
+        output=[
+            FakeWebSearchCall(
+                "sc_1",
+                "latest federal funds rate",
+                [
+                    FakeSearchSource("https://www.federalreserve.gov/press.htm"),
+                    FakeSearchSource("https://example.test/rates"),
+                ],
+            ),
+            FakeMessage(
+                "msg_1",
+                [
+                    FakeOutputText(
+                        text,
+                        [
+                            FakeURLCitation(
+                                "https://www.federalreserve.gov/press.htm",
+                                "Federal Reserve Press",
+                                start,
+                                end,
+                            ),
+                            FakeURLCitation(
+                                "https://example.test/rates",
+                                "Example Rates",
+                                start,
+                                end,
+                            ),
+                        ],
+                    )
+                ],
+            ),
+        ]
+    )
+
+
 @pytest.mark.asyncio
 async def test_provider_requests_sources_and_normalizes_citations():
     client = FakeResponsesClient(response_with_search_call_and_citations())
@@ -127,6 +167,54 @@ async def test_provider_requests_sources_and_normalizes_citations():
     ]
     assert client.kwargs["include"] == ["web_search_call.action.sources"]
     assert payload["sources"][0]["url"] == "https://example.test/report"
+
+
+@pytest.mark.asyncio
+async def test_provider_passes_allowed_domains_in_request_filters():
+    client = FakeResponsesClient(response_with_two_sources())
+    provider = OpenAIWebSearchProvider(client, "research-model")
+    task = focused_task()
+    task["approved_domains"] = ["federalreserve.gov"]
+
+    await provider.search(task)
+
+    assert client.kwargs["tools"] == [
+        {
+            "type": "web_search",
+            "search_context_size": "low",
+            "filters": {"allowed_domains": ["federalreserve.gov"]},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_provider_filters_findings_when_all_cited_sources_dropped():
+    client = FakeResponsesClient(response_with_two_sources())
+    provider = OpenAIWebSearchProvider(client, "research-model")
+    task = focused_task()
+    task["approved_domains"] = ["not-allowed.test"]
+
+    with pytest.raises(OpenAIWebSearchError) as excinfo:
+        await provider.search(task)
+
+    assert excinfo.value.reason_code == "missing_sources"
+
+
+@pytest.mark.asyncio
+async def test_provider_drops_dropped_source_from_finding_citations():
+    client = FakeResponsesClient(response_with_two_sources())
+    provider = OpenAIWebSearchProvider(client, "research-model")
+    task = focused_task()
+    task["approved_domains"] = ["federalreserve.gov"]
+
+    payload = await provider.search(task)
+
+    assert len(payload["sources"]) == 1
+    assert all(
+        citation["url"] == "https://www.federalreserve.gov/press.htm"
+        for finding in payload["findings"]
+        for citation in finding["citations"]
+    )
 
 
 @pytest.mark.asyncio
@@ -157,8 +245,8 @@ async def test_provider_makes_one_request_per_query():
     await provider.search(task)
 
     assert len(client.calls) == 2
-    assert client.calls[0]["input"] == "first query"
-    assert client.calls[1]["input"] == "second query"
+    assert client.calls[0]["input"] == "first query (official publication)"
+    assert client.calls[1]["input"] == "second query (official publication)"
 
 
 @pytest.mark.asyncio
@@ -189,7 +277,9 @@ async def test_provider_normalizes_search_calls_sources_and_findings():
     payload = await provider.search(focused_task())
 
     assert payload["search_calls"][0]["search_call_id"] == "sc_1"
-    assert payload["search_calls"][0]["query"] == "latest federal funds rate"
+    assert payload["search_calls"][0]["query"] == (
+        "latest federal funds rate (official publication)"
+    )
     source = payload["sources"][0]
     assert source["title"] == "Federal Reserve Report"
     assert source["cited_spans"] == ["reported a"]
@@ -226,6 +316,81 @@ async def test_provider_raises_stable_error_when_sources_missing():
         await provider.search(focused_task())
 
     assert excinfo.value.reason_code == "missing_sources"
+
+
+@pytest.mark.asyncio
+async def test_provider_filters_sources_outside_approved_domains():
+    client = FakeResponsesClient(response_with_two_sources())
+    provider = OpenAIWebSearchProvider(client, "research-model")
+    task = focused_task()
+    task["approved_domains"] = ["federalreserve.gov"]
+
+    payload = await provider.search(task)
+
+    assert [source["url"] for source in payload["sources"]] == [
+        "https://www.federalreserve.gov/press.htm"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_provider_raises_missing_sources_when_all_domains_filtered():
+    client = FakeResponsesClient(response_with_two_sources())
+    provider = OpenAIWebSearchProvider(client, "research-model")
+    task = focused_task()
+    task["approved_domains"] = ["not-allowed.test"]
+
+    with pytest.raises(OpenAIWebSearchError) as excinfo:
+        await provider.search(task)
+
+    assert excinfo.value.reason_code == "missing_sources"
+
+
+@pytest.mark.asyncio
+async def test_provider_translates_time_window_into_query_qualifier():
+    client = FakeResponsesClient(response_with_two_sources())
+    provider = OpenAIWebSearchProvider(client, "research-model")
+    task = focused_task()
+    task["time_window"] = {"start": "2026-08-01", "end": "2026-08-31"}
+
+    payload = await provider.search(task)
+
+    assert client.calls[0]["input"] == (
+        "latest federal funds rate "
+        "(official publication, between 2026-08-01 and 2026-08-31)"
+    )
+    assert [source["url"] for source in payload["sources"]] == [
+        "https://example.test/rates",
+        "https://www.federalreserve.gov/press.htm",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_provider_does_not_drop_sources_for_time_window():
+    client = FakeResponsesClient(response_with_two_sources())
+    provider = OpenAIWebSearchProvider(client, "research-model")
+    task = focused_task()
+    task["time_window"] = {"start": "2026-08-01", "end": "2026-08-31"}
+
+    payload = await provider.search(task)
+
+    assert len(payload["sources"]) == 2
+    assert payload["search_calls"][0]["query"] == (
+        "latest federal funds rate "
+        "(official publication, between 2026-08-01 and 2026-08-31)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_provider_translates_expected_source_class_into_query():
+    client = FakeResponsesClient(response_with_two_sources())
+    provider = OpenAIWebSearchProvider(client, "research-model")
+    task = focused_task()
+    task["expected_source_class"] = "academic"
+
+    payload = await provider.search(task)
+
+    assert client.calls[0]["input"] == "latest federal funds rate (academic)"
+    assert len(payload["sources"]) == 2
 
 
 @pytest.mark.asyncio

@@ -58,28 +58,32 @@ def load_market_assistant_config(args=None, root=ROOT):
     )
     if not model:
         raise RuntimeError("MARKET_ASSISTANT_MODEL is required")
-    research_model = getattr(
-        args, "market_assistant_research_model", None
-    ) or os.getenv("MARKET_ASSISTANT_RESEARCH_MODEL")
-    if not research_model:
-        raise RuntimeError("MARKET_ASSISTANT_RESEARCH_MODEL is required")
-    provider = getattr(args, "market_assistant_research_provider", None) or os.getenv(
-        "MARKET_ASSISTANT_RESEARCH_PROVIDER"
-    )
-    if provider != "openai_responses":
-        raise RuntimeError(
-            "MARKET_ASSISTANT_RESEARCH_PROVIDER must be openai_responses"
-        )
     research_enabled = _parse_market_bool(
         getattr(args, "market_assistant_research_enabled", None)
         or os.getenv("MARKET_ASSISTANT_RESEARCH_ENABLED")
     )
-    supports_web_search = _parse_market_bool(
-        getattr(args, "market_assistant_research_supports_web_search", None)
-        or os.getenv("MARKET_ASSISTANT_RESEARCH_SUPPORTS_WEB_SEARCH")
-    )
-    if config["base_url"] and not supports_web_search:
-        raise RuntimeError("web search support must be explicitly enabled")
+    research_model = None
+    provider = None
+    supports_web_search = False
+    if research_enabled:
+        research_model = getattr(
+            args, "market_assistant_research_model", None
+        ) or os.getenv("MARKET_ASSISTANT_RESEARCH_MODEL")
+        if not research_model:
+            raise RuntimeError("MARKET_ASSISTANT_RESEARCH_MODEL is required")
+        provider = getattr(
+            args, "market_assistant_research_provider", None
+        ) or os.getenv("MARKET_ASSISTANT_RESEARCH_PROVIDER")
+        if provider != "openai_responses":
+            raise RuntimeError(
+                "MARKET_ASSISTANT_RESEARCH_PROVIDER must be openai_responses"
+            )
+        supports_web_search = _parse_market_bool(
+            getattr(args, "market_assistant_research_supports_web_search", None)
+            or os.getenv("MARKET_ASSISTANT_RESEARCH_SUPPORTS_WEB_SEARCH")
+        )
+        if config["base_url"] and not supports_web_search:
+            raise RuntimeError("web search support must be explicitly enabled")
     return {
         "api_key": config["api_key"],
         "base_url": config["base_url"],

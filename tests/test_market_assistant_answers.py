@@ -597,30 +597,49 @@ def test_decision_language_rejected_for_observation_claim():
         validate_answer_draft(draft(claim), artifacts())
 
 
-def test_predictive_language_rejected_for_research_claim():
-    claim = {
-        "claim_id": "c4",
-        "purpose": "observation",
-        "authority": "external_research",
-        "refs": [research_ref("src_1")],
-        "template": "The Fed predicts the {pub_date} decision.",
-        "bindings": {
-            "pub_date": {
-                "value": "2026-08-09",
-                "source": research_ref("src_1", field="publication_date"),
-            }
-        },
-    }
+def test_prohibited_decision_language_rejected_for_decision_fact_claim():
+    claim = valid_claim(template="You should buy NVDA now.")
+    with pytest.raises(ValueError, match="prohibited decision claim"):
+        validate_answer_draft(draft(claim), artifacts())
+
+
+def test_predictive_language_rejected_for_decision_fact_claim():
+    claim = valid_claim(template="This setup predicts a market crash.")
     with pytest.raises(ValueError, match="unsupported materiality language"):
         validate_answer_draft(draft(claim), artifacts())
 
 
-def test_approved_classification_in_referenced_object_allows_the_word():
-    claim = observation_claim(
-        "The window shows an elevated level from {first} to {last}."
+def test_materiality_language_rejected_for_decision_fact_claim():
+    claim = valid_claim(template="The setup is a strong downside setup.")
+    with pytest.raises(ValueError, match="unsupported materiality language"):
+        validate_answer_draft(draft(claim), artifacts())
+
+
+def test_referenced_classification_allows_word_for_decision_fact_claim():
+    artifact = snapshot_artifact()
+    for obj in artifact["object_index"]:
+        if (
+            obj["object_type"] == "confirmation_test"
+            and obj["object_id"] == "vix_downside_confirmation"
+        ):
+            obj["payload"]["classifications"] = {"result": "elevated"}
+    local = artifacts()
+    local["ctx_123"] = artifact
+    claim = valid_claim(
+        template="The confirmation test is elevated in the snapshot.",
+        bindings={},
     )
-    validated = validate_answer_draft(draft(claim), artifacts())
+    validated = validate_answer_draft(draft(claim), local)
     assert validated is not None
+
+
+def test_materiality_language_rejected_for_hypothetical_claim():
+    claim = hypothetical_claim(
+        "If the VIX were {vix_value}, the move would be extreme.",
+        bindings={"vix_value": 25.0},
+    )
+    with pytest.raises(ValueError, match="unsupported materiality language"):
+        validate_answer_draft(draft(claim, kind="illustration"), artifacts())
 
 
 def test_external_source_title_word_does_not_exempt_materiality():
