@@ -8145,6 +8145,39 @@ def test_market_assistant_fallback_notice_does_not_invent_research_failure():
     }
 
 
+def test_market_assistant_renderer_marks_unvalidated_debug_output():
+    payload = _run_market_assistant_harness(
+        """
+        const message = hooks.assistantMessageFrom({
+          resolution: { mode: "current" },
+          answer_text: "UNVALIDATED DEEPSEEK DEBUG OUTPUT\\n{}",
+          citations: [],
+          generation_status: "unvalidated_debug",
+          answer_trace_id: "trace_debug",
+        });
+        const rendered = hooks.renderMessage(message);
+        const notice = rendered.children.find(
+          (child) => child.className ===
+            "market-assistant-notice market-assistant-notice-debug"
+        );
+        console.log(JSON.stringify({
+          unvalidatedDebug: message.unvalidatedDebug,
+          fallback: message.fallback,
+          noticeText: notice && notice.textContent,
+        }));
+        """
+    )
+
+    assert payload == {
+        "unvalidatedDebug": True,
+        "fallback": False,
+        "noticeText": (
+            "Claim validation is disabled. This is unvalidated DeepSeek "
+            "debug output and must not be treated as a Market Setup decision."
+        ),
+    }
+
+
 def test_market_assistant_enter_submits_and_disables_submit_during_request():
     payload = _run_market_assistant_harness(
         """

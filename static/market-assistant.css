@@ -59,6 +59,12 @@
   border-left: 3px solid #D8C9B4;
 }
 
+.market-assistant-notice-debug {
+  color: #7A4B14;
+  background: #FBF0DE;
+  border-left: 3px solid #D79A35;
+}
+
 .market-assistant-evidence-date {
   margin: 0;
   color: #8B7E74;

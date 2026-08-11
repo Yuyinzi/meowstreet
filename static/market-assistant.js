@@ -86,6 +86,15 @@
     return notice;
   }
 
+  function renderUnvalidatedDebugNotice() {
+    const notice = document.createElement("p");
+    notice.className = "market-assistant-notice market-assistant-notice-debug";
+    notice.textContent =
+      "Claim validation is disabled. This is unvalidated DeepSeek debug output " +
+      "and must not be treated as a Market Setup decision.";
+    return notice;
+  }
+
   function renderEvidenceDate(date) {
     const line = document.createElement("p");
     line.className = "market-assistant-evidence-date";
@@ -141,6 +150,9 @@
     if (message.contextChanged) {
       article.appendChild(renderContextChangeNotice());
     }
+    if (message.unvalidatedDebug) {
+      article.appendChild(renderUnvalidatedDebugNotice());
+    }
     const text = document.createElement("p");
     text.className = "market-assistant-message-text";
     text.textContent = message.text;
@@ -168,6 +180,7 @@
       text: data.answer_text || "",
       citations: data.citations || [],
       fallback: data.generation_status === "fallback",
+      unvalidatedDebug: data.generation_status === "unvalidated_debug",
       contextChanged:
         Boolean(resolution.context_changed) && resolution.previous_context_id != null,
       evidenceDate: acceptedEvidenceDate(resolution),
