@@ -404,7 +404,7 @@ def invalid_draft():
                                 "object_id": "vix_level",
                             }
                         ],
-                        "template": "The VIX level is 99.9 today.",
+                        "template": "The VIX level is 99.9 today. unvalidated model text.",
                         "bindings": {},
                     }
                 ],
