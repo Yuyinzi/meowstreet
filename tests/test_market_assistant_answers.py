@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.tools.market_assistant_artifacts import validate_artifact
@@ -8,7 +10,9 @@ from app.tools.market_assistant_answers import calculate_hypothetical
 from app.tools.market_assistant_answers import collect_citations
 from app.tools.market_assistant_answers import render_answer
 from app.tools.market_assistant_answers import render_fallback
+from app.tools.market_assistant_answers import render_unvalidated_debug_answer
 from app.tools.market_assistant_answers import validate_answer_draft
+from app.tools.market_assistant_answers import validate_answer_draft_schema
 
 
 def snapshot_artifact():
@@ -571,6 +575,44 @@ def test_unbound_factual_enum_rejected():
     )
     with pytest.raises(ValueError, match="unbound factual literal"):
         validate_answer_draft(draft(claim), artifacts())
+
+
+def test_schema_only_validation_accepts_claim_policy_violation():
+    claim = valid_claim(
+        template="VIX is 18.4.",
+        bindings={},
+    )
+    payload = draft(claim)
+
+    with pytest.raises(DraftValidationError) as exc_info:
+        validate_answer_draft(payload, artifacts())
+
+    normalized = validate_answer_draft_schema(payload)
+
+    assert exc_info.value.errors[0]["code"] == "UNBOUND_FACTUAL_LITERAL"
+    assert normalized["sections"][0]["claims"][0]["template"] == "VIX is 18.4."
+
+
+def test_schema_only_validation_still_rejects_invalid_shape():
+    with pytest.raises(DraftValidationError) as exc_info:
+        validate_answer_draft_schema({"sections": []})
+
+    assert exc_info.value.errors[0]["code"] == "SCHEMA_INVALID"
+
+
+def test_unvalidated_debug_renderer_displays_normalized_draft_without_artifacts():
+    payload = draft(
+        valid_claim(
+            template="VIX is 18.4.",
+            bindings={},
+        )
+    )
+
+    rendered = render_unvalidated_debug_answer(payload)
+    serialized = rendered.split("\n", 1)[1]
+
+    assert rendered.startswith("UNVALIDATED DEEPSEEK DEBUG OUTPUT\n")
+    assert json.loads(serialized) == validate_answer_draft_schema(payload)
 
 
 def test_non_hypothetical_scalar_binding_rejected():

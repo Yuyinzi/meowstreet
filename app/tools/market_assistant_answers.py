@@ -1,3 +1,4 @@
+import json
 import re
 from math import isfinite
 from typing import Literal
@@ -218,6 +219,13 @@ def _sanitize_value(value):
 
 def _errors_message(errors):
     return "; ".join(error["message"] for error in errors)
+
+
+def validate_answer_draft_schema(payload):
+    normalized, errors = _validate_draft_schema(payload)
+    if errors:
+        raise DraftValidationError(_errors_message(errors), errors)
+    return normalized
 
 
 def validate_answer_draft(payload, artifacts):
@@ -847,6 +855,17 @@ def _sanitize_error(error):
         "expected": _sanitize_value(error.get("expected")),
         "actual": _sanitize_value(error.get("actual")),
     }
+
+
+def render_unvalidated_debug_answer(draft):
+    normalized = validate_answer_draft_schema(draft)
+    serialized = json.dumps(
+        normalized,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+    return "UNVALIDATED DEEPSEEK DEBUG OUTPUT\n" + serialized
 
 
 def render_answer(draft, artifacts, notices):
