@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.api import app
 from app.db import market_assistant as market_assistant_db
+from app.routers import market_assistant as market_assistant_router
 from app.services import market_assistant as market_assistant_service
 
 client = TestClient(app)
@@ -98,6 +99,52 @@ def test_current_question_returns_resolution_answer_and_trace(
     assert response.status_code == 200
     assert response.json()["resolution"]["mode"] == "current"
     assert response.json()["answer_trace_id"] == "trace_123"
+
+
+def test_assistant_runtime_allows_bounded_streaming_request(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(
+        "app.routers.market_assistant.load_market_assistant_config",
+        lambda: {
+            "model": "assistant-model",
+            "structured_output_mode": "json_object",
+        },
+    )
+
+    def fake_build_async_client(config, **kwargs):
+        captured["config"] = config
+        captured["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(
+        "app.routers.market_assistant.build_async_client", fake_build_async_client
+    )
+
+    _, model, structured_output_mode = market_assistant_router._assistant_runtime()
+
+    assert model == "assistant-model"
+    assert structured_output_mode == "json_object"
+    assert captured["kwargs"]["timeout"] == 900.0
+
+
+@pytest.mark.asyncio
+async def test_known_setup_question_uses_deterministic_plan_without_llm(monkeypatch):
+    monkeypatch.setattr(
+        market_assistant_router,
+        "_assistant_runtime",
+        lambda: (_ for _ in ()).throw(AssertionError("LLM must not run")),
+    )
+
+    plan = await market_assistant_router._plan_llm(
+        question="explain the market setup",
+        context_summary={"mode": "current"},
+    )
+
+    assert plan["intent"] == "decision_explanation"
+    assert plan["operations"] == [
+        {"operation_id": "resolve_current_explanation", "parameters": {}}
+    ]
 
 
 def test_historical_question_without_context_id_returns_400():
