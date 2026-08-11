@@ -314,7 +314,7 @@ def _snapshot_artifact(snapshot):
         objects.append(
             _artifact_object(
                 counterfactual["object_type"],
-                counterfactual["object_id"],
+                counterfactual["counterfactual_id"],
                 "decision_fact",
                 counterfactual,
             )
