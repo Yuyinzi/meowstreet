@@ -772,7 +772,8 @@ def _referenced_payload_words(claim, artifacts):
             object_entry = resolve_artifact_ref(artifacts, ref)
         except ValueError:
             continue
-        for text in _iter_strings(object_entry.get("payload")):
+        classifications = (object_entry.get("payload") or {}).get("classifications")
+        for text in _iter_strings(classifications):
             lowered = text.lower()
             tokens.update(_TOKEN_RE.findall(lowered))
             texts.append(lowered)

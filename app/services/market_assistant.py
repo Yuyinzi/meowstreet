@@ -28,7 +28,6 @@ from app.tools.market_setup_explanation_snapshot import canonical_json
 PROMPT_VERSION = "market_assistant_prompt_v1"
 ASSISTANT_POLICY_VERSION = "market_assistant_policy_v1"
 ARTIFACT_SCHEMA_VERSION = "market_assistant_artifact_v1"
-CONTEXT_CHANGE_NOTICE = "Market Setup context changed since the previous message."
 
 TOOL_SCHEMA_VERSIONS = {
     "artifact_envelope": ARTIFACT_SCHEMA_VERSION,
@@ -47,6 +46,28 @@ _KNOWLEDGE_OBJECT_TYPE = {
     "get_indicator_definition": "indicator_definition",
     "get_indicator_method": "indicator_method",
     "get_indicator_source": "indicator_source",
+}
+
+_KNOWLEDGE_INDICATOR_ALIASES = {
+    ("vix", "indicator_definition"): "vix_level",
+    ("vix", "indicator_method"): "vix_level",
+    ("vix", "indicator_source"): "vix_level",
+    ("m2_money_stock", "indicator_definition"): "m2_liquidity",
+    ("m2_money_stock", "indicator_method"): "m2_liquidity",
+    ("m2_money_stock", "indicator_source"): "m2_liquidity",
+    ("sp500_close", "indicator_definition"): "sp500_market_phase",
+    ("sp500_close", "indicator_method"): "sp500_market_phase",
+    ("sp500_close", "indicator_source"): "sp500_market_phase",
+    ("ism_manufacturing_pmi", "indicator_source"): "ism_surveys",
+    ("initial_claims_sa", "indicator_definition"): "jobless_claims",
+    ("initial_claims_sa", "indicator_method"): "jobless_claims",
+    ("initial_claims_sa", "indicator_source"): "jobless_claims",
+    ("continuing_claims_sa", "indicator_definition"): "jobless_claims",
+    ("continuing_claims_sa", "indicator_method"): "jobless_claims",
+    ("continuing_claims_sa", "indicator_source"): "jobless_claims",
+    ("credit_conditions", "indicator_definition"): "credit_conditions",
+    ("credit_conditions", "indicator_method"): "credit_conditions",
+    ("credit_conditions", "indicator_source"): "credit_conditions",
 }
 
 _EXPLORATION_QUERY_KIND = {
@@ -150,17 +171,11 @@ async def answer_question(request, *, dependencies):
         request, plan, resolution, frozen_artifacts, draft, deps
     )
     attempts["plan"] = plan_attempts
-    notices = _build_notices(resolution)
     if validated is not None:
-        answer_text = _render_answer_text(
-            render_answer(validated, frozen_artifacts, []), notices
-        )
+        answer_text = render_answer(validated, frozen_artifacts, [])
         citations = collect_citations(validated, frozen_artifacts)
     else:
-        answer_text = _render_answer_text(
-            render_fallback(plan=plan, artifacts=frozen_artifacts, notices=[]),
-            notices,
-        )
+        answer_text = render_fallback(plan=plan, artifacts=frozen_artifacts, notices=[])
         citations = []
     generated_at = _now_iso()
     referenced = _referenced_artifacts(plan, validated, frozen_artifacts)
@@ -229,6 +244,7 @@ def _context_summary(request, resolution):
         "current_context_id": envelope["current_context_id"],
         "previous_context_id": envelope["previous_context_id"],
         "resolved_at": envelope["resolved_at"],
+        "external_search_requested": bool(request.get("external_search_requested")),
     }
 
 
@@ -283,6 +299,9 @@ async def _acquire_registered_artifacts(request, plan, resolution, deps):
         else:
             unsupported_operation_id = operation_id
             break
+        if artifact is None:
+            unsupported_operation_id = operation_id
+            break
         artifacts[artifact["artifact_id"]] = artifact
     if unsupported_operation_id is not None:
         snapshot_artifact = _snapshot_artifact(resolution["snapshot"])
@@ -314,7 +333,7 @@ def _snapshot_artifact(snapshot):
         objects.append(
             _artifact_object(
                 counterfactual["object_type"],
-                counterfactual["counterfactual_id"],
+                counterfactual["object_id"],
                 "decision_fact",
                 counterfactual,
             )
@@ -355,6 +374,8 @@ def _knowledge_artifact(operation, deps):
     object_type = _KNOWLEDGE_OBJECT_TYPE[operation["operation_id"]]
     catalog = _dependency(deps, "load_knowledge_catalog")()
     record = _resolve_knowledge_record(catalog, indicator_id, object_type)
+    if record is None:
+        return None
     envelope = {
         "artifact_id": record["record_id"],
         "artifact_kind": "knowledge_record",
@@ -374,15 +395,23 @@ def _knowledge_artifact(operation, deps):
 
 
 def _resolve_knowledge_record(catalog, indicator_id, object_type):
-    matches = [
+    matches = _knowledge_matches(catalog, indicator_id, object_type)
+    if not matches:
+        alias_id = _KNOWLEDGE_INDICATOR_ALIASES.get((indicator_id, object_type))
+        if alias_id is not None:
+            matches = _knowledge_matches(catalog, alias_id, object_type)
+    if not matches:
+        return None
+    return max(matches, key=lambda record: record["version"])
+
+
+def _knowledge_matches(catalog, indicator_id, object_type):
+    return [
         record
         for record in catalog.get("records") or []
         if record.get("indicator_id") == indicator_id
         and record.get("object_type") == object_type
     ]
-    if not matches:
-        raise ValueError(f"knowledge record is not available for {indicator_id}")
-    return max(matches, key=lambda record: record["version"])
 
 
 def _exploration_artifact(operation, deps):
@@ -394,6 +423,8 @@ def _exploration_artifact(operation, deps):
         result = _dependency(deps, "exploration")(
             con, query, result_id=result_id, created_at=created_at
         )
+    except ValueError:
+        return None
     finally:
         con.close()
     envelope = {
@@ -454,7 +485,11 @@ async def _research_artifact(request, operation, deps):
             result_id, searched_at, "configuration_unavailable"
         )
     result = await _dependency(deps, "acquire_research")(
-        provider, task, result_id=result_id, searched_at=searched_at
+        provider,
+        task,
+        result_id=result_id,
+        searched_at=searched_at,
+        explicit_deep=(tier == "deep" and bool(request.get("deep_research_requested"))),
     )
     if result.get("status") == "research_unavailable":
         return _research_unavailable_artifact(
@@ -542,20 +577,6 @@ async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, 
     except DraftValidationError as exc:
         validation_error_codes = sorted({error["code"] for error in exc.errors})
         return None, "fallback", attempts, validation_error_codes
-
-
-def _build_notices(resolution):
-    envelope = resolution["resolution"]
-    if envelope.get("previous_context_id") and envelope.get("context_changed"):
-        return [{"text": CONTEXT_CHANGE_NOTICE}]
-    return []
-
-
-def _render_answer_text(rendered, notices):
-    notice_texts = [notice["text"] for notice in notices if notice.get("text")]
-    if not notice_texts:
-        return rendered
-    return "\n".join(notice_texts) + "\n" + rendered
 
 
 def _referenced_artifacts(plan, validated, artifacts):

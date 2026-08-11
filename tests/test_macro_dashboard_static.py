@@ -8112,6 +8112,7 @@ def test_market_assistant_build_payload_uses_current_mode_and_context_id():
           hasPreviousContext: Object.prototype.hasOwnProperty.call(first, "previous_context_id"),
           previousContextId: second.previous_context_id,
           deepResearchDefault: first.deep_research_requested,
+          externalSearchDefault: first.external_search_requested,
           conversationId: typeof first.conversation_id === "string" && first.conversation_id.length > 0,
         }));
         """
@@ -8123,6 +8124,7 @@ def test_market_assistant_build_payload_uses_current_mode_and_context_id():
         "hasPreviousContext": False,
         "previousContextId": "ctx_B",
         "deepResearchDefault": False,
+        "externalSearchDefault": False,
         "conversationId": True,
     }
 
@@ -8273,6 +8275,7 @@ def test_market_assistant_deep_research_requires_external_search():
     payload = _run_market_assistant_harness(
         """
         const plainFlag = hooks.buildPayload("plain").deep_research_requested;
+        const plainExternal = hooks.buildPayload("plain").external_search_requested;
         const initiallyDisabled = elements.marketAssistantDeepResearch.disabled === true;
         elements.marketAssistantExternalSearch.checked = true;
         elements.marketAssistantExternalSearch.listeners.change({ target: { checked: true } });
@@ -8281,12 +8284,16 @@ def test_market_assistant_deep_research_requires_external_search():
         elements.marketAssistantDeepResearch.listeners.change({ target: { checked: true } });
         const payload = hooks.buildPayload("What next?");
         const optionPayload = hooks.buildPayload("Deep?", { deepResearchRequested: true });
+        const optionExternal = hooks.buildPayload("Search?", { externalSearchRequested: true });
         console.log(JSON.stringify({
           initiallyDisabled,
           enabledAfterExternal,
           deepResearchFlag: payload.deep_research_requested,
+          externalSearchFlag: payload.external_search_requested,
           optionFlag: optionPayload.deep_research_requested,
+          optionExternalFlag: optionExternal.external_search_requested,
           plainFlag,
+          plainExternal,
         }));
         """
     )
@@ -8295,8 +8302,38 @@ def test_market_assistant_deep_research_requires_external_search():
         "initiallyDisabled": True,
         "enabledAfterExternal": True,
         "deepResearchFlag": True,
+        "externalSearchFlag": True,
         "optionFlag": True,
+        "optionExternalFlag": True,
         "plainFlag": False,
+        "plainExternal": False,
+    }
+
+
+def test_market_assistant_context_change_requires_previous_context():
+    payload = _run_market_assistant_harness(
+        """
+        const first = hooks.assistantMessageFrom({
+          resolution: { context_changed: true, previous_context_id: null, mode: "current" },
+        });
+        const changed = hooks.assistantMessageFrom({
+          resolution: { context_changed: true, previous_context_id: "ctx_A", mode: "current" },
+        });
+        const unchanged = hooks.assistantMessageFrom({
+          resolution: { context_changed: false, previous_context_id: "ctx_A", mode: "current" },
+        });
+        console.log(JSON.stringify({
+          firstMessage: first.contextChanged,
+          changedFollowUp: changed.contextChanged,
+          unchangedFollowUp: unchanged.contextChanged,
+        }));
+        """
+    )
+
+    assert payload == {
+        "firstMessage": False,
+        "changedFollowUp": True,
+        "unchangedFollowUp": False,
     }
 
 

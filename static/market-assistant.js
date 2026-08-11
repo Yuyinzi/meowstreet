@@ -50,6 +50,11 @@
           ? options.deepResearchRequested
           : state.deepResearchRequested
       ),
+      external_search_requested: Boolean(
+        options.externalSearchRequested !== undefined
+          ? options.externalSearchRequested
+          : state.externalSearchRequested
+      ),
     };
     if (state.lastContextId) {
       payload.previous_context_id = state.lastContextId;
@@ -163,7 +168,8 @@
       text: data.answer_text || "",
       citations: data.citations || [],
       fallback: data.generation_status === "fallback",
-      contextChanged: Boolean(resolution.context_changed),
+      contextChanged:
+        Boolean(resolution.context_changed) && resolution.previous_context_id != null,
       evidenceDate: acceptedEvidenceDate(resolution),
     };
   }

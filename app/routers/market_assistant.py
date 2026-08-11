@@ -48,6 +48,7 @@ class _QuestionRequest(BaseModel):
     previous_context_id: str | None = None
     conversation_id: str | None = None
     deep_research_requested: bool = False
+    external_search_requested: bool = False
 
 
 def _assistant_runtime():

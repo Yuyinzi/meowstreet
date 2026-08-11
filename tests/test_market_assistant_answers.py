@@ -623,6 +623,57 @@ def test_approved_classification_in_referenced_object_allows_the_word():
     assert validated is not None
 
 
+def test_external_source_title_word_does_not_exempt_materiality():
+    source_artifact = research_artifact()
+    source_artifact["artifact_id"] = "res_sig"
+    source_artifact["payload"]["sources"][0]["title"] = "Significant Market Update"
+    source_artifact["object_index"][0]["payload"]["title"] = "Significant Market Update"
+    local = artifacts()
+    local["res_sig"] = source_artifact
+    claim = {
+        "claim_id": "c8",
+        "purpose": "bounded_interpretation",
+        "authority": "external_research",
+        "refs": [
+            {
+                "artifact_id": "res_sig",
+                "object_type": "research_source",
+                "object_id": "src_1",
+            }
+        ],
+        "template": "The external report is a significant update.",
+        "bindings": {},
+    }
+    with pytest.raises(ValueError, match="unsupported materiality language"):
+        validate_answer_draft(draft(claim, kind="observation"), local)
+
+
+def test_referenced_classification_field_allows_approved_word():
+    source_artifact = research_artifact()
+    source_artifact["artifact_id"] = "res_cls"
+    source_artifact["object_index"][0]["payload"]["classifications"] = {
+        "level": "elevated"
+    }
+    local = artifacts()
+    local["res_cls"] = source_artifact
+    claim = {
+        "claim_id": "c9",
+        "purpose": "bounded_interpretation",
+        "authority": "external_research",
+        "refs": [
+            {
+                "artifact_id": "res_cls",
+                "object_type": "research_source",
+                "object_id": "src_1",
+            }
+        ],
+        "template": "The external report shows an elevated update.",
+        "bindings": {},
+    }
+    validated = validate_answer_draft(draft(claim, kind="observation"), local)
+    assert validated is not None
+
+
 def test_hypothetical_claim_requires_illustration_purpose():
     claim = hypothetical_claim(
         "If the VIX were {vix_value}, the test would flip.",

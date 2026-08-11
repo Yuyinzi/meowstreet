@@ -468,7 +468,9 @@ class _FakeAnswerDeps:
     def exploration(self, con, query, *, result_id, created_at):
         raise AssertionError("exploration must not run")
 
-    async def acquire_research(self, provider, task, *, result_id, searched_at):
+    async def acquire_research(
+        self, provider, task, *, result_id, searched_at, explicit_deep=False
+    ):
         return self._research
 
     def build_research_provider(self, config):

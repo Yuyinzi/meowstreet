@@ -61,6 +61,23 @@ def test_get_knowledge_record_returns_plain_dict():
     assert record["record_id"] == "vix_definition"
 
 
+def test_method_records_exist_for_core_indicators():
+    catalog = market_assistant_knowledge.load_knowledge_catalog()
+    method_ids = {
+        (record["indicator_id"], record["object_type"])
+        for record in catalog["records"]
+        if record["object_type"] == "indicator_method"
+    }
+    assert {
+        ("vix_level", "indicator_method"),
+        ("ism_manufacturing_pmi", "indicator_method"),
+        ("m2_liquidity", "indicator_method"),
+        ("sp500_market_phase", "indicator_method"),
+        ("credit_conditions", "indicator_method"),
+        ("jobless_claims", "indicator_method"),
+    }.issubset(method_ids)
+
+
 def test_get_knowledge_record_with_version_returns_exact_version():
     catalog = market_assistant_knowledge.load_knowledge_catalog()
     record = market_assistant_knowledge.get_knowledge_record(

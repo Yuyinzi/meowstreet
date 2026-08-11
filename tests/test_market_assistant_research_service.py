@@ -121,6 +121,25 @@ async def test_acquire_research_deep_without_explicit_intent_returns_unavailable
 
 
 @pytest.mark.asyncio
+async def test_acquire_research_deep_with_explicit_intent_executes():
+    provider = FakeProvider(payload=valid_provider_payload())
+
+    result = await research_service.acquire_research(
+        provider,
+        valid_task(tier="deep"),
+        result_id="res_deep_ok",
+        searched_at="2026-08-10T02:00:00Z",
+        explicit_deep=True,
+    )
+
+    assert provider.search_calls == 1
+    assert result["research_result_id"] == "res_deep_ok"
+    assert result["authority"] == "external_research"
+    assert result["task"]["depth_tier"] == "deep"
+    assert "status" not in result
+
+
+@pytest.mark.asyncio
 async def test_acquire_research_provider_error_returns_unavailable():
     provider = FakeProvider(error=RuntimeError("boom"))
 

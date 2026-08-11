@@ -169,7 +169,7 @@ class _SetupTransition(BaseModel):
 
     counterfactual_id: str
     object_type: Literal["market_setup"]
-    object_id: Literal["market_setup"]
+    object_id: str
     from_code: str
     to_code: str
     confirmation_change: dict
@@ -472,13 +472,14 @@ def _setup_transitions(setup_result, method_contracts):
             continue
         to_setup = cell["setup_code"]
         to_posture = postures[to_setup]["code"]
+        counterfactual_id = (
+            f"setup_{cell['macro_regime']}_{cell['market_confirmation']}"
+        )
         transitions.append(
             {
-                "counterfactual_id": (
-                    f"setup_{cell['macro_regime']}_{cell['market_confirmation']}"
-                ),
+                "counterfactual_id": counterfactual_id,
                 "object_type": "market_setup",
-                "object_id": "market_setup",
+                "object_id": counterfactual_id,
                 "from_code": current_setup,
                 "to_code": to_setup,
                 "confirmation_change": {

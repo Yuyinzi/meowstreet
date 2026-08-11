@@ -11,9 +11,11 @@ class ResearchProvider(Protocol):
     async def search(self, task: dict) -> dict: ...
 
 
-async def acquire_research(provider, task, *, result_id, searched_at):
+async def acquire_research(
+    provider, task, *, result_id, searched_at, explicit_deep=False
+):
     try:
-        validated_task = validate_research_task(task, explicit_deep=False)
+        validated_task = validate_research_task(task, explicit_deep=explicit_deep)
     except ValueError:
         return _research_unavailable(result_id, searched_at, "invalid_task")
     try:
@@ -33,13 +35,19 @@ async def acquire_research(provider, task, *, result_id, searched_at):
         return _research_unavailable(result_id, searched_at, "provider_error")
 
 
-async def acquire_research_from_config(config, task, *, result_id, searched_at):
+async def acquire_research_from_config(
+    config, task, *, result_id, searched_at, explicit_deep=False
+):
     try:
         provider = build_research_provider(config)
     except OpenAIWebSearchError as exc:
         return _research_unavailable(result_id, searched_at, exc.reason_code)
     return await acquire_research(
-        provider, task, result_id=result_id, searched_at=searched_at
+        provider,
+        task,
+        result_id=result_id,
+        searched_at=searched_at,
+        explicit_deep=explicit_deep,
     )
 
 

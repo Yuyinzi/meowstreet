@@ -132,6 +132,31 @@ def test_historical_question_passes_exact_context_to_service(
     assert captured["request"]["mode"] == "historical"
 
 
+def test_external_search_requested_flows_to_service(assistant_env, monkeypatch):
+    captured = {}
+
+    async def fake_answer_question(request, *, dependencies):
+        captured["request"] = request
+        return {"resolution": {"mode": "current"}}
+
+    monkeypatch.setattr(
+        market_assistant_service, "answer_question", fake_answer_question
+    )
+
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={
+            "question": "Why?",
+            "mode": "current",
+            "external_search_requested": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["request"]["external_search_requested"] is True
+    assert captured["request"]["deep_research_requested"] is False
+
+
 def test_question_passes_real_dependencies_dict(assistant_env, monkeypatch):
     captured = {}
 

@@ -7,6 +7,7 @@ from app.services import market_assistant
 from app.services.market_assistant import ASSISTANT_POLICY_VERSION
 from app.services.market_assistant import PROMPT_VERSION
 from app.services.market_setup_current import resolve_current_explanation
+from app.tools.market_assistant_knowledge import load_knowledge_catalog
 from app.tools.market_assistant_plans import validate_task_plan
 
 
@@ -420,6 +421,7 @@ class FakeDependencies:
         knowledge=None,
     ):
         self.llm_calls = []
+        self.context_summaries = []
         self.tool_execution_count = 0
         self.saved_trace = None
         self.saved_artifacts = None
@@ -437,6 +439,7 @@ class FakeDependencies:
 
     async def plan_llm(self, *, question, context_summary):
         self.llm_calls.append("plan")
+        self.context_summaries.append(context_summary)
         if isinstance(self._plan, list):
             response = self._plan.pop(0)
         else:
@@ -488,12 +491,15 @@ class FakeDependencies:
         self.tool_execution_count += 1
         return self._exploration
 
-    async def acquire_research(self, provider, task, *, result_id, searched_at):
+    async def acquire_research(
+        self, provider, task, *, result_id, searched_at, explicit_deep=False
+    ):
         self.tool_execution_count += 1
         self.acquired_research_kwargs = {
             "result_id": result_id,
             "searched_at": searched_at,
             "task": task,
+            "explicit_deep": explicit_deep,
         }
         return self._research
 
@@ -725,7 +731,7 @@ async def test_research_unavailable_renders_research_fallback():
 
 
 @pytest.mark.asyncio
-async def test_context_change_notice_precedes_claims():
+async def test_context_change_surfaces_in_resolution_not_answer_text():
     deps = fake_dependencies(
         valid_plan(),
         valid_draft(),
@@ -735,10 +741,9 @@ async def test_context_change_notice_precedes_claims():
     response = await market_assistant.answer_question(request, dependencies=deps)
 
     notice = "Market Setup context changed since the previous message."
-    assert notice in response["answer_text"]
-    assert response["answer_text"].index(notice) < response["answer_text"].index(
-        "The accepted VIX level"
-    )
+    assert response["resolution"]["context_changed"] is True
+    assert response["resolution"]["previous_context_id"] == "ctx_A"
+    assert notice not in response["answer_text"]
 
 
 @pytest.mark.asyncio
@@ -1110,3 +1115,189 @@ def _exploration_draft():
         },
     }
     return {"sections": [{"kind": "observation", "claims": [claim]}]}
+
+
+def _knowledge_method_draft(record_id="vix_method"):
+    claim = {
+        "claim_id": "m1",
+        "purpose": "method_explanation",
+        "authority": "method_knowledge",
+        "refs": [
+            {
+                "artifact_id": record_id,
+                "object_type": "indicator_method",
+                "object_id": record_id,
+            }
+        ],
+        "template": "The VIX confirmation method is the approved market confirmation method.",
+        "bindings": {},
+    }
+    return {"sections": [{"kind": "knowledge", "claims": [claim]}]}
+
+
+def _knowledge_source_draft(record_id="vix_source"):
+    claim = {
+        "claim_id": "s1",
+        "purpose": "source_explanation",
+        "authority": "method_knowledge",
+        "refs": [
+            {
+                "artifact_id": record_id,
+                "object_type": "indicator_source",
+                "object_id": record_id,
+            }
+        ],
+        "template": "The VIX level is sourced from the accepted daily series.",
+        "bindings": {},
+    }
+    return {"sections": [{"kind": "research", "claims": [claim]}]}
+
+
+@pytest.mark.asyncio
+async def test_deep_research_with_explicit_intent_executes():
+    deps = fake_dependencies(
+        research_plan("deep"), _research_draft(), research=research_result()
+    )
+    request = current_question(deep_research_requested=True)
+    response = await market_assistant.answer_question(request, dependencies=deps)
+
+    assert deps.acquired_research_kwargs is not None
+    assert deps.acquired_research_kwargs["task"]["depth_tier"] == "deep"
+    assert deps.acquired_research_kwargs["explicit_deep"] is True
+    assert response["generation_status"] == "validated_first_pass"
+
+
+@pytest.mark.asyncio
+async def test_deep_research_without_explicit_intent_never_executes():
+    deps = fake_dependencies(research_plan("deep"), invalid_draft(), invalid_repair())
+    request = current_question(deep_research_requested=False)
+    response = await market_assistant.answer_question(request, dependencies=deps)
+
+    assert deps.acquired_research_kwargs is None
+    assert response["generation_status"] == "fallback"
+    assert "External research is currently unavailable." in response["answer_text"]
+
+
+@pytest.mark.asyncio
+async def test_external_search_requested_flows_to_planner_context():
+    deps = fake_dependencies(valid_plan(), valid_draft())
+    request = current_question(external_search_requested=True)
+    response = await market_assistant.answer_question(request, dependencies=deps)
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert deps.context_summaries[0]["external_search_requested"] is True
+
+
+@pytest.mark.asyncio
+async def test_knowledge_definition_through_real_catalog_aliases_vix():
+    deps = fake_dependencies(
+        knowledge_plan(), _knowledge_draft(), catalog=load_knowledge_catalog()
+    )
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert deps.saved_trace["knowledge_references"] == ["vix_definition"]
+
+
+@pytest.mark.asyncio
+async def test_knowledge_method_through_real_catalog_aliases_vix():
+    deps = fake_dependencies(
+        knowledge_plan(
+            operations=[
+                {
+                    "operation_id": "get_indicator_method",
+                    "parameters": {"indicator_id": "vix"},
+                }
+            ],
+            intent="method",
+        ),
+        _knowledge_method_draft(),
+        catalog=load_knowledge_catalog(),
+    )
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert deps.saved_trace["knowledge_references"] == ["vix_method"]
+
+
+@pytest.mark.asyncio
+async def test_knowledge_source_through_real_catalog_aliases_vix():
+    deps = fake_dependencies(
+        knowledge_plan(
+            operations=[
+                {
+                    "operation_id": "get_indicator_source",
+                    "parameters": {"indicator_id": "vix"},
+                }
+            ],
+            intent="source",
+        ),
+        _knowledge_source_draft(),
+        catalog=load_knowledge_catalog(),
+    )
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert deps.saved_trace["knowledge_references"] == ["vix_source"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_knowledge_indicator_routes_to_fallback():
+    deps = fake_dependencies(
+        knowledge_plan(
+            operations=[
+                {
+                    "operation_id": "get_indicator_definition",
+                    "parameters": {"indicator_id": "unknown_series"},
+                }
+            ]
+        ),
+        valid_draft(),
+    )
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "fallback"
+    assert (
+        "The approved knowledge record is currently unavailable."
+        in response["answer_text"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_unregistered_exploration_indicator_routes_to_fallback():
+    plan = {
+        "intent": "local_history",
+        "context_mode": "current",
+        "operations": [
+            {
+                "operation_id": "query_indicator_history",
+                "parameters": {
+                    "indicator_id": "not_registered",
+                    "start": "2026-01-01",
+                    "end": "2026-06-30",
+                },
+            }
+        ],
+        "answer_depth": "standard",
+        "research_tier": None,
+    }
+    deps = fake_dependencies(plan, valid_draft())
+
+    def raise_unregistered(con, query, *, result_id, created_at):
+        raise ValueError(f"indicator is not registered: {query['indicator_id']}")
+
+    deps.exploration = raise_unregistered
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps
+    )
+
+    assert response["generation_status"] == "fallback"
+    assert "Local exploration data is currently unavailable." in response["answer_text"]
