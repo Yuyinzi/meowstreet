@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import pytest
@@ -183,6 +184,7 @@ def _config(**overrides):
         "model": "assistant-model",
         "research_model": "research-model",
         "provider": "openai_responses",
+        "structured_output_mode": "json_object",
         "research_enabled": True,
         "supports_web_search": True,
         "api_key": "sk-secret-test-key",
@@ -561,7 +563,12 @@ class RealPersistenceDeps:
             if artifact["artifact_kind"] == "explanation_snapshot"
         )
         context_id = snapshot_artifact["artifact_id"]
-        regime = snapshot_artifact["payload"]["results"]["macro_regime"]
+        regime = next(
+            item["payload"]
+            for item in snapshot_artifact["object_index"]
+            if item["object_type"] == "market_setup_result"
+            and item["object_id"] == "macro_regime"
+        )
         knowledge_artifact = next(
             artifact
             for artifact in artifacts.values()
@@ -648,6 +655,62 @@ async def test_answer_uses_one_structured_synthesis_and_persists_trace():
     assert response["generation_status"] == "validated_first_pass"
     assert deps.llm_calls == ["plan", "draft"]
     assert deps.saved_trace["answer_text"] == response["answer_text"]
+
+
+@pytest.mark.asyncio
+async def test_llm_receives_bounded_object_projection_not_duplicated_payload():
+    deps = fake_dependencies(valid_plan(), valid_draft())
+
+    await market_assistant.answer_question(current_question(), dependencies=deps)
+
+    assert deps.acquired_artifacts
+    for artifact in deps.acquired_artifacts.values():
+        assert "payload" not in artifact
+        assert isinstance(artifact["object_index"], list)
+
+
+def test_decision_explanation_projection_excludes_non_decision_display_objects():
+    artifact = {
+        "artifact_id": "ctx_123",
+        "artifact_kind": "explanation_snapshot",
+        "primary_authority": "decision_fact",
+        "market_setup_relation": "authoritative_snapshot",
+        "object_index": [
+            {
+                "object_type": "evidence_fact",
+                "object_id": "survey_growth_direction",
+                "authority": "decision_fact",
+                "payload": {
+                    "role": {"function": "selector"},
+                    "participation": {"state": "applied"},
+                },
+            },
+            {
+                "object_type": "evidence_fact",
+                "object_id": "cyclical_commodities",
+                "authority": "decision_fact",
+                "payload": {
+                    "role": {"function": "display_only"},
+                    "participation": {"state": "not_applied"},
+                    "large_unused_payload": "x" * 1000,
+                },
+            },
+            {
+                "object_type": "method_contract",
+                "object_id": "vix_confirmation_v2",
+                "authority": "method_knowledge",
+                "payload": {"description": "Not needed for a general setup answer."},
+            },
+        ],
+    }
+
+    projected = market_assistant._llm_artifact_projection(
+        {"ctx_123": artifact}, valid_plan()
+    )
+
+    assert [
+        item["object_id"] for item in projected["ctx_123"]["object_index"]
+    ] == ["survey_growth_direction"]
 
 
 @pytest.mark.asyncio
@@ -869,7 +932,7 @@ async def test_persistence_failure_raises_stable_error():
 
 
 @pytest.mark.asyncio
-async def test_every_llm_call_unavailable_renders_market_setup_fallback():
+async def test_every_llm_call_unavailable_renders_market_setup_fallback(caplog):
     deps = fake_dependencies(
         RuntimeError("llm down"),
         RuntimeError("llm down"),
@@ -882,6 +945,27 @@ async def test_every_llm_call_unavailable_renders_market_setup_fallback():
     assert response["generation_status"] == "fallback"
     assert "Market Setup decision result:" in response["answer_text"]
     assert deps.saved_trace["generation_status"] == "fallback"
+    assert "market assistant plan generation failed" in caplog.text
+    assert "market assistant synthesis failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_hanging_synthesis_returns_deterministic_fallback_within_budget():
+    deps = fake_dependencies(valid_plan(), valid_draft())
+    deps.llm_attempt_timeout = 0.01
+
+    async def hang_forever(**kwargs):
+        await asyncio.Event().wait()
+
+    deps.synthesize_llm = hang_forever
+
+    response = await asyncio.wait_for(
+        market_assistant.answer_question(current_question(), dependencies=deps),
+        timeout=0.5,
+    )
+
+    assert response["generation_status"] == "fallback"
+    assert "Market Setup decision result:" in response["answer_text"]
 
 
 @pytest.mark.asyncio
@@ -922,6 +1006,10 @@ async def test_answer_trace_has_design_19_fields_and_no_secrets():
         == ASSISTANT_POLICY_VERSION
     )
     assert trace["model_configuration_fingerprint"]["model"] == "assistant-model"
+    assert (
+        trace["model_configuration_fingerprint"]["structured_output_mode"]
+        == "json_object"
+    )
     assert len(trace["answer_text_hash"]) == 64
     assert "api_key" not in json.dumps(trace)
     assert "sk-secret-test-key" not in json.dumps(trace)

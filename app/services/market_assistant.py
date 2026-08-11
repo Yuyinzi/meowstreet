@@ -1,4 +1,6 @@
+import asyncio
 import hashlib
+import logging
 import secrets
 from copy import deepcopy
 from datetime import datetime
@@ -29,6 +31,9 @@ from app.tools.market_setup_explanation_snapshot import canonical_json
 PROMPT_VERSION = "market_assistant_prompt_v1"
 ASSISTANT_POLICY_VERSION = "market_assistant_policy_v1"
 ARTIFACT_SCHEMA_VERSION = "market_assistant_artifact_v1"
+LLM_ATTEMPT_TIMEOUT_SECONDS = 900.0
+
+LOGGER = logging.getLogger(__name__)
 
 TOOL_SCHEMA_VERSIONS = {
     "artifact_envelope": ARTIFACT_SCHEMA_VERSION,
@@ -255,8 +260,11 @@ async def _plan_or_fallback(request, resolution, deps):
     context_summary = _context_summary(request, resolution)
     attempts = {"plan": 0}
     try:
-        plan = await _dependency(deps, "plan_llm")(
-            question=question, context_summary=context_summary
+        plan = await _bounded_llm_call(
+            deps,
+            "plan_llm",
+            question=question,
+            context_summary=context_summary,
         )
         attempts["plan"] += 1
         return plan, attempts["plan"]
@@ -264,16 +272,20 @@ async def _plan_or_fallback(request, resolution, deps):
         attempts["plan"] += 1
         report = _plan_validation_report(exc)
     except Exception:
+        LOGGER.warning("market assistant plan generation failed", exc_info=True)
         attempts["plan"] += 1
         return _dependency(deps, "deterministic_plan")(question), attempts["plan"]
     try:
-        plan = await _dependency(deps, "plan_llm")(
+        plan = await _bounded_llm_call(
+            deps,
+            "plan_llm",
             question=question,
             context_summary={**context_summary, "plan_validation_report": report},
         )
         attempts["plan"] += 1
         return plan, attempts["plan"]
     except Exception:
+        LOGGER.warning("market assistant plan repair failed", exc_info=True)
         return _dependency(deps, "deterministic_plan")(question), attempts["plan"]
 
 
@@ -659,14 +671,67 @@ def _research_unavailable_artifact(result_id, searched_at, reason_code):
 
 async def _synthesize(request, plan, resolution, artifacts, deps):
     try:
-        return await _dependency(deps, "synthesize_llm")(
+        return await _bounded_llm_call(
+            deps,
+            "synthesize_llm",
             question=request["question"],
             plan=plan,
             context_summary=_context_summary(request, resolution),
-            artifacts=artifacts,
+            artifacts=_llm_artifact_projection(artifacts, plan),
         )
     except Exception:
+        LOGGER.warning("market assistant synthesis failed", exc_info=True)
         return None
+
+
+async def _bounded_llm_call(deps, dependency_name, **kwargs):
+    timeout = _dependency(
+        deps, "llm_attempt_timeout", default=LLM_ATTEMPT_TIMEOUT_SECONDS
+    )
+    task = asyncio.create_task(_dependency(deps, dependency_name)(**kwargs))
+    done, _ = await asyncio.wait({task}, timeout=timeout)
+    if task not in done:
+        task.cancel()
+        task.add_done_callback(_consume_llm_task)
+        raise TimeoutError("market assistant LLM attempt timed out")
+    return task.result()
+
+
+def _consume_llm_task(task):
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        return
+    except Exception:
+        LOGGER.warning("market assistant timed-out LLM task failed", exc_info=True)
+
+
+def _llm_artifact_projection(artifacts, plan):
+    return {
+        artifact_id: {
+            "artifact_id": artifact["artifact_id"],
+            "artifact_kind": artifact["artifact_kind"],
+            "primary_authority": artifact["primary_authority"],
+            "market_setup_relation": artifact["market_setup_relation"],
+            "object_index": _llm_object_index(artifact["object_index"], plan),
+        }
+        for artifact_id, artifact in artifacts.items()
+    }
+
+
+def _llm_object_index(object_index, plan):
+    if plan.get("intent") != "decision_explanation":
+        return object_index
+    return [
+        item
+        for item in object_index
+        if item.get("object_type") != "method_contract"
+        and (
+            item.get("object_type") != "evidence_fact"
+            or (item.get("payload") or {}).get("role", {}).get("function")
+            not in {"display_only", "watch_only"}
+        )
+    ]
 
 
 async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, deps):
@@ -683,15 +748,18 @@ async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, 
         report = build_validation_report(exc.errors)
     attempts["repair"] += 1
     try:
-        repaired = await _dependency(deps, "repair_llm")(
+        repaired = await _bounded_llm_call(
+            deps,
+            "repair_llm",
             question=request["question"],
             plan=plan,
             context_summary=_context_summary(request, resolution),
-            artifacts=artifacts,
+            artifacts=_llm_artifact_projection(artifacts, plan),
             draft=draft,
             validation_report=report,
         )
     except Exception:
+        LOGGER.warning("market assistant answer repair failed", exc_info=True)
         return None, "fallback", attempts, validation_error_codes
     if repaired is None:
         return None, "fallback", attempts, validation_error_codes
@@ -824,6 +892,7 @@ def _model_configuration_fingerprint(config):
     return {
         "provider": config.get("provider"),
         "model": config.get("model"),
+        "structured_output_mode": config.get("structured_output_mode"),
         "research_model": config.get("research_model"),
         "tool_schema_versions": TOOL_SCHEMA_VERSIONS,
         "assistant_policy_version": ASSISTANT_POLICY_VERSION,
