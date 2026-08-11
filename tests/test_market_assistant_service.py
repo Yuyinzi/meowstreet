@@ -8,6 +8,7 @@ from app.services import market_assistant
 from app.services.market_assistant import ASSISTANT_POLICY_VERSION
 from app.services.market_assistant import PROMPT_VERSION
 from app.services.market_setup_current import resolve_current_explanation
+from app.tools.market_assistant_answers import validate_answer_draft_schema
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
 from app.tools.market_assistant_plans import validate_task_plan
 
@@ -742,7 +743,8 @@ async def test_disabled_claim_validation_returns_unvalidated_debug_draft():
     assert response["answer_text"].startswith("UNVALIDATED DEEPSEEK DEBUG OUTPUT\n")
     assert deps.llm_calls == ["plan", "draft"]
     assert deps.saved_trace["generation_status"] == "unvalidated_debug"
-    assert deps.saved_trace["structured_claims"] == invalid_draft()["sections"]
+    expected_claims = validate_answer_draft_schema(invalid_draft())["sections"]
+    assert deps.saved_trace["structured_claims"] == expected_claims
     assert deps.saved_trace["validation_error_codes"] == []
     assert deps.saved_trace["attempts"] == {
         "plan": 1,
