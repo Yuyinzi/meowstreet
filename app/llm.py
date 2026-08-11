@@ -58,6 +58,13 @@ def load_market_assistant_config(args=None, root=ROOT):
     )
     if not model:
         raise RuntimeError("MARKET_ASSISTANT_MODEL is required")
+    structured_output_mode = os.getenv(
+        "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE", "json_schema"
+    )
+    if structured_output_mode not in {"json_schema", "json_object"}:
+        raise RuntimeError(
+            "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE must be json_schema or json_object"
+        )
     research_enabled = _parse_market_bool(
         getattr(args, "market_assistant_research_enabled", None)
         or os.getenv("MARKET_ASSISTANT_RESEARCH_ENABLED")
@@ -88,6 +95,7 @@ def load_market_assistant_config(args=None, root=ROOT):
         "api_key": config["api_key"],
         "base_url": config["base_url"],
         "model": model,
+        "structured_output_mode": structured_output_mode,
         "research_model": research_model,
         "provider": provider,
         "research_enabled": research_enabled,

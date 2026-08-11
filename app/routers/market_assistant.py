@@ -18,6 +18,7 @@ from app.services.market_assistant_research import build_research_provider
 from app.services.market_setup_current import resolve_current_explanation
 from app.tools.market_assistant_answers import _AnswerDraft as AnswerDraftSchema
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
+from app.tools.market_assistant_plans import deterministic_plan
 
 router = APIRouter(prefix="/api/market-assistant", tags=["market-assistant"])
 
@@ -53,22 +54,35 @@ class _QuestionRequest(BaseModel):
 
 def _assistant_runtime():
     config = load_market_assistant_config()
-    client = build_async_client(config, error_context="market assistant")
-    return client, config["model"]
+    client = build_async_client(
+        config, timeout=900.0, error_context="market assistant"
+    )
+    return client, config["model"], config["structured_output_mode"]
 
 
 async def _plan_llm(*, question, context_summary):
-    client, model = _assistant_runtime()
+    deterministic = deterministic_plan(question)
+    if deterministic["intent"] != "unsupported":
+        return deterministic
+    client, model, structured_output_mode = _assistant_runtime()
     return await plan_question(
-        client, model=model, question=question, context_summary=context_summary
+        client,
+        model=model,
+        question=question,
+        context_summary=context_summary,
+        structured_output_mode=structured_output_mode,
     )
 
 
 async def _synthesize_llm(*, question, plan, context_summary, artifacts):
-    client, model = _assistant_runtime()
+    client, model, structured_output_mode = _assistant_runtime()
     prompt = _synthesis_prompt(question, plan, context_summary, artifacts)
     return await complete_structured(
-        client, model=model, prompt=prompt, schema_type=AnswerDraftSchema
+        client,
+        model=model,
+        prompt=prompt,
+        schema_type=AnswerDraftSchema,
+        structured_output_mode=structured_output_mode,
     )
 
 
@@ -81,12 +95,16 @@ async def _repair_llm(
     draft,
     validation_report,
 ):
-    client, model = _assistant_runtime()
+    client, model, structured_output_mode = _assistant_runtime()
     prompt = _repair_prompt(
         question, plan, context_summary, artifacts, draft, validation_report
     )
     return await complete_structured(
-        client, model=model, prompt=prompt, schema_type=AnswerDraftSchema
+        client,
+        model=model,
+        prompt=prompt,
+        schema_type=AnswerDraftSchema,
+        structured_output_mode=structured_output_mode,
     )
 
 

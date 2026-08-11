@@ -10,6 +10,7 @@ MARKET_ENV_NAMES = (
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
     "MARKET_ASSISTANT_MODEL",
+    "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE",
     "MARKET_ASSISTANT_RESEARCH_MODEL",
     "MARKET_ASSISTANT_RESEARCH_PROVIDER",
     "MARKET_ASSISTANT_RESEARCH_ENABLED",
@@ -20,6 +21,7 @@ MARKET_ENV_NAMES = (
 def write_env(tmp_path, **overrides):
     env = {
         "MARKET_ASSISTANT_MODEL": "assistant-model",
+        "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE": "json_schema",
         "MARKET_ASSISTANT_RESEARCH_MODEL": "research-model",
         "MARKET_ASSISTANT_RESEARCH_PROVIDER": "openai_responses",
         "MARKET_ASSISTANT_RESEARCH_ENABLED": "true",
@@ -27,6 +29,7 @@ def write_env(tmp_path, **overrides):
     }
     key_map = {
         "model": "MARKET_ASSISTANT_MODEL",
+        "structured_output_mode": "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE",
         "research_model": "MARKET_ASSISTANT_RESEARCH_MODEL",
         "provider": "MARKET_ASSISTANT_RESEARCH_PROVIDER",
         "base_url": "OPENAI_BASE_URL",
@@ -229,10 +232,33 @@ def test_load_market_assistant_config_returns_full_config(tmp_path, monkeypatch)
 
     assert config["api_key"] == "test-key"
     assert config["model"] == "assistant-model"
+    assert config["structured_output_mode"] == "json_schema"
     assert config["research_model"] == "research-model"
     assert config["provider"] == "openai_responses"
     assert config["research_enabled"] is True
     assert config["supports_web_search"] is False
+
+
+def test_load_market_assistant_config_accepts_json_object_mode(tmp_path, monkeypatch):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path, structured_output_mode="json_object")
+
+    config = llm.load_market_assistant_config(root=tmp_path)
+
+    assert config["structured_output_mode"] == "json_object"
+
+
+def test_load_market_assistant_config_rejects_unknown_structured_output_mode(
+    tmp_path, monkeypatch
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path, structured_output_mode="yaml")
+
+    with pytest.raises(
+        RuntimeError,
+        match="MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE must be json_schema or json_object",
+    ):
+        llm.load_market_assistant_config(root=tmp_path)
 
 
 def test_load_market_assistant_config_parses_disabled_research(tmp_path, monkeypatch):

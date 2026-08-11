@@ -1,3 +1,7 @@
+import json
+import logging
+from types import SimpleNamespace
+
 import pytest
 from pydantic import BaseModel
 
@@ -18,8 +22,9 @@ class FakeParsed:
 
 
 class FakeResponse:
-    def __init__(self, output_parsed):
+    def __init__(self, output_parsed=None, output_text=""):
         self.output_parsed = output_parsed
+        self.output_text = output_text
 
 
 class FakeResponses:
@@ -30,15 +35,35 @@ class FakeResponses:
         self.client.calls.append(kwargs)
         return FakeResponse(self.client.output_parsed)
 
+    async def create(self, **kwargs):
+        self.client.calls.append(kwargs)
+        if self.client.stream_events is not None:
+            return FakeStream(self.client.stream_events)
+        return FakeResponse(output_text=self.client.output_text)
+
 
 class FakeClient:
-    def __init__(self, output_parsed):
+    def __init__(self, output_parsed=None, output_text="", stream_events=None):
         self.output_parsed = output_parsed
+        self.output_text = output_text
+        self.stream_events = stream_events
         self.calls = []
 
     @property
     def responses(self):
         return FakeResponses(self)
+
+
+class FakeStream:
+    def __init__(self, events):
+        self.events = events
+
+    def __aiter__(self):
+        return self._iterate()
+
+    async def _iterate(self):
+        for event in self.events:
+            yield event
 
 
 def valid_plan_payload(**overrides):
@@ -86,6 +111,78 @@ async def test_complete_structured_unavailable_parsed_raises():
             model="assistant-model",
             prompt=[],
             schema_type=DummyStructured,
+        )
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_json_object_streams_and_validates_locally(caplog):
+    caplog.set_level(logging.INFO)
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.created"),
+            SimpleNamespace(type="response.output_text.delta", delta='{"value":'),
+            SimpleNamespace(type="response.output_text.delta", delta='"hello"}'),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(output_text='{"value":"hello"}'),
+            ),
+        ]
+    )
+    prompt = [{"role": "user", "content": "hello"}]
+
+    result = await complete_structured(
+        client,
+        model="assistant-model",
+        prompt=prompt,
+        schema_type=DummyStructured,
+        structured_output_mode="json_object",
+    )
+
+    assert client.calls[0]["model"] == "assistant-model"
+    assert client.calls[0]["text"] == {"format": {"type": "json_object"}}
+    assert client.calls[0]["stream"] is True
+    assert client.calls[0]["input"][-1] == prompt[-1]
+    assert "value" in client.calls[0]["input"][0]["content"]
+    assert result == {"value": "hello"}
+    assert "market assistant response stream started" in caplog.text
+    assert "market assistant response stream completed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_json_object_rejects_unvalidated_provider_text():
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.output_text.delta", delta='{"value":42}'),
+            SimpleNamespace(type="response.completed", response=None),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="structured response is invalid"):
+        await complete_structured(
+            client,
+            model="assistant-model",
+            prompt=[],
+            schema_type=DummyStructured,
+            structured_output_mode="json_object",
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("terminal_type", ["response.incomplete", "response.failed"])
+async def test_complete_structured_json_object_rejects_unsuccessful_stream(
+    terminal_type,
+):
+    client = FakeClient(
+        stream_events=[SimpleNamespace(type=terminal_type, response=None)]
+    )
+
+    with pytest.raises(ValueError, match="structured response stream did not complete"):
+        await complete_structured(
+            client,
+            model="assistant-model",
+            prompt=[],
+            schema_type=DummyStructured,
+            structured_output_mode="json_object",
         )
 
 
