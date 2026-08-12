@@ -665,6 +665,84 @@ def test_unvalidated_debug_renderer_replaces_missing_placeholder():
     )
 
 
+def test_unvalidated_debug_renderer_hides_snake_case_code_binding():
+    claim = valid_claim(
+        template="当前市场状态是{code}。",
+        bindings={"code": "macro_weakening_partially_confirmed"},
+    )
+
+    rendered = render_unvalidated_debug_answer(draft(claim), language="zh")
+
+    assert rendered == "当前市场状态是暂不可用。"
+    assert "macro_weakening_partially_confirmed" not in rendered
+
+
+def test_unvalidated_debug_renderer_hides_snake_case_annotated_code_binding():
+    claim = valid_claim(
+        template="当前市场状态是{code}。",
+        bindings={
+            "code": {
+                "value": "macro_weakening_partially_confirmed",
+                "source": snapshot_ref(
+                    "vix_level",
+                    object_type="evidence_fact",
+                    field="label",
+                ),
+            }
+        },
+    )
+
+    rendered = render_unvalidated_debug_answer(draft(claim), language="zh")
+
+    assert rendered == "当前市场状态是暂不可用。"
+    assert "macro_weakening_partially_confirmed" not in rendered
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "当前市场状态是{state}，因此应该买入。",
+        "当前市场状态是{state}，建议平仓。",
+    ],
+)
+def test_unvalidated_debug_renderer_drops_decision_instruction_claims(template):
+    claim = valid_claim(
+        template=template,
+        bindings={"state": "增长放缓"},
+    )
+
+    rendered = render_unvalidated_debug_answer(draft(claim), language="zh")
+
+    assert "买入" not in rendered
+    assert "平仓" not in rendered
+
+
+def test_unvalidated_debug_renderer_keeps_benign_claim_when_neighbor_dropped():
+    payload = {
+        "sections": [
+            {
+                "kind": "decision",
+                "claims": [
+                    valid_claim(
+                        template="当前市场状态是{state}，因此应该买入。",
+                        bindings={"state": "增长放缓"},
+                    ),
+                    valid_claim(
+                        template="当前市场状态是{state}。",
+                        bindings={"state": "增长放缓"},
+                        claim_id="benign",
+                    ),
+                ],
+            }
+        ]
+    }
+
+    rendered = render_unvalidated_debug_answer(payload, language="zh")
+
+    assert "应该买入" not in rendered
+    assert "当前市场状态是增长放缓。" in rendered
+
+
 def test_non_hypothetical_scalar_binding_rejected():
     claim = valid_claim(
         template="Current VIX is {vix_value}.",

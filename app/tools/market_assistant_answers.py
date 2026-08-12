@@ -909,11 +909,17 @@ def render_unvalidated_debug_answer(draft, *, language="en"):
         claims = section.get("claims") or []
         if not claims:
             continue
+        rendered_claims = []
+        for claim in claims:
+            rendered = _render_unvalidated_claim(claim, language=language)
+            if rendered is not None:
+                rendered_claims.append(rendered)
+        if not rendered_claims:
+            continue
         heading = headings.get(section.get("kind"), "")
         if heading:
             parts.append(heading)
-        for claim in claims:
-            parts.append(_render_unvalidated_claim(claim, language=language))
+        parts.extend(rendered_claims)
     return "\n".join(parts)
 
 
@@ -935,6 +941,8 @@ def _render_unvalidated_claim(claim, *, language):
         lambda match: values.get(match.group(1), unavailable),
         claim["template"],
     )
+    if _DECISION_RE.search(rendered):
+        return None
     if claim.get("authority") == "hypothetical":
         return _EXAMPLE_PREFIXES.get(language, _EXAMPLE_PREFIXES["en"]) + rendered
     return rendered
@@ -943,9 +951,14 @@ def _render_unvalidated_claim(claim, *, language):
 def _render_unvalidated_binding(binding, *, unavailable):
     if isinstance(binding, dict):
         if "value" in binding:
-            return _format_value(binding["value"])
+            value = binding["value"]
+        else:
+            return unavailable
+    else:
+        value = binding
+    if isinstance(value, str) and _ENUM_RE.search(value):
         return unavailable
-    return _format_value(binding)
+    return _format_value(value)
 
 
 def detect_answer_language(text) -> Literal["en", "zh"]:
