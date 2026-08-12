@@ -17,6 +17,7 @@ from app.services.market_setup_current import resolve_current_explanation
 from app.tools.market_assistant_answers import DraftValidationError
 from app.tools.market_assistant_answers import build_validation_report
 from app.tools.market_assistant_answers import collect_citations
+from app.tools.market_assistant_answers import detect_answer_language
 from app.tools.market_assistant_answers import render_answer
 from app.tools.market_assistant_answers import render_fallback
 from app.tools.market_assistant_answers import render_unvalidated_debug_answer
@@ -179,11 +180,19 @@ async def answer_question(request, *, dependencies):
         request, plan, resolution, frozen_artifacts, draft, deps
     )
     attempts["plan"] = plan_attempts
+    answer_language = detect_answer_language(request.get("question") or "")
     if generation_status == "unvalidated_debug":
-        answer_text = render_unvalidated_debug_answer(validated)
+        answer_text = render_unvalidated_debug_answer(
+            validated, language=answer_language
+        )
         citations = []
     elif validated is not None:
-        answer_text = render_answer(validated, frozen_artifacts, [])
+        answer_text = render_answer(
+            validated,
+            frozen_artifacts,
+            [],
+            language=answer_language,
+        )
         citations = collect_citations(validated, frozen_artifacts)
     else:
         answer_text = render_fallback(plan=plan, artifacts=frozen_artifacts, notices=[])

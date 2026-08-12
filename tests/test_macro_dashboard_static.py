@@ -8150,12 +8150,15 @@ def test_market_assistant_renderer_marks_unvalidated_debug_output():
         """
         const message = hooks.assistantMessageFrom({
           resolution: { mode: "current" },
-          answer_text: "UNVALIDATED DEEPSEEK DEBUG OUTPUT\\n{}",
+          answer_text: "现在的市场可以理解为：经济增长正在放慢，但市场只确认了一部分风险。",
           citations: [],
           generation_status: "unvalidated_debug",
           answer_trace_id: "trace_debug",
         });
         const rendered = hooks.renderMessage(message);
+        const textEl = rendered.children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
         const notice = rendered.children.find(
           (child) => child.className ===
             "market-assistant-notice market-assistant-notice-debug"
@@ -8164,6 +8167,8 @@ def test_market_assistant_renderer_marks_unvalidated_debug_output():
           unvalidatedDebug: message.unvalidatedDebug,
           fallback: message.fallback,
           noticeText: notice && notice.textContent,
+          answerText: textEl.textContent,
+          containsSections: textEl.textContent.indexOf("sections") !== -1,
         }));
         """
     )
@@ -8175,6 +8180,10 @@ def test_market_assistant_renderer_marks_unvalidated_debug_output():
             "Claim validation is disabled. This is unvalidated DeepSeek "
             "debug output and must not be treated as a Market Setup decision."
         ),
+        "answerText": (
+            "现在的市场可以理解为：经济增长正在放慢，但市场只确认了一部分风险。"
+        ),
+        "containsSections": False,
     }
 
 

@@ -267,6 +267,29 @@ def invalid_repair():
     }
 
 
+def beginner_debug_draft():
+    return {
+        "sections": [
+            {
+                "kind": "decision",
+                "claims": [
+                    {
+                        "claim_id": "beginner_summary",
+                        "purpose": "decision_explanation",
+                        "authority": "decision_fact",
+                        "refs": [evidence_ref()],
+                        "template": "现在的市场可以理解为：经济增长正在{direction}，但市场只确认了{confirmation}风险。",
+                        "bindings": {
+                            "direction": "放慢",
+                            "confirmation": "一部分",
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+
+
 def _dummy_con():
     return _DummyCon()
 
@@ -730,20 +753,25 @@ async def test_failed_repair_uses_deterministic_fallback_without_new_tools():
 async def test_disabled_claim_validation_returns_unvalidated_debug_draft():
     deps = fake_dependencies(
         valid_plan(),
-        invalid_draft(),
+        beginner_debug_draft(),
         invalid_repair(),
         config=_config(claim_validation_enabled=False),
     )
 
     response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
+        current_question(question="现在市场怎么样？为什么？"),
+        dependencies=deps,
     )
 
     assert response["generation_status"] == "unvalidated_debug"
-    assert response["answer_text"].startswith("UNVALIDATED DEEPSEEK DEBUG OUTPUT\n")
+    assert response["answer_text"] == (
+        "现在的市场可以理解为：经济增长正在放慢，但市场只确认了一部分风险。"
+    )
+    assert "sections" not in response["answer_text"]
+    assert response["citations"] == []
     assert deps.llm_calls == ["plan", "draft"]
     assert deps.saved_trace["generation_status"] == "unvalidated_debug"
-    expected_claims = validate_answer_draft_schema(invalid_draft())["sections"]
+    expected_claims = validate_answer_draft_schema(beginner_debug_draft())["sections"]
     assert deps.saved_trace["structured_claims"] == expected_claims
     assert deps.saved_trace["validation_error_codes"] == []
     assert deps.saved_trace["attempts"] == {
@@ -751,6 +779,20 @@ async def test_disabled_claim_validation_returns_unvalidated_debug_draft():
         "draft": 1,
         "repair": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_validated_chinese_question_uses_chinese_heading():
+    deps = fake_dependencies(knowledge_plan(), _knowledge_draft())
+
+    response = await market_assistant.answer_question(
+        current_question(question="VIX 是什么？"),
+        dependencies=deps,
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert response["answer_text"].startswith("指标与方法\n")
+    assert "Method & Knowledge" not in response["answer_text"]
 
 
 @pytest.mark.asyncio
