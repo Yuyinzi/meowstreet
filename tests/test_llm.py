@@ -12,6 +12,7 @@ MARKET_ENV_NAMES = (
     "MARKET_ASSISTANT_MODEL",
     "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE",
     "MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED",
+    "MARKET_ASSISTANT_REASONING_EFFORT",
     "MARKET_ASSISTANT_RESEARCH_MODEL",
     "MARKET_ASSISTANT_RESEARCH_PROVIDER",
     "MARKET_ASSISTANT_RESEARCH_ENABLED",
@@ -34,6 +35,7 @@ def write_env(tmp_path, **overrides):
         "claim_validation": "MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED",
         "research_model": "MARKET_ASSISTANT_RESEARCH_MODEL",
         "provider": "MARKET_ASSISTANT_RESEARCH_PROVIDER",
+        "reasoning_effort": "MARKET_ASSISTANT_REASONING_EFFORT",
         "base_url": "OPENAI_BASE_URL",
         "supports": "MARKET_ASSISTANT_RESEARCH_SUPPORTS_WEB_SEARCH",
         "api_key": "OPENAI_API_KEY",
@@ -335,3 +337,39 @@ def test_load_market_assistant_config_builds_client_via_build_async_client(
     client = llm.build_async_client(config, error_context="market research")
 
     assert client is not None
+
+
+def test_load_market_assistant_config_reasoning_effort_defaults_to_low(
+    tmp_path, monkeypatch
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path)
+
+    config = llm.load_market_assistant_config(root=tmp_path)
+
+    assert config["reasoning_effort"] == "low"
+
+
+@pytest.mark.parametrize("value", ["", "maximum", "LOW"])
+def test_load_market_assistant_config_rejects_invalid_reasoning_effort(
+    tmp_path, monkeypatch, value
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path, reasoning_effort=value)
+
+    with pytest.raises(
+        RuntimeError,
+        match="MARKET_ASSISTANT_REASONING_EFFORT must be low, medium, or high",
+    ):
+        llm.load_market_assistant_config(root=tmp_path)
+
+
+def test_load_market_assistant_config_accepts_medium_reasoning_effort(
+    tmp_path, monkeypatch
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path, reasoning_effort="medium")
+
+    config = llm.load_market_assistant_config(root=tmp_path)
+
+    assert config["reasoning_effort"] == "medium"

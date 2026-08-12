@@ -1204,6 +1204,7 @@ async def test_answer_trace_has_design_19_fields_and_no_secrets():
         trace["model_configuration_fingerprint"]["structured_output_mode"]
         == "json_object"
     )
+    assert trace["model_configuration_fingerprint"]["reasoning_effort"] == "low"
     assert len(trace["answer_text_hash"]) == 64
     assert "api_key" not in json.dumps(trace)
     assert "sk-secret-test-key" not in json.dumps(trace)
@@ -1907,3 +1908,20 @@ async def test_unregistered_exploration_indicator_routes_to_fallback():
 
     assert response["generation_status"] == "fallback"
     assert "Local exploration data is currently unavailable." in response["answer_text"]
+
+
+def test_model_configuration_fingerprint_includes_reasoning_effort():
+    fingerprint = market_assistant._model_configuration_fingerprint(
+        _config(reasoning_effort="medium")
+    )
+
+    assert fingerprint["reasoning_effort"] == "medium"
+
+
+def test_model_configuration_fingerprint_defaults_reasoning_effort_to_low():
+    config = _config()
+    config.pop("reasoning_effort", None)
+
+    fingerprint = market_assistant._model_configuration_fingerprint(config)
+
+    assert fingerprint["reasoning_effort"] == "low"

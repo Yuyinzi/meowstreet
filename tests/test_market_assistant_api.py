@@ -121,11 +121,68 @@ def test_assistant_runtime_allows_bounded_streaming_request(monkeypatch):
         "app.routers.market_assistant.build_async_client", fake_build_async_client
     )
 
-    _, model, structured_output_mode = market_assistant_router._assistant_runtime()
+    (
+        _,
+        model,
+        structured_output_mode,
+        reasoning_effort,
+    ) = market_assistant_router._assistant_runtime()
 
     assert model == "assistant-model"
     assert structured_output_mode == "json_object"
+    assert reasoning_effort == "low"
     assert captured["kwargs"]["timeout"] == 900.0
+
+
+@pytest.mark.asyncio
+async def test_llm_helpers_thread_reasoning_effort_from_config(monkeypatch):
+    captured = {"plan_reasoning": None, "llm_reasoning": []}
+
+    monkeypatch.setattr(
+        market_assistant_router,
+        "_assistant_runtime",
+        lambda: ("client", "assistant-model", "json_schema", "medium"),
+    )
+    monkeypatch.setattr(
+        market_assistant_router,
+        "deterministic_plan",
+        lambda question: {"intent": "unsupported"},
+    )
+
+    async def fake_plan_question(client, **kwargs):
+        captured["plan_reasoning"] = kwargs["reasoning_effort"]
+        return {"intent": "unsupported"}
+
+    async def fake_complete_structured(client, **kwargs):
+        captured["llm_reasoning"].append(kwargs["reasoning_effort"])
+        return {"sections": []}
+
+    monkeypatch.setattr(market_assistant_router, "plan_question", fake_plan_question)
+    monkeypatch.setattr(
+        market_assistant_router, "complete_structured", fake_complete_structured
+    )
+
+    await market_assistant_router._plan_llm(
+        question="hello world",
+        context_summary={"mode": "current"},
+    )
+    await market_assistant_router._synthesize_llm(
+        question="hello world",
+        plan={"intent": "decision_explanation"},
+        context_summary={"mode": "current"},
+        artifacts={},
+    )
+    await market_assistant_router._repair_llm(
+        question="hello world",
+        plan={"intent": "decision_explanation"},
+        context_summary={"mode": "current"},
+        artifacts={},
+        draft={"sections": []},
+        validation_report={"valid": False},
+    )
+
+    assert captured["plan_reasoning"] == "medium"
+    assert captured["llm_reasoning"] == ["medium", "medium"]
 
 
 @pytest.mark.asyncio

@@ -96,7 +96,12 @@ async def test_complete_structured_records_kwargs_and_returns_json_dump():
     )
 
     assert client.calls == [
-        {"model": "assistant-model", "input": prompt, "text_format": DummyStructured}
+        {
+            "model": "assistant-model",
+            "input": prompt,
+            "text_format": DummyStructured,
+            "reasoning": {"effort": "low"},
+        }
     ]
     assert result == {"value": "hello"}
 
@@ -141,6 +146,7 @@ async def test_complete_structured_json_object_streams_and_validates_locally(cap
     assert client.calls[0]["model"] == "assistant-model"
     assert client.calls[0]["text"] == {"format": {"type": "json_object"}}
     assert client.calls[0]["stream"] is True
+    assert client.calls[0]["reasoning"] == {"effort": "low"}
     assert client.calls[0]["input"][-1] == prompt[-1]
     assert "value" in client.calls[0]["input"][0]["content"]
     assert result == {"value": "hello"}
@@ -241,3 +247,96 @@ async def test_plan_question_prompt_mentions_only_registered_operations():
     assert "resolve_current_explanation" in combined
     assert "research_deep" in combined
     assert "run_sql" not in combined
+
+
+@pytest.mark.asyncio
+async def test_plan_question_passes_reasoning_effort_to_complete_structured():
+    client = FakeClient(output_parsed=FakeParsed(valid_plan_payload()))
+
+    await plan_question(
+        client,
+        model="assistant-model",
+        question="What is the VIX?",
+        context_summary={},
+        reasoning_effort="high",
+    )
+
+    assert client.calls[0]["reasoning"] == {"effort": "high"}
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_json_object_logs_usage_metrics(caplog):
+    caplog.set_level(logging.INFO)
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.reasoning_text.delta", delta="thinking"),
+            SimpleNamespace(type="response.output_text.delta", delta='{"value":'),
+            SimpleNamespace(type="response.output_text.delta", delta='"hello"}'),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(
+                    output_text='{"value":"hello"}',
+                    usage=SimpleNamespace(
+                        input_tokens=10,
+                        output_tokens=5,
+                        input_tokens_details=SimpleNamespace(cached_tokens=3),
+                        output_tokens_details=SimpleNamespace(reasoning_tokens=2),
+                    ),
+                ),
+            ),
+        ]
+    )
+
+    result = await complete_structured(
+        client,
+        model="assistant-model",
+        prompt=[{"role": "user", "content": "hello"}],
+        schema_type=DummyStructured,
+        structured_output_mode="json_object",
+    )
+
+    assert result == {"value": "hello"}
+    assert "input_tokens=10" in caplog.text
+    assert "cached_tokens=3" in caplog.text
+    assert "output_tokens=5" in caplog.text
+    assert "reasoning_tokens=2" in caplog.text
+    assert "first_reasoning_seconds=" in caplog.text
+    assert "first_output_seconds=" in caplog.text
+    assert "thinking" not in caplog.text
+    assert "hello" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_json_object_logs_usage_from_dict_events(caplog):
+    caplog.set_level(logging.INFO)
+    client = FakeClient(
+        stream_events=[
+            {"type": "response.output_text.delta", "delta": '{"value":"hi"}'},
+            {
+                "type": "response.completed",
+                "response": {
+                    "output_text": '{"value":"hi"}',
+                    "usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 20,
+                        "input_tokens_details": {"cached_tokens": 40},
+                        "output_tokens_details": {"reasoning_tokens": 8},
+                    },
+                },
+            },
+        ]
+    )
+
+    result = await complete_structured(
+        client,
+        model="assistant-model",
+        prompt=[],
+        schema_type=DummyStructured,
+        structured_output_mode="json_object",
+    )
+
+    assert result == {"value": "hi"}
+    assert "input_tokens=100" in caplog.text
+    assert "cached_tokens=40" in caplog.text
+    assert "output_tokens=20" in caplog.text
+    assert "reasoning_tokens=8" in caplog.text

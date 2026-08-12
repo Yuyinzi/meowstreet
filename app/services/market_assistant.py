@@ -927,6 +927,7 @@ def _model_configuration_fingerprint(config):
         "structured_output_mode": config.get("structured_output_mode"),
         "claim_validation_enabled": config.get("claim_validation_enabled", True),
         "research_model": config.get("research_model"),
+        "reasoning_effort": config.get("reasoning_effort", "low"),
         "tool_schema_versions": TOOL_SCHEMA_VERSIONS,
         "assistant_policy_version": ASSISTANT_POLICY_VERSION,
         "prompt_version": PROMPT_VERSION,
