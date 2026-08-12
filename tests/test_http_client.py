@@ -23,6 +23,30 @@ def test_request_adds_user_agent_and_forwards_params():
     assert captured["user_agent"] == DEFAULT_USER_AGENT
 
 
+def test_follows_redirect_to_final_response():
+    requested_urls = []
+
+    def handler(request):
+        requested_urls.append(str(request.url))
+        if request.url.path == "/start":
+            return httpx.Response(
+                302,
+                headers={"Location": "https://example.test/final"},
+                request=request,
+            )
+        return httpx.Response(200, content=b"final content", request=request)
+
+    response = HttpClient(transport=httpx.MockTransport(handler)).request(
+        "GET", "https://example.test/start"
+    )
+
+    assert response.content == b"final content"
+    assert requested_urls == [
+        "https://example.test/start",
+        "https://example.test/final",
+    ]
+
+
 def test_retries_read_timeout_then_succeeds():
     calls = []
     delays = []

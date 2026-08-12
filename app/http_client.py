@@ -36,7 +36,9 @@ class HttpClient:
         last_exception = None
         for attempt in range(self._max_attempts):
             try:
-                with httpx.Client(transport=self._transport) as client:
+                with httpx.Client(
+                    transport=self._transport, follow_redirects=True
+                ) as client:
                     response = client.request(
                         method,
                         url,
