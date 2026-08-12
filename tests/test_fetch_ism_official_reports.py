@@ -547,7 +547,7 @@ def test_import_report_url_uses_factual_extraction_by_default(tmp_path):
     )
 
 
-def test_backfill_targets_use_prnewswire_for_history_and_official_for_latest(
+def test_backfill_targets_use_prnewswire_for_history_and_latest(
     monkeypatch,
 ):
     archive_reports = [
@@ -589,8 +589,8 @@ def test_backfill_targets_use_prnewswire_for_history_and_official_for_latest(
     assert targets == [
         {
             "survey_type": "manufacturing",
-            "source_name": "ismworld",
-            "url": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
+            "source_name": "prnewswire",
+            "url": "https://www.prnewswire.com/jun-2026.html",
             "report_month": "2026-06-01",
             "report_id": "ism_manufacturing_2026_06",
         }

@@ -4,7 +4,24 @@ import httpx
 
 
 DEFAULT_USER_AGENT = "Meowstreet/1.0"
+BROWSER_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
 DEFAULT_TIMEOUT_SECONDS = 30.0
+
+BROWSER_HEADERS = {
+    "User-Agent": BROWSER_USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Dnt": "1",
+    "Sec-Gpc": "1",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Priority": "u=0, i",
+    "Cache-Control": "max-age=0",
+}
 
 
 class HttpClient:
@@ -26,10 +43,16 @@ class HttpClient:
         json=None,
         headers=None,
         timeout=None,
+        browser=False,
     ):
-        merged_headers = {"User-Agent": DEFAULT_USER_AGENT}
-        if headers:
-            merged_headers.update(headers)
+        if browser:
+            merged_headers = dict(BROWSER_HEADERS)
+            if headers:
+                merged_headers.update(headers)
+        else:
+            merged_headers = {"User-Agent": DEFAULT_USER_AGENT}
+            if headers:
+                merged_headers.update(headers)
 
         effective_timeout = timeout if timeout is not None else self._default_timeout
 

@@ -191,12 +191,25 @@ def _is_sso_page(html):
     return "Object moved" in html and "ecommerce.ismworld.org" in html
 
 
+def _is_captcha_page(html):
+    markers = [
+        "captcha_form",
+        "grecaptcha.execute",
+        "google.com/recaptcha",
+        "rtoken",
+    ]
+    lowered = html.lower()
+    return sum(marker.lower() in lowered for marker in markers) >= 2
+
+
 def fetch_text(url, http_client=None):
     client = http_client or HttpClient(max_attempts=_FETCH_ATTEMPTS)
-    response = client.request("GET", url, timeout=30)
+    response = client.request("GET", url, timeout=30, browser=True)
     text = response.content.decode("utf-8", errors="replace")
     if _is_sso_page(text):
         raise ValueError("ism official report requires ISM membership login")
+    if _is_captcha_page(text):
+        raise ValueError("ism official report blocked by captcha")
     return text
 
 

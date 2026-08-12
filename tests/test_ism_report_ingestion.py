@@ -95,22 +95,22 @@ class TestBuildTargetsMissingOnlyRetry:
 
 
 class TestBuildTargetsLatestOnly:
-    def test_default_returns_one_ismworld_target(self):
+    def test_default_returns_one_prnewswire_target(self):
         targets = ingestion.build_targets("manufacturing")
         assert len(targets) == 1
-        assert targets[0]["source_name"] == "ismworld"
+        assert targets[0]["source_name"] == "prnewswire"
         assert targets[0]["survey_type"] == "manufacturing"
         assert targets[0]["report_month"] is not None
         assert targets[0]["report_id"].startswith("ism_manufacturing")
-        assert targets[0]["url"].startswith("https://www.ismworld.org/")
+        assert targets[0]["url"].startswith("https://www.prnewswire.com/")
 
-    def test_default_returns_services_ismworld_target(self):
+    def test_default_returns_services_prnewswire_target(self):
         targets = ingestion.build_targets("services")
         assert len(targets) == 1
-        assert targets[0]["source_name"] == "ismworld"
+        assert targets[0]["source_name"] == "prnewswire"
         assert targets[0]["survey_type"] == "services"
         assert targets[0]["report_id"].startswith("ism_services")
-        assert "services/" in targets[0]["url"]
+        assert targets[0]["url"].startswith("https://www.prnewswire.com/")
 
     def test_missing_only_with_existing_month_suppresses_latest(self):
         latest = ingestion.latest_released_report_month()
@@ -148,17 +148,17 @@ class TestBuildTargetsSpecificMonth:
         targets = ingestion.build_targets("manufacturing", report_month="2026-06")
         assert any(t["report_month"] == "2026-06-01" for t in targets)
 
-    def test_report_month_uses_ismworld_for_latest(self):
+    def test_report_month_uses_prnewswire_for_latest(self):
         latest = ingestion.latest_released_report_month()
         targets = ingestion.build_targets("services", report_month=latest[:7])
         matching = [t for t in targets if t["report_month"] == latest]
         assert len(matching) >= 1
-        assert matching[0]["source_name"] == "ismworld"
+        assert matching[0]["source_name"] == "prnewswire"
 
 
 class TestBuildTargetsCurrentYear:
     @patch("app.services.ism_report_ingestion.discover_prnewswire_reports")
-    def test_current_year_includes_prnewswire_for_history_ismworld_for_latest(
+    def test_current_year_includes_prnewswire_for_history_and_latest(
         self, mock_discover
     ):
         mock_discover.return_value = [
@@ -178,16 +178,12 @@ class TestBuildTargetsCurrentYear:
             and t["report_month"]
             and t["report_month"].startswith("2025")
         }
-        ism_months = {
-            t["report_month"]
-            for t in targets
-            if t["source_name"] == "ismworld" and t["report_month"]
-        }
-        assert len(pr_months) > 0
-        assert len(ism_months) <= 1
+        assert pr_months == {f"2025-{m:02d}-01" for m in range(1, 7)}
 
     @patch("app.services.ism_report_ingestion.discover_prnewswire_reports")
-    def test_current_year_latest_is_ismworld(self, mock_discover):
+    def test_current_year_latest_falls_back_to_ismworld_when_not_in_archive(
+        self, mock_discover
+    ):
         mock_discover.return_value = [
             {
                 "url": "https://prnewswire.com/jan-2024",

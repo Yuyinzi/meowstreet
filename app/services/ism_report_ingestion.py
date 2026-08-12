@@ -112,6 +112,24 @@ def discover_prnewswire_reports(
     return sorted(reports, key=lambda item: item["report_month"])
 
 
+def _find_latest_prnewswire_target(survey_type, latest_month, fetch=None):
+    """Return a Pr Newswire target for *latest_month* if it exists, else None."""
+    cfg = ism_report_config.load_survey_config(survey_type)
+    archive_reports = discover_prnewswire_reports(
+        int(latest_month[:4]), survey_type, fetch=fetch, pagesize=25, max_pages=4
+    )
+    for item in archive_reports:
+        if item["report_month"] == latest_month:
+            return {
+                "survey_type": survey_type,
+                "report_month": latest_month,
+                "report_id": item["report_id"],
+                "source_name": "prnewswire",
+                "url": item["url"],
+            }
+    return None
+
+
 def build_targets(
     survey_type,
     *,
@@ -165,18 +183,25 @@ def build_targets(
         if normal_month >= latest_month:
             if not missing_only or normal_month not in existing_months:
                 if (survey_type, normal_month) not in seen_months:
-                    url = cfg["ismworld_monthly_url"](month_name(normal_month))
-                    rid = ism_report_archive.report_id(normal_month, survey_type)
-                    targets.append(
-                        {
-                            "survey_type": survey_type,
-                            "report_month": normal_month,
-                            "report_id": rid,
-                            "source_name": "ismworld",
-                            "url": url,
-                        }
+                    latest_pr = _find_latest_prnewswire_target(
+                        survey_type, normal_month, fetch=fetch
                     )
-                    seen_months.add((survey_type, normal_month))
+                    if latest_pr:
+                        targets.append(latest_pr)
+                        seen_months.add((survey_type, normal_month))
+                    else:
+                        url = cfg["ismworld_monthly_url"](month_name(normal_month))
+                        rid = ism_report_archive.report_id(normal_month, survey_type)
+                        targets.append(
+                            {
+                                "survey_type": survey_type,
+                                "report_month": normal_month,
+                                "report_id": rid,
+                                "source_name": "ismworld",
+                                "url": url,
+                            }
+                        )
+                        seen_months.add((survey_type, normal_month))
         else:
             archive_reports = discover_prnewswire_reports(
                 int(normal_month[:4]),
@@ -248,25 +273,42 @@ def build_targets(
             if missing_only and ym in existing_months:
                 continue
             if ym == latest_month:
-                url = cfg["ismworld_monthly_url"](month_name(ym))
-                rid = ism_report_archive.report_id(ym, survey_type)
-                target_source = "ismworld"
+                if ym in archive_by_month:
+                    item = archive_by_month[ym]
+                    targets.append(
+                        {
+                            "survey_type": survey_type,
+                            "report_month": ym,
+                            "report_id": item["report_id"],
+                            "source_name": "prnewswire",
+                            "url": item["url"],
+                        }
+                    )
+                else:
+                    url = cfg["ismworld_monthly_url"](month_name(ym))
+                    rid = ism_report_archive.report_id(ym, survey_type)
+                    targets.append(
+                        {
+                            "survey_type": survey_type,
+                            "report_month": ym,
+                            "report_id": rid,
+                            "source_name": "ismworld",
+                            "url": url,
+                        }
+                    )
             elif ym in archive_by_month:
                 item = archive_by_month[ym]
-                url = item["url"]
-                rid = item["report_id"]
-                target_source = "prnewswire"
+                targets.append(
+                    {
+                        "survey_type": survey_type,
+                        "report_month": ym,
+                        "report_id": item["report_id"],
+                        "source_name": "prnewswire",
+                        "url": item["url"],
+                    }
+                )
             else:
                 continue
-            targets.append(
-                {
-                    "survey_type": survey_type,
-                    "report_month": ym,
-                    "report_id": rid,
-                    "source_name": target_source,
-                    "url": url,
-                }
-            )
             seen_months.add(key)
 
     # Latest released report unless suppressed
@@ -282,17 +324,23 @@ def build_targets(
 
     if force_latest and (survey_type, latest_month) not in seen_months:
         if not missing_only or latest_month not in existing_months:
-            url = cfg["ismworld_monthly_url"](month_name(latest_month))
-            rid = ism_report_archive.report_id(latest_month, survey_type)
-            targets.append(
-                {
-                    "survey_type": survey_type,
-                    "report_month": latest_month,
-                    "report_id": rid,
-                    "source_name": "ismworld",
-                    "url": url,
-                }
+            latest_pr = _find_latest_prnewswire_target(
+                survey_type, latest_month, fetch=fetch
             )
+            if latest_pr:
+                targets.append(latest_pr)
+            else:
+                url = cfg["ismworld_monthly_url"](month_name(latest_month))
+                rid = ism_report_archive.report_id(latest_month, survey_type)
+                targets.append(
+                    {
+                        "survey_type": survey_type,
+                        "report_month": latest_month,
+                        "report_id": rid,
+                        "source_name": "ismworld",
+                        "url": url,
+                    }
+                )
             seen_months.add((survey_type, latest_month))
 
     return targets
