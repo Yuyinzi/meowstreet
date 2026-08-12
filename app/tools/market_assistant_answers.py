@@ -123,7 +123,7 @@ _MATERIALITY_RE = re.compile(
     r"\b(?:significant|significantly|material|materially|strong|weak|extreme|"
     r"unusual|rare|elevated|dangerous|confirms|risk-off|predicts|causes|"
     r"high-stress|implies a regime)\b"
-    r"|(?:显著|重大|明显|强劲|疲弱|极端|异常|罕见|高企|危险|高压|确认|避险|"
+    r"|(?:显著|重大|明显|强劲|疲弱|极端|异常|罕见|高企|危险|高压|避险|"
     r"预示|预测|导致|暗示)",
     re.IGNORECASE,
 )

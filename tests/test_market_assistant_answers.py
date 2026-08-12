@@ -767,6 +767,26 @@ def test_chinese_decision_language_rejected_for_decision_fact_claim(template):
         validate_answer_draft(draft(claim), artifacts())
 
 
+@pytest.mark.parametrize(
+    "template",
+    [
+        "市场只确认了一部分风险。",
+        "市场还没有全面确认下行风险。",
+        "市场确认了波动率上升。",
+    ],
+)
+def test_chinese_confirmation_language_allowed_for_decision_fact_claim(template):
+    claim = valid_claim(template=template, bindings={})
+    validated = validate_answer_draft(draft(claim), artifacts())
+    assert validated is not None
+
+
+def test_chinese_predictive_confirmation_phrase_rejected():
+    claim = valid_claim(template="这确认了避险情绪。", bindings={})
+    with pytest.raises(ValueError, match="unsupported materiality language"):
+        validate_answer_draft(draft(claim), artifacts())
+
+
 def _snapshot_with_market_setup_result():
     artifact = snapshot_artifact()
     for obj in artifact["object_index"]:
