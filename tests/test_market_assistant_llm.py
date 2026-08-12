@@ -38,7 +38,9 @@ class FakeResponses:
     async def create(self, **kwargs):
         self.client.calls.append(kwargs)
         if self.client.stream_events is not None:
-            return FakeStream(self.client.stream_events)
+            stream = FakeStream(self.client.stream_events)
+            self.client.last_stream = stream
+            return stream
         return FakeResponse(output_text=self.client.output_text)
 
 
@@ -48,6 +50,7 @@ class FakeClient:
         self.output_text = output_text
         self.stream_events = stream_events
         self.calls = []
+        self.last_stream = None
 
     @property
     def responses(self):
@@ -57,6 +60,7 @@ class FakeClient:
 class FakeStream:
     def __init__(self, events):
         self.events = events
+        self.closed = False
 
     def __aiter__(self):
         return self._iterate()
@@ -64,6 +68,9 @@ class FakeStream:
     async def _iterate(self):
         for event in self.events:
             yield event
+
+    async def aclose(self):
+        self.closed = True
 
 
 def valid_plan_payload(**overrides):
@@ -340,3 +347,210 @@ async def test_complete_structured_json_object_logs_usage_from_dict_events(caplo
     assert "cached_tokens=40" in caplog.text
     assert "output_tokens=20" in caplog.text
     assert "reasoning_tokens=8" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_observer_gets_reasoning_started_only(caplog):
+    caplog.set_level(logging.INFO)
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(
+                type="response.reasoning_text.delta", delta="deep thinking here"
+            ),
+            SimpleNamespace(type="response.reasoning_text.delta", delta=" keep going"),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(
+                    output_text='{"answer_text":"hi","value":"ok"}'
+                ),
+            ),
+        ]
+    )
+    events = []
+
+    def observer(event):
+        events.append(event)
+
+    result = await complete_structured(
+        client,
+        model="assistant-model",
+        prompt=[],
+        schema_type=DummyStructured,
+        structured_output_mode="json_object",
+        stream_observer=observer,
+    )
+
+    assert result == {"value": "ok"}
+    assert events == [{"type": "reasoning_started"}]
+    assert "deep thinking here" not in json.dumps(events)
+    assert "deep thinking here" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_observer_gets_answer_deltas_from_extractor(caplog):
+    caplog.set_level(logging.INFO)
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(
+                type="response.reasoning_text.delta", delta="deep thinking here"
+            ),
+            SimpleNamespace(type="response.output_text.delta", delta='{"answer_'),
+            SimpleNamespace(type="response.output_text.delta", delta='text":"当前'),
+            SimpleNamespace(
+                type="response.output_text.delta", delta='市场","value":"x"}'
+            ),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(
+                    output_text='{"answer_text":"当前市场","value":"x"}',
+                    usage=SimpleNamespace(
+                        input_tokens=10,
+                        output_tokens=5,
+                        input_tokens_details=SimpleNamespace(cached_tokens=3),
+                        output_tokens_details=SimpleNamespace(reasoning_tokens=2),
+                    ),
+                ),
+            ),
+        ]
+    )
+    events = []
+
+    def observer(event):
+        events.append(event)
+
+    result = await complete_structured(
+        client,
+        model="assistant-model",
+        prompt=[],
+        schema_type=DummyStructured,
+        structured_output_mode="json_object",
+        stream_observer=observer,
+    )
+
+    assert result == {"value": "x"}
+    assert events == [
+        {"type": "reasoning_started"},
+        {"type": "answer_delta", "delta": "当前"},
+        {"type": "answer_delta", "delta": "市场"},
+    ]
+    assert "deep thinking here" not in json.dumps(events)
+    assert "deep thinking here" not in caplog.text
+    assert "reasoning_tokens=2" in caplog.text
+    assert "当前" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_missing_streamed_answer_text_is_best_effort(caplog):
+    caplog.set_level(logging.INFO)
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.output_text.delta", delta='{"value":"ok"}'),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(output_text='{"value":"ok"}'),
+            ),
+        ]
+    )
+    events = []
+
+    def observer(event):
+        events.append(event)
+
+    result = await complete_structured(
+        client,
+        model="assistant-model",
+        prompt=[],
+        schema_type=DummyStructured,
+        structured_output_mode="json_object",
+        stream_observer=observer,
+    )
+
+    assert result == {"value": "ok"}
+    assert events == []
+    assert "answer_text missing" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_observer_error_closes_stream_and_reraises():
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.reasoning_text.delta", delta="thinking"),
+            SimpleNamespace(type="response.output_text.delta", delta='{"value":'),
+            SimpleNamespace(type="response.output_text.delta", delta='"ok"}'),
+        ]
+    )
+
+    def observer(event):
+        raise RuntimeError("observer exploded")
+
+    with pytest.raises(RuntimeError, match="observer exploded"):
+        await complete_structured(
+            client,
+            model="assistant-model",
+            prompt=[],
+            schema_type=DummyStructured,
+            structured_output_mode="json_object",
+            stream_observer=observer,
+        )
+
+    assert client.last_stream.closed is True
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_supports_async_observer():
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.output_text.delta", delta='{"answer_'),
+            SimpleNamespace(
+                type="response.output_text.delta", delta='text":"hi","value":"ok"}'
+            ),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(
+                    output_text='{"answer_text":"hi","value":"ok"}'
+                ),
+            ),
+        ]
+    )
+    events = []
+
+    async def observer(event):
+        events.append(event)
+
+    result = await complete_structured(
+        client,
+        model="assistant-model",
+        prompt=[],
+        schema_type=DummyStructured,
+        structured_output_mode="json_object",
+        stream_observer=observer,
+    )
+
+    assert result == {"value": "ok"}
+    assert events == [{"type": "answer_delta", "delta": "hi"}]
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_without_observer_keeps_existing_behavior(caplog):
+    caplog.set_level(logging.INFO)
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.output_text.delta", delta='{"value":'),
+            SimpleNamespace(type="response.output_text.delta", delta='"hi"}'),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(output_text='{"value":"hi"}'),
+            ),
+        ]
+    )
+
+    result = await complete_structured(
+        client,
+        model="assistant-model",
+        prompt=[],
+        schema_type=DummyStructured,
+        structured_output_mode="json_object",
+    )
+
+    assert result == {"value": "hi"}
+    assert "market assistant response stream started" in caplog.text

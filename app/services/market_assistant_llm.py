@@ -1,3 +1,4 @@
+import inspect
 import json
 import logging
 from time import monotonic
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 from app.tools.market_assistant_plans import TaskPlanSchema
 from app.tools.market_assistant_plans import registered_operation_ids
 from app.tools.market_assistant_plans import validate_task_plan
+from app.tools.market_assistant_stream import AnswerTextStreamExtractor
 
 
 LOGGER = logging.getLogger(__name__)
@@ -22,6 +24,7 @@ async def complete_structured(
     schema_type: type[BaseModel],
     structured_output_mode: str = "json_schema",
     reasoning_effort: str = "low",
+    stream_observer=None,
 ) -> Awaitable[dict]:
     if structured_output_mode == "json_object":
         request_started_at = monotonic()
@@ -37,7 +40,7 @@ async def complete_structured(
             "market assistant response stream connected elapsed_seconds=%.2f",
             monotonic() - request_started_at,
         )
-        output_text = await _collect_response_stream(stream)
+        output_text = await _collect_response_stream(stream, stream_observer)
         try:
             parsed = schema_type.model_validate_json(output_text)
         except (TypeError, ValueError) as exc:
@@ -57,7 +60,7 @@ async def complete_structured(
     return parsed.model_dump(mode="json")
 
 
-async def _collect_response_stream(stream):
+async def _collect_response_stream(stream, stream_observer=None):
     started_at = monotonic()
     event_counts = {}
     output_parts = []
@@ -66,6 +69,10 @@ async def _collect_response_stream(stream):
     first_event_received = False
     first_reasoning_at = None
     first_output_at = None
+    reasoning_started_emitted = False
+    extractor = None
+    if stream_observer is not None:
+        extractor = AnswerTextStreamExtractor()
     STREAM_LOGGER.info("market assistant response stream started")
     async for event in stream:
         event_type = _event_value(event, "type") or "unknown"
@@ -80,12 +87,25 @@ async def _collect_response_stream(stream):
         if event_type == "response.reasoning_text.delta":
             if first_reasoning_at is None:
                 first_reasoning_at = monotonic() - started_at
+            if extractor is not None and not reasoning_started_emitted:
+                reasoning_started_emitted = True
+                await _notify_observer(
+                    stream, stream_observer, {"type": "reasoning_started"}
+                )
         if event_type == "response.output_text.delta":
             if first_output_at is None:
                 first_output_at = monotonic() - started_at
             delta = _event_value(event, "delta")
             if isinstance(delta, str):
                 output_parts.append(delta)
+                if extractor is not None:
+                    delta_text = extractor.feed(delta)
+                    if delta_text:
+                        await _notify_observer(
+                            stream,
+                            stream_observer,
+                            {"type": "answer_delta", "delta": delta_text},
+                        )
         if event_type == "response.completed":
             completed = True
             completed_response = _event_value(event, "response")
@@ -105,6 +125,13 @@ async def _collect_response_stream(stream):
         response_output_text = _event_value(completed_response, "output_text")
         if isinstance(response_output_text, str):
             output_text = response_output_text
+    if extractor is not None:
+        try:
+            extractor.finish()
+        except ValueError as exc:
+            LOGGER.warning(
+                "market assistant stream answer text extraction incomplete %s", exc
+            )
     elapsed_seconds = monotonic() - started_at
     _log_stream_usage(
         completed_response, elapsed_seconds, first_reasoning_at, first_output_at
@@ -115,6 +142,18 @@ async def _collect_response_stream(stream):
         event_counts,
     )
     return output_text
+
+
+async def _notify_observer(stream, stream_observer, event):
+    try:
+        result = stream_observer(event)
+        if inspect.isawaitable(result):
+            await result
+    except Exception:
+        aclose = getattr(stream, "aclose", None)
+        if callable(aclose):
+            await aclose()
+        raise
 
 
 def _log_stream_usage(
