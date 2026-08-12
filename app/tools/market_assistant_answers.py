@@ -19,14 +19,27 @@ _SECTION_KINDS = (
 )
 
 _SECTION_HEADINGS = {
-    "decision": "",
-    "knowledge": "Method & Knowledge",
-    "observation": "Local Observations",
-    "research": "External Research",
-    "illustration": "",
-    "governance": "Governance",
-    "notice": "Notes",
+    "en": {
+        "decision": "",
+        "knowledge": "Method & Knowledge",
+        "observation": "Local Observations",
+        "research": "External Research",
+        "illustration": "",
+        "governance": "Governance",
+        "notice": "Notes",
+    },
+    "zh": {
+        "decision": "",
+        "knowledge": "指标与方法",
+        "observation": "本地数据观察",
+        "research": "外部资料",
+        "illustration": "",
+        "governance": "数据与规则说明",
+        "notice": "说明",
+    },
 }
+
+_EXAMPLE_PREFIXES = {"en": "[Example] ", "zh": "[举例] "}
 
 _SECTION_BY_PURPOSE = {
     "decision_explanation": "decision",
@@ -96,6 +109,8 @@ _PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _NUMBER_RE = re.compile(r"\d")
 _ENUM_RE = re.compile(r"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b")
 _TOKEN_RE = re.compile(r"[a-z][a-z0-9-]*")
+
+_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 
 _DECISION_RE = re.compile(
     r"\b(?:buy|sell|should buy|should sell|enter a position|take a position|"
@@ -868,24 +883,31 @@ def render_unvalidated_debug_answer(draft):
     return "UNVALIDATED DEEPSEEK DEBUG OUTPUT\n" + serialized
 
 
-def render_answer(draft, artifacts, notices):
+def detect_answer_language(text) -> Literal["en", "zh"]:
+    if isinstance(text, str) and _CJK_RE.search(text):
+        return "zh"
+    return "en"
+
+
+def render_answer(draft, artifacts, notices, *, language="en"):
     parts = []
+    headings = _SECTION_HEADINGS[language]
     for section in draft.get("sections", []):
         claims = section.get("claims") or []
         if not claims:
             continue
-        heading = _SECTION_HEADINGS.get(section.get("kind"), "")
+        heading = headings.get(section.get("kind"), "")
         if heading:
             parts.append(_escape_html(heading))
         for claim in claims:
-            parts.append(_render_claim(claim, artifacts))
+            parts.append(_render_claim(claim, artifacts, language=language))
     for notice in notices or []:
         if isinstance(notice, dict) and isinstance(notice.get("text"), str):
             parts.append(_escape_html(notice["text"]))
     return "\n".join(parts)
 
 
-def _render_claim(claim, artifacts):
+def _render_claim(claim, artifacts, *, language="en"):
     values = {}
     for key, binding in (claim.get("bindings") or {}).items():
         values[key] = _render_binding(binding, artifacts)
@@ -902,7 +924,7 @@ def _render_claim(claim, artifacts):
     )
     escaped = _escape_html(rendered)
     if claim.get("authority") == "hypothetical":
-        return "[Example] " + escaped
+        return _EXAMPLE_PREFIXES[language] + escaped
     return escaped
 
 

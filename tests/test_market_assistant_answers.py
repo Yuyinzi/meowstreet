@@ -8,6 +8,7 @@ from app.tools.market_assistant_answers import DraftValidationError
 from app.tools.market_assistant_answers import build_validation_report
 from app.tools.market_assistant_answers import calculate_hypothetical
 from app.tools.market_assistant_answers import collect_citations
+from app.tools.market_assistant_answers import detect_answer_language
 from app.tools.market_assistant_answers import render_answer
 from app.tools.market_assistant_answers import render_fallback
 from app.tools.market_assistant_answers import render_unvalidated_debug_answer
@@ -1086,6 +1087,29 @@ def test_render_groups_sections_with_backend_headings():
     validated = validate_answer_draft(payload, artifacts())
     rendered = render_answer(validated, artifacts(), [])
     assert "Local Observations" in rendered
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("现在市场怎么样？", "zh"),
+        ("为什么是 Mild Risk-Off？", "zh"),
+        ("Explain the market setup", "en"),
+        ("", "en"),
+    ],
+)
+def test_detect_answer_language(question, expected):
+    assert detect_answer_language(question) == expected
+
+
+def test_render_answer_localizes_chinese_observation_heading():
+    claim = observation_claim("VIX 当前为 {first}，最新为 {last}。")
+    validated = validate_answer_draft(draft(claim, kind="observation"), artifacts())
+
+    rendered = render_answer(validated, artifacts(), [], language="zh")
+
+    assert rendered.startswith("本地数据观察\n")
+    assert "Local Observations" not in rendered
 
 
 def test_render_fallback_decision_renders_four_layers_and_path():
