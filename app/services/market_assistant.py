@@ -185,6 +185,14 @@ async def answer_question(request, *, dependencies):
         answer_text = render_unvalidated_debug_answer(
             validated, language=answer_language
         )
+        if not answer_text.strip():
+            generation_status = "fallback"
+            answer_text = render_fallback(
+                plan=plan, artifacts=frozen_artifacts, notices=[]
+            )
+            validation_error_codes = sorted(
+                set(validation_error_codes) | {"DISPLAY_FILTERED"}
+            )
         citations = []
     elif validated is not None:
         answer_text = render_answer(
