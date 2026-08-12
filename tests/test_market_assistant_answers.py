@@ -767,6 +767,116 @@ def test_chinese_decision_language_rejected_for_decision_fact_claim(template):
         validate_answer_draft(draft(claim), artifacts())
 
 
+def _snapshot_with_market_setup_result():
+    artifact = snapshot_artifact()
+    for obj in artifact["object_index"]:
+        if obj["object_id"] == "macro_regime":
+            return artifact
+    artifact["object_index"].append(
+        {
+            "object_type": "market_setup_result",
+            "object_id": "macro_regime",
+            "authority": "decision_fact",
+            "payload": {
+                "code": "growth_decelerating",
+                "label": "Growth Decelerating",
+                "internal_state": "macro_weakening_partially_confirmed",
+            },
+        }
+    )
+    return artifact
+
+
+def test_code_field_binding_rejected_for_decision_claim():
+    local = artifacts()
+    local["ctx_123"] = _snapshot_with_market_setup_result()
+    claim = valid_claim(
+        template="当前市场状态代码是{code}。",
+        bindings={
+            "code": {
+                "value": "growth_decelerating",
+                "source": snapshot_ref(
+                    "macro_regime",
+                    object_type="market_setup_result",
+                    field="code",
+                ),
+            }
+        },
+    )
+    with pytest.raises(ValueError, match="internal code"):
+        validate_answer_draft(draft(claim), local)
+
+
+def test_code_value_binding_rejected_for_decision_claim():
+    local = artifacts()
+    local["ctx_123"] = _snapshot_with_market_setup_result()
+    claim = valid_claim(
+        template="当前市场状态代码是{code}。",
+        bindings={
+            "code": {
+                "value": "macro_weakening_partially_confirmed",
+                "source": snapshot_ref(
+                    "macro_regime",
+                    object_type="market_setup_result",
+                    field="internal_state",
+                ),
+            }
+        },
+    )
+    with pytest.raises(ValueError, match="internal code"):
+        validate_answer_draft(draft(claim), local)
+
+
+def test_label_binding_allowed_for_decision_claim():
+    local = artifacts()
+    local["ctx_123"] = _snapshot_with_market_setup_result()
+    claim = valid_claim(
+        template="当前市场处于{state}状态。",
+        bindings={
+            "state": {
+                "value": "Growth Decelerating",
+                "source": snapshot_ref(
+                    "macro_regime",
+                    object_type="market_setup_result",
+                    field="label",
+                ),
+            }
+        },
+    )
+    validated = validate_answer_draft(draft(claim), local)
+    assert validated is not None
+
+
+def test_code_field_binding_allowed_for_governance_claim():
+    local = artifacts()
+    local["ctx_123"] = _snapshot_with_market_setup_result()
+    claim = {
+        "claim_id": "gov1",
+        "purpose": "governance_explanation",
+        "authority": "decision_fact",
+        "refs": [
+            {
+                "artifact_id": "ctx_123",
+                "object_type": "market_setup_result",
+                "object_id": "macro_regime",
+            }
+        ],
+        "template": "当前市场状态代码是{code}。",
+        "bindings": {
+            "code": {
+                "value": "growth_decelerating",
+                "source": snapshot_ref(
+                    "macro_regime",
+                    object_type="market_setup_result",
+                    field="code",
+                ),
+            }
+        },
+    }
+    validated = validate_answer_draft(draft(claim, kind="governance"), local)
+    assert validated is not None
+
+
 def test_external_source_title_word_does_not_exempt_materiality():
     source_artifact = research_artifact()
     source_artifact["artifact_id"] = "res_sig"

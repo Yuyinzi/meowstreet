@@ -644,12 +644,12 @@ class RealPersistenceDeps:
                             "template": "The macro regime is {regime}.",
                             "bindings": {
                                 "regime": {
-                                    "value": regime["code"],
+                                    "value": regime["label"],
                                     "source": {
                                         "artifact_id": context_id,
                                         "object_type": "market_setup_result",
                                         "object_id": "macro_regime",
-                                        "field": "code",
+                                        "field": "label",
                                     },
                                 }
                             },
@@ -986,12 +986,12 @@ async def test_external_and_local_claims_keep_separate_authorities():
         ),
         "bindings": {
             "regime": {
-                "value": "growth_decelerating",
+                "value": "Growth Decelerating",
                 "source": {
                     "artifact_id": "ctx_123",
                     "object_type": "market_setup_result",
                     "object_id": "macro_regime",
-                    "field": "code",
+                    "field": "label",
                 },
             },
             "vix_level": {
@@ -1050,7 +1050,7 @@ async def test_external_and_local_claims_keep_separate_authorities():
     )
 
     assert response["generation_status"] == "validated_first_pass"
-    assert "growth_decelerating" in response["answer_text"]
+    assert "Growth Decelerating" in response["answer_text"]
     assert "18.4" in response["answer_text"]
     assert "25.0" in response["answer_text"]
     authorities = {
@@ -1354,12 +1354,12 @@ async def test_historical_snapshot_operation_acquires_snapshot_artifact():
                         "template": "The macro regime was {regime}.",
                         "bindings": {
                             "regime": {
-                                "value": "growth_decelerating",
+                                "value": "Growth Decelerating",
                                 "source": {
                                     "artifact_id": "ctx_123",
                                     "object_type": "market_setup_result",
                                     "object_id": "macro_regime",
-                                    "field": "code",
+                                    "field": "label",
                                 },
                             }
                         },
@@ -1416,12 +1416,12 @@ async def test_snapshot_object_operation_acquires_focused_artifact():
                         "template": "The macro regime is {regime}.",
                         "bindings": {
                             "regime": {
-                                "value": "growth_decelerating",
+                                "value": "Growth Decelerating",
                                 "source": {
                                     "artifact_id": "ctx_123_market_setup_result_macro_regime",
                                     "object_type": "market_setup_result",
                                     "object_id": "macro_regime",
-                                    "field": "code",
+                                    "field": "label",
                                 },
                             }
                         },

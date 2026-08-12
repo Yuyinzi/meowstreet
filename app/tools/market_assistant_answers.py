@@ -90,6 +90,7 @@ _ERROR_CODES = frozenset(
         "UNBOUND_FACTUAL_LITERAL",
         "PROHIBITED_DECISION_CLAIM",
         "UNSUPPORTED_MATERIALITY",
+        "PROHIBITED_INTERNAL_CODE",
         "HYPOTHETICAL_REFERENCE_FORBIDDEN",
         "RESEARCH_CITATION_REQUIRED",
         "LIMIT_EXCEEDED",
@@ -647,6 +648,9 @@ def _validate_annotated_binding(claim, key, binding, artifacts):
         )
     else:
         errors.extend(_validate_typed_value(claim, key, actual))
+        errors.extend(
+            _internal_code_binding_errors(claim, key, source["field"], binding["value"])
+        )
     return errors
 
 
@@ -675,7 +679,30 @@ def _validate_field_ref_binding(claim, key, binding, artifacts):
         )
     else:
         errors.extend(_validate_typed_value(claim, key, value))
+    errors.extend(_internal_code_binding_errors(claim, key, binding["field"], value))
     return errors
+
+
+def _internal_code_binding_errors(claim, key, source_field, value):
+    if claim["purpose"] == "governance_explanation":
+        return []
+    final_segment = (
+        source_field.rsplit(".", 1)[-1] if isinstance(source_field, str) else ""
+    )
+    is_code_field = final_segment == "code"
+    is_code_value = isinstance(value, str) and bool(_ENUM_RE.search(value))
+    if not (is_code_field or is_code_value):
+        return []
+    return [
+        _error(
+            "PROHIBITED_INTERNAL_CODE",
+            "internal code cannot be displayed in an explanation",
+            claim_id=claim["claim_id"],
+            field_id=key,
+            expected=_format_value(source_field),
+            actual=_format_value(value),
+        )
+    ]
 
 
 def _validate_typed_value(claim, key, value):
