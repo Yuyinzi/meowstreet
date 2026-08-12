@@ -504,7 +504,7 @@ def test_repair_prompt_preserves_beginner_contract():
 def _stream_events():
     events = [
         {"type": "status", "status": "thinking"},
-        {"type": "answer_delta", "text": "Market "},
+        {"type": "answer_delta", "delta": "市场 "},
         {"type": "validation", "status": "passed", "error_codes": []},
         {
             "type": "complete",
@@ -535,7 +535,8 @@ def test_stream_question_returns_ndjson_event_sequence(assistant_env, monkeypatc
         assert response.headers["content-type"].startswith("application/x-ndjson")
         assert response.headers["cache-control"] == "no-cache"
         assert response.headers["x-accel-buffering"] == "no"
-        parsed = [json.loads(line) for line in response.iter_lines()]
+        raw_lines = list(response.iter_lines())
+        parsed = [json.loads(line) for line in raw_lines]
         assert [event["type"] for event in parsed] == [
             "status",
             "answer_delta",
@@ -543,7 +544,14 @@ def test_stream_question_returns_ndjson_event_sequence(assistant_env, monkeypatc
             "complete",
         ]
         assert parsed[0] == {"type": "status", "status": "thinking"}
-        assert parsed[1] == {"type": "answer_delta", "text": "Market "}
+        assert parsed[1] == {"type": "answer_delta", "delta": "市场 "}
+        wire_line = raw_lines[1]
+        compact = json.dumps(parsed[1], ensure_ascii=False, separators=(",", ":"))
+        assert wire_line == compact
+        assert ", " not in wire_line
+        assert ": " not in wire_line
+        assert "市场" in wire_line
+        assert "\\u" not in wire_line
 
 
 def test_stream_question_empty_question_returns_400_before_streaming(assistant_env):

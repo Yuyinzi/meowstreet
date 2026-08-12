@@ -235,6 +235,7 @@ async def answer_question(request, *, dependencies, event_sink=None):
                 plan=plan, artifacts=frozen_artifacts, notices=[]
             )
             citations = []
+            await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
         else:
             answer_text = validated.get("answer_text") or render_answer(
                 validated, frozen_artifacts, [], language=answer_language
@@ -250,6 +251,8 @@ async def answer_question(request, *, dependencies, event_sink=None):
         )
         citations = collect_citations(validated, frozen_artifacts)
         if generation_status == "validated_first_pass":
+            if not (validated.get("answer_text") or "").strip():
+                await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
             await _emit_validation(event_sink, "passed", [])
         else:
             await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
@@ -887,7 +890,7 @@ def _projected_object_index(object_index, plan):
 def _keeps_artifact_object(item, kept_counterfactual_ids):
     return (
         not _is_setup_counterfactual(item)
-        or item["object_id"] in kept_counterfactual_ids
+        or item.get("object_id") in kept_counterfactual_ids
     )
 
 
@@ -931,9 +934,10 @@ def _project_evidence_fact_for_llm(item):
     projected_payload = {
         key: payload[key] for key in _KEPT_EVIDENCE_FIELDS if key in payload
     }
-    projected_payload["provenance"] = {
-        "source_period": (payload.get("provenance") or {}).get("source_period")
-    }
+    provenance = payload.get("provenance")
+    source_period = (provenance or {}).get("source_period")
+    if isinstance(provenance, dict) and source_period is not None:
+        projected_payload["provenance"] = {"source_period": source_period}
     return {**item, "payload": projected_payload}
 
 

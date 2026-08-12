@@ -8749,6 +8749,7 @@ def test_market_assistant_stream_error_after_body_keeps_text_and_reenables():
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
           questionCleared: elements.marketAssistantQuestion.value === "",
           logChildren: elements.marketAssistantLog.children.length,
+          busyAfter: assistant.attrs["aria-busy"],
         }));
         """
     )
@@ -8759,6 +8760,7 @@ def test_market_assistant_stream_error_after_body_keeps_text_and_reenables():
         "submitEnabled": True,
         "questionCleared": True,
         "logChildren": 2,
+        "busyAfter": "false",
     }
 
 
@@ -8785,4 +8787,104 @@ def test_market_assistant_stream_message_aria_busy_lifecycle():
     assert payload == {
         "busyDuring": "true",
         "busyAfter": "false",
+    }
+
+
+def test_market_assistant_stream_unknown_validation_status_skips_badge():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {
+          type: "validation",
+          status: "mystery_status",
+          error_codes: ["SOME_CODE"],
+        });
+        const badge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        console.log(JSON.stringify({
+          hasBadge: Boolean(badge),
+          validation: stream.message.validation,
+          busyDuring: stream.element.attrs["aria-busy"],
+        }));
+        """
+    )
+
+    assert payload == {
+        "hasBadge": False,
+        "validation": None,
+        "busyDuring": "true",
+    }
+
+
+def test_market_assistant_stream_null_body_treated_as_stream_failure():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => ({ ok: true, status: 200, body: null });
+        elements.marketAssistantQuestion.value = "Will this work?";
+        await hooks.handleSubmit();
+        console.log(JSON.stringify({
+          hasError: hooks.state.error !== null,
+          statusText: elements.marketAssistantStatus.textContent,
+          questionPreserved: elements.marketAssistantQuestion.value === "Will this work?",
+          submitEnabled: elements.marketAssistantSubmit.disabled === false,
+          logChildren: elements.marketAssistantLog.children.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "hasError": True,
+        "statusText": "The assistant could not answer right now. Your question is preserved.",
+        "questionPreserved": True,
+        "submitEnabled": True,
+        "logChildren": 1,
+    }
+
+
+def test_market_assistant_stream_consumption_cancels_reader_on_event_error():
+    payload = _run_market_assistant_harness(
+        """
+        let cancelled = false;
+        let released = false;
+        const encoder = new TextEncoder();
+        const chunks = [
+          '{"type":"answer_delta","delta":"现在"}\\n',
+          '{"type":"answer_delta","delta":"市场"}\\n',
+        ];
+        let chunkIndex = 0;
+        const body = {
+          getReader() {
+            return {
+              read: async () => {
+                if (chunkIndex < chunks.length) {
+                  return { done: false, value: encoder.encode(chunks[chunkIndex++]) };
+                }
+                return { done: true, value: undefined };
+              },
+              cancel: async () => { cancelled = true; },
+              releaseLock: () => { released = true; },
+            };
+          },
+        };
+        let error = null;
+        try {
+          await hooks.consumeNdjsonStream({ body }, () => {
+            throw new Error("boom");
+          });
+        } catch (caught) {
+          error = String(caught.message);
+        }
+        console.log(JSON.stringify({
+          error,
+          cancelled,
+          released,
+        }));
+        """
+    )
+
+    assert payload == {
+        "error": "boom",
+        "cancelled": True,
+        "released": True,
     }

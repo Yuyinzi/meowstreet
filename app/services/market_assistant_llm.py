@@ -166,14 +166,20 @@ def _log_stream_usage(
         "market assistant response usage "
         "input_tokens=%s cached_tokens=%s output_tokens=%s reasoning_tokens=%s "
         "elapsed_seconds=%.2f first_reasoning_seconds=%s first_output_seconds=%s",
-        _nested_value(usage, "input_tokens"),
-        _nested_value(usage, "input_tokens_details", "cached_tokens"),
-        _nested_value(usage, "output_tokens"),
-        _nested_value(usage, "output_tokens_details", "reasoning_tokens"),
+        _token_label(_nested_value(usage, "input_tokens")),
+        _token_label(_nested_value(usage, "input_tokens_details", "cached_tokens")),
+        _token_label(_nested_value(usage, "output_tokens")),
+        _token_label(_nested_value(usage, "output_tokens_details", "reasoning_tokens")),
         elapsed_seconds,
         _elapsed_label(first_reasoning_at),
         _elapsed_label(first_output_at),
     )
+
+
+def _token_label(value):
+    if value is None:
+        return "none"
+    return value
 
 
 def _nested_value(payload, *path):

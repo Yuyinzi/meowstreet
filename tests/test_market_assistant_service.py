@@ -1137,6 +1137,62 @@ def test_llm_artifact_projection_refs_resolve_in_full_artifacts():
             assert _path_exists(resolved["payload"], path)
 
 
+def test_evidence_projection_omits_provenance_without_source_period():
+    snapshot = _projection_snapshot()
+    snapshot["evidence"] = [
+        _projection_evidence_fact(
+            "vix_level",
+            "confirmation_test",
+            {"effective_date": "2026-07-01"},
+        ),
+        _projection_evidence_fact("survey_growth_direction", "selector", None),
+        {
+            "fact_id": "credit_conditions",
+            "indicator_id": "credit_conditions",
+            "label": "Credit Conditions",
+            "accepted_values": {"state": "tightening"},
+            "role": {"function": "selector"},
+            "data_status": {"state": "available"},
+            "participation": {"state": "applied"},
+            "decision_result": {
+                "kind": "evaluated",
+                "evaluation": {"state": "evaluated"},
+            },
+            "finding": {"state": "evaluated", "confirms": True},
+        },
+    ]
+    artifact = market_assistant._snapshot_artifact(snapshot)
+    artifacts = {artifact["artifact_id"]: artifact}
+
+    projected = market_assistant._llm_artifact_projection(artifacts, valid_plan())
+
+    by_id = {item["object_id"]: item for item in projected["ctx_123"]["object_index"]}
+    assert by_id["vix_level"]["payload"]["provenance"] == {
+        "source_period": {"effective_date": "2026-07-01"}
+    }
+    assert "provenance" not in by_id["survey_growth_direction"]["payload"]
+    assert "provenance" not in by_id["credit_conditions"]["payload"]
+    for item in projected["ctx_123"]["object_index"]:
+        resolved = resolve_artifact_ref(
+            artifacts,
+            {
+                "artifact_id": "ctx_123",
+                "object_type": item["object_type"],
+                "object_id": item["object_id"],
+            },
+        )
+        for path in _dotted_paths(item["payload"]):
+            assert _path_exists(resolved["payload"], path)
+
+
+def test_keeps_artifact_object_tolerates_missing_object_id():
+    malformed = {"object_type": "market_setup"}
+
+    kept = market_assistant._keeps_artifact_object(malformed, ["market_setup"])
+
+    assert kept is False
+
+
 def test_llm_artifact_projection_smaller_than_previous_full_payload_projection():
     artifacts = _projection_artifacts()
     compact = market_assistant._llm_artifact_projection(artifacts, valid_plan())
@@ -2421,6 +2477,7 @@ async def test_stream_answer_lifecycle_emits_full_event_sequence():
         "answer_delta",
         "answer_delta",
         "status",
+        "answer_replace",
         "validation",
         "complete",
     ]
@@ -2436,12 +2493,13 @@ async def test_stream_answer_lifecycle_emits_full_event_sequence():
     }
     assert sink.events[4] == {"type": "answer_delta", "delta": "18.4."}
     assert sink.events[5] == {"type": "status", "status": "validating"}
-    assert sink.events[6] == {
+    assert sink.events[6] == {"type": "answer_replace", "text": response["answer_text"]}
+    assert sink.events[7] == {
         "type": "validation",
         "status": "passed",
         "error_codes": [],
     }
-    complete = sink.events[7]
+    complete = sink.events[8]
     assert complete["type"] == "complete"
     assert complete["resolution"] == response["resolution"]
     assert complete["generation_status"] == "validated_first_pass"
@@ -2511,6 +2569,61 @@ async def test_stream_answer_lifecycle_failed_initial_then_repaired_and_passed()
         "error_codes": [],
     }
     assert sink.events[7]["generation_status"] == "validated_after_repair"
+
+
+@pytest.mark.asyncio
+async def test_stream_first_pass_without_answer_text_replaces_with_rendered_text():
+    deps = _streaming_dependencies(valid_plan(), valid_draft())
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    replace_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "answer_replace"
+    )
+    passed_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "validation" and event["status"] == "passed"
+    )
+    assert replace_index < passed_index
+    assert sink.events[replace_index]["text"] == response["answer_text"]
+    assert response["answer_text"] == "The accepted VIX level is 18.4."
+
+
+@pytest.mark.asyncio
+async def test_stream_validation_failed_visible_none_draft_replaces_with_fallback():
+    deps = _streaming_dependencies(
+        valid_plan(),
+        {"sections": []},
+        invalid_repair(),
+    )
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validation_failed_visible"
+    replace_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "answer_replace"
+    )
+    failed_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "validation" and event["status"] == "failed"
+    )
+    assert replace_index < failed_index
+    assert sink.events[replace_index]["text"] == response["answer_text"]
+    assert response["answer_text"].startswith("Market Setup decision result:")
+    assert deps.saved_trace["generation_status"] == "validation_failed_visible"
 
 
 @pytest.mark.asyncio
@@ -2604,6 +2717,7 @@ async def test_stream_answer_question_yields_events_and_stops_at_complete():
         "status",
         "answer_delta",
         "status",
+        "answer_replace",
         "validation",
         "complete",
     ]

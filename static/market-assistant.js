@@ -260,7 +260,10 @@
         clearThinking();
         break;
       case "validation":
-        if (event.status !== "failed_initial") {
+        if (
+          event.status !== "failed_initial" &&
+          VALIDATION_BADGE_TEXT[event.status]
+        ) {
           stream.message.validation = event.status;
           stream.element.appendChild(
             renderValidationBadge(event.status, event.error_codes || [])
@@ -317,21 +320,31 @@
   }
 
   async function consumeNdjsonStream(response, onEvent) {
+    if (!response.body) {
+      throw new Error("response body is missing");
+    }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      buffer = parseNdjsonLines(buffer, onEvent);
-    }
-    buffer += decoder.decode();
-    if (buffer.trim()) {
-      const event = parseNdjsonLine(buffer);
-      if (event !== null) {
-        onEvent(event);
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        buffer = parseNdjsonLines(buffer, onEvent);
       }
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        const event = parseNdjsonLine(buffer);
+        if (event !== null) {
+          onEvent(event);
+        }
+      }
+    } catch (error) {
+      await reader.cancel();
+      throw error;
+    } finally {
+      reader.releaseLock();
     }
   }
 
@@ -377,6 +390,7 @@
     } catch (error) {
       state.error = String(error.message || "request failed");
       if (bodyShown || stream.message.text) {
+        stream.element.setAttribute("aria-busy", "false");
         stream.element.appendChild(renderInterruptedNotice());
         renderStatus("", false);
       } else {

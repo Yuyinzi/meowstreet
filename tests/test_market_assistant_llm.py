@@ -350,6 +350,40 @@ async def test_complete_structured_json_object_logs_usage_from_dict_events(caplo
 
 
 @pytest.mark.asyncio
+async def test_complete_structured_logs_missing_token_subfields_as_none(caplog):
+    caplog.set_level(logging.INFO)
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.output_text.delta", delta='{"value":"hi"}'),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(
+                    output_text='{"value":"hi"}',
+                    usage=SimpleNamespace(
+                        input_tokens=100,
+                        output_tokens=20,
+                    ),
+                ),
+            ),
+        ]
+    )
+
+    result = await complete_structured(
+        client,
+        model="assistant-model",
+        prompt=[],
+        schema_type=DummyStructured,
+        structured_output_mode="json_object",
+    )
+
+    assert result == {"value": "hi"}
+    assert "input_tokens=100" in caplog.text
+    assert "cached_tokens=none" in caplog.text
+    assert "output_tokens=20" in caplog.text
+    assert "reasoning_tokens=none" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_complete_structured_observer_gets_reasoning_started_only(caplog):
     caplog.set_level(logging.INFO)
     client = FakeClient(
