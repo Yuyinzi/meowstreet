@@ -290,6 +290,33 @@ def beginner_debug_draft():
     }
 
 
+def _chinese_observation_debug_draft():
+    return {
+        "sections": [
+            {
+                "kind": "observation",
+                "claims": [
+                    {
+                        "claim_id": "obs_debug",
+                        "purpose": "observation",
+                        "authority": "local_observation",
+                        "refs": [],
+                        "template": "当前波动率为{vix}。",
+                        "bindings": {
+                            "vix": {
+                                "artifact_id": "ctx_1",
+                                "object_type": "evidence_fact",
+                                "object_id": "vix_level",
+                                "field": "observed.value",
+                            }
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+
+
 def _dummy_con():
     return _DummyCon()
 
@@ -779,6 +806,25 @@ async def test_disabled_claim_validation_returns_unvalidated_debug_draft():
         "draft": 1,
         "repair": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_disabled_claim_validation_debug_render_uses_detected_language():
+    deps = fake_dependencies(
+        valid_plan(),
+        _chinese_observation_debug_draft(),
+        config=_config(claim_validation_enabled=False),
+    )
+
+    response = await market_assistant.answer_question(
+        current_question(question="现在市场怎么样？"),
+        dependencies=deps,
+    )
+
+    assert response["generation_status"] == "unvalidated_debug"
+    assert response["answer_text"].startswith("本地数据观察\n")
+    assert "当前波动率为暂不可用。" in response["answer_text"]
+    assert deps.llm_calls == ["plan", "draft"]
 
 
 @pytest.mark.asyncio
