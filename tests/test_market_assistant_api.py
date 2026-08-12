@@ -379,3 +379,48 @@ def test_question_endpoint_has_no_refresh_side_effects(assistant_env, monkeypatc
     )
 
     assert response.status_code == 200
+
+
+def test_synthesis_prompt_requests_beginner_chinese_explanation():
+    prompt = market_assistant_router._synthesis_prompt(
+        "现在市场怎么样？为什么？",
+        {"intent": "decision_explanation", "answer_depth": "standard"},
+        {"mode": "current"},
+        {"ctx_1": {"object_index": []}},
+    )
+    system = prompt[0]["content"]
+
+    assert "Answer language: Chinese" in system
+    assert "financial beginner" in system
+    assert "final user-facing prose" in system
+    assert "do not display internal codes" in system
+    assert "annotated artifact bindings" in system
+    assert "conflicting or unconfirmed evidence" in system
+    assert "up to three main reasons" in system
+
+
+def test_synthesis_prompt_selects_english_for_english_question():
+    prompt = market_assistant_router._synthesis_prompt(
+        "Explain the market setup",
+        {"intent": "decision_explanation"},
+        {"mode": "current"},
+        {"ctx_1": {"object_index": []}},
+    )
+    assert "Answer language: English" in prompt[0]["content"]
+
+
+def test_repair_prompt_preserves_beginner_contract():
+    prompt = market_assistant_router._repair_prompt(
+        "现在市场怎么样？",
+        {"intent": "decision_explanation"},
+        {"mode": "current"},
+        {"ctx_1": {"object_index": []}},
+        {"sections": []},
+        {"valid": False, "errors": []},
+    )
+    system = prompt[0]["content"]
+
+    assert "Answer language: Chinese" in system
+    assert "financial beginner" in system
+    assert "same evidence set" in system
+    assert "complete corrected StructuredAnswerDraft" in system

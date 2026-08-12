@@ -17,6 +17,7 @@ from app.services.market_assistant_llm import plan_question
 from app.services.market_assistant_research import build_research_provider
 from app.services.market_setup_current import resolve_current_explanation
 from app.tools.market_assistant_answers import _AnswerDraft as AnswerDraftSchema
+from app.tools.market_assistant_answers import detect_answer_language
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
 from app.tools.market_assistant_plans import deterministic_plan
 
@@ -54,9 +55,7 @@ class _QuestionRequest(BaseModel):
 
 def _assistant_runtime():
     config = load_market_assistant_config()
-    client = build_async_client(
-        config, timeout=900.0, error_context="market assistant"
-    )
+    client = build_async_client(config, timeout=900.0, error_context="market assistant")
     return client, config["model"], config["structured_output_mode"]
 
 
@@ -108,14 +107,39 @@ async def _repair_llm(
     )
 
 
+def _answer_language_label(question):
+    return "Chinese" if detect_answer_language(question) == "zh" else "English"
+
+
+def _structured_answer_instructions(question):
+    language = _answer_language_label(question)
+    return (
+        "You are the explanation layer for deterministic Market Setup v2. "
+        "Produce a StructuredAnswerDraft using only the supplied artifacts. "
+        f"Answer language: {language}. Write for a financial beginner. "
+        "Each claim template is final user-facing prose after placeholder "
+        "substitution, not internal notes. Explain what the current market "
+        "state means before using technical terms. For a standard setup answer, "
+        "give one plain-language summary, up to three main reasons, conflicting "
+        "or unconfirmed evidence, the approved general posture meaning, and "
+        "backend-provided conditions that could change the conclusion. Define "
+        "financial terms on first use. Preserve level versus direction and trend "
+        "versus confirmation. Prefer labels and meanings; do not display internal "
+        "codes, artifact IDs, object IDs, authority names, or schema fields unless "
+        "the user explicitly asks for diagnostics. Use annotated artifact bindings "
+        "for every factual value or enum. Each non-hypothetical binding must contain "
+        "the supplied value and its exact artifact source. Every ref must match the "
+        "claim authority. Split different authorities into separate claims. Do not "
+        "invent facts, classifications, weights, thresholds, causality, predictions, "
+        "materiality, allocations, or trading instructions."
+    )
+
+
 def _synthesis_prompt(question, plan, context_summary, artifacts):
     return [
         {
             "role": "system",
-            "content": (
-                "You are the Market Setup assistant. Produce a StructuredAnswerDraft "
-                "for the question using only the provided artifacts."
-            ),
+            "content": _structured_answer_instructions(question),
         },
         {
             "role": "user",
@@ -139,9 +163,11 @@ def _repair_prompt(
     return [
         {
             "role": "system",
-            "content": (
-                "You are the Market Setup assistant. Repair the StructuredAnswerDraft "
-                "using the validation report while keeping the same artifacts."
+            "content": _structured_answer_instructions(question)
+            + (
+                " Repair the draft using only the validation report and the same "
+                "evidence set. Do not acquire new evidence. Return the complete "
+                "corrected StructuredAnswerDraft."
             ),
         },
         {
