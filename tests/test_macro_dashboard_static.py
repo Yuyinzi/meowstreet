@@ -4,6 +4,8 @@ import re
 import subprocess
 import textwrap
 
+import pytest
+
 from app.tools import market_setup_evidence_layers
 
 
@@ -8053,11 +8055,52 @@ def _market_assistant_harness(test_js):
             checked: false,
             attrs: {{}},
             listeners: {{}},
+            parent: null,
             classList: {{ add() {{}}, remove() {{}} }},
-            appendChild(child) {{ this.children.push(child); return child; }},
+            appendChild(child) {{ child.parent = this; this.children.push(child); return child; }},
+            insertBefore(child, ref) {{
+              const index = this.children.indexOf(ref);
+              if (index === -1) {{
+                this.children.push(child);
+              }} else {{
+                this.children.splice(index, 0, child);
+              }}
+              child.parent = this;
+              return child;
+            }},
             setAttribute(name, value) {{ this.attrs[name] = value; }},
             addEventListener(type, fn) {{ this.listeners[type] = fn; }},
             focus() {{}},
+            remove() {{
+              if (this.parent) {{
+                const index = this.parent.children.indexOf(this);
+                if (index !== -1) this.parent.children.splice(index, 1);
+                this.parent = null;
+              }}
+            }},
+          }};
+        }}
+
+        function streamedBody(chunks) {{
+          let index = 0;
+          const encoder = new TextEncoder();
+          return {{
+            getReader() {{
+              return {{
+                read: async () => {{
+                  if (index < chunks.length) {{
+                    const chunk = chunks[index++];
+                    return {{
+                      done: false,
+                      value: typeof chunk === "string" ? encoder.encode(chunk) : chunk,
+                    }};
+                  }}
+                  return {{ done: true, value: undefined }};
+                }},
+                cancel: async () => {{}},
+                releaseLock: () => {{}},
+              }};
+            }},
           }};
         }}
 
@@ -8129,96 +8172,127 @@ def test_market_assistant_build_payload_uses_current_mode_and_context_id():
     }
 
 
-def test_market_assistant_fallback_notice_does_not_invent_research_failure():
+def test_market_assistant_stream_fallback_badge_does_not_invent_research_failure():
     payload = _run_market_assistant_harness(
         """
-        const notice = hooks.renderFallbackNotice();
-        console.log(JSON.stringify({ text: notice.textContent }));
-        """
-    )
-
-    assert payload == {
-        "text": (
-            "A deterministic fallback was used because a validated assistant "
-            "response was unavailable."
-        )
-    }
-
-
-def test_market_assistant_renderer_marks_unvalidated_debug_output():
-    payload = _run_market_assistant_harness(
-        """
-        const message = hooks.assistantMessageFrom({
-          resolution: { mode: "current" },
-          answer_text: "现在的市场可以理解为：经济增长正在放慢，但市场只确认了一部分风险。",
-          citations: [],
-          generation_status: "unvalidated_debug",
-          answer_trace_id: "trace_debug",
-        });
-        const rendered = hooks.renderMessage(message);
-        const textEl = rendered.children.find(
-          (child) => child.className === "market-assistant-message-text"
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "answer_replace", text: "确定性备用回答内容" });
+        hooks.applyStreamEvent(stream, { type: "validation", status: "fallback", error_codes: [] });
+        const badge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
         );
-        const notice = rendered.children.find(
-          (child) => child.className ===
-            "market-assistant-notice market-assistant-notice-debug"
-        );
+        const label = badge.children[0];
         console.log(JSON.stringify({
-          unvalidatedDebug: message.unvalidatedDebug,
-          fallback: message.fallback,
-          noticeText: notice && notice.textContent,
-          answerText: textEl.textContent,
-          containsSections: textEl.textContent.indexOf("sections") !== -1,
+          className: badge.className,
+          label: label.textContent,
+          mentionsResearchFailure: label.textContent.indexOf("research failure") !== -1,
+          answerText: stream.message.text,
         }));
         """
     )
 
     assert payload == {
-        "unvalidatedDebug": True,
-        "fallback": False,
-        "noticeText": (
-            "Claim validation is disabled. This is unvalidated DeepSeek "
-            "debug output and must not be treated as a Market Setup decision."
-        ),
-        "answerText": (
-            "现在的市场可以理解为：经济增长正在放慢，但市场只确认了一部分风险。"
-        ),
-        "containsSections": False,
+        "className": "market-assistant-validation market-assistant-validation-passed",
+        "label": "已使用确定性备用回答",
+        "mentionsResearchFailure": False,
+        "answerText": "确定性备用回答内容",
     }
 
 
-def test_market_assistant_enter_submits_and_disables_submit_during_request():
+def test_market_assistant_stream_marks_unvalidated_debug_with_disabled_badge():
     payload = _run_market_assistant_harness(
         """
-        let resolveFetch;
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {
+          type: "answer_delta",
+          delta: "现在的市场可以理解为：经济增长正在放慢，但市场只确认了一部分风险。",
+        });
+        hooks.applyStreamEvent(stream, { type: "validation", status: "disabled", error_codes: [] });
+        const textEl = stream.element.children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
+        const badge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        const label = badge.children[0];
+        console.log(JSON.stringify({
+          className: badge.className,
+          label: label.textContent,
+          answerText: textEl.textContent,
+        }));
+        """
+    )
+
+    assert payload == {
+        "className": "market-assistant-validation market-assistant-validation-disabled",
+        "label": "Claim validation 当前已关闭",
+        "answerText": (
+            "现在的市场可以理解为：经济增长正在放慢，但市场只确认了一部分风险。"
+        ),
+    }
+
+
+def test_market_assistant_stream_thinking_state_and_first_delta_clears_it():
+    payload = _run_market_assistant_harness(
+        """
+        let resumeRead;
         let capturedBody;
+        const encoder = new TextEncoder();
+        const chunks = [
+          '{"type":"status","status":"thinking"}\\n',
+          '{"type":"answer_delta","delta":"现在"}\\n',
+        ];
+        let chunkIndex = 0;
         global.fetch = (url, options) => {
           capturedBody = JSON.parse(options.body);
-          return new Promise((resolve) => { resolveFetch = resolve; });
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            body: {
+              getReader() {
+                return {
+                  read: async () => {
+                    if (chunkIndex < chunks.length) {
+                      const value = encoder.encode(chunks[chunkIndex++]);
+                      return { done: false, value };
+                    }
+                    return new Promise((resolve) => {
+                      resumeRead = () => resolve({ done: true, value: undefined });
+                    });
+                  },
+                  cancel: async () => {},
+                  releaseLock: () => {},
+                };
+              },
+            },
+          });
         };
         elements.marketAssistantQuestion.value = "What supports the setup?";
         elements.marketAssistantQuestion.listeners.keydown({ key: "Enter", preventDefault() {} });
         const disabledDuring = elements.marketAssistantSubmit.disabled === true;
         const statusDuring = elements.marketAssistantStatus.textContent;
         const statusClassDuring = elements.marketAssistantStatus.className;
-        resolveFetch({ ok: true, status: 200, json: async () => ({
-          resolution: { mode: "current", current_context_id: "ctx_B", context_changed: true, resolved_at: "2026-08-10T02:00:00Z" },
-          answer_text: "Market Setup remains macro_improving.",
-          citations: [],
-          generation_status: "validated_first_pass",
-          answer_trace_id: "trace_123",
-        }) });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const thinkingClearedAfterDelta = elements.marketAssistantStatus.textContent;
+        const textEl = elements.marketAssistantLog.children[1].children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
+        const textAfterDelta = textEl.textContent;
+        const assistantMessageCountDuring = elements.marketAssistantLog.children.length;
+        resumeRead();
         await new Promise((resolve) => setTimeout(resolve, 0));
         console.log(JSON.stringify({
           disabledDuring,
           disabledAfter: elements.marketAssistantSubmit.disabled === false,
           statusDuring,
           statusClassDuring,
+          thinkingClearedAfterDelta,
           statusAfter: elements.marketAssistantStatus.textContent,
+          textAfterDelta,
+          assistantMessageCountDuring,
           question: capturedBody.question,
           mode: capturedBody.mode,
           lastContextId: hooks.state.lastContextId,
-          logChildren: elements.marketAssistantLog.children.length,
         }));
         """
     )
@@ -8226,26 +8300,26 @@ def test_market_assistant_enter_submits_and_disables_submit_during_request():
     assert payload == {
         "disabledDuring": True,
         "disabledAfter": True,
-        "statusDuring": "Generating a grounded answer...",
-        "statusClassDuring": "market-assistant-status",
+        "statusDuring": "Thinking…",
+        "statusClassDuring": "market-assistant-status market-assistant-thinking",
+        "thinkingClearedAfterDelta": "",
         "statusAfter": "",
+        "textAfterDelta": "现在",
+        "assistantMessageCountDuring": 2,
         "question": "What supports the setup?",
         "mode": "current",
-        "lastContextId": "ctx_B",
-        "logChildren": 2,
+        "lastContextId": None,
     }
 
 
-def test_market_assistant_response_updates_context_for_next_payload():
+def test_market_assistant_stream_response_updates_context_for_next_payload():
     payload = _run_market_assistant_harness(
         """
-        global.fetch = async () => ({ ok: true, status: 200, json: async () => ({
-          resolution: { mode: "current", current_context_id: "ctx_NEW", context_changed: true, resolved_at: "2026-08-10T02:00:00Z" },
-          answer_text: "Market Setup is improving.",
-          citations: [],
-          generation_status: "validated_first_pass",
-          answer_trace_id: "trace_1",
-        }) });
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"resolution","resolution":{"mode":"current","current_context_id":"ctx_NEW","context_changed":true,"resolved_at":"2026-08-10T02:00:00Z"}}\\n',
+          '{"type":"answer_delta","delta":"Market Setup is improving."}\\n',
+          '{"type":"complete","resolution":{"mode":"current","current_context_id":"ctx_NEW"},"generation_status":"validated_first_pass","answer_trace_id":"trace_1","citations":[]}\\n',
+        ]) });
         elements.marketAssistantQuestion.value = "Question one";
         await hooks.handleSubmit();
         const nextPayload = hooks.buildPayload("Question two");
@@ -8264,30 +8338,38 @@ def test_market_assistant_response_updates_context_for_next_payload():
     }
 
 
-def test_market_assistant_renderer_shows_context_fallback_and_evidence_notices():
+def test_market_assistant_stream_renders_context_evidence_and_citations():
     payload = _run_market_assistant_harness(
         """
-        const message = hooks.renderMessage({
-          role: "assistant",
-          text: "The setup is improving.",
-          contextChanged: true,
-          fallback: true,
-          evidenceDate: "2026-08-10",
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {
+          type: "resolution",
+          resolution: {
+            mode: "current",
+            current_context_id: "ctx_B",
+            context_changed: true,
+            previous_context_id: "ctx_A",
+            evidence_through: "2026-08-05T00:00:00Z",
+          },
+        });
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "The setup is improving." });
+        hooks.applyStreamEvent(stream, {
+          type: "complete",
+          resolution: { mode: "current" },
+          generation_status: "validated_first_pass",
+          answer_trace_id: "trace_1",
           citations: [{ source_id: "s1", title: "ISM Manufacturing Report", url: "https://example.com/ism", publisher: "ISM", event_date: "2026-08-01" }],
         });
-        const textEl = message.children.find((child) => child.className === "market-assistant-message-text");
-        const contextNotice = message.children.find((child) => child.className === "market-assistant-notice market-assistant-notice-context");
-        const fallbackNotice = message.children.find((child) => child.className === "market-assistant-notice market-assistant-notice-fallback");
-        const evidenceEl = message.children.find((child) => child.className === "market-assistant-evidence-date");
-        const headingEl = message.children.find((child) => child.className === "market-assistant-citations-heading");
-        const citations = message.children.find((child) => child.className === "market-assistant-citations");
+        const textEl = stream.element.children.find((child) => child.className === "market-assistant-message-text");
+        const contextNotice = stream.element.children.find((child) => child.className === "market-assistant-notice market-assistant-notice-context");
+        const evidenceEl = stream.element.children.find((child) => child.className === "market-assistant-evidence-date");
+        const headingEl = stream.element.children.find((child) => child.className === "market-assistant-citations-heading");
+        const citations = stream.element.children.find((child) => child.className === "market-assistant-citations");
         const citationLink = citations.children[0].children[0];
         const citationDate = citations.children[0].children[1];
-        const plain = hooks.renderMessage({ role: "assistant", text: "Plain answer.", citations: [] });
         console.log(JSON.stringify({
           answerText: textEl.textContent,
           hasContextNotice: Boolean(contextNotice),
-          hasFallbackNotice: Boolean(fallbackNotice),
           evidenceLabel: evidenceEl.textContent,
           externalHeading: headingEl.textContent,
           citationHref: citationLink.attrs.href,
@@ -8295,8 +8377,8 @@ def test_market_assistant_renderer_shows_context_fallback_and_evidence_notices()
           citationRel: citationLink.attrs.rel,
           citationTitle: citationLink.textContent,
           citationDate: citationDate.textContent,
-          contextNoticePrecedesAnswer: message.children.indexOf(contextNotice) < message.children.indexOf(textEl),
-          plainHasNoNotices: plain.children.length === 1,
+          contextNoticePrecedesAnswer: stream.element.children.indexOf(contextNotice) < stream.element.children.indexOf(textEl),
+          busyAfter: stream.element.attrs["aria-busy"],
         }));
         """
     )
@@ -8304,8 +8386,7 @@ def test_market_assistant_renderer_shows_context_fallback_and_evidence_notices()
     assert payload == {
         "answerText": "The setup is improving.",
         "hasContextNotice": True,
-        "hasFallbackNotice": True,
-        "evidenceLabel": "Market Setup evidence through 2026-08-10",
+        "evidenceLabel": "Market Setup evidence through 2026-08-05",
         "externalHeading": "External research",
         "citationHref": "https://example.com/ism",
         "citationTarget": "_blank",
@@ -8313,7 +8394,7 @@ def test_market_assistant_renderer_shows_context_fallback_and_evidence_notices()
         "citationTitle": "ISM Manufacturing Report",
         "citationDate": "2026-08-01",
         "contextNoticePrecedesAnswer": True,
-        "plainHasNoNotices": True,
+        "busyAfter": "false",
     }
 
 
@@ -8376,22 +8457,40 @@ def test_market_assistant_deep_research_requires_external_search():
     }
 
 
-def test_market_assistant_context_change_requires_previous_context():
+def test_market_assistant_stream_context_notice_requires_previous_context():
     payload = _run_market_assistant_harness(
         """
-        const first = hooks.assistantMessageFrom({
+        const first = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(first, {
+          type: "resolution",
           resolution: { context_changed: true, previous_context_id: null, mode: "current" },
         });
-        const changed = hooks.assistantMessageFrom({
+        const firstNotice = first.element.children.find(
+          (child) => child.className === "market-assistant-notice market-assistant-notice-context"
+        );
+
+        const changed = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(changed, {
+          type: "resolution",
           resolution: { context_changed: true, previous_context_id: "ctx_A", mode: "current" },
         });
-        const unchanged = hooks.assistantMessageFrom({
+        const changedNotice = changed.element.children.find(
+          (child) => child.className === "market-assistant-notice market-assistant-notice-context"
+        );
+
+        const unchanged = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(unchanged, {
+          type: "resolution",
           resolution: { context_changed: false, previous_context_id: "ctx_A", mode: "current" },
         });
+        const unchangedNotice = unchanged.element.children.find(
+          (child) => child.className === "market-assistant-notice market-assistant-notice-context"
+        );
+
         console.log(JSON.stringify({
-          firstMessage: first.contextChanged,
-          changedFollowUp: changed.contextChanged,
-          unchangedFollowUp: unchanged.contextChanged,
+          firstMessage: Boolean(firstNotice),
+          changedFollowUp: Boolean(changedNotice),
+          unchangedFollowUp: Boolean(unchangedNotice),
         }));
         """
     )
@@ -8425,4 +8524,265 @@ def test_market_assistant_error_recovery_preserves_question():
         "questionPreserved": True,
         "submitEnabled": True,
         "logChildren": 1,
+    }
+
+
+def test_market_assistant_stream_parses_line_split_across_chunks():
+    payload = _run_market_assistant_harness(
+        """
+        const encoder = new TextEncoder();
+        const line = '{"type":"answer_delta","delta":"现在市场"}\\n';
+        const bytes = encoder.encode(line);
+        const mid = Math.floor(bytes.length / 2);
+        const events = [];
+        await hooks.consumeNdjsonStream(
+          { body: streamedBody([bytes.slice(0, mid), bytes.slice(mid)]) },
+          (event) => events.push(event)
+        );
+        console.log(JSON.stringify({
+          eventCount: events.length,
+          type: events[0] && events[0].type,
+          delta: events[0] && events[0].delta,
+        }));
+        """
+    )
+
+    assert payload == {
+        "eventCount": 1,
+        "type": "answer_delta",
+        "delta": "现在市场",
+    }
+
+
+def test_market_assistant_stream_skips_malformed_line_and_keeps_reading():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"status","status":"thinking"}\\n',
+          'not-json\\n',
+          '{"type":"answer_delta","delta":"现在市场"}\\n',
+        ]) });
+        elements.marketAssistantQuestion.value = "What supports the setup?";
+        await hooks.handleSubmit();
+        const textEl = elements.marketAssistantLog.children[1].children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
+        console.log(JSON.stringify({
+          answerText: textEl.textContent,
+          submitEnabled: elements.marketAssistantSubmit.disabled === false,
+        }));
+        """
+    )
+
+    assert payload == {
+        "answerText": "现在市场",
+        "submitEnabled": True,
+    }
+
+
+def test_market_assistant_stream_deltas_append_to_single_element():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "现在" });
+        const textElBefore = stream.element.children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "市场" });
+        const textElAfter = stream.element.children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
+        console.log(JSON.stringify({
+          text: textElAfter.textContent,
+          sameElement: textElBefore === textElAfter,
+          logChildren: elements.marketAssistantLog.children.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "text": "现在市场",
+        "sameElement": True,
+        "logChildren": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    "status,expected_class,expected_label",
+    [
+        (
+            "passed",
+            "market-assistant-validation-passed",
+            "已通过 Market Setup 证据验证",
+        ),
+        (
+            "repaired_and_passed",
+            "market-assistant-validation-passed",
+            "修复后已通过验证",
+        ),
+        ("failed", "market-assistant-validation-failed", "未通过完整证据验证"),
+        (
+            "disabled",
+            "market-assistant-validation-disabled",
+            "Claim validation 当前已关闭",
+        ),
+        ("fallback", "market-assistant-validation-passed", "已使用确定性备用回答"),
+    ],
+)
+def test_market_assistant_stream_validation_badge_statuses(
+    status, expected_class, expected_label
+):
+    payload = _run_market_assistant_harness(
+        f"""
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {{ type: "validation", status: "{status}", error_codes: [] }});
+        const badge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        console.log(JSON.stringify({{
+          className: badge.className,
+          label: badge.children[0].textContent,
+          hasCodes: badge.children.length === 2,
+        }}));
+        """
+    )
+
+    assert payload == {
+        "className": "market-assistant-validation " + expected_class,
+        "label": expected_label,
+        "hasCodes": False,
+    }
+
+
+def test_market_assistant_stream_failed_validation_lists_error_codes():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {
+          type: "validation",
+          status: "failed",
+          error_codes: ["REFERENCE_AUTHORITY_MISMATCH", "ANSWER_TEXT_MISMATCH"],
+        });
+        const badge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        console.log(JSON.stringify({
+          className: badge.className,
+          label: badge.children[0].textContent,
+          codes: badge.children[1] && badge.children[1].textContent,
+        }));
+        """
+    )
+
+    assert payload == {
+        "className": "market-assistant-validation market-assistant-validation-failed",
+        "label": "未通过完整证据验证",
+        "codes": "REFERENCE_AUTHORITY_MISMATCH, ANSWER_TEXT_MISMATCH",
+    }
+
+
+def test_market_assistant_stream_failed_initial_does_not_render_badge():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {
+          type: "validation",
+          status: "failed_initial",
+          error_codes: ["ANSWER_TEXT_MISMATCH"],
+        });
+        const badge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        console.log(JSON.stringify({ hasBadge: Boolean(badge) }));
+        """
+    )
+
+    assert payload == {"hasBadge": False}
+
+
+def test_market_assistant_stream_answer_replace_replaces_text_without_duplicate():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "最初草稿" });
+        const textElBefore = stream.element.children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
+        hooks.applyStreamEvent(stream, { type: "answer_replace", text: "修复后的完整答案" });
+        const textElAfter = stream.element.children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
+        console.log(JSON.stringify({
+          text: textElAfter.textContent,
+          sameElement: textElBefore === textElAfter,
+          logChildren: elements.marketAssistantLog.children.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "text": "修复后的完整答案",
+        "sameElement": True,
+        "logChildren": 1,
+    }
+
+
+def test_market_assistant_stream_error_after_body_keeps_text_and_reenables():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"answer_delta","delta":"现在"}\\n',
+          '{"type":"error","message":"market assistant service is unavailable"}\\n',
+        ]) });
+        elements.marketAssistantQuestion.value = "Will this work?";
+        await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[1];
+        const textEl = assistant.children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
+        const notice = assistant.children.find(
+          (child) => child.className === "market-assistant-notice market-assistant-notice-fallback"
+        );
+        console.log(JSON.stringify({
+          text: textEl.textContent,
+          notice: notice && notice.textContent,
+          submitEnabled: elements.marketAssistantSubmit.disabled === false,
+          questionCleared: elements.marketAssistantQuestion.value === "",
+          logChildren: elements.marketAssistantLog.children.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "text": "现在",
+        "notice": "连接中断，回答可能不完整",
+        "submitEnabled": True,
+        "questionCleared": True,
+        "logChildren": 2,
+    }
+
+
+def test_market_assistant_stream_message_aria_busy_lifecycle():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        const busyDuring = stream.element.attrs["aria-busy"];
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "现在" });
+        hooks.applyStreamEvent(stream, {
+          type: "complete",
+          resolution: { mode: "current" },
+          generation_status: "validated_first_pass",
+          answer_trace_id: "trace_1",
+          citations: [],
+        });
+        console.log(JSON.stringify({
+          busyDuring,
+          busyAfter: stream.element.attrs["aria-busy"],
+        }));
+        """
+    )
+
+    assert payload == {
+        "busyDuring": "true",
+        "busyAfter": "false",
     }
