@@ -11,7 +11,7 @@ Meowstreet is a local-first trade workflow console for assessing market context,
 ## Screenshots
 
 ![Meowstreet dashboard](static/dashboard.png)
-
+![Meowstreet dashboard](static/ISM.png)
 ## Run locally
 
 Create a virtual environment, install dependencies, and start the server:
