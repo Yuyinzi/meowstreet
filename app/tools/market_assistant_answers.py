@@ -1,4 +1,3 @@
-import json
 import re
 from math import isfinite
 from typing import Literal
@@ -872,15 +871,52 @@ def _sanitize_error(error):
     }
 
 
-def render_unvalidated_debug_answer(draft):
+def render_unvalidated_debug_answer(draft, *, language="en"):
     normalized = validate_answer_draft_schema(draft)
-    serialized = json.dumps(
-        normalized,
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
+    headings = _SECTION_HEADINGS.get(language, _SECTION_HEADINGS["en"])
+    parts = []
+    for section in normalized.get("sections", []):
+        claims = section.get("claims") or []
+        if not claims:
+            continue
+        heading = headings.get(section.get("kind"), "")
+        if heading:
+            parts.append(_escape_html(heading))
+        for claim in claims:
+            parts.append(_render_unvalidated_claim(claim, language=language))
+    return "\n".join(parts)
+
+
+def _render_unvalidated_claim(claim, *, language):
+    unavailable = "暂不可用" if language == "zh" else "unavailable"
+    values = {
+        key: _render_unvalidated_binding(binding, unavailable=unavailable)
+        for key, binding in (claim.get("bindings") or {}).items()
+    }
+    arithmetic = claim.get("arithmetic")
+    if arithmetic:
+        result = calculate_hypothetical(arithmetic["operation"], arithmetic["operands"])
+        values[arithmetic["result_binding"]] = (
+            _format_value(result["value"])
+            if result["state"] == "calculated"
+            else unavailable
+        )
+    rendered = _PLACEHOLDER_RE.sub(
+        lambda match: values.get(match.group(1), unavailable),
+        claim["template"],
     )
-    return "UNVALIDATED DEEPSEEK DEBUG OUTPUT\n" + serialized
+    escaped = _escape_html(rendered)
+    if claim.get("authority") == "hypothetical":
+        return _EXAMPLE_PREFIXES.get(language, _EXAMPLE_PREFIXES["en"]) + escaped
+    return escaped
+
+
+def _render_unvalidated_binding(binding, *, unavailable):
+    if isinstance(binding, dict):
+        if "value" in binding:
+            return _format_value(binding["value"])
+        return unavailable
+    return _format_value(binding)
 
 
 def detect_answer_language(text) -> Literal["en", "zh"]:

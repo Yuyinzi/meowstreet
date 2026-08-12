@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from app.tools.market_assistant_artifacts import validate_artifact
@@ -601,19 +599,70 @@ def test_schema_only_validation_still_rejects_invalid_shape():
     assert exc_info.value.errors[0]["code"] == "SCHEMA_INVALID"
 
 
-def test_unvalidated_debug_renderer_displays_normalized_draft_without_artifacts():
+def test_unvalidated_debug_renderer_substitutes_scalar_bindings_as_prose():
     payload = draft(
         valid_claim(
-            template="VIX is 18.4.",
-            bindings={},
+            template="现在的市场可以理解为：经济增长正在{direction}，但市场只确认了{confirmation}风险。",
+            bindings={"direction": "放慢", "confirmation": "一部分"},
         )
     )
 
-    rendered = render_unvalidated_debug_answer(payload)
-    serialized = rendered.split("\n", 1)[1]
+    rendered = render_unvalidated_debug_answer(payload, language="zh")
 
-    assert rendered.startswith("UNVALIDATED DEEPSEEK DEBUG OUTPUT\n")
-    assert json.loads(serialized) == validate_answer_draft_schema(payload)
+    assert (
+        rendered == "现在的市场可以理解为：经济增长正在放慢，但市场只确认了一部分风险。"
+    )
+    assert "sections" not in rendered
+    assert "bindings" not in rendered
+    assert "authority" not in rendered
+
+
+def test_unvalidated_debug_renderer_uses_annotated_value_without_resolving_source():
+    claim = valid_claim(
+        template="当前系统采用的是{posture}。",
+        bindings={
+            "posture": {
+                "value": "轻度防守",
+                "source": snapshot_ref(
+                    "missing_object",
+                    object_type="market_setup_result",
+                    field="label",
+                ),
+            }
+        },
+    )
+
+    assert (
+        render_unvalidated_debug_answer(draft(claim), language="zh")
+        == "当前系统采用的是轻度防守。"
+    )
+
+
+def test_unvalidated_debug_renderer_marks_unresolved_reference_unavailable():
+    claim = valid_claim(
+        template="当前波动率为{vix}。",
+        bindings={
+            "vix": snapshot_ref(
+                "vix_level",
+                object_type="evidence_fact",
+                field="observed.value",
+            )
+        },
+    )
+
+    assert (
+        render_unvalidated_debug_answer(draft(claim), language="zh")
+        == "当前波动率为暂不可用。"
+    )
+
+
+def test_unvalidated_debug_renderer_replaces_missing_placeholder():
+    claim = valid_claim(template="当前状态是{missing}。", bindings={})
+
+    assert (
+        render_unvalidated_debug_answer(draft(claim), language="zh")
+        == "当前状态是暂不可用。"
+    )
 
 
 def test_non_hypothetical_scalar_binding_rejected():
