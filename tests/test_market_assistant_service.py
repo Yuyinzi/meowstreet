@@ -1,5 +1,6 @@
 import asyncio
 import json
+from copy import deepcopy
 
 import pytest
 
@@ -9,8 +10,10 @@ from app.services.market_assistant import ASSISTANT_POLICY_VERSION
 from app.services.market_assistant import PROMPT_VERSION
 from app.services.market_setup_current import resolve_current_explanation
 from app.tools.market_assistant_answers import validate_answer_draft_schema
+from app.tools.market_assistant_artifacts import resolve_artifact_ref
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
 from app.tools.market_assistant_plans import validate_task_plan
+from app.tools.market_setup_explanation_snapshot import canonical_json
 
 
 def current_question(**overrides):
@@ -762,6 +765,375 @@ def test_decision_explanation_projection_excludes_non_decision_display_objects()
     assert [item["object_id"] for item in projected["ctx_123"]["object_index"]] == [
         "survey_growth_direction"
     ]
+
+
+def _projection_evidence_fact(fact_id, role_function, source_period):
+    return {
+        "fact_id": fact_id,
+        "indicator_id": "vix" if fact_id == "vix_level" else fact_id,
+        "label": "VIX" if fact_id == "vix_level" else fact_id,
+        "accepted_values": (
+            {"level": 18.4} if fact_id == "vix_level" else {"direction": "slowing"}
+        ),
+        "classifications": {"level": "elevated"},
+        "role": {
+            "decision_scope": "confirmation_input",
+            "function": role_function,
+            "target_layer": "market_confirmation",
+            "allowed_effects": [],
+        },
+        "data_status": {"state": "available"},
+        "participation": {"state": "applied"},
+        "decision_result": {"kind": "evaluated", "evaluation": {"state": "evaluated"}},
+        "provenance": {
+            "source_module": "market_setup_evidence_facts",
+            "source_id": fact_id,
+            "method_references": ["vix_confirmation_v2"],
+            "source_period": source_period,
+        },
+        "finding": {"state": "evaluated", "confirms": True},
+    }
+
+
+def _projection_snapshot():
+    return {
+        "context_id": "ctx_123",
+        "results": {
+            "macro_regime": {
+                "code": "growth_decelerating",
+                "label": "Growth Decelerating",
+                "primary_source": "ism_survey_synthesis",
+                "supports": [{"fact_id": "survey_growth_direction"}],
+                "conflicts": [{"fact_id": "macro_policy_response"}],
+                "missing_inputs": [],
+                "excluded_inputs": ["housing_starts"],
+                "method_version": "market_setup_v2_macro_regime_v1",
+                "source_periods": {
+                    "survey_growth_direction": {"reference_period": "2026-06"}
+                },
+            },
+            "market_confirmation": {
+                "code": "downside_confirmation",
+                "label": "Downside Confirmation",
+                "confirmation_test_count": 2,
+                "evidence": {"volatility": "confirmed", "liquidity": "confirmed"},
+                "offsets": [{"fact_id": "m2_liquidity", "effect": "delays"}],
+                "missing_inputs": [],
+                "method_version": "market_setup_v2_market_confirmation_v1",
+                "source_periods": {"vix_level": {"observation_date": "2026-07-01"}},
+            },
+            "market_setup": {
+                "code": "downside_setup",
+                "label": "Downside Setup",
+                "agreement": "aligned",
+            },
+            "portfolio_posture": {
+                "code": "defensive",
+                "label": "Defensive Posture",
+                "net_exposure": "underweight",
+                "gross_exposure": "low",
+                "implementation": "reduce_equity",
+                "broad_beta": "risk_off",
+                "positioning": [{"instrument": "equities", "action": "reduce"}],
+                "avoid": [{"instrument": "high_beta"}],
+                "method_version": "market_setup_v2_posture_v1",
+            },
+        },
+        "evidence": [
+            _projection_evidence_fact(
+                "vix_level",
+                "confirmation_test",
+                {"effective_date": "2026-07-01"},
+            ),
+            _projection_evidence_fact(
+                "survey_growth_direction",
+                "selector",
+                {"reference_period": "2026-06"},
+            ),
+            _projection_evidence_fact("cyclical_commodities", "display_only", None),
+            _projection_evidence_fact("equity_breadth", "watch_only", None),
+        ],
+        "method_contracts": {
+            "version": "market_setup_explanation_methods_v1",
+            "methods": {
+                "vix_confirmation_v2": {
+                    "method_version": "vix_confirmation_v2",
+                    "kind": "predicate_method",
+                    "decision_contract": {"input_contract": {"fact_id": "vix_level"}},
+                    "explanation_contract": {"summary": "predicate method"},
+                }
+            },
+        },
+        "counterfactuals": [
+            {
+                "counterfactual_id": "vix_downside_crossing",
+                "object_type": "confirmation_test",
+                "object_id": "vix_level",
+                "predicate_ref": {"method_id": "vix_confirmation_v2"},
+                "transition": "accepted_value_crosses_boundary",
+                "decision_effect": "confirmation_test_result_change",
+            },
+            {
+                "counterfactual_id": "setup_growth_decelerating_confirming_downside",
+                "object_type": "market_setup",
+                "object_id": "setup_growth_decelerating_confirming_downside",
+                "from_code": "neutral_setup",
+                "to_code": "downside_setup",
+                "confirmation_change": {
+                    "from": "neutral_confirmation",
+                    "to": "downside_confirmation",
+                },
+                "posture_change": {"from": "balanced", "to": "defensive"},
+                "decision_effect": "market_setup_and_posture_change",
+            },
+            {
+                "counterfactual_id": "setup_growth_decelerating_not_confirming_downside",
+                "object_type": "market_setup",
+                "object_id": "setup_growth_decelerating_not_confirming_downside",
+                "from_code": "neutral_setup",
+                "to_code": "upside_setup",
+                "confirmation_change": {
+                    "from": "neutral_confirmation",
+                    "to": "upside_confirmation",
+                },
+                "posture_change": {"from": "balanced", "to": "aggressive"},
+                "decision_effect": "market_setup_and_posture_change",
+            },
+            {
+                "counterfactual_id": "sp500_downside_crossing",
+                "object_type": "confirmation_test",
+                "object_id": "sp500_market_phase",
+                "predicate_ref": {"method_id": "equity_confirmation_v2"},
+                "transition": "accepted_value_crosses_boundary",
+                "decision_effect": "confirmation_test_result_change",
+            },
+            {
+                "counterfactual_id": "setup_growth_decelerating_third",
+                "object_type": "market_setup",
+                "object_id": "setup_growth_decelerating_third",
+                "from_code": "neutral_setup",
+                "to_code": "downside_setup",
+                "confirmation_change": {
+                    "from": "neutral_confirmation",
+                    "to": "downside_confirmation",
+                },
+                "posture_change": {"from": "balanced", "to": "defensive"},
+                "decision_effect": "market_setup_and_posture_change",
+            },
+        ],
+    }
+
+
+def _projection_artifacts():
+    artifact = market_assistant._snapshot_artifact(_projection_snapshot())
+    return {artifact["artifact_id"]: artifact}
+
+
+def _projected(plan):
+    return market_assistant._llm_artifact_projection(_projection_artifacts(), plan)
+
+
+def _projected_objects():
+    return _projected(valid_plan())["ctx_123"]["object_index"]
+
+
+def _previous_style_object_index(object_index):
+    return [
+        item
+        for item in object_index
+        if item.get("object_type") != "method_contract"
+        and (
+            item.get("object_type") != "evidence_fact"
+            or (item.get("payload") or {}).get("role", {}).get("function")
+            not in {"display_only", "watch_only"}
+        )
+    ]
+
+
+def _dotted_paths(payload, prefix=""):
+    paths = []
+    for key, value in payload.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            paths.extend(_dotted_paths(value, path))
+        else:
+            paths.append(path)
+    return paths
+
+
+def _path_exists(payload, path):
+    current = payload
+    for key in path.split("."):
+        if not isinstance(current, dict) or key not in current:
+            return False
+        current = current[key]
+    return True
+
+
+def test_llm_artifact_projection_does_not_mutate_full_artifacts():
+    artifacts = _projection_artifacts()
+    frozen = deepcopy(artifacts)
+    projected = market_assistant._llm_artifact_projection(artifacts, valid_plan())
+
+    assert artifacts == frozen
+    assert len(canonical_json(projected)) < len(canonical_json(artifacts))
+
+
+def test_llm_artifact_projection_keeps_layer_results_and_applied_evidence():
+    by_id = {item["object_id"]: item for item in _projected_objects()}
+
+    assert {
+        "macro_regime",
+        "market_confirmation",
+        "market_setup",
+        "portfolio_posture",
+    } <= set(by_id)
+    assert by_id["macro_regime"]["payload"] == {
+        "code": "growth_decelerating",
+        "label": "Growth Decelerating",
+        "primary_source": "ism_survey_synthesis",
+        "supports": [{"fact_id": "survey_growth_direction"}],
+        "conflicts": [{"fact_id": "macro_policy_response"}],
+        "missing_inputs": [],
+        "excluded_inputs": ["housing_starts"],
+        "method_version": "market_setup_v2_macro_regime_v1",
+    }
+    assert by_id["market_confirmation"]["payload"] == {
+        "code": "downside_confirmation",
+        "label": "Downside Confirmation",
+        "confirmation_test_count": 2,
+        "offsets": [{"fact_id": "m2_liquidity", "effect": "delays"}],
+        "missing_inputs": [],
+        "method_version": "market_setup_v2_market_confirmation_v1",
+    }
+    assert by_id["market_setup"]["payload"] == {
+        "code": "downside_setup",
+        "label": "Downside Setup",
+        "agreement": "aligned",
+    }
+    assert by_id["portfolio_posture"]["payload"] == {
+        "code": "defensive",
+        "label": "Defensive Posture",
+        "net_exposure": "underweight",
+        "gross_exposure": "low",
+        "implementation": "reduce_equity",
+        "broad_beta": "risk_off",
+        "positioning": [{"instrument": "equities", "action": "reduce"}],
+        "avoid": [{"instrument": "high_beta"}],
+        "method_version": "market_setup_v2_posture_v1",
+    }
+
+    evidence = [
+        item for item in _projected_objects() if item["object_type"] == "evidence_fact"
+    ]
+    assert [item["object_id"] for item in evidence] == [
+        "vix_level",
+        "survey_growth_direction",
+    ]
+    assert evidence[0]["payload"] == {
+        "fact_id": "vix_level",
+        "label": "VIX",
+        "accepted_values": {"level": 18.4},
+        "classifications": {"level": "elevated"},
+        "data_status": {"state": "available"},
+        "participation": {"state": "applied"},
+        "decision_result": {"kind": "evaluated", "evaluation": {"state": "evaluated"}},
+        "finding": {"state": "evaluated", "confirms": True},
+        "role": {
+            "decision_scope": "confirmation_input",
+            "function": "confirmation_test",
+            "target_layer": "market_confirmation",
+            "allowed_effects": [],
+        },
+        "provenance": {"source_period": {"effective_date": "2026-07-01"}},
+    }
+    assert evidence[1]["payload"]["provenance"] == {
+        "source_period": {"reference_period": "2026-06"}
+    }
+
+
+def test_llm_artifact_projection_drops_redundant_objects_and_fields():
+    object_index = _projected_objects()
+    object_ids = {item["object_id"] for item in object_index}
+
+    assert "vix_confirmation_v2" not in object_ids
+    assert "cyclical_commodities" not in object_ids
+    assert "equity_breadth" not in object_ids
+    assert "vix_downside_crossing" not in object_ids
+    assert "sp500_downside_crossing" not in object_ids
+    assert "setup_growth_decelerating_third" not in object_ids
+
+    for item in object_index:
+        if item["object_type"] == "market_setup_result":
+            assert "source_periods" not in item["payload"]
+            if item["object_id"] == "market_confirmation":
+                assert "evidence" not in item["payload"]
+        if item["object_type"] == "evidence_fact":
+            assert "indicator_id" not in item["payload"]
+            assert set(item["payload"]["provenance"]) == {"source_period"}
+
+
+def test_llm_artifact_projection_keeps_only_first_two_setup_counterfactuals():
+    object_index = _projected_objects()
+
+    setup_counterfactuals = [
+        item
+        for item in object_index
+        if item["object_type"] == "market_setup" and item["object_id"] != "market_setup"
+    ]
+    assert [item["object_id"] for item in setup_counterfactuals] == [
+        "setup_growth_decelerating_confirming_downside",
+        "setup_growth_decelerating_not_confirming_downside",
+    ]
+    assert setup_counterfactuals[0]["payload"]["from_code"] == "neutral_setup"
+    assert setup_counterfactuals[0]["payload"]["decision_effect"] == (
+        "market_setup_and_posture_change"
+    )
+    assert not any(item["object_type"] == "confirmation_test" for item in object_index)
+
+
+def test_llm_artifact_projection_refs_resolve_in_full_artifacts():
+    artifacts = _projection_artifacts()
+    object_index = _projected(valid_plan())["ctx_123"]["object_index"]
+
+    for item in object_index:
+        resolved = resolve_artifact_ref(
+            artifacts,
+            {
+                "artifact_id": "ctx_123",
+                "object_type": item["object_type"],
+                "object_id": item["object_id"],
+            },
+        )
+        for path in _dotted_paths(item["payload"]):
+            assert _path_exists(resolved["payload"], path)
+
+
+def test_llm_artifact_projection_smaller_than_previous_full_payload_projection():
+    artifacts = _projection_artifacts()
+    compact = market_assistant._llm_artifact_projection(artifacts, valid_plan())
+    previous = {
+        artifact_id: {
+            "artifact_id": artifact["artifact_id"],
+            "artifact_kind": artifact["artifact_kind"],
+            "primary_authority": artifact["primary_authority"],
+            "market_setup_relation": artifact["market_setup_relation"],
+            "object_index": _previous_style_object_index(artifact["object_index"]),
+        }
+        for artifact_id, artifact in artifacts.items()
+    }
+
+    assert len(canonical_json(compact)) < len(canonical_json(previous))
+
+
+def test_non_decision_projection_returns_objects_unchanged():
+    artifacts = _projection_artifacts()
+    frozen = deepcopy(artifacts)
+    projected = market_assistant._llm_artifact_projection(
+        artifacts, valid_plan(intent="counterfactual")
+    )
+
+    assert projected["ctx_123"]["object_index"] == frozen["ctx_123"]["object_index"]
 
 
 @pytest.mark.asyncio

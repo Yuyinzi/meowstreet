@@ -51,6 +51,27 @@ _RESULT_LAYERS = (
     "portfolio_posture",
 )
 
+_DROPPED_EVIDENCE_FUNCTIONS = frozenset({"display_only", "watch_only"})
+
+_KEPT_EVIDENCE_FIELDS = (
+    "fact_id",
+    "label",
+    "accepted_values",
+    "classifications",
+    "data_status",
+    "participation",
+    "decision_result",
+    "finding",
+    "role",
+)
+
+_DELETED_LAYER_RESULT_FIELDS = {
+    "macro_regime": frozenset({"source_periods"}),
+    "market_confirmation": frozenset({"source_periods", "evidence"}),
+    "market_setup": frozenset(),
+    "portfolio_posture": frozenset(),
+}
+
 _KNOWLEDGE_OBJECT_TYPE = {
     "get_indicator_definition": "indicator_definition",
     "get_indicator_method": "indicator_method",
@@ -735,25 +756,85 @@ def _llm_artifact_projection(artifacts, plan):
             "artifact_kind": artifact["artifact_kind"],
             "primary_authority": artifact["primary_authority"],
             "market_setup_relation": artifact["market_setup_relation"],
-            "object_index": _llm_object_index(artifact["object_index"], plan),
+            "object_index": _projected_object_index(artifact["object_index"], plan),
         }
         for artifact_id, artifact in artifacts.items()
     }
 
 
-def _llm_object_index(object_index, plan):
+def _projected_object_index(object_index, plan):
     if plan.get("intent") != "decision_explanation":
-        return object_index
+        return list(object_index)
+    kept_counterfactual_ids = _kept_setup_counterfactual_ids(object_index)
     return [
-        item
+        projected
         for item in object_index
-        if item.get("object_type") != "method_contract"
-        and (
-            item.get("object_type") != "evidence_fact"
-            or (item.get("payload") or {}).get("role", {}).get("function")
-            not in {"display_only", "watch_only"}
-        )
+        if _keeps_artifact_object(item, kept_counterfactual_ids)
+        and (projected := _project_artifact_object_for_llm(item, plan)) is not None
     ]
+
+
+def _keeps_artifact_object(item, kept_counterfactual_ids):
+    return (
+        not _is_setup_counterfactual(item)
+        or item["object_id"] in kept_counterfactual_ids
+    )
+
+
+def _is_setup_counterfactual(item):
+    return (
+        item.get("object_type") == "market_setup"
+        and item.get("object_id") != "market_setup"
+    )
+
+
+def _kept_setup_counterfactual_ids(object_index):
+    kept = []
+    for item in object_index:
+        if len(kept) == 2:
+            break
+        if _is_setup_counterfactual(item):
+            kept.append(item["object_id"])
+    return kept
+
+
+def _project_artifact_object_for_llm(item, plan):
+    if plan.get("intent") != "decision_explanation":
+        return item
+    object_type = item.get("object_type")
+    if object_type == "method_contract":
+        return None
+    if object_type == "confirmation_test":
+        return None
+    if object_type == "evidence_fact":
+        return _project_evidence_fact_for_llm(item)
+    if object_type == "market_setup_result":
+        return _project_layer_result_for_llm(item)
+    return item
+
+
+def _project_evidence_fact_for_llm(item):
+    role = (item.get("payload") or {}).get("role") or {}
+    if role.get("function") in _DROPPED_EVIDENCE_FUNCTIONS:
+        return None
+    payload = item["payload"]
+    projected_payload = {
+        key: payload[key] for key in _KEPT_EVIDENCE_FIELDS if key in payload
+    }
+    projected_payload["provenance"] = {
+        "source_period": (payload.get("provenance") or {}).get("source_period")
+    }
+    return {**item, "payload": projected_payload}
+
+
+def _project_layer_result_for_llm(item):
+    deleted_fields = _DELETED_LAYER_RESULT_FIELDS.get(item["object_id"], frozenset())
+    projected_payload = {
+        key: value
+        for key, value in item["payload"].items()
+        if key not in deleted_fields
+    }
+    return {**item, "payload": projected_payload}
 
 
 async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, deps):
