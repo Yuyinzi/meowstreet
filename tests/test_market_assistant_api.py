@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -497,3 +499,98 @@ def test_repair_prompt_preserves_beginner_contract():
     assert "financial beginner" in system
     assert "same evidence set" in system
     assert "complete corrected StructuredAnswerDraft" in system
+
+
+def _stream_events():
+    events = [
+        {"type": "status", "status": "thinking"},
+        {"type": "answer_delta", "text": "Market "},
+        {"type": "validation", "status": "passed", "error_codes": []},
+        {
+            "type": "complete",
+            "generation_status": "validated_first_pass",
+            "answer_trace_id": "trace_123",
+            "citations": [],
+        },
+    ]
+
+    async def fake_stream(request, *, dependencies):
+        for event in events:
+            yield event
+
+    return fake_stream
+
+
+def test_stream_question_returns_ndjson_event_sequence(assistant_env, monkeypatch):
+    monkeypatch.setattr(
+        market_assistant_service, "stream_answer_question", _stream_events()
+    )
+
+    with client.stream(
+        "POST",
+        "/api/market-assistant/questions/stream",
+        json={"question": "Why?", "mode": "current"},
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/x-ndjson")
+        assert response.headers["cache-control"] == "no-cache"
+        assert response.headers["x-accel-buffering"] == "no"
+        parsed = [json.loads(line) for line in response.iter_lines()]
+        assert [event["type"] for event in parsed] == [
+            "status",
+            "answer_delta",
+            "validation",
+            "complete",
+        ]
+        assert parsed[0] == {"type": "status", "status": "thinking"}
+        assert parsed[1] == {"type": "answer_delta", "text": "Market "}
+
+
+def test_stream_question_empty_question_returns_400_before_streaming(assistant_env):
+    with client.stream(
+        "POST",
+        "/api/market-assistant/questions/stream",
+        json={"question": "  ", "mode": "current"},
+    ) as response:
+        assert response.status_code == 400
+        response.read()
+        assert response.json()["detail"] == "question is required"
+
+
+def test_stream_question_historical_without_context_returns_400_before_streaming(
+    assistant_env,
+):
+    with client.stream(
+        "POST",
+        "/api/market-assistant/questions/stream",
+        json={"question": "Why?", "mode": "historical"},
+    ) as response:
+        assert response.status_code == 400
+        response.read()
+        assert response.json()["detail"] == "context id is required"
+
+
+def test_stream_worker_error_emits_error_line_without_stack_trace(
+    assistant_env, monkeypatch
+):
+    async def fake_stream(request, *, dependencies):
+        yield {"type": "status", "status": "thinking"}
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(market_assistant_service, "stream_answer_question", fake_stream)
+
+    with client.stream(
+        "POST",
+        "/api/market-assistant/questions/stream",
+        json={"question": "Why?", "mode": "current"},
+    ) as response:
+        assert response.status_code == 200
+        lines = list(response.iter_lines())
+        parsed = [json.loads(line) for line in lines]
+        assert [event["type"] for event in parsed] == ["status", "error"]
+        assert parsed[-1] == {
+            "type": "error",
+            "message": "market assistant service is unavailable",
+        }
+        assert "boom" not in "".join(lines)
+        assert "Traceback" not in "".join(lines)

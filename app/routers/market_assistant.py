@@ -2,6 +2,7 @@ import json
 from typing import Literal
 
 from fastapi import APIRouter, Body, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -239,6 +240,41 @@ def _is_artifact_corruption(exc):
         return False
     message = str(exc)
     return any(message.startswith(prefix) for prefix in _ARTIFACT_CORRUPTION_PREFIXES)
+
+
+async def _stream_answer_events(request, dependencies):
+    try:
+        async for event in market_assistant_service.stream_answer_question(
+            request, dependencies=dependencies
+        ):
+            yield json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
+    except Exception:
+        yield (
+            json.dumps(
+                {"type": "error", "message": "market assistant service is unavailable"},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            + "\n"
+        )
+
+
+@router.post("/questions/stream")
+async def market_assistant_questions_stream(body: dict = Body(default={})):
+    try:
+        request = _validate_question_request(body)
+        dependencies = _build_dependencies()
+    except ValueError as exc:
+        if _is_artifact_corruption(exc):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if request["mode"] == "historical" and not request.get("context_id"):
+        raise HTTPException(status_code=400, detail="context id is required")
+    return StreamingResponse(
+        _stream_answer_events(request, dependencies),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/questions")
