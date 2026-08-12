@@ -1249,19 +1249,34 @@ def test_calculate_hypothetical_rejects_empty_operands():
         calculate_hypothetical("add", [])
 
 
-def test_render_appends_notices_and_escapes_unsafe_output():
+def test_render_appends_notices_as_plain_text():
     validated = validate_answer_draft(vix_decision_draft(), artifacts())
     rendered = render_answer(validated, artifacts(), [{"text": "Data as of <as_of>"}])
-    assert rendered.endswith("Data as of &lt;as_of&gt;")
-    assert "<as_of>" not in rendered
+    assert rendered.endswith("Data as of <as_of>")
+    assert "&lt;" not in rendered
 
 
-def test_render_escapes_claim_template_output():
+def test_render_passes_claim_template_through_unmodified():
     claim = valid_claim(template='Current VIX {vix_threshold} & above "quotes".')
     validated = validate_answer_draft(draft(claim), artifacts())
     rendered = render_answer(validated, artifacts(), [])
-    assert "&amp;" in rendered
-    assert '"' not in rendered.replace("&quot;", "")
+    assert 'Current VIX 20.0 & above "quotes".' in rendered
+    assert "&amp;" not in rendered
+
+
+def test_render_passes_ampersand_plain_for_textcontent():
+    claim = valid_claim(template="S&P remains resilient.", bindings={})
+    validated = validate_answer_draft(draft(claim), artifacts())
+    rendered = render_answer(validated, artifacts(), [])
+    assert "S&P remains resilient." in rendered
+    assert "&amp;" not in rendered
+
+
+def test_debug_renderer_passes_ampersand_plain_for_textcontent():
+    payload = draft(valid_claim(template="S&P 500 continues to lead.", bindings={}))
+    rendered = render_unvalidated_debug_answer(payload)
+    assert "S&P 500 continues to lead." in rendered
+    assert "&amp;" not in rendered
 
 
 def test_render_groups_sections_with_backend_headings():

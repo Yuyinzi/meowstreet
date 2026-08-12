@@ -911,7 +911,7 @@ def render_unvalidated_debug_answer(draft, *, language="en"):
             continue
         heading = headings.get(section.get("kind"), "")
         if heading:
-            parts.append(_escape_html(heading))
+            parts.append(heading)
         for claim in claims:
             parts.append(_render_unvalidated_claim(claim, language=language))
     return "\n".join(parts)
@@ -935,10 +935,9 @@ def _render_unvalidated_claim(claim, *, language):
         lambda match: values.get(match.group(1), unavailable),
         claim["template"],
     )
-    escaped = _escape_html(rendered)
     if claim.get("authority") == "hypothetical":
-        return _EXAMPLE_PREFIXES.get(language, _EXAMPLE_PREFIXES["en"]) + escaped
-    return escaped
+        return _EXAMPLE_PREFIXES.get(language, _EXAMPLE_PREFIXES["en"]) + rendered
+    return rendered
 
 
 def _render_unvalidated_binding(binding, *, unavailable):
@@ -964,12 +963,12 @@ def render_answer(draft, artifacts, notices, *, language="en"):
             continue
         heading = headings.get(section.get("kind"), "")
         if heading:
-            parts.append(_escape_html(heading))
+            parts.append(heading)
         for claim in claims:
             parts.append(_render_claim(claim, artifacts, language=language))
     for notice in notices or []:
         if isinstance(notice, dict) and isinstance(notice.get("text"), str):
-            parts.append(_escape_html(notice["text"]))
+            parts.append(notice["text"])
     return "\n".join(parts)
 
 
@@ -988,10 +987,9 @@ def _render_claim(claim, artifacts, *, language="en"):
         lambda match: values.get(match.group(1), match.group(0)),
         claim["template"],
     )
-    escaped = _escape_html(rendered)
     if claim.get("authority") == "hypothetical":
-        return _EXAMPLE_PREFIXES[language] + escaped
-    return escaped
+        return _EXAMPLE_PREFIXES[language] + rendered
+    return rendered
 
 
 def _render_binding(binding, artifacts):
@@ -1023,16 +1021,6 @@ def _format_value(value):
     if isinstance(value, bool):
         return str(value).lower()
     return str(value)
-
-
-def _escape_html(text):
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&#39;")
-    )
 
 
 def collect_citations(draft, artifacts):
@@ -1116,10 +1104,10 @@ def render_fallback(*, plan, artifacts, notices):
     router = _FALLBACK_ROUTERS.get(intent) if isinstance(intent, str) else None
     if router is None:
         router = _fallback_unsupported
-    parts = [_escape_html(router(artifacts))]
+    parts = [router(artifacts)]
     for notice in notices or []:
         if isinstance(notice, dict) and isinstance(notice.get("text"), str):
-            parts.append(_escape_html(notice["text"]))
+            parts.append(notice["text"])
     return "\n".join(parts)
 
 
