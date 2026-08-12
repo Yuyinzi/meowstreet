@@ -698,6 +698,28 @@ def test_unvalidated_debug_renderer_hides_snake_case_annotated_code_binding():
     assert "macro_weakening_partially_confirmed" not in rendered
 
 
+def test_unvalidated_debug_renderer_hides_template_literal_snake_case_code():
+    claim = valid_claim(
+        template="当前市场状态是macro_weakening_partially_confirmed。",
+        bindings={},
+    )
+
+    rendered = render_unvalidated_debug_answer(draft(claim), language="zh")
+
+    assert "macro_weakening_partially_confirmed" not in rendered
+
+
+def test_unvalidated_debug_renderer_hides_template_literal_snake_case_code_in_english():
+    claim = valid_claim(
+        template="The state is macro_weakening_partially_confirmed.",
+        bindings={},
+    )
+
+    rendered = render_unvalidated_debug_answer(draft(claim))
+
+    assert "macro_weakening_partially_confirmed" not in rendered
+
+
 @pytest.mark.parametrize(
     "template",
     [

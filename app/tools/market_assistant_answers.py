@@ -108,6 +108,7 @@ _MAX_TEMPLATE_LENGTH = 2000
 _PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _NUMBER_RE = re.compile(r"\d")
 _ENUM_RE = re.compile(r"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b")
+_CODE_TOKEN_RE = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
 _TOKEN_RE = re.compile(r"[a-z][a-z0-9-]*")
 
 _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
@@ -942,6 +943,8 @@ def _render_unvalidated_claim(claim, *, language):
         claim["template"],
     )
     if _DECISION_RE.search(rendered):
+        return None
+    if _CODE_TOKEN_RE.search(rendered):
         return None
     if claim.get("authority") == "hypothetical":
         return _EXAMPLE_PREFIXES.get(language, _EXAMPLE_PREFIXES["en"]) + rendered
