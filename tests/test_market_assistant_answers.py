@@ -734,6 +734,39 @@ def test_materiality_language_rejected_for_hypothetical_claim():
         validate_answer_draft(draft(claim, kind="illustration"), artifacts())
 
 
+@pytest.mark.parametrize(
+    "template",
+    [
+        "当前信号显著恶化，因此应该买入。",
+        "当前市场明显转弱。",
+        "这属于极端行情。",
+        "这是危险信号。",
+        "这确认了避险情绪。",
+    ],
+)
+def test_chinese_materiality_language_rejected_for_decision_fact_claim(template):
+    claim = valid_claim(template=template, bindings={})
+    with pytest.raises(ValueError, match="unsupported materiality language"):
+        validate_answer_draft(draft(claim), artifacts())
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "现在应该买入。",
+        "现在应该卖出。",
+        "建议建立头寸。",
+        "建议平仓。",
+        "可以加仓。",
+        "建议减仓。",
+    ],
+)
+def test_chinese_decision_language_rejected_for_decision_fact_claim(template):
+    claim = valid_claim(template=template, bindings={})
+    with pytest.raises(ValueError, match="prohibited decision claim"):
+        validate_answer_draft(draft(claim), artifacts())
+
+
 def test_external_source_title_word_does_not_exempt_materiality():
     source_artifact = research_artifact()
     source_artifact["artifact_id"] = "res_sig"

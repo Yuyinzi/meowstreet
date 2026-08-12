@@ -113,14 +113,17 @@ _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 
 _DECISION_RE = re.compile(
     r"\b(?:buy|sell|should buy|should sell|enter a position|take a position|"
-    r"exit the position|add to position|trim the position)\b",
+    r"exit the position|add to position|trim the position)\b"
+    r"|(?:买入|卖出|应该买入|应该卖出|建立头寸|平仓|加仓|减仓|开仓)",
     re.IGNORECASE,
 )
 
 _MATERIALITY_RE = re.compile(
     r"\b(?:significant|significantly|material|materially|strong|weak|extreme|"
     r"unusual|rare|elevated|dangerous|confirms|risk-off|predicts|causes|"
-    r"high-stress|implies a regime)\b",
+    r"high-stress|implies a regime)\b"
+    r"|(?:显著|重大|明显|强劲|疲弱|极端|异常|罕见|高企|危险|高压|确认|避险|"
+    r"预示|预测|导致|暗示)",
     re.IGNORECASE,
 )
 
