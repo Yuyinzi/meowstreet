@@ -575,6 +575,34 @@ def fake_dependencies(plan, draft, repair=None, **kwargs):
     return FakeDependencies(plan, draft, repair=repair, **kwargs)
 
 
+class _ListSink:
+    def __init__(self):
+        self.events = []
+
+    async def send(self, event):
+        self.events.append(event)
+
+
+def _streaming_dependencies(plan, draft, repair=None, *, stream_events=None, **kwargs):
+    deps = fake_dependencies(plan, draft, repair=repair, **kwargs)
+    events = list(stream_events or [])
+
+    async def synthesize_llm(
+        *, question, plan, context_summary, artifacts, stream_observer=None
+    ):
+        deps.llm_calls.append("draft")
+        deps.acquired_artifacts = artifacts
+        if stream_observer is not None:
+            for event in events:
+                await stream_observer(event)
+        if isinstance(deps._draft, Exception):
+            raise deps._draft
+        return deps._draft
+
+    deps.synthesize_llm = synthesize_llm
+    return deps
+
+
 class RealPersistenceDeps:
     def __init__(self, db_path):
         self.db_path = str(db_path)
@@ -1137,15 +1165,21 @@ def test_non_decision_projection_returns_objects_unchanged():
 
 
 @pytest.mark.asyncio
-async def test_failed_repair_uses_deterministic_fallback_without_new_tools():
+async def test_failed_repair_keeps_initial_draft_visible_as_unvalidated():
     deps = fake_dependencies(valid_plan(), invalid_draft(), invalid_repair())
     response = await market_assistant.answer_question(
         current_question(), dependencies=deps
     )
 
-    assert response["generation_status"] == "fallback"
+    assert response["generation_status"] == "validation_failed_visible"
+    assert response["answer_text"] == "The VIX level is 99.9 today."
     assert deps.tool_execution_count == 1
     assert deps.llm_calls == ["plan", "draft", "repair"]
+    assert deps.saved_trace["generation_status"] == "validation_failed_visible"
+    assert (
+        deps.saved_trace["structured_claims"]
+        == validate_answer_draft_schema(invalid_draft())["sections"]
+    )
 
 
 @pytest.mark.asyncio
@@ -1287,7 +1321,7 @@ async def test_claim_validation_remains_enabled_when_config_key_is_absent():
         current_question(), dependencies=deps
     )
 
-    assert response["generation_status"] == "fallback"
+    assert response["generation_status"] == "validation_failed_visible"
     assert deps.llm_calls == ["plan", "draft", "repair"]
 
 
@@ -1351,7 +1385,7 @@ async def test_research_operation_calls_acquire_research_with_ids():
 async def test_research_unavailable_renders_research_fallback():
     deps = fake_dependencies(
         research_plan(),
-        invalid_draft(),
+        None,
         invalid_repair(),
         research=research_unavailable(),
     )
@@ -2159,8 +2193,8 @@ async def test_deep_research_without_explicit_intent_never_executes():
     response = await market_assistant.answer_question(request, dependencies=deps)
 
     assert deps.acquired_research_kwargs is None
-    assert response["generation_status"] == "fallback"
-    assert "External research is currently unavailable." in response["answer_text"]
+    assert response["generation_status"] == "validation_failed_visible"
+    assert response["answer_text"] == "The VIX level is 99.9 today."
 
 
 @pytest.mark.asyncio
@@ -2360,3 +2394,272 @@ async def test_debug_mode_prefers_draft_answer_text():
     assert response["generation_status"] == "unvalidated_debug"
     assert response["answer_text"] == "市场处于轻度避险状态。"
     assert deps.llm_calls == ["plan", "draft"]
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_lifecycle_emits_full_event_sequence():
+    deps = _streaming_dependencies(
+        valid_plan(),
+        valid_draft(),
+        stream_events=[
+            {"type": "reasoning_started"},
+            {"type": "answer_delta", "delta": "The accepted VIX level is "},
+            {"type": "answer_delta", "delta": "18.4."},
+        ],
+    )
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert [event["type"] for event in sink.events] == [
+        "resolution",
+        "status",
+        "status",
+        "answer_delta",
+        "answer_delta",
+        "status",
+        "validation",
+        "complete",
+    ]
+    assert sink.events[0] == {
+        "type": "resolution",
+        "resolution": response["resolution"],
+    }
+    assert sink.events[1] == {"type": "status", "status": "thinking"}
+    assert sink.events[2] == {"type": "status", "status": "thinking"}
+    assert sink.events[3] == {
+        "type": "answer_delta",
+        "delta": "The accepted VIX level is ",
+    }
+    assert sink.events[4] == {"type": "answer_delta", "delta": "18.4."}
+    assert sink.events[5] == {"type": "status", "status": "validating"}
+    assert sink.events[6] == {
+        "type": "validation",
+        "status": "passed",
+        "error_codes": [],
+    }
+    complete = sink.events[7]
+    assert complete["type"] == "complete"
+    assert complete["resolution"] == response["resolution"]
+    assert complete["generation_status"] == "validated_first_pass"
+    assert complete["answer_trace_id"] == response["answer_trace_id"]
+    assert complete["citations"] == response["citations"] == []
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_lifecycle_emits_validation_disabled_not_passed():
+    deps = _streaming_dependencies(
+        valid_plan(),
+        beginner_debug_draft(),
+        invalid_repair(),
+        config=_config(claim_validation_enabled=False),
+    )
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(question="现在市场怎么样？为什么？"),
+        dependencies=deps,
+        event_sink=sink,
+    )
+
+    assert response["generation_status"] == "unvalidated_debug"
+    validations = [event for event in sink.events if event["type"] == "validation"]
+    assert validations == [
+        {"type": "validation", "status": "disabled", "error_codes": []}
+    ]
+    assert not any(event["type"] == "answer_replace" for event in sink.events)
+    complete = sink.events[-1]
+    assert complete["type"] == "complete"
+    assert complete["generation_status"] == "unvalidated_debug"
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_lifecycle_failed_initial_then_repaired_and_passed():
+    deps = _streaming_dependencies(valid_plan(), invalid_draft(), valid_draft())
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validated_after_repair"
+    assert [event["type"] for event in sink.events] == [
+        "resolution",
+        "status",
+        "status",
+        "validation",
+        "status",
+        "answer_replace",
+        "validation",
+        "complete",
+    ]
+    assert sink.events[3] == {
+        "type": "validation",
+        "status": "failed_initial",
+        "error_codes": ["UNBOUND_FACTUAL_LITERAL"],
+    }
+    assert sink.events[4] == {"type": "status", "status": "repairing"}
+    replace = sink.events[5]
+    assert replace["type"] == "answer_replace"
+    assert replace["text"] == response["answer_text"]
+    assert sink.events[6] == {
+        "type": "validation",
+        "status": "repaired_and_passed",
+        "error_codes": [],
+    }
+    assert sink.events[7]["generation_status"] == "validated_after_repair"
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_lifecycle_repair_failure_keeps_initial_draft_visible():
+    deps = _streaming_dependencies(valid_plan(), invalid_draft(), invalid_repair())
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validation_failed_visible"
+    assert response["answer_text"] == "The VIX level is 99.9 today."
+    assert [event["type"] for event in sink.events] == [
+        "resolution",
+        "status",
+        "status",
+        "validation",
+        "status",
+        "validation",
+        "complete",
+    ]
+    validations = [event for event in sink.events if event["type"] == "validation"]
+    assert validations == [
+        {
+            "type": "validation",
+            "status": "failed_initial",
+            "error_codes": ["UNBOUND_FACTUAL_LITERAL"],
+        },
+        {
+            "type": "validation",
+            "status": "failed",
+            "error_codes": ["UNBOUND_FACTUAL_LITERAL"],
+        },
+    ]
+    assert not any(event["type"] == "answer_replace" for event in sink.events)
+    complete = sink.events[-1]
+    assert complete["type"] == "complete"
+    assert complete["generation_status"] == "validation_failed_visible"
+    assert complete["answer_trace_id"] == response["answer_trace_id"]
+    assert deps.saved_trace["generation_status"] == "validation_failed_visible"
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_lifecycle_falls_back_when_synthesis_fails_before_delta():
+    deps = _streaming_dependencies(valid_plan(), RuntimeError("llm down"))
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "fallback"
+    assert response["answer_text"].startswith("Market Setup decision result:")
+    assert [event["type"] for event in sink.events] == [
+        "resolution",
+        "status",
+        "status",
+        "answer_replace",
+        "validation",
+        "complete",
+    ]
+    replace = sink.events[3]
+    assert replace["type"] == "answer_replace"
+    assert replace["text"] == response["answer_text"]
+    assert sink.events[4] == {
+        "type": "validation",
+        "status": "fallback",
+        "error_codes": [],
+    }
+    assert sink.events[5]["generation_status"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_question_yields_events_and_stops_at_complete():
+    deps = _streaming_dependencies(
+        valid_plan(),
+        valid_draft(),
+        stream_events=[{"type": "answer_delta", "delta": "The accepted VIX level is "}],
+    )
+
+    events = [
+        event
+        async for event in market_assistant.stream_answer_question(
+            current_question(), dependencies=deps
+        )
+    ]
+
+    assert [event["type"] for event in events] == [
+        "resolution",
+        "status",
+        "answer_delta",
+        "status",
+        "validation",
+        "complete",
+    ]
+    assert events[-1]["type"] == "complete"
+    assert events[-1]["generation_status"] == "validated_first_pass"
+    assert events[-1]["answer_trace_id"]
+    assert events[-1]["citations"] == []
+    assert deps.saved_trace is not None
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_question_sends_error_and_stops_without_trace():
+    deps = _streaming_dependencies(valid_plan(), valid_draft())
+
+    def fail_save(con, *, artifacts, answer_trace):
+        raise RuntimeError("disk full")
+
+    deps.save_bundle = fail_save
+
+    events = [
+        event
+        async for event in market_assistant.stream_answer_question(
+            current_question(), dependencies=deps
+        )
+    ]
+
+    assert events[-1]["type"] == "error"
+    assert events[-1]["message"] == "market assistant service is unavailable"
+    assert not any(event["type"] == "complete" for event in events)
+    assert deps.saved_trace is None
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_question_aclose_cancels_worker_and_llm_task():
+    deps = _streaming_dependencies(valid_plan(), valid_draft())
+    cancelled = []
+    started = asyncio.Event()
+
+    async def hanging_synthesize_llm(
+        *, question, plan, context_summary, artifacts, stream_observer=None
+    ):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    deps.synthesize_llm = hanging_synthesize_llm
+
+    generator = market_assistant.stream_answer_question(
+        current_question(), dependencies=deps
+    )
+    assert (await anext(generator))["type"] == "resolution"
+    await asyncio.wait_for(started.wait(), timeout=0.5)
+    await generator.aclose()
+
+    assert cancelled == [True]
+    assert deps.saved_trace is None

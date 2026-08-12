@@ -180,10 +180,14 @@ def _new_id(prefix):
     return f"{prefix}{secrets.token_hex(8)}"
 
 
-async def answer_question(request, *, dependencies):
+async def answer_question(request, *, dependencies, event_sink=None):
     deps = dependencies
     db_path = _dependency(deps, "db_path")
     resolution = _resolve_request_context(request, deps, db_path)
+    await _emit(
+        event_sink, {"type": "resolution", "resolution": resolution["resolution"]}
+    )
+    await _emit(event_sink, {"type": "status", "status": "thinking"})
     plan, plan_attempts = await _plan_or_fallback(request, resolution, deps)
     artifacts, unsupported_operation_id = await _acquire_registered_artifacts(
         request, plan, resolution, deps
@@ -191,14 +195,17 @@ async def answer_question(request, *, dependencies):
     frozen_artifacts = deepcopy(artifacts)
     draft = None
     if unsupported_operation_id is None:
-        draft = await _synthesize(request, plan, resolution, frozen_artifacts, deps)
+        draft = await _synthesize(
+            request, plan, resolution, frozen_artifacts, deps, event_sink
+        )
+    await _emit(event_sink, {"type": "status", "status": "validating"})
     (
         validated,
         generation_status,
         attempts,
         validation_error_codes,
     ) = await _validate_or_repair_once(
-        request, plan, resolution, frozen_artifacts, draft, deps
+        request, plan, resolution, frozen_artifacts, draft, deps, event_sink
     )
     attempts["plan"] = plan_attempts
     answer_language = detect_answer_language(request.get("question") or "")
@@ -217,6 +224,23 @@ async def answer_question(request, *, dependencies):
                 set(validation_error_codes) | {"DISPLAY_FILTERED"}
             )
         citations = []
+        if generation_status == "fallback":
+            await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
+            await _emit_validation(event_sink, "fallback", validation_error_codes)
+        else:
+            await _emit_validation(event_sink, "disabled", [])
+    elif generation_status == "validation_failed_visible":
+        if validated is None:
+            answer_text = render_fallback(
+                plan=plan, artifacts=frozen_artifacts, notices=[]
+            )
+            citations = []
+        else:
+            answer_text = validated.get("answer_text") or render_answer(
+                validated, frozen_artifacts, [], language=answer_language
+            )
+            citations = collect_citations(validated, frozen_artifacts)
+        await _emit_validation(event_sink, "failed", validation_error_codes)
     elif validated is not None:
         answer_text = render_answer(
             validated,
@@ -225,9 +249,16 @@ async def answer_question(request, *, dependencies):
             language=answer_language,
         )
         citations = collect_citations(validated, frozen_artifacts)
+        if generation_status == "validated_first_pass":
+            await _emit_validation(event_sink, "passed", [])
+        else:
+            await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
+            await _emit_validation(event_sink, "repaired_and_passed", [])
     else:
         answer_text = render_fallback(plan=plan, artifacts=frozen_artifacts, notices=[])
         citations = []
+        await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
+        await _emit_validation(event_sink, "fallback", validation_error_codes)
     generated_at = _now_iso()
     referenced = _referenced_artifacts(plan, validated, frozen_artifacts)
     referenced_map = {artifact["artifact_id"]: artifact for artifact in referenced}
@@ -245,6 +276,16 @@ async def answer_question(request, *, dependencies):
         runtime_config=_runtime_config(deps),
     )
     _persist_bundle(deps, db_path, referenced, trace)
+    await _emit(
+        event_sink,
+        {
+            "type": "complete",
+            "resolution": resolution["resolution"],
+            "generation_status": generation_status,
+            "answer_trace_id": trace["answer_trace_id"],
+            "citations": citations,
+        },
+    )
     return {
         "resolution": resolution["resolution"],
         "answer_text": answer_text,
@@ -252,6 +293,57 @@ async def answer_question(request, *, dependencies):
         "generation_status": generation_status,
         "answer_trace_id": trace["answer_trace_id"],
     }
+
+
+async def _emit(event_sink, event):
+    if event_sink is not None:
+        await event_sink.send(event)
+
+
+async def _emit_validation(event_sink, status, error_codes):
+    await _emit(
+        event_sink,
+        {"type": "validation", "status": status, "error_codes": sorted(error_codes)},
+    )
+
+
+class _QueueEventSink:
+    def __init__(self, queue):
+        self._queue = queue
+
+    async def send(self, event):
+        await self._queue.put(event)
+
+
+async def stream_answer_question(request, *, dependencies):
+    queue = asyncio.Queue(maxsize=100)
+    sink = _QueueEventSink(queue)
+    worker = asyncio.create_task(_stream_worker(request, dependencies, sink))
+    try:
+        while True:
+            event = await queue.get()
+            yield event
+            if event["type"] in ("complete", "error"):
+                break
+    finally:
+        if not worker.done():
+            worker.cancel()
+            try:
+                await worker
+            except asyncio.CancelledError:
+                pass
+
+
+async def _stream_worker(request, dependencies, sink):
+    try:
+        await answer_question(request, dependencies=dependencies, event_sink=sink)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        LOGGER.warning("market assistant stream failed", exc_info=True)
+        await sink.send(
+            {"type": "error", "message": "market assistant service is unavailable"}
+        )
 
 
 def _resolve_request_context(request, deps, db_path):
@@ -714,19 +806,30 @@ def _research_unavailable_artifact(result_id, searched_at, reason_code):
     return _finalize_envelope(envelope)
 
 
-async def _synthesize(request, plan, resolution, artifacts, deps):
+async def _synthesize(request, plan, resolution, artifacts, deps, event_sink=None):
+    kwargs = {
+        "question": request["question"],
+        "plan": plan,
+        "context_summary": _context_summary(request, resolution),
+        "artifacts": _llm_artifact_projection(artifacts, plan),
+    }
+    if event_sink is not None:
+        kwargs["stream_observer"] = _synthesis_stream_observer(event_sink)
     try:
-        return await _bounded_llm_call(
-            deps,
-            "synthesize_llm",
-            question=request["question"],
-            plan=plan,
-            context_summary=_context_summary(request, resolution),
-            artifacts=_llm_artifact_projection(artifacts, plan),
-        )
+        return await _bounded_llm_call(deps, "synthesize_llm", **kwargs)
     except Exception:
         LOGGER.warning("market assistant synthesis failed", exc_info=True)
         return None
+
+
+def _synthesis_stream_observer(event_sink):
+    async def observer(event):
+        if event["type"] == "reasoning_started":
+            await event_sink.send({"type": "status", "status": "thinking"})
+        elif event["type"] == "answer_delta":
+            await event_sink.send(event)
+
+    return observer
 
 
 async def _bounded_llm_call(deps, dependency_name, **kwargs):
@@ -734,7 +837,12 @@ async def _bounded_llm_call(deps, dependency_name, **kwargs):
         deps, "llm_attempt_timeout", default=LLM_ATTEMPT_TIMEOUT_SECONDS
     )
     task = asyncio.create_task(_dependency(deps, dependency_name)(**kwargs))
-    done, _ = await asyncio.wait({task}, timeout=timeout)
+    try:
+        done, _ = await asyncio.wait({task}, timeout=timeout)
+    except asyncio.CancelledError:
+        task.cancel()
+        task.add_done_callback(_consume_llm_task)
+        raise
     if task not in done:
         task.cancel()
         task.add_done_callback(_consume_llm_task)
@@ -839,7 +947,9 @@ def _project_layer_result_for_llm(item):
     return {**item, "payload": projected_payload}
 
 
-async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, deps):
+async def _validate_or_repair_once(
+    request, plan, resolution, artifacts, draft, deps, event_sink=None
+):
     attempts = {"draft": 0, "repair": 0}
     validation_error_codes = []
     answer_language = detect_answer_language(request.get("question") or "")
@@ -856,13 +966,17 @@ async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, 
             validation_error_codes = sorted({error["code"] for error in exc.errors})
             return None, "fallback", attempts, validation_error_codes
         return normalized, "unvalidated_debug", attempts, validation_error_codes
+    initial_draft = None
     try:
         validated = validate_answer_draft(draft, artifacts, language=answer_language)
         return validated, "validated_first_pass", attempts, validation_error_codes
     except DraftValidationError as exc:
         validation_error_codes = sorted({error["code"] for error in exc.errors})
         report = build_validation_report(exc.errors)
+        initial_draft = _normalized_draft_or_none(draft)
+        await _emit_validation(event_sink, "failed_initial", validation_error_codes)
     attempts["repair"] += 1
+    await _emit(event_sink, {"type": "status", "status": "repairing"})
     try:
         repaired = await _bounded_llm_call(
             deps,
@@ -876,16 +990,38 @@ async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, 
         )
     except Exception:
         LOGGER.warning("market assistant answer repair failed", exc_info=True)
-        return None, "fallback", attempts, validation_error_codes
+        return (
+            initial_draft,
+            "validation_failed_visible",
+            attempts,
+            validation_error_codes,
+        )
     if repaired is None:
-        return None, "fallback", attempts, validation_error_codes
+        return (
+            initial_draft,
+            "validation_failed_visible",
+            attempts,
+            validation_error_codes,
+        )
     attempts["draft"] += 1
     try:
         validated = validate_answer_draft(repaired, artifacts, language=answer_language)
         return validated, "validated_after_repair", attempts, validation_error_codes
     except DraftValidationError as exc:
         validation_error_codes = sorted({error["code"] for error in exc.errors})
-        return None, "fallback", attempts, validation_error_codes
+        return (
+            initial_draft,
+            "validation_failed_visible",
+            attempts,
+            validation_error_codes,
+        )
+
+
+def _normalized_draft_or_none(draft):
+    try:
+        return validate_answer_draft_schema(draft)
+    except DraftValidationError:
+        return None
 
 
 def _referenced_artifacts(plan, validated, artifacts):

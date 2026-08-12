@@ -79,7 +79,9 @@ async def _plan_llm(*, question, context_summary):
     )
 
 
-async def _synthesize_llm(*, question, plan, context_summary, artifacts):
+async def _synthesize_llm(
+    *, question, plan, context_summary, artifacts, stream_observer=None
+):
     client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
     prompt = _synthesis_prompt(question, plan, context_summary, artifacts)
     return await complete_structured(
@@ -89,6 +91,7 @@ async def _synthesize_llm(*, question, plan, context_summary, artifacts):
         schema_type=AnswerDraftSchema,
         structured_output_mode=structured_output_mode,
         reasoning_effort=reasoning_effort,
+        stream_observer=stream_observer,
     )
 
 

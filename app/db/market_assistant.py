@@ -218,6 +218,7 @@ _TRACE_GENERATION_STATUSES = frozenset(
         "validated_first_pass",
         "validated_after_repair",
         "unvalidated_debug",
+        "validation_failed_visible",
         "fallback",
     }
 )
