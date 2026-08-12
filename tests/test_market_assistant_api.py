@@ -466,6 +466,22 @@ def test_synthesis_prompt_selects_english_for_english_question():
     assert "Answer language: English" in prompt[0]["content"]
 
 
+def test_synthesis_prompt_requires_streamable_answer_text():
+    prompt = market_assistant_router._synthesis_prompt(
+        "Explain the market setup",
+        {"intent": "decision_explanation"},
+        {"mode": "current"},
+        {"ctx_1": {"object_index": []}},
+    )
+    system = prompt[0]["content"]
+    assert "Serialize answer_text as the first top-level property." in system
+    assert (
+        "answer_text must exactly equal the deterministic rendering of sections "
+        "and claims." in system
+    )
+    assert "Do not place markdown fences around the JSON object." in system
+
+
 def test_repair_prompt_preserves_beginner_contract():
     prompt = market_assistant_router._repair_prompt(
         "现在市场怎么样？",

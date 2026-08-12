@@ -139,7 +139,10 @@ def _structured_answer_instructions(question):
         "the supplied value and its exact artifact source. Every ref must match the "
         "claim authority. Split different authorities into separate claims. Do not "
         "invent facts, classifications, weights, thresholds, causality, predictions, "
-        "materiality, allocations, or trading instructions."
+        "materiality, allocations, or trading instructions. "
+        "Serialize answer_text as the first top-level property. "
+        "answer_text must exactly equal the deterministic rendering of sections "
+        "and claims. Do not place markdown fences around the JSON object."
     )
 
 

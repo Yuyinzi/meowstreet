@@ -203,9 +203,11 @@ async def answer_question(request, *, dependencies):
     attempts["plan"] = plan_attempts
     answer_language = detect_answer_language(request.get("question") or "")
     if generation_status == "unvalidated_debug":
-        answer_text = render_unvalidated_debug_answer(
-            validated, language=answer_language
-        )
+        answer_text = validated.get("answer_text") or ""
+        if not answer_text:
+            answer_text = render_unvalidated_debug_answer(
+                validated, language=answer_language
+            )
         if not answer_text.strip():
             generation_status = "fallback"
             answer_text = render_fallback(
@@ -840,6 +842,7 @@ def _project_layer_result_for_llm(item):
 async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, deps):
     attempts = {"draft": 0, "repair": 0}
     validation_error_codes = []
+    answer_language = detect_answer_language(request.get("question") or "")
     if draft is None:
         return None, "fallback", attempts, validation_error_codes
     attempts["draft"] += 1
@@ -854,7 +857,7 @@ async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, 
             return None, "fallback", attempts, validation_error_codes
         return normalized, "unvalidated_debug", attempts, validation_error_codes
     try:
-        validated = validate_answer_draft(draft, artifacts)
+        validated = validate_answer_draft(draft, artifacts, language=answer_language)
         return validated, "validated_first_pass", attempts, validation_error_codes
     except DraftValidationError as exc:
         validation_error_codes = sorted({error["code"] for error in exc.errors})
@@ -878,7 +881,7 @@ async def _validate_or_repair_once(request, plan, resolution, artifacts, draft, 
         return None, "fallback", attempts, validation_error_codes
     attempts["draft"] += 1
     try:
-        validated = validate_answer_draft(repaired, artifacts)
+        validated = validate_answer_draft(repaired, artifacts, language=answer_language)
         return validated, "validated_after_repair", attempts, validation_error_codes
     except DraftValidationError as exc:
         validation_error_codes = sorted({error["code"] for error in exc.errors})

@@ -2037,6 +2037,12 @@ def _knowledge_draft():
     return {"sections": [{"kind": "knowledge", "claims": [claim]}]}
 
 
+def _knowledge_draft_with_answer_text(answer_text):
+    draft = _knowledge_draft()
+    draft["answer_text"] = answer_text
+    return draft
+
+
 def _research_claim():
     return {
         "claim_id": "r1",
@@ -2297,3 +2303,60 @@ def test_model_configuration_fingerprint_defaults_reasoning_effort_to_low():
     fingerprint = market_assistant._model_configuration_fingerprint(config)
 
     assert fingerprint["reasoning_effort"] == "low"
+
+
+@pytest.mark.asyncio
+async def test_matching_chinese_answer_text_passes_validation():
+    deps = fake_dependencies(
+        knowledge_plan(),
+        _knowledge_draft_with_answer_text(
+            "指标与方法\nThe VIX measures expected volatility."
+        ),
+    )
+
+    response = await market_assistant.answer_question(
+        current_question(question="VIX 是什么？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert deps.llm_calls == ["plan", "draft"]
+
+
+@pytest.mark.asyncio
+async def test_mismatched_chinese_answer_text_repairs_then_passes():
+    deps = fake_dependencies(
+        knowledge_plan(),
+        _knowledge_draft_with_answer_text("指标与方法\nThe VIX is highly volatile."),
+        _knowledge_draft_with_answer_text(
+            "指标与方法\nThe VIX measures expected volatility."
+        ),
+    )
+
+    response = await market_assistant.answer_question(
+        current_question(question="VIX 是什么？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_after_repair"
+    assert deps.llm_calls == ["plan", "draft", "repair"]
+    assert deps.saved_trace["validation_error_codes"] == ["ANSWER_TEXT_MISMATCH"]
+
+
+@pytest.mark.asyncio
+async def test_debug_mode_prefers_draft_answer_text():
+    draft = beginner_debug_draft()
+    draft["answer_text"] = "市场处于轻度避险状态。"
+    deps = fake_dependencies(
+        valid_plan(),
+        draft,
+        invalid_repair(),
+        config=_config(claim_validation_enabled=False),
+    )
+
+    response = await market_assistant.answer_question(
+        current_question(question="现在市场怎么样？为什么？"),
+        dependencies=deps,
+    )
+
+    assert response["generation_status"] == "unvalidated_debug"
+    assert response["answer_text"] == "市场处于轻度避险状态。"
+    assert deps.llm_calls == ["plan", "draft"]
