@@ -31,6 +31,16 @@ def test_macro_dashboard_includes_market_assistant_assets():
     assert 'href="/market-assistant.css"' in html
 
 
+def test_macro_dashboard_html_includes_deep_analysis_checkbox():
+    html = STATIC_HTML.read_text(encoding="utf-8")
+    controls = html[html.index('id="marketAssistantExternalSearch"') :]
+    assert 'id="marketAssistantDeepAnalysis"' in html
+    assert "Deep analysis" in html
+    assert 'id="marketAssistantDeepAnalysis"' in controls
+    assert "Deep analysis" in controls
+    assert "disabled" not in controls
+
+
 def test_assistant_renderer_uses_text_content_and_clickable_citations():
     script = ASSISTANT_JS.read_text(encoding="utf-8")
     assert "textContent" in script
@@ -8111,6 +8121,7 @@ def _market_assistant_harness(test_js):
           marketAssistantSubmit: makeEl("button"),
           marketAssistantExternalSearch: makeEl("input"),
           marketAssistantDeepResearch: makeEl("input"),
+          marketAssistantDeepAnalysis: makeEl("input"),
           marketAssistantStatus: makeEl("div"),
         }};
 
@@ -8454,6 +8465,242 @@ def test_market_assistant_deep_research_requires_external_search():
         "optionExternalFlag": True,
         "plainFlag": False,
         "plainExternal": False,
+    }
+
+
+def test_market_assistant_deep_analysis_payload_matrix():
+    payload = _run_market_assistant_harness(
+        """
+        const standard = hooks.buildPayload("standard");
+        hooks.state.deepAnalysisRequested = true;
+        const localDeep = hooks.buildPayload("local deep");
+        hooks.state.deepAnalysisRequested = false;
+        hooks.state.externalSearchRequested = true;
+        const externalOnly = hooks.buildPayload("external only");
+        console.log(JSON.stringify({
+          standardDeep: standard.deep_analysis_requested,
+          standardExternal: standard.external_search_requested,
+          localDeepFlag: localDeep.deep_analysis_requested,
+          localDeepExternal: localDeep.external_search_requested,
+          externalOnlyDeep: externalOnly.deep_analysis_requested,
+          externalOnlyExternal: externalOnly.external_search_requested,
+        }));
+        """
+    )
+
+    assert payload == {
+        "standardDeep": False,
+        "standardExternal": False,
+        "localDeepFlag": True,
+        "localDeepExternal": False,
+        "externalOnlyDeep": False,
+        "externalOnlyExternal": True,
+    }
+
+
+def test_market_assistant_deep_analysis_survives_external_search_toggles():
+    payload = _run_market_assistant_harness(
+        """
+        elements.marketAssistantDeepAnalysis.checked = true;
+        elements.marketAssistantDeepAnalysis.listeners.change({ target: { checked: true } });
+        const deepChecked = hooks.state.deepAnalysisRequested;
+        const deepDisabledInitial = elements.marketAssistantDeepAnalysis.disabled === true;
+        elements.marketAssistantExternalSearch.checked = true;
+        elements.marketAssistantExternalSearch.listeners.change({ target: { checked: true } });
+        const deepAfterExternalOn = hooks.state.deepAnalysisRequested;
+        const deepDisabledAfterExternalOn = elements.marketAssistantDeepAnalysis.disabled === true;
+        const researchEnabledAfterExternal = elements.marketAssistantDeepResearch.disabled === false;
+        elements.marketAssistantExternalSearch.checked = false;
+        elements.marketAssistantExternalSearch.listeners.change({ target: { checked: false } });
+        const deepAfterExternalOff = hooks.state.deepAnalysisRequested;
+        const deepDisabledAfterExternalOff = elements.marketAssistantDeepAnalysis.disabled === true;
+        const researchDisabledAfterExternalOff = elements.marketAssistantDeepResearch.disabled === true;
+        const researchClearedAfterExternalOff = hooks.state.deepResearchRequested === false;
+        console.log(JSON.stringify({
+          deepChecked,
+          deepDisabledInitial,
+          deepAfterExternalOn,
+          deepDisabledAfterExternalOn,
+          researchEnabledAfterExternal,
+          deepAfterExternalOff,
+          deepDisabledAfterExternalOff,
+          researchDisabledAfterExternalOff,
+          researchClearedAfterExternalOff,
+        }));
+        """
+    )
+
+    assert payload == {
+        "deepChecked": True,
+        "deepDisabledInitial": False,
+        "deepAfterExternalOn": True,
+        "deepDisabledAfterExternalOn": False,
+        "researchEnabledAfterExternal": True,
+        "deepAfterExternalOff": True,
+        "deepDisabledAfterExternalOff": False,
+        "researchDisabledAfterExternalOff": True,
+        "researchClearedAfterExternalOff": True,
+    }
+
+
+def test_market_assistant_deep_analysis_persists_across_questions():
+    payload = _run_market_assistant_harness(
+        """
+        elements.marketAssistantDeepAnalysis.checked = true;
+        elements.marketAssistantDeepAnalysis.listeners.change({ target: { checked: true } });
+        const first = hooks.buildPayload("first question");
+        const second = hooks.buildPayload("second question");
+        console.log(JSON.stringify({
+          firstFlag: first.deep_analysis_requested,
+          secondFlag: second.deep_analysis_requested,
+        }));
+        """
+    )
+
+    assert payload == {"firstFlag": True, "secondFlag": True}
+
+
+def test_market_assistant_progress_shows_before_narration_then_clears_on_first_delta():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup", message: "Reading setup evidence" });
+        const progressShown = elements.marketAssistantStatus.textContent;
+        const progressClass = elements.marketAssistantStatus.className;
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "First delta." });
+        const statusAfterFirstDelta = elements.marketAssistantStatus.textContent;
+        const textEl = stream.element.children.find((child) => child.className === "market-assistant-message-text");
+        const textAfterFirstDelta = textEl.textContent;
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: " Second delta." });
+        const textAfterSecondDelta = textEl.textContent;
+        console.log(JSON.stringify({
+          progressShown,
+          progressClass,
+          statusAfterFirstDelta,
+          textAfterFirstDelta,
+          textAfterSecondDelta,
+          logChildren: elements.marketAssistantLog.children.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "progressShown": "Reading setup evidence",
+        "progressClass": "market-assistant-status market-assistant-progress",
+        "statusAfterFirstDelta": "",
+        "textAfterFirstDelta": "First delta.",
+        "textAfterSecondDelta": "First delta. Second delta.",
+        "logChildren": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    "stage,message",
+    [
+        ("reading_setup", "Reading setup evidence"),
+        ("checking_confirmation", "Checking confirmation evidence"),
+        ("querying_history", "Querying market history"),
+        ("comparing_evidence", "Comparing evidence"),
+        ("writing_answer", "Writing answer"),
+    ],
+)
+def test_market_assistant_progress_renders_allowlisted_stages(stage, message):
+    payload = _run_market_assistant_harness(
+        f"""
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {{ type: "progress", stage: "{stage}", message: "{message}" }});
+        console.log(JSON.stringify({{
+          status: elements.marketAssistantStatus.textContent,
+        }}));
+        """
+    )
+
+    assert payload == {"status": message}
+
+
+def test_market_assistant_progress_ignores_unknown_stages():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "progress", stage: "mystery_stage", message: "Should not show" });
+        const afterUnknown = elements.marketAssistantStatus.textContent;
+        hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup", message: "Reading setup evidence" });
+        const afterKnown = elements.marketAssistantStatus.textContent;
+        console.log(JSON.stringify({
+          afterUnknown,
+          afterKnown,
+        }));
+        """
+    )
+
+    assert payload == {"afterUnknown": "", "afterKnown": "Reading setup evidence"}
+
+
+def test_market_assistant_progress_without_message_is_ignored():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup" });
+        console.log(JSON.stringify({
+          status: elements.marketAssistantStatus.textContent,
+        }));
+        """
+    )
+
+    assert payload == {"status": ""}
+
+
+def test_market_assistant_client_timing_log_emits_request_id_and_durations():
+    payload = _run_market_assistant_harness(
+        """
+        const timingCalls = [];
+        const originalInfo = console.info;
+        console.info = (...args) => { timingCalls.push(args); };
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"resolution","resolution":{"mode":"current","current_context_id":"ctx_NEW"},"request_id":"req_t1"}\\n',
+          '{"type":"answer_delta","delta":"First delta."}\\n',
+          '{"type":"answer_delta","delta":" Second delta."}\\n',
+          '{"type":"validation","status":"passed","error_codes":[]}\\n',
+          '{"type":"complete","resolution":{"mode":"current"},"generation_status":"validated_first_pass","answer_trace_id":"trace_1","citations":[],"request_id":"req_t1"}\\n',
+        ]) });
+        elements.marketAssistantQuestion.value = "Will this work?";
+        await hooks.handleSubmit();
+        console.info = originalInfo;
+        const timingCall = timingCalls.find((entry) => entry[0] === "market assistant client timing");
+        const timingPayload = timingCall && timingCall[1];
+        const keys = timingPayload ? Object.keys(timingPayload).sort() : [];
+        const serialized = timingPayload ? JSON.stringify(timingPayload) : "";
+        console.log(JSON.stringify({
+          callCount: timingCalls.length,
+          requestId: timingPayload && timingPayload.request_id,
+          hasDurations: timingPayload && timingPayload.durations_ms !== undefined,
+          durationKeys: timingPayload && timingPayload.durations_ms
+            ? Object.keys(timingPayload.durations_ms).sort()
+            : [],
+          numericDurations: timingPayload && timingPayload.durations_ms
+            ? Object.keys(timingPayload.durations_ms).every((key) => typeof timingPayload.durations_ms[key] === "number")
+            : false,
+          leaksQuestion: serialized.indexOf("Will this work?") !== -1,
+          leaksAnswer: serialized.indexOf("First delta") !== -1 || serialized.indexOf("Second") !== -1,
+          keys,
+        }));
+        """
+    )
+
+    assert payload == {
+        "callCount": 1,
+        "requestId": "req_t1",
+        "hasDurations": True,
+        "durationKeys": [
+            "complete_ms",
+            "first_delta_ms",
+            "first_event_ms",
+            "validation_ms",
+        ],
+        "numericDurations": True,
+        "leaksQuestion": False,
+        "leaksAnswer": False,
+        "keys": ["durations_ms", "request_id"],
     }
 
 
