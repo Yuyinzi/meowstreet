@@ -7,6 +7,7 @@ from app.api import app
 from app.db import market_assistant as market_assistant_db
 from app.routers import market_assistant as market_assistant_router
 from app.services import market_assistant as market_assistant_service
+from app.tools.market_assistant_claim_audit import ClaimAuditSchema
 
 client = TestClient(app)
 
@@ -286,6 +287,8 @@ def test_question_passes_real_dependencies_dict(assistant_env, monkeypatch):
     assert callable(deps["plan_llm"])
     assert callable(deps["synthesize_llm"])
     assert callable(deps["repair_llm"])
+    assert callable(deps["react_turn_llm"])
+    assert callable(deps["claim_audit_llm"])
     assert callable(deps["build_research_provider"])
     assert callable(deps["exploration"])
     assert callable(deps["load_knowledge_catalog"])
@@ -499,6 +502,178 @@ def test_repair_prompt_preserves_beginner_contract():
     assert "financial beginner" in system
     assert "same evidence set" in system
     assert "complete corrected StructuredAnswerDraft" in system
+
+
+def test_narration_instructions_contain_beginner_prompt_boundaries():
+    lower_instructions = market_assistant_router._narration_instructions().lower()
+
+    for phrase in (
+        "write for a financial beginner",
+        "answer the user's question before naming system labels",
+        "use only supplied views and tool results",
+        "do not display internal codes or artifact identifiers",
+        "when tools are needed, return tool calls only",
+        "when answering, return plain text only",
+        "do not reinterpret or override Market Setup",
+    ):
+        assert phrase.lower() in lower_instructions
+
+
+def test_narration_input_items_exclude_snapshot_and_schema_bulk():
+    items = market_assistant_router._narration_input_items(
+        "现在市场怎么样？",
+        {
+            "view_version": "setup_explanation_v1",
+            "results": {"market_setup": "improving"},
+            "audit_objects": [],
+        },
+        {"get_setup_overview": {"status": "available"}},
+    )
+    serialized = json.dumps(items, ensure_ascii=False)
+
+    for forbidden in (
+        "snapshot_json",
+        "snapshot_hash",
+        "method_manifest",
+        "StructuredAnswerDraft",
+        "object_index",
+    ):
+        assert forbidden not in serialized
+    assert "view_version" in serialized
+    assert "get_setup_overview" in serialized
+    assert "现在市场怎么样？" in serialized
+
+
+def test_claim_audit_prompt_receives_exact_answer_and_frozen_refs():
+    answer_text = "现在的市场偏积极，但仍没有得到全面确认。"
+    explanation_view = {
+        "view_version": "setup_explanation_v1",
+        "audit_objects": [
+            {
+                "artifact_id": "ctx_1",
+                "object_type": "result",
+                "object_id": "market_setup",
+            }
+        ],
+    }
+    artifact_projection = {
+        "ctx_1": {
+            "artifact_id": "ctx_1",
+            "payload": {"result": "improving"},
+        }
+    }
+    prompt = market_assistant_router._claim_audit_prompt(
+        answer_text, explanation_view, artifact_projection
+    )
+    system = prompt[0]["content"]
+    user_content = prompt[1]["content"]
+
+    assert "exact offsets" in system
+    assert "exact text copied verbatim" in system
+    assert "ClaimAudit" in system
+    assert "Do not alter the supplied answer" in system
+    assert answer_text in user_content
+    assert '"explanation_view"' in user_content
+    assert '"artifact_projection"' in user_content
+    assert '"object_id"' in user_content
+    assert "market_setup" in user_content
+
+
+def test_claim_audit_prompt_does_not_ask_to_rewrite_the_answer():
+    prompt = market_assistant_router._claim_audit_prompt(
+        "现在的市场偏积极。",
+        {"view_version": "setup_explanation_v1", "audit_objects": []},
+        {"ctx_1": {"artifact_id": "ctx_1"}},
+    )
+    text = prompt[0]["content"] + " " + prompt[1]["content"]
+
+    for forbidden in (
+        "rewrite the answer",
+        "improve the answer",
+        "repair the answer",
+        "replace the answer",
+        "return a corrected",
+    ):
+        assert forbidden not in text
+
+
+@pytest.mark.asyncio
+async def test_narration_llm_adapter_streams_plain_text_with_configured_runtime(
+    monkeypatch,
+):
+    captured = {}
+
+    monkeypatch.setattr(
+        market_assistant_router,
+        "_assistant_runtime",
+        lambda: ("client", "assistant-model", "json_object", "high"),
+    )
+
+    async def fake_stream_response_turn(client, **kwargs):
+        captured["client"] = client
+        captured["kwargs"] = kwargs
+        return {
+            "output_text": "answer",
+            "tool_calls": [],
+            "response_items": [],
+            "usage": None,
+            "timings": {},
+        }
+
+    monkeypatch.setattr(
+        market_assistant_router, "stream_response_turn", fake_stream_response_turn
+    )
+
+    result = await market_assistant_router._react_turn_llm(
+        instructions="narration instructions",
+        input_items=[{"type": "message", "role": "user", "content": []}],
+        tools=[{"type": "function", "name": "get_setup_overview"}],
+    )
+
+    assert captured["client"] == "client"
+    assert captured["kwargs"]["model"] == "assistant-model"
+    assert captured["kwargs"]["reasoning_effort"] == "high"
+    assert captured["kwargs"]["instructions"] == "narration instructions"
+    assert captured["kwargs"]["tools"] == [
+        {"type": "function", "name": "get_setup_overview"}
+    ]
+    assert "text_format" not in captured["kwargs"]
+    assert result["output_text"] == "answer"
+
+
+@pytest.mark.asyncio
+async def test_claim_audit_prompt_adapter_uses_claim_audit_schema_without_tools(
+    monkeypatch,
+):
+    captured = {}
+
+    monkeypatch.setattr(
+        market_assistant_router,
+        "_assistant_runtime",
+        lambda: ("client", "assistant-model", "json_schema", "medium"),
+    )
+
+    async def fake_complete_structured(client, **kwargs):
+        captured["client"] = client
+        captured["kwargs"] = kwargs
+        return {"claims": []}
+
+    monkeypatch.setattr(
+        market_assistant_router, "complete_structured", fake_complete_structured
+    )
+
+    result = await market_assistant_router._claim_audit_llm(
+        answer_text="answer",
+        explanation_view={"view_version": "setup_explanation_v1"},
+        artifact_projection={"ctx_1": {"artifact_id": "ctx_1"}},
+    )
+
+    assert captured["client"] == "client"
+    assert captured["kwargs"]["model"] == "assistant-model"
+    assert captured["kwargs"]["schema_type"] is ClaimAuditSchema
+    assert captured["kwargs"]["reasoning_effort"] == "medium"
+    assert "tools" not in captured["kwargs"]
+    assert result == {"claims": []}
 
 
 def _stream_events():

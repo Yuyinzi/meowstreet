@@ -15,10 +15,12 @@ from app.services import market_assistant as market_assistant_service
 from app.services.market_assistant_exploration import execute_exploration
 from app.services.market_assistant_llm import complete_structured
 from app.services.market_assistant_llm import plan_question
+from app.services.market_assistant_llm import stream_response_turn
 from app.services.market_assistant_research import build_research_provider
 from app.services.market_setup_current import resolve_current_explanation
 from app.tools.market_assistant_answers import _AnswerDraft as AnswerDraftSchema
 from app.tools.market_assistant_answers import detect_answer_language
+from app.tools.market_assistant_claim_audit import ClaimAuditSchema
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
 from app.tools.market_assistant_plans import deterministic_plan
 
@@ -119,6 +121,32 @@ async def _repair_llm(
     )
 
 
+async def _react_turn_llm(*, instructions, input_items, tools, stream_observer=None):
+    client, model, _, reasoning_effort = _assistant_runtime()
+    return await stream_response_turn(
+        client,
+        model=model,
+        input_items=input_items,
+        instructions=instructions,
+        tools=tools,
+        reasoning_effort=reasoning_effort,
+        observer=stream_observer,
+    )
+
+
+async def _claim_audit_llm(*, answer_text, explanation_view, artifact_projection):
+    client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
+    prompt = _claim_audit_prompt(answer_text, explanation_view, artifact_projection)
+    return await complete_structured(
+        client,
+        model=model,
+        prompt=prompt,
+        schema_type=ClaimAuditSchema,
+        structured_output_mode=structured_output_mode,
+        reasoning_effort=reasoning_effort,
+    )
+
+
 def _answer_language_label(question):
     return "Chinese" if detect_answer_language(question) == "zh" else "English"
 
@@ -203,6 +231,75 @@ def _repair_prompt(
     ]
 
 
+def _narration_instructions():
+    return (
+        "You are the Market Setup narration assistant. "
+        "Narrate the current market setup from the evidence. "
+        "Always write for a financial beginner. "
+        "Always answer the user's question before naming system labels. "
+        "Use only supplied views and tool results. "
+        "Do not display internal codes or artifact identifiers. "
+        "When tools are needed, return tool calls only. "
+        "When answering, return plain text only. "
+        "Do not reinterpret or override Market Setup. "
+        "Answer in the user's language. "
+        "Do not invent facts, thresholds, or causality the evidence does not support. "
+        "When evidence is unavailable, say it is unavailable rather than guessing."
+    )
+
+
+def _narration_input_items(question, explanation_view, tool_results):
+    return [
+        {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": json.dumps(
+                        {
+                            "question": question,
+                            "explanation_view": explanation_view,
+                            "tool_results": tool_results,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                }
+            ],
+        }
+    ]
+
+
+def _claim_audit_prompt(answer_text, explanation_view, artifact_projection):
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are the Market Setup claim audit assistant. "
+                "Audit the exact supplied answer string against the frozen "
+                "explanation view and artifact projections. "
+                "Each claim span must use exact offsets and exact text copied "
+                "verbatim from the answer string. "
+                "Return only a ClaimAudit matching the supplied schema. "
+                "Do not alter the supplied answer wording or emit a corrected draft."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "answer_text": answer_text,
+                    "explanation_view": explanation_view,
+                    "artifact_projection": artifact_projection,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        },
+    ]
+
+
 def _build_dependencies():
     return {
         "config": _load_market_assistant_config_or_none(),
@@ -210,6 +307,8 @@ def _build_dependencies():
         "plan_llm": _plan_llm,
         "synthesize_llm": _synthesize_llm,
         "repair_llm": _repair_llm,
+        "react_turn_llm": _react_turn_llm,
+        "claim_audit_llm": _claim_audit_llm,
         "build_research_provider": build_research_provider,
         "exploration": execute_exploration,
         "load_knowledge_catalog": load_knowledge_catalog,
