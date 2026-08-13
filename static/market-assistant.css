@@ -253,6 +253,18 @@
   border-left: 3px solid #D79A35;
 }
 
+.market-assistant-validation-unavailable {
+  color: #7A4B14;
+  background: #FBF0DE;
+  border-left: 3px solid #D79A35;
+}
+
+.market-assistant-validation-interrupted {
+  color: #A04040;
+  background: #FDF2F2;
+  border-left: 3px solid #C62828;
+}
+
 @media (max-width: 820px) {
   .market-assistant-input-row {
     flex-direction: column;

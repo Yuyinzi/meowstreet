@@ -14,8 +14,8 @@ from app.services import market_assistant_tool_runtime
 from app.services.market_assistant_exploration import EXPLORATION_SCHEMA_VERSION
 from app.services.market_assistant_react import run_hybrid_narration
 from app.services.market_assistant_tool_runtime import ARTIFACT_SCHEMA_VERSION
-from app.services.market_assistant_tool_runtime import _snapshot_artifact
 from app.services.market_assistant_tool_runtime import acquire_registered_artifacts
+from app.services.market_assistant_tool_runtime import snapshot_artifact
 from app.services.market_setup_current import resolve_current_explanation
 from app.tools.market_assistant_answers import DraftValidationError
 from app.tools.market_assistant_answers import build_validation_report
@@ -539,7 +539,7 @@ def _fallback_plan(route):
 
 
 def _fallback_artifacts(resolution, artifacts):
-    snapshot = _snapshot_artifact(resolution["snapshot"])
+    snapshot = snapshot_artifact(resolution["snapshot"])
     return {snapshot["artifact_id"]: snapshot, **artifacts}
 
 

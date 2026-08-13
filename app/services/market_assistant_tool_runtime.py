@@ -230,8 +230,8 @@ async def acquire_registered_artifacts(
         artifacts[artifact["artifact_id"]] = artifact
     if unsupported_operation_id is not None:
         snapshot = await _frozen_snapshot(dependencies, resolution)
-        snapshot_artifact = _snapshot_artifact(snapshot)
-        artifacts[snapshot_artifact["artifact_id"]] = snapshot_artifact
+        snapshot_envelope = snapshot_artifact(snapshot)
+        artifacts[snapshot_envelope["artifact_id"]] = snapshot_envelope
     return artifacts, unsupported_operation_id
 
 
@@ -242,7 +242,7 @@ async def acquire_operation_artifact(
     parameters = operation.get("parameters") or {}
     if operation_id == "resolve_current_explanation":
         snapshot = await _frozen_snapshot(dependencies, resolution)
-        return _snapshot_artifact(snapshot)
+        return snapshot_artifact(snapshot)
     if operation_id == "get_historical_snapshot":
         snapshot = await _frozen_snapshot(dependencies, resolution)
         return _historical_snapshot_artifact(parameters, snapshot, dependencies)
@@ -305,7 +305,7 @@ def _historical_snapshot_artifact(parameters, snapshot, dependencies):
     context_id = parameters["context_id"]
     if snapshot.get("context_id") != context_id:
         return None
-    return _snapshot_artifact(snapshot)
+    return snapshot_artifact(snapshot)
 
 
 def _snapshot_object_artifact(parameters, snapshot):
@@ -401,7 +401,7 @@ def _compare_snapshots_artifact(parameters, snapshot, dependencies):
     return _finalize_envelope(envelope)
 
 
-def _snapshot_artifact(snapshot):
+def snapshot_artifact(snapshot):
     envelope = {
         "artifact_id": snapshot["context_id"],
         "artifact_kind": "explanation_snapshot",
@@ -582,7 +582,7 @@ async def _research_artifact(
     tier = _RESEARCH_TIER[operation_id]
     result_id = _new_id("res_")
     searched_at = created_at or _now_iso()
-    if request.get("external_search_requested") is False:
+    if not request.get("external_search_requested"):
         return _research_unavailable_artifact(
             result_id, searched_at, "external_search_not_requested"
         )

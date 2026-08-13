@@ -9289,3 +9289,59 @@ def test_market_assistant_stream_disabled_validation_renders_visible_badge():
         "isPassed": False,
         "label": "Claim validation 当前已关闭",
     }
+
+
+def test_market_assistant_stream_unavailable_validation_renders_badge():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "现在的市场偏积极。" });
+        hooks.applyStreamEvent(stream, { type: "validation", status: "unavailable", error_codes: [] });
+        const badge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        console.log(JSON.stringify({
+          className: badge && badge.className,
+          isUnavailable: Boolean(badge) && badge.className.indexOf("market-assistant-validation-unavailable") !== -1,
+          isPassed: Boolean(badge) && badge.className.indexOf("market-assistant-validation-passed") !== -1,
+          label: badge && badge.children[0].textContent,
+          answerText: stream.message.text,
+        }));
+        """
+    )
+
+    assert payload == {
+        "className": "market-assistant-validation market-assistant-validation-unavailable",
+        "isUnavailable": True,
+        "isPassed": False,
+        "label": "验证不可用，回答未验证",
+        "answerText": "现在的市场偏积极。",
+    }
+
+
+def test_market_assistant_stream_interrupted_validation_renders_badge():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "部分回答" });
+        hooks.applyStreamEvent(stream, { type: "validation", status: "interrupted", error_codes: [] });
+        const badge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        console.log(JSON.stringify({
+          className: badge && badge.className,
+          isInterrupted: Boolean(badge) && badge.className.indexOf("market-assistant-validation-interrupted") !== -1,
+          isPassed: Boolean(badge) && badge.className.indexOf("market-assistant-validation-passed") !== -1,
+          label: badge && badge.children[0].textContent,
+          answerText: stream.message.text,
+        }));
+        """
+    )
+
+    assert payload == {
+        "className": "market-assistant-validation market-assistant-validation-interrupted",
+        "isInterrupted": True,
+        "isPassed": False,
+        "label": "连接中断，回答可能不完整",
+        "answerText": "部分回答",
+    }

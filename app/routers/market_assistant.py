@@ -127,8 +127,16 @@ async def _repair_llm(
     )
 
 
-async def _react_turn_llm(*, instructions, input_items, tools, stream_observer=None):
-    client, model, _, reasoning_effort = _assistant_runtime()
+async def _react_turn_llm(
+    client,
+    *,
+    model,
+    input_items,
+    instructions,
+    tools,
+    reasoning_effort,
+    observer=None,
+):
     return await stream_response_turn(
         client,
         model=model,
@@ -136,7 +144,7 @@ async def _react_turn_llm(*, instructions, input_items, tools, stream_observer=N
         instructions=instructions,
         tools=tools,
         reasoning_effort=reasoning_effort,
-        observer=stream_observer,
+        observer=observer,
     )
 
 
@@ -319,6 +327,7 @@ def _build_dependencies():
         "synthesize_llm": _synthesize_llm,
         "repair_llm": _repair_llm,
         "react_turn_llm": _react_turn_llm,
+        "stream_turn": _react_turn_llm,
         "narration_instructions": _narration_instructions,
         "claim_audit_llm": _claim_audit_llm,
         "build_research_provider": build_research_provider,

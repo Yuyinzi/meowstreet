@@ -140,6 +140,40 @@ def test_whitespace_normalized_chinese_question_matches_marker():
     assert route["route_id"] == "current_setup_overview"
 
 
+def test_explain_current_market_setup_routes_to_overview():
+    route = route_question("解释当前 Market Setup", deep_analysis=False)
+    assert route["route_id"] == "current_setup_overview"
+    assert route["routing_source"] == "deterministic"
+    assert route["initial_operations"]
+
+
+def test_explain_the_current_market_setup_routes_to_overview():
+    route = route_question("explain the current market setup", deep_analysis=False)
+    assert route["route_id"] == "current_setup_overview"
+    assert route["routing_source"] == "deterministic"
+
+
+def test_why_mild_risk_on_routes_to_posture():
+    route = route_question("为什么是 Mild Risk-On", deep_analysis=False)
+    assert route["route_id"] == "why_portfolio_posture"
+    assert route["routing_source"] == "deterministic"
+    assert [item["operation_id"] for item in route["initial_operations"]] == [
+        "get_posture_explanation"
+    ]
+
+
+def test_why_mildly_positive_routes_to_posture():
+    route = route_question("为什么是轻度偏积极", deep_analysis=False)
+    assert route["route_id"] == "why_portfolio_posture"
+    assert route["routing_source"] == "deterministic"
+
+
+def test_why_mild_risk_on_english_routes_to_posture():
+    route = route_question("why is the regime mild risk on?", deep_analysis=False)
+    assert route["route_id"] == "why_portfolio_posture"
+    assert route["routing_source"] == "deterministic"
+
+
 def test_empty_question_raises_value_error():
     with pytest.raises(ValueError, match="question is required"):
         route_question("   ", deep_analysis=False)

@@ -13,7 +13,6 @@ from app.db import market_assistant as market_assistant_db
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.routers import market_assistant as market_assistant_router
 from app.services import market_assistant as market_assistant_service
-from app.services import market_assistant_react
 from app.services import market_setup_current
 from app.services.market_assistant_tool_runtime import (
     _approved_counterfactuals_artifact,
@@ -549,6 +548,7 @@ class _AnswerHarness:
                 {
                     "question": "Why is the current setup Mild Risk-Off?",
                     "mode": "current",
+                    "external_search_requested": researched_vix is not None,
                 },
                 dependencies=deps,
             )
@@ -1026,9 +1026,7 @@ def _prepare_market_setup_harness(
         lambda db_path, *, previous_context_id, resolved_at: deepcopy(resolution),
     )
     monkeypatch.setattr(market_assistant_router, "complete_structured", audit)
-    monkeypatch.setitem(
-        market_assistant_react._DEPENDENCY_DEFAULTS, "stream_turn", turn
-    )
+    monkeypatch.setattr(market_assistant_router, "_react_turn_llm", turn)
     payload = {"question": question, "mode": "current"}
     if request_overrides:
         payload.update(request_overrides)

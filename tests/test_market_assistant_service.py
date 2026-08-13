@@ -1327,7 +1327,7 @@ def _projection_snapshot():
 
 
 def _projection_artifacts():
-    artifact = market_assistant._snapshot_artifact(_projection_snapshot())
+    artifact = market_assistant.snapshot_artifact(_projection_snapshot())
     return {artifact["artifact_id"]: artifact}
 
 
@@ -1535,7 +1535,7 @@ def test_evidence_projection_omits_provenance_without_source_period():
             "finding": {"state": "evaluated", "confirms": True},
         },
     ]
-    artifact = market_assistant._snapshot_artifact(snapshot)
+    artifact = market_assistant.snapshot_artifact(snapshot)
     artifacts = {artifact["artifact_id"]: artifact}
 
     projected = market_assistant._llm_artifact_projection(artifacts, _decision_plan())
@@ -1932,6 +1932,44 @@ async def test_tool_result_context_overflow_stops_loop_without_more_execution():
     assert len(executed) == 1
     assert executed[0]["tool_name"] == "query_indicator_history"
     assert len(stream.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_rejected_invalid_calls_consume_call_budget():
+    invalid_calls = [
+        {
+            "call_id": f"call_hostile_{index}",
+            "tool_name": "refresh_benchmarks",
+            "arguments": {},
+        }
+        for index in range(12)
+    ]
+    stream = _ScriptedStream(
+        [
+            tool_step(invalid_calls[0:4]),
+            tool_step(invalid_calls[4:8]),
+            tool_step(invalid_calls[8:12]),
+            narration_step(),
+        ]
+    )
+    deps = _ReactDeps(stream)
+
+    result = await run_hybrid_narration(
+        _react_request(deep_analysis_requested=True),
+        route=route_question("讲个笑话", deep_analysis=True),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "budget_exhausted"
+    assert deps.executed == []
+    assert len(stream.calls) == 3
+    rejected = [
+        entry for entry in result["tool_trace"] if entry["status"] == "rejected"
+    ]
+    assert len(rejected) == 12
+    assert all(entry["reason"] == "tool_call_invalid" for entry in rejected)
+    assert not any(entry["status"] == "executed" for entry in result["tool_trace"])
 
 
 @pytest.mark.asyncio

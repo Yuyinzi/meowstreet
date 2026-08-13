@@ -133,7 +133,16 @@ _EXPLANATION_TOPICS = (
     ("why_market_confirmation", ("确认", "market confirmation", "confirmation")),
     (
         "why_portfolio_posture",
-        ("组合", "仓位", "持仓", "portfolio posture", "posture"),
+        (
+            "组合",
+            "仓位",
+            "持仓",
+            "偏积极",
+            "portfolio posture",
+            "posture",
+            "risk-on",
+            "mild risk on",
+        ),
     ),
 )
 
@@ -144,6 +153,7 @@ _OVERVIEW_MARKERS = (
     "市场情况怎么样",
     "当前市场情况",
     "市场情况如何",
+    "解释当前",
     "现在行情怎么样",
     "行情如何",
     "how is the market",
@@ -153,6 +163,7 @@ _OVERVIEW_MARKERS = (
     "market setup overview",
     "what is the market doing",
     "how does the market look",
+    "explain the current",
 )
 
 _CONFIRMATION_MARKERS = (

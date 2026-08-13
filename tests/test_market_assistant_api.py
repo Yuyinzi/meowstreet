@@ -11,7 +11,6 @@ from app.api import app
 from app.db import market_assistant as market_assistant_db
 from app.routers import market_assistant as market_assistant_router
 from app.services import market_assistant as market_assistant_service
-from app.services import market_assistant_react
 from app.tools import market_setup_evidence_facts
 from app.tools import market_setup_explanation_snapshot
 from app.tools import market_setup_v2
@@ -371,6 +370,7 @@ def test_question_passes_real_dependencies_dict(assistant_env, monkeypatch):
     assert callable(deps["synthesize_llm"])
     assert callable(deps["repair_llm"])
     assert callable(deps["react_turn_llm"])
+    assert deps["stream_turn"] is deps["react_turn_llm"]
     assert callable(deps["narration_instructions"])
     assert callable(deps["claim_audit_llm"])
     assert callable(deps["build_research_provider"])
@@ -682,16 +682,8 @@ def test_claim_audit_prompt_does_not_ask_to_rewrite_the_answer():
 
 
 @pytest.mark.asyncio
-async def test_narration_llm_adapter_streams_plain_text_with_configured_runtime(
-    monkeypatch,
-):
+async def test_narration_llm_adapter_delegates_with_orchestrator_signature(monkeypatch):
     captured = {}
-
-    monkeypatch.setattr(
-        market_assistant_router,
-        "_assistant_runtime",
-        lambda: ("client", "assistant-model", "json_object", "high"),
-    )
 
     async def fake_stream_response_turn(client, **kwargs):
         captured["client"] = client
@@ -709,9 +701,13 @@ async def test_narration_llm_adapter_streams_plain_text_with_configured_runtime(
     )
 
     result = await market_assistant_router._react_turn_llm(
-        instructions="narration instructions",
+        "client",
+        model="assistant-model",
         input_items=[{"type": "message", "role": "user", "content": []}],
+        instructions="narration instructions",
         tools=[{"type": "function", "name": "get_setup_overview"}],
+        reasoning_effort="high",
+        observer=None,
     )
 
     assert captured["client"] == "client"
@@ -721,6 +717,7 @@ async def test_narration_llm_adapter_streams_plain_text_with_configured_runtime(
     assert captured["kwargs"]["tools"] == [
         {"type": "function", "name": "get_setup_overview"}
     ]
+    assert captured["kwargs"]["observer"] is None
     assert "text_format" not in captured["kwargs"]
     assert result["output_text"] == "answer"
 
@@ -1223,9 +1220,7 @@ def _hybrid_e2e(
         lambda db_path, *, previous_context_id, resolved_at: deepcopy(resolution),
     )
     monkeypatch.setattr(market_assistant_router, "complete_structured", audit)
-    monkeypatch.setitem(
-        market_assistant_react._DEPENDENCY_DEFAULTS, "stream_turn", turn
-    )
+    monkeypatch.setattr(market_assistant_router, "_react_turn_llm", turn)
     if exploration is not None:
         monkeypatch.setattr(market_assistant_router, "execute_exploration", exploration)
     payload = {"question": question, "mode": "current"}
@@ -1288,7 +1283,7 @@ def test_hybrid_stream_fast_path_sequence_and_narration_prompt_contract(
     assert order == ["narration", "audit"]
 
     serialized = json.dumps(result["turn"].calls[0]["input_items"], ensure_ascii=False)
-    assert len(serialized.encode("utf-8")) < 32 * 1024
+    input_bytes = len(serialized.encode("utf-8"))
     for forbidden in (
         "snapshot_hash",
         "method_manifest",
@@ -1296,6 +1291,16 @@ def test_hybrid_stream_fast_path_sequence_and_narration_prompt_contract(
         "snapshot_json",
     ):
         assert forbidden not in serialized
+    assert "explanation_view" in serialized
+    assert "setup_explanation_v1" in serialized
+    from app.services.market_assistant_tool_runtime import snapshot_artifact
+
+    envelope_bytes = len(
+        json.dumps(
+            snapshot_artifact(result["resolution"]["snapshot"]), ensure_ascii=False
+        ).encode("utf-8")
+    )
+    assert input_bytes < envelope_bytes
 
 
 def _exploration_payload(query, result_id):
@@ -1415,6 +1420,22 @@ def test_hybrid_stream_react_two_rounds_immutable_artifacts_and_audit(
         "get_approved_counterfactuals",
     }
     assert len(trace["exploration_result_ids"]) == 1
+
+    first_message = result["turn"].calls[0]["input_items"][0]
+    first_view = json.loads(first_message["content"][1]["text"])["explanation_view"]
+    assert first_view["view_version"] == "react_anchor_v1"
+    assert set(first_view["results"]) == {
+        "macro_regime",
+        "market_confirmation",
+        "market_setup",
+        "portfolio_posture",
+    }
+    assert first_view["context_id"] == result["resolution"]["snapshot"]["context_id"]
+
+    final_message = result["turn"].calls[2]["input_items"][0]
+    final_view = json.loads(final_message["content"][1]["text"])["explanation_view"]
+    assert final_view["view_version"] == "exploration_explanation_v1"
+    assert final_view["indicator_id"] == "credit_conditions"
 
     second_items = result["turn"].calls[1]["input_items"]
     credit_output = json.loads(

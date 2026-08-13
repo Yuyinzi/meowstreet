@@ -36,6 +36,8 @@
     failed: "未通过完整证据验证",
     disabled: "Claim validation 当前已关闭",
     fallback: "已使用确定性备用回答",
+    unavailable: "验证不可用，回答未验证",
+    interrupted: INTERRUPTED_NOTICE,
   };
 
   const VALIDATION_BADGE_CLASS = {
@@ -44,6 +46,8 @@
     failed: "market-assistant-validation-failed",
     disabled: "market-assistant-validation-disabled",
     fallback: "market-assistant-validation-passed",
+    unavailable: "market-assistant-validation-unavailable",
+    interrupted: "market-assistant-validation-interrupted",
   };
 
   function $(id) {

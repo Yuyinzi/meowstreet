@@ -8,6 +8,7 @@ from time import monotonic
 from app.services.market_assistant_llm import response_items_for_next_turn
 from app.services.market_assistant_llm import stream_response_turn
 from app.services.market_assistant_tool_runtime import execute_tool_batch
+from app.services.market_assistant_tool_runtime import snapshot_artifact
 from app.tools.market_assistant_tools import normalized_tool_call_key
 from app.tools.market_assistant_tools import tool_definitions
 from app.tools.market_assistant_tools import validate_tool_call
@@ -278,6 +279,7 @@ async def run_hybrid_narration(
     tool_trace = []
     seen_calls = set()
     call_count = 0
+    executed_calls = 0
     result_bytes = 0
     round_number = 0
     deadline = monotonic() + budget["deadline_seconds"]
@@ -302,7 +304,10 @@ async def run_hybrid_narration(
         _merge_records(artifacts, initial_records, tool_trace, "initial")
         initial_tools_seconds = round(monotonic() - initial_started_at, 4)
         await _emit(event_sink, {"type": "initial_tools_completed"})
-    input_items = _initial_input_items(request["question"], initial_records)
+    if route["route_id"] == "react":
+        _seed_snapshot_anchor(artifacts, resolution)
+    view = build_view(route, artifacts, question=request["question"])
+    input_items = _initial_input_items(request["question"], initial_records, view)
     tools = definitions(list(tool_ids))
 
     while True:
@@ -317,6 +322,8 @@ async def run_hybrid_narration(
             break
         round_number += 1
         await _emit(event_sink, {"type": "model_turn_started"})
+        if round_number > 1 or initial_calls:
+            await _emit_progress(event_sink, "writing_answer", request)
         try:
             turn = await stream_turn(
                 client,
@@ -361,15 +368,19 @@ async def run_hybrid_narration(
                     created_at=created_at,
                 )
                 _merge_records(artifacts, records, tool_trace, "optional")
-                call_count += len(records)
                 seen_calls.update(_call_keys(normalize_key, accepted))
                 result_bytes += _result_bytes(measure, records)
                 if result_bytes > budget["max_tool_result_bytes"]:
                     generation_status = "budget_exhausted"
                     break
-            input_items.extend(next_items(turn))
-            input_items.extend(_output_items(accepted, records, rejected))
-            view = build_view(route, artifacts, question=request["question"])
+            call_count += len(accepted) + len(rejected)
+            executed_calls += len(records)
+            input_items = _next_input_items(
+                input_items,
+                next_items(turn),
+                _output_items(accepted, records, rejected),
+                build_view(route, artifacts, question=request["question"]),
+            )
         else:
             answer_text = turn["output_text"]
             if answer_text.strip():
@@ -378,7 +389,6 @@ async def run_hybrid_narration(
                 generation_status = "narration_unavailable"
             break
 
-    await _emit_progress(event_sink, "writing_answer", request)
     if generation_status == "answered":
         pass
     elif generation_status == "narration_interrupted":
@@ -397,19 +407,32 @@ async def run_hybrid_narration(
         "timings": {
             "initial_tools_seconds": initial_tools_seconds,
             "optional_rounds": round_number,
-            "executed_calls": call_count,
+            "executed_calls": executed_calls,
             "total_seconds": round(monotonic() - started_at, 4),
         },
         "generation_status": generation_status,
     }
 
 
-def _initial_input_items(question, records):
+def _view_text(view):
+    return json.dumps({"explanation_view": view}, ensure_ascii=False, sort_keys=True)
+
+
+def _message_with_view(message, view):
+    content = list(message["content"])
+    content[1] = {"type": "input_text", "text": _view_text(view)}
+    return {**message, "content": content}
+
+
+def _initial_input_items(question, records, view):
     items = [
         {
             "type": "message",
             "role": "user",
-            "content": [{"type": "input_text", "text": question}],
+            "content": [
+                {"type": "input_text", "text": question},
+                {"type": "input_text", "text": _view_text(view)},
+            ],
         }
     ]
     for record in records:
@@ -431,6 +454,22 @@ def _initial_input_items(question, records):
             }
         )
     return items
+
+
+def _next_input_items(input_items, response_items, output_items, view):
+    items = list(input_items)
+    items.extend(response_items)
+    items.extend(output_items)
+    items[0] = _message_with_view(items[0], view)
+    return items
+
+
+def _seed_snapshot_anchor(artifacts, resolution):
+    snapshot = (resolution or {}).get("snapshot")
+    if not isinstance(snapshot, dict):
+        return
+    envelope = snapshot_artifact(snapshot)
+    artifacts.setdefault(envelope["artifact_id"], envelope)
 
 
 def _provider_tool_output(record):

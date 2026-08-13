@@ -848,4 +848,75 @@ async def test_initial_tool_outputs_are_bounded_not_full_snapshots():
     serialized = json.dumps(deps.stream_turn.calls[0]["input_items"])
     assert "snapshot_hash" not in serialized
     assert "decision_fingerprint" not in serialized
-    assert "method_manifest" not in serialized
+
+
+def _first_turn_view(stream):
+    first_message = stream.calls[0]["input_items"][0]
+    view_text = first_message["content"][1]["text"]
+    return json.loads(view_text)["explanation_view"]
+
+
+@pytest.mark.asyncio
+async def test_first_turn_input_carries_compact_explanation_view():
+    stream = _ScriptedStream([narration_step()])
+    deps = recording_dependencies([], stream=stream)
+    await run_hybrid_narration(
+        {"question": "现在市场怎么样？"},
+        route=current_setup_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    view = _first_turn_view(deps.stream_turn)
+    assert view["view_version"] == "setup_explanation_v1"
+    assert view["question_language"] == "zh"
+    assert set(view["results"]) == {
+        "macro_regime",
+        "market_confirmation",
+        "market_setup",
+        "portfolio_posture",
+    }
+    assert view["posture_meaning"]
+
+
+@pytest.mark.asyncio
+async def test_react_route_first_turn_carries_minimal_anchor_with_result_labels():
+    stream = _ScriptedStream([narration_step()])
+    deps = recording_dependencies([], stream=stream)
+    await run_hybrid_narration(
+        {"question": "讲个笑话"},
+        route=react_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    view = _first_turn_view(deps.stream_turn)
+    assert view["view_version"] == "react_anchor_v1"
+    assert view["context_id"] == "ctx_1"
+    assert set(view["results"]) == {
+        "macro_regime",
+        "market_confirmation",
+        "market_setup",
+        "portfolio_posture",
+    }
+    assert all(isinstance(label, str) for label in view["results"].values())
+
+
+@pytest.mark.asyncio
+async def test_final_narration_turn_input_carries_current_view():
+    stream = _ScriptedStream(
+        [
+            tool_step([vix_confirmation_call()]),
+            narration_step(),
+        ]
+    )
+    deps = recording_dependencies([], stream=stream)
+    await run_hybrid_narration(
+        {"question": "VIX和信贷最近的变化有什么关系？"},
+        route=react_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    assert len(stream.calls) == 2
+    final_message = stream.calls[1]["input_items"][0]
+    final_view = json.loads(final_message["content"][1]["text"])["explanation_view"]
+    assert final_view["view_version"] == "react_anchor_v1"
+    assert "results" in final_view

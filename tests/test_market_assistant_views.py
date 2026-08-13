@@ -9,7 +9,7 @@ from app.services.market_assistant_tool_runtime import _confirmation_tests_artif
 from app.services.market_assistant_tool_runtime import _macro_regime_artifact
 from app.services.market_assistant_tool_runtime import _posture_artifact
 from app.services.market_assistant_tool_runtime import _setup_overview_artifact
-from app.services.market_assistant_tool_runtime import _snapshot_artifact
+from app.services.market_assistant_tool_runtime import snapshot_artifact
 from app.tools import market_setup_evidence_facts
 from app.tools import market_setup_explanation_snapshot
 from app.tools import market_setup_v2
@@ -167,7 +167,7 @@ def _representative_snapshot():
 def full_setup_artifacts():
     snapshot = _representative_snapshot()
     envelopes = [
-        _snapshot_artifact(snapshot),
+        snapshot_artifact(snapshot),
         _setup_overview_artifact(snapshot),
         _macro_regime_artifact(snapshot),
         _confirmation_tests_artifact(
@@ -360,7 +360,7 @@ def _vix_exploration_envelope():
 def vix_artifacts():
     snapshot = _representative_snapshot()
     envelopes = [
-        _snapshot_artifact(snapshot),
+        snapshot_artifact(snapshot),
         _confirmation_test_artifact({"test_id": "vix"}, snapshot),
         vix_knowledge_envelope(),
         _vix_exploration_envelope(),
