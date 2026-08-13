@@ -233,16 +233,21 @@ class AnswerTextStreamExtractor:
 
     def _read_surrogate_pair(self, pos, high_value):
         low_start = pos + 6
-        if low_start >= len(self._raw):
+        tail = self._raw[low_start:]
+        if not tail:
             return None
-        if self._raw[low_start : low_start + 2] != "\\u":
+        if tail[0] != "\\":
             return _INVALID_ESCAPE, pos + 6
-        if low_start + 6 > len(self._raw):
+        if len(tail) == 1:
             return None
-        low_hex = self._raw[low_start + 2 : low_start + 6]
-        if any(digit not in _HEX_DIGITS for digit in low_hex):
+        if tail[1] != "u":
             return _INVALID_ESCAPE, pos + 6
-        low_value = int(low_hex, 16)
+        hex_chars = tail[2:6]
+        if len(hex_chars) < 4:
+            return None
+        if any(digit not in _HEX_DIGITS for digit in hex_chars):
+            return _INVALID_ESCAPE, pos + 6
+        low_value = int(hex_chars, 16)
         if not 0xDC00 <= low_value <= 0xDFFF:
             return _INVALID_ESCAPE, pos + 6
         combined = 0x10000 + ((high_value - 0xD800) << 10) + (low_value - 0xDC00)

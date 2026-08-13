@@ -28,6 +28,20 @@ def test_extractor_holds_escape_split_across_deltas():
     extractor.finish()
 
 
+def test_extractor_holds_surrogate_pair_split_after_low_escape_backslash():
+    extractor = AnswerTextStreamExtractor()
+    assert extractor.feed('{"answer_text":"\\ud83d\\') == ""
+    assert extractor.feed('ude3a"}') == "😺"
+    extractor.finish()
+
+
+def test_extractor_holds_surrogate_pair_split_mid_low_escape_hex():
+    extractor = AnswerTextStreamExtractor()
+    assert extractor.feed('{"answer_text":"\\ud83d\\ude') == ""
+    assert extractor.feed('3a"}') == "😺"
+    extractor.finish()
+
+
 def test_extractor_holds_simple_escape_split_across_deltas():
     extractor = AnswerTextStreamExtractor()
     assert extractor.feed('{"answer_text":"line\\') == "line"
