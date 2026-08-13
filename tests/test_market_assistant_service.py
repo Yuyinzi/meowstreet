@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+import logging
 from copy import deepcopy
 
 import pytest
@@ -943,6 +944,95 @@ async def test_stream_answer_question_yields_events_and_stops_at_complete():
     assert events[-1]["answer_trace_id"]
     assert events[-1]["citations"] == []
     assert deps.saved_trace is not None
+
+
+@pytest.mark.asyncio
+async def test_stream_events_carry_stable_request_id_without_fingerprint_leak():
+    deps = hybrid_dependencies()
+
+    events = [
+        event
+        async for event in market_assistant.stream_answer_question(
+            current_question("现在市场怎么样？"), dependencies=deps
+        )
+    ]
+
+    resolution_event = next(event for event in events if event["type"] == "resolution")
+    complete_event = events[-1]
+    assert complete_event["type"] == "complete"
+    assert resolution_event["request_id"].startswith("req_")
+    assert resolution_event["request_id"] == complete_event["request_id"]
+    assert deps.saved_trace is not None
+    assert "request_id" not in json.dumps(deps.saved_trace)
+
+
+@pytest.mark.asyncio
+async def test_stage_logs_include_request_id_and_exclude_privacy(caplog):
+    text = "现在的市场偏积极，但仍需保持谨慎。"
+    stream = _ScriptedStream(
+        [
+            {
+                "result": {
+                    "output_text": text,
+                    "tool_calls": [],
+                    "response_items": [],
+                    "usage": None,
+                    "timings": {},
+                },
+                "observer_events": [
+                    {"type": "reasoning_started"},
+                    {"type": "output_delta", "delta": "  "},
+                    {"type": "output_delta", "delta": text},
+                ],
+            }
+        ]
+    )
+    deps = hybrid_dependencies(stream=stream)
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        await market_assistant.answer_question(
+            current_question("现在市场怎么样？"), dependencies=deps
+        )
+
+    stage_lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "uvicorn.error"
+        and "market assistant stage" in record.getMessage()
+    ]
+    expected_stages = {
+        "resolution_completed",
+        "route_selected",
+        "initial_tools_completed",
+        "react_round_started",
+        "react_round_completed",
+        "narration_request_started",
+        "first_reasoning_delta",
+        "first_output_text_delta",
+        "first_user_visible_delta",
+        "narration_completed",
+        "audit_completed",
+        "request_completed",
+    }
+    observed = [line.split("stage=")[1].split()[0] for line in stage_lines]
+    assert len(observed) == len(set(observed))
+    assert expected_stages.issubset(set(observed))
+    for line in stage_lines:
+        assert "request_id=req_" in line
+        assert "elapsed_seconds=" in line
+
+    combined = " ".join(stage_lines)
+    for forbidden in (
+        "现在市场怎么样",
+        "偏积极",
+        "sk-secret-test-key",
+        "ctx_123",
+        "expl_1",
+        "test_ids",
+        "reasoning_text",
+        "prompt",
+    ):
+        assert forbidden not in combined
 
 
 @pytest.mark.asyncio

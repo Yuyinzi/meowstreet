@@ -1,4 +1,7 @@
 import json
+import logging
+import secrets
+from time import monotonic
 from typing import Literal
 
 from fastapi import APIRouter, Body, HTTPException
@@ -25,6 +28,8 @@ from app.tools.market_assistant_knowledge import load_knowledge_catalog
 from app.tools.market_assistant_plans import deterministic_plan
 
 router = APIRouter(prefix="/api/market-assistant", tags=["market-assistant"])
+
+STREAM_LOGGER = logging.getLogger("uvicorn.error")
 
 _ARTIFACT_CORRUPTION_PREFIXES = frozenset(
     {
@@ -54,6 +59,7 @@ class _QuestionRequest(BaseModel):
     conversation_id: str | None = None
     deep_research_requested: bool = False
     external_search_requested: bool = False
+    deep_analysis_requested: bool = Field(default=False, strict=True)
 
 
 def _assistant_runtime():
@@ -300,6 +306,10 @@ def _claim_audit_prompt(answer_text, explanation_view, artifact_projection):
     ]
 
 
+def _new_request_id():
+    return f"req_{secrets.token_hex(8)}"
+
+
 def _build_dependencies():
     config = _load_market_assistant_config_or_none()
     dependencies = {
@@ -316,6 +326,7 @@ def _build_dependencies():
         "load_knowledge_catalog": load_knowledge_catalog,
         "save_bundle": market_assistant_db.save_answer_bundle,
         "resolve_current_explanation": resolve_current_explanation,
+        "request_id": _new_request_id(),
     }
     if config:
         dependencies["client"] = build_async_client(
@@ -348,11 +359,21 @@ def _is_artifact_corruption(exc):
     return any(message.startswith(prefix) for prefix in _ARTIFACT_CORRUPTION_PREFIXES)
 
 
-async def _stream_answer_events(request, dependencies):
+async def _stream_answer_events(request, dependencies, started_at):
+    request_id = dependencies.get("request_id")
+    first_answer_delta_sent = False
     try:
         async for event in market_assistant_service.stream_answer_question(
             request, dependencies=dependencies
         ):
+            if not first_answer_delta_sent and event.get("type") == "answer_delta":
+                first_answer_delta_sent = True
+                STREAM_LOGGER.info(
+                    "market assistant stage stage=first_ndjson_answer_delta_sent "
+                    "request_id=%s elapsed_seconds=%.2f",
+                    request_id,
+                    monotonic() - started_at,
+                )
             yield _ndjson_line(event)
     except Exception:
         yield _ndjson_line(
@@ -367,6 +388,7 @@ def _ndjson_line(event):
 
 @router.post("/questions/stream")
 async def market_assistant_questions_stream(body: dict = Body(default={})):
+    started_at = monotonic()
     try:
         request = _validate_question_request(body)
         dependencies = _build_dependencies()
@@ -377,7 +399,7 @@ async def market_assistant_questions_stream(body: dict = Body(default={})):
     if request["mode"] == "historical" and not request.get("context_id"):
         raise HTTPException(status_code=400, detail="context id is required")
     return StreamingResponse(
-        _stream_answer_events(request, dependencies),
+        _stream_answer_events(request, dependencies, started_at=started_at),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

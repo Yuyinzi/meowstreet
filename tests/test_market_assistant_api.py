@@ -1,4 +1,5 @@
 import json
+import logging
 
 import pytest
 from fastapi.testclient import TestClient
@@ -263,6 +264,81 @@ def test_external_search_requested_flows_to_service(assistant_env, monkeypatch):
     assert response.status_code == 200
     assert captured["request"]["external_search_requested"] is True
     assert captured["request"]["deep_research_requested"] is False
+
+
+def test_question_accepts_deep_analysis_without_external_search(
+    assistant_env, monkeypatch
+):
+    captured = {}
+
+    async def fake_answer_question(request, *, dependencies):
+        captured["request"] = request
+        return {"resolution": {"mode": "current"}}
+
+    monkeypatch.setattr(
+        market_assistant_service, "answer_question", fake_answer_question
+    )
+
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={
+            "question": "现在市场怎么样？",
+            "mode": "current",
+            "deep_analysis_requested": True,
+            "external_search_requested": False,
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["request"]["deep_analysis_requested"] is True
+    assert captured["request"]["external_search_requested"] is False
+
+
+def test_stream_accepts_deep_analysis_without_external_search(monkeypatch):
+    captured = {}
+
+    async def fake_answer(request, dependencies):
+        captured.update(request)
+        yield {"type": "complete", "answer_trace_id": "ans_1"}
+
+    monkeypatch.setattr(
+        market_assistant_service,
+        "stream_answer_question",
+        fake_answer,
+    )
+    response = client.post(
+        "/api/market-assistant/questions/stream",
+        json={
+            "question": "现在市场怎么样？",
+            "deep_analysis_requested": True,
+            "external_search_requested": False,
+        },
+    )
+    assert response.status_code == 200
+    assert captured["deep_analysis_requested"] is True
+    assert captured["external_search_requested"] is False
+
+
+def test_stream_deep_analysis_non_boolean_returns_400():
+    with client.stream(
+        "POST",
+        "/api/market-assistant/questions/stream",
+        json={"question": "Why?", "deep_analysis_requested": "yes"},
+    ) as response:
+        assert response.status_code == 400
+        response.read()
+        assert response.json()["detail"] == "question request is invalid"
+
+
+def test_stream_unknown_request_field_returns_400():
+    with client.stream(
+        "POST",
+        "/api/market-assistant/questions/stream",
+        json={"question": "Why?", "unknown_field": 1},
+    ) as response:
+        assert response.status_code == 400
+        response.read()
+        assert response.json()["detail"] == "question request is invalid"
 
 
 def test_question_passes_real_dependencies_dict(assistant_env, monkeypatch):
@@ -728,6 +804,40 @@ def test_stream_question_returns_ndjson_event_sequence(assistant_env, monkeypatc
         assert ": " not in wire_line
         assert "市场" in wire_line
         assert "\\u" not in wire_line
+
+
+def test_stream_logs_first_ndjson_answer_delta_sent_with_request_id(
+    caplog, monkeypatch
+):
+    monkeypatch.setattr(
+        market_assistant_service, "stream_answer_question", _stream_events()
+    )
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        with client.stream(
+            "POST",
+            "/api/market-assistant/questions/stream",
+            json={"question": "Why?", "mode": "current"},
+        ) as response:
+            assert response.status_code == 200
+            response.read()
+
+    stage_lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "uvicorn.error"
+        and "stage=first_ndjson_answer_delta_sent" in record.getMessage()
+    ]
+    assert len(stage_lines) == 1
+    assert "request_id=req_" in stage_lines[0]
+    assert "elapsed_seconds=" in stage_lines[0]
+
+    combined = " ".join(
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "uvicorn.error"
+    )
+    assert "Why?" not in combined
 
 
 def test_stream_question_empty_question_returns_400_before_streaming(assistant_env):

@@ -41,6 +41,7 @@ LLM_ATTEMPT_TIMEOUT_SECONDS = 900.0
 AUDIT_TIMEOUT_SECONDS = 120.0
 
 LOGGER = logging.getLogger(__name__)
+STREAM_LOGGER = logging.getLogger("uvicorn.error")
 
 TOOL_SCHEMA_VERSIONS = {
     "artifact_envelope": ARTIFACT_SCHEMA_VERSION,
@@ -149,39 +150,112 @@ def _new_id(prefix):
     return f"{prefix}{secrets.token_hex(8)}"
 
 
+def _request_id(deps):
+    request_id = _optional_dependency(deps, "request_id")
+    if request_id:
+        return request_id
+    return _new_id("req_")
+
+
+class _StageRecorder:
+    def __init__(self, request_id, started_at):
+        self._request_id = request_id
+        self._started_at = started_at
+        self._recorded = set()
+
+    def record(self, stage):
+        if stage in self._recorded:
+            return
+        self._recorded.add(stage)
+        STREAM_LOGGER.info(
+            "market assistant stage stage=%s request_id=%s elapsed_seconds=%.2f",
+            stage,
+            self._request_id,
+            monotonic() - self._started_at,
+        )
+
+
 async def answer_question(request, *, dependencies, event_sink=None):
     deps = dependencies
     db_path = _dependency(deps, "db_path")
+    request_id = _request_id(deps)
+    request_started_at = monotonic()
+    recorder = _StageRecorder(request_id, request_started_at)
     resolution = _resolve_request_context(request, deps, db_path)
+    recorder.record("resolution_completed")
     await _emit(
-        event_sink, {"type": "resolution", "resolution": resolution["resolution"]}
+        event_sink,
+        {
+            "type": "resolution",
+            "resolution": resolution["resolution"],
+            "request_id": request_id,
+        },
     )
     if _optional_dependency(deps, "client") is None:
-        return await _answer_legacy(request, resolution, deps, event_sink)
-    return await _answer_hybrid(request, resolution, deps, event_sink)
+        result = await _answer_legacy(
+            request, resolution, deps, event_sink, request_id=request_id
+        )
+    else:
+        result = await _answer_hybrid(
+            request,
+            resolution,
+            deps,
+            event_sink,
+            recorder=recorder,
+            request_id=request_id,
+        )
+    recorder.record("request_completed")
+    return result
 
 
 class _AnswerDeltaSink:
-    def __init__(self, event_sink):
+    def __init__(self, event_sink, recorder=None):
         self._event_sink = event_sink
+        self._recorder = recorder
 
     async def send(self, event):
+        self._record_stage(event)
         if event.get("type") == "output_delta":
             event = {"type": "answer_delta", "delta": event.get("delta")}
         await _emit(self._event_sink, event)
 
+    def _record_stage(self, event):
+        if self._recorder is None:
+            return
+        event_type = event.get("type")
+        if event_type == "initial_tools_completed":
+            self._recorder.record("initial_tools_completed")
+        elif event_type == "model_turn_started":
+            self._recorder.record("narration_request_started")
+            self._recorder.record("react_round_started")
+        elif event_type == "progress":
+            self._recorder.record("react_round_completed")
+        elif event_type == "reasoning_started":
+            self._recorder.record("first_reasoning_delta")
+        elif event_type == "output_delta":
+            self._recorder.record("first_output_text_delta")
+            delta = event.get("delta")
+            if isinstance(delta, str) and any(not char.isspace() for char in delta):
+                self._recorder.record("first_user_visible_delta")
 
-async def _answer_hybrid(request, resolution, deps, event_sink=None):
+
+async def _answer_hybrid(
+    request, resolution, deps, event_sink=None, recorder=None, request_id=None
+):
     started_at = monotonic()
     await _emit(event_sink, {"type": "status", "status": "thinking"})
     route = _route_for_request(request, deps)
+    if recorder is not None:
+        recorder.record("route_selected")
     narration = await run_hybrid_narration(
         request,
         route=route,
         resolution=resolution,
         dependencies=deps,
-        event_sink=_AnswerDeltaSink(event_sink),
+        event_sink=_AnswerDeltaSink(event_sink, recorder=recorder),
     )
+    if recorder is not None:
+        recorder.record("narration_completed")
     outcome, answer_text = _narration_outcome(narration)
     frozen_artifacts = deepcopy(narration["artifacts"])
     claim_audit = None
@@ -212,6 +286,8 @@ async def _answer_hybrid(request, resolution, deps, event_sink=None):
             audit_seconds,
         ) = await _run_claim_audit(narration, frozen_artifacts, deps)
         attempts["audit"] = 1
+        if recorder is not None:
+            recorder.record("audit_completed")
         await _emit_validation(event_sink, validation_status, validation_error_codes)
     generated_at = _now_iso()
     trace = _build_hybrid_trace(
@@ -241,6 +317,7 @@ async def _answer_hybrid(request, resolution, deps, event_sink=None):
             "generation_status": generation_status,
             "answer_trace_id": trace["answer_trace_id"],
             "citations": [],
+            "request_id": request_id or _request_id(deps),
         },
     )
     return {
@@ -252,7 +329,7 @@ async def _answer_hybrid(request, resolution, deps, event_sink=None):
     }
 
 
-async def _answer_legacy(request, resolution, deps, event_sink=None):
+async def _answer_legacy(request, resolution, deps, event_sink=None, request_id=None):
     db_path = _dependency(deps, "db_path")
     await _emit(event_sink, {"type": "status", "status": "thinking"})
     plan, plan_attempts = await _plan_or_fallback(request, resolution, deps)
@@ -365,6 +442,7 @@ async def _answer_legacy(request, resolution, deps, event_sink=None):
             "generation_status": generation_status,
             "answer_trace_id": trace["answer_trace_id"],
             "citations": citations,
+            "request_id": request_id or _request_id(deps),
         },
     )
     return {
@@ -662,6 +740,7 @@ def _context_summary(request, resolution):
         "previous_context_id": envelope["previous_context_id"],
         "resolved_at": envelope["resolved_at"],
         "external_search_requested": bool(request.get("external_search_requested")),
+        "deep_analysis_requested": bool(request.get("deep_analysis_requested")),
     }
 
 
