@@ -16,6 +16,7 @@
   const CITATION_SECURITY_ATTRS = [CITATION_TARGET_ATTR, CITATION_REL_ATTR];
 
   const THINKING_TEXT = "Thinking…";
+  const COMPLETION_NOTICE = "已生成回答";
   const UNAVAILABLE_NOTICE =
     "The assistant could not answer right now. Your question is preserved.";
   const INTERRUPTED_NOTICE = "连接中断，回答可能不完整";
@@ -295,11 +296,7 @@
   }
 
   function parseNdjsonLine(line) {
-    try {
-      return JSON.parse(line);
-    } catch (error) {
-      return null;
-    }
+    return JSON.parse(line);
   }
 
   function parseNdjsonLines(buffer, onEvent) {
@@ -309,10 +306,7 @@
       const line = residual.slice(0, newlineIndex);
       residual = residual.slice(newlineIndex + 1);
       if (line.trim()) {
-        const event = parseNdjsonLine(line);
-        if (event !== null) {
-          onEvent(event);
-        }
+        onEvent(parseNdjsonLine(line));
       }
       newlineIndex = residual.indexOf("\n");
     }
@@ -326,19 +320,26 @@
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let terminalEvent = false;
+    const wrapped = (event) => {
+      if (event.type === "complete" || event.type === "error") {
+        terminalEvent = true;
+      }
+      onEvent(event);
+    };
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        buffer = parseNdjsonLines(buffer, onEvent);
+        buffer = parseNdjsonLines(buffer, wrapped);
       }
       buffer += decoder.decode();
       if (buffer.trim()) {
-        const event = parseNdjsonLine(buffer);
-        if (event !== null) {
-          onEvent(event);
-        }
+        wrapped(parseNdjsonLine(buffer));
+      }
+      if (!terminalEvent) {
+        throw new Error("stream ended without a terminal event");
       }
     } catch (error) {
       await reader.cancel();
@@ -386,7 +387,7 @@
           applyStreamEvent(stream, event);
         },
       });
-      renderStatus("", false);
+      renderStatus(COMPLETION_NOTICE, false);
     } catch (error) {
       state.error = String(error.message || "request failed");
       if (bodyShown || stream.message.text) {

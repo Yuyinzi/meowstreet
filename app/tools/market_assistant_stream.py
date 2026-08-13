@@ -220,8 +220,30 @@ class AnswerTextStreamExtractor:
             hex_chars = self._raw[pos + 2 : pos + 6]
             if any(digit not in _HEX_DIGITS for digit in hex_chars):
                 return _INVALID_ESCAPE, pos + 6
-            return chr(int(hex_chars, 16)), pos + 6
+            value = int(hex_chars, 16)
+            if 0xD800 <= value <= 0xDBFF:
+                return self._read_surrogate_pair(pos, value)
+            if 0xDC00 <= value <= 0xDFFF:
+                return _INVALID_ESCAPE, pos + 6
+            return chr(value), pos + 6
         decoded = _JSON_ESCAPES.get(code)
         if decoded is None:
             return _INVALID_ESCAPE, pos + 2
         return decoded, pos + 2
+
+    def _read_surrogate_pair(self, pos, high_value):
+        low_start = pos + 6
+        if low_start >= len(self._raw):
+            return None
+        if self._raw[low_start : low_start + 2] != "\\u":
+            return _INVALID_ESCAPE, pos + 6
+        if low_start + 6 > len(self._raw):
+            return None
+        low_hex = self._raw[low_start + 2 : low_start + 6]
+        if any(digit not in _HEX_DIGITS for digit in low_hex):
+            return _INVALID_ESCAPE, pos + 6
+        low_value = int(low_hex, 16)
+        if not 0xDC00 <= low_value <= 0xDFFF:
+            return _INVALID_ESCAPE, pos + 6
+        combined = 0x10000 + ((high_value - 0xD800) << 10) + (low_value - 0xDC00)
+        return chr(combined), low_start + 6

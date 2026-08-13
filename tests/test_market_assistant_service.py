@@ -2454,9 +2454,11 @@ async def test_debug_mode_prefers_draft_answer_text():
 
 @pytest.mark.asyncio
 async def test_stream_answer_lifecycle_emits_full_event_sequence():
+    draft = valid_draft()
+    draft["answer_text"] = "The accepted VIX level is 18.4."
     deps = _streaming_dependencies(
         valid_plan(),
-        valid_draft(),
+        draft,
         stream_events=[
             {"type": "reasoning_started"},
             {"type": "answer_delta", "delta": "The accepted VIX level is "},
@@ -2477,7 +2479,6 @@ async def test_stream_answer_lifecycle_emits_full_event_sequence():
         "answer_delta",
         "answer_delta",
         "status",
-        "answer_replace",
         "validation",
         "complete",
     ]
@@ -2493,13 +2494,12 @@ async def test_stream_answer_lifecycle_emits_full_event_sequence():
     }
     assert sink.events[4] == {"type": "answer_delta", "delta": "18.4."}
     assert sink.events[5] == {"type": "status", "status": "validating"}
-    assert sink.events[6] == {"type": "answer_replace", "text": response["answer_text"]}
-    assert sink.events[7] == {
+    assert sink.events[6] == {
         "type": "validation",
         "status": "passed",
         "error_codes": [],
     }
-    complete = sink.events[8]
+    complete = sink.events[7]
     assert complete["type"] == "complete"
     assert complete["resolution"] == response["resolution"]
     assert complete["generation_status"] == "validated_first_pass"
@@ -2508,12 +2508,42 @@ async def test_stream_answer_lifecycle_emits_full_event_sequence():
 
 
 @pytest.mark.asyncio
+async def test_stream_first_pass_without_streamed_delta_replaces_with_rendered_text():
+    draft = valid_draft()
+    draft["answer_text"] = "The accepted VIX level is 18.4."
+    deps = _streaming_dependencies(valid_plan(), draft)
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    replace_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "answer_replace"
+    )
+    passed_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "validation" and event["status"] == "passed"
+    )
+    assert replace_index < passed_index
+    assert sink.events[replace_index]["text"] == response["answer_text"]
+    assert response["answer_text"] == "The accepted VIX level is 18.4."
+
+
+@pytest.mark.asyncio
 async def test_stream_answer_lifecycle_emits_validation_disabled_not_passed():
+    draft = beginner_debug_draft()
+    draft["answer_text"] = "现在市场处于轻度避险状态。"
     deps = _streaming_dependencies(
         valid_plan(),
-        beginner_debug_draft(),
+        draft,
         invalid_repair(),
         config=_config(claim_validation_enabled=False),
+        stream_events=[{"type": "answer_delta", "delta": "现在市场处于轻度避险状态。"}],
     )
     sink = _ListSink()
 
@@ -2643,6 +2673,7 @@ async def test_stream_answer_lifecycle_repair_failure_keeps_initial_draft_visibl
         "status",
         "validation",
         "status",
+        "answer_replace",
         "validation",
         "complete",
     ]
@@ -2659,7 +2690,9 @@ async def test_stream_answer_lifecycle_repair_failure_keeps_initial_draft_visibl
             "error_codes": ["UNBOUND_FACTUAL_LITERAL"],
         },
     ]
-    assert not any(event["type"] == "answer_replace" for event in sink.events)
+    replace = sink.events[5]
+    assert replace["type"] == "answer_replace"
+    assert replace["text"] == response["answer_text"]
     complete = sink.events[-1]
     assert complete["type"] == "complete"
     assert complete["generation_status"] == "validation_failed_visible"
@@ -2699,9 +2732,11 @@ async def test_stream_answer_lifecycle_falls_back_when_synthesis_fails_before_de
 
 @pytest.mark.asyncio
 async def test_stream_answer_question_yields_events_and_stops_at_complete():
+    draft = valid_draft()
+    draft["answer_text"] = "The accepted VIX level is 18.4."
     deps = _streaming_dependencies(
         valid_plan(),
-        valid_draft(),
+        draft,
         stream_events=[{"type": "answer_delta", "delta": "The accepted VIX level is "}],
     )
 
@@ -2717,7 +2752,6 @@ async def test_stream_answer_question_yields_events_and_stops_at_complete():
         "status",
         "answer_delta",
         "status",
-        "answer_replace",
         "validation",
         "complete",
     ]

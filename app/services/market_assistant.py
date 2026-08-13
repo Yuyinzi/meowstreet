@@ -193,10 +193,17 @@ async def answer_question(request, *, dependencies, event_sink=None):
         request, plan, resolution, deps
     )
     frozen_artifacts = deepcopy(artifacts)
+    stream_state = {"streamed_delta": False}
     draft = None
     if unsupported_operation_id is None:
         draft = await _synthesize(
-            request, plan, resolution, frozen_artifacts, deps, event_sink
+            request,
+            plan,
+            resolution,
+            frozen_artifacts,
+            deps,
+            event_sink,
+            stream_state,
         )
     await _emit(event_sink, {"type": "status", "status": "validating"})
     (
@@ -228,6 +235,8 @@ async def answer_question(request, *, dependencies, event_sink=None):
             await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
             await _emit_validation(event_sink, "fallback", validation_error_codes)
         else:
+            if not _body_streamed(event_sink, stream_state):
+                await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
             await _emit_validation(event_sink, "disabled", [])
     elif generation_status == "validation_failed_visible":
         if validated is None:
@@ -241,6 +250,8 @@ async def answer_question(request, *, dependencies, event_sink=None):
                 validated, frozen_artifacts, [], language=answer_language
             )
             citations = collect_citations(validated, frozen_artifacts)
+            if not _body_streamed(event_sink, stream_state):
+                await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
         await _emit_validation(event_sink, "failed", validation_error_codes)
     elif validated is not None:
         answer_text = render_answer(
@@ -251,7 +262,7 @@ async def answer_question(request, *, dependencies, event_sink=None):
         )
         citations = collect_citations(validated, frozen_artifacts)
         if generation_status == "validated_first_pass":
-            if not (validated.get("answer_text") or "").strip():
+            if not _body_streamed(event_sink, stream_state):
                 await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
             await _emit_validation(event_sink, "passed", [])
         else:
@@ -809,7 +820,9 @@ def _research_unavailable_artifact(result_id, searched_at, reason_code):
     return _finalize_envelope(envelope)
 
 
-async def _synthesize(request, plan, resolution, artifacts, deps, event_sink=None):
+async def _synthesize(
+    request, plan, resolution, artifacts, deps, event_sink=None, stream_state=None
+):
     kwargs = {
         "question": request["question"],
         "plan": plan,
@@ -817,7 +830,7 @@ async def _synthesize(request, plan, resolution, artifacts, deps, event_sink=Non
         "artifacts": _llm_artifact_projection(artifacts, plan),
     }
     if event_sink is not None:
-        kwargs["stream_observer"] = _synthesis_stream_observer(event_sink)
+        kwargs["stream_observer"] = _synthesis_stream_observer(event_sink, stream_state)
     try:
         return await _bounded_llm_call(deps, "synthesize_llm", **kwargs)
     except Exception:
@@ -825,14 +838,21 @@ async def _synthesize(request, plan, resolution, artifacts, deps, event_sink=Non
         return None
 
 
-def _synthesis_stream_observer(event_sink):
+def _synthesis_stream_observer(event_sink, stream_state):
     async def observer(event):
         if event["type"] == "reasoning_started":
             await event_sink.send({"type": "status", "status": "thinking"})
         elif event["type"] == "answer_delta":
+            stream_state["streamed_delta"] = True
             await event_sink.send(event)
 
     return observer
+
+
+def _body_streamed(event_sink, stream_state):
+    if event_sink is None:
+        return True
+    return stream_state["streamed_delta"]
 
 
 async def _bounded_llm_call(deps, dependency_name, **kwargs):

@@ -125,13 +125,10 @@ async def _collect_response_stream(stream, stream_observer=None):
         response_output_text = _event_value(completed_response, "output_text")
         if isinstance(response_output_text, str):
             output_text = response_output_text
+    if extractor is not None and not output_parts:
+        extractor.feed(output_text)
     if extractor is not None:
-        try:
-            extractor.finish()
-        except ValueError as exc:
-            LOGGER.warning(
-                "market assistant stream answer text extraction incomplete %s", exc
-            )
+        extractor.finish()
     elapsed_seconds = monotonic() - started_at
     _log_stream_usage(
         completed_response, elapsed_seconds, first_reasoning_at, first_output_at

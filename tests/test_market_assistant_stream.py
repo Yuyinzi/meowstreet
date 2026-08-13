@@ -120,3 +120,37 @@ def test_finish_raises_on_duplicate_top_level_answer_text():
     extractor.feed('{"answer_text":"first","answer_text":"second"}')
     with pytest.raises(ValueError, match="duplicate top-level answer_text"):
         extractor.finish()
+
+
+def test_extractor_combines_surrogate_pair_escape():
+    extractor = AnswerTextStreamExtractor()
+    assert extractor.feed('{"answer_text":"\\ud83d\\ude3a"}') == "😺"
+    extractor.finish()
+
+
+def test_extractor_combines_surrogate_pair_split_across_deltas():
+    extractor = AnswerTextStreamExtractor()
+    assert extractor.feed('{"answer_text":"\\ud83d') == ""
+    assert extractor.feed('\\ude3a"}') == "😺"
+    extractor.finish()
+
+
+def test_finish_raises_on_lone_high_surrogate_escape():
+    extractor = AnswerTextStreamExtractor()
+    extractor.feed('{"answer_text":"\\ud83d"}')
+    with pytest.raises(ValueError, match="invalid escape"):
+        extractor.finish()
+
+
+def test_finish_raises_on_lone_low_surrogate_escape():
+    extractor = AnswerTextStreamExtractor()
+    extractor.feed('{"answer_text":"\\ude3a"}')
+    with pytest.raises(ValueError, match="invalid escape"):
+        extractor.finish()
+
+
+def test_finish_raises_on_high_surrogate_followed_by_non_low_escape():
+    extractor = AnswerTextStreamExtractor()
+    extractor.feed('{"answer_text":"\\ud83d\\u0041"}')
+    with pytest.raises(ValueError, match="invalid escape"):
+        extractor.finish()

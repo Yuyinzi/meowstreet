@@ -474,8 +474,7 @@ async def test_complete_structured_observer_gets_answer_deltas_from_extractor(ca
 
 
 @pytest.mark.asyncio
-async def test_complete_structured_missing_streamed_answer_text_is_best_effort(caplog):
-    caplog.set_level(logging.INFO)
+async def test_complete_structured_missing_streamed_answer_text_raises():
     client = FakeClient(
         stream_events=[
             SimpleNamespace(type="response.output_text.delta", delta='{"value":"ok"}'),
@@ -490,18 +489,51 @@ async def test_complete_structured_missing_streamed_answer_text_is_best_effort(c
     def observer(event):
         events.append(event)
 
-    result = await complete_structured(
-        client,
-        model="assistant-model",
-        prompt=[],
-        schema_type=DummyStructured,
-        structured_output_mode="json_object",
-        stream_observer=observer,
-    )
+    with pytest.raises(ValueError, match="answer_text missing"):
+        await complete_structured(
+            client,
+            model="assistant-model",
+            prompt=[],
+            schema_type=DummyStructured,
+            structured_output_mode="json_object",
+            stream_observer=observer,
+        )
 
-    assert result == {"value": "ok"}
     assert events == []
-    assert "answer_text missing" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_complete_structured_duplicate_answer_text_raises():
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(
+                type="response.output_text.delta",
+                delta='{"answer_text":"first","answer_text":"second","value":"ok"}',
+            ),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(
+                    output_text='{"answer_text":"first","answer_text":"second","value":"ok"}'
+                ),
+            ),
+        ]
+    )
+    events = []
+
+    def observer(event):
+        events.append(event)
+
+    with pytest.raises(ValueError, match="duplicate top-level answer_text"):
+        await complete_structured(
+            client,
+            model="assistant-model",
+            prompt=[],
+            schema_type=DummyStructured,
+            structured_output_mode="json_object",
+            stream_observer=observer,
+        )
+
+    assert events == [{"type": "answer_delta", "delta": "first"}]
 
 
 @pytest.mark.asyncio

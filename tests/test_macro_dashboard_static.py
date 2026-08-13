@@ -8532,29 +8532,38 @@ def test_market_assistant_stream_parses_line_split_across_chunks():
         """
         const encoder = new TextEncoder();
         const line = '{"type":"answer_delta","delta":"现在市场"}\\n';
+        const completeLine = '{"type":"complete","generation_status":"validated_first_pass"}\\n';
         const bytes = encoder.encode(line);
         const mid = Math.floor(bytes.length / 2);
         const events = [];
         await hooks.consumeNdjsonStream(
-          { body: streamedBody([bytes.slice(0, mid), bytes.slice(mid)]) },
+          {
+            body: streamedBody([
+              bytes.slice(0, mid),
+              bytes.slice(mid),
+              encoder.encode(completeLine),
+            ]),
+          },
           (event) => events.push(event)
         );
         console.log(JSON.stringify({
           eventCount: events.length,
           type: events[0] && events[0].type,
           delta: events[0] && events[0].delta,
+          completeType: events[1] && events[1].type,
         }));
         """
     )
 
     assert payload == {
-        "eventCount": 1,
+        "eventCount": 2,
         "type": "answer_delta",
         "delta": "现在市场",
+        "completeType": "complete",
     }
 
 
-def test_market_assistant_stream_skips_malformed_line_and_keeps_reading():
+def test_market_assistant_stream_malformed_line_fails_stream():
     payload = _run_market_assistant_harness(
         """
         global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
@@ -8564,19 +8573,24 @@ def test_market_assistant_stream_skips_malformed_line_and_keeps_reading():
         ]) });
         elements.marketAssistantQuestion.value = "What supports the setup?";
         await hooks.handleSubmit();
-        const textEl = elements.marketAssistantLog.children[1].children.find(
-          (child) => child.className === "market-assistant-message-text"
-        );
         console.log(JSON.stringify({
-          answerText: textEl.textContent,
+          questionValue: elements.marketAssistantQuestion.value,
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
+          status: elements.marketAssistantStatus.textContent,
+          assistantMessages: elements.marketAssistantLog.children.filter(
+            (child) => child.className.includes("market-assistant-message-assistant")
+          ).length,
         }));
         """
     )
 
     assert payload == {
-        "answerText": "现在市场",
+        "questionValue": "What supports the setup?",
         "submitEnabled": True,
+        "status": (
+            "The assistant could not answer right now. Your question is preserved."
+        ),
+        "assistantMessages": 0,
     }
 
 
@@ -8761,6 +8775,66 @@ def test_market_assistant_stream_error_after_body_keeps_text_and_reenables():
         "questionCleared": True,
         "logChildren": 2,
         "busyAfter": "false",
+    }
+
+
+def test_market_assistant_stream_truncated_without_terminal_event_is_interrupted():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"answer_delta","delta":"现在"}\\n',
+          '{"type":"answer_delta","delta":"市场"}\\n',
+        ]) });
+        elements.marketAssistantQuestion.value = "Will this work?";
+        await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[1];
+        const textEl = assistant.children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
+        const notice = assistant.children.find(
+          (child) => child.className === "market-assistant-notice market-assistant-notice-fallback"
+        );
+        console.log(JSON.stringify({
+          text: textEl.textContent,
+          notice: notice && notice.textContent,
+          submitEnabled: elements.marketAssistantSubmit.disabled === false,
+          busyAfter: assistant.attrs["aria-busy"],
+          logChildren: elements.marketAssistantLog.children.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "text": "现在市场",
+        "notice": "连接中断，回答可能不完整",
+        "submitEnabled": True,
+        "busyAfter": "false",
+        "logChildren": 2,
+    }
+
+
+def test_market_assistant_stream_completion_announces_in_status():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"answer_delta","delta":"现在"}\\n',
+          '{"type":"complete","resolution":{"mode":"current"},'
+          + '"generation_status":"validated_first_pass","answer_trace_id":"trace_1","citations":[]}\\n',
+        ]) });
+        elements.marketAssistantQuestion.value = "Will this work?";
+        await hooks.handleSubmit();
+        console.log(JSON.stringify({
+          status: elements.marketAssistantStatus.textContent,
+          busyAfter: elements.marketAssistantLog.children[1].attrs["aria-busy"],
+          submitEnabled: elements.marketAssistantSubmit.disabled === false,
+        }));
+        """
+    )
+
+    assert payload == {
+        "status": "已生成回答",
+        "busyAfter": "false",
+        "submitEnabled": True,
     }
 
 

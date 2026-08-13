@@ -247,16 +247,16 @@ async def _stream_answer_events(request, dependencies):
         async for event in market_assistant_service.stream_answer_question(
             request, dependencies=dependencies
         ):
-            yield json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
+            yield _ndjson_line(event)
     except Exception:
-        yield (
-            json.dumps(
-                {"type": "error", "message": "market assistant service is unavailable"},
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
-            + "\n"
+        yield _ndjson_line(
+            {"type": "error", "message": "market assistant service is unavailable"}
         )
+
+
+def _ndjson_line(event):
+    line = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+    return line.encode("utf-8", errors="replace").decode("utf-8") + "\n"
 
 
 @router.post("/questions/stream")
