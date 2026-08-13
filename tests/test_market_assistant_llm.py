@@ -7,6 +7,8 @@ from pydantic import BaseModel
 
 from app.services.market_assistant_llm import complete_structured
 from app.services.market_assistant_llm import plan_question
+from app.services.market_assistant_llm import response_items_for_next_turn
+from app.services.market_assistant_llm import stream_response_turn
 
 
 class DummyStructured(BaseModel):
@@ -71,6 +73,16 @@ class FakeStream:
 
     async def aclose(self):
         self.closed = True
+
+
+class FakeOutputItem:
+    def __init__(self, **fields):
+        self._fields = fields
+        for key, value in fields.items():
+            setattr(self, key, value)
+
+    def model_dump(self, *, mode):
+        return self._fields
 
 
 def valid_plan_payload(**overrides):
@@ -620,3 +632,401 @@ async def test_complete_structured_without_observer_keeps_existing_behavior(capl
 
     assert result == {"value": "hi"}
     assert "market assistant response stream started" in caplog.text
+
+
+def tool_call_kwargs():
+    return {
+        "model": "assistant-model",
+        "input_items": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "what is the vix?"}],
+            }
+        ],
+        "instructions": "narrate the current market",
+        "tools": [
+            {
+                "type": "function",
+                "name": "query_indicator_history",
+                "strict": True,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "indicator_id": {"type": "string"},
+                        "window": {"type": "string"},
+                    },
+                    "required": ["indicator_id", "window"],
+                },
+            }
+        ],
+        "reasoning_effort": "medium",
+    }
+
+
+def function_call_stream_events():
+    return [
+        SimpleNamespace(type="response.created"),
+        {
+            "type": "response.output_item.added",
+            "item": {
+                "type": "function_call",
+                "call_id": "call_vix",
+                "name": "query_indicator_history",
+            },
+        },
+        {
+            "type": "response.function_call_arguments.delta",
+            "item_id": "call_vix",
+            "delta": '{"indicator_id":',
+        },
+        SimpleNamespace(
+            type="response.function_call_arguments.delta",
+            item_id="call_vix",
+            delta='"vix","window":"6m"}',
+        ),
+        SimpleNamespace(
+            type="response.function_call_arguments.done",
+            item_id="call_vix",
+            arguments='{"indicator_id":"vix","window":"6m"}',
+        ),
+        {
+            "type": "response.output_item.done",
+            "item": {
+                "type": "function_call",
+                "call_id": "call_vix",
+                "name": "query_indicator_history",
+                "arguments": '{"indicator_id":"vix","window":"6m"}',
+            },
+        },
+        SimpleNamespace(
+            type="response.completed",
+            response=SimpleNamespace(output_text="", usage=None),
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_stream_response_turn_parses_function_call_from_mixed_event_forms():
+    client = FakeClient(stream_events=function_call_stream_events())
+
+    result = await stream_response_turn(client, **tool_call_kwargs())
+
+    assert result["tool_calls"] == [
+        {
+            "call_id": "call_vix",
+            "tool_name": "query_indicator_history",
+            "arguments": {"indicator_id": "vix", "window": "6m"},
+        }
+    ]
+    assert result["output_text"] == ""
+    assert result["response_items"] == [
+        {
+            "type": "function_call",
+            "call_id": "call_vix",
+            "name": "query_indicator_history",
+            "arguments": '{"indicator_id":"vix","window":"6m"}',
+        }
+    ]
+    assert result["usage"] is None
+    assert client.calls[0]["input"] == tool_call_kwargs()["input_items"]
+    assert client.calls[0]["instructions"] == tool_call_kwargs()["instructions"]
+    assert client.calls[0]["tools"] == tool_call_kwargs()["tools"]
+    assert client.calls[0]["reasoning"] == {"effort": "medium"}
+    assert client.calls[0]["stream"] is True
+
+
+@pytest.mark.asyncio
+async def test_stream_response_turn_preserves_sdk_output_item_with_model_dump():
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.created"),
+            SimpleNamespace(
+                type="response.output_item.added",
+                item=SimpleNamespace(
+                    type="function_call",
+                    call_id="call_vix",
+                    name="query_indicator_history",
+                ),
+            ),
+            SimpleNamespace(
+                type="response.function_call_arguments.delta",
+                item_id="call_vix",
+                delta='{"indicator_id":"vix","window":"6m"}',
+            ),
+            SimpleNamespace(
+                type="response.function_call_arguments.done",
+                item_id="call_vix",
+                arguments='{"indicator_id":"vix","window":"6m"}',
+            ),
+            SimpleNamespace(
+                type="response.output_item.done",
+                output=FakeOutputItem(
+                    type="function_call",
+                    id="fc_1",
+                    call_id="call_vix",
+                    name="query_indicator_history",
+                    arguments='{"indicator_id":"vix","window":"6m"}',
+                ),
+            ),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(output_text="", usage=None),
+            ),
+        ]
+    )
+
+    result = await stream_response_turn(client, **tool_call_kwargs())
+
+    assert result["tool_calls"] == [
+        {
+            "call_id": "call_vix",
+            "tool_name": "query_indicator_history",
+            "arguments": {"indicator_id": "vix", "window": "6m"},
+        }
+    ]
+    assert result["response_items"] == [
+        {
+            "type": "function_call",
+            "id": "fc_1",
+            "call_id": "call_vix",
+            "name": "query_indicator_history",
+            "arguments": '{"indicator_id":"vix","window":"6m"}',
+        }
+    ]
+
+
+def test_response_items_for_next_turn_returns_preserved_items():
+    turn = {
+        "response_items": [
+            {
+                "type": "function_call",
+                "call_id": "call_vix",
+                "name": "query_indicator_history",
+            }
+        ]
+    }
+
+    assert response_items_for_next_turn(turn) == [
+        {
+            "type": "function_call",
+            "call_id": "call_vix",
+            "name": "query_indicator_history",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_stream_response_turn_narrates_deltas_to_observer_and_hides_reasoning(
+    caplog,
+):
+    caplog.set_level(logging.INFO)
+    reasoning_text = "deep thinking not shown"
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.created"),
+            SimpleNamespace(type="response.reasoning_text.delta", delta="deep"),
+            SimpleNamespace(
+                type="response.reasoning_text.delta", delta=" thinking not shown"
+            ),
+            SimpleNamespace(type="response.output_text.delta", delta="现在的市场"),
+            SimpleNamespace(type="response.output_text.delta", delta="偏积极。"),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(output_text="现在的市场偏积极。", usage=None),
+            ),
+        ]
+    )
+    events = []
+
+    def observer(event):
+        events.append(event)
+
+    result = await stream_response_turn(
+        client,
+        observer=observer,
+        **tool_call_kwargs(),
+    )
+
+    assert result["output_text"] == "现在的市场偏积极。"
+    assert result["tool_calls"] == []
+    assert events == [
+        {"type": "reasoning_started"},
+        {"type": "output_delta", "delta": "现在的市场"},
+        {"type": "output_delta", "delta": "偏积极。"},
+    ]
+    assert reasoning_text not in result["output_text"]
+    assert reasoning_text not in json.dumps(events)
+    assert reasoning_text not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_stream_response_turn_notifies_provider_tool_call_started():
+    client = FakeClient(stream_events=function_call_stream_events())
+    events = []
+
+    def observer(event):
+        events.append(event)
+
+    result = await stream_response_turn(
+        client,
+        observer=observer,
+        **tool_call_kwargs(),
+    )
+
+    assert events == [
+        {
+            "type": "provider_tool_call_started",
+            "call_id": "call_vix",
+            "tool_name": "query_indicator_history",
+        }
+    ]
+    assert result["tool_calls"][0]["call_id"] == "call_vix"
+
+
+@pytest.mark.asyncio
+async def test_stream_response_turn_rejects_mixed_text_and_tool_calls():
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.output_text.delta", delta="some narration"),
+            {
+                "type": "response.output_item.added",
+                "item": {
+                    "type": "function_call",
+                    "call_id": "call_vix",
+                    "name": "query_indicator_history",
+                },
+            },
+            {
+                "type": "response.function_call_arguments.delta",
+                "item_id": "call_vix",
+                "delta": "{}",
+            },
+            {
+                "type": "response.function_call_arguments.done",
+                "item_id": "call_vix",
+                "arguments": "{}",
+            },
+            {
+                "type": "response.output_item.done",
+                "item": {
+                    "type": "function_call",
+                    "call_id": "call_vix",
+                    "name": "query_indicator_history",
+                    "arguments": "{}",
+                },
+            },
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(output_text="some narration", usage=None),
+            ),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="response turn mixes text and tool calls"):
+        await stream_response_turn(client, **tool_call_kwargs())
+
+
+@pytest.mark.asyncio
+async def test_stream_response_turn_rejects_malformed_function_arguments():
+    client = FakeClient(
+        stream_events=[
+            {
+                "type": "response.output_item.added",
+                "item": {
+                    "type": "function_call",
+                    "call_id": "call_vix",
+                    "name": "query_indicator_history",
+                },
+            },
+            {
+                "type": "response.function_call_arguments.delta",
+                "item_id": "call_vix",
+                "delta": "{not json",
+            },
+            {
+                "type": "response.function_call_arguments.done",
+                "item_id": "call_vix",
+                "arguments": "{not json",
+            },
+        ]
+    )
+
+    with pytest.raises(
+        ValueError, match="function call call_vix arguments are invalid"
+    ):
+        await stream_response_turn(client, **tool_call_kwargs())
+
+
+@pytest.mark.asyncio
+async def test_stream_response_turn_rejects_uncompleted_stream():
+    client = FakeClient(
+        stream_events=[SimpleNamespace(type="response.incomplete", response=None)]
+    )
+
+    with pytest.raises(ValueError, match="response stream did not complete"):
+        await stream_response_turn(client, **tool_call_kwargs())
+
+
+@pytest.mark.asyncio
+async def test_stream_response_turn_logs_and_returns_four_timings(caplog):
+    caplog.set_level(logging.INFO)
+    client = FakeClient(
+        stream_events=[
+            SimpleNamespace(type="response.created"),
+            SimpleNamespace(type="response.reasoning_text.delta", delta="thinking"),
+            SimpleNamespace(type="response.output_text.delta", delta=" "),
+            SimpleNamespace(type="response.output_text.delta", delta="answer"),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(
+                    output_text=" answer",
+                    usage={
+                        "input_tokens": 10,
+                        "output_tokens": 5,
+                        "input_tokens_details": {"cached_tokens": 3},
+                        "output_tokens_details": {"reasoning_tokens": 2},
+                    },
+                ),
+            ),
+        ]
+    )
+
+    result = await stream_response_turn(
+        client,
+        instructions="narrate with credential sk-abc123",
+        input_items=[{"type": "message", "role": "user", "content": "secret question"}],
+        model="assistant-model",
+        tools=[{"type": "function", "name": "query_indicator_history"}],
+        reasoning_effort="medium",
+    )
+
+    timings = result["timings"]
+    assert set(timings) == {
+        "first_reasoning_seconds",
+        "first_output_seconds",
+        "first_visible_delta_seconds",
+        "completed_seconds",
+    }
+    assert isinstance(timings["first_reasoning_seconds"], float)
+    assert isinstance(timings["first_output_seconds"], float)
+    assert isinstance(timings["first_visible_delta_seconds"], float)
+    assert isinstance(timings["completed_seconds"], float)
+    assert timings["first_output_seconds"] <= timings["first_visible_delta_seconds"]
+    assert result["output_text"] == " answer"
+    assert result["usage"] == {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "input_tokens_details": {"cached_tokens": 3},
+        "output_tokens_details": {"reasoning_tokens": 2},
+    }
+    assert "first_reasoning_seconds=" in caplog.text
+    assert "first_output_seconds=" in caplog.text
+    assert "first_visible_delta_seconds=" in caplog.text
+    assert "completed_seconds=" in caplog.text
+    assert "input_tokens=10" in caplog.text
+    assert "cached_tokens=3" in caplog.text
+    assert "sk-abc123" not in caplog.text
+    assert "secret question" not in caplog.text
+    assert "thinking" not in caplog.text
+    assert "answer" not in caplog.text
