@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -121,11 +123,68 @@ def test_assistant_runtime_allows_bounded_streaming_request(monkeypatch):
         "app.routers.market_assistant.build_async_client", fake_build_async_client
     )
 
-    _, model, structured_output_mode = market_assistant_router._assistant_runtime()
+    (
+        _,
+        model,
+        structured_output_mode,
+        reasoning_effort,
+    ) = market_assistant_router._assistant_runtime()
 
     assert model == "assistant-model"
     assert structured_output_mode == "json_object"
+    assert reasoning_effort == "low"
     assert captured["kwargs"]["timeout"] == 900.0
+
+
+@pytest.mark.asyncio
+async def test_llm_helpers_thread_reasoning_effort_from_config(monkeypatch):
+    captured = {"plan_reasoning": None, "llm_reasoning": []}
+
+    monkeypatch.setattr(
+        market_assistant_router,
+        "_assistant_runtime",
+        lambda: ("client", "assistant-model", "json_schema", "medium"),
+    )
+    monkeypatch.setattr(
+        market_assistant_router,
+        "deterministic_plan",
+        lambda question: {"intent": "unsupported"},
+    )
+
+    async def fake_plan_question(client, **kwargs):
+        captured["plan_reasoning"] = kwargs["reasoning_effort"]
+        return {"intent": "unsupported"}
+
+    async def fake_complete_structured(client, **kwargs):
+        captured["llm_reasoning"].append(kwargs["reasoning_effort"])
+        return {"sections": []}
+
+    monkeypatch.setattr(market_assistant_router, "plan_question", fake_plan_question)
+    monkeypatch.setattr(
+        market_assistant_router, "complete_structured", fake_complete_structured
+    )
+
+    await market_assistant_router._plan_llm(
+        question="hello world",
+        context_summary={"mode": "current"},
+    )
+    await market_assistant_router._synthesize_llm(
+        question="hello world",
+        plan={"intent": "decision_explanation"},
+        context_summary={"mode": "current"},
+        artifacts={},
+    )
+    await market_assistant_router._repair_llm(
+        question="hello world",
+        plan={"intent": "decision_explanation"},
+        context_summary={"mode": "current"},
+        artifacts={},
+        draft={"sections": []},
+        validation_report={"valid": False},
+    )
+
+    assert captured["plan_reasoning"] == "medium"
+    assert captured["llm_reasoning"] == ["medium", "medium"]
 
 
 @pytest.mark.asyncio
@@ -409,6 +468,22 @@ def test_synthesis_prompt_selects_english_for_english_question():
     assert "Answer language: English" in prompt[0]["content"]
 
 
+def test_synthesis_prompt_requires_streamable_answer_text():
+    prompt = market_assistant_router._synthesis_prompt(
+        "Explain the market setup",
+        {"intent": "decision_explanation"},
+        {"mode": "current"},
+        {"ctx_1": {"object_index": []}},
+    )
+    system = prompt[0]["content"]
+    assert "Serialize answer_text as the first top-level property." in system
+    assert (
+        "answer_text must exactly equal the deterministic rendering of sections "
+        "and claims." in system
+    )
+    assert "Do not place markdown fences around the JSON object." in system
+
+
 def test_repair_prompt_preserves_beginner_contract():
     prompt = market_assistant_router._repair_prompt(
         "现在市场怎么样？",
@@ -424,3 +499,106 @@ def test_repair_prompt_preserves_beginner_contract():
     assert "financial beginner" in system
     assert "same evidence set" in system
     assert "complete corrected StructuredAnswerDraft" in system
+
+
+def _stream_events():
+    events = [
+        {"type": "status", "status": "thinking"},
+        {"type": "answer_delta", "delta": "市场 "},
+        {"type": "validation", "status": "passed", "error_codes": []},
+        {
+            "type": "complete",
+            "generation_status": "validated_first_pass",
+            "answer_trace_id": "trace_123",
+            "citations": [],
+        },
+    ]
+
+    async def fake_stream(request, *, dependencies):
+        for event in events:
+            yield event
+
+    return fake_stream
+
+
+def test_stream_question_returns_ndjson_event_sequence(assistant_env, monkeypatch):
+    monkeypatch.setattr(
+        market_assistant_service, "stream_answer_question", _stream_events()
+    )
+
+    with client.stream(
+        "POST",
+        "/api/market-assistant/questions/stream",
+        json={"question": "Why?", "mode": "current"},
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/x-ndjson")
+        assert response.headers["cache-control"] == "no-cache"
+        assert response.headers["x-accel-buffering"] == "no"
+        raw_lines = list(response.iter_lines())
+        parsed = [json.loads(line) for line in raw_lines]
+        assert [event["type"] for event in parsed] == [
+            "status",
+            "answer_delta",
+            "validation",
+            "complete",
+        ]
+        assert parsed[0] == {"type": "status", "status": "thinking"}
+        assert parsed[1] == {"type": "answer_delta", "delta": "市场 "}
+        wire_line = raw_lines[1]
+        compact = json.dumps(parsed[1], ensure_ascii=False, separators=(",", ":"))
+        assert wire_line == compact
+        assert ", " not in wire_line
+        assert ": " not in wire_line
+        assert "市场" in wire_line
+        assert "\\u" not in wire_line
+
+
+def test_stream_question_empty_question_returns_400_before_streaming(assistant_env):
+    with client.stream(
+        "POST",
+        "/api/market-assistant/questions/stream",
+        json={"question": "  ", "mode": "current"},
+    ) as response:
+        assert response.status_code == 400
+        response.read()
+        assert response.json()["detail"] == "question is required"
+
+
+def test_stream_question_historical_without_context_returns_400_before_streaming(
+    assistant_env,
+):
+    with client.stream(
+        "POST",
+        "/api/market-assistant/questions/stream",
+        json={"question": "Why?", "mode": "historical"},
+    ) as response:
+        assert response.status_code == 400
+        response.read()
+        assert response.json()["detail"] == "context id is required"
+
+
+def test_stream_worker_error_emits_error_line_without_stack_trace(
+    assistant_env, monkeypatch
+):
+    async def fake_stream(request, *, dependencies):
+        yield {"type": "status", "status": "thinking"}
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(market_assistant_service, "stream_answer_question", fake_stream)
+
+    with client.stream(
+        "POST",
+        "/api/market-assistant/questions/stream",
+        json={"question": "Why?", "mode": "current"},
+    ) as response:
+        assert response.status_code == 200
+        lines = list(response.iter_lines())
+        parsed = [json.loads(line) for line in lines]
+        assert [event["type"] for event in parsed] == ["status", "error"]
+        assert parsed[-1] == {
+            "type": "error",
+            "message": "market assistant service is unavailable",
+        }
+        assert "boom" not in "".join(lines)
+        assert "Traceback" not in "".join(lines)

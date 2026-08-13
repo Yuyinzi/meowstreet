@@ -2,6 +2,7 @@ import json
 from typing import Literal
 
 from fastapi import APIRouter, Body, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -56,25 +57,33 @@ class _QuestionRequest(BaseModel):
 def _assistant_runtime():
     config = load_market_assistant_config()
     client = build_async_client(config, timeout=900.0, error_context="market assistant")
-    return client, config["model"], config["structured_output_mode"]
+    return (
+        client,
+        config["model"],
+        config["structured_output_mode"],
+        config.get("reasoning_effort", "low"),
+    )
 
 
 async def _plan_llm(*, question, context_summary):
     deterministic = deterministic_plan(question)
     if deterministic["intent"] != "unsupported":
         return deterministic
-    client, model, structured_output_mode = _assistant_runtime()
+    client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
     return await plan_question(
         client,
         model=model,
         question=question,
         context_summary=context_summary,
         structured_output_mode=structured_output_mode,
+        reasoning_effort=reasoning_effort,
     )
 
 
-async def _synthesize_llm(*, question, plan, context_summary, artifacts):
-    client, model, structured_output_mode = _assistant_runtime()
+async def _synthesize_llm(
+    *, question, plan, context_summary, artifacts, stream_observer=None
+):
+    client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
     prompt = _synthesis_prompt(question, plan, context_summary, artifacts)
     return await complete_structured(
         client,
@@ -82,6 +91,8 @@ async def _synthesize_llm(*, question, plan, context_summary, artifacts):
         prompt=prompt,
         schema_type=AnswerDraftSchema,
         structured_output_mode=structured_output_mode,
+        reasoning_effort=reasoning_effort,
+        stream_observer=stream_observer,
     )
 
 
@@ -94,7 +105,7 @@ async def _repair_llm(
     draft,
     validation_report,
 ):
-    client, model, structured_output_mode = _assistant_runtime()
+    client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
     prompt = _repair_prompt(
         question, plan, context_summary, artifacts, draft, validation_report
     )
@@ -104,6 +115,7 @@ async def _repair_llm(
         prompt=prompt,
         schema_type=AnswerDraftSchema,
         structured_output_mode=structured_output_mode,
+        reasoning_effort=reasoning_effort,
     )
 
 
@@ -131,7 +143,10 @@ def _structured_answer_instructions(question):
         "the supplied value and its exact artifact source. Every ref must match the "
         "claim authority. Split different authorities into separate claims. Do not "
         "invent facts, classifications, weights, thresholds, causality, predictions, "
-        "materiality, allocations, or trading instructions."
+        "materiality, allocations, or trading instructions. "
+        "Serialize answer_text as the first top-level property. "
+        "answer_text must exactly equal the deterministic rendering of sections "
+        "and claims. Do not place markdown fences around the JSON object."
     )
 
 
@@ -225,6 +240,41 @@ def _is_artifact_corruption(exc):
         return False
     message = str(exc)
     return any(message.startswith(prefix) for prefix in _ARTIFACT_CORRUPTION_PREFIXES)
+
+
+async def _stream_answer_events(request, dependencies):
+    try:
+        async for event in market_assistant_service.stream_answer_question(
+            request, dependencies=dependencies
+        ):
+            yield _ndjson_line(event)
+    except Exception:
+        yield _ndjson_line(
+            {"type": "error", "message": "market assistant service is unavailable"}
+        )
+
+
+def _ndjson_line(event):
+    line = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+    return line.encode("utf-8", errors="replace").decode("utf-8") + "\n"
+
+
+@router.post("/questions/stream")
+async def market_assistant_questions_stream(body: dict = Body(default={})):
+    try:
+        request = _validate_question_request(body)
+        dependencies = _build_dependencies()
+    except ValueError as exc:
+        if _is_artifact_corruption(exc):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if request["mode"] == "historical" and not request.get("context_id"):
+        raise HTTPException(status_code=400, detail="context id is required")
+    return StreamingResponse(
+        _stream_answer_events(request, dependencies),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/questions")

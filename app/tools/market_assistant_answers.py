@@ -94,6 +94,7 @@ _ERROR_CODES = frozenset(
         "HYPOTHETICAL_REFERENCE_FORBIDDEN",
         "RESEARCH_CITATION_REQUIRED",
         "LIMIT_EXCEEDED",
+        "ANSWER_TEXT_MISMATCH",
     }
 )
 
@@ -204,6 +205,7 @@ class _Section(BaseModel):
 class _AnswerDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
+    answer_text: str | None = None
     sections: list[_Section] = Field(min_length=1)
 
 
@@ -247,17 +249,17 @@ def validate_answer_draft_schema(payload):
     return normalized
 
 
-def validate_answer_draft(payload, artifacts):
+def validate_answer_draft(payload, artifacts, *, language="en"):
     if not isinstance(artifacts, dict):
         raise ValueError("artifact references are required")
-    errors = _collect_errors(payload, artifacts)
+    errors = _collect_errors(payload, artifacts, language=language)
     if errors:
         raise DraftValidationError(_errors_message(errors), errors)
     normalized, _ = _validate_draft_schema(payload)
     return normalized
 
 
-def _collect_errors(payload, artifacts):
+def _collect_errors(payload, artifacts, *, language="en"):
     normalized, schema_errors = _validate_draft_schema(payload)
     if normalized is None:
         return schema_errors
@@ -268,7 +270,34 @@ def _collect_errors(payload, artifacts):
     for section in normalized["sections"]:
         for claim in section["claims"]:
             errors.extend(_validate_claim(claim, artifacts))
+    errors.extend(
+        _answer_text_mismatch_errors(normalized, artifacts, language=language)
+    )
     return errors
+
+
+def _answer_text_mismatch_errors(normalized, artifacts, *, language):
+    answer_text = normalized.get("answer_text")
+    if answer_text is None:
+        return []
+    try:
+        rendered = render_answer(normalized, artifacts, [], language=language)
+    except ValueError:
+        return []
+    if _normalize_answer_text(answer_text) != _normalize_answer_text(rendered):
+        return [
+            _error(
+                "ANSWER_TEXT_MISMATCH",
+                "answer_text does not match the rendered answer",
+                expected=_format_value(rendered),
+                actual=_format_value(answer_text),
+            )
+        ]
+    return []
+
+
+def _normalize_answer_text(text):
+    return text.replace("\r\n", "\n").rstrip()
 
 
 def _validate_draft_schema(payload):

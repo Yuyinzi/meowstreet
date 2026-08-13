@@ -771,9 +771,11 @@ def test_historical_snapshot_uses_frozen_v2_predicate_after_contract_upgrade(
     assert predicate["operand"] == 20.0
 
 
-def test_unvalidated_draft_and_failed_repair_emit_only_fallback(answer_harness):
+def test_unvalidated_draft_and_failed_repair_keeps_initial_draft_visible(
+    answer_harness,
+):
     response = answer_harness.answer(draft=invalid_draft(), repair=invalid_draft())
 
-    assert response["generation_status"] == "fallback"
+    assert response["generation_status"] == "validation_failed_visible"
     assert response["validation_error_codes"]
-    assert "unvalidated model text" not in response["answer_text"]
+    assert "unvalidated model text" in response["answer_text"]

@@ -1494,6 +1494,93 @@ def test_render_fallback_missing_snapshot_is_deterministic():
     assert "unavailable" in rendered
 
 
+def test_answer_draft_schema_accepts_answer_text():
+    payload = vix_decision_draft()
+    payload["answer_text"] = "当前市场处于轻度避险状态。"
+    normalized = validate_answer_draft_schema(payload)
+    assert normalized["answer_text"] == payload["answer_text"]
+
+
+def test_answer_draft_schema_keeps_answer_text_none_for_old_drafts():
+    normalized = validate_answer_draft_schema(vix_decision_draft())
+    assert normalized["answer_text"] is None
+
+
+def test_matching_answer_text_passes_validation():
+    payload = vix_decision_draft()
+    payload["answer_text"] = (
+        "Current VIX is 18.4. The approved downside rule requires VIX ≥ 20.0, "
+        "so this confirmation test is not confirming."
+    )
+    validated = validate_answer_draft(payload, artifacts())
+    assert validated["answer_text"] == payload["answer_text"]
+
+
+def test_mismatched_answer_text_is_rejected_with_mismatch_code():
+    payload = vix_decision_draft()
+    payload["answer_text"] = "A completely different summary."
+    with pytest.raises(DraftValidationError) as exc_info:
+        validate_answer_draft(payload, artifacts())
+    assert exc_info.value.errors[0]["code"] == "ANSWER_TEXT_MISMATCH"
+
+
+@pytest.mark.parametrize(
+    "answer_text",
+    [
+        (
+            "Current VIX is 18.4. The approved downside rule requires VIX ≥ 20.0, "
+            "so this confirmation test is not confirming.\r\n"
+        ),
+        (
+            "Current VIX is 18.4. The approved downside rule requires VIX ≥ 20.0, "
+            "so this confirmation test is not confirming.   "
+        ),
+    ],
+)
+def test_answer_text_whitespace_only_differences_pass(answer_text):
+    payload = vix_decision_draft()
+    payload["answer_text"] = answer_text
+    validated = validate_answer_draft(payload, artifacts())
+    assert validated["answer_text"] == answer_text
+
+
+def test_answer_text_with_mid_text_whitespace_change_is_rejected():
+    payload = vix_decision_draft()
+    payload["answer_text"] = (
+        "Current VIX is 18.4. The approved downside rule requires VIX ≥ 20.0,  "
+        "so this confirmation test is not confirming."
+    )
+    with pytest.raises(DraftValidationError) as exc_info:
+        validate_answer_draft(payload, artifacts())
+    assert exc_info.value.errors[0]["code"] == "ANSWER_TEXT_MISMATCH"
+
+
+def test_answer_text_none_skips_mismatch_check():
+    validated = validate_answer_draft(vix_decision_draft(), artifacts())
+    assert validated["answer_text"] is None
+
+
+def test_answer_text_validation_threads_requested_language():
+    claim = observation_claim("VIX 当前为 {first}，最新为 {last}。")
+    payload = draft(claim, kind="observation")
+    payload["answer_text"] = "本地数据观察\nVIX 当前为 15.0，最新为 18.4。"
+    validated = validate_answer_draft(payload, artifacts(), language="zh")
+    assert validated["answer_text"] == payload["answer_text"]
+
+
+def test_answer_text_mismatch_does_not_mask_broken_reference():
+    claim = valid_claim(
+        bindings={"vix_threshold": snapshot_ref("missing_object", field="threshold")}
+    )
+    payload = draft(claim)
+    payload["answer_text"] = "some text"
+    with pytest.raises(DraftValidationError) as exc_info:
+        validate_answer_draft(payload, artifacts())
+    codes = {error["code"] for error in exc_info.value.errors}
+    assert "REFERENCE_NOT_FOUND" in codes
+    assert "ANSWER_TEXT_MISMATCH" not in codes
+
+
 def _fallback_plan(intent):
     return {
         "intent": intent,

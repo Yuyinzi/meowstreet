@@ -553,6 +553,20 @@ class TestAnswerBundle:
         loaded = market_assistant.load_answer_trace(con, trace["answer_trace_id"])
         assert loaded["generation_status"] == "unvalidated_debug"
 
+    def test_save_answer_trace_accepts_validation_failed_visible_status(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        trace = answer_trace()
+        trace["generation_status"] = "validation_failed_visible"
+
+        market_assistant.save_answer_bundle(
+            con,
+            artifacts=[],
+            answer_trace=trace,
+        )
+
+        loaded = market_assistant.load_answer_trace(con, trace["answer_trace_id"])
+        assert loaded["generation_status"] == "validation_failed_visible"
+
     def test_save_answer_bundle_identical_artifact_is_idempotent(self, tmp_path):
         con = market_assistant.connect(tmp_path / "assistant.sqlite")
         artifact = knowledge_record_artifact()

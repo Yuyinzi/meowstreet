@@ -65,6 +65,11 @@ def load_market_assistant_config(args=None, root=ROOT):
         raise RuntimeError(
             "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE must be json_schema or json_object"
         )
+    reasoning_effort = os.getenv("MARKET_ASSISTANT_REASONING_EFFORT", "low")
+    if reasoning_effort not in {"low", "medium", "high"}:
+        raise RuntimeError(
+            "MARKET_ASSISTANT_REASONING_EFFORT must be low, medium, or high"
+        )
     research_enabled = _parse_market_bool(
         getattr(args, "market_assistant_research_enabled", None)
         or os.getenv("MARKET_ASSISTANT_RESEARCH_ENABLED")
@@ -102,6 +107,7 @@ def load_market_assistant_config(args=None, root=ROOT):
         "base_url": config["base_url"],
         "model": model,
         "structured_output_mode": structured_output_mode,
+        "reasoning_effort": reasoning_effort,
         "claim_validation_enabled": claim_validation_enabled,
         "research_model": research_model,
         "provider": provider,

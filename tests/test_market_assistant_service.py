@@ -1,5 +1,6 @@
 import asyncio
 import json
+from copy import deepcopy
 
 import pytest
 
@@ -9,8 +10,10 @@ from app.services.market_assistant import ASSISTANT_POLICY_VERSION
 from app.services.market_assistant import PROMPT_VERSION
 from app.services.market_setup_current import resolve_current_explanation
 from app.tools.market_assistant_answers import validate_answer_draft_schema
+from app.tools.market_assistant_artifacts import resolve_artifact_ref
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
 from app.tools.market_assistant_plans import validate_task_plan
+from app.tools.market_setup_explanation_snapshot import canonical_json
 
 
 def current_question(**overrides):
@@ -572,6 +575,34 @@ def fake_dependencies(plan, draft, repair=None, **kwargs):
     return FakeDependencies(plan, draft, repair=repair, **kwargs)
 
 
+class _ListSink:
+    def __init__(self):
+        self.events = []
+
+    async def send(self, event):
+        self.events.append(event)
+
+
+def _streaming_dependencies(plan, draft, repair=None, *, stream_events=None, **kwargs):
+    deps = fake_dependencies(plan, draft, repair=repair, **kwargs)
+    events = list(stream_events or [])
+
+    async def synthesize_llm(
+        *, question, plan, context_summary, artifacts, stream_observer=None
+    ):
+        deps.llm_calls.append("draft")
+        deps.acquired_artifacts = artifacts
+        if stream_observer is not None:
+            for event in events:
+                await stream_observer(event)
+        if isinstance(deps._draft, Exception):
+            raise deps._draft
+        return deps._draft
+
+    deps.synthesize_llm = synthesize_llm
+    return deps
+
+
 class RealPersistenceDeps:
     def __init__(self, db_path):
         self.db_path = str(db_path)
@@ -764,16 +795,447 @@ def test_decision_explanation_projection_excludes_non_decision_display_objects()
     ]
 
 
+def _projection_evidence_fact(fact_id, role_function, source_period):
+    return {
+        "fact_id": fact_id,
+        "indicator_id": "vix" if fact_id == "vix_level" else fact_id,
+        "label": "VIX" if fact_id == "vix_level" else fact_id,
+        "accepted_values": (
+            {"level": 18.4} if fact_id == "vix_level" else {"direction": "slowing"}
+        ),
+        "classifications": {"level": "elevated"},
+        "role": {
+            "decision_scope": "confirmation_input",
+            "function": role_function,
+            "target_layer": "market_confirmation",
+            "allowed_effects": [],
+        },
+        "data_status": {"state": "available"},
+        "participation": {"state": "applied"},
+        "decision_result": {"kind": "evaluated", "evaluation": {"state": "evaluated"}},
+        "provenance": {
+            "source_module": "market_setup_evidence_facts",
+            "source_id": fact_id,
+            "method_references": ["vix_confirmation_v2"],
+            "source_period": source_period,
+        },
+        "finding": {"state": "evaluated", "confirms": True},
+    }
+
+
+def _projection_snapshot():
+    return {
+        "context_id": "ctx_123",
+        "results": {
+            "macro_regime": {
+                "code": "growth_decelerating",
+                "label": "Growth Decelerating",
+                "primary_source": "ism_survey_synthesis",
+                "supports": [{"fact_id": "survey_growth_direction"}],
+                "conflicts": [{"fact_id": "macro_policy_response"}],
+                "missing_inputs": [],
+                "excluded_inputs": ["housing_starts"],
+                "method_version": "market_setup_v2_macro_regime_v1",
+                "source_periods": {
+                    "survey_growth_direction": {"reference_period": "2026-06"}
+                },
+            },
+            "market_confirmation": {
+                "code": "downside_confirmation",
+                "label": "Downside Confirmation",
+                "confirmation_test_count": 2,
+                "evidence": {"volatility": "confirmed", "liquidity": "confirmed"},
+                "offsets": [{"fact_id": "m2_liquidity", "effect": "delays"}],
+                "missing_inputs": [],
+                "method_version": "market_setup_v2_market_confirmation_v1",
+                "source_periods": {"vix_level": {"observation_date": "2026-07-01"}},
+            },
+            "market_setup": {
+                "code": "downside_setup",
+                "label": "Downside Setup",
+                "agreement": "aligned",
+            },
+            "portfolio_posture": {
+                "code": "defensive",
+                "label": "Defensive Posture",
+                "net_exposure": "underweight",
+                "gross_exposure": "low",
+                "implementation": "reduce_equity",
+                "broad_beta": "risk_off",
+                "positioning": [{"instrument": "equities", "action": "reduce"}],
+                "avoid": [{"instrument": "high_beta"}],
+                "method_version": "market_setup_v2_posture_v1",
+            },
+        },
+        "evidence": [
+            _projection_evidence_fact(
+                "vix_level",
+                "confirmation_test",
+                {"effective_date": "2026-07-01"},
+            ),
+            _projection_evidence_fact(
+                "survey_growth_direction",
+                "selector",
+                {"reference_period": "2026-06"},
+            ),
+            _projection_evidence_fact("cyclical_commodities", "display_only", None),
+            _projection_evidence_fact("equity_breadth", "watch_only", None),
+        ],
+        "method_contracts": {
+            "version": "market_setup_explanation_methods_v1",
+            "methods": {
+                "vix_confirmation_v2": {
+                    "method_version": "vix_confirmation_v2",
+                    "kind": "predicate_method",
+                    "decision_contract": {"input_contract": {"fact_id": "vix_level"}},
+                    "explanation_contract": {"summary": "predicate method"},
+                }
+            },
+        },
+        "counterfactuals": [
+            {
+                "counterfactual_id": "vix_downside_crossing",
+                "object_type": "confirmation_test",
+                "object_id": "vix_level",
+                "predicate_ref": {"method_id": "vix_confirmation_v2"},
+                "transition": "accepted_value_crosses_boundary",
+                "decision_effect": "confirmation_test_result_change",
+            },
+            {
+                "counterfactual_id": "setup_growth_decelerating_confirming_downside",
+                "object_type": "market_setup",
+                "object_id": "setup_growth_decelerating_confirming_downside",
+                "from_code": "neutral_setup",
+                "to_code": "downside_setup",
+                "confirmation_change": {
+                    "from": "neutral_confirmation",
+                    "to": "downside_confirmation",
+                },
+                "posture_change": {"from": "balanced", "to": "defensive"},
+                "decision_effect": "market_setup_and_posture_change",
+            },
+            {
+                "counterfactual_id": "setup_growth_decelerating_not_confirming_downside",
+                "object_type": "market_setup",
+                "object_id": "setup_growth_decelerating_not_confirming_downside",
+                "from_code": "neutral_setup",
+                "to_code": "upside_setup",
+                "confirmation_change": {
+                    "from": "neutral_confirmation",
+                    "to": "upside_confirmation",
+                },
+                "posture_change": {"from": "balanced", "to": "aggressive"},
+                "decision_effect": "market_setup_and_posture_change",
+            },
+            {
+                "counterfactual_id": "sp500_downside_crossing",
+                "object_type": "confirmation_test",
+                "object_id": "sp500_market_phase",
+                "predicate_ref": {"method_id": "equity_confirmation_v2"},
+                "transition": "accepted_value_crosses_boundary",
+                "decision_effect": "confirmation_test_result_change",
+            },
+            {
+                "counterfactual_id": "setup_growth_decelerating_third",
+                "object_type": "market_setup",
+                "object_id": "setup_growth_decelerating_third",
+                "from_code": "neutral_setup",
+                "to_code": "downside_setup",
+                "confirmation_change": {
+                    "from": "neutral_confirmation",
+                    "to": "downside_confirmation",
+                },
+                "posture_change": {"from": "balanced", "to": "defensive"},
+                "decision_effect": "market_setup_and_posture_change",
+            },
+        ],
+    }
+
+
+def _projection_artifacts():
+    artifact = market_assistant._snapshot_artifact(_projection_snapshot())
+    return {artifact["artifact_id"]: artifact}
+
+
+def _projected(plan):
+    return market_assistant._llm_artifact_projection(_projection_artifacts(), plan)
+
+
+def _projected_objects():
+    return _projected(valid_plan())["ctx_123"]["object_index"]
+
+
+def _previous_style_object_index(object_index):
+    return [
+        item
+        for item in object_index
+        if item.get("object_type") != "method_contract"
+        and (
+            item.get("object_type") != "evidence_fact"
+            or (item.get("payload") or {}).get("role", {}).get("function")
+            not in {"display_only", "watch_only"}
+        )
+    ]
+
+
+def _dotted_paths(payload, prefix=""):
+    paths = []
+    for key, value in payload.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            paths.extend(_dotted_paths(value, path))
+        else:
+            paths.append(path)
+    return paths
+
+
+def _path_exists(payload, path):
+    current = payload
+    for key in path.split("."):
+        if not isinstance(current, dict) or key not in current:
+            return False
+        current = current[key]
+    return True
+
+
+def test_llm_artifact_projection_does_not_mutate_full_artifacts():
+    artifacts = _projection_artifacts()
+    frozen = deepcopy(artifacts)
+    projected = market_assistant._llm_artifact_projection(artifacts, valid_plan())
+
+    assert artifacts == frozen
+    assert len(canonical_json(projected)) < len(canonical_json(artifacts))
+
+
+def test_llm_artifact_projection_keeps_layer_results_and_applied_evidence():
+    by_id = {item["object_id"]: item for item in _projected_objects()}
+
+    assert {
+        "macro_regime",
+        "market_confirmation",
+        "market_setup",
+        "portfolio_posture",
+    } <= set(by_id)
+    assert by_id["macro_regime"]["payload"] == {
+        "code": "growth_decelerating",
+        "label": "Growth Decelerating",
+        "primary_source": "ism_survey_synthesis",
+        "supports": [{"fact_id": "survey_growth_direction"}],
+        "conflicts": [{"fact_id": "macro_policy_response"}],
+        "missing_inputs": [],
+        "excluded_inputs": ["housing_starts"],
+        "method_version": "market_setup_v2_macro_regime_v1",
+    }
+    assert by_id["market_confirmation"]["payload"] == {
+        "code": "downside_confirmation",
+        "label": "Downside Confirmation",
+        "confirmation_test_count": 2,
+        "offsets": [{"fact_id": "m2_liquidity", "effect": "delays"}],
+        "missing_inputs": [],
+        "method_version": "market_setup_v2_market_confirmation_v1",
+    }
+    assert by_id["market_setup"]["payload"] == {
+        "code": "downside_setup",
+        "label": "Downside Setup",
+        "agreement": "aligned",
+    }
+    assert by_id["portfolio_posture"]["payload"] == {
+        "code": "defensive",
+        "label": "Defensive Posture",
+        "net_exposure": "underweight",
+        "gross_exposure": "low",
+        "implementation": "reduce_equity",
+        "broad_beta": "risk_off",
+        "positioning": [{"instrument": "equities", "action": "reduce"}],
+        "avoid": [{"instrument": "high_beta"}],
+        "method_version": "market_setup_v2_posture_v1",
+    }
+
+    evidence = [
+        item for item in _projected_objects() if item["object_type"] == "evidence_fact"
+    ]
+    assert [item["object_id"] for item in evidence] == [
+        "vix_level",
+        "survey_growth_direction",
+    ]
+    assert evidence[0]["payload"] == {
+        "fact_id": "vix_level",
+        "label": "VIX",
+        "accepted_values": {"level": 18.4},
+        "classifications": {"level": "elevated"},
+        "data_status": {"state": "available"},
+        "participation": {"state": "applied"},
+        "decision_result": {"kind": "evaluated", "evaluation": {"state": "evaluated"}},
+        "finding": {"state": "evaluated", "confirms": True},
+        "role": {
+            "decision_scope": "confirmation_input",
+            "function": "confirmation_test",
+            "target_layer": "market_confirmation",
+            "allowed_effects": [],
+        },
+        "provenance": {"source_period": {"effective_date": "2026-07-01"}},
+    }
+    assert evidence[1]["payload"]["provenance"] == {
+        "source_period": {"reference_period": "2026-06"}
+    }
+
+
+def test_llm_artifact_projection_drops_redundant_objects_and_fields():
+    object_index = _projected_objects()
+    object_ids = {item["object_id"] for item in object_index}
+
+    assert "vix_confirmation_v2" not in object_ids
+    assert "cyclical_commodities" not in object_ids
+    assert "equity_breadth" not in object_ids
+    assert "vix_downside_crossing" not in object_ids
+    assert "sp500_downside_crossing" not in object_ids
+    assert "setup_growth_decelerating_third" not in object_ids
+
+    for item in object_index:
+        if item["object_type"] == "market_setup_result":
+            assert "source_periods" not in item["payload"]
+            if item["object_id"] == "market_confirmation":
+                assert "evidence" not in item["payload"]
+        if item["object_type"] == "evidence_fact":
+            assert "indicator_id" not in item["payload"]
+            assert set(item["payload"]["provenance"]) == {"source_period"}
+
+
+def test_llm_artifact_projection_keeps_only_first_two_setup_counterfactuals():
+    object_index = _projected_objects()
+
+    setup_counterfactuals = [
+        item
+        for item in object_index
+        if item["object_type"] == "market_setup" and item["object_id"] != "market_setup"
+    ]
+    assert [item["object_id"] for item in setup_counterfactuals] == [
+        "setup_growth_decelerating_confirming_downside",
+        "setup_growth_decelerating_not_confirming_downside",
+    ]
+    assert setup_counterfactuals[0]["payload"]["from_code"] == "neutral_setup"
+    assert setup_counterfactuals[0]["payload"]["decision_effect"] == (
+        "market_setup_and_posture_change"
+    )
+    assert not any(item["object_type"] == "confirmation_test" for item in object_index)
+
+
+def test_llm_artifact_projection_refs_resolve_in_full_artifacts():
+    artifacts = _projection_artifacts()
+    object_index = _projected(valid_plan())["ctx_123"]["object_index"]
+
+    for item in object_index:
+        resolved = resolve_artifact_ref(
+            artifacts,
+            {
+                "artifact_id": "ctx_123",
+                "object_type": item["object_type"],
+                "object_id": item["object_id"],
+            },
+        )
+        for path in _dotted_paths(item["payload"]):
+            assert _path_exists(resolved["payload"], path)
+
+
+def test_evidence_projection_omits_provenance_without_source_period():
+    snapshot = _projection_snapshot()
+    snapshot["evidence"] = [
+        _projection_evidence_fact(
+            "vix_level",
+            "confirmation_test",
+            {"effective_date": "2026-07-01"},
+        ),
+        _projection_evidence_fact("survey_growth_direction", "selector", None),
+        {
+            "fact_id": "credit_conditions",
+            "indicator_id": "credit_conditions",
+            "label": "Credit Conditions",
+            "accepted_values": {"state": "tightening"},
+            "role": {"function": "selector"},
+            "data_status": {"state": "available"},
+            "participation": {"state": "applied"},
+            "decision_result": {
+                "kind": "evaluated",
+                "evaluation": {"state": "evaluated"},
+            },
+            "finding": {"state": "evaluated", "confirms": True},
+        },
+    ]
+    artifact = market_assistant._snapshot_artifact(snapshot)
+    artifacts = {artifact["artifact_id"]: artifact}
+
+    projected = market_assistant._llm_artifact_projection(artifacts, valid_plan())
+
+    by_id = {item["object_id"]: item for item in projected["ctx_123"]["object_index"]}
+    assert by_id["vix_level"]["payload"]["provenance"] == {
+        "source_period": {"effective_date": "2026-07-01"}
+    }
+    assert "provenance" not in by_id["survey_growth_direction"]["payload"]
+    assert "provenance" not in by_id["credit_conditions"]["payload"]
+    for item in projected["ctx_123"]["object_index"]:
+        resolved = resolve_artifact_ref(
+            artifacts,
+            {
+                "artifact_id": "ctx_123",
+                "object_type": item["object_type"],
+                "object_id": item["object_id"],
+            },
+        )
+        for path in _dotted_paths(item["payload"]):
+            assert _path_exists(resolved["payload"], path)
+
+
+def test_keeps_artifact_object_tolerates_missing_object_id():
+    malformed = {"object_type": "market_setup"}
+
+    kept = market_assistant._keeps_artifact_object(malformed, ["market_setup"])
+
+    assert kept is False
+
+
+def test_llm_artifact_projection_smaller_than_previous_full_payload_projection():
+    artifacts = _projection_artifacts()
+    compact = market_assistant._llm_artifact_projection(artifacts, valid_plan())
+    previous = {
+        artifact_id: {
+            "artifact_id": artifact["artifact_id"],
+            "artifact_kind": artifact["artifact_kind"],
+            "primary_authority": artifact["primary_authority"],
+            "market_setup_relation": artifact["market_setup_relation"],
+            "object_index": _previous_style_object_index(artifact["object_index"]),
+        }
+        for artifact_id, artifact in artifacts.items()
+    }
+
+    assert len(canonical_json(compact)) < len(canonical_json(previous))
+
+
+def test_non_decision_projection_returns_objects_unchanged():
+    artifacts = _projection_artifacts()
+    frozen = deepcopy(artifacts)
+    projected = market_assistant._llm_artifact_projection(
+        artifacts, valid_plan(intent="counterfactual")
+    )
+
+    assert projected["ctx_123"]["object_index"] == frozen["ctx_123"]["object_index"]
+
+
 @pytest.mark.asyncio
-async def test_failed_repair_uses_deterministic_fallback_without_new_tools():
+async def test_failed_repair_keeps_initial_draft_visible_as_unvalidated():
     deps = fake_dependencies(valid_plan(), invalid_draft(), invalid_repair())
     response = await market_assistant.answer_question(
         current_question(), dependencies=deps
     )
 
-    assert response["generation_status"] == "fallback"
+    assert response["generation_status"] == "validation_failed_visible"
+    assert response["answer_text"] == "The VIX level is 99.9 today."
     assert deps.tool_execution_count == 1
     assert deps.llm_calls == ["plan", "draft", "repair"]
+    assert deps.saved_trace["generation_status"] == "validation_failed_visible"
+    assert (
+        deps.saved_trace["structured_claims"]
+        == validate_answer_draft_schema(invalid_draft())["sections"]
+    )
 
 
 @pytest.mark.asyncio
@@ -915,7 +1377,7 @@ async def test_claim_validation_remains_enabled_when_config_key_is_absent():
         current_question(), dependencies=deps
     )
 
-    assert response["generation_status"] == "fallback"
+    assert response["generation_status"] == "validation_failed_visible"
     assert deps.llm_calls == ["plan", "draft", "repair"]
 
 
@@ -979,7 +1441,7 @@ async def test_research_operation_calls_acquire_research_with_ids():
 async def test_research_unavailable_renders_research_fallback():
     deps = fake_dependencies(
         research_plan(),
-        invalid_draft(),
+        None,
         invalid_repair(),
         research=research_unavailable(),
     )
@@ -1204,6 +1666,7 @@ async def test_answer_trace_has_design_19_fields_and_no_secrets():
         trace["model_configuration_fingerprint"]["structured_output_mode"]
         == "json_object"
     )
+    assert trace["model_configuration_fingerprint"]["reasoning_effort"] == "low"
     assert len(trace["answer_text_hash"]) == 64
     assert "api_key" not in json.dumps(trace)
     assert "sk-secret-test-key" not in json.dumps(trace)
@@ -1664,6 +2127,12 @@ def _knowledge_draft():
     return {"sections": [{"kind": "knowledge", "claims": [claim]}]}
 
 
+def _knowledge_draft_with_answer_text(answer_text):
+    draft = _knowledge_draft()
+    draft["answer_text"] = answer_text
+    return draft
+
+
 def _research_claim():
     return {
         "claim_id": "r1",
@@ -1780,8 +2249,8 @@ async def test_deep_research_without_explicit_intent_never_executes():
     response = await market_assistant.answer_question(request, dependencies=deps)
 
     assert deps.acquired_research_kwargs is None
-    assert response["generation_status"] == "fallback"
-    assert "External research is currently unavailable." in response["answer_text"]
+    assert response["generation_status"] == "validation_failed_visible"
+    assert response["answer_text"] == "The VIX level is 99.9 today."
 
 
 @pytest.mark.asyncio
@@ -1907,3 +2376,438 @@ async def test_unregistered_exploration_indicator_routes_to_fallback():
 
     assert response["generation_status"] == "fallback"
     assert "Local exploration data is currently unavailable." in response["answer_text"]
+
+
+def test_model_configuration_fingerprint_includes_reasoning_effort():
+    fingerprint = market_assistant._model_configuration_fingerprint(
+        _config(reasoning_effort="medium")
+    )
+
+    assert fingerprint["reasoning_effort"] == "medium"
+
+
+def test_model_configuration_fingerprint_defaults_reasoning_effort_to_low():
+    config = _config()
+    config.pop("reasoning_effort", None)
+
+    fingerprint = market_assistant._model_configuration_fingerprint(config)
+
+    assert fingerprint["reasoning_effort"] == "low"
+
+
+@pytest.mark.asyncio
+async def test_matching_chinese_answer_text_passes_validation():
+    deps = fake_dependencies(
+        knowledge_plan(),
+        _knowledge_draft_with_answer_text(
+            "指标与方法\nThe VIX measures expected volatility."
+        ),
+    )
+
+    response = await market_assistant.answer_question(
+        current_question(question="VIX 是什么？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert deps.llm_calls == ["plan", "draft"]
+
+
+@pytest.mark.asyncio
+async def test_mismatched_chinese_answer_text_repairs_then_passes():
+    deps = fake_dependencies(
+        knowledge_plan(),
+        _knowledge_draft_with_answer_text("指标与方法\nThe VIX is highly volatile."),
+        _knowledge_draft_with_answer_text(
+            "指标与方法\nThe VIX measures expected volatility."
+        ),
+    )
+
+    response = await market_assistant.answer_question(
+        current_question(question="VIX 是什么？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "validated_after_repair"
+    assert deps.llm_calls == ["plan", "draft", "repair"]
+    assert deps.saved_trace["validation_error_codes"] == ["ANSWER_TEXT_MISMATCH"]
+
+
+@pytest.mark.asyncio
+async def test_debug_mode_prefers_draft_answer_text():
+    draft = beginner_debug_draft()
+    draft["answer_text"] = "市场处于轻度避险状态。"
+    deps = fake_dependencies(
+        valid_plan(),
+        draft,
+        invalid_repair(),
+        config=_config(claim_validation_enabled=False),
+    )
+
+    response = await market_assistant.answer_question(
+        current_question(question="现在市场怎么样？为什么？"),
+        dependencies=deps,
+    )
+
+    assert response["generation_status"] == "unvalidated_debug"
+    assert response["answer_text"] == "市场处于轻度避险状态。"
+    assert deps.llm_calls == ["plan", "draft"]
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_lifecycle_emits_full_event_sequence():
+    draft = valid_draft()
+    draft["answer_text"] = "The accepted VIX level is 18.4."
+    deps = _streaming_dependencies(
+        valid_plan(),
+        draft,
+        stream_events=[
+            {"type": "reasoning_started"},
+            {"type": "answer_delta", "delta": "The accepted VIX level is "},
+            {"type": "answer_delta", "delta": "18.4."},
+        ],
+    )
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    assert [event["type"] for event in sink.events] == [
+        "resolution",
+        "status",
+        "status",
+        "answer_delta",
+        "answer_delta",
+        "status",
+        "validation",
+        "complete",
+    ]
+    assert sink.events[0] == {
+        "type": "resolution",
+        "resolution": response["resolution"],
+    }
+    assert sink.events[1] == {"type": "status", "status": "thinking"}
+    assert sink.events[2] == {"type": "status", "status": "thinking"}
+    assert sink.events[3] == {
+        "type": "answer_delta",
+        "delta": "The accepted VIX level is ",
+    }
+    assert sink.events[4] == {"type": "answer_delta", "delta": "18.4."}
+    assert sink.events[5] == {"type": "status", "status": "validating"}
+    assert sink.events[6] == {
+        "type": "validation",
+        "status": "passed",
+        "error_codes": [],
+    }
+    complete = sink.events[7]
+    assert complete["type"] == "complete"
+    assert complete["resolution"] == response["resolution"]
+    assert complete["generation_status"] == "validated_first_pass"
+    assert complete["answer_trace_id"] == response["answer_trace_id"]
+    assert complete["citations"] == response["citations"] == []
+
+
+@pytest.mark.asyncio
+async def test_stream_first_pass_without_streamed_delta_replaces_with_rendered_text():
+    draft = valid_draft()
+    draft["answer_text"] = "The accepted VIX level is 18.4."
+    deps = _streaming_dependencies(valid_plan(), draft)
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    replace_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "answer_replace"
+    )
+    passed_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "validation" and event["status"] == "passed"
+    )
+    assert replace_index < passed_index
+    assert sink.events[replace_index]["text"] == response["answer_text"]
+    assert response["answer_text"] == "The accepted VIX level is 18.4."
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_lifecycle_emits_validation_disabled_not_passed():
+    draft = beginner_debug_draft()
+    draft["answer_text"] = "现在市场处于轻度避险状态。"
+    deps = _streaming_dependencies(
+        valid_plan(),
+        draft,
+        invalid_repair(),
+        config=_config(claim_validation_enabled=False),
+        stream_events=[{"type": "answer_delta", "delta": "现在市场处于轻度避险状态。"}],
+    )
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(question="现在市场怎么样？为什么？"),
+        dependencies=deps,
+        event_sink=sink,
+    )
+
+    assert response["generation_status"] == "unvalidated_debug"
+    validations = [event for event in sink.events if event["type"] == "validation"]
+    assert validations == [
+        {"type": "validation", "status": "disabled", "error_codes": []}
+    ]
+    assert not any(event["type"] == "answer_replace" for event in sink.events)
+    complete = sink.events[-1]
+    assert complete["type"] == "complete"
+    assert complete["generation_status"] == "unvalidated_debug"
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_lifecycle_failed_initial_then_repaired_and_passed():
+    deps = _streaming_dependencies(valid_plan(), invalid_draft(), valid_draft())
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validated_after_repair"
+    assert [event["type"] for event in sink.events] == [
+        "resolution",
+        "status",
+        "status",
+        "validation",
+        "status",
+        "answer_replace",
+        "validation",
+        "complete",
+    ]
+    assert sink.events[3] == {
+        "type": "validation",
+        "status": "failed_initial",
+        "error_codes": ["UNBOUND_FACTUAL_LITERAL"],
+    }
+    assert sink.events[4] == {"type": "status", "status": "repairing"}
+    replace = sink.events[5]
+    assert replace["type"] == "answer_replace"
+    assert replace["text"] == response["answer_text"]
+    assert sink.events[6] == {
+        "type": "validation",
+        "status": "repaired_and_passed",
+        "error_codes": [],
+    }
+    assert sink.events[7]["generation_status"] == "validated_after_repair"
+
+
+@pytest.mark.asyncio
+async def test_stream_first_pass_without_answer_text_replaces_with_rendered_text():
+    deps = _streaming_dependencies(valid_plan(), valid_draft())
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validated_first_pass"
+    replace_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "answer_replace"
+    )
+    passed_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "validation" and event["status"] == "passed"
+    )
+    assert replace_index < passed_index
+    assert sink.events[replace_index]["text"] == response["answer_text"]
+    assert response["answer_text"] == "The accepted VIX level is 18.4."
+
+
+@pytest.mark.asyncio
+async def test_stream_validation_failed_visible_none_draft_replaces_with_fallback():
+    deps = _streaming_dependencies(
+        valid_plan(),
+        {"sections": []},
+        invalid_repair(),
+    )
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validation_failed_visible"
+    replace_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "answer_replace"
+    )
+    failed_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event["type"] == "validation" and event["status"] == "failed"
+    )
+    assert replace_index < failed_index
+    assert sink.events[replace_index]["text"] == response["answer_text"]
+    assert response["answer_text"].startswith("Market Setup decision result:")
+    assert deps.saved_trace["generation_status"] == "validation_failed_visible"
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_lifecycle_repair_failure_keeps_initial_draft_visible():
+    deps = _streaming_dependencies(valid_plan(), invalid_draft(), invalid_repair())
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "validation_failed_visible"
+    assert response["answer_text"] == "The VIX level is 99.9 today."
+    assert [event["type"] for event in sink.events] == [
+        "resolution",
+        "status",
+        "status",
+        "validation",
+        "status",
+        "answer_replace",
+        "validation",
+        "complete",
+    ]
+    validations = [event for event in sink.events if event["type"] == "validation"]
+    assert validations == [
+        {
+            "type": "validation",
+            "status": "failed_initial",
+            "error_codes": ["UNBOUND_FACTUAL_LITERAL"],
+        },
+        {
+            "type": "validation",
+            "status": "failed",
+            "error_codes": ["UNBOUND_FACTUAL_LITERAL"],
+        },
+    ]
+    replace = sink.events[5]
+    assert replace["type"] == "answer_replace"
+    assert replace["text"] == response["answer_text"]
+    complete = sink.events[-1]
+    assert complete["type"] == "complete"
+    assert complete["generation_status"] == "validation_failed_visible"
+    assert complete["answer_trace_id"] == response["answer_trace_id"]
+    assert deps.saved_trace["generation_status"] == "validation_failed_visible"
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_lifecycle_falls_back_when_synthesis_fails_before_delta():
+    deps = _streaming_dependencies(valid_plan(), RuntimeError("llm down"))
+    sink = _ListSink()
+
+    response = await market_assistant.answer_question(
+        current_question(), dependencies=deps, event_sink=sink
+    )
+
+    assert response["generation_status"] == "fallback"
+    assert response["answer_text"].startswith("Market Setup decision result:")
+    assert [event["type"] for event in sink.events] == [
+        "resolution",
+        "status",
+        "status",
+        "answer_replace",
+        "validation",
+        "complete",
+    ]
+    replace = sink.events[3]
+    assert replace["type"] == "answer_replace"
+    assert replace["text"] == response["answer_text"]
+    assert sink.events[4] == {
+        "type": "validation",
+        "status": "fallback",
+        "error_codes": [],
+    }
+    assert sink.events[5]["generation_status"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_question_yields_events_and_stops_at_complete():
+    draft = valid_draft()
+    draft["answer_text"] = "The accepted VIX level is 18.4."
+    deps = _streaming_dependencies(
+        valid_plan(),
+        draft,
+        stream_events=[{"type": "answer_delta", "delta": "The accepted VIX level is "}],
+    )
+
+    events = [
+        event
+        async for event in market_assistant.stream_answer_question(
+            current_question(), dependencies=deps
+        )
+    ]
+
+    assert [event["type"] for event in events] == [
+        "resolution",
+        "status",
+        "answer_delta",
+        "status",
+        "validation",
+        "complete",
+    ]
+    assert events[-1]["type"] == "complete"
+    assert events[-1]["generation_status"] == "validated_first_pass"
+    assert events[-1]["answer_trace_id"]
+    assert events[-1]["citations"] == []
+    assert deps.saved_trace is not None
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_question_sends_error_and_stops_without_trace():
+    deps = _streaming_dependencies(valid_plan(), valid_draft())
+
+    def fail_save(con, *, artifacts, answer_trace):
+        raise RuntimeError("disk full")
+
+    deps.save_bundle = fail_save
+
+    events = [
+        event
+        async for event in market_assistant.stream_answer_question(
+            current_question(), dependencies=deps
+        )
+    ]
+
+    assert events[-1]["type"] == "error"
+    assert events[-1]["message"] == "market assistant service is unavailable"
+    assert not any(event["type"] == "complete" for event in events)
+    assert deps.saved_trace is None
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_question_aclose_cancels_worker_and_llm_task():
+    deps = _streaming_dependencies(valid_plan(), valid_draft())
+    cancelled = []
+    started = asyncio.Event()
+
+    async def hanging_synthesize_llm(
+        *, question, plan, context_summary, artifacts, stream_observer=None
+    ):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    deps.synthesize_llm = hanging_synthesize_llm
+
+    generator = market_assistant.stream_answer_question(
+        current_question(), dependencies=deps
+    )
+    assert (await anext(generator))["type"] == "resolution"
+    await asyncio.wait_for(started.wait(), timeout=0.5)
+    await generator.aclose()
+
+    assert cancelled == [True]
+    assert deps.saved_trace is None
