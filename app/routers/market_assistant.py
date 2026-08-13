@@ -309,6 +309,7 @@ def _build_dependencies():
         "synthesize_llm": _synthesize_llm,
         "repair_llm": _repair_llm,
         "react_turn_llm": _react_turn_llm,
+        "narration_instructions": _narration_instructions,
         "claim_audit_llm": _claim_audit_llm,
         "build_research_provider": build_research_provider,
         "exploration": execute_exploration,

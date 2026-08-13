@@ -96,6 +96,7 @@ _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
 _DEPENDENCY_DEFAULTS = {
     "stream_turn": stream_response_turn,
+    "narration_instructions": _INSTRUCTIONS,
     "response_items_for_next_turn": response_items_for_next_turn,
     "execute_tool_batch": execute_tool_batch,
     "build_explanation_view": build_explanation_view,
@@ -261,6 +262,9 @@ async def run_hybrid_narration(
     model = _model(dependencies)
     reasoning_effort = _reasoning_effort(dependencies)
     stream_turn = _dependency(dependencies, "stream_turn")
+    instructions = _dependency(dependencies, "narration_instructions")
+    if callable(instructions):
+        instructions = instructions()
     execute_batch = _dependency(dependencies, "execute_tool_batch")
     definitions = _dependency(dependencies, "tool_definitions")
     validate_call = _dependency(dependencies, "validate_tool_call")
@@ -318,7 +322,7 @@ async def run_hybrid_narration(
                 client,
                 model=model,
                 input_items=input_items,
-                instructions=_INSTRUCTIONS,
+                instructions=instructions,
                 tools=tools,
                 reasoning_effort=reasoning_effort,
                 observer=observer,

@@ -288,6 +288,7 @@ def test_question_passes_real_dependencies_dict(assistant_env, monkeypatch):
     assert callable(deps["synthesize_llm"])
     assert callable(deps["repair_llm"])
     assert callable(deps["react_turn_llm"])
+    assert callable(deps["narration_instructions"])
     assert callable(deps["claim_audit_llm"])
     assert callable(deps["build_research_provider"])
     assert callable(deps["exploration"])

@@ -798,6 +798,44 @@ async def test_indicator_confirmation_missing_test_is_unavailable_evidence():
 
 
 @pytest.mark.asyncio
+async def test_run_hybrid_narration_uses_injected_narration_instructions():
+    stream = _ScriptedStream([narration_step()])
+    dependencies = {
+        "client": object(),
+        "config": {"model": "assistant-model", "reasoning_effort": "medium"},
+        "stream_turn": stream,
+        "narration_instructions": "beginner narration instructions",
+        "event_sink": None,
+    }
+    await run_hybrid_narration(
+        {"question": "讲个笑话"},
+        route=react_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=dependencies,
+    )
+    assert stream.calls[0]["instructions"] == "beginner narration instructions"
+
+
+@pytest.mark.asyncio
+async def test_run_hybrid_narration_invokes_callable_narration_instructions():
+    stream = _ScriptedStream([narration_step()])
+    dependencies = {
+        "client": object(),
+        "config": {"model": "assistant-model", "reasoning_effort": "medium"},
+        "stream_turn": stream,
+        "narration_instructions": lambda: "callable narration instructions",
+        "event_sink": None,
+    }
+    await run_hybrid_narration(
+        {"question": "讲个笑话"},
+        route=react_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=dependencies,
+    )
+    assert stream.calls[0]["instructions"] == "callable narration instructions"
+
+
+@pytest.mark.asyncio
 async def test_initial_tool_outputs_are_bounded_not_full_snapshots():
     stream = _ScriptedStream([narration_step()])
     deps = recording_dependencies([], stream=stream)
