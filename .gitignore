@@ -34,3 +34,5 @@ docs/superpowers/
 logs/*
 !logs/.gitkeep
 .superpowers/
+/data/
+/docs/
