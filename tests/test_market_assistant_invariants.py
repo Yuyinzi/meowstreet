@@ -665,6 +665,13 @@ def _seed_schema(db_path):
 
 
 def _assistant_env(monkeypatch):
+    for name in (
+        "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE",
+        "MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED",
+        "MARKET_ASSISTANT_REASONING_EFFORT",
+        "MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS",
+    ):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("MARKET_ASSISTANT_MODEL", "test-model")
     monkeypatch.setenv("MARKET_ASSISTANT_RESEARCH_MODEL", "test-research-model")
     monkeypatch.setenv("MARKET_ASSISTANT_RESEARCH_PROVIDER", "openai_responses")
@@ -716,7 +723,7 @@ def test_market_setup_is_byte_identical_with_assistant_enabled_or_unavailable(
         json={"question": "Why?", "mode": "current"},
     )
     assert response.status_code == 200
-    assert response.json()["generation_status"] == "fallback"
+    assert response.json()["generation_status"] == "deterministic_fallback"
     after = client.get("/api/macro-dashboard/market-setup").json()
 
     assert decision_projection(before) == decision_projection(after)

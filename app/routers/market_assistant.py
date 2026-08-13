@@ -301,8 +301,9 @@ def _claim_audit_prompt(answer_text, explanation_view, artifact_projection):
 
 
 def _build_dependencies():
-    return {
-        "config": _load_market_assistant_config_or_none(),
+    config = _load_market_assistant_config_or_none()
+    dependencies = {
+        "config": config,
         "db_path": market_assistant_db.DEFAULT_DB_PATH,
         "plan_llm": _plan_llm,
         "synthesize_llm": _synthesize_llm,
@@ -315,6 +316,11 @@ def _build_dependencies():
         "save_bundle": market_assistant_db.save_answer_bundle,
         "resolve_current_explanation": resolve_current_explanation,
     }
+    if config:
+        dependencies["client"] = build_async_client(
+            config, timeout=900.0, error_context="market assistant"
+        )
+    return dependencies
 
 
 def _load_market_assistant_config_or_none():
