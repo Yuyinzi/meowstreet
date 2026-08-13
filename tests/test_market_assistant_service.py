@@ -8,8 +8,10 @@ import pytest
 
 from app.db import market_assistant as market_assistant_db
 from app.services import market_assistant
+from app.services import market_assistant_react
 from app.services.market_assistant import ASSISTANT_POLICY_VERSION
 from app.services.market_assistant import PROMPT_VERSION
+from app.services.market_assistant_react import run_hybrid_narration
 from app.services.market_setup_current import resolve_current_explanation
 from app.tools.market_assistant_artifacts import resolve_artifact_ref
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
@@ -1607,3 +1609,352 @@ def test_model_configuration_fingerprint_defaults_reasoning_effort_to_low():
     fingerprint = market_assistant._model_configuration_fingerprint(config)
 
     assert fingerprint["reasoning_effort"] == "low"
+
+
+class _ReactDeps:
+    def __init__(self, stream, *, huge_exploration=False):
+        self.client = object()
+        self.model = "assistant-model"
+        self.reasoning_effort = "medium"
+        self.stream_turn = stream
+        self.db_path = ":memory:"
+        self.executed = []
+        self._huge = huge_exploration
+        self.config = _config()
+
+    def connect(self, db_path):
+        return _dummy_con()
+
+    def load_snapshot(self, con, context_id):
+        return None
+
+    def load_knowledge_catalog(self):
+        return knowledge_catalog()
+
+    def exploration(self, con, query, *, result_id, created_at):
+        self.executed.append(deepcopy(query))
+        rows = [{"date": "2026-08-13", "value": 18.4, "note": "x" * 800}] * (
+            120 if self._huge else 1
+        )
+        return {
+            "exploration_result_id": result_id,
+            "artifact_schema_version": "market_assistant_exploration_result_v1",
+            "authority": "local_observation",
+            "market_setup_relation": "non_decision",
+            "query_contract": deepcopy(query),
+            "observed_window": {"start": query.get("start"), "end": query.get("end")},
+            "data_through": query.get("end"),
+            "rows": rows,
+            "deterministic_statistics": {"last_value": 18.4},
+            "gaps": {"policy": "not_applicable", "missing_periods": None},
+            "object_index": [
+                {
+                    "object_type": "indicator_history",
+                    "object_id": "history",
+                    "authority": "local_observation",
+                    "payload": {"rows": rows},
+                }
+            ],
+            "result_hash": "a" * 64,
+        }
+
+    async def acquire_research(
+        self, provider, task, *, result_id, searched_at, explicit_deep=False
+    ):
+        self.executed.append(deepcopy(task))
+        return {
+            "research_result_id": result_id,
+            "status": "research_unavailable",
+            "reason_code": "provider_error",
+        }
+
+    def build_research_provider(self, config):
+        return object()
+
+
+def _react_resolution():
+    return {
+        "resolution": {
+            "mode": "current",
+            "resolved_at": "2026-08-13T00:00:00Z",
+            "previous_context_id": None,
+            "current_context_id": "ctx_react",
+            "context_changed": False,
+        },
+        "delta": {"results_changed": False, "changes": []},
+        "snapshot": {"context_id": "ctx_react"},
+    }
+
+
+def _react_request(**overrides):
+    request = {"question": "讲个笑话"}
+    request.update(overrides)
+    return request
+
+
+def _history_call(call_id, *, indicator_id="vix", window="6m", statistics=None):
+    arguments = {"indicator_id": indicator_id, "window": window}
+    if statistics is not None:
+        arguments["statistics"] = statistics
+    return {
+        "call_id": call_id,
+        "tool_name": "query_indicator_history",
+        "arguments": arguments,
+    }
+
+
+def _confirmation_call(call_id, test_id):
+    return {
+        "call_id": call_id,
+        "tool_name": "get_confirmation_test",
+        "arguments": {"test_id": test_id},
+    }
+
+
+def _empty_call(call_id, tool_name):
+    return {"call_id": call_id, "tool_name": tool_name, "arguments": {}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_name", "arguments"),
+    [
+        (
+            "research_focused",
+            {
+                "purpose": "current_events",
+                "queries": ["latest vix"],
+                "expected_source_class": "official_publication",
+            },
+        ),
+        ("refresh_benchmarks", {}),
+        ("ingest_snapshot", {}),
+        ("import_ism_report", {}),
+        (
+            "query_indicator_history",
+            {"indicator_id": "https://evil.example/x", "window": "6m"},
+        ),
+        (
+            "query_indicator_history",
+            {
+                "indicator_id": "vix",
+                "window": "6m",
+                "statistics": ["'; DROP TABLE answer_traces;--"],
+            },
+        ),
+        ("get_confirmation_test", {"test_id": "vix", "context_id": "ctx_hack"}),
+    ],
+)
+async def test_hostile_tool_calls_are_rejected_without_execution(tool_name, arguments):
+    stream = _ScriptedStream(
+        [
+            tool_step(
+                [
+                    {
+                        "call_id": "call_hostile",
+                        "tool_name": tool_name,
+                        "arguments": arguments,
+                    }
+                ]
+            ),
+            narration_step(),
+        ]
+    )
+    deps = _ReactDeps(stream)
+
+    result = await run_hybrid_narration(
+        _react_request(external_search_requested=False),
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "answered"
+    assert deps.executed == []
+    rejected = [
+        entry for entry in result["tool_trace"] if entry["status"] == "rejected"
+    ]
+    assert rejected == [
+        {
+            "phase": "optional",
+            "call_id": "call_hostile",
+            "tool_name": tool_name,
+            "arguments": arguments,
+            "status": "rejected",
+            "reason": "tool_call_invalid",
+            "artifact_id": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_repeated_tool_call_stops_loop_before_any_execution():
+    call = _confirmation_call("call_dup", "vix")
+    stream = _ScriptedStream([tool_step([dict(call), dict(call)]), narration_step()])
+    deps = _ReactDeps(stream)
+
+    result = await run_hybrid_narration(
+        _react_request(),
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "duplicate_tool_call"
+    assert deps.executed == []
+    assert len(stream.calls) == 1
+    assert not any(entry["status"] == "executed" for entry in result["tool_trace"])
+
+
+@pytest.mark.asyncio
+async def test_fifth_parallel_call_is_rejected_without_execution():
+    calls = [
+        _confirmation_call("call_1", "vix"),
+        _confirmation_call("call_2", "credit"),
+        _confirmation_call("call_3", "equity"),
+        _history_call("call_4", indicator_id="vix"),
+        _empty_call("call_5", "get_posture_explanation"),
+    ]
+    stream = _ScriptedStream([tool_step(calls), narration_step()])
+    deps = _ReactDeps(stream)
+
+    result = await run_hybrid_narration(
+        _react_request(),
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "answered"
+    rejected = [
+        entry for entry in result["tool_trace"] if entry["status"] == "rejected"
+    ]
+    assert len(rejected) == 1
+    assert rejected[0]["call_id"] == "call_5"
+    assert rejected[0]["tool_name"] == "get_posture_explanation"
+    assert rejected[0]["reason"] == "parallel_call_limit"
+    handled = [entry for entry in result["tool_trace"] if entry["status"] != "rejected"]
+    assert len(handled) == 4
+    assert all(entry["status"] in {"executed", "unavailable"} for entry in handled)
+    assert not any(
+        entry["tool_name"] == "get_posture_explanation"
+        for entry in result["tool_trace"]
+        if entry["status"] == "executed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_thirteenth_deep_analysis_call_is_rejected_without_execution():
+    calls = [
+        _empty_call("c1", "get_setup_overview"),
+        _empty_call("c2", "get_macro_regime_explanation"),
+        _confirmation_call("c3", "vix"),
+        _confirmation_call("c4", "credit"),
+        _confirmation_call("c5", "equity"),
+        _empty_call("c6", "get_posture_explanation"),
+        _empty_call("c7", "get_approved_counterfactuals"),
+        {
+            "call_id": "c8",
+            "tool_name": "get_confirmation_tests",
+            "arguments": {"test_ids": ["equity", "credit", "vix"]},
+        },
+        {
+            "call_id": "c9",
+            "tool_name": "get_indicator_knowledge",
+            "arguments": {"indicator_id": "vix", "topic": "definition"},
+        },
+        _history_call("c10", indicator_id="vix", window="1m"),
+        _history_call("c11", indicator_id="credit_conditions", window="3m"),
+        _history_call("c12", indicator_id="sp500_close", window="6m"),
+        _history_call("c13", indicator_id="vix", window="1y"),
+    ]
+    rounds = [calls[0:4], calls[4:8], calls[8:11], calls[11:13]]
+    stream = _ScriptedStream([tool_step(round_calls) for round_calls in rounds])
+    deps = _ReactDeps(stream)
+
+    result = await run_hybrid_narration(
+        _react_request(deep_analysis_requested=True),
+        route=route_question("讲个笑话", deep_analysis=True),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "budget_exhausted"
+    rejected = [
+        entry for entry in result["tool_trace"] if entry["status"] == "rejected"
+    ]
+    assert rejected == [
+        {
+            "phase": "optional",
+            "call_id": "c13",
+            "tool_name": "query_indicator_history",
+            "arguments": {
+                "indicator_id": "vix",
+                "window": "1y",
+                "start": None,
+                "end": None,
+                "statistics": [],
+            },
+            "status": "rejected",
+            "reason": "tool_call_budget",
+            "artifact_id": None,
+        }
+    ]
+    handled = [entry for entry in result["tool_trace"] if entry["status"] != "rejected"]
+    assert len(handled) == 12
+    assert not any(
+        entry["call_id"] == "c13" and entry["status"] == "executed"
+        for entry in result["tool_trace"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_result_context_overflow_stops_loop_without_more_execution():
+    stream = _ScriptedStream(
+        [
+            tool_step([_history_call("call_history", indicator_id="vix")]),
+            narration_step(),
+        ]
+    )
+    deps = _ReactDeps(stream, huge_exploration=True)
+
+    result = await run_hybrid_narration(
+        _react_request(),
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "budget_exhausted"
+    executed = [
+        entry for entry in result["tool_trace"] if entry["status"] == "executed"
+    ]
+    assert len(executed) == 1
+    assert executed[0]["tool_name"] == "query_indicator_history"
+    assert len(stream.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_deadline_expiry_stops_loop_before_first_model_turn(monkeypatch):
+    class _DeadlineClock:
+        def __init__(self):
+            self.count = 0
+
+        def __call__(self):
+            self.count += 1
+            return 0.0 if self.count <= 2 else 10000.0
+
+    monkeypatch.setattr(market_assistant_react, "monotonic", _DeadlineClock())
+    stream = _ScriptedStream([narration_step()])
+    deps = _ReactDeps(stream)
+
+    result = await run_hybrid_narration(
+        _react_request(),
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "budget_exhausted"
+    assert stream.calls == []
+    assert deps.executed == []

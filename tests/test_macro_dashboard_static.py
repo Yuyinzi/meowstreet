@@ -9209,3 +9209,83 @@ def test_market_assistant_stream_consumption_cancels_reader_on_event_error():
         "cancelled": True,
         "released": True,
     }
+
+
+def test_market_assistant_rendered_stream_is_beginner_language_without_internal_codes():
+    first = "当前市场整体偏防御，增长正在放缓但下滑尚未完全确认。"
+    second = "选择依据是经济增长方向放缓。货币政策与增长方向不一致，显示冲突。"
+    third = "整体组合姿态偏向防御，即降低股票敞口。如果市场确认转弱，结论会改变。"
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {
+          type: "resolution",
+          resolution: { mode: "current", current_context_id: "ctx_NEW", context_changed: false },
+        });
+        hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup", message: "正在读取当前 Market Setup…" });
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "当前市场整体偏防御，增长正在放缓但下滑尚未完全确认。" });
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "选择依据是经济增长方向放缓。货币政策与增长方向不一致，显示冲突。" });
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "整体组合姿态偏向防御，即降低股票敞口。如果市场确认转弱，结论会改变。" });
+        hooks.applyStreamEvent(stream, { type: "validation", status: "passed", error_codes: [] });
+        hooks.applyStreamEvent(stream, { type: "complete", generation_status: "narration_validated", answer_trace_id: "trace_1", citations: [], resolution: { mode: "current" } });
+        const logText = elements.marketAssistantLog.children.map((child) => {
+          const textEl = child.children.find((c) => c.className === "market-assistant-message-text");
+          return textEl ? textEl.textContent : "";
+        }).join(" ");
+        const statusText = elements.marketAssistantStatus.textContent;
+        const rendered = logText + " " + statusText;
+        const tokens = ["bull_market", "risk_rising", "modest_long", "selective_positions", "conflicts", "artifact_id", "object_id", "decision_fact"];
+        console.log(JSON.stringify({
+          rendered,
+          leaksAny: tokens.some((token) => rendered.indexOf(token) !== -1),
+          leaksContextId: rendered.indexOf("ctx_") !== -1,
+          hasOpening: rendered.indexOf("当前市场整体偏防御") !== -1,
+          hasSelector: rendered.indexOf("选择依据") !== -1,
+          hasConflict: rendered.indexOf("不一致") !== -1,
+          hasPosture: rendered.indexOf("降低股票敞口") !== -1,
+          hasChange: rendered.indexOf("结论会改变") !== -1,
+        }));
+        """
+    )
+
+    assert payload == {
+        "rendered": first + second + third + " ",
+        "leaksAny": False,
+        "leaksContextId": False,
+        "hasOpening": True,
+        "hasSelector": True,
+        "hasConflict": True,
+        "hasPosture": True,
+        "hasChange": True,
+    }
+
+
+def test_market_assistant_stream_disabled_validation_renders_visible_badge():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"answer_delta","delta":"当前市场整体偏防御。"}\\n',
+          '{"type":"validation","status":"disabled","error_codes":[]}\\n',
+          '{"type":"complete","generation_status":"narration_validation_disabled","answer_trace_id":"trace_1","citations":[],"resolution":{"mode":"current"}}\\n',
+        ]) });
+        elements.marketAssistantQuestion.value = "现在市场怎么样？";
+        await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[1];
+        const badge = assistant.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        console.log(JSON.stringify({
+          badgeClass: badge && badge.className,
+          isDisabled: Boolean(badge) && badge.className.indexOf("market-assistant-validation-disabled") !== -1,
+          isPassed: Boolean(badge) && badge.className.indexOf("market-assistant-validation-passed") !== -1,
+          label: badge && badge.children[0].textContent,
+        }));
+        """
+    )
+
+    assert payload == {
+        "badgeClass": "market-assistant-validation market-assistant-validation-disabled",
+        "isDisabled": True,
+        "isPassed": False,
+        "label": "Claim validation 当前已关闭",
+    }

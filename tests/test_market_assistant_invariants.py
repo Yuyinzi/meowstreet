@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import inspect
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -12,12 +13,21 @@ from app.db import market_assistant as market_assistant_db
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.routers import market_assistant as market_assistant_router
 from app.services import market_assistant as market_assistant_service
+from app.services import market_assistant_react
 from app.services import market_setup_current
+from app.services.market_assistant_tool_runtime import (
+    _approved_counterfactuals_artifact,
+)
+from app.services.market_assistant_tool_runtime import _confirmation_tests_artifact
+from app.services.market_assistant_tool_runtime import _macro_regime_artifact
+from app.services.market_assistant_tool_runtime import _posture_artifact
+from app.services.market_assistant_tool_runtime import _setup_overview_artifact
 from app.tools import market_setup_evidence_facts
 from app.tools import market_setup_explanation_snapshot
 from app.tools import market_setup_predicates
 from app.tools import market_setup_v2
 from app.tools.market_assistant_plans import validate_task_plan
+from app.tools.market_assistant_views import build_explanation_view
 
 ROOT = Path(__file__).resolve().parents[1]
 METHOD_CONTRACTS_PATH = (
@@ -801,3 +811,483 @@ def test_unvalidated_draft_and_failed_repair_keeps_initial_draft_visible(
     assert response["generation_status"] == "validation_failed_visible"
     assert response["validation_error_codes"]
     assert "unvalidated model text" in response["answer_text"]
+
+
+_FORBIDDEN_BEGINNER_TOKENS = (
+    "bull_market",
+    "risk_rising",
+    "modest_long",
+    "selective_positions",
+    "conflicts",
+    "artifact_id",
+    "object_id",
+    "decision_fact",
+)
+
+
+def _string_values(payload):
+    values = []
+    if isinstance(payload, dict):
+        for value in payload.values():
+            values.extend(_string_values(value))
+    elif isinstance(payload, list):
+        for item in payload:
+            values.extend(_string_values(item))
+    elif isinstance(payload, str):
+        values.append(payload)
+    return values
+
+
+def _representative_setup_artifacts():
+    state = _snapshot_state(_downside_inputs())
+    snapshot = market_setup_explanation_snapshot.finalize_snapshot(
+        state, context_id="ctx_rep", created_at=RESOLVED_AT
+    )
+    artifacts = {}
+    for artifact in (
+        _setup_overview_artifact(snapshot),
+        _macro_regime_artifact(snapshot),
+        _confirmation_tests_artifact(
+            {"test_ids": ["equity", "credit", "vix"]}, snapshot
+        ),
+        _posture_artifact(snapshot),
+        _approved_counterfactuals_artifact(snapshot),
+    ):
+        artifacts[artifact["artifact_id"]] = artifact
+    return artifacts
+
+
+def _setup_explanation_view(artifacts):
+    route = {
+        "route_id": "current_setup_overview",
+        "routing_source": "deterministic",
+        "view_type": "setup_explanation",
+        "initial_operations": [],
+        "supplementary_tools": [],
+        "budget": {
+            "max_rounds": 2,
+            "max_parallel_calls": 4,
+            "max_tool_calls": 8,
+            "max_tool_result_bytes": 32 * 1024,
+            "deadline_seconds": 90.0,
+        },
+    }
+    return build_explanation_view(route, artifacts, question="现在市场怎么样？")
+
+
+def test_setup_view_uses_beginner_language_without_internal_codes():
+    view = _setup_explanation_view(_representative_setup_artifacts())
+
+    display = {key: value for key, value in view.items() if key != "audit_objects"}
+    display_values = _string_values(display)
+    for token in _FORBIDDEN_BEGINNER_TOKENS:
+        assert token not in display_values
+
+    assert all(result["meaning"] for result in view["results"].values())
+    assert view["macro_selector"]["label"]
+    assert view["macro_selector"]["input_state"]
+    assert any(
+        relationship["relationship"] == "与当前增长方向不一致"
+        for relationship in view["relevant_relationships"]
+    )
+    assert view["posture_meaning"]["meaning"]
+    assert view["counterfactuals"]
+
+
+class _E2EStreamTurn:
+    def __init__(self, steps):
+        self.steps = list(steps)
+        self.calls = []
+
+    async def __call__(
+        self,
+        client,
+        *,
+        model,
+        input_items,
+        instructions,
+        tools,
+        reasoning_effort,
+        observer=None,
+    ):
+        step = self.steps.pop(0)
+        self.calls.append({"input_items": input_items})
+        for event in step.get("observer_events") or []:
+            result = observer(event)
+            if inspect.isawaitable(result):
+                await result
+        if step.get("error") is not None:
+            raise step["error"]
+        return step["result"]
+
+
+def _e2e_narration_step(text, deltas=None, error=None):
+    step = {
+        "result": {
+            "output_text": text,
+            "tool_calls": [],
+            "response_items": [],
+            "usage": None,
+            "timings": {},
+        }
+    }
+    if deltas:
+        step["observer_events"] = [
+            {"type": "output_delta", "delta": delta} for delta in deltas
+        ]
+    if error is not None:
+        step["error"] = error
+    return step
+
+
+def _first_decision_fact_ref(artifact_projection):
+    for artifact_id in sorted(artifact_projection):
+        for obj in artifact_projection[artifact_id].get("object_index") or []:
+            if obj.get("authority") == "decision_fact":
+                return {
+                    "artifact_id": artifact_id,
+                    "object_type": obj["object_type"],
+                    "object_id": obj["object_id"],
+                }
+    return None
+
+
+def _claim_audit_factory():
+    async def fake_complete_structured(client, **kwargs):
+        user_payload = json.loads(kwargs["prompt"][1]["content"])
+        artifact_projection = user_payload["artifact_projection"]
+        ref = _first_decision_fact_ref(artifact_projection)
+        answer_text = user_payload["answer_text"]
+        if ref is None:
+            claim = {
+                "claim_id": "claim_1",
+                "start": 0,
+                "end": len(answer_text),
+                "exact_text": answer_text,
+                "purpose": "illustration",
+                "authority": "hypothetical",
+                "refs": [],
+                "values": [],
+            }
+        else:
+            claim = {
+                "claim_id": "claim_1",
+                "start": 0,
+                "end": len(answer_text),
+                "exact_text": answer_text,
+                "purpose": "decision_explanation",
+                "authority": "decision_fact",
+                "refs": [ref],
+                "values": [],
+            }
+        return {"claims": [claim]}
+
+    return fake_complete_structured
+
+
+def _prepare_market_setup_harness(
+    monkeypatch,
+    tmp_path,
+    *,
+    steps=None,
+    turn=None,
+    audit=None,
+    question="现在市场怎么样？",
+    extra_env=None,
+    request_overrides=None,
+):
+    _assistant_env(monkeypatch)
+    for name in ("MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED",):
+        monkeypatch.delenv(name, raising=False)
+    if extra_env:
+        for name, value in extra_env.items():
+            monkeypatch.setenv(name, value)
+    db_path = tmp_path / "assistant.sqlite"
+    _seed_schema(db_path)
+    monkeypatch.setattr(market_assistant_db, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(us_rates_liquidity_db, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(market_setup_current, "DEFAULT_DB_PATH", db_path)
+    resolution = _build_resolution(db_path, _downside_inputs(), created_at=RESOLVED_AT)
+    if turn is None:
+        turn = _E2EStreamTurn(steps or [])
+    if audit is None:
+        audit = _claim_audit_factory()
+    monkeypatch.setattr(
+        market_assistant_router, "build_async_client", lambda *args, **kwargs: object()
+    )
+    monkeypatch.setattr(
+        market_assistant_router,
+        "_assistant_runtime",
+        lambda: (object(), "test-model", "json_schema", "low"),
+    )
+    monkeypatch.setattr(
+        market_assistant_router,
+        "resolve_current_explanation",
+        lambda db_path, *, previous_context_id, resolved_at: deepcopy(resolution),
+    )
+    monkeypatch.setattr(market_assistant_router, "complete_structured", audit)
+    monkeypatch.setitem(
+        market_assistant_react._DEPENDENCY_DEFAULTS, "stream_turn", turn
+    )
+    payload = {"question": question, "mode": "current"}
+    if request_overrides:
+        payload.update(request_overrides)
+
+    def run():
+        with client.stream(
+            "POST",
+            "/api/market-assistant/questions/stream",
+            json=payload,
+        ) as response:
+            lines = list(response.iter_lines())
+        events = [json.loads(line) for line in lines]
+        con = market_assistant_db.connect(db_path)
+        try:
+            trace = market_assistant_db.load_answer_trace(
+                con, events[-1]["answer_trace_id"]
+            )
+        finally:
+            con.close()
+        return {"events": events, "turn": turn, "db_path": db_path, "trace": trace}
+
+    return run
+
+
+def _assert_market_setup_unchanged(monkeypatch, tmp_path, *, run):
+    before = client.get("/api/macro-dashboard/market-setup").json()
+    result = run()
+    after = client.get("/api/macro-dashboard/market-setup").json()
+    assert decision_projection(before) == decision_projection(after)
+    return result
+
+
+def test_hybrid_stream_beginner_narration_has_plain_language_and_no_codes(
+    monkeypatch, tmp_path
+):
+    answer = (
+        "当前市场整体偏防御，增长正在放缓但下滑尚未完全确认。"
+        "选择依据是经济增长方向放缓。货币政策与增长方向不一致，显示冲突。"
+        "整体组合姿态偏向防御，即降低股票敞口。如果市场确认转弱，结论会改变。"
+    )
+    run = _prepare_market_setup_harness(
+        monkeypatch,
+        tmp_path,
+        steps=[_e2e_narration_step(answer, deltas=[answer])],
+    )
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    rendered = "".join(
+        event["delta"] for event in result["events"] if event["type"] == "answer_delta"
+    )
+    assert rendered == answer
+    for token in _FORBIDDEN_BEGINNER_TOKENS:
+        assert token not in rendered
+    assert "当前市场整体偏防御" in rendered
+    assert "选择依据" in rendered
+    assert "不一致" in rendered
+    assert "降低股票敞口" in rendered
+    assert "结论会改变" in rendered
+    assert result["trace"]["generation_status"] == "narration_validated"
+    assert any(
+        event == {"type": "validation", "status": "passed", "error_codes": []}
+        for event in result["events"]
+    )
+
+
+def test_invalid_claim_audit_keeps_market_setup_intact(monkeypatch, tmp_path):
+    text = "现在的市场偏积极，但仍需保持谨慎。"
+
+    async def invalid_audit(client, **kwargs):
+        user_payload = json.loads(kwargs["prompt"][1]["content"])
+        answer_text = user_payload["answer_text"]
+        return {
+            "claims": [
+                {
+                    "claim_id": "claim_bad",
+                    "start": 0,
+                    "end": len(answer_text),
+                    "exact_text": answer_text + " 未经批准的表述",
+                    "purpose": "decision_explanation",
+                    "authority": "decision_fact",
+                    "refs": [
+                        {
+                            "artifact_id": "ctx_missing",
+                            "object_type": "market_setup_result",
+                            "object_id": "macro_regime",
+                        }
+                    ],
+                    "values": [],
+                }
+            ]
+        }
+
+    run = _prepare_market_setup_harness(
+        monkeypatch,
+        tmp_path,
+        steps=[_e2e_narration_step(text, deltas=[text])],
+        audit=invalid_audit,
+    )
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    assert result["trace"]["generation_status"] == "narration_validation_failed"
+    assert result["trace"]["validation_error_codes"]
+    validations = [event for event in result["events"] if event["type"] == "validation"]
+    assert validations[-1]["status"] == "failed"
+
+
+def test_audit_timeout_keeps_market_setup_intact(monkeypatch, tmp_path):
+    text = "现在的市场偏积极，但仍需保持谨慎。"
+
+    async def hang_forever(client, **kwargs):
+        await asyncio.Event().wait()
+
+    run = _prepare_market_setup_harness(
+        monkeypatch,
+        tmp_path,
+        steps=[_e2e_narration_step(text, deltas=[text])],
+        audit=hang_forever,
+        extra_env={"MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS": "1"},
+    )
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    assert result["trace"]["generation_status"] == "narration_validation_unavailable"
+    validations = [event for event in result["events"] if event["type"] == "validation"]
+    assert validations[-1] == {
+        "type": "validation",
+        "status": "unavailable",
+        "error_codes": [],
+    }
+
+
+def test_disabled_claim_validation_keeps_market_setup_intact(monkeypatch, tmp_path):
+    text = "现在的市场偏积极，但仍需保持谨慎。"
+
+    run = _prepare_market_setup_harness(
+        monkeypatch,
+        tmp_path,
+        steps=[_e2e_narration_step(text, deltas=[text])],
+        extra_env={"MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED": "false"},
+    )
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    assert result["trace"]["generation_status"] == "narration_validation_disabled"
+    assert result["trace"]["claim_audit"]["audit"] is None
+    validations = [event for event in result["events"] if event["type"] == "validation"]
+    assert validations[-1] == {
+        "type": "validation",
+        "status": "disabled",
+        "error_codes": [],
+    }
+
+
+def test_provider_outage_before_narration_keeps_market_setup_intact(
+    monkeypatch, tmp_path
+):
+    class _FailingTurn:
+        def __init__(self):
+            self.calls = []
+
+        async def __call__(
+            self,
+            client,
+            *,
+            model,
+            input_items,
+            instructions,
+            tools,
+            reasoning_effort,
+            observer=None,
+        ):
+            self.calls.append({})
+            raise RuntimeError("provider down")
+
+    run = _prepare_market_setup_harness(monkeypatch, tmp_path, turn=_FailingTurn())
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    assert result["trace"]["generation_status"] == "deterministic_fallback"
+    assert result["trace"]["answer_text"].startswith("Market Setup decision result:")
+    assert any(event["type"] == "answer_replace" for event in result["events"])
+    validations = [event for event in result["events"] if event["type"] == "validation"]
+    assert validations[-1] == {
+        "type": "validation",
+        "status": "fallback",
+        "error_codes": [],
+    }
+
+
+def test_provider_interruption_after_narration_keeps_market_setup_intact(
+    monkeypatch, tmp_path
+):
+    partial = "现在的市场偏积极"
+
+    run = _prepare_market_setup_harness(
+        monkeypatch,
+        tmp_path,
+        steps=[
+            _e2e_narration_step("", deltas=[partial], error=RuntimeError("cut off"))
+        ],
+    )
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    assert result["trace"]["generation_status"] == "narration_interrupted"
+    assert result["trace"]["answer_text"] == partial
+    assert any(event["type"] == "answer_delta" for event in result["events"])
+    validations = [event for event in result["events"] if event["type"] == "validation"]
+    assert validations[-1] == {
+        "type": "validation",
+        "status": "interrupted",
+        "error_codes": [],
+    }
+
+
+def test_unavailable_local_evidence_keeps_market_setup_intact(monkeypatch, tmp_path):
+    text = "现在的市场偏积极，但仍需保持谨慎。"
+
+    run = _prepare_market_setup_harness(
+        monkeypatch,
+        tmp_path,
+        steps=[_e2e_narration_step(text, deltas=[text])],
+        question="ISM的确认信号怎么样？",
+    )
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    assert result["trace"]["generation_status"] == "narration_validated"
+    assert any(
+        entry["tool_name"] == "get_confirmation_test"
+        and entry["status"] == "unavailable"
+        for entry in result["trace"]["tool_trace"]
+    )
+    assert any(
+        event == {"type": "validation", "status": "passed", "error_codes": []}
+        for event in result["events"]
+    )
+
+
+def test_llm_disabled_configuration_keeps_market_setup_intact(monkeypatch, tmp_path):
+    _assistant_env(monkeypatch)
+    monkeypatch.delenv("MARKET_ASSISTANT_MODEL", raising=False)
+    monkeypatch.setattr(
+        market_assistant_router, "_assistant_runtime", _raise_unavailable
+    )
+    db_path = tmp_path / "assistant.sqlite"
+    _seed_schema(db_path)
+    monkeypatch.setattr(market_assistant_db, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(us_rates_liquidity_db, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(market_setup_current, "DEFAULT_DB_PATH", db_path)
+    resolution = _build_resolution(db_path, _downside_inputs(), created_at=RESOLVED_AT)
+    monkeypatch.setattr(
+        market_assistant_router,
+        "resolve_current_explanation",
+        lambda db_path, *, previous_context_id, resolved_at: deepcopy(resolution),
+    )
+
+    before = client.get("/api/macro-dashboard/market-setup").json()
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={"question": "现在市场怎么样？", "mode": "current"},
+    )
+    after = client.get("/api/macro-dashboard/market-setup").json()
+
+    assert response.status_code == 200
+    assert response.json()["generation_status"] == "fallback"
+    assert decision_projection(before) == decision_projection(after)
