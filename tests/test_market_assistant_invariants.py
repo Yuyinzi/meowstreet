@@ -685,6 +685,16 @@ def _raise_unavailable(*args, **kwargs):
     raise RuntimeError("llm client is unavailable")
 
 
+class _UnavailableResponses:
+    async def create(self, *args, **kwargs):
+        raise RuntimeError("llm client is unavailable")
+
+
+class _UnavailableClient:
+    def __init__(self):
+        self.responses = _UnavailableResponses()
+
+
 @pytest.fixture
 def resolver(tmp_path):
     return _Resolver(tmp_path / "resolver.sqlite")
@@ -715,6 +725,11 @@ def test_market_setup_is_byte_identical_with_assistant_enabled_or_unavailable(
     monkeypatch.setattr(us_rates_liquidity_db, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(
         market_assistant_router, "_assistant_runtime", _raise_unavailable
+    )
+    monkeypatch.setattr(
+        market_assistant_router,
+        "build_async_client",
+        lambda *args, **kwargs: _UnavailableClient(),
     )
 
     before = client.get("/api/macro-dashboard/market-setup").json()
