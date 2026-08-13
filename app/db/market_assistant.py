@@ -220,10 +220,28 @@ _TRACE_GENERATION_STATUSES = frozenset(
         "unvalidated_debug",
         "validation_failed_visible",
         "fallback",
+        "narration_validated",
+        "narration_validation_failed",
+        "narration_validation_unavailable",
+        "narration_validation_disabled",
+        "narration_interrupted",
+        "deterministic_fallback",
     }
 )
 
 _FINGERPRINT_SECRET_MARKERS = ("api_key", "apikey", "secret", "token", "password")
+
+
+def _validate_optional_trace_dict(answer_trace, key, message):
+    value = answer_trace.get(key)
+    if value is not None and not isinstance(value, dict):
+        raise ValueError(message)
+
+
+def _validate_optional_trace_list(answer_trace, key, message):
+    value = answer_trace.get(key)
+    if value is not None and not isinstance(value, list):
+        raise ValueError(message)
 
 
 def _validate_answer_trace_shape(answer_trace):
@@ -246,7 +264,10 @@ def _validate_answer_trace_shape(answer_trace):
     ):
         if not isinstance(answer_trace.get(key), list):
             raise ValueError(f"answer trace {key} is invalid")
-    if not isinstance(answer_trace.get("plan"), dict):
+    if (
+        not isinstance(answer_trace.get("plan"), dict)
+        and answer_trace.get("plan") is not None
+    ):
         raise ValueError("answer trace plan is invalid")
     claims = answer_trace.get("structured_claims")
     if claims is not None and not isinstance(claims, list):
@@ -259,6 +280,27 @@ def _validate_answer_trace_shape(answer_trace):
         raise ValueError("answer trace attempts are invalid")
     if not isinstance(answer_trace.get("validation_error_codes"), list):
         raise ValueError("answer trace validation error codes are invalid")
+    _validate_optional_trace_dict(
+        answer_trace, "request_controls", "answer trace request controls are invalid"
+    )
+    _validate_optional_trace_dict(
+        answer_trace, "route", "answer trace route is invalid"
+    )
+    _validate_optional_trace_list(
+        answer_trace, "tool_trace", "answer trace tool trace is invalid"
+    )
+    _validate_optional_trace_dict(
+        answer_trace, "budget", "answer trace budget is invalid"
+    )
+    _validate_optional_trace_dict(
+        answer_trace, "explanation_view", "answer trace explanation view is invalid"
+    )
+    _validate_optional_trace_dict(
+        answer_trace, "claim_audit", "answer trace claim audit is invalid"
+    )
+    _validate_optional_trace_dict(
+        answer_trace, "timings", "answer trace timings are invalid"
+    )
     prompt = answer_trace.get("prompt")
     if not isinstance(prompt, dict):
         raise ValueError("answer trace prompt is invalid")

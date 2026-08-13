@@ -302,6 +302,103 @@ def answer_trace():
     }
 
 
+def hybrid_answer_trace():
+    trace = answer_trace()
+    trace.update(
+        {
+            "request_controls": {
+                "mode": "current",
+                "deep_analysis_requested": False,
+                "deep_research_requested": False,
+                "external_search_requested": False,
+            },
+            "route": {
+                "route_id": "current_setup_overview",
+                "routing_source": "deterministic",
+                "initial_operations": [
+                    {
+                        "operation_id": "get_approved_counterfactuals",
+                        "indicator_id": None,
+                    },
+                    {"operation_id": "get_confirmation_tests", "indicator_id": None},
+                    {
+                        "operation_id": "get_macro_regime_explanation",
+                        "indicator_id": None,
+                    },
+                    {"operation_id": "get_posture_explanation", "indicator_id": None},
+                    {"operation_id": "get_setup_overview", "indicator_id": None},
+                ],
+                "supplementary_tools": [
+                    "get_indicator_definition",
+                    "get_indicator_method",
+                    "get_indicator_source",
+                ],
+                "view_type": "setup_explanation",
+                "budget": {
+                    "max_rounds": 2,
+                    "max_parallel_calls": 4,
+                    "max_tool_calls": 8,
+                    "max_tool_result_bytes": 32768,
+                    "deadline_seconds": 90.0,
+                },
+            },
+            "tool_trace": [
+                {
+                    "phase": "initial",
+                    "call_id": "initial_get_setup_overview",
+                    "tool_name": "get_setup_overview",
+                    "arguments": {},
+                    "status": "executed",
+                    "artifact_id": "ctx_B_overview",
+                }
+            ],
+            "budget": {
+                "max_rounds": 2,
+                "max_parallel_calls": 4,
+                "max_tool_calls": 8,
+                "max_tool_result_bytes": 32768,
+                "deadline_seconds": 90.0,
+            },
+            "explanation_view": {
+                "view_version": "setup_explanation_v1",
+                "view_hash": "c" * 64,
+            },
+            "plan": None,
+            "structured_claims": None,
+            "generation_status": "narration_validated",
+            "attempts": {"narration": 1, "audit": 1},
+            "claim_audit": {
+                "audit": {
+                    "claims": [
+                        {
+                            "claim_id": "claim_1",
+                            "start": 0,
+                            "end": 20,
+                            "exact_text": "The market remains defensive.",
+                            "purpose": "decision_explanation",
+                            "authority": "decision_fact",
+                            "refs": [],
+                            "values": [],
+                        }
+                    ]
+                },
+                "validation": {"valid": True, "error_count": 0, "errors": []},
+            },
+            "timings": {
+                "narration": {
+                    "initial_tools_seconds": 0.01,
+                    "optional_rounds": 0,
+                    "executed_calls": 1,
+                    "total_seconds": 0.2,
+                },
+                "audit_seconds": 0.05,
+                "total_seconds": 0.3,
+            },
+        }
+    )
+    return trace
+
+
 class TestSnapshotRepository:
     def test_same_explanation_fingerprint_reuses_existing_context(self, tmp_path):
         con = market_assistant.connect(tmp_path / "assistant.sqlite")
@@ -699,3 +796,75 @@ class TestAnswerBundle:
         ):
             row = con.execute(f"select count(*) from {table}").fetchone()
             assert row[0] == 0
+
+    @pytest.mark.parametrize(
+        "generation_status",
+        [
+            "narration_validated",
+            "narration_validation_failed",
+            "narration_validation_unavailable",
+            "narration_validation_disabled",
+            "narration_interrupted",
+            "deterministic_fallback",
+        ],
+    )
+    def test_save_answer_trace_accepts_hybrid_generation_statuses(
+        self, tmp_path, generation_status
+    ):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        trace = hybrid_answer_trace()
+        trace["generation_status"] = generation_status
+        trace["answer_trace_id"] = f"trace_{generation_status}"
+        trace["message_id"] = f"msg_{generation_status}"
+
+        market_assistant.save_answer_bundle(
+            con,
+            artifacts=[],
+            answer_trace=trace,
+        )
+
+        loaded = market_assistant.load_answer_trace(con, trace["answer_trace_id"])
+        assert loaded["generation_status"] == generation_status
+
+    def test_save_answer_bundle_round_trips_hybrid_trace_fields(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        trace = hybrid_answer_trace()
+
+        market_assistant.save_answer_bundle(
+            con,
+            artifacts=[],
+            answer_trace=trace,
+        )
+
+        loaded = market_assistant.load_answer_trace(con, trace["answer_trace_id"])
+        assert loaded == trace
+
+    def test_old_legacy_trace_without_hybrid_fields_still_reads(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        trace = answer_trace()
+
+        market_assistant.save_answer_bundle(
+            con,
+            artifacts=[],
+            answer_trace=trace,
+        )
+
+        loaded = market_assistant.load_answer_trace(con, trace["answer_trace_id"])
+        assert loaded == trace
+        assert "route" not in loaded
+        assert "tool_trace" not in loaded
+        assert "claim_audit" not in loaded
+
+    def test_save_answer_bundle_rejects_invalid_hybrid_route_field(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        trace = hybrid_answer_trace()
+        trace["route"] = "not-a-dict"
+        with pytest.raises(ValueError, match="answer trace route is invalid"):
+            market_assistant.save_answer_bundle(con, artifacts=[], answer_trace=trace)
+
+    def test_save_answer_bundle_rejects_invalid_hybrid_tool_trace_field(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        trace = hybrid_answer_trace()
+        trace["tool_trace"] = {}
+        with pytest.raises(ValueError, match="answer trace tool trace is invalid"):
+            market_assistant.save_answer_bundle(con, artifacts=[], answer_trace=trace)
