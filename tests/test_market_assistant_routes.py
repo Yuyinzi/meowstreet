@@ -106,6 +106,29 @@ def test_chinese_indicator_confirmation_routes_to_confirmation():
     assert route["initial_operations"][0]["indicator_id"] == "ism_manufacturing_pmi"
 
 
+def test_chinese_why_confirmation_with_vix_routes_to_indicator_confirmation():
+    route = route_question("VIX 为什么没有确认", deep_analysis=False)
+    assert route["route_id"] == "indicator_confirmation"
+    assert route["initial_operations"][0]["indicator_id"] == "vix"
+
+
+def test_chinese_why_partial_confirmation_routes_to_market_confirmation():
+    route = route_question("为什么只是部分确认", deep_analysis=False)
+    assert route["route_id"] == "why_market_confirmation"
+
+
+def test_english_why_indicator_confirmation_routes_to_indicator_confirmation():
+    route = route_question("why is the ism confirmation weak", deep_analysis=False)
+    assert route["route_id"] == "indicator_confirmation"
+    assert route["initial_operations"][0]["indicator_id"] == "ism_manufacturing_pmi"
+
+
+def test_chinese_why_indicator_confirmation_routes_to_indicator_confirmation():
+    route = route_question("为什么ISM的确认信号这么低？", deep_analysis=False)
+    assert route["route_id"] == "indicator_confirmation"
+    assert route["initial_operations"][0]["indicator_id"] == "ism_manufacturing_pmi"
+
+
 def test_english_indicator_question_uses_deep_analysis_budget():
     route = route_question("What is the VIX?", deep_analysis=True)
     assert route["route_id"] == "indicator_definition"
@@ -196,3 +219,22 @@ def test_react_route_has_no_initial_operations():
 def test_routed_payloads_validate_cleanly(question):
     route = route_question(question, deep_analysis=False)
     assert validate_route(route) == route
+
+
+@pytest.mark.parametrize(
+    ("route_id", "view_type"),
+    [
+        ("current_setup_overview", "setup_explanation"),
+        ("why_macro_regime", "setup_explanation"),
+        ("why_market_confirmation", "setup_explanation"),
+        ("why_portfolio_posture", "setup_explanation"),
+        ("indicator_confirmation", "indicator_explanation"),
+        ("indicator_definition", "indicator_explanation"),
+        ("indicator_method", "method_explanation"),
+        ("react", "react_anchor"),
+    ],
+)
+def test_route_view_type_uses_shared_view_vocabulary(route_id, view_type):
+    route = route_question(_ROUTE_QUESTIONS[route_id], deep_analysis=False)
+    assert route["route_id"] == route_id
+    assert route["view_type"] == view_type

@@ -24,7 +24,12 @@ _INDICATOR_ROUTE_IDS = frozenset(
     {"indicator_confirmation", "indicator_definition", "indicator_method"}
 )
 
-_VIEW_TYPE_IDS = ("overview", "explanation", "indicator", "react")
+_VIEW_TYPE_IDS = (
+    "setup_explanation",
+    "indicator_explanation",
+    "method_explanation",
+    "react_anchor",
+)
 
 _OPERATION_IDS = (
     "get_setup_overview",
@@ -99,14 +104,14 @@ _SUPPLEMENTARY_TOOLS = {
 }
 
 _VIEW_TYPES = {
-    "current_setup_overview": "overview",
-    "why_macro_regime": "explanation",
-    "why_market_confirmation": "explanation",
-    "why_portfolio_posture": "explanation",
-    "indicator_confirmation": "indicator",
-    "indicator_definition": "indicator",
-    "indicator_method": "indicator",
-    "react": "react",
+    "current_setup_overview": "setup_explanation",
+    "why_macro_regime": "setup_explanation",
+    "why_market_confirmation": "setup_explanation",
+    "why_portfolio_posture": "setup_explanation",
+    "indicator_confirmation": "indicator_explanation",
+    "indicator_definition": "indicator_explanation",
+    "indicator_method": "method_explanation",
+    "react": "react_anchor",
 }
 
 _INDICATOR_ALIASES = (
@@ -210,13 +215,13 @@ class _RouteSchema(BaseModel):
     budget: _Budget
 
 
-def budget_for_mode(deep_analysis):
+def budget_for_mode(deep_analysis: bool) -> dict:
     if not isinstance(deep_analysis, bool):
         raise ValueError("deep_analysis must be a boolean")
     return dict(_BUDGETS[deep_analysis])
 
 
-def route_question(question, *, deep_analysis):
+def route_question(question: str, *, deep_analysis: bool) -> dict:
     if not isinstance(question, str) or not question.strip():
         raise ValueError("question is required")
     if not isinstance(deep_analysis, bool):
@@ -227,7 +232,7 @@ def route_question(question, *, deep_analysis):
     return validate_route(payload)
 
 
-def validate_route(payload):
+def validate_route(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("route is required")
     try:
@@ -242,14 +247,14 @@ def validate_route(payload):
 def _route(normalized):
     lowered = normalized.lower()
     compact = re.sub(r"\s+", "", normalized)
-    route_id = _explanation_route(lowered, compact)
-    if route_id is not None:
-        return _route_match(route_id)
     if _is_overview_question(lowered, compact):
         return _route_match("current_setup_overview")
     indicator_match = _indicator_route(lowered, compact)
     if indicator_match is not None:
         return indicator_match
+    route_id = _explanation_route(lowered, compact)
+    if route_id is not None:
+        return _route_match(route_id)
     return _route_match(_REACT_ROUTE_ID)
 
 
