@@ -24,18 +24,28 @@ def test_macro_dashboard_html_links_assets_and_app_root():
     assert 'src="/macro-dashboard.js"' in html
 
 
+def test_macro_dashboard_uses_floating_market_assistant():
+    html = STATIC_HTML.read_text(encoding="utf-8")
+    assert 'id="marketAssistantFab"' in html
+    assert 'id="marketAssistantWindow"' in html
+    assert 'class="market-assistant-window"' in html
+    assert '<section class="market-assistant"' not in html
+
+
 def test_macro_dashboard_includes_market_assistant_assets():
     html = STATIC_HTML.read_text(encoding="utf-8")
-    assert 'id="marketAssistant"' in html
+    assert 'id="marketAssistantFab"' in html
+    assert 'id="marketAssistantWindow"' in html
+    assert 'src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"' in html
     assert 'src="/market-assistant.js"' in html
-    assert 'href="/market-assistant.css"' in html
 
 
 def test_macro_dashboard_html_includes_deep_analysis_checkbox():
     html = STATIC_HTML.read_text(encoding="utf-8")
-    controls = html[html.index('id="marketAssistantExternalSearch"') :]
-    assert 'id="marketAssistantDeepAnalysis"' in html
-    assert "Deep analysis" in html
+    window = html[html.index('id="marketAssistantWindow"') :]
+    controls = window[window.index('id="marketAssistantExternalSearch"') :]
+    assert 'id="marketAssistantDeepAnalysis"' in window
+    assert "Deep analysis" in window
     assert 'id="marketAssistantDeepAnalysis"' in controls
     assert "Deep analysis" in controls
     assert "disabled" not in controls
