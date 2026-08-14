@@ -99,7 +99,6 @@
       window: $("marketAssistantWindow"),
       head: $("marketAssistantWindowHead"),
       close: $("marketAssistantWindowClose"),
-      resize: $("marketAssistantResize"),
       log: $("marketAssistantLog"),
       form: $("marketAssistantForm"),
       question: $("marketAssistantQuestion"),
@@ -823,36 +822,59 @@
 
   function bindResize() {
     const el = elements();
-    if (!el.resize) return;
-    el.resize.addEventListener("mousedown", (event) => {
-      if (event.button !== 0 || isMobileViewport()) return;
-      const rect = state.windowRect;
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const startWidth = rect.width;
-      const startHeight = rect.height;
-      const maxHeight = Math.max(360, Math.floor((window.innerHeight || 640) * 0.9));
-      const onMove = (moveEvent) => {
-        state.windowRect.width = clamp(
-          startWidth + (moveEvent.clientX - startX),
-          280,
-          720
-        );
-        state.windowRect.height = clamp(
-          startHeight + (moveEvent.clientY - startY),
-          360,
-          maxHeight
-        );
-        applyWindowRect();
-      };
-      const onUp = () => {
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
-        saveState();
-      };
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-      event.preventDefault();
+    if (!el.window || typeof el.window.querySelectorAll !== "function") return;
+    el.window.querySelectorAll(".market-assistant-resize").forEach((handle) => {
+      handle.addEventListener("mousedown", (event) => {
+        if (event.button !== 0 || isMobileViewport()) return;
+        const edge = handle.getAttribute("data-edge") || "se";
+        const rect = state.windowRect;
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const startWidth = rect.width;
+        const startHeight = rect.height;
+        const startRight = rect.right;
+        const startBottom = rect.bottom;
+        const maxHeight = Math.max(360, Math.floor((window.innerHeight || 640) * 0.9));
+        const onMove = (moveEvent) => {
+          const dx = moveEvent.clientX - startX;
+          const dy = moveEvent.clientY - startY;
+          let width = startWidth;
+          let height = startHeight;
+          let right = startRight;
+          let bottom = startBottom;
+          if (edge.includes("e")) {
+            width = clamp(startWidth + dx, 280, 720);
+          }
+          if (edge.includes("w")) {
+            const desired = clamp(startWidth - dx, 280, 720);
+            const deltaWidth = desired - width;
+            width = desired;
+            right = Math.max(12, startRight - deltaWidth);
+          }
+          if (edge.includes("s")) {
+            height = clamp(startHeight + dy, 360, maxHeight);
+          }
+          if (edge.includes("n")) {
+            const desired = clamp(startHeight - dy, 360, maxHeight);
+            const deltaHeight = desired - height;
+            height = desired;
+            bottom = Math.max(12, startBottom - deltaHeight);
+          }
+          state.windowRect.width = width;
+          state.windowRect.height = height;
+          state.windowRect.right = right;
+          state.windowRect.bottom = bottom;
+          applyWindowRect();
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          saveState();
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+        event.preventDefault();
+      });
     });
   }
 
