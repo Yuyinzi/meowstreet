@@ -32,6 +32,16 @@ def test_macro_dashboard_uses_floating_market_assistant():
     assert '<section class="market-assistant"' not in html
 
 
+def test_market_assistant_header_has_new_conversation_control():
+    html = STATIC_HTML.read_text(encoding="utf-8")
+    window = html[html.index('id="marketAssistantWindow"') :]
+
+    assert 'class="market-assistant-window-actions"' in window
+    assert 'id="marketAssistantNewConversation"' in window
+    assert 'type="button"' in window
+    assert 'aria-label="Start new conversation"' in window
+
+
 def test_macro_dashboard_includes_market_assistant_assets():
     html = STATIC_HTML.read_text(encoding="utf-8")
     assert 'id="marketAssistantFab"' in html

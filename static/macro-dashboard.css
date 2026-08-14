@@ -6705,6 +6705,36 @@ h2 {
   color: #3B3530;
 }
 
+.market-assistant-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.market-assistant-window-new {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid #E0D6C8;
+  border-radius: 999px;
+  background: #FFFFFF;
+  color: #3B3530;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.market-assistant-window-new:hover,
+.market-assistant-window-new:focus-visible {
+  border-color: #3B3530;
+}
+
+.market-assistant-window-new:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .market-assistant-window-close {
   width: 28px;
   height: 28px;
