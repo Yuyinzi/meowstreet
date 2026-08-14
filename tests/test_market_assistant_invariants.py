@@ -675,13 +675,10 @@ def _seed_schema(db_path):
 
 
 def _assistant_env(monkeypatch):
-    for name in (
-        "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE",
-        "MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED",
-        "MARKET_ASSISTANT_REASONING_EFFORT",
-        "MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS",
-    ):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE", "json_schema")
+    monkeypatch.setenv("MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED", "true")
+    monkeypatch.setenv("MARKET_ASSISTANT_REASONING_EFFORT", "low")
+    monkeypatch.setenv("MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS", "120")
     monkeypatch.setenv("MARKET_ASSISTANT_MODEL", "test-model")
     monkeypatch.setenv("MARKET_ASSISTANT_RESEARCH_MODEL", "test-research-model")
     monkeypatch.setenv("MARKET_ASSISTANT_RESEARCH_PROVIDER", "openai_responses")
@@ -997,8 +994,7 @@ def _prepare_market_setup_harness(
     request_overrides=None,
 ):
     _assistant_env(monkeypatch)
-    for name in ("MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED",):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED", "true")
     if extra_env:
         for name, value in extra_env.items():
             monkeypatch.setenv(name, value)
@@ -1263,7 +1259,7 @@ def test_unavailable_local_evidence_keeps_market_setup_intact(monkeypatch, tmp_p
 
 def test_llm_disabled_configuration_keeps_market_setup_intact(monkeypatch, tmp_path):
     _assistant_env(monkeypatch)
-    monkeypatch.delenv("MARKET_ASSISTANT_MODEL", raising=False)
+    monkeypatch.setenv("MARKET_ASSISTANT_MODEL", "")
     monkeypatch.setattr(
         market_assistant_router, "_assistant_runtime", _raise_unavailable
     )

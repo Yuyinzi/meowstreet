@@ -895,13 +895,10 @@ def test_stream_worker_error_emits_error_line_without_stack_trace(
 
 
 def _e2e_env(monkeypatch):
-    for name in (
-        "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE",
-        "MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED",
-        "MARKET_ASSISTANT_REASONING_EFFORT",
-        "MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS",
-    ):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE", "json_schema")
+    monkeypatch.setenv("MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED", "true")
+    monkeypatch.setenv("MARKET_ASSISTANT_REASONING_EFFORT", "low")
+    monkeypatch.setenv("MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS", "120")
     monkeypatch.setenv("MARKET_ASSISTANT_MODEL", "test-model")
     monkeypatch.setenv("MARKET_ASSISTANT_RESEARCH_MODEL", "test-research-model")
     monkeypatch.setenv("MARKET_ASSISTANT_RESEARCH_PROVIDER", "openai_responses")
