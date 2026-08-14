@@ -306,6 +306,103 @@ def test_assistant_drag_and_resize_check_mobile_at_interaction_time():
     }
 
 
+def test_market_assistant_new_conversation_resets_active_chat_only():
+    payload = _run_market_assistant_harness(
+        """
+        const storage = {};
+        global.localStorage = {
+          setItem: (key, value) => { storage[key] = value; },
+          getItem: (key) => (key in storage ? storage[key] : null),
+          removeItem: (key) => { delete storage[key]; },
+        };
+        hooks.state.conversationId = "conv_old";
+        hooks.state.serverHistoryReady = true;
+        hooks.state.lastContextId = "ctx_old";
+        hooks.state.messages = [
+          { role: "user", text: "old question" },
+          { role: "assistant", text: "old answer" },
+        ];
+        hooks.state.error = "old error";
+        hooks.state.isOpen = true;
+        hooks.state.windowRect = { width: 500, height: 600, right: 30, bottom: 40 };
+        hooks.state.externalSearchRequested = true;
+        hooks.state.deepResearchRequested = true;
+        hooks.state.deepAnalysisRequested = true;
+        hooks.renderMessages();
+
+        const reset = hooks.startNewConversation();
+        const stored = JSON.parse(storage.meowstreet_market_assistant_v1);
+        const nextPayload = hooks.buildPayload("fresh question");
+
+        console.log(JSON.stringify({
+          reset,
+          conversationIdAfterReset: stored.conversationId,
+          runtimeConversationChanged: nextPayload.conversation_id !== "conv_old",
+          lastContextId: hooks.state.lastContextId,
+          serverHistoryReady: hooks.state.serverHistoryReady,
+          messages: hooks.state.messages,
+          error: hooks.state.error,
+          logChildren: elements.marketAssistantLog.children.length,
+          preservedRect: hooks.state.windowRect,
+          preservedOpen: hooks.state.isOpen,
+          preservedSwitches: [
+            hooks.state.externalSearchRequested,
+            hooks.state.deepResearchRequested,
+            hooks.state.deepAnalysisRequested,
+          ],
+          hasBootstrap: Object.prototype.hasOwnProperty.call(nextPayload, "conversation_bootstrap"),
+          hasPreviousContext: Object.prototype.hasOwnProperty.call(nextPayload, "previous_context_id"),
+        }));
+        """
+    )
+
+    assert payload == {
+        "reset": True,
+        "conversationIdAfterReset": None,
+        "runtimeConversationChanged": True,
+        "lastContextId": None,
+        "serverHistoryReady": False,
+        "messages": [],
+        "error": None,
+        "logChildren": 0,
+        "preservedRect": {"width": 500, "height": 600, "right": 30, "bottom": 40},
+        "preservedOpen": True,
+        "preservedSwitches": [True, True, True],
+        "hasBootstrap": False,
+        "hasPreviousContext": False,
+    }
+
+
+def test_market_assistant_new_conversation_is_ignored_while_busy():
+    payload = _run_market_assistant_harness(
+        """
+        hooks.state.conversationId = "conv_active";
+        hooks.state.serverHistoryReady = true;
+        hooks.state.lastContextId = "ctx_active";
+        hooks.state.messages = [{ role: "user", text: "in flight" }];
+        hooks.state.busy = true;
+
+        const reset = hooks.startNewConversation();
+
+        console.log(JSON.stringify({
+          reset,
+          conversationId: hooks.state.conversationId,
+          serverHistoryReady: hooks.state.serverHistoryReady,
+          lastContextId: hooks.state.lastContextId,
+          messageCount: hooks.state.messages.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "reset": False,
+        "conversationId": "conv_active",
+        "serverHistoryReady": True,
+        "lastContextId": "ctx_active",
+        "messageCount": 1,
+    }
+
+
 def test_nfib_regional_ui_renders_factual_read_and_component_comparisons():
     js = (ROOT / "static" / "nfib-sbo-ui.js").read_text()
 
@@ -8317,7 +8414,6 @@ def _market_assistant_harness(test_js):
             tagName: tag,
             children: [],
             className: "",
-            textContent: "",
             value: "",
             disabled: false,
             checked: false,
@@ -8347,6 +8443,14 @@ def _market_assistant_harness(test_js):
               }}
             }},
           }};
+          Object.defineProperty(el, "textContent", {{
+            get() {{ return el._textContent || ""; }},
+            set(value) {{
+              el._textContent = value;
+              el.children = [];
+            }},
+            configurable: true,
+          }});
           Object.defineProperty(el, "innerHTML", {{
             get() {{ return el._innerHTML || ""; }},
             set(value) {{
@@ -8402,6 +8506,7 @@ def _market_assistant_harness(test_js):
           marketAssistantWindow: marketAssistantWindow,
           marketAssistantWindowHead: makeEl("div"),
           marketAssistantWindowClose: makeEl("button"),
+          marketAssistantNewConversation: makeEl("button"),
           marketAssistantLog: makeEl("div"),
           marketAssistantForm: makeEl("form"),
           marketAssistantQuestion: makeEl("input"),

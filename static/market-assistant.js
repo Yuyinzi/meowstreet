@@ -99,6 +99,7 @@
       window: $("marketAssistantWindow"),
       head: $("marketAssistantWindowHead"),
       close: $("marketAssistantWindowClose"),
+      newConversation: $("marketAssistantNewConversation"),
       log: $("marketAssistantLog"),
       form: $("marketAssistantForm"),
       question: $("marketAssistantQuestion"),
@@ -315,6 +316,22 @@
         "conv_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
     }
     return state.conversationId;
+  }
+
+  function startNewConversation() {
+    if (state.busy) return false;
+    const el = elements();
+    state.conversationId = null;
+    state.serverHistoryReady = false;
+    state.lastContextId = null;
+    state.messages = [];
+    state.error = null;
+    if (el.question) el.question.value = "";
+    renderStatus("", false);
+    renderMessages();
+    saveState();
+    if (el.question) el.question.focus();
+    return true;
   }
 
   function messageId() {
@@ -902,6 +919,11 @@
         closeWindow();
       });
     }
+    if (el.newConversation) {
+      el.newConversation.addEventListener("click", () => {
+        startNewConversation();
+      });
+    }
     bindDrag();
     bindResize();
     if (el.externalSearch) {
@@ -953,6 +975,7 @@
       openWindow,
       closeWindow,
       toggleWindow,
+      startNewConversation,
       handleSubmit,
       state,
     };
