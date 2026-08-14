@@ -114,6 +114,15 @@
   function applyWindowRect() {
     const el = elements();
     if (!el.window || !el.window.style) return;
+    const isMobile = window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
+    if (isMobile) {
+      el.window.style.width = "";
+      el.window.style.height = "";
+      el.window.style.right = "";
+      el.window.style.bottom = "";
+      el.window.style.left = "";
+      return;
+    }
     const rect = state.windowRect;
     el.window.style.width = rect.width + "px";
     el.window.style.height = rect.height + "px";
@@ -207,6 +216,8 @@
     applyWindowRect();
     if (state.messages.length === 0) {
       loadState();
+    }
+    if (el.log && el.log.children.length === 0) {
       renderMessages();
     }
     if (el.question) el.question.focus();
@@ -814,6 +825,7 @@
       setAssistantMessageHtml,
       saveState,
       loadState,
+      applyWindowRect,
       renderMessages,
       openWindow,
       closeWindow,

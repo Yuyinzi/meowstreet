@@ -179,6 +179,71 @@ def test_assistant_state_persists_to_local_storage():
     }
 
 
+def test_assistant_reopen_renders_loaded_messages():
+    payload = _run_market_assistant_harness(
+        """
+        hooks.state.messages = [
+          { role: "user", text: "hi" },
+          { role: "assistant", text: "hello" },
+        ];
+        hooks.state.isOpen = false;
+        hooks.openWindow();
+        console.log(JSON.stringify({
+          logChildren: elements.marketAssistantLog.children.length,
+          hasUser: elements.marketAssistantLog.children.some(
+            (child) => child.className.indexOf("market-assistant-message-user") !== -1
+          ),
+          hasAssistant: elements.marketAssistantLog.children.some(
+            (child) => child.className.indexOf("market-assistant-message-assistant") !== -1
+          ),
+        }));
+        """
+    )
+
+    assert payload == {
+        "logChildren": 2,
+        "hasUser": True,
+        "hasAssistant": True,
+    }
+
+
+def test_assistant_window_rect_defers_to_mobile_bottom_sheet():
+    payload = _run_market_assistant_harness(
+        """
+        const style = { width: "360px", height: "520px", right: "24px", bottom: "92px", left: "" };
+        elements.marketAssistantWindow.style = style;
+        hooks.state.windowRect = { width: 360, height: 520, right: 24, bottom: 92 };
+        window.matchMedia = () => ({ matches: true });
+        hooks.applyWindowRect();
+        const cleared = {
+          width: style.width,
+          height: style.height,
+          right: style.right,
+          bottom: style.bottom,
+        };
+        window.matchMedia = () => ({ matches: false });
+        hooks.applyWindowRect();
+        const desktop = {
+          width: style.width,
+          height: style.height,
+          right: style.right,
+          bottom: style.bottom,
+        };
+        console.log(JSON.stringify({ cleared, desktop }));
+        """
+    )
+
+    assert payload == {
+        "cleared": {"width": "", "height": "", "right": "", "bottom": ""},
+        "desktop": {
+            "width": "360px",
+            "height": "520px",
+            "right": "24px",
+            "bottom": "92px",
+        },
+    }
+
+
 def test_nfib_regional_ui_renders_factual_read_and_component_comparisons():
     js = (ROOT / "static" / "nfib-sbo-ui.js").read_text()
 
