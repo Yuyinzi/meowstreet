@@ -228,7 +228,7 @@ class _AnswerDeltaSink:
         elif event_type == "model_turn_started":
             self._recorder.record("narration_request_started")
             self._recorder.record("react_round_started")
-        elif event_type == "progress":
+        elif event_type == "optional_round_completed":
             self._recorder.record("react_round_completed")
         elif event_type == "reasoning_started":
             self._recorder.record("first_reasoning_delta")
@@ -285,7 +285,8 @@ async def _answer_hybrid(
             validation_error_codes,
             audit_seconds,
         ) = await _run_claim_audit(narration, frozen_artifacts, deps)
-        attempts["audit"] = 1
+        if validation_status != "disabled":
+            attempts["audit"] = 1
         if recorder is not None:
             recorder.record("audit_completed")
         await _emit_validation(event_sink, validation_status, validation_error_codes)

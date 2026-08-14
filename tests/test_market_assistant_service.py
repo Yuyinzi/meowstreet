@@ -544,6 +544,7 @@ async def test_disabled_claim_validation_persists_narration_validation_disabled(
     assert not any(event["type"] == "answer_replace" for event in sink.events)
     assert deps.saved_trace["generation_status"] == "narration_validation_disabled"
     assert deps.saved_trace["claim_audit"]["audit"] is None
+    assert deps.saved_trace["attempts"] == {"narration": 1, "audit": 0}
 
 
 @pytest.mark.asyncio
@@ -1007,7 +1008,6 @@ async def test_stage_logs_include_request_id_and_exclude_privacy(caplog):
         "route_selected",
         "initial_tools_completed",
         "react_round_started",
-        "react_round_completed",
         "narration_request_started",
         "first_reasoning_delta",
         "first_output_text_delta",
@@ -1035,6 +1035,48 @@ async def test_stage_logs_include_request_id_and_exclude_privacy(caplog):
         "prompt",
     ):
         assert forbidden not in combined
+
+
+def _observed_stages(caplog):
+    stage_lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "uvicorn.error"
+        and "market assistant stage" in record.getMessage()
+    ]
+    return {line.split("stage=")[1].split()[0] for line in stage_lines}
+
+
+@pytest.mark.asyncio
+async def test_react_round_completed_stage_recorded_when_optional_round_runs(caplog):
+    stream = _ScriptedStream(
+        [
+            tool_step([_confirmation_call("call_vix", "vix")]),
+            narration_step(),
+        ]
+    )
+    deps = hybrid_dependencies(stream=stream)
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        await market_assistant.answer_question(
+            current_question("讲个笑话"), dependencies=deps
+        )
+
+    assert "react_round_completed" in _observed_stages(caplog)
+    assert deps.saved_trace["timings"]["narration"]["optional_rounds"] == 1
+
+
+@pytest.mark.asyncio
+async def test_react_round_completed_stage_not_recorded_without_optional_round(caplog):
+    deps = hybrid_dependencies()
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        await market_assistant.answer_question(
+            current_question("现在市场怎么样？"), dependencies=deps
+        )
+
+    assert "react_round_completed" not in _observed_stages(caplog)
+    assert deps.saved_trace["timings"]["narration"]["optional_rounds"] == 0
 
 
 @pytest.mark.asyncio
@@ -1867,8 +1909,9 @@ async def test_thirteenth_deep_analysis_call_is_rejected_without_execution():
         _history_call("c11", indicator_id="credit_conditions", window="3m"),
         _history_call("c12", indicator_id="sp500_close", window="6m"),
         _history_call("c13", indicator_id="vix", window="1y"),
+        _history_call("c14", indicator_id="vix", window="2y"),
     ]
-    rounds = [calls[0:4], calls[4:8], calls[8:11], calls[11:13]]
+    rounds = [calls[0:4], calls[4:8], calls[8:11], calls[11:13], calls[13:14]]
     stream = _ScriptedStream([tool_step(round_calls) for round_calls in rounds])
     deps = _ReactDeps(stream)
 
@@ -1961,9 +2004,10 @@ async def test_rejected_invalid_calls_consume_call_budget():
         dependencies=deps,
     )
 
-    assert result["generation_status"] == "budget_exhausted"
+    assert result["generation_status"] == "answered"
+    assert result["answer_text"] == "现在的市场偏积极，但仍需保持谨慎。"
     assert deps.executed == []
-    assert len(stream.calls) == 3
+    assert len(stream.calls) == 4
     rejected = [
         entry for entry in result["tool_trace"] if entry["status"] == "rejected"
     ]

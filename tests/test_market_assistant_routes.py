@@ -153,6 +153,45 @@ def test_explain_the_current_market_setup_routes_to_overview():
     assert route["routing_source"] == "deterministic"
 
 
+def test_explain_the_market_setup_routes_to_overview():
+    route = route_question("explain the market setup", deep_analysis=False)
+    assert route["route_id"] == "current_setup_overview"
+    assert route["routing_source"] == "deterministic"
+    assert route["initial_operations"]
+
+
+def test_chinese_explain_market_state_routes_to_overview():
+    route = route_question("解释市场状态", deep_analysis=False)
+    assert route["route_id"] == "current_setup_overview"
+    assert route["routing_source"] == "deterministic"
+    assert route["initial_operations"]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "explain the setup",
+        "explain the current setup",
+        "explain the market situation",
+        "explain the current market situation",
+        "what is the market setup",
+        "market setup",
+        "解释市场情况",
+    ],
+)
+def test_overview_variant_questions_route_to_overview(question):
+    route = route_question(question, deep_analysis=False)
+    assert route["route_id"] == "current_setup_overview"
+    assert route["routing_source"] == "deterministic"
+    assert route["initial_operations"]
+
+
+def test_explain_how_indicator_is_calculated_stays_on_indicator_route():
+    route = route_question("explain how vix is calculated", deep_analysis=False)
+    assert route["route_id"] == "indicator_method"
+    assert route["routing_source"] == "deterministic"
+
+
 def test_why_mild_risk_on_routes_to_posture():
     route = route_question("为什么是 Mild Risk-On", deep_analysis=False)
     assert route["route_id"] == "why_portfolio_posture"

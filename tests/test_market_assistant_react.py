@@ -426,6 +426,122 @@ async def test_optional_round_executes_parallel_tools_then_final_narration():
 
 
 @pytest.mark.asyncio
+async def test_standard_budget_allows_two_optional_rounds_then_final_narration():
+    events = []
+    stream = _ScriptedStream(
+        [
+            tool_step(
+                [
+                    {
+                        "call_id": "call_current",
+                        "tool_name": "get_indicator_current",
+                        "arguments": {"indicator_id": "vix"},
+                    }
+                ]
+            ),
+            tool_step(
+                [
+                    {
+                        "call_id": "call_definition",
+                        "tool_name": "get_indicator_definition",
+                        "arguments": {"indicator_id": "vix"},
+                    }
+                ]
+            ),
+            narration_step(),
+        ]
+    )
+    deps = recording_dependencies(events, stream=stream)
+    result = await run_hybrid_narration(
+        {"question": "现在市场怎么样？"},
+        route=current_setup_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    assert result["generation_status"] == "answered"
+    assert result["timings"]["optional_rounds"] == 2
+    assert len(stream.calls) == 3
+    assert events.count("model_turn_started") == 3
+    optional = [item for item in result["tool_trace"] if item["phase"] == "optional"]
+    assert {item["tool_name"] for item in optional} == {
+        "get_indicator_current",
+        "get_indicator_definition",
+    }
+    assert all(item["status"] in {"executed", "unavailable"} for item in optional)
+
+
+@pytest.mark.asyncio
+async def test_third_optional_round_in_standard_is_refused_after_budget():
+    stream = _ScriptedStream(
+        [
+            tool_step(
+                [
+                    {
+                        "call_id": "call_current",
+                        "tool_name": "get_indicator_current",
+                        "arguments": {"indicator_id": "vix"},
+                    }
+                ]
+            ),
+            tool_step(
+                [
+                    {
+                        "call_id": "call_definition",
+                        "tool_name": "get_indicator_definition",
+                        "arguments": {"indicator_id": "vix"},
+                    }
+                ]
+            ),
+            tool_step(
+                [
+                    {
+                        "call_id": "call_method",
+                        "tool_name": "get_indicator_method",
+                        "arguments": {"indicator_id": "vix"},
+                    }
+                ]
+            ),
+        ]
+    )
+    deps = recording_dependencies([], stream=stream)
+    result = await run_hybrid_narration(
+        {"question": "现在市场怎么样？"},
+        route=current_setup_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    assert result["generation_status"] == "budget_exhausted"
+    assert result["timings"]["optional_rounds"] == 2
+    assert len(stream.calls) == 3
+    assert result["answer_text"] == _FALLBACK_ZH
+
+
+@pytest.mark.asyncio
+async def test_first_turn_input_contains_only_question_and_compact_view():
+    stream = _ScriptedStream([narration_step()])
+    deps = recording_dependencies([], stream=stream)
+    result = await run_hybrid_narration(
+        {"question": "现在市场怎么样？"},
+        route=current_setup_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    items = deps.stream_turn.calls[0]["input_items"]
+    assert len(items) == 1
+    assert items[0]["type"] == "message"
+    assert items[0]["role"] == "user"
+    assert [part["type"] for part in items[0]["content"]] == [
+        "input_text",
+        "input_text",
+    ]
+    assert items[0]["content"][0]["text"] == "现在市场怎么样？"
+    assert "explanation_view" in items[0]["content"][1]["text"]
+    assert not any(item["type"] == "function_call_output" for item in items)
+    assert not any(item["type"] == "function_call" for item in items)
+    assert len(result["artifacts"]) >= 5
+
+
+@pytest.mark.asyncio
 async def test_duplicate_normalized_call_stops_loop_without_more_budget():
     events = []
     repeated = vix_confirmation_call()
@@ -693,6 +809,15 @@ async def test_budget_exhaustion_selects_deterministic_fallback():
                         {
                             "call_id": "call_posture",
                             "tool_name": "get_posture_explanation",
+                            "arguments": {},
+                        }
+                    ]
+                ),
+                tool_step(
+                    [
+                        {
+                            "call_id": "call_counterfactuals",
+                            "tool_name": "get_approved_counterfactuals",
                             "arguments": {},
                         }
                     ]

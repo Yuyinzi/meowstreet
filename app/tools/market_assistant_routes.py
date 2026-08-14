@@ -154,6 +154,8 @@ _OVERVIEW_MARKERS = (
     "当前市场情况",
     "市场情况如何",
     "解释当前",
+    "解释市场状态",
+    "解释市场情况",
     "现在行情怎么样",
     "行情如何",
     "how is the market",
@@ -164,6 +166,13 @@ _OVERVIEW_MARKERS = (
     "what is the market doing",
     "how does the market look",
     "explain the current",
+    "explain the market setup",
+    "explain the current setup",
+    "explain the setup",
+    "explain the market situation",
+    "explain the current market situation",
+    "what is the market setup",
+    "market setup",
 )
 
 _CONFIRMATION_MARKERS = (

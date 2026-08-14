@@ -1293,6 +1293,15 @@ def test_hybrid_stream_fast_path_sequence_and_narration_prompt_contract(
         assert forbidden not in serialized
     assert "explanation_view" in serialized
     assert "setup_explanation_v1" in serialized
+    first_items = result["turn"].calls[0]["input_items"]
+    assert len(first_items) == 1
+    assert first_items[0]["type"] == "message"
+    assert [part["type"] for part in first_items[0]["content"]] == [
+        "input_text",
+        "input_text",
+    ]
+    assert not any(item["type"] == "function_call_output" for item in first_items)
+    assert not any(item["type"] == "function_call" for item in first_items)
     from app.services.market_assistant_tool_runtime import snapshot_artifact
 
     envelope_bytes = len(
@@ -1409,7 +1418,7 @@ def test_hybrid_stream_react_two_rounds_immutable_artifacts_and_audit(
     assert trace["generation_status"] == "narration_validated"
     assert trace["route"]["route_id"] == "react"
     assert trace["route"]["budget"]["max_tool_calls"] == 12
-    assert trace["timings"]["narration"]["optional_rounds"] == 3
+    assert trace["timings"]["narration"]["optional_rounds"] == 2
     assert trace["timings"]["narration"]["executed_calls"] == 3
     optional = [entry for entry in trace["tool_trace"] if entry["phase"] == "optional"]
     assert len(optional) == 3

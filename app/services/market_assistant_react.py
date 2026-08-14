@@ -282,6 +282,7 @@ async def run_hybrid_narration(
     executed_calls = 0
     result_bytes = 0
     round_number = 0
+    turn_count = 0
     deadline = monotonic() + budget["deadline_seconds"]
     stream_state = {"text_parts": [], "has_output": False}
     generation_status = None
@@ -307,22 +308,15 @@ async def run_hybrid_narration(
     if route["route_id"] == "react":
         _seed_snapshot_anchor(artifacts, resolution)
     view = build_view(route, artifacts, question=request["question"])
-    input_items = _initial_input_items(request["question"], initial_records, view)
+    input_items = _initial_input_items(request["question"], view)
     tools = definitions(list(tool_ids))
 
     while True:
-        if round_number >= budget["max_rounds"]:
-            generation_status = "budget_exhausted"
-            break
         if monotonic() > deadline:
             generation_status = "budget_exhausted"
             break
-        if call_count >= budget["max_tool_calls"]:
-            generation_status = "budget_exhausted"
-            break
-        round_number += 1
         await _emit(event_sink, {"type": "model_turn_started"})
-        if round_number > 1 or initial_calls:
+        if turn_count > 0 or initial_calls:
             await _emit_progress(event_sink, "writing_answer", request)
         try:
             turn = await stream_turn(
@@ -341,6 +335,13 @@ async def run_hybrid_narration(
                 generation_status = "narration_unavailable"
             break
         if turn["tool_calls"]:
+            if (
+                round_number >= budget["max_rounds"]
+                or call_count >= budget["max_tool_calls"]
+            ):
+                generation_status = "budget_exhausted"
+                break
+            round_number += 1
             accepted, rejected = _classify_calls(
                 turn["tool_calls"],
                 tool_id_set,
@@ -373,6 +374,7 @@ async def run_hybrid_narration(
                 if result_bytes > budget["max_tool_result_bytes"]:
                     generation_status = "budget_exhausted"
                     break
+                await _emit(event_sink, {"type": "optional_round_completed"})
             call_count += len(accepted) + len(rejected)
             executed_calls += len(records)
             input_items = _next_input_items(
@@ -388,6 +390,7 @@ async def run_hybrid_narration(
             else:
                 generation_status = "narration_unavailable"
             break
+        turn_count += 1
 
     if generation_status == "answered":
         pass
@@ -424,8 +427,8 @@ def _message_with_view(message, view):
     return {**message, "content": content}
 
 
-def _initial_input_items(question, records, view):
-    items = [
+def _initial_input_items(question, view):
+    return [
         {
             "type": "message",
             "role": "user",
@@ -435,25 +438,6 @@ def _initial_input_items(question, records, view):
             ],
         }
     ]
-    for record in records:
-        items.append(
-            {
-                "type": "function_call",
-                "call_id": record["call_id"],
-                "name": record["tool_name"],
-                "arguments": json.dumps(
-                    record["arguments"], ensure_ascii=False, sort_keys=True
-                ),
-            }
-        )
-        items.append(
-            {
-                "type": "function_call_output",
-                "call_id": record["call_id"],
-                "output": _provider_tool_output(record),
-            }
-        )
-    return items
 
 
 def _next_input_items(input_items, response_items, output_items, view):
