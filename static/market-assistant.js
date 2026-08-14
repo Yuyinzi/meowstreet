@@ -1,5 +1,6 @@
 (function () {
   const API_URL = "/api/market-assistant/questions/stream";
+  const STORAGE_KEY = "meowstreet_market_assistant_v1";
 
   const state = {
     lastContextId: null,
@@ -10,6 +11,8 @@
     externalSearchRequested: false,
     deepResearchRequested: false,
     deepAnalysisRequested: false,
+    isOpen: false,
+    windowRect: { width: 360, height: 520, right: 24, bottom: 92 },
   };
 
   const CITATION_TARGET_ATTR = 'target="_blank"';
@@ -56,6 +59,11 @@
 
   function elements() {
     return {
+      fab: $("marketAssistantFab"),
+      window: $("marketAssistantWindow"),
+      head: $("marketAssistantWindowHead"),
+      close: $("marketAssistantWindowClose"),
+      resize: $("marketAssistantResize"),
       log: $("marketAssistantLog"),
       form: $("marketAssistantForm"),
       question: $("marketAssistantQuestion"),
@@ -65,6 +73,159 @@
       deepAnalysis: $("marketAssistantDeepAnalysis"),
       status: $("marketAssistantStatus"),
     };
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function saveState() {
+    try {
+      const payload = {
+        conversationId: state.conversationId,
+        messages: state.messages,
+        lastContextId: state.lastContextId,
+        isOpen: state.isOpen,
+        windowRect: state.windowRect,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      console.warn("market assistant state save failed", error);
+    }
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      const payload = JSON.parse(raw);
+      if (payload.conversationId) state.conversationId = payload.conversationId;
+      if (Array.isArray(payload.messages)) state.messages = payload.messages;
+      if (payload.lastContextId) state.lastContextId = payload.lastContextId;
+      if (typeof payload.isOpen === "boolean") state.isOpen = payload.isOpen;
+      if (payload.windowRect) state.windowRect = payload.windowRect;
+      return true;
+    } catch (error) {
+      console.warn("market assistant state load failed", error);
+      return false;
+    }
+  }
+
+  function applyWindowRect() {
+    const el = elements();
+    if (!el.window || !el.window.style) return;
+    const rect = state.windowRect;
+    el.window.style.width = rect.width + "px";
+    el.window.style.height = rect.height + "px";
+    el.window.style.right = rect.right + "px";
+    el.window.style.bottom = rect.bottom + "px";
+  }
+
+  function renderMarkdown(text) {
+    if (typeof window !== "undefined" && window.marked && window.marked.parse) {
+      return window.marked.parse(text || "");
+    }
+    return escapeHtml(text || "").replace(/\n/g, "<br>");
+  }
+
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function setAssistantMessageHtml(textEl, text) {
+    if (!textEl) return;
+    textEl.innerHTML = renderMarkdown(text);
+    if (typeof textEl.querySelectorAll === "function") {
+      textEl.querySelectorAll("a").forEach((link) => {
+        link.setAttribute("target", "_blank");
+        link.setAttribute("rel", "noopener noreferrer");
+      });
+    }
+  }
+
+  function pushAssistantMessage(message) {
+    state.messages.push({
+      role: "assistant",
+      text: message.text,
+      citations: message.citations || [],
+      validation: message.validation || null,
+      errorCodes: message.errorCodes || [],
+      interrupted: Boolean(message.interrupted),
+    });
+    saveState();
+  }
+
+  function renderStoredAssistantMessage(message) {
+    const article = document.createElement("div");
+    article.className = "market-assistant-message market-assistant-message-assistant";
+    const textEl = document.createElement("p");
+    textEl.className = "market-assistant-message-text";
+    setAssistantMessageHtml(textEl, message.text || "");
+    article.appendChild(textEl);
+    if (message.citations && message.citations.length) {
+      const heading = document.createElement("p");
+      heading.className = "market-assistant-citations-heading";
+      heading.textContent = "External research";
+      article.appendChild(heading);
+      article.appendChild(renderCitations(message.citations));
+    }
+    if (message.validation && VALIDATION_BADGE_TEXT[message.validation]) {
+      article.appendChild(
+        renderValidationBadge(message.validation, message.errorCodes || [])
+      );
+    }
+    if (message.interrupted) {
+      article.appendChild(renderInterruptedNotice());
+    }
+    return article;
+  }
+
+  function renderMessages() {
+    const el = elements();
+    if (!el.log) return;
+    el.log.textContent = "";
+    state.messages.forEach((message) => {
+      if (message.role === "user") {
+        el.log.appendChild(renderUserMessage(message.text));
+      } else {
+        el.log.appendChild(renderStoredAssistantMessage(message));
+      }
+    });
+  }
+
+  function openWindow() {
+    const el = elements();
+    if (!el.window) return;
+    state.isOpen = true;
+    el.window.classList.add("open");
+    el.window.setAttribute("aria-hidden", "false");
+    applyWindowRect();
+    if (state.messages.length === 0) {
+      loadState();
+      renderMessages();
+    }
+    if (el.question) el.question.focus();
+  }
+
+  function closeWindow() {
+    const el = elements();
+    state.isOpen = false;
+    if (el.window) {
+      el.window.classList.remove("open");
+      el.window.setAttribute("aria-hidden", "true");
+    }
+    saveState();
+    if (el.fab) el.fab.focus();
+  }
+
+  function toggleWindow() {
+    if (state.isOpen) closeWindow();
+    else openWindow();
   }
 
   function conversationId() {
@@ -241,6 +402,8 @@
     if (el.log) {
       el.log.appendChild(renderUserMessage(text));
     }
+    state.messages.push({ role: "user", text: text });
+    saveState();
   }
 
   function createStreamingAssistantMessage() {
@@ -291,7 +454,7 @@
         break;
       case "answer_replace":
         stream.message.text = event.text || "";
-        stream.textEl.textContent = stream.message.text;
+        setAssistantMessageHtml(stream.textEl, stream.message.text);
         clearThinking();
         clearProgress();
         break;
@@ -301,6 +464,7 @@
           VALIDATION_BADGE_TEXT[event.status]
         ) {
           stream.message.validation = event.status;
+          stream.message.errorCodes = event.error_codes || [];
           stream.element.appendChild(
             renderValidationBadge(event.status, event.error_codes || [])
           );
@@ -323,6 +487,7 @@
       case "complete":
         stream.message.complete = true;
         stream.message.citations = event.citations || [];
+        setAssistantMessageHtml(stream.textEl, stream.message.text);
         if (stream.message.citations.length) {
           const heading = document.createElement("p");
           heading.className = "market-assistant-citations-heading";
@@ -331,6 +496,7 @@
           stream.element.appendChild(renderCitations(stream.message.citations));
         }
         stream.element.setAttribute("aria-busy", "false");
+        pushAssistantMessage(stream.message);
         break;
     }
   }
@@ -490,6 +656,11 @@
         stream.element.setAttribute("aria-busy", "false");
         stream.element.appendChild(renderInterruptedNotice());
         renderStatus("", false);
+        pushAssistantMessage({
+          text: stream.message.text,
+          citations: [],
+          interrupted: true,
+        });
       } else {
         stream.element.remove();
         renderStatus(UNAVAILABLE_NOTICE, true);
@@ -512,6 +683,69 @@
     }
   }
 
+  function bindDrag() {
+    const el = elements();
+    if (!el.head) return;
+    const isMobile = window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
+    el.head.addEventListener("mousedown", (event) => {
+      if (event.button !== 0 || isMobile) return;
+      const rect = state.windowRect;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startRight = rect.right;
+      const startBottom = rect.bottom;
+      const onMove = (moveEvent) => {
+        state.windowRect.right = Math.max(12, startRight - (moveEvent.clientX - startX));
+        state.windowRect.bottom = Math.max(12, startBottom - (moveEvent.clientY - startY));
+        applyWindowRect();
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        saveState();
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+      event.preventDefault();
+    });
+  }
+
+  function bindResize() {
+    const el = elements();
+    if (!el.resize) return;
+    const isMobile = window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
+    el.resize.addEventListener("mousedown", (event) => {
+      if (event.button !== 0 || isMobile) return;
+      const rect = state.windowRect;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startWidth = rect.width;
+      const startHeight = rect.height;
+      const maxHeight = Math.max(360, Math.floor((window.innerHeight || 640) * 0.9));
+      const onMove = (moveEvent) => {
+        state.windowRect.width = clamp(
+          startWidth + (moveEvent.clientX - startX),
+          280,
+          720
+        );
+        state.windowRect.height = clamp(
+          startHeight + (moveEvent.clientY - startY),
+          360,
+          maxHeight
+        );
+        applyWindowRect();
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        saveState();
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+      event.preventDefault();
+    });
+  }
+
   function bindEvents() {
     const el = elements();
     if (!el.form || !el.question || !el.submit) return;
@@ -525,6 +759,19 @@
         handleSubmit();
       }
     });
+    if (el.fab) {
+      el.fab.addEventListener("click", (event) => {
+        event.preventDefault();
+        toggleWindow();
+      });
+    }
+    if (el.close) {
+      el.close.addEventListener("click", () => {
+        closeWindow();
+      });
+    }
+    bindDrag();
+    bindResize();
     if (el.externalSearch) {
       el.externalSearch.addEventListener("change", (event) => {
         state.externalSearchRequested = Boolean(event.target.checked);
@@ -545,6 +792,12 @@
   }
 
   bindEvents();
+  loadState();
+  if (state.isOpen) {
+    openWindow();
+  } else {
+    renderMessages();
+  }
 
   if (typeof window !== "undefined" && window.__MEOWSTREET_TEST__) {
     window.__MEOWSTREET_TEST__ = {
@@ -557,6 +810,14 @@
       renderEvidenceDate,
       acceptedEvidenceDate,
       renderCitations,
+      renderMarkdown,
+      setAssistantMessageHtml,
+      saveState,
+      loadState,
+      renderMessages,
+      openWindow,
+      closeWindow,
+      toggleWindow,
       handleSubmit,
       state,
     };

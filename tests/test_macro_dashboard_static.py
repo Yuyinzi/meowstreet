@@ -69,6 +69,14 @@ def test_macro_dashboard_css_has_floating_window_styles():
     )
 
 
+def test_assistant_floating_window_opens_and_renders_markdown():
+    script = ASSISTANT_JS.read_text(encoding="utf-8")
+    assert "marketAssistantFab" in script
+    assert "marketAssistantWindow" in script
+    assert "marked.parse" in script or "window.marked" in script
+    assert "localStorage" in script
+
+
 def test_nfib_regional_ui_renders_factual_read_and_component_comparisons():
     js = (ROOT / "static" / "nfib-sbo-ui.js").read_text()
 
@@ -8076,7 +8084,7 @@ def _market_assistant_harness(test_js):
         const vm = require("vm");
 
         function makeEl(tag) {{
-          return {{
+          const el = {{
             tagName: tag,
             children: [],
             className: "",
@@ -8110,6 +8118,15 @@ def _market_assistant_harness(test_js):
               }}
             }},
           }};
+          Object.defineProperty(el, "innerHTML", {{
+            get() {{ return el._innerHTML || ""; }},
+            set(value) {{
+              el._innerHTML = value;
+              el.textContent = value.replace(/<[^>]*>/g, "");
+            }},
+            configurable: true,
+          }});
+          return el;
         }}
 
         function streamedBody(chunks) {{
