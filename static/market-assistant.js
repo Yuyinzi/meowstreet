@@ -747,6 +747,7 @@
     if (!question || state.busy) return;
     state.busy = true;
     el.submit.disabled = true;
+    if (el.newConversation) el.newConversation.disabled = true;
     renderThinking();
     appendUserMessage(question);
     el.question.value = "";
@@ -797,6 +798,7 @@
     } finally {
       state.busy = false;
       el.submit.disabled = false;
+      if (el.newConversation) el.newConversation.disabled = false;
       el.question.focus();
     }
   }

@@ -403,6 +403,37 @@ def test_market_assistant_new_conversation_is_ignored_while_busy():
     }
 
 
+def test_market_assistant_disables_new_conversation_during_stream():
+    payload = _run_market_assistant_harness(
+        """
+        let release;
+        global.fetch = async () => ({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: () => new Promise((resolve) => { release = resolve; }),
+              cancel: async () => {},
+              releaseLock: () => {},
+            }),
+          },
+        });
+        elements.marketAssistantQuestion.value = "Explain the setup";
+        const pending = hooks.handleSubmit();
+        await Promise.resolve();
+        await Promise.resolve();
+        const disabledDuring = elements.marketAssistantNewConversation.disabled;
+        release({ done: true, value: undefined });
+        await pending;
+        console.log(JSON.stringify({
+          disabledDuring,
+          disabledAfter: elements.marketAssistantNewConversation.disabled,
+        }));
+        """
+    )
+
+    assert payload == {"disabledDuring": True, "disabledAfter": False}
+
+
 def test_nfib_regional_ui_renders_factual_read_and_component_comparisons():
     js = (ROOT / "static" / "nfib-sbo-ui.js").read_text()
 
