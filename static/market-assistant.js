@@ -19,6 +19,41 @@
   const CITATION_REL_ATTR = 'rel="noopener noreferrer"';
   const CITATION_SECURITY_ATTRS = [CITATION_TARGET_ATTR, CITATION_REL_ATTR];
 
+  const ALLOWED_ASSISTANT_TAGS = new Set([
+    "H1",
+    "H2",
+    "H3",
+    "H4",
+    "H5",
+    "H6",
+    "P",
+    "UL",
+    "OL",
+    "LI",
+    "STRONG",
+    "EM",
+    "CODE",
+    "PRE",
+    "BLOCKQUOTE",
+    "A",
+    "TABLE",
+    "THEAD",
+    "TBODY",
+    "TR",
+    "TH",
+    "TD",
+    "BR",
+    "HR",
+  ]);
+
+  const ALLOWED_ASSISTANT_ATTRIBUTES = new Set([
+    "href",
+    "title",
+    "align",
+    "colspan",
+    "rowspan",
+  ]);
+
   const THINKING_TEXT = "Thinking…";
   const COMPLETION_NOTICE = "已生成回答";
   const UNAVAILABLE_NOTICE =
@@ -111,11 +146,14 @@
     }
   }
 
+  function isMobileViewport() {
+    return window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
+  }
+
   function applyWindowRect() {
     const el = elements();
     if (!el.window || !el.window.style) return;
-    const isMobile = window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
-    if (isMobile) {
+    if (isMobileViewport()) {
       el.window.style.width = "";
       el.window.style.height = "";
       el.window.style.right = "";
@@ -146,9 +184,37 @@
       .replace(/'/g, "&#039;");
   }
 
+  function sanitizeAssistantHtml(html) {
+    if (typeof DOMParser === "undefined") return html;
+    const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+    const walk = (parent) => {
+      Array.from(parent.children).forEach((child) => {
+        if (!ALLOWED_ASSISTANT_TAGS.has(child.tagName)) {
+          const text = document.createTextNode(child.textContent);
+          parent.replaceChild(text, child);
+          return;
+        }
+        if (child.tagName === "A") {
+          const href = child.getAttribute("href") || "";
+          if (!/^https?:\/\/\S+$/.test(href)) {
+            child.removeAttribute("href");
+          }
+        }
+        Array.from(child.attributes).forEach((attribute) => {
+          if (!ALLOWED_ASSISTANT_ATTRIBUTES.has(attribute.name)) {
+            child.removeAttribute(attribute.name);
+          }
+        });
+        walk(child);
+      });
+    };
+    walk(doc.body);
+    return doc.body.innerHTML;
+  }
+
   function setAssistantMessageHtml(textEl, text) {
     if (!textEl) return;
-    textEl.innerHTML = renderMarkdown(text);
+    textEl.innerHTML = sanitizeAssistantHtml(renderMarkdown(text));
     if (typeof textEl.querySelectorAll === "function") {
       textEl.querySelectorAll("a").forEach((link) => {
         link.setAttribute("target", "_blank");
@@ -697,9 +763,8 @@
   function bindDrag() {
     const el = elements();
     if (!el.head) return;
-    const isMobile = window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
     el.head.addEventListener("mousedown", (event) => {
-      if (event.button !== 0 || isMobile) return;
+      if (event.button !== 0 || isMobileViewport()) return;
       const rect = state.windowRect;
       const startX = event.clientX;
       const startY = event.clientY;
@@ -724,9 +789,8 @@
   function bindResize() {
     const el = elements();
     if (!el.resize) return;
-    const isMobile = window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
     el.resize.addEventListener("mousedown", (event) => {
-      if (event.button !== 0 || isMobile) return;
+      if (event.button !== 0 || isMobileViewport()) return;
       const rect = state.windowRect;
       const startX = event.clientX;
       const startY = event.clientY;
@@ -823,6 +887,8 @@
       renderCitations,
       renderMarkdown,
       setAssistantMessageHtml,
+      sanitizeAssistantHtml,
+      isMobileViewport,
       saveState,
       loadState,
       applyWindowRect,

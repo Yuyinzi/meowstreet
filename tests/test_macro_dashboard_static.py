@@ -244,6 +244,57 @@ def test_assistant_window_rect_defers_to_mobile_bottom_sheet():
     }
 
 
+def test_assistant_markdown_escape_fallback_neutralizes_script():
+    payload = _run_market_assistant_harness(
+        """
+        const textEl = makeEl("p");
+        hooks.setAssistantMessageHtml(textEl, "<script>alert(1)</script>");
+        console.log(JSON.stringify({
+          hasLiteralScript: textEl.innerHTML.indexOf("<script>") !== -1,
+          isEscaped: textEl.innerHTML.indexOf("&lt;script&gt;") !== -1,
+        }));
+        """
+    )
+
+    assert payload == {"hasLiteralScript": False, "isEscaped": True}
+
+
+def test_assistant_js_sanitizes_markdown_output():
+    script = ASSISTANT_JS.read_text(encoding="utf-8")
+    assert "sanitizeAssistantHtml" in script
+    assert "ALLOWED_ASSISTANT_TAGS" in script
+    assert "DOMParser" in script
+    assert "javascript:" not in script
+
+
+def test_assistant_drag_and_resize_check_mobile_at_interaction_time():
+    payload = _run_market_assistant_harness(
+        """
+        const dragListener = elements.marketAssistantWindowHead.listeners.mousedown;
+        const resizeListener = elements.marketAssistantResize.listeners.mousedown;
+        const docCalls = [];
+        document.addEventListener = (type) => { docCalls.push(type); };
+        window.matchMedia = () => ({ matches: true });
+        dragListener({ button: 0, clientX: 0, clientY: 0, preventDefault: () => {} });
+        resizeListener({ button: 0, clientX: 0, clientY: 0, preventDefault: () => {} });
+        const mobileCalls = docCalls.slice();
+        window.matchMedia = () => ({ matches: false });
+        dragListener({ button: 0, clientX: 0, clientY: 0, preventDefault: () => {} });
+        console.log(JSON.stringify({
+          mobileCalls,
+          dragBindsMousemoveOnDesktop: docCalls.indexOf("mousemove") !== -1,
+          hasMouseup: docCalls.indexOf("mouseup") !== -1,
+        }));
+        """
+    )
+
+    assert payload == {
+        "mobileCalls": [],
+        "dragBindsMousemoveOnDesktop": True,
+        "hasMouseup": True,
+    }
+
+
 def test_nfib_regional_ui_renders_factual_read_and_component_comparisons():
     js = (ROOT / "static" / "nfib-sbo-ui.js").read_text()
 
