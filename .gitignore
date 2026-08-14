@@ -21,6 +21,7 @@ data/**/*.sqlite
 .DS_Store
 .env
 method_notes/
+progress.md
 .idea/
 data/local_system/extraction_prompts/
 data/local_system/extraction_results/
