@@ -77,6 +77,108 @@ def test_assistant_floating_window_opens_and_renders_markdown():
     assert "localStorage" in script
 
 
+def test_assistant_floating_window_toggles_open_state():
+    payload = _run_market_assistant_harness(
+        """
+        const opened = [];
+        const closed = [];
+        elements.marketAssistantWindow.classList = {
+          add: (name) => opened.push(name),
+          remove: (name) => closed.push(name),
+        };
+        elements.marketAssistantWindow.attrs = {};
+        hooks.state.isOpen = false;
+        hooks.openWindow();
+        const afterOpen = {
+          isOpen: hooks.state.isOpen,
+          hasOpenClass: opened.indexOf("open") !== -1,
+          ariaHidden: elements.marketAssistantWindow.attrs["aria-hidden"],
+        };
+        hooks.closeWindow();
+        console.log(JSON.stringify({
+          afterOpen,
+          afterCloseIsOpen: hooks.state.isOpen,
+          removedOpenClass: closed.indexOf("open") !== -1,
+          closedAriaHidden: elements.marketAssistantWindow.attrs["aria-hidden"],
+        }));
+        """
+    )
+
+    assert payload == {
+        "afterOpen": {
+            "isOpen": True,
+            "hasOpenClass": True,
+            "ariaHidden": "false",
+        },
+        "afterCloseIsOpen": False,
+        "removedOpenClass": True,
+        "closedAriaHidden": "true",
+    }
+
+
+def test_assistant_markdown_renders_with_marked_or_escaped_fallback():
+    payload = _run_market_assistant_harness(
+        """
+        const fallbackHtml = hooks.renderMarkdown("Line one\\n# Heading");
+        const fallbackEscapesTag = hooks.renderMarkdown("<b>x</b>").indexOf("&lt;") !== -1;
+        const textEl = makeEl("p");
+        hooks.setAssistantMessageHtml(textEl, "Hello <World>");
+        window.marked = { parse: (text) => "<p><strong>" + text + "</strong></p>" };
+        console.log(JSON.stringify({
+          fallbackHasBreak: fallbackHtml.indexOf("<br>") !== -1,
+          fallbackEscapesTag,
+          escapedHtml: textEl.innerHTML,
+          markedHtml: hooks.renderMarkdown("Bold"),
+        }));
+        """
+    )
+
+    assert payload == {
+        "fallbackHasBreak": True,
+        "fallbackEscapesTag": True,
+        "escapedHtml": "Hello &lt;World&gt;",
+        "markedHtml": "<p><strong>Bold</strong></p>",
+    }
+
+
+def test_assistant_state_persists_to_local_storage():
+    payload = _run_market_assistant_harness(
+        """
+        const storage = {};
+        global.localStorage = {
+          setItem: (key, value) => { storage[key] = value; },
+          getItem: (key) => (key in storage ? storage[key] : null),
+          removeItem: (key) => { delete storage[key]; },
+        };
+        hooks.state.conversationId = "conv_test";
+        hooks.state.messages = [{ role: "user", text: "hi" }];
+        hooks.state.lastContextId = "ctx_Z";
+        hooks.state.windowRect = { width: 400, height: 500, right: 20, bottom: 80 };
+        hooks.saveState();
+        hooks.state.conversationId = null;
+        hooks.state.messages = [];
+        hooks.state.lastContextId = null;
+        hooks.state.windowRect = { width: 360, height: 520, right: 24, bottom: 92 };
+        const restored = hooks.loadState();
+        console.log(JSON.stringify({
+          restored,
+          conversationId: hooks.state.conversationId,
+          messageCount: hooks.state.messages.length,
+          lastContextId: hooks.state.lastContextId,
+          width: hooks.state.windowRect.width,
+        }));
+        """
+    )
+
+    assert payload == {
+        "restored": True,
+        "conversationId": "conv_test",
+        "messageCount": 1,
+        "lastContextId": "ctx_Z",
+        "width": 400,
+    }
+
+
 def test_nfib_regional_ui_renders_factual_read_and_component_comparisons():
     js = (ROOT / "static" / "nfib-sbo-ui.js").read_text()
 
@@ -8153,6 +8255,11 @@ def _market_assistant_harness(test_js):
         }}
 
         const elements = {{
+          marketAssistantFab: makeEl("button"),
+          marketAssistantWindow: makeEl("div"),
+          marketAssistantWindowHead: makeEl("div"),
+          marketAssistantWindowClose: makeEl("button"),
+          marketAssistantResize: makeEl("div"),
           marketAssistantLog: makeEl("div"),
           marketAssistantForm: makeEl("form"),
           marketAssistantQuestion: makeEl("input"),
