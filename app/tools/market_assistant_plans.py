@@ -9,6 +9,7 @@ from pydantic import AfterValidator
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import TypeAdapter
 from pydantic import ValidationError
 from pydantic import field_validator
 
@@ -30,6 +31,13 @@ _OPERATIONS = {
     "research_focused",
     "research_standard",
     "research_deep",
+    "get_setup_overview",
+    "get_macro_regime_explanation",
+    "get_confirmation_test",
+    "get_confirmation_tests",
+    "get_posture_explanation",
+    "get_approved_counterfactuals",
+    "get_indicator_knowledge",
 }
 
 _INTENTS = (
@@ -57,6 +65,22 @@ _RESEARCH_OPERATION_TIERS = {
     "research_standard": "standard",
     "research_deep": "deep",
 }
+
+_ALLOWED_INDICATOR_IDS = (
+    "vix",
+    "ism_manufacturing_pmi",
+    "sp500_close",
+    "m2_money_stock",
+    "credit_conditions",
+    "initial_claims_sa",
+    "continuing_claims_sa",
+)
+
+_TEST_IDS = ("equity", "credit", "vix")
+
+_KNOWLEDGE_TOPICS = ("definition", "method", "source")
+
+_HISTORY_WINDOWS = ("1m", "3m", "6m", "1y")
 
 _QUERY_FORBIDDEN_RE = re.compile(
     r"https?://|api_key|password|token|secret|;|\$\(|`|&&|\|\||[|><\n]",
@@ -193,6 +217,19 @@ class _ResearchParams(_OperationParams):
         return queries
 
 
+class _ConfirmationTestParams(_OperationParams):
+    test_id: Literal[*_TEST_IDS]
+
+
+class _ConfirmationTestsParams(_OperationParams):
+    test_ids: list[Literal[*_TEST_IDS]] = Field(min_length=1)
+
+
+class _IndicatorKnowledgeParams(_OperationParams):
+    indicator_id: Literal[*_ALLOWED_INDICATOR_IDS]
+    topic: Literal[*_KNOWLEDGE_TOPICS]
+
+
 class _OperationRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -272,6 +309,41 @@ class _ResearchDeepOperation(_OperationRecord):
     parameters: _ResearchParams
 
 
+class _GetSetupOverviewOperation(_OperationRecord):
+    operation_id: Literal["get_setup_overview"]
+    parameters: _EmptyParams
+
+
+class _GetMacroRegimeExplanationOperation(_OperationRecord):
+    operation_id: Literal["get_macro_regime_explanation"]
+    parameters: _EmptyParams
+
+
+class _GetConfirmationTestOperation(_OperationRecord):
+    operation_id: Literal["get_confirmation_test"]
+    parameters: _ConfirmationTestParams
+
+
+class _GetConfirmationTestsOperation(_OperationRecord):
+    operation_id: Literal["get_confirmation_tests"]
+    parameters: _ConfirmationTestsParams
+
+
+class _GetPostureExplanationOperation(_OperationRecord):
+    operation_id: Literal["get_posture_explanation"]
+    parameters: _EmptyParams
+
+
+class _GetApprovedCounterfactualsOperation(_OperationRecord):
+    operation_id: Literal["get_approved_counterfactuals"]
+    parameters: _EmptyParams
+
+
+class _GetIndicatorKnowledgeOperation(_OperationRecord):
+    operation_id: Literal["get_indicator_knowledge"]
+    parameters: _IndicatorKnowledgeParams
+
+
 _OperationRecord = Annotated[
     Union[
         _ResolveCurrentExplanationOperation,
@@ -289,9 +361,18 @@ _OperationRecord = Annotated[
         _ResearchFocusedOperation,
         _ResearchStandardOperation,
         _ResearchDeepOperation,
+        _GetSetupOverviewOperation,
+        _GetMacroRegimeExplanationOperation,
+        _GetConfirmationTestOperation,
+        _GetConfirmationTestsOperation,
+        _GetPostureExplanationOperation,
+        _GetApprovedCounterfactualsOperation,
+        _GetIndicatorKnowledgeOperation,
     ],
     Field(discriminator="operation_id"),
 ]
+
+_OPERATION_ADAPTER = TypeAdapter(_OperationRecord)
 
 
 class TaskPlanSchema(BaseModel):
@@ -306,6 +387,14 @@ class TaskPlanSchema(BaseModel):
 
 def registered_operation_ids():
     return set(_OPERATIONS)
+
+
+def validate_operation(operation_id, parameters):
+    payload = {"operation_id": operation_id, "parameters": parameters}
+    try:
+        return _OPERATION_ADAPTER.validate_python(payload).model_dump(mode="json")
+    except ValidationError as exc:
+        raise ValueError("operation is invalid") from exc
 
 
 def validate_task_plan(payload):

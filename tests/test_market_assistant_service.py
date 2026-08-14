@@ -1,108 +1,33 @@
 import asyncio
+import inspect
 import json
+import logging
 from copy import deepcopy
 
 import pytest
 
 from app.db import market_assistant as market_assistant_db
 from app.services import market_assistant
+from app.services import market_assistant_react
 from app.services.market_assistant import ASSISTANT_POLICY_VERSION
 from app.services.market_assistant import PROMPT_VERSION
+from app.services.market_assistant_react import run_hybrid_narration
 from app.services.market_setup_current import resolve_current_explanation
-from app.tools.market_assistant_answers import validate_answer_draft_schema
 from app.tools.market_assistant_artifacts import resolve_artifact_ref
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
-from app.tools.market_assistant_plans import validate_task_plan
+from app.tools.market_assistant_routes import route_question
 from app.tools.market_setup_explanation_snapshot import canonical_json
 
 
-def current_question(**overrides):
-    question = {
-        "question": "Why is the current setup Mild Risk-Off?",
+def current_question(question="Why is the current setup Mild Risk-Off?", **overrides):
+    payload = {
+        "question": question,
         "mode": "current",
         "previous_context_id": None,
         "deep_research_requested": False,
     }
-    question.update(overrides)
-    return question
-
-
-def valid_plan(**overrides):
-    plan = {
-        "intent": "decision_explanation",
-        "context_mode": "current",
-        "operations": [
-            {"operation_id": "resolve_current_explanation", "parameters": {}}
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    plan.update(overrides)
-    return plan
-
-
-def research_plan(tier="focused", **overrides):
-    operation = {
-        "focused": "research_focused",
-        "standard": "research_standard",
-        "deep": "research_deep",
-    }[tier]
-    plan = {
-        "intent": "external_research",
-        "context_mode": "current",
-        "operations": [
-            {
-                "operation_id": operation,
-                "parameters": {
-                    "purpose": "current_events",
-                    "queries": ["latest official ism report"],
-                    "expected_source_class": "official_publication",
-                },
-            }
-        ],
-        "answer_depth": "detailed",
-        "research_tier": tier,
-    }
-    plan.update(overrides)
-    return plan
-
-
-def knowledge_plan(**overrides):
-    plan = {
-        "intent": "definition",
-        "context_mode": "current",
-        "operations": [
-            {
-                "operation_id": "get_indicator_definition",
-                "parameters": {"indicator_id": "vix"},
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    plan.update(overrides)
-    return plan
-
-
-def exploration_plan(**overrides):
-    plan = {
-        "intent": "local_history",
-        "context_mode": "current",
-        "operations": [
-            {
-                "operation_id": "query_indicator_history",
-                "parameters": {
-                    "indicator_id": "vix",
-                    "start": "2026-01-01",
-                    "end": "2026-06-30",
-                },
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    plan.update(overrides)
-    return plan
+    payload.update(overrides)
+    return payload
 
 
 def fake_snapshot():
@@ -198,128 +123,6 @@ def _config(**overrides):
     return config
 
 
-def evidence_ref(**overrides):
-    ref = {
-        "artifact_id": "ctx_123",
-        "object_type": "evidence_fact",
-        "object_id": "vix_level",
-    }
-    ref.update(overrides)
-    return ref
-
-
-def valid_claim(**overrides):
-    claim = {
-        "claim_id": "c1",
-        "purpose": "decision_explanation",
-        "authority": "decision_fact",
-        "refs": [evidence_ref()],
-        "template": "The accepted VIX level is {vix_level}.",
-        "bindings": {
-            "vix_level": {
-                "value": 18.4,
-                "source": evidence_ref(field="accepted_values.level"),
-            }
-        },
-    }
-    claim.update(overrides)
-    return claim
-
-
-def valid_draft():
-    return {"sections": [{"kind": "decision", "claims": [valid_claim()]}]}
-
-
-def invalid_draft():
-    return {
-        "sections": [
-            {
-                "kind": "decision",
-                "claims": [
-                    {
-                        "claim_id": "bad1",
-                        "purpose": "decision_explanation",
-                        "authority": "decision_fact",
-                        "refs": [evidence_ref()],
-                        "template": "The VIX level is 99.9 today.",
-                        "bindings": {},
-                    }
-                ],
-            }
-        ]
-    }
-
-
-def invalid_repair():
-    return {
-        "sections": [
-            {
-                "kind": "decision",
-                "claims": [
-                    {
-                        "claim_id": "bad2",
-                        "purpose": "decision_explanation",
-                        "authority": "decision_fact",
-                        "refs": [evidence_ref()],
-                        "template": "The VIX level is 77.7 today.",
-                        "bindings": {},
-                    }
-                ],
-            }
-        ]
-    }
-
-
-def beginner_debug_draft():
-    return {
-        "sections": [
-            {
-                "kind": "decision",
-                "claims": [
-                    {
-                        "claim_id": "beginner_summary",
-                        "purpose": "decision_explanation",
-                        "authority": "decision_fact",
-                        "refs": [evidence_ref()],
-                        "template": "现在的市场可以理解为：经济增长正在{direction}，但市场只确认了{confirmation}风险。",
-                        "bindings": {
-                            "direction": "放慢",
-                            "confirmation": "一部分",
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-
-def _chinese_observation_debug_draft():
-    return {
-        "sections": [
-            {
-                "kind": "observation",
-                "claims": [
-                    {
-                        "claim_id": "obs_debug",
-                        "purpose": "observation",
-                        "authority": "local_observation",
-                        "refs": [],
-                        "template": "当前波动率为{vix}。",
-                        "bindings": {
-                            "vix": {
-                                "artifact_id": "ctx_1",
-                                "object_type": "evidence_fact",
-                                "object_id": "vix_level",
-                                "field": "observed.value",
-                            }
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-
 def _dummy_con():
     return _DummyCon()
 
@@ -382,77 +185,6 @@ def exploration_result():
     }
 
 
-def research_result():
-    return {
-        "research_result_id": "res_1",
-        "artifact_schema_version": "market_assistant_research_result_v1",
-        "authority": "external_research",
-        "market_setup_relation": "non_decision",
-        "task": {
-            "purpose": "current_events",
-            "depth_tier": "focused",
-            "queries": ["latest vix"],
-            "expected_source_class": "official_publication",
-        },
-        "provider_metadata": {
-            "provider_id": "openai_responses_web_search",
-            "model": "research-model",
-        },
-        "searched_at": "2026-08-10T02:00:00Z",
-        "search_calls": [{"query": "latest vix"}],
-        "sources": [
-            {
-                "source_id": "src_1",
-                "canonical_url": "https://www.cboe.com/vix",
-                "title": "CBOE VIX",
-                "publisher": "cboe.com",
-                "publication_date": "2026-08-10",
-                "event_date": "2026-08-10",
-                "retrieved_at": "2026-08-10T02:00:00Z",
-                "cited_spans": ["The VIX closed at 25.0."],
-            }
-        ],
-        "findings": [
-            {
-                "finding_id": "fnd_1",
-                "statement": "The VIX closed at 25.0.",
-                "purpose": "current_events",
-                "framing": "reported",
-                "source_refs": ["src_1"],
-                "cited_spans": ["The VIX closed at 25.0."],
-            }
-        ],
-        "object_index": [
-            {
-                "object_type": "research_source",
-                "object_id": "src_1",
-                "authority": "external_research",
-                "payload": {
-                    "source_id": "src_1",
-                    "canonical_url": "https://www.cboe.com/vix",
-                    "title": "CBOE VIX",
-                    "publisher": "cboe.com",
-                    "publication_date": "2026-08-10",
-                    "event_date": "2026-08-10",
-                    "retrieved_at": "2026-08-10T02:00:00Z",
-                    "cited_spans": ["The VIX closed at 25.0."],
-                    "reported_level": 25.0,
-                },
-            },
-            {
-                "object_type": "research_finding",
-                "object_id": "fnd_1",
-                "authority": "external_research",
-                "payload": {
-                    "finding_id": "fnd_1",
-                    "statement": "The VIX closed at 25.0.",
-                },
-            },
-        ],
-        "result_hash": "a" * 64,
-    }
-
-
 def research_unavailable():
     return {
         "authority": "external_research",
@@ -464,63 +196,225 @@ def research_unavailable():
     }
 
 
-class FakeDependencies:
+def narration_step(text="现在的市场偏积极，但仍需保持谨慎。", deltas=None, error=None):
+    step = {
+        "result": {
+            "output_text": text,
+            "tool_calls": [],
+            "response_items": [],
+            "usage": None,
+            "timings": {},
+        }
+    }
+    if deltas:
+        step["observer_events"] = [
+            {"type": "output_delta", "delta": delta} for delta in deltas
+        ]
+    if error is not None:
+        step["error"] = error
+    return step
+
+
+def tool_step(calls):
+    response_items = [
+        {
+            "type": "function_call",
+            "call_id": call["call_id"],
+            "name": call["tool_name"],
+            "arguments": json.dumps(
+                call["arguments"], ensure_ascii=False, sort_keys=True
+            ),
+        }
+        for call in calls
+    ]
+    return {
+        "result": {
+            "output_text": "",
+            "tool_calls": list(calls),
+            "response_items": response_items,
+            "usage": None,
+            "timings": {},
+        }
+    }
+
+
+class _ScriptedStream:
+    def __init__(self, steps):
+        self.steps = list(steps)
+        self.calls = []
+
+    async def __call__(
+        self,
+        client,
+        *,
+        model,
+        input_items,
+        instructions,
+        tools,
+        reasoning_effort,
+        observer=None,
+    ):
+        step = self.steps.pop(0)
+        self.calls.append(
+            {
+                "client": client,
+                "model": model,
+                "input_items": input_items,
+                "instructions": instructions,
+                "tools": tools,
+                "reasoning_effort": reasoning_effort,
+                "observer": observer,
+            }
+        )
+        for event in step.get("observer_events") or []:
+            result = observer(event)
+            if inspect.isawaitable(result):
+                await result
+        if step.get("error") is not None:
+            raise step["error"]
+        return step["result"]
+
+
+class RecordingSink:
+    def __init__(self):
+        self.events = []
+
+    async def send(self, event):
+        self.events.append(event)
+
+
+def _default_narration_stream():
+    text = "现在的市场偏积极，但仍需保持谨慎。"
+    return _ScriptedStream([narration_step(text, deltas=[text])])
+
+
+def _setup_result_artifact_id(artifact_projection):
+    for artifact_id, artifact in artifact_projection.items():
+        for obj in artifact.get("object_index") or []:
+            if (
+                obj.get("object_type") == "market_setup_result"
+                and obj.get("object_id") == "macro_regime"
+            ):
+                return artifact_id
+    return None
+
+
+def _valid_audit_payload(answer_text, artifact_projection=None, **kwargs):
+    artifact_id = _setup_result_artifact_id(artifact_projection or {})
+    if artifact_id is None:
+        claim = {
+            "claim_id": "claim_1",
+            "start": 0,
+            "end": len(answer_text),
+            "exact_text": answer_text,
+            "purpose": "illustration",
+            "authority": "hypothetical",
+            "refs": [],
+            "values": [],
+        }
+    else:
+        claim = {
+            "claim_id": "claim_1",
+            "start": 0,
+            "end": len(answer_text),
+            "exact_text": answer_text,
+            "purpose": "decision_explanation",
+            "authority": "decision_fact",
+            "refs": [
+                {
+                    "artifact_id": artifact_id,
+                    "object_type": "market_setup_result",
+                    "object_id": "macro_regime",
+                }
+            ],
+            "values": [],
+        }
+    return {"claims": [claim]}
+
+
+def _invalid_audit_payload(answer_text, artifact_projection=None, **kwargs):
+    return {
+        "claims": [
+            {
+                "claim_id": "claim_bad",
+                "start": 0,
+                "end": len(answer_text),
+                "exact_text": answer_text + " unapproved claim",
+                "purpose": "decision_explanation",
+                "authority": "decision_fact",
+                "refs": [
+                    {
+                        "artifact_id": "ctx_123_overview",
+                        "object_type": "market_setup_result",
+                        "object_id": "macro_regime",
+                    }
+                ],
+                "values": [],
+            }
+        ]
+    }
+
+
+class HybridDependencies:
     def __init__(
         self,
-        plan,
-        draft,
-        repair=None,
         *,
+        stream=None,
+        audit=None,
         resolve=None,
-        research=None,
         config=None,
-        catalog=None,
+        research=None,
         exploration=None,
-        knowledge=None,
+        catalog=None,
+        route=None,
     ):
-        self.llm_calls = []
-        self.context_summaries = []
-        self.tool_execution_count = 0
-        self.saved_trace = None
-        self.saved_artifacts = None
-        self.acquired_research_kwargs = None
-        self.acquired_artifacts = None
         self.db_path = ":memory:"
         self.config = config if config is not None else _config()
-        self._plan = plan
-        self._draft = draft
-        self._repair = repair
+        self.client = object()
+        self.model = self.config["model"]
+        self.reasoning_effort = self.config.get("reasoning_effort", "low")
+        self.stream_turn = stream if stream is not None else _default_narration_stream()
+        self.audit_timeout_seconds = self.config.get("audit_timeout_seconds")
+        self._audit = audit
         self._resolve = resolve if resolve is not None else resolution_envelope()
         self._research = research if research is not None else research_unavailable()
+        self._exploration = (
+            exploration if exploration is not None else exploration_result()
+        )
         self._catalog = catalog if catalog is not None else knowledge_catalog()
-        self._exploration = exploration
-        self._knowledge = knowledge
+        self._route = route
+        self.saved_trace = None
+        self.saved_artifacts = None
+        self.tool_execution_count = 0
+        self.llm_calls = []
+        self.audit_kwargs = None
 
-    async def plan_llm(self, *, question, context_summary):
-        self.llm_calls.append("plan")
-        self.context_summaries.append(context_summary)
-        if isinstance(self._plan, list):
-            response = self._plan.pop(0)
-        else:
-            response = self._plan
-        if isinstance(response, Exception):
-            raise response
-        return validate_task_plan(response)
+    def route_question(self, question, *, deep_analysis):
+        if self._route is not None:
+            return deepcopy(self._route)
+        return route_question(question, deep_analysis=deep_analysis)
 
-    async def synthesize_llm(self, *, question, plan, context_summary, artifacts):
-        self.llm_calls.append("draft")
-        self.acquired_artifacts = artifacts
-        if isinstance(self._draft, Exception):
-            raise self._draft
-        return self._draft
-
-    async def repair_llm(
-        self, *, question, plan, context_summary, artifacts, draft, validation_report
+    async def claim_audit_llm(
+        self, *, answer_text, explanation_view, artifact_projection
     ):
-        self.llm_calls.append("repair")
-        if isinstance(self._repair, Exception):
-            raise self._repair
-        return self._repair
+        self.llm_calls.append("audit")
+        self.audit_kwargs = {
+            "answer_text": answer_text,
+            "explanation_view": explanation_view,
+            "artifact_projection": artifact_projection,
+        }
+        if isinstance(self._audit, Exception):
+            raise self._audit
+        if callable(self._audit):
+            result = self._audit(
+                answer_text=answer_text, artifact_projection=artifact_projection
+            )
+            if inspect.isawaitable(result):
+                return await result
+            return result
+        if self._audit is not None:
+            return self._audit
+        return _valid_audit_payload(answer_text, artifact_projection)
 
     def resolve_current_explanation(self, db_path, *, previous_context_id, resolved_at):
         self.tool_execution_count += 1
@@ -535,18 +429,6 @@ class FakeDependencies:
     def load_knowledge_catalog(self):
         return self._catalog
 
-    def knowledge(self, catalog, indicator_id, object_type):
-        if self._knowledge is not None:
-            self.tool_execution_count += 1
-            return self._knowledge(catalog, indicator_id, object_type)
-        for record in catalog.get("records", []):
-            if (
-                record.get("indicator_id") == indicator_id
-                and record.get("object_type") == object_type
-            ):
-                return record
-        raise ValueError(f"knowledge record is not available for {indicator_id}")
-
     def exploration(self, con, query, *, result_id, created_at):
         self.tool_execution_count += 1
         return self._exploration
@@ -555,12 +437,6 @@ class FakeDependencies:
         self, provider, task, *, result_id, searched_at, explicit_deep=False
     ):
         self.tool_execution_count += 1
-        self.acquired_research_kwargs = {
-            "result_id": result_id,
-            "searched_at": searched_at,
-            "task": task,
-            "explicit_deep": explicit_deep,
-        }
         return self._research
 
     def build_research_provider(self, config):
@@ -571,42 +447,26 @@ class FakeDependencies:
         self.saved_artifacts = list(artifacts)
 
 
-def fake_dependencies(plan, draft, repair=None, **kwargs):
-    return FakeDependencies(plan, draft, repair=repair, **kwargs)
+def hybrid_dependencies(**kwargs):
+    return HybridDependencies(**kwargs)
 
 
-class _ListSink:
-    def __init__(self):
-        self.events = []
-
-    async def send(self, event):
-        self.events.append(event)
-
-
-def _streaming_dependencies(plan, draft, repair=None, *, stream_events=None, **kwargs):
-    deps = fake_dependencies(plan, draft, repair=repair, **kwargs)
-    events = list(stream_events or [])
-
-    async def synthesize_llm(
-        *, question, plan, context_summary, artifacts, stream_observer=None
-    ):
-        deps.llm_calls.append("draft")
-        deps.acquired_artifacts = artifacts
-        if stream_observer is not None:
-            for event in events:
-                await stream_observer(event)
-        if isinstance(deps._draft, Exception):
-            raise deps._draft
-        return deps._draft
-
-    deps.synthesize_llm = synthesize_llm
-    return deps
-
-
-class RealPersistenceDeps:
+class HybridRealPersistenceDeps:
     def __init__(self, db_path):
         self.db_path = str(db_path)
         self.config = _config()
+        self.client = object()
+        self.model = self.config["model"]
+        self.reasoning_effort = self.config.get("reasoning_effort", "low")
+        self.stream_turn = _default_narration_stream()
+        self.audit_timeout_seconds = None
+        self.llm_calls = []
+
+    async def claim_audit_llm(
+        self, *, answer_text, explanation_view, artifact_projection
+    ):
+        self.llm_calls.append("audit")
+        return _valid_audit_payload(answer_text, artifact_projection)
 
     def connect(self, db_path):
         return market_assistant_db.connect(db_path)
@@ -621,134 +481,679 @@ class RealPersistenceDeps:
             db_path, previous_context_id=previous_context_id, resolved_at=resolved_at
         )
 
-    async def plan_llm(self, *, question, context_summary):
-        return validate_task_plan(
-            {
-                "intent": "decision_explanation",
-                "context_mode": "current",
-                "operations": [
-                    {"operation_id": "resolve_current_explanation", "parameters": {}},
-                    {
-                        "operation_id": "get_indicator_definition",
-                        "parameters": {"indicator_id": "vix_level"},
-                    },
-                ],
-                "answer_depth": "standard",
-                "research_tier": None,
-            }
-        )
 
-    async def synthesize_llm(self, *, question, plan, context_summary, artifacts):
-        snapshot_artifact = next(
-            artifact
-            for artifact in artifacts.values()
-            if artifact["artifact_kind"] == "explanation_snapshot"
-        )
-        context_id = snapshot_artifact["artifact_id"]
-        regime = next(
-            item["payload"]
-            for item in snapshot_artifact["object_index"]
-            if item["object_type"] == "market_setup_result"
-            and item["object_id"] == "macro_regime"
-        )
-        knowledge_artifact = next(
-            artifact
-            for artifact in artifacts.values()
-            if artifact["artifact_kind"] == "knowledge_record"
-        )
-        return {
-            "sections": [
-                {
-                    "kind": "decision",
-                    "claims": [
-                        {
-                            "claim_id": "c1",
-                            "purpose": "decision_explanation",
-                            "authority": "decision_fact",
-                            "refs": [
-                                {
-                                    "artifact_id": context_id,
-                                    "object_type": "market_setup_result",
-                                    "object_id": "macro_regime",
-                                }
-                            ],
-                            "template": "The macro regime is {regime}.",
-                            "bindings": {
-                                "regime": {
-                                    "value": regime["label"],
-                                    "source": {
-                                        "artifact_id": context_id,
-                                        "object_type": "market_setup_result",
-                                        "object_id": "macro_regime",
-                                        "field": "label",
-                                    },
-                                }
-                            },
-                        }
-                    ],
-                },
-                {
-                    "kind": "knowledge",
-                    "claims": [
-                        {
-                            "claim_id": "k1",
-                            "purpose": "method_explanation",
-                            "authority": "method_knowledge",
-                            "refs": [
-                                {
-                                    "artifact_id": knowledge_artifact["artifact_id"],
-                                    "object_type": "indicator_definition",
-                                    "object_id": knowledge_artifact["artifact_id"],
-                                }
-                            ],
-                            "template": "The approved instrument is {title}.",
-                            "bindings": {
-                                "title": {
-                                    "value": "CBOE Volatility Index",
-                                    "source": {
-                                        "artifact_id": knowledge_artifact[
-                                            "artifact_id"
-                                        ],
-                                        "object_type": "indicator_definition",
-                                        "object_id": knowledge_artifact["artifact_id"],
-                                        "field": "title",
-                                    },
-                                }
-                            },
-                        }
-                    ],
-                },
-            ]
-        }
-
-    async def repair_llm(
-        self, *, question, plan, context_summary, artifacts, draft, validation_report
-    ):
-        raise AssertionError("repair must not run")
+@pytest.mark.asyncio
+async def test_answer_streams_before_claim_audit():
+    sink = RecordingSink()
+    await market_assistant.answer_question(
+        current_question("现在市场怎么样？"),
+        dependencies=hybrid_dependencies(),
+        event_sink=sink,
+    )
+    types = [event["type"] for event in sink.events]
+    answer_index = types.index("answer_delta")
+    validating_index = next(
+        index
+        for index, event in enumerate(sink.events)
+        if event == {"type": "status", "status": "validating"}
+    )
+    validation_index = types.index("validation")
+    assert answer_index < validating_index < validation_index
 
 
 @pytest.mark.asyncio
-async def test_answer_uses_one_structured_synthesis_and_persists_trace():
-    deps = fake_dependencies(valid_plan(), valid_draft())
+async def test_audit_failure_visibility():
+    deps = hybrid_dependencies(audit=_invalid_audit_payload)
+    sink = RecordingSink()
+
     response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
+        current_question("现在市场怎么样？"),
+        dependencies=deps,
+        event_sink=sink,
     )
 
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.llm_calls == ["plan", "draft"]
+    assert response["generation_status"] == "narration_validation_failed"
+    assert response["answer_text"] == "现在的市场偏积极，但仍需保持谨慎。"
+    assert not any(event["type"] == "answer_replace" for event in sink.events)
+    assert deps.saved_trace["answer_text"] == response["answer_text"]
+    assert deps.saved_trace["generation_status"] == "narration_validation_failed"
+    report = deps.saved_trace["claim_audit"]["validation"]
+    assert report["valid"] is False
+    assert [error["code"] for error in report["errors"]] == ["ANSWER_TEXT_MISMATCH"]
+    assert deps.saved_trace["validation_error_codes"] == ["ANSWER_TEXT_MISMATCH"]
+
+
+@pytest.mark.asyncio
+async def test_disabled_claim_validation_persists_narration_validation_disabled(caplog):
+    deps = hybrid_dependencies(config=_config(claim_validation_enabled=False))
+    sink = RecordingSink()
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        response = await market_assistant.answer_question(
+            current_question("现在市场怎么样？"),
+            dependencies=deps,
+            event_sink=sink,
+        )
+
+    assert response["generation_status"] == "narration_validation_disabled"
+    assert response["answer_text"] == "现在的市场偏积极，但仍需保持谨慎。"
+    assert "audit" not in deps.llm_calls
+    validations = [event for event in sink.events if event["type"] == "validation"]
+    assert validations == [
+        {"type": "validation", "status": "disabled", "error_codes": []}
+    ]
+    assert not any(event["type"] == "answer_replace" for event in sink.events)
+    assert deps.saved_trace["generation_status"] == "narration_validation_disabled"
+    assert deps.saved_trace["claim_audit"]["audit"] is None
+    assert deps.saved_trace["attempts"] == {"narration": 1, "audit": 0}
+    assert "audit_completed" not in _observed_stages(caplog)
+
+
+@pytest.mark.asyncio
+async def test_claim_validation_remains_enabled_when_config_key_is_absent():
+    config = _config()
+    config.pop("claim_validation_enabled", None)
+    deps = hybrid_dependencies(config=config)
+
+    response = await market_assistant.answer_question(
+        current_question("现在市场怎么样？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "narration_validated"
+    assert "audit" in deps.llm_calls
+
+
+@pytest.mark.asyncio
+async def test_audit_timeout_emits_validation_unavailable_without_repair():
+    async def hang_forever(**kwargs):
+        await asyncio.Event().wait()
+
+    deps = hybrid_dependencies(
+        audit=hang_forever,
+        config=_config(audit_timeout_seconds=0.01),
+    )
+    sink = RecordingSink()
+
+    response = await market_assistant.answer_question(
+        current_question("现在市场怎么样？"),
+        dependencies=deps,
+        event_sink=sink,
+    )
+
+    assert response["generation_status"] == "narration_validation_unavailable"
+    assert response["answer_text"] == "现在的市场偏积极，但仍需保持谨慎。"
+    assert deps.saved_trace["generation_status"] == "narration_validation_unavailable"
+    assert deps.saved_trace["claim_audit"]["audit"] is None
+    validations = [event for event in sink.events if event["type"] == "validation"]
+    assert validations == [
+        {"type": "validation", "status": "unavailable", "error_codes": []}
+    ]
+    assert len(deps.stream_turn.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_narration_failure_before_text_renders_deterministic_fallback(caplog):
+    stream = _ScriptedStream([narration_step(error=RuntimeError("llm down"))])
+    deps = hybrid_dependencies(stream=stream)
+    sink = RecordingSink()
+
+    response = await market_assistant.answer_question(
+        current_question("现在市场怎么样？"),
+        dependencies=deps,
+        event_sink=sink,
+    )
+
+    assert response["generation_status"] == "deterministic_fallback"
+    assert response["answer_text"].startswith("Market Setup decision result:")
+    assert deps.saved_trace["generation_status"] == "deterministic_fallback"
+    assert deps.saved_trace["narration_status"] == "narration_unavailable"
+    assert any(event["type"] == "answer_replace" for event in sink.events)
+    validations = [event for event in sink.events if event["type"] == "validation"]
+    assert validations == [
+        {"type": "validation", "status": "fallback", "error_codes": []}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_narration_interrupted_keeps_partial_text_and_emits_notice():
+    stream = _ScriptedStream(
+        [narration_step(deltas=["部分文本"], error=RuntimeError("cut off"))]
+    )
+    deps = hybrid_dependencies(stream=stream)
+    sink = RecordingSink()
+
+    response = await market_assistant.answer_question(
+        current_question("现在市场怎么样？"),
+        dependencies=deps,
+        event_sink=sink,
+    )
+
+    assert response["generation_status"] == "narration_interrupted"
+    assert response["answer_text"] == "部分文本"
+    assert deps.saved_trace["generation_status"] == "narration_interrupted"
+    assert "audit" not in deps.llm_calls
+    validations = [event for event in sink.events if event["type"] == "validation"]
+    assert validations == [
+        {"type": "validation", "status": "interrupted", "error_codes": []}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_hybrid_answer_uses_one_narration_turn_and_persists_trace():
+    deps = hybrid_dependencies()
+
+    response = await market_assistant.answer_question(
+        current_question("现在市场怎么样？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "narration_validated"
+    assert response["answer_text"] == "现在的市场偏积极，但仍需保持谨慎。"
+    assert deps.llm_calls == ["audit"]
     assert deps.saved_trace["answer_text"] == response["answer_text"]
 
 
 @pytest.mark.asyncio
-async def test_llm_receives_bounded_object_projection_not_duplicated_payload():
-    deps = fake_dependencies(valid_plan(), valid_draft())
+async def test_hybrid_answer_trace_has_required_fields_and_no_secrets():
+    deps = hybrid_dependencies()
+    await market_assistant.answer_question(
+        current_question("现在市场怎么样？"), dependencies=deps
+    )
+    trace = deps.saved_trace
 
-    await market_assistant.answer_question(current_question(), dependencies=deps)
+    expected_fields = {
+        "answer_trace_id",
+        "message_id",
+        "resolution",
+        "explanation_context_id",
+        "request_controls",
+        "route",
+        "tool_trace",
+        "budget",
+        "explanation_view",
+        "knowledge_references",
+        "snapshot_artifact_ids",
+        "exploration_result_ids",
+        "research_result_ids",
+        "plan",
+        "structured_claims",
+        "generation_status",
+        "attempts",
+        "validation_error_codes",
+        "prompt",
+        "model_configuration_fingerprint",
+        "tool_schema_versions",
+        "answer_text",
+        "answer_text_hash",
+        "claim_audit",
+        "timings",
+        "generated_time",
+    }
+    assert expected_fields.issubset(trace)
+    assert trace["answer_trace_id"].startswith("trc_")
+    assert trace["message_id"].startswith("msg_")
+    assert trace["generation_status"] == "narration_validated"
+    assert trace["route"]["route_id"] == "current_setup_overview"
+    assert trace["route"]["routing_source"] == "deterministic"
+    assert trace["request_controls"]["mode"] == "current"
+    assert trace["request_controls"]["deep_analysis_requested"] is False
+    assert trace["explanation_view"]["view_version"] == "setup_explanation_v1"
+    assert len(trace["explanation_view"]["view_hash"]) == 64
+    assert isinstance(trace["tool_trace"], list)
+    assert trace["claim_audit"]["validation"]["valid"] is True
+    assert trace["claim_audit"]["audit"]["claims"]
+    assert trace["timings"]["narration"]["executed_calls"] == 0
+    assert trace["attempts"] == {"narration": 1, "audit": 1}
+    assert trace["plan"] is None
+    assert trace["structured_claims"] is None
+    assert trace["prompt"]["version"] == PROMPT_VERSION
+    assert len(trace["prompt"]["hash"]) == 64
+    assert trace["model_configuration_fingerprint"]["prompt_version"] == PROMPT_VERSION
+    assert (
+        trace["model_configuration_fingerprint"]["assistant_policy_version"]
+        == ASSISTANT_POLICY_VERSION
+    )
+    assert trace["model_configuration_fingerprint"]["model"] == "assistant-model"
+    assert len(trace["answer_text_hash"]) == 64
+    assert "api_key" not in json.dumps(trace)
+    assert "sk-secret-test-key" not in json.dumps(trace)
+    assert "api_key" not in json.dumps(trace["model_configuration_fingerprint"])
 
-    assert deps.acquired_artifacts
-    for artifact in deps.acquired_artifacts.values():
-        assert "payload" not in artifact
-        assert isinstance(artifact["object_index"], list)
+
+@pytest.mark.asyncio
+async def test_deep_analysis_selects_deep_budget_route():
+    deps = hybrid_dependencies()
+    response = await market_assistant.answer_question(
+        current_question("现在市场怎么样？", deep_analysis_requested=True),
+        dependencies=deps,
+    )
+
+    assert response["generation_status"] == "narration_validated"
+    assert deps.saved_trace["route"]["budget"]["max_rounds"] == 4
+    assert deps.saved_trace["route"]["budget"]["max_tool_calls"] == 12
+    assert deps.saved_trace["route"]["budget"]["deadline_seconds"] == 300.0
+
+
+@pytest.mark.asyncio
+async def test_knowledge_operation_acquires_knowledge_record_artifact():
+    deps = hybrid_dependencies()
+
+    response = await market_assistant.answer_question(
+        current_question("VIX 是什么？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "narration_validated"
+    assert deps.saved_trace["knowledge_references"] == ["vix_definition"]
+
+
+@pytest.mark.asyncio
+async def test_knowledge_definition_through_real_catalog_aliases_vix():
+    deps = hybrid_dependencies(catalog=load_knowledge_catalog())
+
+    response = await market_assistant.answer_question(
+        current_question("VIX 是什么？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "narration_validated"
+    assert deps.saved_trace["knowledge_references"] == ["vix_definition"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_knowledge_indicator_routes_to_fallback():
+    catalog = {"version": "market_assistant_knowledge_v1", "records": []}
+    stream = _ScriptedStream([narration_step(error=RuntimeError("llm down"))])
+    deps = hybrid_dependencies(stream=stream, catalog=catalog)
+
+    response = await market_assistant.answer_question(
+        current_question("VIX 是什么？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "deterministic_fallback"
+    assert (
+        "The approved knowledge record is currently unavailable."
+        in response["answer_text"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_exploration_operation_acquires_exploration_result_artifact():
+    stream = _ScriptedStream(
+        [
+            tool_step(
+                [
+                    {
+                        "call_id": "call_1",
+                        "tool_name": "query_indicator_history",
+                        "arguments": {
+                            "indicator_id": "vix",
+                            "window": "6m",
+                        },
+                    }
+                ]
+            ),
+            narration_step(),
+        ]
+    )
+    deps = hybrid_dependencies(stream=stream)
+
+    response = await market_assistant.answer_question(
+        current_question("VIX 确认了吗？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "narration_validated"
+    assert deps.saved_trace["exploration_result_ids"] == ["expl_1"]
+    assert deps.tool_execution_count == 2
+
+
+@pytest.mark.asyncio
+async def test_external_search_disabled_never_executes_research():
+    stream = _ScriptedStream(
+        [
+            tool_step(
+                [
+                    {
+                        "call_id": "call_1",
+                        "tool_name": "research_focused",
+                        "arguments": {
+                            "purpose": "current_events",
+                            "queries": ["latest vix"],
+                            "expected_source_class": "official_publication",
+                        },
+                    }
+                ]
+            ),
+            narration_step(),
+        ]
+    )
+    deps = hybrid_dependencies(stream=stream)
+
+    response = await market_assistant.answer_question(
+        current_question("讲个笑话", external_search_requested=False),
+        dependencies=deps,
+    )
+
+    assert response["generation_status"] == "narration_validated"
+    assert deps.tool_execution_count == 1
+    assert any(
+        item["tool_name"] == "research_focused" and item["status"] == "rejected"
+        for item in deps.saved_trace["tool_trace"]
+    )
+    assert deps.saved_trace["research_result_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_context_change_surfaces_in_resolution_not_answer_text():
+    deps = hybrid_dependencies(resolve=resolution_envelope(previous_context_id="ctx_A"))
+    request = current_question("现在市场怎么样？", previous_context_id="ctx_A")
+    response = await market_assistant.answer_question(request, dependencies=deps)
+
+    assert response["resolution"]["context_changed"] is True
+    assert response["resolution"]["previous_context_id"] == "ctx_A"
+    assert response["answer_text"] == "现在的市场偏积极，但仍需保持谨慎。"
+
+
+@pytest.mark.asyncio
+async def test_hybrid_persists_narration_artifacts_not_the_full_snapshot():
+    deps = hybrid_dependencies()
+    await market_assistant.answer_question(
+        current_question("现在市场怎么样？"), dependencies=deps
+    )
+
+    persisted_ids = [artifact["artifact_id"] for artifact in deps.saved_artifacts]
+    assert "ctx_123" not in persisted_ids
+    assert "ctx_123_overview" in persisted_ids
+    assert "ctx_123_macro_regime" in persisted_ids
+
+
+@pytest.mark.asyncio
+async def test_persistence_failure_raises_stable_error():
+    deps = hybrid_dependencies()
+
+    def fail_save(con, *, artifacts, answer_trace):
+        raise RuntimeError("disk full")
+
+    deps.save_bundle = fail_save
+
+    with pytest.raises(ValueError, match="answer trace persistence failed"):
+        await market_assistant.answer_question(
+            current_question("现在市场怎么样？"), dependencies=deps
+        )
+    assert deps.saved_trace is None
+
+
+@pytest.mark.asyncio
+async def test_hybrid_answer_persists_real_bundle_with_durable_snapshot(tmp_path):
+    db_path = tmp_path / "assistant.sqlite"
+    deps = HybridRealPersistenceDeps(db_path)
+    response = await market_assistant.answer_question(
+        current_question("现在市场怎么样？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "narration_validated"
+    con = market_assistant_db.connect(db_path)
+    try:
+        trace = market_assistant_db.load_answer_trace(con, response["answer_trace_id"])
+        assert trace is not None
+        assert trace["route"]["route_id"] == "current_setup_overview"
+        snapshot = market_assistant_db.load_snapshot(
+            con, trace["explanation_context_id"]
+        )
+        assert snapshot is not None
+    finally:
+        con.close()
+
+
+@pytest.mark.asyncio
+async def test_market_setup_results_byte_identical_across_assistant_modes():
+    baseline = canonical_json(fake_snapshot()["results"])
+    cases = [
+        (
+            hybrid_dependencies(),
+            current_question("现在市场怎么样？"),
+        ),
+        (
+            hybrid_dependencies(config=_config(claim_validation_enabled=False)),
+            current_question("现在市场怎么样？"),
+        ),
+        (
+            hybrid_dependencies(),
+            current_question("现在市场怎么样？", deep_analysis_requested=True),
+        ),
+        (
+            hybrid_dependencies(),
+            current_question("讲个笑话", external_search_requested=False),
+        ),
+        (
+            hybrid_dependencies(audit=_invalid_audit_payload),
+            current_question("现在市场怎么样？"),
+        ),
+    ]
+    observed = []
+    for deps, request in cases:
+        await market_assistant.answer_question(request, dependencies=deps)
+        observed.append(canonical_json(deps._resolve["snapshot"]["results"]))
+    assert observed == [baseline] * len(cases)
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_question_yields_events_and_stops_at_complete():
+    deps = hybrid_dependencies()
+
+    events = [
+        event
+        async for event in market_assistant.stream_answer_question(
+            current_question("现在市场怎么样？"), dependencies=deps
+        )
+    ]
+
+    assert events[-1]["type"] == "complete"
+    assert events[-1]["generation_status"] == "narration_validated"
+    assert events[-1]["answer_trace_id"]
+    assert events[-1]["citations"] == []
+    assert deps.saved_trace is not None
+
+
+@pytest.mark.asyncio
+async def test_stream_events_carry_stable_request_id_without_fingerprint_leak():
+    deps = hybrid_dependencies()
+
+    events = [
+        event
+        async for event in market_assistant.stream_answer_question(
+            current_question("现在市场怎么样？"), dependencies=deps
+        )
+    ]
+
+    resolution_event = next(event for event in events if event["type"] == "resolution")
+    complete_event = events[-1]
+    assert complete_event["type"] == "complete"
+    assert resolution_event["request_id"].startswith("req_")
+    assert resolution_event["request_id"] == complete_event["request_id"]
+    assert deps.saved_trace is not None
+    assert "request_id" not in json.dumps(deps.saved_trace)
+
+
+@pytest.mark.asyncio
+async def test_stage_logs_include_request_id_and_exclude_privacy(caplog):
+    text = "现在的市场偏积极，但仍需保持谨慎。"
+    stream = _ScriptedStream(
+        [
+            {
+                "result": {
+                    "output_text": text,
+                    "tool_calls": [],
+                    "response_items": [],
+                    "usage": None,
+                    "timings": {},
+                },
+                "observer_events": [
+                    {"type": "reasoning_started"},
+                    {"type": "output_delta", "delta": "  "},
+                    {"type": "output_delta", "delta": text},
+                ],
+            }
+        ]
+    )
+    deps = hybrid_dependencies(stream=stream)
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        await market_assistant.answer_question(
+            current_question("现在市场怎么样？"), dependencies=deps
+        )
+
+    stage_lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "uvicorn.error"
+        and "market assistant stage" in record.getMessage()
+    ]
+    expected_stages = {
+        "resolution_completed",
+        "route_selected",
+        "initial_tools_completed",
+        "react_round_started",
+        "narration_request_started",
+        "first_reasoning_delta",
+        "first_output_text_delta",
+        "first_user_visible_delta",
+        "narration_completed",
+        "audit_completed",
+        "request_completed",
+    }
+    observed = [line.split("stage=")[1].split()[0] for line in stage_lines]
+    assert len(observed) == len(set(observed))
+    assert expected_stages.issubset(set(observed))
+    for line in stage_lines:
+        assert "request_id=req_" in line
+        assert "elapsed_seconds=" in line
+
+    combined = " ".join(stage_lines)
+    for forbidden in (
+        "现在市场怎么样",
+        "偏积极",
+        "sk-secret-test-key",
+        "ctx_123",
+        "expl_1",
+        "test_ids",
+        "reasoning_text",
+        "prompt",
+    ):
+        assert forbidden not in combined
+
+
+def _observed_stages(caplog):
+    stage_lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "uvicorn.error"
+        and "market assistant stage" in record.getMessage()
+    ]
+    return {line.split("stage=")[1].split()[0] for line in stage_lines}
+
+
+@pytest.mark.asyncio
+async def test_react_round_completed_stage_recorded_when_optional_round_runs(caplog):
+    stream = _ScriptedStream(
+        [
+            tool_step([_confirmation_call("call_vix", "vix")]),
+            narration_step(),
+        ]
+    )
+    deps = hybrid_dependencies(stream=stream)
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        await market_assistant.answer_question(
+            current_question("讲个笑话"), dependencies=deps
+        )
+
+    assert "react_round_completed" in _observed_stages(caplog)
+    assert deps.saved_trace["timings"]["narration"]["optional_rounds"] == 1
+
+
+@pytest.mark.asyncio
+async def test_react_round_completed_stage_not_recorded_without_optional_round(caplog):
+    deps = hybrid_dependencies()
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        await market_assistant.answer_question(
+            current_question("现在市场怎么样？"), dependencies=deps
+        )
+
+    assert "react_round_completed" not in _observed_stages(caplog)
+    assert deps.saved_trace["timings"]["narration"]["optional_rounds"] == 0
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_question_sends_error_and_stops_without_trace():
+    deps = hybrid_dependencies()
+
+    def fail_save(con, *, artifacts, answer_trace):
+        raise RuntimeError("disk full")
+
+    deps.save_bundle = fail_save
+
+    events = [
+        event
+        async for event in market_assistant.stream_answer_question(
+            current_question("现在市场怎么样？"), dependencies=deps
+        )
+    ]
+
+    assert events[-1]["type"] == "error"
+    assert events[-1]["message"] == "market assistant service is unavailable"
+    assert not any(event["type"] == "complete" for event in events)
+    assert deps.saved_trace is None
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_question_aclose_cancels_worker_and_narration_task():
+    deps = hybrid_dependencies()
+    cancelled = []
+    started = asyncio.Event()
+
+    async def hanging_stream(
+        client,
+        *,
+        model,
+        input_items,
+        instructions,
+        tools,
+        reasoning_effort,
+        observer=None,
+    ):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    deps.stream_turn = hanging_stream
+
+    generator = market_assistant.stream_answer_question(
+        current_question("现在市场怎么样？"), dependencies=deps
+    )
+    assert (await anext(generator))["type"] == "resolution"
+    await asyncio.wait_for(started.wait(), timeout=0.5)
+    await generator.aclose()
+
+    assert cancelled == [True]
+    assert deps.saved_trace is None
+
+
+def test_audit_artifact_projection_keeps_objects_without_snapshot_bulk():
+    artifacts = _projection_artifacts()
+
+    projection = market_assistant._audit_artifact_projection(artifacts)
+
+    artifact = projection["ctx_123"]
+    assert "payload" not in artifact
+    assert artifact["primary_authority"] == "decision_fact"
+    assert artifact["market_setup_relation"] == "authoritative_snapshot"
+    assert any(
+        obj["object_type"] == "market_setup_result"
+        and obj["object_id"] == "macro_regime"
+        for obj in artifact["object_index"]
+    )
 
 
 def test_decision_explanation_projection_excludes_non_decision_display_objects():
@@ -787,12 +1192,26 @@ def test_decision_explanation_projection_excludes_non_decision_display_objects()
     }
 
     projected = market_assistant._llm_artifact_projection(
-        {"ctx_123": artifact}, valid_plan()
+        {"ctx_123": artifact}, _decision_plan()
     )
 
     assert [item["object_id"] for item in projected["ctx_123"]["object_index"]] == [
         "survey_growth_direction"
     ]
+
+
+def _decision_plan(intent="decision_explanation", **overrides):
+    plan = {
+        "intent": intent,
+        "context_mode": "current",
+        "operations": [
+            {"operation_id": "resolve_current_explanation", "parameters": {}}
+        ],
+        "answer_depth": "standard",
+        "research_tier": None,
+    }
+    plan.update(overrides)
+    return plan
 
 
 def _projection_evidence_fact(fact_id, role_function, source_period):
@@ -953,7 +1372,7 @@ def _projection_snapshot():
 
 
 def _projection_artifacts():
-    artifact = market_assistant._snapshot_artifact(_projection_snapshot())
+    artifact = market_assistant.snapshot_artifact(_projection_snapshot())
     return {artifact["artifact_id"]: artifact}
 
 
@@ -962,7 +1381,7 @@ def _projected(plan):
 
 
 def _projected_objects():
-    return _projected(valid_plan())["ctx_123"]["object_index"]
+    return _projected(_decision_plan())["ctx_123"]["object_index"]
 
 
 def _previous_style_object_index(object_index):
@@ -1001,7 +1420,7 @@ def _path_exists(payload, path):
 def test_llm_artifact_projection_does_not_mutate_full_artifacts():
     artifacts = _projection_artifacts()
     frozen = deepcopy(artifacts)
-    projected = market_assistant._llm_artifact_projection(artifacts, valid_plan())
+    projected = market_assistant._llm_artifact_projection(artifacts, _decision_plan())
 
     assert artifacts == frozen
     assert len(canonical_json(projected)) < len(canonical_json(artifacts))
@@ -1122,7 +1541,7 @@ def test_llm_artifact_projection_keeps_only_first_two_setup_counterfactuals():
 
 def test_llm_artifact_projection_refs_resolve_in_full_artifacts():
     artifacts = _projection_artifacts()
-    object_index = _projected(valid_plan())["ctx_123"]["object_index"]
+    object_index = _projected(_decision_plan())["ctx_123"]["object_index"]
 
     for item in object_index:
         resolved = resolve_artifact_ref(
@@ -1161,10 +1580,10 @@ def test_evidence_projection_omits_provenance_without_source_period():
             "finding": {"state": "evaluated", "confirms": True},
         },
     ]
-    artifact = market_assistant._snapshot_artifact(snapshot)
+    artifact = market_assistant.snapshot_artifact(snapshot)
     artifacts = {artifact["artifact_id"]: artifact}
 
-    projected = market_assistant._llm_artifact_projection(artifacts, valid_plan())
+    projected = market_assistant._llm_artifact_projection(artifacts, _decision_plan())
 
     by_id = {item["object_id"]: item for item in projected["ctx_123"]["object_index"]}
     assert by_id["vix_level"]["payload"]["provenance"] == {
@@ -1195,7 +1614,7 @@ def test_keeps_artifact_object_tolerates_missing_object_id():
 
 def test_llm_artifact_projection_smaller_than_previous_full_payload_projection():
     artifacts = _projection_artifacts()
-    compact = market_assistant._llm_artifact_projection(artifacts, valid_plan())
+    compact = market_assistant._llm_artifact_projection(artifacts, _decision_plan())
     previous = {
         artifact_id: {
             "artifact_id": artifact["artifact_id"],
@@ -1214,1168 +1633,10 @@ def test_non_decision_projection_returns_objects_unchanged():
     artifacts = _projection_artifacts()
     frozen = deepcopy(artifacts)
     projected = market_assistant._llm_artifact_projection(
-        artifacts, valid_plan(intent="counterfactual")
+        artifacts, _decision_plan(intent="counterfactual")
     )
 
     assert projected["ctx_123"]["object_index"] == frozen["ctx_123"]["object_index"]
-
-
-@pytest.mark.asyncio
-async def test_failed_repair_keeps_initial_draft_visible_as_unvalidated():
-    deps = fake_dependencies(valid_plan(), invalid_draft(), invalid_repair())
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validation_failed_visible"
-    assert response["answer_text"] == "The VIX level is 99.9 today."
-    assert deps.tool_execution_count == 1
-    assert deps.llm_calls == ["plan", "draft", "repair"]
-    assert deps.saved_trace["generation_status"] == "validation_failed_visible"
-    assert (
-        deps.saved_trace["structured_claims"]
-        == validate_answer_draft_schema(invalid_draft())["sections"]
-    )
-
-
-@pytest.mark.asyncio
-async def test_disabled_claim_validation_returns_unvalidated_debug_draft():
-    deps = fake_dependencies(
-        valid_plan(),
-        beginner_debug_draft(),
-        invalid_repair(),
-        config=_config(claim_validation_enabled=False),
-    )
-
-    response = await market_assistant.answer_question(
-        current_question(question="现在市场怎么样？为什么？"),
-        dependencies=deps,
-    )
-
-    assert response["generation_status"] == "unvalidated_debug"
-    assert response["answer_text"] == (
-        "现在的市场可以理解为：经济增长正在放慢，但市场只确认了一部分风险。"
-    )
-    assert "sections" not in response["answer_text"]
-    assert response["citations"] == []
-    assert deps.llm_calls == ["plan", "draft"]
-    assert deps.saved_trace["generation_status"] == "unvalidated_debug"
-    expected_claims = validate_answer_draft_schema(beginner_debug_draft())["sections"]
-    assert deps.saved_trace["structured_claims"] == expected_claims
-    assert deps.saved_trace["validation_error_codes"] == []
-    assert deps.saved_trace["attempts"] == {
-        "plan": 1,
-        "draft": 1,
-        "repair": 0,
-    }
-
-
-@pytest.mark.asyncio
-async def test_disabled_claim_validation_debug_render_uses_detected_language():
-    deps = fake_dependencies(
-        valid_plan(),
-        _chinese_observation_debug_draft(),
-        config=_config(claim_validation_enabled=False),
-    )
-
-    response = await market_assistant.answer_question(
-        current_question(question="现在市场怎么样？"),
-        dependencies=deps,
-    )
-
-    assert response["generation_status"] == "unvalidated_debug"
-    assert response["answer_text"].startswith("本地数据观察\n")
-    assert "当前波动率为暂不可用。" in response["answer_text"]
-    assert deps.llm_calls == ["plan", "draft"]
-
-
-@pytest.mark.asyncio
-async def test_fully_filtered_debug_draft_falls_back_deterministically():
-    draft = {
-        "sections": [
-            {
-                "kind": "decision",
-                "claims": [
-                    {
-                        "claim_id": "d1",
-                        "purpose": "decision_explanation",
-                        "authority": "decision_fact",
-                        "refs": [evidence_ref()],
-                        "template": "当前市场状态是{state}，因此应该买入。",
-                        "bindings": {"state": "增长放缓"},
-                    }
-                ],
-            }
-        ]
-    }
-    deps = fake_dependencies(
-        valid_plan(),
-        draft,
-        invalid_repair(),
-        config=_config(claim_validation_enabled=False),
-    )
-
-    response = await market_assistant.answer_question(
-        current_question(question="现在市场怎么样？"),
-        dependencies=deps,
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert response["answer_text"].strip()
-    assert "买入" not in response["answer_text"]
-    assert deps.llm_calls == ["plan", "draft"]
-    assert deps.saved_trace["generation_status"] == "fallback"
-    assert "DISPLAY_FILTERED" in deps.saved_trace["validation_error_codes"]
-    assert deps.saved_trace["structured_claims"] is not None
-
-
-@pytest.mark.asyncio
-async def test_validated_chinese_question_uses_chinese_heading():
-    deps = fake_dependencies(knowledge_plan(), _knowledge_draft())
-
-    response = await market_assistant.answer_question(
-        current_question(question="VIX 是什么？"),
-        dependencies=deps,
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert response["answer_text"].startswith("指标与方法\n")
-    assert "Method & Knowledge" not in response["answer_text"]
-
-
-@pytest.mark.asyncio
-async def test_disabled_claim_validation_still_falls_back_for_invalid_schema():
-    deps = fake_dependencies(
-        valid_plan(),
-        {"sections": []},
-        invalid_repair(),
-        config=_config(claim_validation_enabled=False),
-    )
-
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert deps.llm_calls == ["plan", "draft"]
-    assert deps.saved_trace["structured_claims"] is None
-    assert deps.saved_trace["validation_error_codes"] == ["SCHEMA_INVALID"]
-
-
-@pytest.mark.asyncio
-async def test_claim_validation_remains_enabled_when_config_key_is_absent():
-    config = _config()
-    config.pop("claim_validation_enabled", None)
-    deps = fake_dependencies(
-        valid_plan(),
-        invalid_draft(),
-        invalid_repair(),
-        config=config,
-    )
-
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validation_failed_visible"
-    assert deps.llm_calls == ["plan", "draft", "repair"]
-
-
-@pytest.mark.asyncio
-async def test_validated_after_repair_returns_repaired_answer():
-    deps = fake_dependencies(valid_plan(), invalid_draft(), valid_draft())
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_after_repair"
-    assert deps.llm_calls == ["plan", "draft", "repair"]
-    assert deps.saved_trace["attempts"] == {"plan": 1, "draft": 2, "repair": 1}
-
-
-@pytest.mark.asyncio
-async def test_invalid_plan_repairs_then_synthesizes():
-    invalid = valid_plan(intent="decision_explanation", context_mode="historical")
-    deps = fake_dependencies([invalid, valid_plan()], valid_draft())
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.llm_calls == ["plan", "plan", "draft"]
-
-
-@pytest.mark.asyncio
-async def test_plan_unavailable_uses_deterministic_decision_plan():
-    deps = fake_dependencies(RuntimeError("llm down"), valid_draft())
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.saved_trace["plan"]["operations"][0]["operation_id"] == (
-        "resolve_current_explanation"
-    )
-    assert deps.tool_execution_count == 1
-
-
-@pytest.mark.asyncio
-async def test_research_operation_calls_acquire_research_with_ids():
-    deps = fake_dependencies(
-        research_plan(),
-        _research_draft(),
-        research=research_result(),
-    )
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert deps.acquired_research_kwargs is not None
-    assert deps.acquired_research_kwargs["result_id"].startswith("res_")
-    assert deps.acquired_research_kwargs["searched_at"]
-    assert deps.acquired_research_kwargs["task"]["depth_tier"] == "focused"
-    assert response["generation_status"] == "validated_first_pass"
-
-
-@pytest.mark.asyncio
-async def test_research_unavailable_renders_research_fallback():
-    deps = fake_dependencies(
-        research_plan(),
-        None,
-        invalid_repair(),
-        research=research_unavailable(),
-    )
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert "External research is currently unavailable." in response["answer_text"]
-
-
-@pytest.mark.asyncio
-async def test_context_change_surfaces_in_resolution_not_answer_text():
-    deps = fake_dependencies(
-        valid_plan(),
-        valid_draft(),
-        resolve=resolution_envelope(previous_context_id="ctx_A"),
-    )
-    request = current_question(previous_context_id="ctx_A")
-    response = await market_assistant.answer_question(request, dependencies=deps)
-
-    notice = "Market Setup context changed since the previous message."
-    assert response["resolution"]["context_changed"] is True
-    assert response["resolution"]["previous_context_id"] == "ctx_A"
-    assert notice not in response["answer_text"]
-
-
-@pytest.mark.asyncio
-async def test_external_and_local_claims_keep_separate_authorities():
-    local_claim = {
-        "claim_id": "local1",
-        "purpose": "decision_explanation",
-        "authority": "decision_fact",
-        "refs": [
-            {
-                "artifact_id": "ctx_123",
-                "object_type": "market_setup_result",
-                "object_id": "macro_regime",
-            },
-            evidence_ref(),
-        ],
-        "template": (
-            "The macro regime is {regime} and the accepted VIX level is {vix_level}."
-        ),
-        "bindings": {
-            "regime": {
-                "value": "Growth Decelerating",
-                "source": {
-                    "artifact_id": "ctx_123",
-                    "object_type": "market_setup_result",
-                    "object_id": "macro_regime",
-                    "field": "label",
-                },
-            },
-            "vix_level": {
-                "value": 18.4,
-                "source": evidence_ref(field="accepted_values.level"),
-            },
-        },
-    }
-    external_claim = {
-        "claim_id": "ext1",
-        "purpose": "source_explanation",
-        "authority": "external_research",
-        "refs": [
-            {
-                "artifact_id": "res_1",
-                "object_type": "research_source",
-                "object_id": "src_1",
-            }
-        ],
-        "template": "An external source reports the VIX at {ext_level}.",
-        "bindings": {
-            "ext_level": {
-                "value": 25.0,
-                "source": {
-                    "artifact_id": "res_1",
-                    "object_type": "research_source",
-                    "object_id": "src_1",
-                    "field": "reported_level",
-                },
-            }
-        },
-    }
-    plan = valid_plan(
-        operations=[
-            {"operation_id": "resolve_current_explanation", "parameters": {}},
-            {
-                "operation_id": "research_focused",
-                "parameters": {
-                    "purpose": "current_events",
-                    "queries": ["latest vix"],
-                    "expected_source_class": "official_publication",
-                },
-            },
-        ],
-        research_tier="focused",
-    )
-    draft = {
-        "sections": [
-            {"kind": "decision", "claims": [local_claim]},
-            {"kind": "research", "claims": [external_claim]},
-        ]
-    }
-    deps = fake_dependencies(plan, draft, research=research_result())
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert "Growth Decelerating" in response["answer_text"]
-    assert "18.4" in response["answer_text"]
-    assert "25.0" in response["answer_text"]
-    authorities = {
-        claim["authority"]
-        for section in deps.saved_trace["structured_claims"]
-        for claim in section["claims"]
-    }
-    assert authorities == {"decision_fact", "external_research"}
-    assert not any(
-        artifact["artifact_kind"] == "explanation_snapshot"
-        for artifact in deps.saved_artifacts
-    )
-    research_artifact = next(
-        artifact
-        for artifact in deps.saved_artifacts
-        if artifact["artifact_kind"] == "research_result"
-    )
-    assert research_artifact["market_setup_relation"] == "non_decision"
-
-
-@pytest.mark.asyncio
-async def test_persistence_failure_raises_stable_error():
-    deps = fake_dependencies(valid_plan(), valid_draft())
-
-    def fail_save(con, *, artifacts, answer_trace):
-        raise RuntimeError("disk full")
-
-    deps.save_bundle = fail_save
-
-    with pytest.raises(ValueError, match="answer trace persistence failed"):
-        await market_assistant.answer_question(current_question(), dependencies=deps)
-    assert deps.saved_trace is None
-
-
-@pytest.mark.asyncio
-async def test_every_llm_call_unavailable_renders_market_setup_fallback(caplog):
-    deps = fake_dependencies(
-        RuntimeError("llm down"),
-        RuntimeError("llm down"),
-        RuntimeError("llm down"),
-    )
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert "Market Setup decision result:" in response["answer_text"]
-    assert deps.saved_trace["generation_status"] == "fallback"
-    assert "market assistant plan generation failed" in caplog.text
-    assert "market assistant synthesis failed" in caplog.text
-
-
-@pytest.mark.asyncio
-async def test_hanging_synthesis_returns_deterministic_fallback_within_budget():
-    deps = fake_dependencies(valid_plan(), valid_draft())
-    deps.llm_attempt_timeout = 0.01
-
-    async def hang_forever(**kwargs):
-        await asyncio.Event().wait()
-
-    deps.synthesize_llm = hang_forever
-
-    response = await asyncio.wait_for(
-        market_assistant.answer_question(current_question(), dependencies=deps),
-        timeout=0.5,
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert "Market Setup decision result:" in response["answer_text"]
-
-
-@pytest.mark.asyncio
-async def test_answer_trace_has_design_19_fields_and_no_secrets():
-    deps = fake_dependencies(valid_plan(), valid_draft())
-    await market_assistant.answer_question(current_question(), dependencies=deps)
-    trace = deps.saved_trace
-
-    expected_fields = {
-        "answer_trace_id",
-        "message_id",
-        "resolution",
-        "explanation_context_id",
-        "knowledge_references",
-        "exploration_result_ids",
-        "research_result_ids",
-        "plan",
-        "structured_claims",
-        "generation_status",
-        "attempts",
-        "validation_error_codes",
-        "prompt",
-        "model_configuration_fingerprint",
-        "tool_schema_versions",
-        "answer_text",
-        "answer_text_hash",
-        "generated_time",
-    }
-    assert expected_fields.issubset(trace)
-    assert trace["answer_trace_id"].startswith("trc_")
-    assert trace["message_id"].startswith("msg_")
-    assert trace["generation_status"] == "validated_first_pass"
-    assert trace["prompt"]["version"] == PROMPT_VERSION
-    assert len(trace["prompt"]["hash"]) == 64
-    assert trace["model_configuration_fingerprint"]["prompt_version"] == PROMPT_VERSION
-    assert (
-        trace["model_configuration_fingerprint"]["assistant_policy_version"]
-        == ASSISTANT_POLICY_VERSION
-    )
-    assert trace["model_configuration_fingerprint"]["model"] == "assistant-model"
-    assert (
-        trace["model_configuration_fingerprint"]["structured_output_mode"]
-        == "json_object"
-    )
-    assert trace["model_configuration_fingerprint"]["reasoning_effort"] == "low"
-    assert len(trace["answer_text_hash"]) == 64
-    assert "api_key" not in json.dumps(trace)
-    assert "sk-secret-test-key" not in json.dumps(trace)
-    assert "api_key" not in json.dumps(trace["model_configuration_fingerprint"])
-
-
-@pytest.mark.asyncio
-async def test_only_referenced_persistable_artifacts_are_saved():
-    plan = valid_plan(
-        operations=[
-            {"operation_id": "resolve_current_explanation", "parameters": {}},
-            {
-                "operation_id": "research_focused",
-                "parameters": {
-                    "purpose": "current_events",
-                    "queries": ["latest vix"],
-                    "expected_source_class": "official_publication",
-                },
-            },
-        ],
-        research_tier="focused",
-    )
-    draft = {
-        "sections": [
-            {"kind": "decision", "claims": [valid_claim()]},
-            {"kind": "research", "claims": [_research_claim()]},
-        ]
-    }
-    deps = fake_dependencies(plan, draft, research=research_result())
-    await market_assistant.answer_question(current_question(), dependencies=deps)
-
-    persisted_ids = [artifact["artifact_id"] for artifact in deps.saved_artifacts]
-    assert persisted_ids == ["res_1"]
-
-
-@pytest.mark.asyncio
-async def test_persistence_excludes_pre_durable_snapshot_artifact():
-    deps = fake_dependencies(valid_plan(), valid_draft())
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.saved_artifacts == []
-    assert deps.saved_trace["generation_status"] == "validated_first_pass"
-
-
-@pytest.mark.asyncio
-async def test_counterfactuals_mismatched_context_falls_back():
-    plan = {
-        "intent": "counterfactual",
-        "context_mode": "current",
-        "operations": [
-            {
-                "operation_id": "get_counterfactuals",
-                "parameters": {"context_id": "ctx_old"},
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    snapshot = fake_snapshot()
-    snapshot["counterfactuals"] = [
-        {
-            "counterfactual_id": "cf_1",
-            "object_type": "confirmation_test",
-            "object_id": "vix_downside_confirmation",
-            "transition": "accepted_value_crosses_boundary",
-            "decision_effect": "confirmation_test_result_change",
-        }
-    ]
-    resolve = resolution_envelope()
-    resolve["snapshot"] = snapshot
-    deps = fake_dependencies(plan, valid_draft(), resolve=resolve)
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert deps.saved_trace["generation_status"] == "fallback"
-
-
-@pytest.mark.asyncio
-async def test_historical_snapshot_mismatched_context_falls_back():
-    plan = {
-        "intent": "historical_snapshot",
-        "context_mode": "historical",
-        "operations": [
-            {
-                "operation_id": "get_historical_snapshot",
-                "parameters": {"context_id": "ctx_old"},
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    deps = fake_dependencies(plan, valid_draft())
-    response = await market_assistant.answer_question(
-        current_question(mode="historical", context_id="ctx_123"),
-        dependencies=deps,
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert deps.saved_trace["generation_status"] == "fallback"
-
-
-@pytest.mark.asyncio
-async def test_compare_snapshots_requires_resolution_context():
-    plan = {
-        "intent": "snapshot_comparison",
-        "context_mode": "historical",
-        "operations": [
-            {
-                "operation_id": "compare_snapshots",
-                "parameters": {
-                    "context_a_id": "ctx_A",
-                    "context_b_id": "ctx_B",
-                },
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    deps = fake_dependencies(plan, valid_draft())
-    response = await market_assistant.answer_question(
-        current_question(mode="historical", context_id="ctx_123"),
-        dependencies=deps,
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert deps.saved_trace["generation_status"] == "fallback"
-
-
-@pytest.mark.asyncio
-async def test_missing_counterfactuals_returns_deterministic_fallback():
-    plan = {
-        "intent": "counterfactual",
-        "context_mode": "current",
-        "operations": [
-            {
-                "operation_id": "get_counterfactuals",
-                "parameters": {"context_id": "ctx_123"},
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    deps = fake_dependencies(plan, valid_draft())
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert deps.llm_calls == ["plan"]
-    assert deps.saved_trace["generation_status"] == "fallback"
-
-
-@pytest.mark.asyncio
-async def test_historical_snapshot_operation_acquires_snapshot_artifact():
-    plan = {
-        "intent": "historical_snapshot",
-        "context_mode": "historical",
-        "operations": [
-            {
-                "operation_id": "get_historical_snapshot",
-                "parameters": {"context_id": "ctx_123"},
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    draft = {
-        "sections": [
-            {
-                "kind": "decision",
-                "claims": [
-                    {
-                        "claim_id": "h1",
-                        "purpose": "decision_explanation",
-                        "authority": "decision_fact",
-                        "refs": [
-                            {
-                                "artifact_id": "ctx_123",
-                                "object_type": "market_setup_result",
-                                "object_id": "macro_regime",
-                            }
-                        ],
-                        "template": "The macro regime was {regime}.",
-                        "bindings": {
-                            "regime": {
-                                "value": "Growth Decelerating",
-                                "source": {
-                                    "artifact_id": "ctx_123",
-                                    "object_type": "market_setup_result",
-                                    "object_id": "macro_regime",
-                                    "field": "label",
-                                },
-                            }
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-    deps = fake_dependencies(plan, draft)
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert any(
-        artifact["artifact_kind"] == "explanation_snapshot"
-        for artifact in deps.acquired_artifacts.values()
-    )
-
-
-@pytest.mark.asyncio
-async def test_snapshot_object_operation_acquires_focused_artifact():
-    plan = {
-        "intent": "decision_explanation",
-        "context_mode": "current",
-        "operations": [
-            {
-                "operation_id": "get_snapshot_object",
-                "parameters": {
-                    "object_type": "market_setup_result",
-                    "object_id": "macro_regime",
-                },
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    draft = {
-        "sections": [
-            {
-                "kind": "decision",
-                "claims": [
-                    {
-                        "claim_id": "s1",
-                        "purpose": "decision_explanation",
-                        "authority": "decision_fact",
-                        "refs": [
-                            {
-                                "artifact_id": "ctx_123_market_setup_result_macro_regime",
-                                "object_type": "market_setup_result",
-                                "object_id": "macro_regime",
-                            }
-                        ],
-                        "template": "The macro regime is {regime}.",
-                        "bindings": {
-                            "regime": {
-                                "value": "Growth Decelerating",
-                                "source": {
-                                    "artifact_id": "ctx_123_market_setup_result_macro_regime",
-                                    "object_type": "market_setup_result",
-                                    "object_id": "macro_regime",
-                                    "field": "label",
-                                },
-                            }
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-    deps = fake_dependencies(plan, draft)
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-
-
-@pytest.mark.asyncio
-async def test_counterfactuals_operation_acquires_artifact_when_present():
-    plan = {
-        "intent": "counterfactual",
-        "context_mode": "current",
-        "operations": [
-            {
-                "operation_id": "get_counterfactuals",
-                "parameters": {"context_id": "ctx_123"},
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    snapshot = fake_snapshot()
-    snapshot["counterfactuals"] = [
-        {
-            "counterfactual_id": "cf_1",
-            "object_type": "confirmation_test",
-            "object_id": "vix_downside_confirmation",
-            "transition": "accepted_value_crosses_boundary",
-            "decision_effect": "confirmation_test_result_change",
-        }
-    ]
-    resolve = resolution_envelope()
-    resolve["snapshot"] = snapshot
-    draft = {
-        "sections": [
-            {
-                "kind": "decision",
-                "claims": [
-                    {
-                        "claim_id": "cf1",
-                        "purpose": "counterfactual_explanation",
-                        "authority": "decision_fact",
-                        "refs": [
-                            {
-                                "artifact_id": "ctx_123_counterfactuals",
-                                "object_type": "confirmation_test",
-                                "object_id": "vix_downside_confirmation",
-                            }
-                        ],
-                        "template": "The approved test would flip.",
-                        "bindings": {},
-                    }
-                ],
-            }
-        ]
-    }
-    deps = fake_dependencies(plan, draft, resolve=resolve)
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert "ctx_123_counterfactuals" in deps.saved_trace["snapshot_artifact_ids"]
-    assert "ctx_123_counterfactuals" in [
-        artifact["artifact_id"] for artifact in deps.saved_artifacts
-    ]
-
-
-@pytest.mark.asyncio
-async def test_compare_snapshots_operation_acquires_delta_artifact():
-    plan = {
-        "intent": "snapshot_comparison",
-        "context_mode": "historical",
-        "operations": [
-            {
-                "operation_id": "compare_snapshots",
-                "parameters": {
-                    "context_a_id": "ctx_A",
-                    "context_b_id": "ctx_123",
-                },
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    draft = {
-        "sections": [
-            {
-                "kind": "decision",
-                "claims": [
-                    {
-                        "claim_id": "cmp1",
-                        "purpose": "decision_explanation",
-                        "authority": "decision_fact",
-                        "refs": [
-                            {
-                                "artifact_id": "cmp_ctx_A_ctx_123",
-                                "object_type": "snapshot_delta",
-                                "object_id": "cmp_ctx_A_ctx_123",
-                            }
-                        ],
-                        "template": "The snapshots are compared.",
-                        "bindings": {},
-                    }
-                ],
-            }
-        ]
-    }
-    deps = fake_dependencies(plan, draft)
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert any(
-        artifact["artifact_id"] == "cmp_ctx_A_ctx_123"
-        for artifact in deps.acquired_artifacts.values()
-    )
-    assert "cmp_ctx_A_ctx_123" in deps.saved_trace["snapshot_artifact_ids"]
-    assert "cmp_ctx_A_ctx_123" in [
-        artifact["artifact_id"] for artifact in deps.saved_artifacts
-    ]
-
-
-@pytest.mark.asyncio
-async def test_answer_question_persists_real_bundle_with_durable_snapshot(tmp_path):
-    db_path = tmp_path / "assistant.sqlite"
-    deps = RealPersistenceDeps(db_path)
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    con = market_assistant_db.connect(db_path)
-    try:
-        trace = market_assistant_db.load_answer_trace(con, response["answer_trace_id"])
-        assert trace is not None
-        snapshot = market_assistant_db.load_snapshot(
-            con, trace["explanation_context_id"]
-        )
-        assert snapshot is not None
-        assert trace["knowledge_references"] == ["vix_definition"]
-        for table in ("knowledge_records", "exploration_results", "research_results"):
-            row = con.execute(f"select count(*) from {table}").fetchone()
-            assert row[0] == (1 if table == "knowledge_records" else 0)
-    finally:
-        con.close()
-
-
-@pytest.mark.asyncio
-async def test_knowledge_operation_acquires_knowledge_record_artifact():
-    deps = fake_dependencies(knowledge_plan(), _knowledge_draft())
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.saved_trace["knowledge_references"] == ["vix_definition"]
-
-
-@pytest.mark.asyncio
-async def test_exploration_operation_acquires_exploration_result_artifact():
-    deps = fake_dependencies(
-        exploration_plan(),
-        _exploration_draft(),
-        exploration=exploration_result(),
-    )
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.saved_trace["exploration_result_ids"] == ["expl_1"]
-
-
-def _knowledge_draft():
-    claim = {
-        "claim_id": "k1",
-        "purpose": "method_explanation",
-        "authority": "method_knowledge",
-        "refs": [
-            {
-                "artifact_id": "vix_definition",
-                "object_type": "indicator_definition",
-                "object_id": "vix_definition",
-            }
-        ],
-        "template": "The VIX measures expected volatility.",
-        "bindings": {},
-    }
-    return {"sections": [{"kind": "knowledge", "claims": [claim]}]}
-
-
-def _knowledge_draft_with_answer_text(answer_text):
-    draft = _knowledge_draft()
-    draft["answer_text"] = answer_text
-    return draft
-
-
-def _research_claim():
-    return {
-        "claim_id": "r1",
-        "purpose": "source_explanation",
-        "authority": "external_research",
-        "refs": [
-            {
-                "artifact_id": "res_1",
-                "object_type": "research_source",
-                "object_id": "src_1",
-            }
-        ],
-        "template": "The external source reports a VIX level of {reported_level}.",
-        "bindings": {
-            "reported_level": {
-                "value": 25.0,
-                "source": {
-                    "artifact_id": "res_1",
-                    "object_type": "research_source",
-                    "object_id": "src_1",
-                    "field": "reported_level",
-                },
-            }
-        },
-    }
-
-
-def _research_draft():
-    return {"sections": [{"kind": "research", "claims": [_research_claim()]}]}
-
-
-def _exploration_draft():
-    claim = {
-        "claim_id": "e1",
-        "purpose": "observation",
-        "authority": "local_observation",
-        "refs": [
-            {
-                "artifact_id": "expl_1",
-                "object_type": "indicator_history",
-                "object_id": "vix_history",
-            }
-        ],
-        "template": "The final VIX value in the window is {last_value}.",
-        "bindings": {
-            "last_value": {
-                "value": 18.4,
-                "source": {
-                    "artifact_id": "expl_1",
-                    "object_type": "indicator_history",
-                    "object_id": "vix_history",
-                    "field": "last_value",
-                },
-            }
-        },
-    }
-    return {"sections": [{"kind": "observation", "claims": [claim]}]}
-
-
-def _knowledge_method_draft(record_id="vix_method"):
-    claim = {
-        "claim_id": "m1",
-        "purpose": "method_explanation",
-        "authority": "method_knowledge",
-        "refs": [
-            {
-                "artifact_id": record_id,
-                "object_type": "indicator_method",
-                "object_id": record_id,
-            }
-        ],
-        "template": "The VIX confirmation method is the approved market confirmation method.",
-        "bindings": {},
-    }
-    return {"sections": [{"kind": "knowledge", "claims": [claim]}]}
-
-
-def _knowledge_source_draft(record_id="vix_source"):
-    claim = {
-        "claim_id": "s1",
-        "purpose": "source_explanation",
-        "authority": "method_knowledge",
-        "refs": [
-            {
-                "artifact_id": record_id,
-                "object_type": "indicator_source",
-                "object_id": record_id,
-            }
-        ],
-        "template": "The VIX level is sourced from the accepted daily series.",
-        "bindings": {},
-    }
-    return {"sections": [{"kind": "research", "claims": [claim]}]}
-
-
-@pytest.mark.asyncio
-async def test_deep_research_with_explicit_intent_executes():
-    deps = fake_dependencies(
-        research_plan("deep"), _research_draft(), research=research_result()
-    )
-    request = current_question(deep_research_requested=True)
-    response = await market_assistant.answer_question(request, dependencies=deps)
-
-    assert deps.acquired_research_kwargs is not None
-    assert deps.acquired_research_kwargs["task"]["depth_tier"] == "deep"
-    assert deps.acquired_research_kwargs["explicit_deep"] is True
-    assert response["generation_status"] == "validated_first_pass"
-
-
-@pytest.mark.asyncio
-async def test_deep_research_without_explicit_intent_never_executes():
-    deps = fake_dependencies(research_plan("deep"), invalid_draft(), invalid_repair())
-    request = current_question(deep_research_requested=False)
-    response = await market_assistant.answer_question(request, dependencies=deps)
-
-    assert deps.acquired_research_kwargs is None
-    assert response["generation_status"] == "validation_failed_visible"
-    assert response["answer_text"] == "The VIX level is 99.9 today."
-
-
-@pytest.mark.asyncio
-async def test_external_search_requested_flows_to_planner_context():
-    deps = fake_dependencies(valid_plan(), valid_draft())
-    request = current_question(external_search_requested=True)
-    response = await market_assistant.answer_question(request, dependencies=deps)
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.context_summaries[0]["external_search_requested"] is True
-
-
-@pytest.mark.asyncio
-async def test_knowledge_definition_through_real_catalog_aliases_vix():
-    deps = fake_dependencies(
-        knowledge_plan(), _knowledge_draft(), catalog=load_knowledge_catalog()
-    )
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.saved_trace["knowledge_references"] == ["vix_definition"]
-
-
-@pytest.mark.asyncio
-async def test_knowledge_method_through_real_catalog_aliases_vix():
-    deps = fake_dependencies(
-        knowledge_plan(
-            operations=[
-                {
-                    "operation_id": "get_indicator_method",
-                    "parameters": {"indicator_id": "vix"},
-                }
-            ],
-            intent="method",
-        ),
-        _knowledge_method_draft(),
-        catalog=load_knowledge_catalog(),
-    )
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.saved_trace["knowledge_references"] == ["vix_method"]
-
-
-@pytest.mark.asyncio
-async def test_knowledge_source_through_real_catalog_aliases_vix():
-    deps = fake_dependencies(
-        knowledge_plan(
-            operations=[
-                {
-                    "operation_id": "get_indicator_source",
-                    "parameters": {"indicator_id": "vix"},
-                }
-            ],
-            intent="source",
-        ),
-        _knowledge_source_draft(),
-        catalog=load_knowledge_catalog(),
-    )
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.saved_trace["knowledge_references"] == ["vix_source"]
-
-
-@pytest.mark.asyncio
-async def test_unknown_knowledge_indicator_routes_to_fallback():
-    deps = fake_dependencies(
-        knowledge_plan(
-            operations=[
-                {
-                    "operation_id": "get_indicator_definition",
-                    "parameters": {"indicator_id": "unknown_series"},
-                }
-            ]
-        ),
-        valid_draft(),
-    )
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert (
-        "The approved knowledge record is currently unavailable."
-        in response["answer_text"]
-    )
-
-
-@pytest.mark.asyncio
-async def test_unregistered_exploration_indicator_routes_to_fallback():
-    plan = {
-        "intent": "local_history",
-        "context_mode": "current",
-        "operations": [
-            {
-                "operation_id": "query_indicator_history",
-                "parameters": {
-                    "indicator_id": "not_registered",
-                    "start": "2026-01-01",
-                    "end": "2026-06-30",
-                },
-            }
-        ],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }
-    deps = fake_dependencies(plan, valid_draft())
-
-    def raise_unregistered(con, query, *, result_id, created_at):
-        raise ValueError(f"indicator is not registered: {query['indicator_id']}")
-
-    deps.exploration = raise_unregistered
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert "Local exploration data is currently unavailable." in response["answer_text"]
 
 
 def test_model_configuration_fingerprint_includes_reasoning_effort():
@@ -2395,419 +1656,429 @@ def test_model_configuration_fingerprint_defaults_reasoning_effort_to_low():
     assert fingerprint["reasoning_effort"] == "low"
 
 
+class _ReactDeps:
+    def __init__(self, stream, *, huge_exploration=False):
+        self.client = object()
+        self.model = "assistant-model"
+        self.reasoning_effort = "medium"
+        self.stream_turn = stream
+        self.db_path = ":memory:"
+        self.executed = []
+        self._huge = huge_exploration
+        self.config = _config()
+
+    def connect(self, db_path):
+        return _dummy_con()
+
+    def load_snapshot(self, con, context_id):
+        return None
+
+    def load_knowledge_catalog(self):
+        return knowledge_catalog()
+
+    def exploration(self, con, query, *, result_id, created_at):
+        self.executed.append(deepcopy(query))
+        rows = [{"date": "2026-08-13", "value": 18.4, "note": "x" * 800}] * (
+            120 if self._huge else 1
+        )
+        return {
+            "exploration_result_id": result_id,
+            "artifact_schema_version": "market_assistant_exploration_result_v1",
+            "authority": "local_observation",
+            "market_setup_relation": "non_decision",
+            "query_contract": deepcopy(query),
+            "observed_window": {"start": query.get("start"), "end": query.get("end")},
+            "data_through": query.get("end"),
+            "rows": rows,
+            "deterministic_statistics": {"last_value": 18.4},
+            "gaps": {"policy": "not_applicable", "missing_periods": None},
+            "object_index": [
+                {
+                    "object_type": "indicator_history",
+                    "object_id": "history",
+                    "authority": "local_observation",
+                    "payload": {"rows": rows},
+                }
+            ],
+            "result_hash": "a" * 64,
+        }
+
+    async def acquire_research(
+        self, provider, task, *, result_id, searched_at, explicit_deep=False
+    ):
+        self.executed.append(deepcopy(task))
+        return {
+            "research_result_id": result_id,
+            "status": "research_unavailable",
+            "reason_code": "provider_error",
+        }
+
+    def build_research_provider(self, config):
+        return object()
+
+
+def _react_resolution():
+    return {
+        "resolution": {
+            "mode": "current",
+            "resolved_at": "2026-08-13T00:00:00Z",
+            "previous_context_id": None,
+            "current_context_id": "ctx_react",
+            "context_changed": False,
+        },
+        "delta": {"results_changed": False, "changes": []},
+        "snapshot": {"context_id": "ctx_react"},
+    }
+
+
+def _react_request(**overrides):
+    request = {"question": "讲个笑话"}
+    request.update(overrides)
+    return request
+
+
+def _history_call(call_id, *, indicator_id="vix", window="6m", statistics=None):
+    arguments = {"indicator_id": indicator_id, "window": window}
+    if statistics is not None:
+        arguments["statistics"] = statistics
+    return {
+        "call_id": call_id,
+        "tool_name": "query_indicator_history",
+        "arguments": arguments,
+    }
+
+
+def _confirmation_call(call_id, test_id):
+    return {
+        "call_id": call_id,
+        "tool_name": "get_confirmation_test",
+        "arguments": {"test_id": test_id},
+    }
+
+
+def _empty_call(call_id, tool_name):
+    return {"call_id": call_id, "tool_name": tool_name, "arguments": {}}
+
+
 @pytest.mark.asyncio
-async def test_matching_chinese_answer_text_passes_validation():
-    deps = fake_dependencies(
-        knowledge_plan(),
-        _knowledge_draft_with_answer_text(
-            "指标与方法\nThe VIX measures expected volatility."
+@pytest.mark.parametrize(
+    ("tool_name", "arguments"),
+    [
+        (
+            "research_focused",
+            {
+                "purpose": "current_events",
+                "queries": ["latest vix"],
+                "expected_source_class": "official_publication",
+            },
         ),
-    )
-
-    response = await market_assistant.answer_question(
-        current_question(question="VIX 是什么？"), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert deps.llm_calls == ["plan", "draft"]
-
-
-@pytest.mark.asyncio
-async def test_mismatched_chinese_answer_text_repairs_then_passes():
-    deps = fake_dependencies(
-        knowledge_plan(),
-        _knowledge_draft_with_answer_text("指标与方法\nThe VIX is highly volatile."),
-        _knowledge_draft_with_answer_text(
-            "指标与方法\nThe VIX measures expected volatility."
+        ("refresh_benchmarks", {}),
+        ("ingest_snapshot", {}),
+        ("import_ism_report", {}),
+        (
+            "query_indicator_history",
+            {"indicator_id": "https://evil.example/x", "window": "6m"},
         ),
+        (
+            "query_indicator_history",
+            {
+                "indicator_id": "vix",
+                "window": "6m",
+                "statistics": ["'; DROP TABLE answer_traces;--"],
+            },
+        ),
+        ("get_confirmation_test", {"test_id": "vix", "context_id": "ctx_hack"}),
+    ],
+)
+async def test_hostile_tool_calls_are_rejected_without_execution(tool_name, arguments):
+    stream = _ScriptedStream(
+        [
+            tool_step(
+                [
+                    {
+                        "call_id": "call_hostile",
+                        "tool_name": tool_name,
+                        "arguments": arguments,
+                    }
+                ]
+            ),
+            narration_step(),
+        ]
     )
+    deps = _ReactDeps(stream)
 
-    response = await market_assistant.answer_question(
-        current_question(question="VIX 是什么？"), dependencies=deps
-    )
-
-    assert response["generation_status"] == "validated_after_repair"
-    assert deps.llm_calls == ["plan", "draft", "repair"]
-    assert deps.saved_trace["validation_error_codes"] == ["ANSWER_TEXT_MISMATCH"]
-
-
-@pytest.mark.asyncio
-async def test_debug_mode_prefers_draft_answer_text():
-    draft = beginner_debug_draft()
-    draft["answer_text"] = "市场处于轻度避险状态。"
-    deps = fake_dependencies(
-        valid_plan(),
-        draft,
-        invalid_repair(),
-        config=_config(claim_validation_enabled=False),
-    )
-
-    response = await market_assistant.answer_question(
-        current_question(question="现在市场怎么样？为什么？"),
+    result = await run_hybrid_narration(
+        _react_request(external_search_requested=False),
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=_react_resolution(),
         dependencies=deps,
     )
 
-    assert response["generation_status"] == "unvalidated_debug"
-    assert response["answer_text"] == "市场处于轻度避险状态。"
-    assert deps.llm_calls == ["plan", "draft"]
-
-
-@pytest.mark.asyncio
-async def test_stream_answer_lifecycle_emits_full_event_sequence():
-    draft = valid_draft()
-    draft["answer_text"] = "The accepted VIX level is 18.4."
-    deps = _streaming_dependencies(
-        valid_plan(),
-        draft,
-        stream_events=[
-            {"type": "reasoning_started"},
-            {"type": "answer_delta", "delta": "The accepted VIX level is "},
-            {"type": "answer_delta", "delta": "18.4."},
-        ],
-    )
-    sink = _ListSink()
-
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps, event_sink=sink
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    assert [event["type"] for event in sink.events] == [
-        "resolution",
-        "status",
-        "status",
-        "answer_delta",
-        "answer_delta",
-        "status",
-        "validation",
-        "complete",
+    assert result["generation_status"] == "answered"
+    assert deps.executed == []
+    rejected = [
+        entry for entry in result["tool_trace"] if entry["status"] == "rejected"
     ]
-    assert sink.events[0] == {
-        "type": "resolution",
-        "resolution": response["resolution"],
-    }
-    assert sink.events[1] == {"type": "status", "status": "thinking"}
-    assert sink.events[2] == {"type": "status", "status": "thinking"}
-    assert sink.events[3] == {
-        "type": "answer_delta",
-        "delta": "The accepted VIX level is ",
-    }
-    assert sink.events[4] == {"type": "answer_delta", "delta": "18.4."}
-    assert sink.events[5] == {"type": "status", "status": "validating"}
-    assert sink.events[6] == {
-        "type": "validation",
-        "status": "passed",
-        "error_codes": [],
-    }
-    complete = sink.events[7]
-    assert complete["type"] == "complete"
-    assert complete["resolution"] == response["resolution"]
-    assert complete["generation_status"] == "validated_first_pass"
-    assert complete["answer_trace_id"] == response["answer_trace_id"]
-    assert complete["citations"] == response["citations"] == []
+    assert rejected == [
+        {
+            "phase": "optional",
+            "call_id": "call_hostile",
+            "tool_name": tool_name,
+            "arguments": arguments,
+            "status": "rejected",
+            "reason": "tool_call_invalid",
+            "artifact_id": None,
+        }
+    ]
 
 
 @pytest.mark.asyncio
-async def test_stream_first_pass_without_streamed_delta_replaces_with_rendered_text():
-    draft = valid_draft()
-    draft["answer_text"] = "The accepted VIX level is 18.4."
-    deps = _streaming_dependencies(valid_plan(), draft)
-    sink = _ListSink()
+async def test_repeated_tool_call_stops_loop_before_any_execution():
+    call = _confirmation_call("call_dup", "vix")
+    stream = _ScriptedStream([tool_step([dict(call), dict(call)]), narration_step()])
+    deps = _ReactDeps(stream)
 
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps, event_sink=sink
+    result = await run_hybrid_narration(
+        _react_request(),
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=_react_resolution(),
+        dependencies=deps,
     )
 
-    assert response["generation_status"] == "validated_first_pass"
-    replace_index = next(
-        index
-        for index, event in enumerate(sink.events)
-        if event["type"] == "answer_replace"
-    )
-    passed_index = next(
-        index
-        for index, event in enumerate(sink.events)
-        if event["type"] == "validation" and event["status"] == "passed"
-    )
-    assert replace_index < passed_index
-    assert sink.events[replace_index]["text"] == response["answer_text"]
-    assert response["answer_text"] == "The accepted VIX level is 18.4."
+    assert result["generation_status"] == "duplicate_tool_call"
+    assert deps.executed == []
+    assert len(stream.calls) == 1
+    assert not any(entry["status"] == "executed" for entry in result["tool_trace"])
 
 
 @pytest.mark.asyncio
-async def test_stream_answer_lifecycle_emits_validation_disabled_not_passed():
-    draft = beginner_debug_draft()
-    draft["answer_text"] = "现在市场处于轻度避险状态。"
-    deps = _streaming_dependencies(
-        valid_plan(),
-        draft,
-        invalid_repair(),
-        config=_config(claim_validation_enabled=False),
-        stream_events=[{"type": "answer_delta", "delta": "现在市场处于轻度避险状态。"}],
+async def test_fifth_parallel_call_is_rejected_without_execution():
+    calls = [
+        _confirmation_call("call_1", "vix"),
+        _confirmation_call("call_2", "credit"),
+        _confirmation_call("call_3", "equity"),
+        _history_call("call_4", indicator_id="vix"),
+        _empty_call("call_5", "get_posture_explanation"),
+    ]
+    stream = _ScriptedStream([tool_step(calls), narration_step()])
+    deps = _ReactDeps(stream)
+
+    result = await run_hybrid_narration(
+        _react_request(),
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=_react_resolution(),
+        dependencies=deps,
     )
-    sink = _ListSink()
+
+    assert result["generation_status"] == "answered"
+    rejected = [
+        entry for entry in result["tool_trace"] if entry["status"] == "rejected"
+    ]
+    assert len(rejected) == 1
+    assert rejected[0]["call_id"] == "call_5"
+    assert rejected[0]["tool_name"] == "get_posture_explanation"
+    assert rejected[0]["reason"] == "parallel_call_limit"
+    handled = [entry for entry in result["tool_trace"] if entry["status"] != "rejected"]
+    assert len(handled) == 4
+    assert all(entry["status"] in {"executed", "unavailable"} for entry in handled)
+    assert not any(
+        entry["tool_name"] == "get_posture_explanation"
+        for entry in result["tool_trace"]
+        if entry["status"] == "executed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_thirteenth_deep_analysis_call_is_rejected_without_execution():
+    calls = [
+        _empty_call("c1", "get_setup_overview"),
+        _empty_call("c2", "get_macro_regime_explanation"),
+        _confirmation_call("c3", "vix"),
+        _confirmation_call("c4", "credit"),
+        _confirmation_call("c5", "equity"),
+        _empty_call("c6", "get_posture_explanation"),
+        _empty_call("c7", "get_approved_counterfactuals"),
+        {
+            "call_id": "c8",
+            "tool_name": "get_confirmation_tests",
+            "arguments": {"test_ids": ["equity", "credit", "vix"]},
+        },
+        {
+            "call_id": "c9",
+            "tool_name": "get_indicator_knowledge",
+            "arguments": {"indicator_id": "vix", "topic": "definition"},
+        },
+        _history_call("c10", indicator_id="vix", window="1m"),
+        _history_call("c11", indicator_id="credit_conditions", window="3m"),
+        _history_call("c12", indicator_id="sp500_close", window="6m"),
+        _history_call("c13", indicator_id="vix", window="1y"),
+        _history_call("c14", indicator_id="vix", window="2y"),
+    ]
+    rounds = [calls[0:4], calls[4:8], calls[8:11], calls[11:13], calls[13:14]]
+    stream = _ScriptedStream([tool_step(round_calls) for round_calls in rounds])
+    deps = _ReactDeps(stream)
+
+    result = await run_hybrid_narration(
+        _react_request(deep_analysis_requested=True),
+        route=route_question("讲个笑话", deep_analysis=True),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "budget_exhausted"
+    rejected = [
+        entry for entry in result["tool_trace"] if entry["status"] == "rejected"
+    ]
+    assert rejected == [
+        {
+            "phase": "optional",
+            "call_id": "c13",
+            "tool_name": "query_indicator_history",
+            "arguments": {
+                "indicator_id": "vix",
+                "window": "1y",
+                "start": None,
+                "end": None,
+                "statistics": [],
+            },
+            "status": "rejected",
+            "reason": "tool_call_budget",
+            "artifact_id": None,
+        }
+    ]
+    handled = [entry for entry in result["tool_trace"] if entry["status"] != "rejected"]
+    assert len(handled) == 12
+    assert not any(
+        entry["call_id"] == "c13" and entry["status"] == "executed"
+        for entry in result["tool_trace"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_result_context_overflow_stops_loop_without_more_execution():
+    stream = _ScriptedStream(
+        [
+            tool_step([_history_call("call_history", indicator_id="vix")]),
+            narration_step(),
+        ]
+    )
+    deps = _ReactDeps(stream, huge_exploration=True)
+
+    result = await run_hybrid_narration(
+        _react_request(),
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "budget_exhausted"
+    executed = [
+        entry for entry in result["tool_trace"] if entry["status"] == "executed"
+    ]
+    assert len(executed) == 1
+    assert executed[0]["tool_name"] == "query_indicator_history"
+    assert len(stream.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_rejected_invalid_calls_consume_call_budget():
+    invalid_calls = [
+        {
+            "call_id": f"call_hostile_{index}",
+            "tool_name": "refresh_benchmarks",
+            "arguments": {},
+        }
+        for index in range(12)
+    ]
+    stream = _ScriptedStream(
+        [
+            tool_step(invalid_calls[0:4]),
+            tool_step(invalid_calls[4:8]),
+            tool_step(invalid_calls[8:12]),
+            narration_step(),
+        ]
+    )
+    deps = _ReactDeps(stream)
+
+    result = await run_hybrid_narration(
+        _react_request(deep_analysis_requested=True),
+        route=route_question("讲个笑话", deep_analysis=True),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "answered"
+    assert result["answer_text"] == "现在的市场偏积极，但仍需保持谨慎。"
+    assert deps.executed == []
+    assert len(stream.calls) == 4
+    rejected = [
+        entry for entry in result["tool_trace"] if entry["status"] == "rejected"
+    ]
+    assert len(rejected) == 12
+    assert all(entry["reason"] == "tool_call_invalid" for entry in rejected)
+    assert not any(entry["status"] == "executed" for entry in result["tool_trace"])
+
+
+@pytest.mark.asyncio
+async def test_deadline_expiry_stops_loop_before_first_model_turn(monkeypatch):
+    class _DeadlineClock:
+        def __init__(self):
+            self.count = 0
+
+        def __call__(self):
+            self.count += 1
+            return 0.0 if self.count <= 2 else 10000.0
+
+    monkeypatch.setattr(market_assistant_react, "monotonic", _DeadlineClock())
+    stream = _ScriptedStream([narration_step()])
+    deps = _ReactDeps(stream)
+
+    result = await run_hybrid_narration(
+        _react_request(),
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=_react_resolution(),
+        dependencies=deps,
+    )
+
+    assert result["generation_status"] == "deadline_exceeded"
+    assert stream.calls == []
+    assert deps.executed == []
+
+
+@pytest.mark.asyncio
+async def test_deadline_exhaustion_freezes_deadline_exceeded_in_trace():
+    class _SlowNarrationStream:
+        async def __call__(
+            self,
+            client,
+            *,
+            model,
+            input_items,
+            instructions,
+            tools,
+            reasoning_effort,
+            observer=None,
+        ):
+            await asyncio.sleep(0.10)
+            return {
+                "output_text": "现在的市场偏积极，但仍需保持谨慎。",
+                "tool_calls": [],
+                "response_items": [],
+                "usage": None,
+                "timings": {},
+            }
+
+    route = route_question("现在市场怎么样？", deep_analysis=False)
+    route["budget"] = {**route["budget"], "deadline_seconds": 0.02}
+    deps = hybrid_dependencies(stream=_SlowNarrationStream(), route=route)
+    sink = RecordingSink()
 
     response = await market_assistant.answer_question(
-        current_question(question="现在市场怎么样？为什么？"),
+        current_question("现在市场怎么样？"),
         dependencies=deps,
         event_sink=sink,
     )
 
-    assert response["generation_status"] == "unvalidated_debug"
-    validations = [event for event in sink.events if event["type"] == "validation"]
-    assert validations == [
-        {"type": "validation", "status": "disabled", "error_codes": []}
-    ]
-    assert not any(event["type"] == "answer_replace" for event in sink.events)
-    complete = sink.events[-1]
-    assert complete["type"] == "complete"
-    assert complete["generation_status"] == "unvalidated_debug"
-
-
-@pytest.mark.asyncio
-async def test_stream_answer_lifecycle_failed_initial_then_repaired_and_passed():
-    deps = _streaming_dependencies(valid_plan(), invalid_draft(), valid_draft())
-    sink = _ListSink()
-
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps, event_sink=sink
-    )
-
-    assert response["generation_status"] == "validated_after_repair"
-    assert [event["type"] for event in sink.events] == [
-        "resolution",
-        "status",
-        "status",
-        "validation",
-        "status",
-        "answer_replace",
-        "validation",
-        "complete",
-    ]
-    assert sink.events[3] == {
-        "type": "validation",
-        "status": "failed_initial",
-        "error_codes": ["UNBOUND_FACTUAL_LITERAL"],
-    }
-    assert sink.events[4] == {"type": "status", "status": "repairing"}
-    replace = sink.events[5]
-    assert replace["type"] == "answer_replace"
-    assert replace["text"] == response["answer_text"]
-    assert sink.events[6] == {
-        "type": "validation",
-        "status": "repaired_and_passed",
-        "error_codes": [],
-    }
-    assert sink.events[7]["generation_status"] == "validated_after_repair"
-
-
-@pytest.mark.asyncio
-async def test_stream_first_pass_without_answer_text_replaces_with_rendered_text():
-    deps = _streaming_dependencies(valid_plan(), valid_draft())
-    sink = _ListSink()
-
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps, event_sink=sink
-    )
-
-    assert response["generation_status"] == "validated_first_pass"
-    replace_index = next(
-        index
-        for index, event in enumerate(sink.events)
-        if event["type"] == "answer_replace"
-    )
-    passed_index = next(
-        index
-        for index, event in enumerate(sink.events)
-        if event["type"] == "validation" and event["status"] == "passed"
-    )
-    assert replace_index < passed_index
-    assert sink.events[replace_index]["text"] == response["answer_text"]
-    assert response["answer_text"] == "The accepted VIX level is 18.4."
-
-
-@pytest.mark.asyncio
-async def test_stream_validation_failed_visible_none_draft_replaces_with_fallback():
-    deps = _streaming_dependencies(
-        valid_plan(),
-        {"sections": []},
-        invalid_repair(),
-    )
-    sink = _ListSink()
-
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps, event_sink=sink
-    )
-
-    assert response["generation_status"] == "validation_failed_visible"
-    replace_index = next(
-        index
-        for index, event in enumerate(sink.events)
-        if event["type"] == "answer_replace"
-    )
-    failed_index = next(
-        index
-        for index, event in enumerate(sink.events)
-        if event["type"] == "validation" and event["status"] == "failed"
-    )
-    assert replace_index < failed_index
-    assert sink.events[replace_index]["text"] == response["answer_text"]
-    assert response["answer_text"].startswith("Market Setup decision result:")
-    assert deps.saved_trace["generation_status"] == "validation_failed_visible"
-
-
-@pytest.mark.asyncio
-async def test_stream_answer_lifecycle_repair_failure_keeps_initial_draft_visible():
-    deps = _streaming_dependencies(valid_plan(), invalid_draft(), invalid_repair())
-    sink = _ListSink()
-
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps, event_sink=sink
-    )
-
-    assert response["generation_status"] == "validation_failed_visible"
-    assert response["answer_text"] == "The VIX level is 99.9 today."
-    assert [event["type"] for event in sink.events] == [
-        "resolution",
-        "status",
-        "status",
-        "validation",
-        "status",
-        "answer_replace",
-        "validation",
-        "complete",
-    ]
-    validations = [event for event in sink.events if event["type"] == "validation"]
-    assert validations == [
-        {
-            "type": "validation",
-            "status": "failed_initial",
-            "error_codes": ["UNBOUND_FACTUAL_LITERAL"],
-        },
-        {
-            "type": "validation",
-            "status": "failed",
-            "error_codes": ["UNBOUND_FACTUAL_LITERAL"],
-        },
-    ]
-    replace = sink.events[5]
-    assert replace["type"] == "answer_replace"
-    assert replace["text"] == response["answer_text"]
-    complete = sink.events[-1]
-    assert complete["type"] == "complete"
-    assert complete["generation_status"] == "validation_failed_visible"
-    assert complete["answer_trace_id"] == response["answer_trace_id"]
-    assert deps.saved_trace["generation_status"] == "validation_failed_visible"
-
-
-@pytest.mark.asyncio
-async def test_stream_answer_lifecycle_falls_back_when_synthesis_fails_before_delta():
-    deps = _streaming_dependencies(valid_plan(), RuntimeError("llm down"))
-    sink = _ListSink()
-
-    response = await market_assistant.answer_question(
-        current_question(), dependencies=deps, event_sink=sink
-    )
-
-    assert response["generation_status"] == "fallback"
-    assert response["answer_text"].startswith("Market Setup decision result:")
-    assert [event["type"] for event in sink.events] == [
-        "resolution",
-        "status",
-        "status",
-        "answer_replace",
-        "validation",
-        "complete",
-    ]
-    replace = sink.events[3]
-    assert replace["type"] == "answer_replace"
-    assert replace["text"] == response["answer_text"]
-    assert sink.events[4] == {
-        "type": "validation",
-        "status": "fallback",
-        "error_codes": [],
-    }
-    assert sink.events[5]["generation_status"] == "fallback"
-
-
-@pytest.mark.asyncio
-async def test_stream_answer_question_yields_events_and_stops_at_complete():
-    draft = valid_draft()
-    draft["answer_text"] = "The accepted VIX level is 18.4."
-    deps = _streaming_dependencies(
-        valid_plan(),
-        draft,
-        stream_events=[{"type": "answer_delta", "delta": "The accepted VIX level is "}],
-    )
-
-    events = [
-        event
-        async for event in market_assistant.stream_answer_question(
-            current_question(), dependencies=deps
-        )
-    ]
-
-    assert [event["type"] for event in events] == [
-        "resolution",
-        "status",
-        "answer_delta",
-        "status",
-        "validation",
-        "complete",
-    ]
-    assert events[-1]["type"] == "complete"
-    assert events[-1]["generation_status"] == "validated_first_pass"
-    assert events[-1]["answer_trace_id"]
-    assert events[-1]["citations"] == []
-    assert deps.saved_trace is not None
-
-
-@pytest.mark.asyncio
-async def test_stream_answer_question_sends_error_and_stops_without_trace():
-    deps = _streaming_dependencies(valid_plan(), valid_draft())
-
-    def fail_save(con, *, artifacts, answer_trace):
-        raise RuntimeError("disk full")
-
-    deps.save_bundle = fail_save
-
-    events = [
-        event
-        async for event in market_assistant.stream_answer_question(
-            current_question(), dependencies=deps
-        )
-    ]
-
-    assert events[-1]["type"] == "error"
-    assert events[-1]["message"] == "market assistant service is unavailable"
-    assert not any(event["type"] == "complete" for event in events)
-    assert deps.saved_trace is None
-
-
-@pytest.mark.asyncio
-async def test_stream_answer_question_aclose_cancels_worker_and_llm_task():
-    deps = _streaming_dependencies(valid_plan(), valid_draft())
-    cancelled = []
-    started = asyncio.Event()
-
-    async def hanging_synthesize_llm(
-        *, question, plan, context_summary, artifacts, stream_observer=None
-    ):
-        started.set()
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            cancelled.append(True)
-            raise
-
-    deps.synthesize_llm = hanging_synthesize_llm
-
-    generator = market_assistant.stream_answer_question(
-        current_question(), dependencies=deps
-    )
-    assert (await anext(generator))["type"] == "resolution"
-    await asyncio.wait_for(started.wait(), timeout=0.5)
-    await generator.aclose()
-
-    assert cancelled == [True]
-    assert deps.saved_trace is None
+    assert response["generation_status"] == "deterministic_fallback"
+    assert deps.saved_trace["generation_status"] == "deterministic_fallback"
+    assert deps.saved_trace["narration_status"] == "deadline_exceeded"

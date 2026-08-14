@@ -9,6 +9,7 @@
     error: null,
     externalSearchRequested: false,
     deepResearchRequested: false,
+    deepAnalysisRequested: false,
   };
 
   const CITATION_TARGET_ATTR = 'target="_blank"';
@@ -21,12 +22,22 @@
     "The assistant could not answer right now. Your question is preserved.";
   const INTERRUPTED_NOTICE = "连接中断，回答可能不完整";
 
+  const PROGRESS_STAGES = [
+    "reading_setup",
+    "checking_confirmation",
+    "querying_history",
+    "comparing_evidence",
+    "writing_answer",
+  ];
+
   const VALIDATION_BADGE_TEXT = {
     passed: "已通过 Market Setup 证据验证",
     repaired_and_passed: "修复后已通过验证",
     failed: "未通过完整证据验证",
     disabled: "Claim validation 当前已关闭",
     fallback: "已使用确定性备用回答",
+    unavailable: "验证不可用，回答未验证",
+    interrupted: INTERRUPTED_NOTICE,
   };
 
   const VALIDATION_BADGE_CLASS = {
@@ -35,6 +46,8 @@
     failed: "market-assistant-validation-failed",
     disabled: "market-assistant-validation-disabled",
     fallback: "market-assistant-validation-passed",
+    unavailable: "market-assistant-validation-unavailable",
+    interrupted: "market-assistant-validation-interrupted",
   };
 
   function $(id) {
@@ -49,6 +62,7 @@
       submit: $("marketAssistantSubmit"),
       externalSearch: $("marketAssistantExternalSearch"),
       deepResearch: $("marketAssistantDeepResearch"),
+      deepAnalysis: $("marketAssistantDeepAnalysis"),
       status: $("marketAssistantStatus"),
     };
   }
@@ -75,6 +89,11 @@
         options.externalSearchRequested !== undefined
           ? options.externalSearchRequested
           : state.externalSearchRequested
+      ),
+      deep_analysis_requested: Boolean(
+        options.deepAnalysisRequested !== undefined
+          ? options.deepAnalysisRequested
+          : state.deepAnalysisRequested
       ),
     };
     if (state.lastContextId) {
@@ -180,6 +199,20 @@
     el.status.className = "market-assistant-status";
   }
 
+  function renderProgress(message) {
+    const el = elements();
+    if (!el.status) return;
+    el.status.textContent = message;
+    el.status.className = "market-assistant-status market-assistant-progress";
+  }
+
+  function clearProgress() {
+    const el = elements();
+    if (!el.status || el.status.className.indexOf("market-assistant-progress") === -1) return;
+    el.status.textContent = "";
+    el.status.className = "market-assistant-status";
+  }
+
   function renderValidationBadge(status, errorCodes) {
     const badge = document.createElement("div");
     badge.className = "market-assistant-validation " + VALIDATION_BADGE_CLASS[status];
@@ -254,11 +287,13 @@
         stream.message.text += event.delta || "";
         stream.textEl.textContent = stream.message.text;
         clearThinking();
+        clearProgress();
         break;
       case "answer_replace":
         stream.message.text = event.text || "";
         stream.textEl.textContent = stream.message.text;
         clearThinking();
+        clearProgress();
         break;
       case "validation":
         if (
@@ -278,6 +313,11 @@
           renderStatus("Validating…", false);
         } else if (event.status === "repairing") {
           renderStatus("Repairing…", false);
+        }
+        break;
+      case "progress":
+        if (PROGRESS_STAGES.indexOf(event.stage) !== -1 && event.message) {
+          renderProgress(event.message);
         }
         break;
       case "complete":
@@ -367,6 +407,46 @@
     });
   }
 
+  function createClientTiming() {
+    const startedAt = performance.now();
+    const marks = {};
+    function mark(name) {
+      if (marks[name] === undefined) {
+        marks[name] = performance.now() - startedAt;
+      }
+    }
+    return {
+      markFirstEvent() {
+        mark("first_event");
+      },
+      markFirstDelta() {
+        mark("first_delta");
+      },
+      markValidation() {
+        mark("validation");
+      },
+      markComplete() {
+        mark("complete");
+      },
+      durations() {
+        return {
+          first_event_ms: marks.first_event,
+          first_delta_ms: marks.first_delta,
+          complete_ms: marks.complete,
+          validation_ms: marks.validation,
+        };
+      },
+    };
+  }
+
+  function emitClientTiming(requestId, durations) {
+    if (!requestId) return;
+    console.info("market assistant client timing", {
+      request_id: requestId,
+      durations_ms: durations,
+    });
+  }
+
   async function handleSubmit() {
     const el = elements();
     const question = String(el.question.value || "").trim();
@@ -377,10 +457,25 @@
     appendUserMessage(question);
     el.question.value = "";
     const stream = createStreamingAssistantMessage();
+    const timing = createClientTiming();
+    let requestId = null;
     let bodyShown = false;
     try {
       await submitQuestionStream(question, {
         onEvent: (event) => {
+          timing.markFirstEvent();
+          if (event.type === "resolution" || event.type === "complete") {
+            requestId = event.request_id || requestId;
+          }
+          if (event.type === "answer_delta") {
+            timing.markFirstDelta();
+          }
+          if (event.type === "validation") {
+            timing.markValidation();
+          }
+          if (event.type === "complete") {
+            timing.markComplete();
+          }
           if (event.type === "answer_delta" || event.type === "answer_replace") {
             bodyShown = true;
           }
@@ -388,6 +483,7 @@
         },
       });
       renderStatus(COMPLETION_NOTICE, false);
+      emitClientTiming(requestId, timing.durations());
     } catch (error) {
       state.error = String(error.message || "request failed");
       if (bodyShown || stream.message.text) {
@@ -438,6 +534,11 @@
     if (el.deepResearch) {
       el.deepResearch.addEventListener("change", (event) => {
         state.deepResearchRequested = Boolean(event.target.checked);
+      });
+    }
+    if (el.deepAnalysis) {
+      el.deepAnalysis.addEventListener("change", (event) => {
+        state.deepAnalysisRequested = Boolean(event.target.checked);
       });
     }
     syncDeepResearchEnabled();

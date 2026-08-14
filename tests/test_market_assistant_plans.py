@@ -3,6 +3,7 @@ import pytest
 from app.tools.market_assistant_plans import _OPERATIONS
 from app.tools.market_assistant_plans import deterministic_plan
 from app.tools.market_assistant_plans import registered_operation_ids
+from app.tools.market_assistant_plans import validate_operation
 from app.tools.market_assistant_plans import validate_task_plan
 
 _RESEARCH_TIERS = {
@@ -94,6 +95,16 @@ def operation_parameters(operation_id):
             "queries": ["latest ism report"],
             "expected_source_class": "official_publication",
         },
+        "get_setup_overview": {},
+        "get_macro_regime_explanation": {},
+        "get_confirmation_test": {"test_id": "vix"},
+        "get_confirmation_tests": {"test_ids": ["vix"]},
+        "get_posture_explanation": {},
+        "get_approved_counterfactuals": {},
+        "get_indicator_knowledge": {
+            "indicator_id": "vix",
+            "topic": "definition",
+        },
     }[operation_id]
 
 
@@ -156,6 +167,13 @@ def test_operation_registry_matches_approved_ids():
         "research_focused",
         "research_standard",
         "research_deep",
+        "get_setup_overview",
+        "get_macro_regime_explanation",
+        "get_confirmation_test",
+        "get_confirmation_tests",
+        "get_posture_explanation",
+        "get_approved_counterfactuals",
+        "get_indicator_knowledge",
     }
     assert registered_operation_ids() == _OPERATIONS
 
@@ -373,3 +391,72 @@ def test_deterministic_plans_are_validated():
     for question in questions:
         plan = deterministic_plan(question)
         assert validate_task_plan(plan) == plan
+
+
+def test_validate_operation_returns_plain_dict():
+    result = validate_operation("get_indicator_definition", {"indicator_id": "vix"})
+    assert result == {
+        "operation_id": "get_indicator_definition",
+        "parameters": {"indicator_id": "vix"},
+    }
+    assert isinstance(result, dict)
+
+
+def test_validate_operation_rejects_unknown_operation():
+    with pytest.raises(ValueError, match="operation is invalid"):
+        validate_operation("run_sql", {"sql": "select 1"})
+
+
+def test_validate_operation_rejects_invalid_parameters():
+    with pytest.raises(ValueError, match="operation is invalid"):
+        validate_operation("get_confirmation_test", {"test_id": "gold"})
+
+
+@pytest.mark.parametrize(
+    "operation_id",
+    [
+        "get_setup_overview",
+        "get_macro_regime_explanation",
+        "get_confirmation_test",
+        "get_confirmation_tests",
+        "get_posture_explanation",
+        "get_approved_counterfactuals",
+        "get_indicator_knowledge",
+    ],
+)
+def test_validate_operation_covers_focused_operations(operation_id):
+    result = validate_operation(operation_id, operation_parameters(operation_id))
+    assert result["operation_id"] == operation_id
+
+
+def test_validate_operation_rejects_model_supplied_context_id_on_snapshot():
+    with pytest.raises(ValueError, match="operation is invalid"):
+        validate_operation(
+            "get_setup_overview",
+            {"context_id": "ctx_other"},
+        )
+
+
+@pytest.mark.parametrize(
+    "operation_id",
+    [
+        "resolve_current_explanation",
+        "get_historical_snapshot",
+        "get_snapshot_object",
+        "get_counterfactuals",
+        "compare_snapshots",
+        "get_indicator_definition",
+        "get_indicator_method",
+        "get_indicator_source",
+        "get_indicator_current",
+        "query_indicator_history",
+        "compare_indicator_periods",
+        "query_release_history",
+        "research_focused",
+        "research_standard",
+        "research_deep",
+    ],
+)
+def test_validate_operation_keeps_existing_operations_valid(operation_id):
+    result = validate_operation(operation_id, operation_parameters(operation_id))
+    assert result["operation_id"] == operation_id

@@ -214,6 +214,15 @@
   font-size: 12px;
 }
 
+.market-assistant-progress {
+  color: #7A4B14;
+  background: #FBF0DE;
+  border-left: 3px solid #E3C78F;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
 .market-assistant-validation {
   margin: 0;
   padding: 8px 10px;
@@ -242,6 +251,18 @@
   color: #7A4B14;
   background: #FBF0DE;
   border-left: 3px solid #D79A35;
+}
+
+.market-assistant-validation-unavailable {
+  color: #7A4B14;
+  background: #FBF0DE;
+  border-left: 3px solid #D79A35;
+}
+
+.market-assistant-validation-interrupted {
+  color: #A04040;
+  background: #FDF2F2;
+  border-left: 3px solid #C62828;
 }
 
 @media (max-width: 820px) {

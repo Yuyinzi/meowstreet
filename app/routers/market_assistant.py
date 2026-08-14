@@ -1,4 +1,7 @@
 import json
+import logging
+import secrets
+from time import monotonic
 from typing import Literal
 
 from fastapi import APIRouter, Body, HTTPException
@@ -15,14 +18,18 @@ from app.services import market_assistant as market_assistant_service
 from app.services.market_assistant_exploration import execute_exploration
 from app.services.market_assistant_llm import complete_structured
 from app.services.market_assistant_llm import plan_question
+from app.services.market_assistant_llm import stream_response_turn
 from app.services.market_assistant_research import build_research_provider
 from app.services.market_setup_current import resolve_current_explanation
 from app.tools.market_assistant_answers import _AnswerDraft as AnswerDraftSchema
 from app.tools.market_assistant_answers import detect_answer_language
+from app.tools.market_assistant_claim_audit import ClaimAuditSchema
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
 from app.tools.market_assistant_plans import deterministic_plan
 
 router = APIRouter(prefix="/api/market-assistant", tags=["market-assistant"])
+
+STREAM_LOGGER = logging.getLogger("uvicorn.error")
 
 _ARTIFACT_CORRUPTION_PREFIXES = frozenset(
     {
@@ -52,6 +59,7 @@ class _QuestionRequest(BaseModel):
     conversation_id: str | None = None
     deep_research_requested: bool = False
     external_search_requested: bool = False
+    deep_analysis_requested: bool = Field(default=False, strict=True)
 
 
 def _assistant_runtime():
@@ -114,6 +122,40 @@ async def _repair_llm(
         model=model,
         prompt=prompt,
         schema_type=AnswerDraftSchema,
+        structured_output_mode=structured_output_mode,
+        reasoning_effort=reasoning_effort,
+    )
+
+
+async def _react_turn_llm(
+    client,
+    *,
+    model,
+    input_items,
+    instructions,
+    tools,
+    reasoning_effort,
+    observer=None,
+):
+    return await stream_response_turn(
+        client,
+        model=model,
+        input_items=input_items,
+        instructions=instructions,
+        tools=tools,
+        reasoning_effort=reasoning_effort,
+        observer=observer,
+    )
+
+
+async def _claim_audit_llm(*, answer_text, explanation_view, artifact_projection):
+    client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
+    prompt = _claim_audit_prompt(answer_text, explanation_view, artifact_projection)
+    return await complete_structured(
+        client,
+        model=model,
+        prompt=prompt,
+        schema_type=ClaimAuditSchema,
         structured_output_mode=structured_output_mode,
         reasoning_effort=reasoning_effort,
     )
@@ -203,19 +245,103 @@ def _repair_prompt(
     ]
 
 
+def _narration_instructions():
+    return (
+        "You are the Market Setup narration assistant. "
+        "Narrate the current market setup from the evidence. "
+        "Always write for a financial beginner. "
+        "Always answer the user's question before naming system labels. "
+        "Use only supplied views and tool results. "
+        "Do not display internal codes or artifact identifiers. "
+        "When tools are needed, return tool calls only. "
+        "When answering, return plain text only. "
+        "Do not reinterpret or override Market Setup. "
+        "Answer in the user's language. "
+        "Do not invent facts, thresholds, or causality the evidence does not support. "
+        "When evidence is unavailable, say it is unavailable rather than guessing."
+    )
+
+
+def _narration_input_items(question, explanation_view, tool_results):
+    return [
+        {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": json.dumps(
+                        {
+                            "question": question,
+                            "explanation_view": explanation_view,
+                            "tool_results": tool_results,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                }
+            ],
+        }
+    ]
+
+
+def _claim_audit_prompt(answer_text, explanation_view, artifact_projection):
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are the Market Setup claim audit assistant. "
+                "Audit the exact supplied answer string against the frozen "
+                "explanation view and artifact projections. "
+                "Each claim span must use exact offsets and exact text copied "
+                "verbatim from the answer string. "
+                "Return only a ClaimAudit matching the supplied schema. "
+                "Do not alter the supplied answer wording or emit a corrected draft."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "answer_text": answer_text,
+                    "explanation_view": explanation_view,
+                    "artifact_projection": artifact_projection,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        },
+    ]
+
+
+def _new_request_id():
+    return f"req_{secrets.token_hex(8)}"
+
+
 def _build_dependencies():
-    return {
-        "config": _load_market_assistant_config_or_none(),
+    config = _load_market_assistant_config_or_none()
+    dependencies = {
+        "config": config,
         "db_path": market_assistant_db.DEFAULT_DB_PATH,
         "plan_llm": _plan_llm,
         "synthesize_llm": _synthesize_llm,
         "repair_llm": _repair_llm,
+        "react_turn_llm": _react_turn_llm,
+        "stream_turn": _react_turn_llm,
+        "narration_instructions": _narration_instructions,
+        "claim_audit_llm": _claim_audit_llm,
         "build_research_provider": build_research_provider,
         "exploration": execute_exploration,
         "load_knowledge_catalog": load_knowledge_catalog,
         "save_bundle": market_assistant_db.save_answer_bundle,
         "resolve_current_explanation": resolve_current_explanation,
+        "request_id": _new_request_id(),
     }
+    if config:
+        dependencies["client"] = build_async_client(
+            config, timeout=900.0, error_context="market assistant"
+        )
+    return dependencies
 
 
 def _load_market_assistant_config_or_none():
@@ -242,11 +368,21 @@ def _is_artifact_corruption(exc):
     return any(message.startswith(prefix) for prefix in _ARTIFACT_CORRUPTION_PREFIXES)
 
 
-async def _stream_answer_events(request, dependencies):
+async def _stream_answer_events(request, dependencies, started_at):
+    request_id = dependencies.get("request_id")
+    first_answer_delta_sent = False
     try:
         async for event in market_assistant_service.stream_answer_question(
             request, dependencies=dependencies
         ):
+            if not first_answer_delta_sent and event.get("type") == "answer_delta":
+                first_answer_delta_sent = True
+                STREAM_LOGGER.info(
+                    "market assistant stage stage=first_ndjson_answer_delta_sent "
+                    "request_id=%s elapsed_seconds=%.2f",
+                    request_id,
+                    monotonic() - started_at,
+                )
             yield _ndjson_line(event)
     except Exception:
         yield _ndjson_line(
@@ -261,6 +397,7 @@ def _ndjson_line(event):
 
 @router.post("/questions/stream")
 async def market_assistant_questions_stream(body: dict = Body(default={})):
+    started_at = monotonic()
     try:
         request = _validate_question_request(body)
         dependencies = _build_dependencies()
@@ -271,7 +408,7 @@ async def market_assistant_questions_stream(body: dict = Body(default={})):
     if request["mode"] == "historical" and not request.get("context_id"):
         raise HTTPException(status_code=400, detail="context id is required")
     return StreamingResponse(
-        _stream_answer_events(request, dependencies),
+        _stream_answer_events(request, dependencies, started_at=started_at),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -31,6 +31,16 @@ def test_macro_dashboard_includes_market_assistant_assets():
     assert 'href="/market-assistant.css"' in html
 
 
+def test_macro_dashboard_html_includes_deep_analysis_checkbox():
+    html = STATIC_HTML.read_text(encoding="utf-8")
+    controls = html[html.index('id="marketAssistantExternalSearch"') :]
+    assert 'id="marketAssistantDeepAnalysis"' in html
+    assert "Deep analysis" in html
+    assert 'id="marketAssistantDeepAnalysis"' in controls
+    assert "Deep analysis" in controls
+    assert "disabled" not in controls
+
+
 def test_assistant_renderer_uses_text_content_and_clickable_citations():
     script = ASSISTANT_JS.read_text(encoding="utf-8")
     assert "textContent" in script
@@ -8111,6 +8121,7 @@ def _market_assistant_harness(test_js):
           marketAssistantSubmit: makeEl("button"),
           marketAssistantExternalSearch: makeEl("input"),
           marketAssistantDeepResearch: makeEl("input"),
+          marketAssistantDeepAnalysis: makeEl("input"),
           marketAssistantStatus: makeEl("div"),
         }};
 
@@ -8454,6 +8465,242 @@ def test_market_assistant_deep_research_requires_external_search():
         "optionExternalFlag": True,
         "plainFlag": False,
         "plainExternal": False,
+    }
+
+
+def test_market_assistant_deep_analysis_payload_matrix():
+    payload = _run_market_assistant_harness(
+        """
+        const standard = hooks.buildPayload("standard");
+        hooks.state.deepAnalysisRequested = true;
+        const localDeep = hooks.buildPayload("local deep");
+        hooks.state.deepAnalysisRequested = false;
+        hooks.state.externalSearchRequested = true;
+        const externalOnly = hooks.buildPayload("external only");
+        console.log(JSON.stringify({
+          standardDeep: standard.deep_analysis_requested,
+          standardExternal: standard.external_search_requested,
+          localDeepFlag: localDeep.deep_analysis_requested,
+          localDeepExternal: localDeep.external_search_requested,
+          externalOnlyDeep: externalOnly.deep_analysis_requested,
+          externalOnlyExternal: externalOnly.external_search_requested,
+        }));
+        """
+    )
+
+    assert payload == {
+        "standardDeep": False,
+        "standardExternal": False,
+        "localDeepFlag": True,
+        "localDeepExternal": False,
+        "externalOnlyDeep": False,
+        "externalOnlyExternal": True,
+    }
+
+
+def test_market_assistant_deep_analysis_survives_external_search_toggles():
+    payload = _run_market_assistant_harness(
+        """
+        elements.marketAssistantDeepAnalysis.checked = true;
+        elements.marketAssistantDeepAnalysis.listeners.change({ target: { checked: true } });
+        const deepChecked = hooks.state.deepAnalysisRequested;
+        const deepDisabledInitial = elements.marketAssistantDeepAnalysis.disabled === true;
+        elements.marketAssistantExternalSearch.checked = true;
+        elements.marketAssistantExternalSearch.listeners.change({ target: { checked: true } });
+        const deepAfterExternalOn = hooks.state.deepAnalysisRequested;
+        const deepDisabledAfterExternalOn = elements.marketAssistantDeepAnalysis.disabled === true;
+        const researchEnabledAfterExternal = elements.marketAssistantDeepResearch.disabled === false;
+        elements.marketAssistantExternalSearch.checked = false;
+        elements.marketAssistantExternalSearch.listeners.change({ target: { checked: false } });
+        const deepAfterExternalOff = hooks.state.deepAnalysisRequested;
+        const deepDisabledAfterExternalOff = elements.marketAssistantDeepAnalysis.disabled === true;
+        const researchDisabledAfterExternalOff = elements.marketAssistantDeepResearch.disabled === true;
+        const researchClearedAfterExternalOff = hooks.state.deepResearchRequested === false;
+        console.log(JSON.stringify({
+          deepChecked,
+          deepDisabledInitial,
+          deepAfterExternalOn,
+          deepDisabledAfterExternalOn,
+          researchEnabledAfterExternal,
+          deepAfterExternalOff,
+          deepDisabledAfterExternalOff,
+          researchDisabledAfterExternalOff,
+          researchClearedAfterExternalOff,
+        }));
+        """
+    )
+
+    assert payload == {
+        "deepChecked": True,
+        "deepDisabledInitial": False,
+        "deepAfterExternalOn": True,
+        "deepDisabledAfterExternalOn": False,
+        "researchEnabledAfterExternal": True,
+        "deepAfterExternalOff": True,
+        "deepDisabledAfterExternalOff": False,
+        "researchDisabledAfterExternalOff": True,
+        "researchClearedAfterExternalOff": True,
+    }
+
+
+def test_market_assistant_deep_analysis_persists_across_questions():
+    payload = _run_market_assistant_harness(
+        """
+        elements.marketAssistantDeepAnalysis.checked = true;
+        elements.marketAssistantDeepAnalysis.listeners.change({ target: { checked: true } });
+        const first = hooks.buildPayload("first question");
+        const second = hooks.buildPayload("second question");
+        console.log(JSON.stringify({
+          firstFlag: first.deep_analysis_requested,
+          secondFlag: second.deep_analysis_requested,
+        }));
+        """
+    )
+
+    assert payload == {"firstFlag": True, "secondFlag": True}
+
+
+def test_market_assistant_progress_shows_before_narration_then_clears_on_first_delta():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup", message: "Reading setup evidence" });
+        const progressShown = elements.marketAssistantStatus.textContent;
+        const progressClass = elements.marketAssistantStatus.className;
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "First delta." });
+        const statusAfterFirstDelta = elements.marketAssistantStatus.textContent;
+        const textEl = stream.element.children.find((child) => child.className === "market-assistant-message-text");
+        const textAfterFirstDelta = textEl.textContent;
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: " Second delta." });
+        const textAfterSecondDelta = textEl.textContent;
+        console.log(JSON.stringify({
+          progressShown,
+          progressClass,
+          statusAfterFirstDelta,
+          textAfterFirstDelta,
+          textAfterSecondDelta,
+          logChildren: elements.marketAssistantLog.children.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "progressShown": "Reading setup evidence",
+        "progressClass": "market-assistant-status market-assistant-progress",
+        "statusAfterFirstDelta": "",
+        "textAfterFirstDelta": "First delta.",
+        "textAfterSecondDelta": "First delta. Second delta.",
+        "logChildren": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    "stage,message",
+    [
+        ("reading_setup", "Reading setup evidence"),
+        ("checking_confirmation", "Checking confirmation evidence"),
+        ("querying_history", "Querying market history"),
+        ("comparing_evidence", "Comparing evidence"),
+        ("writing_answer", "Writing answer"),
+    ],
+)
+def test_market_assistant_progress_renders_allowlisted_stages(stage, message):
+    payload = _run_market_assistant_harness(
+        f"""
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {{ type: "progress", stage: "{stage}", message: "{message}" }});
+        console.log(JSON.stringify({{
+          status: elements.marketAssistantStatus.textContent,
+        }}));
+        """
+    )
+
+    assert payload == {"status": message}
+
+
+def test_market_assistant_progress_ignores_unknown_stages():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "progress", stage: "mystery_stage", message: "Should not show" });
+        const afterUnknown = elements.marketAssistantStatus.textContent;
+        hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup", message: "Reading setup evidence" });
+        const afterKnown = elements.marketAssistantStatus.textContent;
+        console.log(JSON.stringify({
+          afterUnknown,
+          afterKnown,
+        }));
+        """
+    )
+
+    assert payload == {"afterUnknown": "", "afterKnown": "Reading setup evidence"}
+
+
+def test_market_assistant_progress_without_message_is_ignored():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup" });
+        console.log(JSON.stringify({
+          status: elements.marketAssistantStatus.textContent,
+        }));
+        """
+    )
+
+    assert payload == {"status": ""}
+
+
+def test_market_assistant_client_timing_log_emits_request_id_and_durations():
+    payload = _run_market_assistant_harness(
+        """
+        const timingCalls = [];
+        const originalInfo = console.info;
+        console.info = (...args) => { timingCalls.push(args); };
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"resolution","resolution":{"mode":"current","current_context_id":"ctx_NEW"},"request_id":"req_t1"}\\n',
+          '{"type":"answer_delta","delta":"First delta."}\\n',
+          '{"type":"answer_delta","delta":" Second delta."}\\n',
+          '{"type":"validation","status":"passed","error_codes":[]}\\n',
+          '{"type":"complete","resolution":{"mode":"current"},"generation_status":"validated_first_pass","answer_trace_id":"trace_1","citations":[],"request_id":"req_t1"}\\n',
+        ]) });
+        elements.marketAssistantQuestion.value = "Will this work?";
+        await hooks.handleSubmit();
+        console.info = originalInfo;
+        const timingCall = timingCalls.find((entry) => entry[0] === "market assistant client timing");
+        const timingPayload = timingCall && timingCall[1];
+        const keys = timingPayload ? Object.keys(timingPayload).sort() : [];
+        const serialized = timingPayload ? JSON.stringify(timingPayload) : "";
+        console.log(JSON.stringify({
+          callCount: timingCalls.length,
+          requestId: timingPayload && timingPayload.request_id,
+          hasDurations: timingPayload && timingPayload.durations_ms !== undefined,
+          durationKeys: timingPayload && timingPayload.durations_ms
+            ? Object.keys(timingPayload.durations_ms).sort()
+            : [],
+          numericDurations: timingPayload && timingPayload.durations_ms
+            ? Object.keys(timingPayload.durations_ms).every((key) => typeof timingPayload.durations_ms[key] === "number")
+            : false,
+          leaksQuestion: serialized.indexOf("Will this work?") !== -1,
+          leaksAnswer: serialized.indexOf("First delta") !== -1 || serialized.indexOf("Second") !== -1,
+          keys,
+        }));
+        """
+    )
+
+    assert payload == {
+        "callCount": 1,
+        "requestId": "req_t1",
+        "hasDurations": True,
+        "durationKeys": [
+            "complete_ms",
+            "first_delta_ms",
+            "first_event_ms",
+            "validation_ms",
+        ],
+        "numericDurations": True,
+        "leaksQuestion": False,
+        "leaksAnswer": False,
+        "keys": ["durations_ms", "request_id"],
     }
 
 
@@ -8961,4 +9208,140 @@ def test_market_assistant_stream_consumption_cancels_reader_on_event_error():
         "error": "boom",
         "cancelled": True,
         "released": True,
+    }
+
+
+def test_market_assistant_rendered_stream_is_beginner_language_without_internal_codes():
+    first = "当前市场整体偏防御，增长正在放缓但下滑尚未完全确认。"
+    second = "选择依据是经济增长方向放缓。货币政策与增长方向不一致，显示冲突。"
+    third = "整体组合姿态偏向防御，即降低股票敞口。如果市场确认转弱，结论会改变。"
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {
+          type: "resolution",
+          resolution: { mode: "current", current_context_id: "ctx_NEW", context_changed: false },
+        });
+        hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup", message: "正在读取当前 Market Setup…" });
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "当前市场整体偏防御，增长正在放缓但下滑尚未完全确认。" });
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "选择依据是经济增长方向放缓。货币政策与增长方向不一致，显示冲突。" });
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "整体组合姿态偏向防御，即降低股票敞口。如果市场确认转弱，结论会改变。" });
+        hooks.applyStreamEvent(stream, { type: "validation", status: "passed", error_codes: [] });
+        hooks.applyStreamEvent(stream, { type: "complete", generation_status: "narration_validated", answer_trace_id: "trace_1", citations: [], resolution: { mode: "current" } });
+        const logText = elements.marketAssistantLog.children.map((child) => {
+          const textEl = child.children.find((c) => c.className === "market-assistant-message-text");
+          return textEl ? textEl.textContent : "";
+        }).join(" ");
+        const statusText = elements.marketAssistantStatus.textContent;
+        const rendered = logText + " " + statusText;
+        const tokens = ["bull_market", "risk_rising", "modest_long", "selective_positions", "conflicts", "artifact_id", "object_id", "decision_fact"];
+        console.log(JSON.stringify({
+          rendered,
+          leaksAny: tokens.some((token) => rendered.indexOf(token) !== -1),
+          leaksContextId: rendered.indexOf("ctx_") !== -1,
+          hasOpening: rendered.indexOf("当前市场整体偏防御") !== -1,
+          hasSelector: rendered.indexOf("选择依据") !== -1,
+          hasConflict: rendered.indexOf("不一致") !== -1,
+          hasPosture: rendered.indexOf("降低股票敞口") !== -1,
+          hasChange: rendered.indexOf("结论会改变") !== -1,
+        }));
+        """
+    )
+
+    assert payload == {
+        "rendered": first + second + third + " ",
+        "leaksAny": False,
+        "leaksContextId": False,
+        "hasOpening": True,
+        "hasSelector": True,
+        "hasConflict": True,
+        "hasPosture": True,
+        "hasChange": True,
+    }
+
+
+def test_market_assistant_stream_disabled_validation_renders_visible_badge():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"answer_delta","delta":"当前市场整体偏防御。"}\\n',
+          '{"type":"validation","status":"disabled","error_codes":[]}\\n',
+          '{"type":"complete","generation_status":"narration_validation_disabled","answer_trace_id":"trace_1","citations":[],"resolution":{"mode":"current"}}\\n',
+        ]) });
+        elements.marketAssistantQuestion.value = "现在市场怎么样？";
+        await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[1];
+        const badge = assistant.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        console.log(JSON.stringify({
+          badgeClass: badge && badge.className,
+          isDisabled: Boolean(badge) && badge.className.indexOf("market-assistant-validation-disabled") !== -1,
+          isPassed: Boolean(badge) && badge.className.indexOf("market-assistant-validation-passed") !== -1,
+          label: badge && badge.children[0].textContent,
+        }));
+        """
+    )
+
+    assert payload == {
+        "badgeClass": "market-assistant-validation market-assistant-validation-disabled",
+        "isDisabled": True,
+        "isPassed": False,
+        "label": "Claim validation 当前已关闭",
+    }
+
+
+def test_market_assistant_stream_unavailable_validation_renders_badge():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "现在的市场偏积极。" });
+        hooks.applyStreamEvent(stream, { type: "validation", status: "unavailable", error_codes: [] });
+        const badge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        console.log(JSON.stringify({
+          className: badge && badge.className,
+          isUnavailable: Boolean(badge) && badge.className.indexOf("market-assistant-validation-unavailable") !== -1,
+          isPassed: Boolean(badge) && badge.className.indexOf("market-assistant-validation-passed") !== -1,
+          label: badge && badge.children[0].textContent,
+          answerText: stream.message.text,
+        }));
+        """
+    )
+
+    assert payload == {
+        "className": "market-assistant-validation market-assistant-validation-unavailable",
+        "isUnavailable": True,
+        "isPassed": False,
+        "label": "验证不可用，回答未验证",
+        "answerText": "现在的市场偏积极。",
+    }
+
+
+def test_market_assistant_stream_interrupted_validation_renders_badge():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "部分回答" });
+        hooks.applyStreamEvent(stream, { type: "validation", status: "interrupted", error_codes: [] });
+        const badge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        console.log(JSON.stringify({
+          className: badge && badge.className,
+          isInterrupted: Boolean(badge) && badge.className.indexOf("market-assistant-validation-interrupted") !== -1,
+          isPassed: Boolean(badge) && badge.className.indexOf("market-assistant-validation-passed") !== -1,
+          label: badge && badge.children[0].textContent,
+          answerText: stream.message.text,
+        }));
+        """
+    )
+
+    assert payload == {
+        "className": "market-assistant-validation market-assistant-validation-interrupted",
+        "isInterrupted": True,
+        "isPassed": False,
+        "label": "连接中断，回答可能不完整",
+        "answerText": "部分回答",
     }

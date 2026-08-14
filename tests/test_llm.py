@@ -13,6 +13,7 @@ MARKET_ENV_NAMES = (
     "MARKET_ASSISTANT_STRUCTURED_OUTPUT_MODE",
     "MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED",
     "MARKET_ASSISTANT_REASONING_EFFORT",
+    "MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS",
     "MARKET_ASSISTANT_RESEARCH_MODEL",
     "MARKET_ASSISTANT_RESEARCH_PROVIDER",
     "MARKET_ASSISTANT_RESEARCH_ENABLED",
@@ -36,6 +37,7 @@ def write_env(tmp_path, **overrides):
         "research_model": "MARKET_ASSISTANT_RESEARCH_MODEL",
         "provider": "MARKET_ASSISTANT_RESEARCH_PROVIDER",
         "reasoning_effort": "MARKET_ASSISTANT_REASONING_EFFORT",
+        "audit_timeout": "MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS",
         "base_url": "OPENAI_BASE_URL",
         "supports": "MARKET_ASSISTANT_RESEARCH_SUPPORTS_WEB_SEARCH",
         "api_key": "OPENAI_API_KEY",
@@ -373,3 +375,54 @@ def test_load_market_assistant_config_accepts_medium_reasoning_effort(
     config = llm.load_market_assistant_config(root=tmp_path)
 
     assert config["reasoning_effort"] == "medium"
+
+
+def test_load_market_assistant_config_audit_timeout_defaults_to_120(
+    tmp_path, monkeypatch
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path)
+
+    config = llm.load_market_assistant_config(root=tmp_path)
+
+    assert config["audit_timeout_seconds"] == 120.0
+
+
+@pytest.mark.parametrize("value", ["1.0", "900.0", "150.5"])
+def test_load_market_assistant_config_accepts_audit_timeout_bounds(
+    tmp_path, monkeypatch, value
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path, audit_timeout=value)
+
+    config = llm.load_market_assistant_config(root=tmp_path)
+
+    assert config["audit_timeout_seconds"] == float(value)
+
+
+@pytest.mark.parametrize("value", ["0.5", "900.1", "-5"])
+def test_load_market_assistant_config_rejects_out_of_range_audit_timeout(
+    tmp_path, monkeypatch, value
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path, audit_timeout=value)
+
+    with pytest.raises(
+        RuntimeError,
+        match="MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS must be between 1 and 900",
+    ):
+        llm.load_market_assistant_config(root=tmp_path)
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "not-a-number"])
+def test_load_market_assistant_config_rejects_non_finite_audit_timeout(
+    tmp_path, monkeypatch, value
+):
+    clear_market_env(monkeypatch)
+    write_env(tmp_path, audit_timeout=value)
+
+    with pytest.raises(
+        RuntimeError,
+        match="MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS must be between 1 and 900",
+    ):
+        llm.load_market_assistant_config(root=tmp_path)

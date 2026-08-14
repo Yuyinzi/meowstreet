@@ -214,6 +214,198 @@ def _json_object_prompt(prompt, schema_type):
     return [instruction, *prompt]
 
 
+async def stream_response_turn(
+    client,
+    *,
+    model: str,
+    input_items: list,
+    instructions: str,
+    tools: list[dict],
+    reasoning_effort: str,
+    observer=None,
+):
+    request_started_at = monotonic()
+    STREAM_LOGGER.info("market assistant response turn request started")
+    stream = await client.responses.create(
+        model=model,
+        instructions=instructions,
+        input=input_items,
+        tools=tools,
+        reasoning={"effort": reasoning_effort},
+        stream=True,
+    )
+    STREAM_LOGGER.info(
+        "market assistant response turn connected elapsed_seconds=%.2f",
+        monotonic() - request_started_at,
+    )
+    return await _collect_response_turn(
+        stream, observer=observer, started_at=request_started_at
+    )
+
+
+async def _collect_response_turn(stream, *, observer, started_at):
+    event_counts = {}
+    output_parts = []
+    tool_calls = []
+    response_items = []
+    argument_buffers = {}
+    parsed_arguments = {}
+    completed_response = None
+    completed = False
+    first_event_received = False
+    first_reasoning_at = None
+    first_output_at = None
+    first_visible_at = None
+    reasoning_started_emitted = False
+    STREAM_LOGGER.info("market assistant response turn started")
+    async for event in stream:
+        event_type = _event_value(event, "type") or "unknown"
+        if not first_event_received:
+            first_event_received = True
+            STREAM_LOGGER.info(
+                "market assistant response turn first event event_type=%s elapsed_seconds=%.2f",
+                event_type,
+                monotonic() - started_at,
+            )
+        event_counts[event_type] = event_counts.get(event_type, 0) + 1
+        if event_type == "response.reasoning_text.delta":
+            if first_reasoning_at is None:
+                first_reasoning_at = monotonic() - started_at
+            if observer is not None and not reasoning_started_emitted:
+                reasoning_started_emitted = True
+                await _notify_observer(stream, observer, {"type": "reasoning_started"})
+        if event_type == "response.output_text.delta":
+            if first_output_at is None:
+                first_output_at = monotonic() - started_at
+            delta = _event_value(event, "delta")
+            if isinstance(delta, str):
+                output_parts.append(delta)
+                if first_visible_at is None and any(
+                    not char.isspace() for char in delta
+                ):
+                    first_visible_at = monotonic() - started_at
+                if observer is not None:
+                    await _notify_observer(
+                        stream, observer, {"type": "output_delta", "delta": delta}
+                    )
+        if event_type == "response.output_item.added":
+            item = _event_value(event, "item")
+            if _event_value(item, "type") == "function_call":
+                call_id = _event_value(item, "call_id")
+                argument_buffers.setdefault(call_id, [])
+                if observer is not None:
+                    await _notify_observer(
+                        stream,
+                        observer,
+                        {
+                            "type": "provider_tool_call_started",
+                            "call_id": call_id,
+                            "tool_name": _event_value(item, "name"),
+                        },
+                    )
+        if event_type == "response.function_call_arguments.delta":
+            call_id = _event_value(event, "item_id")
+            delta = _event_value(event, "delta")
+            if call_id is not None and isinstance(delta, str):
+                argument_buffers.setdefault(call_id, []).append(delta)
+        if event_type == "response.function_call_arguments.done":
+            call_id = _event_value(event, "item_id")
+            arguments_text = _event_value(event, "arguments")
+            if not isinstance(arguments_text, str):
+                arguments_text = "".join(argument_buffers.get(call_id, []))
+            parsed_arguments[call_id] = _parse_arguments(arguments_text, call_id)
+        if event_type == "response.output_item.done":
+            item = _event_value(event, "output")
+            if item is None:
+                item = _event_value(event, "item")
+            if item is not None:
+                response_items.append(_to_plain_dict(item))
+                if _event_value(item, "type") == "function_call":
+                    tool_calls.append(
+                        _normalized_tool_call(item, parsed_arguments, argument_buffers)
+                    )
+        if event_type == "response.completed":
+            completed = True
+            completed_response = _event_value(event, "response")
+            break
+        if event_type in {"response.incomplete", "response.failed"}:
+            LOGGER.warning(
+                "market assistant response turn terminated event_type=%s elapsed_seconds=%.2f event_counts=%s",
+                event_type,
+                monotonic() - started_at,
+                event_counts,
+            )
+            raise ValueError("response stream did not complete")
+    if not completed:
+        raise ValueError("response stream did not complete")
+    output_text = "".join(output_parts)
+    if tool_calls and output_text.strip():
+        raise ValueError("response turn mixes text and tool calls")
+    elapsed_seconds = monotonic() - started_at
+    _log_stream_usage(
+        completed_response, elapsed_seconds, first_reasoning_at, first_output_at
+    )
+    STREAM_LOGGER.info(
+        "market assistant response turn completed "
+        "first_reasoning_seconds=%s first_output_seconds=%s "
+        "first_visible_delta_seconds=%s completed_seconds=%.2f event_counts=%s",
+        _elapsed_label(first_reasoning_at),
+        _elapsed_label(first_output_at),
+        _elapsed_label(first_visible_at),
+        elapsed_seconds,
+        event_counts,
+    )
+    return {
+        "output_text": output_text,
+        "tool_calls": tool_calls,
+        "response_items": response_items,
+        "usage": _to_plain_dict(_event_value(completed_response, "usage")),
+        "timings": {
+            "first_reasoning_seconds": first_reasoning_at,
+            "first_output_seconds": first_output_at,
+            "first_visible_delta_seconds": first_visible_at,
+            "completed_seconds": elapsed_seconds,
+        },
+    }
+
+
+def response_items_for_next_turn(turn):
+    return list(turn["response_items"])
+
+
+def _normalized_tool_call(item, parsed_arguments, argument_buffers):
+    call_id = _event_value(item, "call_id")
+    arguments = parsed_arguments.get(call_id)
+    if arguments is None:
+        arguments_text = _event_value(item, "arguments")
+        if not isinstance(arguments_text, str):
+            arguments_text = "".join(argument_buffers.get(call_id, []))
+        arguments = _parse_arguments(arguments_text, call_id)
+    return {
+        "call_id": call_id,
+        "tool_name": _event_value(item, "name"),
+        "arguments": arguments,
+    }
+
+
+def _parse_arguments(arguments_text, call_id):
+    if not isinstance(arguments_text, str):
+        raise ValueError(f"function call {call_id} arguments are invalid")
+    try:
+        return json.loads(arguments_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"function call {call_id} arguments are invalid") from exc
+
+
+def _to_plain_dict(value):
+    if isinstance(value, dict):
+        return value
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return model_dump(mode="json")
+    return value
+
+
 async def plan_question(
     client,
     *,

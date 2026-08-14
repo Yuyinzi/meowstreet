@@ -70,6 +70,12 @@ def load_market_assistant_config(args=None, root=ROOT):
         raise RuntimeError(
             "MARKET_ASSISTANT_REASONING_EFFORT must be low, medium, or high"
         )
+    audit_timeout_value = os.getenv("MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS")
+    audit_timeout_seconds = (
+        120.0
+        if audit_timeout_value is None
+        else _parse_market_audit_timeout(audit_timeout_value)
+    )
     research_enabled = _parse_market_bool(
         getattr(args, "market_assistant_research_enabled", None)
         or os.getenv("MARKET_ASSISTANT_RESEARCH_ENABLED")
@@ -109,11 +115,26 @@ def load_market_assistant_config(args=None, root=ROOT):
         "structured_output_mode": structured_output_mode,
         "reasoning_effort": reasoning_effort,
         "claim_validation_enabled": claim_validation_enabled,
+        "audit_timeout_seconds": audit_timeout_seconds,
         "research_model": research_model,
         "provider": provider,
         "research_enabled": research_enabled,
         "supports_web_search": supports_web_search,
     }
+
+
+def _parse_market_audit_timeout(value):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS must be between 1 and 900"
+        ) from exc
+    if not 1.0 <= parsed <= 900.0:
+        raise RuntimeError(
+            "MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS must be between 1 and 900"
+        )
+    return parsed
 
 
 def _parse_market_bool(value):
