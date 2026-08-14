@@ -172,7 +172,6 @@ _OVERVIEW_MARKERS = (
     "explain the market situation",
     "explain the current market situation",
     "what is the market setup",
-    "market setup",
 )
 
 _CONFIRMATION_MARKERS = (

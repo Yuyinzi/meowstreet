@@ -175,7 +175,6 @@ def test_chinese_explain_market_state_routes_to_overview():
         "explain the market situation",
         "explain the current market situation",
         "what is the market setup",
-        "market setup",
         "解释市场情况",
     ],
 )
@@ -184,6 +183,15 @@ def test_overview_variant_questions_route_to_overview(question):
     assert route["route_id"] == "current_setup_overview"
     assert route["routing_source"] == "deterministic"
     assert route["initial_operations"]
+
+
+def test_why_market_setup_question_not_hijacked_by_overview_marker():
+    route = route_question(
+        "why is the market setup partially confirmed", deep_analysis=False
+    )
+    assert route["route_id"] != "current_setup_overview"
+    assert route["routing_source"] != "deterministic"
+    assert route["route_id"] == "react"
 
 
 def test_explain_how_indicator_is_calculated_stays_on_indicator_route():
