@@ -58,6 +58,17 @@ def test_assistant_renderer_uses_text_content_and_clickable_citations():
     assert 'rel="noopener noreferrer"' in script
 
 
+def test_macro_dashboard_css_has_floating_window_styles():
+    css = STATIC_CSS.read_text(encoding="utf-8")
+    assert ".market-assistant-fab" in css
+    assert ".market-assistant-window" in css
+    assert ".market-assistant-resize" in css
+    assert (
+        ".market-assistant-message-text h1" in css
+        or ".market-assistant-message-text h2" in css
+    )
+
+
 def test_nfib_regional_ui_renders_factual_read_and_component_comparisons():
     js = (ROOT / "static" / "nfib-sbo-ui.js").read_text()
 
