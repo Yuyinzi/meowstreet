@@ -1296,6 +1296,8 @@ def test_hybrid_stream_fast_path_sequence_and_narration_prompt_contract(
     assert [part["type"] for part in first_items[0]["content"]] == [
         "input_text",
         "input_text",
+        "input_text",
+        "input_text",
     ]
     assert not any(item["type"] == "function_call_output" for item in first_items)
     assert not any(item["type"] == "function_call" for item in first_items)
@@ -1440,8 +1442,7 @@ def test_hybrid_stream_react_two_rounds_immutable_artifacts_and_audit(
 
     final_message = result["turn"].calls[2]["input_items"][0]
     final_view = json.loads(final_message["content"][1]["text"])["explanation_view"]
-    assert final_view["view_version"] == "exploration_explanation_v1"
-    assert final_view["indicator_id"] == "credit_conditions"
+    assert final_view["view_version"] == "react_anchor_v1"
 
     second_items = result["turn"].calls[1]["input_items"]
     credit_output = json.loads(

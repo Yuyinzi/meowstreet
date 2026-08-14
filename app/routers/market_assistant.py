@@ -57,9 +57,23 @@ class _QuestionRequest(BaseModel):
     context_id: str | None = None
     previous_context_id: str | None = None
     conversation_id: str | None = None
+    message_id: str | None = None
+    conversation_bootstrap: list["_ConversationBootstrapMessage"] | None = Field(
+        default=None, max_length=1000
+    )
     deep_research_requested: bool = False
     external_search_requested: bool = False
     deep_analysis_requested: bool = Field(default=False, strict=True)
+
+
+class _ConversationBootstrapMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    text: str = Field(min_length=1, max_length=50000)
+
+
+_QuestionRequest.model_rebuild()
 
 
 def _assistant_runtime():

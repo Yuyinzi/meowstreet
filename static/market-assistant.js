@@ -5,6 +5,7 @@
   const state = {
     lastContextId: null,
     conversationId: null,
+    serverHistoryReady: false,
     messages: [],
     busy: false,
     error: null,
@@ -118,6 +119,7 @@
     try {
       const payload = {
         conversationId: state.conversationId,
+        serverHistoryReady: state.serverHistoryReady,
         messages: state.messages,
         lastContextId: state.lastContextId,
         isOpen: state.isOpen,
@@ -135,6 +137,9 @@
       if (!raw) return false;
       const payload = JSON.parse(raw);
       if (payload.conversationId) state.conversationId = payload.conversationId;
+      if (typeof payload.serverHistoryReady === "boolean") {
+        state.serverHistoryReady = payload.serverHistoryReady;
+      }
       if (Array.isArray(payload.messages)) state.messages = payload.messages;
       if (payload.lastContextId) state.lastContextId = payload.lastContextId;
       if (typeof payload.isOpen === "boolean") state.isOpen = payload.isOpen;
@@ -313,11 +318,16 @@
     return state.conversationId;
   }
 
+  function messageId() {
+    return "msg_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+
   function buildPayload(question, options = {}) {
     const payload = {
       question: String(question || "").trim(),
       mode: "current",
       conversation_id: conversationId(),
+      message_id: messageId(),
       deep_research_requested: Boolean(
         options.deepResearchRequested !== undefined
           ? options.deepResearchRequested
@@ -336,6 +346,30 @@
     };
     if (state.lastContextId) {
       payload.previous_context_id = state.lastContextId;
+    }
+    if (!state.serverHistoryReady) {
+      const priorMessages = state.messages.slice();
+      const lastMessage = priorMessages[priorMessages.length - 1];
+      if (
+        lastMessage &&
+        lastMessage.role === "user" &&
+        String(lastMessage.text || "").trim() === payload.question
+      ) {
+        priorMessages.pop();
+      }
+      const bootstrap = priorMessages
+        .filter(
+          (message) =>
+            (message.role === "user" || message.role === "assistant") &&
+            String(message.text || "").trim()
+        )
+        .map((message) => ({
+          role: message.role,
+          text: String(message.text).trim(),
+        }));
+      if (bootstrap.length) {
+        payload.conversation_bootstrap = bootstrap;
+      }
     }
     return payload;
   }
@@ -562,6 +596,7 @@
         }
         break;
       case "complete":
+        state.serverHistoryReady = true;
         stream.message.complete = true;
         stream.message.citations = event.citations || [];
         setAssistantMessageHtml(stream.textEl, stream.message.text);

@@ -197,6 +197,170 @@ def snapshot_artifact():
     }
 
 
+def test_conversation_items_are_append_only_and_message_id_is_idempotent(tmp_path):
+    con = market_assistant.connect(tmp_path / "market.sqlite")
+    try:
+        first = {
+            "message_id": "msg_user_1",
+            "display": {"role": "user", "text": "现在市场怎么样？"},
+            "provider_items": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "现在市场怎么样？"}],
+                }
+            ],
+        }
+        second = {
+            "message_id": "msg_assistant_1",
+            "display": {"role": "assistant", "text": "我来解释。"},
+            "provider_items": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "我来解释。"}],
+                }
+            ],
+        }
+        market_assistant.append_conversation_message(
+            con, conversation_id="conv_1", message=first, preferred_language="zh"
+        )
+        market_assistant.append_conversation_message(
+            con, conversation_id="conv_1", message=second, preferred_language="zh"
+        )
+        market_assistant.append_conversation_message(
+            con, conversation_id="conv_1", message=first, preferred_language="zh"
+        )
+
+        history = market_assistant.load_conversation_history(con, "conv_1")
+    finally:
+        con.close()
+
+    assert history["preferred_language"] == "zh"
+    assert [message["message_id"] for message in history["messages"]] == [
+        "msg_user_1",
+        "msg_assistant_1",
+    ]
+    assert history["provider_items"][0]["content"][0]["text"] == "现在市场怎么样？"
+
+
+def test_conversation_checkpoint_keeps_original_items_and_projects_only_new_tail(tmp_path):
+    con = market_assistant.connect(tmp_path / "market.sqlite")
+    try:
+        for index in range(3):
+            market_assistant.append_conversation_message(
+                con,
+                conversation_id="conv_checkpoint",
+                preferred_language="en",
+                message={
+                    "message_id": f"msg_{index}",
+                    "display": {"role": "user", "text": f"question {index}"},
+                    "provider_items": [
+                        {
+                            "type": "message",
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": f"question {index}"}
+                            ],
+                        }
+                    ],
+                },
+            )
+        market_assistant.save_conversation_checkpoint(
+            con,
+            conversation_id="conv_checkpoint",
+            through_sequence=2,
+            checkpoint={
+                "schema_version": "market_assistant_conversation_checkpoint_v1",
+                "through_sequence": 2,
+                "preferred_language": "en",
+                "summary": "The user asked question 0 and question 1.",
+                "open_questions": [],
+                "created_at": "2026-08-14T00:00:00Z",
+            },
+        )
+        history = market_assistant.load_conversation_history(con, "conv_checkpoint")
+    finally:
+        con.close()
+
+    assert len(history["messages"]) == 3
+    assert history["checkpoint"]["through_sequence"] == 2
+    assert [item["content"][0]["text"] for item in history["provider_items"]] == [
+        "question 2"
+    ]
+
+
+def test_conversation_turn_is_atomic_when_assistant_message_conflicts(tmp_path):
+    con = market_assistant.connect(tmp_path / "market.sqlite")
+    try:
+        market_assistant.append_conversation_message(
+            con,
+            conversation_id="conv_atomic",
+            preferred_language="en",
+            message={
+                "message_id": "assistant_msg_new",
+                "display": {"role": "assistant", "text": "stored answer"},
+                "provider_items": [],
+            },
+        )
+        with pytest.raises(ValueError, match="conversation message id conflicts"):
+            market_assistant.append_conversation_turn(
+                con,
+                conversation_id="conv_atomic",
+                preferred_language="en",
+                messages=[
+                    {
+                        "message_id": "msg_new",
+                        "display": {"role": "user", "text": "new question"},
+                        "provider_items": [],
+                    },
+                    {
+                        "message_id": "assistant_msg_new",
+                        "display": {"role": "assistant", "text": "different answer"},
+                        "provider_items": [],
+                    },
+                ],
+            )
+        history = market_assistant.load_conversation_history(con, "conv_atomic")
+    finally:
+        con.close()
+
+    assert [item["message_id"] for item in history["messages"]] == [
+        "assistant_msg_new"
+    ]
+
+
+def test_conversation_checkpoint_cannot_skip_unstored_messages(tmp_path):
+    con = market_assistant.connect(tmp_path / "market.sqlite")
+    try:
+        market_assistant.append_conversation_message(
+            con,
+            conversation_id="conv_checkpoint",
+            preferred_language="en",
+            message={
+                "message_id": "msg_1",
+                "display": {"role": "user", "text": "question"},
+                "provider_items": [],
+            },
+        )
+        with pytest.raises(ValueError, match="checkpoint sequence is unavailable"):
+            market_assistant.save_conversation_checkpoint(
+                con,
+                conversation_id="conv_checkpoint",
+                through_sequence=2,
+                checkpoint={
+                    "schema_version": "market_assistant_conversation_checkpoint_v1",
+                    "through_sequence": 2,
+                    "preferred_language": "en",
+                    "summary": "question",
+                    "open_questions": [],
+                    "created_at": "2026-08-14T00:00:00Z",
+                },
+            )
+    finally:
+        con.close()
+
+
 def knowledge_record_artifact():
     return {
         "artifact_id": "krec_vix_level_v1",

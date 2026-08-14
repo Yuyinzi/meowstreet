@@ -271,7 +271,8 @@ def test_assistant_drag_and_resize_check_mobile_at_interaction_time():
     payload = _run_market_assistant_harness(
         """
         const dragListener = elements.marketAssistantWindowHead.listeners.mousedown;
-        const resizeListener = elements.marketAssistantResize.listeners.mousedown;
+        const resizeHandle = marketAssistantWindow.querySelectorAll(".market-assistant-resize")[0];
+        const resizeListener = resizeHandle.listeners.mousedown;
         const docCalls = [];
         document.addEventListener = (type) => { docCalls.push(type); };
         window.matchMedia = () => ({ matches: true });
@@ -8370,12 +8371,27 @@ def _market_assistant_harness(test_js):
           }};
         }}
 
+        const resizeHandles = [];
+        const marketAssistantWindow = makeEl("div");
+        marketAssistantWindow.querySelectorAll = (sel) => {{
+          if (sel === ".market-assistant-resize") {{
+            return resizeHandles;
+          }}
+          return marketAssistantWindow.children.filter((c) => c.className === sel.slice(1));
+        }};
+        ["n", "e", "s", "w", "ne", "se", "sw", "nw"].forEach((edge) => {{
+          const handle = makeEl("div");
+          handle.className = "market-assistant-resize market-assistant-resize-" + edge;
+          handle.setAttribute("data-edge", edge);
+          resizeHandles.push(handle);
+          marketAssistantWindow.appendChild(handle);
+        }});
+
         const elements = {{
           marketAssistantFab: makeEl("button"),
-          marketAssistantWindow: makeEl("div"),
+          marketAssistantWindow: marketAssistantWindow,
           marketAssistantWindowHead: makeEl("div"),
           marketAssistantWindowClose: makeEl("button"),
-          marketAssistantResize: makeEl("div"),
           marketAssistantLog: makeEl("div"),
           marketAssistantForm: makeEl("form"),
           marketAssistantQuestion: makeEl("input"),
@@ -8429,6 +8445,8 @@ def test_market_assistant_build_payload_uses_current_mode_and_context_id():
           deepResearchDefault: first.deep_research_requested,
           externalSearchDefault: first.external_search_requested,
           conversationId: typeof first.conversation_id === "string" && first.conversation_id.length > 0,
+          messageId: typeof first.message_id === "string" && first.message_id.length > 0,
+          messageIdsDiffer: first.message_id !== second.message_id,
         }));
         """
     )
@@ -8441,6 +8459,36 @@ def test_market_assistant_build_payload_uses_current_mode_and_context_id():
         "deepResearchDefault": False,
         "externalSearchDefault": False,
         "conversationId": True,
+        "messageId": True,
+        "messageIdsDiffer": True,
+    }
+
+
+def test_market_assistant_bootstraps_old_local_history_only_until_server_sync():
+    payload = _run_market_assistant_harness(
+        """
+        hooks.state.messages = [
+          { role: "user", text: "当前市场怎么样？" },
+          { role: "assistant", text: "你想继续了解 VIX 还是信贷？" },
+          { role: "user", text: "ok" },
+        ];
+        hooks.state.serverHistoryReady = false;
+        const first = hooks.buildPayload("ok");
+        hooks.state.serverHistoryReady = true;
+        const second = hooks.buildPayload("ok");
+        console.log(JSON.stringify({
+          bootstrap: first.conversation_bootstrap,
+          secondHasBootstrap: Object.prototype.hasOwnProperty.call(second, "conversation_bootstrap"),
+        }));
+        """
+    )
+
+    assert payload == {
+        "bootstrap": [
+            {"role": "user", "text": "当前市场怎么样？"},
+            {"role": "assistant", "text": "你想继续了解 VIX 还是信贷？"},
+        ],
+        "secondHasBootstrap": False,
     }
 
 

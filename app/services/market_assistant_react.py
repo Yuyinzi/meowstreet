@@ -10,6 +10,7 @@ from app.services.market_assistant_llm import response_items_for_next_turn
 from app.services.market_assistant_llm import stream_response_turn
 from app.services.market_assistant_tool_runtime import execute_tool_batch
 from app.services.market_assistant_tool_runtime import snapshot_artifact
+from app.tools.market_assistant_tools import ALL_TOOL_IDS
 from app.tools.market_assistant_tools import normalized_tool_call_key
 from app.tools.market_assistant_tools import tool_definitions
 from app.tools.market_assistant_tools import validate_tool_call
@@ -89,7 +90,8 @@ _INSTRUCTIONS = (
     "You are the Market Setup narration assistant. "
     "Narrate the current market setup, confirmation evidence, and portfolio posture "
     "from the tool evidence provided in this conversation. "
-    "Answer in the user's language. Do not invent facts, thresholds, or causality "
+    "Answer in the language required by the newest user message. Only call tools listed "
+    "as authorized in that message. Do not invent facts, thresholds, or causality "
     "that the evidence does not support. When evidence is unavailable, say it is "
     "unavailable rather than guessing."
 )
@@ -318,7 +320,12 @@ async def run_hybrid_narration(
                 optional_rounds=0,
                 executed_calls=executed_calls,
                 started_at=started_at,
-                view=build_view(route, artifacts, question=request["question"]),
+                view=build_view(
+                    route,
+                    artifacts,
+                    question=request["question"],
+                    answer_language=request.get("answer_language"),
+                ),
                 tool_trace=tool_trace,
             )
         _merge_records(artifacts, initial_records, tool_trace, "initial")
@@ -326,9 +333,25 @@ async def run_hybrid_narration(
         await _emit(event_sink, {"type": "initial_tools_completed"})
     if route["route_id"] == "react":
         _seed_snapshot_anchor(artifacts, resolution)
-    view = build_view(route, artifacts, question=request["question"])
-    input_items = _initial_input_items(request["question"], view)
-    tools = definitions(list(tool_ids))
+    view = build_view(
+        route,
+        artifacts,
+        question=request["question"],
+        answer_language=request.get("answer_language"),
+    )
+    history_items = request.get("provider_history") or []
+    input_items = _initial_input_items(
+        request["question"],
+        view,
+        history_items,
+        answer_language=request.get("answer_language")
+        or _question_language(request["question"]),
+        authorized_tool_ids=tool_ids,
+    )
+    current_user_item = input_items[-1]
+    new_provider_items = [current_user_item]
+    generated_provider_items = []
+    tools = definitions(list(ALL_TOOL_IDS))
 
     while True:
         if monotonic() > deadline:
@@ -422,10 +445,15 @@ async def run_hybrid_narration(
                 input_items,
                 next_items(turn),
                 _output_items(accepted, records, rejected),
-                build_view(route, artifacts, question=request["question"]),
             )
+            new_provider_items.extend(next_items(turn))
+            new_provider_items.extend(_output_items(accepted, records, rejected))
+            generated_provider_items.extend(next_items(turn))
+            generated_provider_items.extend(_output_items(accepted, records, rejected))
         else:
             answer_text = turn["output_text"]
+            new_provider_items.extend(next_items(turn))
+            generated_provider_items.extend(next_items(turn))
             if answer_text.strip():
                 generation_status = "answered"
             else:
@@ -441,7 +469,12 @@ async def run_hybrid_narration(
         answer_text = "".join(stream_state["text_parts"])
     else:
         answer_text = _fallback_answer(request)
-    view = build_view(route, artifacts, question=request["question"])
+    view = build_view(
+        route,
+        artifacts,
+        question=request["question"],
+        answer_language=request.get("answer_language"),
+    )
     return _narration_result(
         answer_text=answer_text,
         artifacts=artifacts,
@@ -453,6 +486,9 @@ async def run_hybrid_narration(
         optional_rounds=round_number,
         executed_calls=executed_calls,
         started_at=started_at,
+        provider_items=new_provider_items,
+        current_user_item=current_user_item,
+        generated_provider_items=generated_provider_items,
     )
 
 
@@ -468,6 +504,9 @@ def _narration_result(
     optional_rounds,
     executed_calls,
     started_at,
+    provider_items=None,
+    current_user_item=None,
+    generated_provider_items=None,
 ):
     return {
         "answer_text": answer_text,
@@ -482,6 +521,9 @@ def _narration_result(
             "total_seconds": round(monotonic() - started_at, 4),
         },
         "generation_status": generation_status,
+        "provider_items": list(provider_items or []),
+        "current_user_item": current_user_item,
+        "generated_provider_items": list(generated_provider_items or []),
     }
 
 
@@ -489,30 +531,41 @@ def _view_text(view):
     return json.dumps({"explanation_view": view}, ensure_ascii=False, sort_keys=True)
 
 
-def _message_with_view(message, view):
-    content = list(message["content"])
-    content[1] = {"type": "input_text", "text": _view_text(view)}
-    return {**message, "content": content}
-
-
-def _initial_input_items(question, view):
-    return [
+def _initial_input_items(
+    question,
+    view,
+    history_items=None,
+    answer_language=None,
+    authorized_tool_ids=(),
+):
+    items = list(history_items or [])
+    items.append(
         {
             "type": "message",
             "role": "user",
             "content": [
                 {"type": "input_text", "text": question},
                 {"type": "input_text", "text": _view_text(view)},
+                {
+                    "type": "input_text",
+                    "text": "Answer language: "
+                    + ("Chinese" if answer_language == "zh" else "English"),
+                },
+                {
+                    "type": "input_text",
+                    "text": "Authorized tools for this request: "
+                    + json.dumps(list(authorized_tool_ids), ensure_ascii=False),
+                },
             ],
         }
-    ]
+    )
+    return items
 
 
-def _next_input_items(input_items, response_items, output_items, view):
+def _next_input_items(input_items, response_items, output_items):
     items = list(input_items)
     items.extend(response_items)
     items.extend(output_items)
-    items[0] = _message_with_view(items[0], view)
     return items
 
 
@@ -682,7 +735,8 @@ def _turn_observer(stream_state, event_sink):
 
 
 def _fallback_answer(request):
-    return _FALLBACK_ANSWERS[_question_language(request["question"])]
+    language = request.get("answer_language") or _question_language(request["question"])
+    return _FALLBACK_ANSWERS[language]
 
 
 async def _emit(event_sink, event):
@@ -729,7 +783,7 @@ def _consume_deadlined_task(task):
 
 
 async def _emit_progress(event_sink, stage, request):
-    language = _question_language(request["question"])
+    language = request.get("answer_language") or _question_language(request["question"])
     message = _PROGRESS_MESSAGES[language][stage]
     await _emit(event_sink, {"type": "progress", "stage": stage, "message": message})
 

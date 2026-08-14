@@ -652,6 +652,54 @@ async def test_hybrid_answer_uses_one_narration_turn_and_persists_trace():
     assert deps.saved_trace["answer_text"] == response["answer_text"]
 
 
+def test_persist_conversation_saves_visible_turn_and_exact_provider_items(tmp_path):
+    db_path = tmp_path / "market.sqlite"
+    current_user_item = {
+        "type": "message",
+        "role": "user",
+        "content": [{"type": "input_text", "text": "ok"}],
+    }
+    generated_items = [
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "好的，请选择。"}],
+        }
+    ]
+
+    market_assistant._persist_conversation(
+        {
+            "question": "ok",
+            "conversation_id": "conv_1",
+            "answer_language": "zh",
+        },
+        {
+            "current_user_item": current_user_item,
+            "generated_provider_items": generated_items,
+        },
+        "好的，请选择。",
+        {
+            "message_id": "msg_1",
+            "generated_time": "2026-08-14T00:00:00Z",
+            "generation_status": "narration_validated",
+        },
+        {"connect": market_assistant_db.connect},
+        db_path,
+    )
+
+    con = market_assistant_db.connect(db_path)
+    try:
+        history = market_assistant_db.load_conversation_history(con, "conv_1")
+    finally:
+        con.close()
+
+    assert [item["display"]["text"] for item in history["messages"]] == [
+        "ok",
+        "好的，请选择。",
+    ]
+    assert history["provider_items"] == [current_user_item, *generated_items]
+
+
 @pytest.mark.asyncio
 async def test_hybrid_answer_trace_has_required_fields_and_no_secrets():
     deps = hybrid_dependencies()

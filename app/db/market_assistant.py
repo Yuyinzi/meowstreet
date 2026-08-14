@@ -1,8 +1,10 @@
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
 
 from app.tools.market_assistant_artifacts import validate_artifact
+from app.tools.market_assistant_conversation import validate_checkpoint
 from app.tools.market_setup_explanation_snapshot import canonical_json
 from app.tools.market_setup_explanation_snapshot import finalize_snapshot
 from app.tools.market_setup_explanation_snapshot import validate_snapshot
@@ -105,6 +107,32 @@ create table if not exists answer_traces (
 );
 create index if not exists idx_answer_traces_message
 on answer_traces(message_id);
+create table if not exists assistant_conversations (
+    conversation_id text primary key,
+    preferred_language text not null,
+    created_at text not null,
+    updated_at text not null
+);
+create table if not exists assistant_conversation_messages (
+    conversation_id text not null,
+    sequence integer not null,
+    message_id text not null,
+    display_json text not null,
+    provider_items_json text not null,
+    created_at text not null,
+    primary key (conversation_id, sequence),
+    unique (conversation_id, message_id)
+);
+create index if not exists idx_assistant_conversation_messages_id
+on assistant_conversation_messages(conversation_id, message_id);
+create table if not exists assistant_conversation_checkpoints (
+    conversation_id text not null,
+    through_sequence integer not null,
+    checkpoint_hash text not null,
+    checkpoint_json text not null,
+    created_at text not null,
+    primary key (conversation_id, through_sequence)
+);
 """
 
 
@@ -298,6 +326,9 @@ def _validate_answer_trace_shape(answer_trace):
         answer_trace, "request_controls", "answer trace request controls are invalid"
     )
     _validate_optional_trace_dict(
+        answer_trace, "conversation_context", "answer trace conversation context is invalid"
+    )
+    _validate_optional_trace_dict(
         answer_trace, "route", "answer trace route is invalid"
     )
     _validate_optional_trace_list(
@@ -427,3 +458,268 @@ def load_answer_trace(con, answer_trace_id):
     except (ValueError, TypeError) as exc:
         raise ValueError("answer trace is invalid") from exc
     return payload
+
+
+def _conversation_id(value):
+    normalized = str(value or "").strip()
+    if not normalized:
+        raise ValueError("conversation id is required")
+    return normalized
+
+
+def _conversation_language(value):
+    if value not in {"en", "zh"}:
+        raise ValueError("conversation preferred language is invalid")
+    return value
+
+
+def _conversation_message(message):
+    if not isinstance(message, dict):
+        raise ValueError("conversation message is required")
+    message_id = str(message.get("message_id") or "").strip()
+    if not message_id:
+        raise ValueError("conversation message id is required")
+    display = message.get("display")
+    provider_items = message.get("provider_items")
+    if not isinstance(display, dict):
+        raise ValueError("conversation display message is invalid")
+    if not isinstance(provider_items, list):
+        raise ValueError("conversation provider items are invalid")
+    return message_id, display, provider_items
+
+
+def append_conversation_message(con, *, conversation_id, message, preferred_language):
+    return (
+        append_conversation_turn(
+            con,
+            conversation_id=conversation_id,
+            messages=[message],
+            preferred_language=preferred_language,
+        )
+        == 1
+    )
+
+
+def append_conversation_turn(con, *, conversation_id, messages, preferred_language):
+    normalized_conversation = _conversation_id(conversation_id)
+    language = _conversation_language(preferred_language)
+    if not isinstance(messages, list) or not messages:
+        raise ValueError("conversation messages are required")
+    normalized_messages = []
+    for message in messages:
+        message_id, display, provider_items = _conversation_message(message)
+        normalized_messages.append(
+            {
+                "message_id": message_id,
+                "display_json": canonical_json(display).decode("utf-8"),
+                "provider_items_json": _canonical_text(provider_items),
+                "created_at": str(
+                    message.get("created_at") or "1970-01-01T00:00:00Z"
+                ),
+            }
+        )
+    con.execute("begin immediate")
+    try:
+        sequence_row = con.execute(
+            """
+            select coalesce(max(sequence), 0) as current_sequence
+            from assistant_conversation_messages
+            where conversation_id = ?
+            """,
+            (normalized_conversation,),
+        ).fetchone()
+        sequence = sequence_row["current_sequence"]
+        inserted = 0
+        for message in normalized_messages:
+            existing = con.execute(
+                """
+                select display_json, provider_items_json
+                from assistant_conversation_messages
+                where conversation_id = ? and message_id = ?
+                """,
+                (normalized_conversation, message["message_id"]),
+            ).fetchone()
+            if existing is not None:
+                if (
+                    existing["display_json"] != message["display_json"]
+                    or existing["provider_items_json"]
+                    != message["provider_items_json"]
+                ):
+                    raise ValueError(
+                        "conversation message id conflicts with stored message"
+                    )
+                continue
+            sequence += 1
+            inserted += 1
+            con.execute(
+                """
+                insert into assistant_conversation_messages(
+                    conversation_id, sequence, message_id, display_json,
+                    provider_items_json, created_at
+                ) values (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized_conversation,
+                    sequence,
+                    message["message_id"],
+                    message["display_json"],
+                    message["provider_items_json"],
+                    message["created_at"],
+                ),
+            )
+        created_at = normalized_messages[0]["created_at"]
+        updated_at = normalized_messages[-1]["created_at"]
+        con.execute(
+            """
+            insert into assistant_conversations(
+                conversation_id, preferred_language, created_at, updated_at
+            ) values (?, ?, ?, ?)
+            on conflict(conversation_id) do update set
+                preferred_language = excluded.preferred_language,
+                updated_at = excluded.updated_at
+            """,
+            (normalized_conversation, language, created_at, updated_at),
+        )
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    return inserted
+
+
+def save_conversation_checkpoint(con, *, conversation_id, through_sequence, checkpoint):
+    normalized_conversation = _conversation_id(conversation_id)
+    if not isinstance(through_sequence, int) or through_sequence < 1:
+        raise ValueError("conversation checkpoint sequence is invalid")
+    checkpoint = validate_checkpoint(checkpoint)
+    if checkpoint["through_sequence"] != through_sequence:
+        raise ValueError("conversation checkpoint sequence does not match")
+    checkpoint_json = canonical_json(checkpoint).decode("utf-8")
+    checkpoint_hash = hashlib.sha256(checkpoint_json.encode("utf-8")).hexdigest()
+    created_at = str(checkpoint.get("created_at") or "1970-01-01T00:00:00Z")
+    con.execute("begin immediate")
+    try:
+        sequence_row = con.execute(
+            """
+            select sequence
+            from assistant_conversation_messages
+            where conversation_id = ? and sequence = ?
+            """,
+            (normalized_conversation, through_sequence),
+        ).fetchone()
+        if sequence_row is None:
+            raise ValueError("conversation checkpoint sequence is unavailable")
+        existing = con.execute(
+            """
+            select checkpoint_hash, checkpoint_json
+            from assistant_conversation_checkpoints
+            where conversation_id = ? and through_sequence = ?
+            """,
+            (normalized_conversation, through_sequence),
+        ).fetchone()
+        if existing is not None:
+            if (
+                existing["checkpoint_hash"] != checkpoint_hash
+                or existing["checkpoint_json"] != checkpoint_json
+            ):
+                raise ValueError("conversation checkpoint conflicts with stored checkpoint")
+            con.commit()
+            return False
+        con.execute(
+            """
+            insert into assistant_conversation_checkpoints(
+                conversation_id, through_sequence, checkpoint_hash, checkpoint_json, created_at
+            ) values (?, ?, ?, ?, ?)
+            """,
+            (
+                normalized_conversation,
+                through_sequence,
+                checkpoint_hash,
+                checkpoint_json,
+                created_at,
+            ),
+        )
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    return True
+
+
+def load_conversation_history(con, conversation_id):
+    normalized_conversation = _conversation_id(conversation_id)
+    conversation = con.execute(
+        """
+        select preferred_language
+        from assistant_conversations
+        where conversation_id = ?
+        """,
+        (normalized_conversation,),
+    ).fetchone()
+    if conversation is None:
+        return {"preferred_language": None, "messages": [], "provider_items": [], "checkpoint": None}
+    checkpoint_row = con.execute(
+        """
+        select through_sequence, checkpoint_hash, checkpoint_json
+        from assistant_conversation_checkpoints
+        where conversation_id = ?
+        order by through_sequence desc
+        limit 1
+        """,
+        (normalized_conversation,),
+    ).fetchone()
+    checkpoint = None
+    through_sequence = 0
+    if checkpoint_row is not None:
+        checkpoint_json = checkpoint_row["checkpoint_json"]
+        if hashlib.sha256(checkpoint_json.encode("utf-8")).hexdigest() != checkpoint_row[
+            "checkpoint_hash"
+        ]:
+            raise ValueError("conversation checkpoint integrity check failed")
+        checkpoint = validate_checkpoint(json.loads(checkpoint_json))
+        through_sequence = checkpoint_row["through_sequence"]
+        if checkpoint["through_sequence"] != through_sequence:
+            raise ValueError("conversation checkpoint integrity check failed")
+    rows = con.execute(
+        """
+        select sequence, message_id, display_json, provider_items_json, created_at
+        from assistant_conversation_messages
+        where conversation_id = ?
+        order by sequence asc
+        """,
+        (normalized_conversation,),
+    ).fetchall()
+    messages = [
+        {
+            "sequence": row["sequence"],
+            "message_id": row["message_id"],
+            "display": json.loads(row["display_json"]),
+            "provider_items": json.loads(row["provider_items_json"]),
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+    provider_items = [
+        item
+        for message in messages
+        if message["sequence"] > through_sequence
+        for item in message["provider_items"]
+    ]
+    return {
+        "preferred_language": conversation["preferred_language"],
+        "messages": messages,
+        "provider_items": provider_items,
+        "checkpoint": (
+            {
+                "through_sequence": through_sequence,
+                "checkpoint_hash": checkpoint_row["checkpoint_hash"],
+                "payload": checkpoint,
+            }
+            if checkpoint_row is not None
+            else None
+        ),
+    }
+
+
+def _canonical_text(payload):
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

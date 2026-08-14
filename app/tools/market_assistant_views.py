@@ -225,7 +225,7 @@ _DISPLAY_LABELS = {
 _FALLBACK_LABELS = {"zh": "已确认状态", "en": "approved state"}
 
 
-def build_explanation_view(route, artifacts, *, question):
+def build_explanation_view(route, artifacts, *, question, answer_language=None):
     if not isinstance(route, dict):
         raise ValueError("route is required")
     if not isinstance(artifacts, dict):
@@ -236,7 +236,9 @@ def build_explanation_view(route, artifacts, *, question):
     if view_type not in _VIEW_VERSION_BY_TYPE:
         raise ValueError(f"route view type is unknown: {view_type}")
     version = _view_version(route, artifacts)
-    language = _question_language(question)
+    if answer_language not in {None, "en", "zh"}:
+        raise ValueError("answer language is invalid")
+    language = answer_language or _question_language(question)
     object_map = _object_map(artifacts)
     as_of, evidence_through = _context_dates(artifacts)
     if version == "setup_explanation_v1":

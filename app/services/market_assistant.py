@@ -8,7 +8,11 @@ from datetime import timezone
 from time import monotonic
 
 from app.db.market_assistant import connect
+from app.db.market_assistant import append_conversation_message
+from app.db.market_assistant import append_conversation_turn
 from app.db.market_assistant import load_snapshot
+from app.db.market_assistant import load_conversation_history
+from app.db.market_assistant import save_conversation_checkpoint
 from app.db.market_assistant import save_answer_bundle
 from app.services import market_assistant_tool_runtime
 from app.services.market_assistant_exploration import EXPLORATION_SCHEMA_VERSION
@@ -29,6 +33,9 @@ from app.tools.market_assistant_answers import validate_answer_draft_schema
 from app.tools.market_assistant_claim_audit import AuditValidationError
 from app.tools.market_assistant_claim_audit import build_audit_validation_report
 from app.tools.market_assistant_claim_audit import validate_claim_audit
+from app.tools.market_assistant_conversation import build_checkpoint
+from app.tools.market_assistant_conversation import CHECKPOINT_SCHEMA_VERSION
+from app.tools.market_assistant_conversation import should_compact
 from app.tools.market_assistant_plans import deterministic_plan
 from app.tools.market_assistant_research import RESEARCH_SCHEMA_VERSION
 from app.tools.market_assistant_routes import route_question
@@ -93,6 +100,10 @@ _DEPENDENCY_DEFAULTS = {
     "resolve_current_explanation": resolve_current_explanation,
     "connect": connect,
     "load_snapshot": load_snapshot,
+    "load_conversation_history": load_conversation_history,
+    "append_conversation_message": append_conversation_message,
+    "append_conversation_turn": append_conversation_turn,
+    "save_conversation_checkpoint": save_conversation_checkpoint,
     "deterministic_plan": deterministic_plan,
     "save_bundle": save_answer_bundle,
 }
@@ -107,6 +118,22 @@ _FALLBACK_INTENT_BY_ROUTE = {
     "indicator_method": "method",
     "react": "decision_explanation",
 }
+
+_ENGLISH_LANGUAGE_REQUESTS = (
+    "answer in english",
+    "respond in english",
+    "use english",
+    "用英文",
+    "英文回答",
+)
+
+_CHINESE_LANGUAGE_REQUESTS = (
+    "answer in chinese",
+    "respond in chinese",
+    "use chinese",
+    "用中文",
+    "中文回答",
+)
 
 
 def _dependency(dependencies, name, default=None):
@@ -157,6 +184,246 @@ def _request_id(deps):
     return _new_id("req_")
 
 
+def _prepare_conversation_request(request, deps, db_path):
+    prepared = dict(request)
+    conversation_id = str(prepared.get("conversation_id") or "").strip()
+    if not conversation_id:
+        return prepared
+    con = _dependency(deps, "connect")(db_path)
+    try:
+        history = _dependency(deps, "load_conversation_history")(con, conversation_id)
+        if not history.get("messages") and prepared.get("conversation_bootstrap"):
+            _bootstrap_conversation(
+                con,
+                conversation_id=conversation_id,
+                messages=prepared["conversation_bootstrap"],
+                question=prepared["question"],
+                deps=deps,
+            )
+            history = _dependency(deps, "load_conversation_history")(
+                con, conversation_id
+            )
+        _maybe_compact_conversation(
+            con,
+            history=history,
+            conversation_id=conversation_id,
+            question=prepared["question"],
+            deps=deps,
+        )
+        history = _dependency(deps, "load_conversation_history")(con, conversation_id)
+    finally:
+        con.close()
+    language = _conversation_language(
+        prepared["question"], history.get("preferred_language")
+    )
+    prepared["conversation_id"] = conversation_id
+    prepared["message_id"] = str(prepared.get("message_id") or "").strip() or _new_id(
+        "msg_"
+    )
+    prepared["answer_language"] = language
+    provider_history = _provider_history_with_checkpoint(history)
+    checkpoint = history.get("checkpoint") or {}
+    prepared["provider_history"] = provider_history
+    prepared["conversation_context"] = {
+        "conversation_id": conversation_id,
+        "checkpoint_hash": checkpoint.get("checkpoint_hash"),
+        "checkpoint_through_sequence": checkpoint.get("through_sequence", 0),
+        "provider_history_item_count": len(provider_history),
+        "provider_history_hash": hashlib.sha256(
+            canonical_json({"provider_history": provider_history})
+        ).hexdigest(),
+    }
+    return prepared
+
+
+def _bootstrap_conversation(con, *, conversation_id, messages, question, deps):
+    preferred_language = _bootstrap_language(messages)
+    preferred_language = _conversation_language(question, preferred_language)
+    created_at = _now_iso()
+    stored_messages = []
+    for index, message in enumerate(messages):
+        role = message.get("role")
+        text = str(message.get("text") or "").strip()
+        if role not in {"user", "assistant"} or not text:
+            continue
+        content_type = "input_text" if role == "user" else "output_text"
+        stored_messages.append(
+            {
+                "message_id": f"bootstrap_{index:04d}",
+                "created_at": created_at,
+                "display": {
+                    "role": role,
+                    "text": text,
+                    "source": "local_display_bootstrap",
+                },
+                "provider_items": [
+                    {
+                        "type": "message",
+                        "role": role,
+                        "content": [{"type": content_type, "text": text}],
+                    }
+                ],
+            }
+        )
+    if not stored_messages:
+        return
+    _dependency(deps, "append_conversation_turn")(
+        con,
+        conversation_id=conversation_id,
+        messages=stored_messages,
+        preferred_language=preferred_language,
+    )
+
+
+def _bootstrap_language(messages):
+    for message in reversed(messages):
+        text = str(message.get("text") or "")
+        if any("\u4e00" <= char <= "\u9fff" for char in text):
+            return "zh"
+    return "en"
+
+
+def _maybe_compact_conversation(con, *, history, conversation_id, question, deps):
+    if not history.get("messages"):
+        return
+    projected_items = _provider_history_with_checkpoint(history)
+    projected_items.append(
+        {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": question}],
+        }
+    )
+    config = _runtime_config(deps)
+    context_window_tokens = config.get("context_window_tokens", 1000000)
+    threshold_ratio = config.get("conversation_compaction_ratio", 0.8)
+    if not should_compact(
+        projected_items,
+        context_window_tokens=context_window_tokens,
+        threshold_ratio=threshold_ratio,
+    ):
+        return
+    language = history.get("preferred_language") or _conversation_language(question, None)
+    checkpoint = build_checkpoint(
+        messages=history["messages"],
+        preferred_language=language,
+        created_at=_now_iso(),
+    )
+    save_checkpoint = _dependency(deps, "save_conversation_checkpoint")
+    save_checkpoint(
+        con,
+        conversation_id=conversation_id,
+        through_sequence=checkpoint["through_sequence"],
+        checkpoint=checkpoint,
+    )
+
+
+def _conversation_language(question, preferred_language):
+    normalized = str(question or "").strip()
+    lowered = normalized.lower()
+    if any(phrase in lowered for phrase in _ENGLISH_LANGUAGE_REQUESTS):
+        return "en"
+    if any(phrase in lowered for phrase in _CHINESE_LANGUAGE_REQUESTS):
+        return "zh"
+    if any("\u4e00" <= char <= "\u9fff" for char in normalized):
+        return "zh"
+    if preferred_language in {"en", "zh"}:
+        return preferred_language
+    return "en"
+
+
+def _provider_history_with_checkpoint(history):
+    items = []
+    checkpoint = history.get("checkpoint")
+    if isinstance(checkpoint, dict):
+        payload = checkpoint.get("payload")
+        if isinstance(payload, dict):
+            items.append(
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "Conversation checkpoint: "
+                            + canonical_json(payload).decode("utf-8"),
+                        }
+                    ],
+                }
+            )
+    items.extend(history.get("provider_items") or [])
+    return items
+
+
+def _persist_conversation(request, narration, answer_text, trace, deps, db_path):
+    conversation_id = request.get("conversation_id")
+    if not conversation_id:
+        return
+    current_user_item = narration.get("current_user_item")
+    if not isinstance(current_user_item, dict):
+        current_user_item = {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": request["question"]},
+                {
+                    "type": "input_text",
+                    "text": "Answer language: "
+                    + ("Chinese" if request.get("answer_language") == "zh" else "English"),
+                },
+            ],
+        }
+    user_items = [current_user_item]
+    assistant_items = list(narration.get("generated_provider_items") or [])
+    if trace["generation_status"] == "deterministic_fallback":
+        assistant_items = [
+            item for item in assistant_items if item.get("type") != "message"
+        ]
+        assistant_items.append(
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": answer_text}],
+            }
+        )
+    elif not any(
+        item.get("type") == "message" and item.get("role") == "assistant"
+        for item in assistant_items
+    ):
+        assistant_items = [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": answer_text}],
+            }
+        ]
+    created_at = trace["generated_time"]
+    con = _dependency(deps, "connect")(db_path)
+    try:
+        append_turn = _dependency(deps, "append_conversation_turn")
+        append_turn(
+            con,
+            conversation_id=conversation_id,
+            preferred_language=request.get("answer_language") or "en",
+            messages=[
+                {
+                    "message_id": trace["message_id"],
+                    "created_at": created_at,
+                    "display": {"role": "user", "text": request["question"]},
+                    "provider_items": user_items,
+                },
+                {
+                    "message_id": f"assistant_{trace['message_id']}",
+                    "created_at": created_at,
+                    "display": {"role": "assistant", "text": answer_text},
+                    "provider_items": assistant_items,
+                },
+            ],
+        )
+    finally:
+        con.close()
+
+
 class _StageRecorder:
     def __init__(self, request_id, started_at):
         self._request_id = request_id
@@ -178,6 +445,7 @@ class _StageRecorder:
 async def answer_question(request, *, dependencies, event_sink=None):
     deps = dependencies
     db_path = _dependency(deps, "db_path")
+    request = _prepare_conversation_request(request, deps, db_path)
     request_id = _request_id(deps)
     request_started_at = monotonic()
     recorder = _StageRecorder(request_id, request_started_at)
@@ -310,6 +578,14 @@ async def _answer_hybrid(
     _persist_bundle(
         deps, _dependency(deps, "db_path"), list(narration["artifacts"].values()), trace
     )
+    _persist_conversation(
+        request,
+        narration,
+        answer_text,
+        trace,
+        deps,
+        _dependency(deps, "db_path"),
+    )
     await _emit(
         event_sink,
         {
@@ -360,7 +636,9 @@ async def _answer_legacy(request, resolution, deps, event_sink=None, request_id=
         request, plan, resolution, frozen_artifacts, draft, deps, event_sink
     )
     attempts["plan"] = plan_attempts
-    answer_language = detect_answer_language(request.get("question") or "")
+    answer_language = request.get("answer_language") or detect_answer_language(
+        request.get("question") or ""
+    )
     if generation_status == "unvalidated_debug":
         answer_text = validated.get("answer_text") or ""
         if not answer_text:
@@ -435,6 +713,14 @@ async def _answer_legacy(request, resolution, deps, event_sink=None, request_id=
         runtime_config=_runtime_config(deps),
     )
     _persist_bundle(deps, db_path, referenced, trace)
+    _persist_conversation(
+        request,
+        {"provider_items": []},
+        answer_text,
+        trace,
+        deps,
+        db_path,
+    )
     await _emit(
         event_sink,
         {
@@ -599,7 +885,8 @@ def _build_hybrid_trace(
 ):
     return {
         "answer_trace_id": _new_id("trc_"),
-        "message_id": _new_id("msg_"),
+        "message_id": request.get("message_id") or _new_id("msg_"),
+        "conversation_context": request.get("conversation_context"),
         "resolution": resolution["resolution"],
         "explanation_context_id": resolution["snapshot"]["context_id"],
         "request_controls": _request_controls(request),
@@ -954,7 +1241,9 @@ async def _validate_or_repair_once(
 ):
     attempts = {"draft": 0, "repair": 0}
     validation_error_codes = []
-    answer_language = detect_answer_language(request.get("question") or "")
+    answer_language = request.get("answer_language") or detect_answer_language(
+        request.get("question") or ""
+    )
     if draft is None:
         return None, "fallback", attempts, validation_error_codes
     attempts["draft"] += 1
@@ -1095,7 +1384,8 @@ def build_answer_trace(
 ):
     return {
         "answer_trace_id": _new_id("trc_"),
-        "message_id": _new_id("msg_"),
+        "message_id": request.get("message_id") or _new_id("msg_"),
+        "conversation_context": request.get("conversation_context"),
         "resolution": resolution["resolution"],
         "explanation_context_id": resolution["snapshot"]["context_id"],
         "knowledge_references": _artifact_ids_by_kind(artifacts, "knowledge_record"),
@@ -1153,4 +1443,11 @@ def _model_configuration_fingerprint(config):
         "tool_schema_versions": TOOL_SCHEMA_VERSIONS,
         "assistant_policy_version": ASSISTANT_POLICY_VERSION,
         "prompt_version": PROMPT_VERSION,
+        "conversation_checkpoint_schema_version": CHECKPOINT_SCHEMA_VERSION,
+        "conversation_context_window_size": config.get(
+            "context_window_tokens", 1000000
+        ),
+        "conversation_compaction_ratio": config.get(
+            "conversation_compaction_ratio", 0.8
+        ),
     }

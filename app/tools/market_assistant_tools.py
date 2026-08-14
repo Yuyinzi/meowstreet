@@ -197,6 +197,8 @@ _TOOL_ARGUMENT_MODELS = {
     "research_deep": _ResearchParams,
 }
 
+ALL_TOOL_IDS = tuple(_TOOL_ARGUMENT_MODELS)
+
 _TOOL_DESCRIPTIONS = {
     "get_setup_overview": "read the current market setup overview",
     "get_macro_regime_explanation": "read the current macro regime explanation",

@@ -108,6 +108,12 @@ def load_market_assistant_config(args=None, root=ROOT):
         if claim_validation_value is None
         else _parse_market_bool(claim_validation_value)
     )
+    context_window_tokens = _parse_context_window_tokens(
+        os.getenv("MARKET_ASSISTANT_CONTEXT_WINDOW_TOKENS", "1000000")
+    )
+    conversation_compaction_ratio = _parse_compaction_ratio(
+        os.getenv("MARKET_ASSISTANT_CONVERSATION_COMPACTION_RATIO", "0.8")
+    )
     return {
         "api_key": config["api_key"],
         "base_url": config["base_url"],
@@ -120,6 +126,8 @@ def load_market_assistant_config(args=None, root=ROOT):
         "provider": provider,
         "research_enabled": research_enabled,
         "supports_web_search": supports_web_search,
+        "context_window_tokens": context_window_tokens,
+        "conversation_compaction_ratio": conversation_compaction_ratio,
     }
 
 
@@ -134,6 +142,26 @@ def _parse_market_audit_timeout(value):
         raise RuntimeError(
             "MARKET_ASSISTANT_AUDIT_TIMEOUT_SECONDS must be between 1 and 900"
         )
+    return parsed
+
+
+def _parse_context_window_tokens(value):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("MARKET_ASSISTANT_CONTEXT_WINDOW_TOKENS must be between 1024 and 1000000") from exc
+    if not 1024 <= parsed <= 1000000:
+        raise RuntimeError("MARKET_ASSISTANT_CONTEXT_WINDOW_TOKENS must be between 1024 and 1000000")
+    return parsed
+
+
+def _parse_compaction_ratio(value):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("MARKET_ASSISTANT_CONVERSATION_COMPACTION_RATIO must be between 0.5 and 0.95") from exc
+    if not 0.5 <= parsed <= 0.95:
+        raise RuntimeError("MARKET_ASSISTANT_CONVERSATION_COMPACTION_RATIO must be between 0.5 and 0.95")
     return parsed
 
 

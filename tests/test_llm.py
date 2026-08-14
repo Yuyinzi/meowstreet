@@ -18,6 +18,8 @@ MARKET_ENV_NAMES = (
     "MARKET_ASSISTANT_RESEARCH_PROVIDER",
     "MARKET_ASSISTANT_RESEARCH_ENABLED",
     "MARKET_ASSISTANT_RESEARCH_SUPPORTS_WEB_SEARCH",
+    "MARKET_ASSISTANT_CONTEXT_WINDOW_TOKENS",
+    "MARKET_ASSISTANT_CONVERSATION_COMPACTION_RATIO",
 )
 
 
@@ -243,6 +245,22 @@ def test_load_market_assistant_config_returns_full_config(tmp_path, monkeypatch)
     assert config["provider"] == "openai_responses"
     assert config["research_enabled"] is True
     assert config["supports_web_search"] is False
+    assert config["context_window_tokens"] == 1000000
+    assert config["conversation_compaction_ratio"] == 0.8
+
+
+def test_load_market_assistant_config_parses_conversation_budget(tmp_path, monkeypatch):
+    clear_market_env(monkeypatch)
+    write_env(
+        tmp_path,
+        MARKET_ASSISTANT_CONTEXT_WINDOW_TOKENS="65536",
+        MARKET_ASSISTANT_CONVERSATION_COMPACTION_RATIO="0.75",
+    )
+
+    config = llm.load_market_assistant_config(root=tmp_path)
+
+    assert config["context_window_tokens"] == 65536
+    assert config["conversation_compaction_ratio"] == 0.75
 
 
 def test_load_market_assistant_config_accepts_json_object_mode(tmp_path, monkeypatch):

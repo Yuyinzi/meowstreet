@@ -11,6 +11,7 @@ from app.services.market_assistant_react import run_hybrid_narration
 from app.tools.market_assistant_artifacts import resolve_artifact_ref
 from app.tools.market_assistant_routes import budget_for_mode
 from app.tools.market_assistant_routes import route_question
+from app.tools.market_assistant_tools import ALL_TOOL_IDS
 
 _FALLBACK_ZH = "当前市场证据已收集，但回答生成暂不可用。"
 
@@ -383,6 +384,9 @@ async def test_result_contract_keys():
         "route",
         "timings",
         "generation_status",
+        "provider_items",
+        "current_user_item",
+        "generated_provider_items",
     }
     assert result["generation_status"] == "answered"
 
@@ -536,12 +540,43 @@ async def test_first_turn_input_contains_only_question_and_compact_view():
     assert [part["type"] for part in items[0]["content"]] == [
         "input_text",
         "input_text",
+        "input_text",
+        "input_text",
     ]
     assert items[0]["content"][0]["text"] == "现在市场怎么样？"
     assert "explanation_view" in items[0]["content"][1]["text"]
+    assert items[0]["content"][2]["text"] == "Answer language: Chinese"
+    assert items[0]["content"][3]["text"].startswith(
+        "Authorized tools for this request:"
+    )
     assert not any(item["type"] == "function_call_output" for item in items)
     assert not any(item["type"] == "function_call" for item in items)
     assert len(result["artifacts"]) >= 5
+
+
+@pytest.mark.asyncio
+async def test_first_turn_preserves_prior_provider_history_before_new_message():
+    stream = _ScriptedStream([narration_step("好的，请选择你想继续了解的部分。")])
+    deps = recording_dependencies([], stream=stream)
+    prior = {
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "output_text", "text": "我可以解释信贷或 VIX。"}],
+    }
+    await run_hybrid_narration(
+        {
+            "question": "ok",
+            "answer_language": "zh",
+            "provider_history": [prior],
+        },
+        route=react_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    items = deps.stream_turn.calls[0]["input_items"]
+    assert items[0] == prior
+    assert items[-1]["content"][0]["text"] == "ok"
+    assert len(items) == 2
 
 
 @pytest.mark.asyncio
@@ -632,7 +667,7 @@ async def test_progress_events_use_deterministic_english_copy():
 
 
 @pytest.mark.asyncio
-async def test_deep_analysis_alone_never_adds_research_tools():
+async def test_deep_analysis_keeps_research_schema_but_does_not_authorize_it():
     deps = recording_dependencies([], stream=_ScriptedStream([narration_step()]))
     request = {"question": "讲个笑话", "deep_analysis_requested": True}
     result = await run_hybrid_narration(
@@ -642,9 +677,55 @@ async def test_deep_analysis_alone_never_adds_research_tools():
         dependencies=deps,
     )
     tool_names = [tool["name"] for tool in deps.stream_turn.calls[0]["tools"]]
-    assert not any(name.startswith("research_") for name in tool_names)
+    assert tool_names == list(ALL_TOOL_IDS)
+    assert [name for name in tool_names if name.startswith("research_")] == [
+        "research_focused",
+        "research_standard",
+        "research_deep",
+    ]
+    authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3][
+        "text"
+    ]
+    assert "research_focused" not in authorization
     assert "acquire_research" not in deps.requested
     assert result["generation_status"] == "answered"
+
+
+@pytest.mark.asyncio
+async def test_visible_but_unauthorized_research_tool_is_rejected():
+    deps = recording_dependencies(
+        [],
+        stream=_ScriptedStream(
+            [
+                tool_step(
+                    [
+                        {
+                            "call_id": "call_research",
+                            "tool_name": "research_deep",
+                            "arguments": {
+                                "purpose": "current_events",
+                                "queries": ["latest vix"],
+                                "expected_source_class": "official_publication",
+                            },
+                        }
+                    ]
+                ),
+                narration_step(),
+            ]
+        ),
+    )
+    request = {"question": "讲个笑话", "deep_analysis_requested": True}
+
+    result = await run_hybrid_narration(
+        request,
+        route=route_question(request["question"], deep_analysis=True),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+
+    assert "acquire_research" not in deps.requested
+    assert result["tool_trace"][0]["status"] == "rejected"
+    assert result["tool_trace"][0]["reason"] == "tool_call_invalid"
 
 
 @pytest.mark.asyncio
@@ -662,7 +743,7 @@ async def test_deep_analysis_alone_never_adds_research_tools():
         ),
     ],
 )
-async def test_external_search_adds_only_permitted_research_tier(
+async def test_external_search_keeps_fixed_schema_and_authorizes_requested_tier(
     request_overrides, expected_research
 ):
     deps = recording_dependencies([], stream=_ScriptedStream([narration_step()]))
@@ -679,7 +760,16 @@ async def test_external_search_adds_only_permitted_research_tier(
     )
     tool_names = [tool["name"] for tool in deps.stream_turn.calls[0]["tools"]]
     research = [name for name in tool_names if name.startswith("research_")]
-    assert research == expected_research
+    assert research == ["research_focused", "research_standard", "research_deep"]
+    authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3][
+        "text"
+    ]
+    assert all(name in authorization for name in expected_research)
+    assert all(
+        name not in authorization
+        for name in {"research_focused", "research_standard", "research_deep"}
+        - set(expected_research)
+    )
 
 
 @pytest.mark.asyncio
@@ -1170,7 +1260,7 @@ async def test_react_route_first_turn_carries_minimal_anchor_with_result_labels(
 
 
 @pytest.mark.asyncio
-async def test_final_narration_turn_input_carries_current_view():
+async def test_final_narration_turn_keeps_original_message_view_immutable():
     stream = _ScriptedStream(
         [
             tool_step([vix_confirmation_call()]),
@@ -1185,7 +1275,31 @@ async def test_final_narration_turn_input_carries_current_view():
         dependencies=deps,
     )
     assert len(stream.calls) == 2
+    first_message = stream.calls[0]["input_items"][0]
     final_message = stream.calls[1]["input_items"][0]
-    final_view = json.loads(final_message["content"][1]["text"])["explanation_view"]
-    assert final_view["view_version"] == "react_anchor_v1"
-    assert "results" in final_view
+    assert final_message == first_message
+
+
+@pytest.mark.asyncio
+async def test_provider_items_keep_multi_round_tool_continuity_in_order():
+    stream = _ScriptedStream(
+        [
+            tool_step([vix_confirmation_call()]),
+            narration_step("VIX is not confirming."),
+        ]
+    )
+    deps = recording_dependencies([], stream=stream)
+    result = await run_hybrid_narration(
+        {"question": "Explain VIX."},
+        route=react_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+
+    assert result["provider_items"][0] == result["current_user_item"]
+    assert [item["type"] for item in result["generated_provider_items"]] == [
+        "function_call",
+        "function_call_output",
+    ]
+    assert result["generated_provider_items"][0]["call_id"] == "call_vix"
+    assert result["generated_provider_items"][1]["call_id"] == "call_vix"
