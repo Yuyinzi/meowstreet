@@ -234,6 +234,16 @@ _COMPARISON_MARKERS = (
     "相关",
 )
 
+_SOURCE_MARKERS = (
+    "来源",
+    "数据来源",
+    "source",
+    "comes from",
+    "come from",
+    "where does",
+    "where do",
+)
+
 
 class _Budget(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
@@ -335,6 +345,8 @@ def _is_compound_question(lowered, compact):
     if _contains_any(compact, lowered, _HISTORY_MARKERS):
         return True
     if _contains_any(compact, lowered, _COMPARISON_MARKERS):
+        return True
+    if _contains_any(compact, lowered, _SOURCE_MARKERS):
         return True
     return len(_matched_indicator_ids(lowered, compact)) > 1
 

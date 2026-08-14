@@ -298,7 +298,7 @@ async def run_hybrid_narration(
         initial_started_at = monotonic()
         try:
             initial_records = await _await_within_budget(
-                execute_batch(
+                lambda: execute_batch(
                     initial_calls,
                     request=request,
                     resolution=resolution,
@@ -307,8 +307,8 @@ async def run_hybrid_narration(
                 ),
                 deadline,
             )
-        except asyncio.TimeoutError:
-            generation_status = "budget_exhausted"
+        except _DeadlineExceeded:
+            generation_status = "deadline_exceeded"
             return _narration_result(
                 answer_text="",
                 artifacts=artifacts,
@@ -332,14 +332,14 @@ async def run_hybrid_narration(
 
     while True:
         if monotonic() > deadline:
-            generation_status = "budget_exhausted"
+            generation_status = "deadline_exceeded"
             break
         await _emit(event_sink, {"type": "model_turn_started"})
         if turn_count > 0 or initial_calls:
             await _emit_progress(event_sink, "writing_answer", request)
         try:
             turn = await _await_within_budget(
-                stream_turn(
+                lambda: stream_turn(
                     client,
                     model=model,
                     input_items=input_items,
@@ -350,6 +350,12 @@ async def run_hybrid_narration(
                 ),
                 deadline,
             )
+        except _DeadlineExceeded:
+            if stream_state["has_output"]:
+                generation_status = "narration_interrupted"
+            else:
+                generation_status = "deadline_exceeded"
+            break
         except asyncio.TimeoutError:
             if stream_state["has_output"]:
                 generation_status = "narration_interrupted"
@@ -386,12 +392,12 @@ async def run_hybrid_narration(
             records = []
             if accepted:
                 if monotonic() > deadline:
-                    generation_status = "budget_exhausted"
+                    generation_status = "deadline_exceeded"
                     break
                 await _emit_batch_progress(event_sink, accepted, request)
                 try:
                     records = await _await_within_budget(
-                        execute_batch(
+                        lambda: execute_batch(
                             accepted,
                             request=request,
                             resolution=resolution,
@@ -400,8 +406,8 @@ async def run_hybrid_narration(
                         ),
                         deadline,
                     )
-                except asyncio.TimeoutError:
-                    generation_status = "budget_exhausted"
+                except _DeadlineExceeded:
+                    generation_status = "deadline_exceeded"
                     break
                 _merge_records(artifacts, records, tool_trace, "optional")
                 seen_calls.update(_call_keys(normalize_key, accepted))
@@ -691,11 +697,20 @@ async def _emit(event_sink, event):
         await result
 
 
-async def _await_within_budget(coro, deadline):
+class _DeadlineExceeded(asyncio.TimeoutError):
+    pass
+
+
+async def _await_within_budget(coro_factory, deadline):
     remaining = deadline - monotonic()
     if remaining <= 0:
-        raise asyncio.TimeoutError()
-    return await asyncio.wait_for(coro, timeout=remaining)
+        raise _DeadlineExceeded()
+    coro = coro_factory()
+    try:
+        return await asyncio.wait_for(coro, timeout=remaining)
+    except asyncio.TimeoutError:
+        coro.close()
+        raise _DeadlineExceeded() from None
 
 
 async def _emit_progress(event_sink, stage, request):

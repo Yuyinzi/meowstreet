@@ -622,6 +622,7 @@ def _build_hybrid_trace(
         "plan": None,
         "structured_claims": None,
         "generation_status": generation_status,
+        "narration_status": narration["generation_status"],
         "attempts": attempts,
         "validation_error_codes": sorted(validation_error_codes),
         "prompt": {

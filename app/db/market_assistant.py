@@ -275,6 +275,9 @@ def _validate_answer_trace_shape(answer_trace):
     generation_status = answer_trace.get("generation_status")
     if generation_status not in _TRACE_GENERATION_STATUSES:
         raise ValueError("answer trace generation status is invalid")
+    narration_status = answer_trace.get("narration_status")
+    if narration_status is not None and not isinstance(narration_status, str):
+        raise ValueError("answer trace narration status is invalid")
     attempts = answer_trace.get("attempts")
     if not isinstance(attempts, dict):
         raise ValueError("answer trace attempts are invalid")

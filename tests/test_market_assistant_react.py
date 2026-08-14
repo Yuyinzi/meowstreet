@@ -911,7 +911,7 @@ async def test_deadline_bounds_slow_model_turn_before_answer():
         resolution=resolved_context("ctx_1"),
         dependencies=deps,
     )
-    assert result["generation_status"] == "narration_unavailable"
+    assert result["generation_status"] == "deadline_exceeded"
     assert result["answer_text"] == _FALLBACK_ZH
     assert len(stream.calls) == 1
 
@@ -947,7 +947,7 @@ async def test_deadline_bounds_slow_optional_tool_batch():
         resolution=resolved_context("ctx_1"),
         dependencies=deps,
     )
-    assert result["generation_status"] == "budget_exhausted"
+    assert result["generation_status"] == "deadline_exceeded"
     assert result["answer_text"] == _FALLBACK_ZH
 
 
@@ -969,7 +969,7 @@ async def test_deadline_bounds_slow_initial_tools_batch():
         resolution=resolved_context("ctx_1"),
         dependencies=deps,
     )
-    assert result["generation_status"] == "budget_exhausted"
+    assert result["generation_status"] == "deadline_exceeded"
     assert result["answer_text"] == ""
     assert result["view"]["view_version"] == "setup_explanation_v1"
 

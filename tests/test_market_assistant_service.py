@@ -606,6 +606,7 @@ async def test_narration_failure_before_text_renders_deterministic_fallback(capl
     assert response["generation_status"] == "deterministic_fallback"
     assert response["answer_text"].startswith("Market Setup decision result:")
     assert deps.saved_trace["generation_status"] == "deterministic_fallback"
+    assert deps.saved_trace["narration_status"] == "narration_unavailable"
     assert any(event["type"] == "answer_replace" for event in sink.events)
     validations = [event for event in sink.events if event["type"] == "validation"]
     assert validations == [
@@ -2039,6 +2040,45 @@ async def test_deadline_expiry_stops_loop_before_first_model_turn(monkeypatch):
         dependencies=deps,
     )
 
-    assert result["generation_status"] == "budget_exhausted"
+    assert result["generation_status"] == "deadline_exceeded"
     assert stream.calls == []
     assert deps.executed == []
+
+
+@pytest.mark.asyncio
+async def test_deadline_exhaustion_freezes_deadline_exceeded_in_trace():
+    class _SlowNarrationStream:
+        async def __call__(
+            self,
+            client,
+            *,
+            model,
+            input_items,
+            instructions,
+            tools,
+            reasoning_effort,
+            observer=None,
+        ):
+            await asyncio.sleep(0.10)
+            return {
+                "output_text": "现在的市场偏积极，但仍需保持谨慎。",
+                "tool_calls": [],
+                "response_items": [],
+                "usage": None,
+                "timings": {},
+            }
+
+    route = route_question("现在市场怎么样？", deep_analysis=False)
+    route["budget"] = {**route["budget"], "deadline_seconds": 0.02}
+    deps = hybrid_dependencies(stream=_SlowNarrationStream(), route=route)
+    sink = RecordingSink()
+
+    response = await market_assistant.answer_question(
+        current_question("现在市场怎么样？"),
+        dependencies=deps,
+        event_sink=sink,
+    )
+
+    assert response["generation_status"] == "deterministic_fallback"
+    assert deps.saved_trace["generation_status"] == "deterministic_fallback"
+    assert deps.saved_trace["narration_status"] == "deadline_exceeded"
