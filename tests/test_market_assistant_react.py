@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import json
 from copy import deepcopy
@@ -7,6 +8,7 @@ import pytest
 from app.services.market_assistant_react import _translate_initial_operation
 from app.services.market_assistant_react import run_hybrid_narration
 from app.tools.market_assistant_artifacts import resolve_artifact_ref
+from app.tools.market_assistant_routes import budget_for_mode
 from app.tools.market_assistant_routes import route_question
 
 _FALLBACK_ZH = "当前市场证据已收集，但回答生成暂不可用。"
@@ -862,6 +864,114 @@ async def test_result_byte_budget_stops_optional_loop():
     )
     assert result["generation_status"] == "budget_exhausted"
     assert result["answer_text"] == _FALLBACK_ZH
+
+
+class _SlowStream:
+    def __init__(self, delay, output_text="现在的市场偏积极，但仍需保持谨慎。"):
+        self.delay = delay
+        self.output_text = output_text
+        self.calls = []
+
+    async def __call__(
+        self,
+        client,
+        *,
+        model,
+        input_items,
+        instructions,
+        tools,
+        reasoning_effort,
+        observer=None,
+    ):
+        self.calls.append(1)
+        await asyncio.sleep(self.delay)
+        return {
+            "output_text": self.output_text,
+            "tool_calls": [],
+            "response_items": [],
+            "usage": None,
+            "timings": {},
+        }
+
+
+def _budget_route(deadline_seconds, route=None):
+    route = route or current_setup_route()
+    route["budget"] = budget_for_mode(False)
+    route["budget"]["deadline_seconds"] = deadline_seconds
+    return route
+
+
+@pytest.mark.asyncio
+async def test_deadline_bounds_slow_model_turn_before_answer():
+    stream = _SlowStream(delay=0.10)
+    deps = recording_dependencies([], stream=stream)
+    result = await run_hybrid_narration(
+        {"question": "现在市场怎么样？"},
+        route=_budget_route(0.02),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    assert result["generation_status"] == "narration_unavailable"
+    assert result["answer_text"] == _FALLBACK_ZH
+    assert len(stream.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_deadline_bounds_slow_optional_tool_batch():
+    stream = _ScriptedStream(
+        [
+            tool_step(
+                [
+                    {
+                        "call_id": "call_overview",
+                        "tool_name": "get_setup_overview",
+                        "arguments": {},
+                    }
+                ]
+            ),
+            narration_step(),
+        ]
+    )
+    deps = recording_dependencies([], stream=stream)
+
+    from app.services.market_assistant_tool_runtime import execute_tool_batch
+
+    async def slow_execute_batch(calls, **kwargs):
+        await asyncio.sleep(0.10)
+        return await execute_tool_batch(calls, **kwargs)
+
+    deps.execute_tool_batch = slow_execute_batch
+    result = await run_hybrid_narration(
+        {"question": "讲个笑话"},
+        route=_budget_route(0.02, route=react_route()),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    assert result["generation_status"] == "budget_exhausted"
+    assert result["answer_text"] == _FALLBACK_ZH
+
+
+@pytest.mark.asyncio
+async def test_deadline_bounds_slow_initial_tools_batch():
+    stream = _ScriptedStream([narration_step()])
+    deps = recording_dependencies([], stream=stream)
+
+    from app.services.market_assistant_tool_runtime import execute_tool_batch
+
+    async def slow_execute_batch(calls, **kwargs):
+        await asyncio.sleep(0.10)
+        return await execute_tool_batch(calls, **kwargs)
+
+    deps.execute_tool_batch = slow_execute_batch
+    result = await run_hybrid_narration(
+        {"question": "现在市场怎么样？"},
+        route=_budget_route(0.02),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    assert result["generation_status"] == "budget_exhausted"
+    assert result["answer_text"] == ""
+    assert result["view"]["view_version"] == "setup_explanation_v1"
 
 
 def test_translate_initial_operation_maps_indicator_operations():

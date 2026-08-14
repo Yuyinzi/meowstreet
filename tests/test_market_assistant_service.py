@@ -524,15 +524,16 @@ async def test_audit_failure_visibility():
 
 
 @pytest.mark.asyncio
-async def test_disabled_claim_validation_persists_narration_validation_disabled():
+async def test_disabled_claim_validation_persists_narration_validation_disabled(caplog):
     deps = hybrid_dependencies(config=_config(claim_validation_enabled=False))
     sink = RecordingSink()
 
-    response = await market_assistant.answer_question(
-        current_question("现在市场怎么样？"),
-        dependencies=deps,
-        event_sink=sink,
-    )
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        response = await market_assistant.answer_question(
+            current_question("现在市场怎么样？"),
+            dependencies=deps,
+            event_sink=sink,
+        )
 
     assert response["generation_status"] == "narration_validation_disabled"
     assert response["answer_text"] == "现在的市场偏积极，但仍需保持谨慎。"
@@ -545,6 +546,7 @@ async def test_disabled_claim_validation_persists_narration_validation_disabled(
     assert deps.saved_trace["generation_status"] == "narration_validation_disabled"
     assert deps.saved_trace["claim_audit"]["audit"] is None
     assert deps.saved_trace["attempts"] == {"narration": 1, "audit": 0}
+    assert "audit_completed" not in _observed_stages(caplog)
 
 
 @pytest.mark.asyncio

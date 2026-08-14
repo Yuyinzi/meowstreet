@@ -287,8 +287,8 @@ async def _answer_hybrid(
         ) = await _run_claim_audit(narration, frozen_artifacts, deps)
         if validation_status != "disabled":
             attempts["audit"] = 1
-        if recorder is not None:
-            recorder.record("audit_completed")
+            if recorder is not None:
+                recorder.record("audit_completed")
         await _emit_validation(event_sink, validation_status, validation_error_codes)
     generated_at = _now_iso()
     trace = _build_hybrid_trace(

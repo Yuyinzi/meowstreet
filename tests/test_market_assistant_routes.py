@@ -194,6 +194,34 @@ def test_why_market_setup_question_not_hijacked_by_overview_marker():
     assert route["route_id"] == "react"
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "explain the market setup and show VIX history",
+        "what is the market setup and how has credit changed over six months?",
+        "解释市场状态，并比较最近六个月的VIX和信贷变化",
+        "explain the market setup and how has credit changed over six months?",
+        "what is the current market setup and how has vix trended recently",
+    ],
+)
+def test_compound_overview_questions_route_to_react(question):
+    route = route_question(question, deep_analysis=False)
+    assert route["route_id"] == "react"
+    assert route["routing_source"] == "react"
+    assert route["initial_operations"] == []
+
+
+def test_simple_overview_questions_still_route_to_overview():
+    for question in (
+        "explain the market setup",
+        "现在市场怎么样",
+        "what is the current market setup",
+        "解释市场情况",
+    ):
+        route = route_question(question, deep_analysis=False)
+        assert route["route_id"] == "current_setup_overview", question
+
+
 def test_explain_how_indicator_is_calculated_stays_on_indicator_route():
     route = route_question("explain how vix is calculated", deep_analysis=False)
     assert route["route_id"] == "indicator_method"

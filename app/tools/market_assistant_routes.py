@@ -205,6 +205,35 @@ _METHOD_MARKERS = (
     "measurement",
 )
 
+_HISTORY_MARKERS = (
+    "历史",
+    "过去",
+    "走势",
+    "变化",
+    "history",
+    "historical",
+    "recent",
+    "recently",
+    "six months",
+    "over the last",
+    "over the past",
+    "changed",
+    "changes",
+    "trend",
+)
+
+_COMPARISON_MARKERS = (
+    "比较",
+    "对比",
+    "compare",
+    "comparison",
+    "comparing",
+    "versus",
+    "relationship",
+    "关系",
+    "相关",
+)
+
 
 class _Budget(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
@@ -266,7 +295,11 @@ def validate_route(payload: dict) -> dict:
 def _route(normalized):
     lowered = normalized.lower()
     compact = re.sub(r"\s+", "", normalized)
-    if _is_overview_question(lowered, compact):
+    if _is_compound_question(lowered, compact):
+        return _route_match(_REACT_ROUTE_ID)
+    if _is_overview_question(lowered, compact) and not _has_why_clause(
+        lowered, compact
+    ):
         return _route_match("current_setup_overview")
     indicator_match = _indicator_route(lowered, compact)
     if indicator_match is not None:
@@ -292,6 +325,18 @@ def _explanation_route(lowered, compact):
 
 def _is_overview_question(lowered, compact):
     return _contains_any(compact, lowered, _OVERVIEW_MARKERS)
+
+
+def _has_why_clause(lowered, compact):
+    return "为什么" in compact or "why" in lowered
+
+
+def _is_compound_question(lowered, compact):
+    if _contains_any(compact, lowered, _HISTORY_MARKERS):
+        return True
+    if _contains_any(compact, lowered, _COMPARISON_MARKERS):
+        return True
+    return len(_matched_indicator_ids(lowered, compact)) > 1
 
 
 def _indicator_route(lowered, compact):

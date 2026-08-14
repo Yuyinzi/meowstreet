@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import json
 import re
@@ -295,13 +296,31 @@ async def run_hybrid_narration(
     if initial_calls:
         await _emit(event_sink, {"type": "initial_tools_started"})
         initial_started_at = monotonic()
-        initial_records = await execute_batch(
-            initial_calls,
-            request=request,
-            resolution=resolution,
-            dependencies=dependencies,
-            created_at=created_at,
-        )
+        try:
+            initial_records = await _await_within_budget(
+                execute_batch(
+                    initial_calls,
+                    request=request,
+                    resolution=resolution,
+                    dependencies=dependencies,
+                    created_at=created_at,
+                ),
+                deadline,
+            )
+        except asyncio.TimeoutError:
+            generation_status = "budget_exhausted"
+            return _narration_result(
+                answer_text="",
+                artifacts=artifacts,
+                route=route,
+                generation_status=generation_status,
+                initial_tools_seconds=round(monotonic() - initial_started_at, 4),
+                optional_rounds=0,
+                executed_calls=executed_calls,
+                started_at=started_at,
+                view=build_view(route, artifacts, question=request["question"]),
+                tool_trace=tool_trace,
+            )
         _merge_records(artifacts, initial_records, tool_trace, "initial")
         initial_tools_seconds = round(monotonic() - initial_started_at, 4)
         await _emit(event_sink, {"type": "initial_tools_completed"})
@@ -319,15 +338,24 @@ async def run_hybrid_narration(
         if turn_count > 0 or initial_calls:
             await _emit_progress(event_sink, "writing_answer", request)
         try:
-            turn = await stream_turn(
-                client,
-                model=model,
-                input_items=input_items,
-                instructions=instructions,
-                tools=tools,
-                reasoning_effort=reasoning_effort,
-                observer=observer,
+            turn = await _await_within_budget(
+                stream_turn(
+                    client,
+                    model=model,
+                    input_items=input_items,
+                    instructions=instructions,
+                    tools=tools,
+                    reasoning_effort=reasoning_effort,
+                    observer=observer,
+                ),
+                deadline,
             )
+        except asyncio.TimeoutError:
+            if stream_state["has_output"]:
+                generation_status = "narration_interrupted"
+            else:
+                generation_status = "narration_unavailable"
+            break
         except Exception:
             if stream_state["has_output"]:
                 generation_status = "narration_interrupted"
@@ -361,13 +389,20 @@ async def run_hybrid_narration(
                     generation_status = "budget_exhausted"
                     break
                 await _emit_batch_progress(event_sink, accepted, request)
-                records = await execute_batch(
-                    accepted,
-                    request=request,
-                    resolution=resolution,
-                    dependencies=dependencies,
-                    created_at=created_at,
-                )
+                try:
+                    records = await _await_within_budget(
+                        execute_batch(
+                            accepted,
+                            request=request,
+                            resolution=resolution,
+                            dependencies=dependencies,
+                            created_at=created_at,
+                        ),
+                        deadline,
+                    )
+                except asyncio.TimeoutError:
+                    generation_status = "budget_exhausted"
+                    break
                 _merge_records(artifacts, records, tool_trace, "optional")
                 seen_calls.update(_call_keys(normalize_key, accepted))
                 result_bytes += _result_bytes(measure, records)
@@ -401,6 +436,33 @@ async def run_hybrid_narration(
     else:
         answer_text = _fallback_answer(request)
     view = build_view(route, artifacts, question=request["question"])
+    return _narration_result(
+        answer_text=answer_text,
+        artifacts=artifacts,
+        view=view,
+        tool_trace=tool_trace,
+        route=route,
+        generation_status=generation_status,
+        initial_tools_seconds=initial_tools_seconds,
+        optional_rounds=round_number,
+        executed_calls=executed_calls,
+        started_at=started_at,
+    )
+
+
+def _narration_result(
+    *,
+    answer_text,
+    artifacts,
+    view,
+    tool_trace,
+    route,
+    generation_status,
+    initial_tools_seconds,
+    optional_rounds,
+    executed_calls,
+    started_at,
+):
     return {
         "answer_text": answer_text,
         "artifacts": artifacts,
@@ -409,7 +471,7 @@ async def run_hybrid_narration(
         "route": route,
         "timings": {
             "initial_tools_seconds": initial_tools_seconds,
-            "optional_rounds": round_number,
+            "optional_rounds": optional_rounds,
             "executed_calls": executed_calls,
             "total_seconds": round(monotonic() - started_at, 4),
         },
@@ -627,6 +689,13 @@ async def _emit(event_sink, event):
         result = event_sink(event)
     if inspect.isawaitable(result):
         await result
+
+
+async def _await_within_budget(coro, deadline):
+    remaining = deadline - monotonic()
+    if remaining <= 0:
+        raise asyncio.TimeoutError()
+    return await asyncio.wait_for(coro, timeout=remaining)
 
 
 async def _emit_progress(event_sink, stage, request):
