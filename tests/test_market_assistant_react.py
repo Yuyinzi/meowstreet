@@ -5,6 +5,7 @@ from copy import deepcopy
 
 import pytest
 
+from app.services.market_assistant_react import _DeadlineExceeded
 from app.services.market_assistant_react import _translate_initial_operation
 from app.services.market_assistant_react import run_hybrid_narration
 from app.tools.market_assistant_artifacts import resolve_artifact_ref
@@ -972,6 +973,39 @@ async def test_deadline_bounds_slow_initial_tools_batch():
     assert result["generation_status"] == "deadline_exceeded"
     assert result["answer_text"] == ""
     assert result["view"]["view_version"] == "setup_explanation_v1"
+
+
+@pytest.mark.asyncio
+async def test_provider_timeout_is_not_misclassified_as_deadline():
+    from app.services.market_assistant_react import _await_within_budget
+
+    async def provider_timeout():
+        raise asyncio.TimeoutError("provider slow")
+
+    with pytest.raises(asyncio.TimeoutError) as exc_info:
+        await _await_within_budget(lambda: provider_timeout(), 1e9)
+    assert not isinstance(exc_info.value, _DeadlineExceeded)
+
+
+@pytest.mark.asyncio
+async def test_model_timeout_under_remaining_budget_is_narration_unavailable():
+    async def provider_timeout_stream(client, **kwargs):
+        raise asyncio.TimeoutError("provider slow")
+
+    stream = _ScriptedStream([narration_step()])
+    deps = recording_dependencies([], stream=stream)
+    deps.stream_turn = provider_timeout_stream
+    route = current_setup_route()
+    route["budget"] = budget_for_mode(False)
+    route["budget"]["deadline_seconds"] = 30.0
+    result = await run_hybrid_narration(
+        {"question": "现在市场怎么样？"},
+        route=route,
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    assert result["generation_status"] == "narration_unavailable"
+    assert result["answer_text"] == _FALLBACK_ZH
 
 
 def test_translate_initial_operation_maps_indicator_operations():

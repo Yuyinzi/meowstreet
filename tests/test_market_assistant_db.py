@@ -664,6 +664,33 @@ class TestAnswerBundle:
         loaded = market_assistant.load_answer_trace(con, trace["answer_trace_id"])
         assert loaded["generation_status"] == "validation_failed_visible"
 
+    def test_save_answer_trace_accepts_valid_narration_statuses(self, tmp_path):
+        for index, status in enumerate(
+            (
+                "answered",
+                "budget_exhausted",
+                "deadline_exceeded",
+                "duplicate_tool_call",
+                "narration_interrupted",
+                "narration_unavailable",
+            )
+        ):
+            con = market_assistant.connect(tmp_path / "assistant.sqlite")
+            trace = hybrid_answer_trace()
+            trace["answer_trace_id"] = f"trace_{index}"
+            trace["narration_status"] = status
+            market_assistant.save_answer_bundle(con, artifacts=[], answer_trace=trace)
+            loaded = market_assistant.load_answer_trace(con, trace["answer_trace_id"])
+            assert loaded["narration_status"] == status
+
+    def test_save_answer_trace_rejects_unknown_narration_status(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        trace = hybrid_answer_trace()
+        trace["narration_status"] = "anything"
+
+        with pytest.raises(ValueError, match="narration status is invalid"):
+            market_assistant.save_answer_bundle(con, artifacts=[], answer_trace=trace)
+
     def test_save_answer_bundle_identical_artifact_is_idempotent(self, tmp_path):
         con = market_assistant.connect(tmp_path / "assistant.sqlite")
         artifact = knowledge_record_artifact()

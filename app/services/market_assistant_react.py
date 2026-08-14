@@ -705,12 +705,27 @@ async def _await_within_budget(coro_factory, deadline):
     remaining = deadline - monotonic()
     if remaining <= 0:
         raise _DeadlineExceeded()
-    coro = coro_factory()
+    task = asyncio.create_task(coro_factory())
     try:
-        return await asyncio.wait_for(coro, timeout=remaining)
-    except asyncio.TimeoutError:
-        coro.close()
-        raise _DeadlineExceeded() from None
+        done, _ = await asyncio.wait({task}, timeout=remaining)
+    except asyncio.CancelledError:
+        task.cancel()
+        task.add_done_callback(_consume_deadlined_task)
+        raise
+    if task not in done:
+        task.cancel()
+        task.add_done_callback(_consume_deadlined_task)
+        raise _DeadlineExceeded()
+    return task.result()
+
+
+def _consume_deadlined_task(task):
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        return
+    except Exception:
+        pass
 
 
 async def _emit_progress(event_sink, stage, request):

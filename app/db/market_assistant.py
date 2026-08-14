@@ -229,6 +229,17 @@ _TRACE_GENERATION_STATUSES = frozenset(
     }
 )
 
+_NARRATION_STATUSES = frozenset(
+    {
+        "answered",
+        "budget_exhausted",
+        "deadline_exceeded",
+        "duplicate_tool_call",
+        "narration_interrupted",
+        "narration_unavailable",
+    }
+)
+
 _FINGERPRINT_SECRET_MARKERS = ("api_key", "apikey", "secret", "token", "password")
 
 
@@ -276,7 +287,7 @@ def _validate_answer_trace_shape(answer_trace):
     if generation_status not in _TRACE_GENERATION_STATUSES:
         raise ValueError("answer trace generation status is invalid")
     narration_status = answer_trace.get("narration_status")
-    if narration_status is not None and not isinstance(narration_status, str):
+    if narration_status is not None and narration_status not in _NARRATION_STATUSES:
         raise ValueError("answer trace narration status is invalid")
     attempts = answer_trace.get("attempts")
     if not isinstance(attempts, dict):
