@@ -320,6 +320,16 @@ def test_question_accepts_valid_tone_values(assistant_env, monkeypatch):
     assert captured["request"]["tone"] == "beginner_cat"
 
 
+def test_question_invalid_tone_returns_400(assistant_env):
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={"question": "Why?", "mode": "current", "tone": "puppy"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "question request is invalid"
+
+
 def test_stream_accepts_deep_analysis_without_external_search(monkeypatch):
     captured = {}
 
