@@ -187,6 +187,15 @@ node --check static/method-system.js
 python3 scripts/build_method.py
 ```
 
+### Build frontend assets
+
+The macro dashboard is compiled from ES modules under `frontend/src/macro-dashboard/` into `static/dist/macro-dashboard.js` and `static/dist/macro-dashboard.css` with Vite. Rebuild after changing frontend source.
+
+```bash
+npm install
+npm run build
+```
+
 There is no linter (no ruff, flake8, mypy) configured for this project.
 
 ## Code Style Guidelines
