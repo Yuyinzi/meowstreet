@@ -11,6 +11,7 @@ from app.services.market_assistant_react import run_hybrid_narration
 from app.tools.market_assistant_artifacts import resolve_artifact_ref
 from app.tools.market_assistant_routes import budget_for_mode
 from app.tools.market_assistant_routes import route_question
+from app.tools.market_assistant_tools import ALL_TOOL_IDS
 
 _FALLBACK_ZH = "当前市场证据已收集，但回答生成暂不可用。"
 
@@ -699,7 +700,7 @@ async def test_progress_events_use_deterministic_english_copy():
 
 
 @pytest.mark.asyncio
-async def test_deep_analysis_exposes_only_authorized_tools():
+async def test_deep_analysis_keeps_fixed_schema_but_does_not_authorize_research():
     deps = recording_dependencies([], stream=_ScriptedStream([narration_step()]))
     request = {"question": "讲个笑话", "deep_analysis_requested": True}
     result = await run_hybrid_narration(
@@ -709,23 +710,40 @@ async def test_deep_analysis_exposes_only_authorized_tools():
         dependencies=deps,
     )
     tool_names = [tool["name"] for tool in deps.stream_turn.calls[0]["tools"]]
-    assert tool_names == [
-        "get_setup_overview",
-        "get_macro_regime_explanation",
-        "get_confirmation_test",
-        "get_confirmation_tests",
-        "get_posture_explanation",
-        "get_approved_counterfactuals",
-        "get_indicator_knowledge",
-        "query_indicator_history",
-        "compare_snapshots",
-        "get_evidence_detail",
+    assert tool_names == list(ALL_TOOL_IDS)
+    assert [name for name in tool_names if name.startswith("research_")] == [
+        "research_focused",
+        "research_standard",
+        "research_deep",
     ]
-    assert not any(name.startswith("research_") for name in tool_names)
     authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3]["text"]
     assert "research_focused" not in authorization
     assert "acquire_research" not in deps.requested
     assert result["generation_status"] == "answered"
+
+
+@pytest.mark.asyncio
+async def test_deterministic_and_react_routes_send_identical_tool_schemas():
+    deterministic_stream = _ScriptedStream([narration_step()])
+    react_stream = _ScriptedStream([narration_step()])
+
+    await run_hybrid_narration(
+        {"question": "现在市场怎么样？"},
+        route=current_setup_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=recording_dependencies([], stream=deterministic_stream),
+    )
+    await run_hybrid_narration(
+        {"question": "讲个笑话"},
+        route=react_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=recording_dependencies([], stream=react_stream),
+    )
+
+    deterministic_tools = deterministic_stream.calls[0]["tools"]
+    react_tools = react_stream.calls[0]["tools"]
+    assert deterministic_tools == react_tools
+    assert [tool["name"] for tool in deterministic_tools] == list(ALL_TOOL_IDS)
 
 
 @pytest.mark.asyncio
@@ -780,7 +798,7 @@ async def test_visible_but_unauthorized_research_tool_is_rejected():
         ),
     ],
 )
-async def test_external_search_exposes_only_requested_research_tier(
+async def test_external_search_keeps_fixed_schema_and_authorizes_requested_tier(
     request_overrides, expected_research
 ):
     deps = recording_dependencies([], stream=_ScriptedStream([narration_step()]))
@@ -797,7 +815,7 @@ async def test_external_search_exposes_only_requested_research_tier(
     )
     tool_names = [tool["name"] for tool in deps.stream_turn.calls[0]["tools"]]
     research = [name for name in tool_names if name.startswith("research_")]
-    assert research == expected_research
+    assert research == ["research_focused", "research_standard", "research_deep"]
     authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3]["text"]
     assert all(name in authorization for name in expected_research)
     assert all(

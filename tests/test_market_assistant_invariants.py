@@ -14,6 +14,7 @@ from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.routers import market_assistant as market_assistant_router
 from app.services import market_assistant as market_assistant_service
 from app.services import market_setup_current
+from app.services.market_assistant_react import run_hybrid_narration
 from app.services.market_assistant_tool_runtime import (
     _approved_counterfactuals_artifact,
 )
@@ -26,6 +27,7 @@ from app.tools import market_setup_explanation_snapshot
 from app.tools import market_setup_predicates
 from app.tools import market_setup_v2
 from app.tools.market_assistant_plans import validate_task_plan
+from app.tools.market_assistant_routes import route_question
 from app.tools.market_assistant_views import build_explanation_view
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1285,3 +1287,195 @@ def test_llm_disabled_configuration_keeps_market_setup_intact(monkeypatch, tmp_p
     assert response.status_code == 200
     assert response.json()["generation_status"] == "fallback"
     assert decision_projection(before) == decision_projection(after)
+
+
+def _inject_detail_only_policy_values(resolution):
+    for fact in resolution["snapshot"]["evidence"]:
+        if fact["fact_id"] == "macro_policy_response":
+            explanation = fact.setdefault("explanation", {})
+            policy_read = explanation.setdefault("policy_read", {})
+            policy_read["reason"] = "detail_only_policy_reason_7f21"
+            policy_read["policy_action"] = "hold"
+            policy_read["overall_bias"] = "mild_hawkish"
+        if fact["fact_id"] == "macro_financial_conditions":
+            fact.setdefault("explanation", {}).setdefault("details", {})[
+                "curve_status"
+            ] = "inverted"
+        if fact["fact_id"] == "consumer_demand_outlook":
+            fact.setdefault("explanation", {})["percentile_zone"] = "elevated"
+    return resolution
+
+
+class _PromptDeps:
+    def __init__(self, stream):
+        self.client = object()
+        self.model = "assistant-model"
+        self.reasoning_effort = "medium"
+        self.stream_turn = stream
+        self.event_sink = None
+        self.db_path = ":memory:"
+        self.requested = []
+        self.config = {
+            "model": "assistant-model",
+            "research_model": "research-model",
+            "provider": "openai_responses",
+            "research_enabled": True,
+            "supports_web_search": True,
+            "api_key": "sk-secret-test-key",
+            "base_url": None,
+        }
+
+    def connect(self, db_path):
+        self.requested.append("connect")
+        return _DummyCon()
+
+    def load_snapshot(self, con, context_id):
+        self.requested.append("load_snapshot")
+        return None
+
+
+class _PromptStream:
+    def __init__(self, steps):
+        self.steps = list(steps)
+        self.calls = []
+
+    async def __call__(
+        self,
+        client,
+        *,
+        model,
+        input_items,
+        instructions,
+        tools,
+        reasoning_effort,
+        observer=None,
+    ):
+        step = self.steps.pop(0)
+        self.calls.append({"input_items": input_items, "tools": tools})
+        return step["result"]
+
+
+def _prompt_narration_step(text="现在的市场偏积极，但仍需保持谨慎。"):
+    return {
+        "result": {
+            "output_text": text,
+            "tool_calls": [],
+            "response_items": [],
+            "usage": None,
+            "timings": {},
+        }
+    }
+
+
+def _prompt_tool_step(calls):
+    response_items = [
+        {
+            "type": "function_call",
+            "call_id": call["call_id"],
+            "name": call["tool_name"],
+            "arguments": json.dumps(
+                call["arguments"], ensure_ascii=False, sort_keys=True
+            ),
+        }
+        for call in calls
+    ]
+    return {
+        "result": {
+            "output_text": "",
+            "tool_calls": list(calls),
+            "response_items": response_items,
+            "usage": None,
+            "timings": {},
+        }
+    }
+
+
+def _first_turn_explanation_view(stream):
+    first_message = stream.calls[0]["input_items"][0]
+    view_text = first_message["content"][1]["text"]
+    return json.loads(view_text)["explanation_view"]
+
+
+@pytest.mark.asyncio
+async def test_overview_initial_prompt_omits_detail_only_explanation_values(resolver):
+    resolution = _inject_detail_only_policy_values(resolver.resolve())
+    stream = _PromptStream([_prompt_narration_step()])
+    deps = _PromptDeps(stream)
+    await run_hybrid_narration(
+        {"question": "现在市场怎么样？"},
+        route=route_question("现在市场怎么样？", deep_analysis=False),
+        resolution=resolution,
+        dependencies=deps,
+    )
+    serialized = json.dumps(stream.calls[0]["input_items"], ensure_ascii=False)
+    for forbidden in (
+        "detail_only_policy_reason_7f21",
+        "policy_action",
+        "overall_bias",
+        "curve_status",
+        "percentile_zone",
+    ):
+        assert forbidden not in serialized
+
+
+@pytest.mark.asyncio
+async def test_policy_detail_route_initial_prompt_contains_bounded_policy_detail(
+    resolver,
+):
+    resolution = _inject_detail_only_policy_values(resolver.resolve())
+    stream = _PromptStream([_prompt_narration_step()])
+    deps = _PromptDeps(stream)
+    question = "美联储目前是加息、降息还是维持？"
+    route = route_question(question, deep_analysis=False)
+    assert route["route_id"] == "evidence_detail"
+    await run_hybrid_narration(
+        {"question": question},
+        route=route,
+        resolution=resolution,
+        dependencies=deps,
+    )
+    view = _first_turn_explanation_view(stream)
+    assert view["view_version"] == "evidence_detail_v1"
+    assert view["current"]["policy_action"] == "hold"
+    assert view["current"]["overall_bias"] == "mild_hawkish"
+    assert view["drivers"]["policy_reason"] == "detail_only_policy_reason_7f21"
+    serialized = json.dumps(stream.calls[0]["input_items"], ensure_ascii=False)
+    assert "snapshot_hash" not in serialized
+    assert "decision_fingerprint" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_react_route_prompt_stays_compact_until_validated_detail_output(
+    resolver,
+):
+    resolution = _inject_detail_only_policy_values(resolver.resolve())
+    detail_call = {
+        "call_id": "call_policy_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        },
+    }
+    stream = _PromptStream([_prompt_tool_step([detail_call]), _prompt_narration_step()])
+    deps = _PromptDeps(stream)
+    await run_hybrid_narration(
+        {"question": "美联储目前是加息、降息还是维持？"},
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=resolution,
+        dependencies=deps,
+    )
+    assert len(stream.calls) == 2
+    anchor = _first_turn_explanation_view(stream)
+    assert anchor["view_version"] == "react_anchor_v1"
+    first_serialized = json.dumps(stream.calls[0]["input_items"], ensure_ascii=False)
+    assert "detail_only_policy_reason_7f21" not in first_serialized
+    assert "policy_action" not in first_serialized
+    second_input = stream.calls[1]["input_items"]
+    outputs = [item for item in second_input if item["type"] == "function_call_output"]
+    assert len(outputs) == 1
+    assert outputs[0]["call_id"] == "call_policy_detail"
+    output_text = outputs[0]["output"]
+    assert "detail_only_policy_reason_7f21" in output_text
+    assert "policy_action" in output_text
+    assert "overall_bias" in output_text
