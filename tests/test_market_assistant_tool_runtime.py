@@ -1,8 +1,12 @@
 import asyncio
 import json
+from datetime import date, timedelta
 
 import pytest
 
+from app.db import macro_indicators
+from app.db import us_rates_liquidity as us_rates_liquidity_db
+from app.services.market_assistant_exploration import execute_exploration
 from app.services.market_assistant_tool_runtime import execute_tool_batch
 from app.services.market_assistant_tool_runtime import execute_tool_call
 
@@ -603,3 +607,112 @@ async def test_call_records_expose_only_safe_fields():
     serialized = json.dumps(record)
     assert "api_key" not in serialized
     assert "sk-secret-test-key" not in serialized
+
+
+def _credit_series_dates():
+    start = date(2026, 3, 2)
+    current = start
+    dates = []
+    while current <= date(2026, 8, 10):
+        dates.append(current)
+        current = current + timedelta(days=7)
+    return dates
+
+
+def _credit_series_points(value, *, high_value=None):
+    return [
+        {
+            "date": current.isoformat(),
+            "value": (
+                high_value
+                if high_value is not None and current >= date(2026, 7, 6)
+                else value
+            ),
+            "source": "fred_ice_bofa",
+        }
+        for current in _credit_series_dates()
+    ]
+
+
+def credit_dependencies(tmp_path):
+    db_path = tmp_path / "runtime_credit.sqlite"
+    con = us_rates_liquidity_db.connect(db_path)
+    macro_indicators.connect(db_path)
+    us_rates_liquidity_db.replace_rate_series_points(
+        con,
+        {
+            "series_id": "treasury_10y",
+            "title": "10-Year Treasury",
+            "instrument_type": "nominal_treasury",
+            "maturity_months": 120,
+            "units": "percent",
+            "source_workbook": "Benchmark_Yields_US.xlsm",
+            "source_sheet": "Data",
+        },
+        [
+            {
+                "date": current.isoformat(),
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            }
+            for current in _credit_series_dates()
+        ],
+    )
+    macro_indicators.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "bbb_corporate_yield",
+            "title": "BBB Corporate Yield",
+            "units": "percent",
+            "source": "BAMLC0A4CBBBEY.csv",
+        },
+        _credit_series_points(5.00),
+    )
+    macro_indicators.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "ccc_corporate_yield",
+            "title": "CCC Corporate Yield",
+            "units": "percent",
+            "source": "BAMLH0A3HYC.csv",
+        },
+        _credit_series_points(8.00, high_value=10.00),
+    )
+    return {
+        "db_path": str(db_path),
+        "connect": us_rates_liquidity_db.connect,
+        "exploration": execute_exploration,
+    }
+
+
+@pytest.mark.asyncio
+async def test_credit_history_tool_call_returns_bounded_categorical_artifact(tmp_path):
+    dependencies = credit_dependencies(tmp_path)
+    artifact = await execute_tool_call(
+        {
+            "call_id": "call_credit_history",
+            "tool_name": "query_indicator_history",
+            "arguments": {
+                "indicator_id": "credit_conditions",
+                "window": "6m",
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=dependencies,
+        created_at="2026-08-13T00:00:00Z",
+    )
+
+    artifact_payload = artifact["artifact"]
+    assert artifact_payload["artifact_kind"] == "exploration_result"
+    assert artifact_payload["primary_authority"] == "local_observation"
+    assert artifact_payload["market_setup_relation"] == "non_decision"
+    assert (
+        artifact_payload["payload"]["query_contract"]["indicator_id"]
+        == "credit_conditions"
+    )
+    assert (
+        artifact_payload["payload"]["deterministic_statistics"]["last_state"]
+        is not None
+    )

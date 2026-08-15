@@ -1469,3 +1469,161 @@ def test_hybrid_stream_react_two_rounds_immutable_artifacts_and_audit(
     vix_output = json.loads(_function_call_output(second_items, "call_vix"))
     assert vix_output["primary_authority"] == "decision_fact"
     assert vix_output["market_setup_relation"] == "authoritative_snapshot"
+
+
+def _credit_conditions_exploration_payload(query, result_id):
+    rows = [
+        {
+            "date": "2026-05-01",
+            "state": "healthy",
+            "method_version": "credit_conditions_history_v1",
+            "decision_method_version": "credit_conditions_v1",
+        },
+        {
+            "date": "2026-07-06",
+            "state": "weak_credit_warning",
+            "method_version": "credit_conditions_history_v1",
+            "decision_method_version": "credit_conditions_v1",
+        },
+        {
+            "date": "2026-08-10",
+            "state": "risk_rising",
+            "method_version": "credit_conditions_history_v1",
+            "decision_method_version": "credit_conditions_v1",
+        },
+    ]
+    statistics = {
+        "first_state": "healthy",
+        "last_state": "risk_rising",
+        "state_counts": {
+            "healthy": 1,
+            "weak_credit_warning": 1,
+            "risk_rising": 1,
+        },
+        "transition_count": 2,
+        "latest_transition": {
+            "date": "2026-08-10",
+            "from_state": "weak_credit_warning",
+            "to_state": "risk_rising",
+        },
+        "current_run_start": "2026-08-10",
+        "current_run_observations": 1,
+    }
+    objects = [
+        {
+            "object_type": "observation_row",
+            "object_id": f"credit_conditions:{row['date']}",
+            "authority": "local_observation",
+            "payload": row,
+        }
+        for row in rows
+    ]
+    for statistic_id, statistic_value in statistics.items():
+        objects.append(
+            {
+                "object_type": "deterministic_statistic",
+                "object_id": statistic_id,
+                "authority": "local_observation",
+                "payload": {
+                    "statistic_id": statistic_id,
+                    "value": statistic_value,
+                },
+            }
+        )
+    return {
+        "exploration_result_id": result_id,
+        "artifact_schema_version": "market_assistant_exploration_result_v1",
+        "authority": "local_observation",
+        "market_setup_relation": "non_decision",
+        "query_contract": deepcopy(query),
+        "observed_window": {"start": query.get("start"), "end": query.get("end")},
+        "data_through": "2026-08-10",
+        "rows": rows,
+        "deterministic_statistics": statistics,
+        "gaps": {"policy": "not_applicable", "missing_periods": None},
+        "object_index": objects,
+        "result_hash": "a" * 64,
+    }
+
+
+def test_hybrid_stream_react_consumes_categorical_credit_history_without_new_tool(
+    monkeypatch, tmp_path
+):
+    answer = (
+        "本地信贷条件历史显示，5月初为健康状态，7月转为弱信用警告，"
+        "截至 2026-08-10 已转为风险上升，这一状态从 2026-08-10 开始延续。"
+        "最新一次状态转换发生在 2026-08-10，从弱信用警告转向风险上升。"
+        "这是对本地已接受观测的解释，不独立改变市场设置。"
+    )
+    exploration_payloads = {}
+
+    def fake_exploration(con, query, *, result_id, created_at):
+        payload = _credit_conditions_exploration_payload(query, result_id)
+        exploration_payloads[result_id] = deepcopy(payload)
+        return payload
+
+    steps = [
+        _tool_step(
+            [
+                {
+                    "call_id": "call_credit_history",
+                    "tool_name": "query_indicator_history",
+                    "arguments": {
+                        "indicator_id": "credit_conditions",
+                        "window": "6m",
+                    },
+                }
+            ]
+        ),
+        _narration_step(answer, deltas=[answer]),
+    ]
+    result = _hybrid_e2e(
+        monkeypatch,
+        tmp_path,
+        steps=steps,
+        question="信贷条件是最近才恶化，还是已经持续一段时间？",
+        exploration=fake_exploration,
+    )
+
+    events = result["events"]
+    types = [event["type"] for event in events]
+    assert result["status_code"] == 200
+    assert types.count("model_turn_started") == 2
+    assert any(
+        event == {"type": "validation", "status": "passed", "error_codes": []}
+        for event in events
+    )
+
+    con = market_assistant_db.connect(result["db_path"])
+    try:
+        trace = market_assistant_db.load_answer_trace(
+            con, events[-1]["answer_trace_id"]
+        )
+    finally:
+        con.close()
+    assert trace["generation_status"] == "narration_validated"
+    assert trace["route"]["route_id"] == "react"
+    assert len(trace["exploration_result_ids"]) == 1
+    executed = [entry for entry in trace["tool_trace"] if entry["status"] == "executed"]
+    assert {entry["tool_name"] for entry in executed} == {"query_indicator_history"}
+
+    second_items = result["turn"].calls[1]["input_items"]
+    credit_output = json.loads(
+        _function_call_output(second_items, "call_credit_history")
+    )
+    assert credit_output["status"] == "available"
+    assert credit_output["artifact_kind"] == "exploration_result"
+    assert credit_output["primary_authority"] == "local_observation"
+    assert credit_output["market_setup_relation"] == "non_decision"
+    exploration_id = credit_output["artifact_id"]
+    assert exploration_id in exploration_payloads
+    assert credit_output["payload"] == exploration_payloads[exploration_id]
+    statistics = credit_output["payload"]["deterministic_statistics"]
+    assert statistics["last_state"] == "risk_rising"
+    assert statistics["current_run_start"] == "2026-08-10"
+    assert statistics["latest_transition"]["to_state"] == "risk_rising"
+    assert any(
+        obj["object_type"] == "observation_row"
+        and obj["object_id"].startswith("credit_conditions:")
+        for obj in credit_output["payload"]["object_index"]
+    )
