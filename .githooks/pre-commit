@@ -6,3 +6,9 @@ if [ -n "$blocked_paths" ]; then
   printf '%s\n' 'Commit blocked: docs/superpowers/ must not be committed.' >&2
   exit 1
 fi
+
+data_paths=$(git diff --cached --name-only -- data/)
+if [ -n "$data_paths" ]; then
+  printf '%s\n' 'Commit blocked: data/ is local-only and must not be committed.' >&2
+  exit 1
+fi

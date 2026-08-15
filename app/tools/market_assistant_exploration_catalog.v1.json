@@ -1,0 +1,152 @@
+{
+  "version": "market_assistant_exploration_catalog_v1",
+  "indicators": [
+    {
+      "indicator_id": "ism_manufacturing_pmi",
+      "loader": "macro_indicator_points",
+      "local_series": "ism_manufacturing_pmi",
+      "frequency": "monthly",
+      "unit": "index",
+      "value_type": "numeric",
+      "query_kinds": [
+        "indicator_current",
+        "indicator_history",
+        "period_comparison",
+        "release_history"
+      ],
+      "maximum_rows": 1200,
+      "date_requirements": {
+        "start": true,
+        "end": true
+      },
+      "gap_policy": "missing_periods_reported"
+    },
+    {
+      "indicator_id": "vix",
+      "loader": "macro_indicator_points",
+      "local_series": "vix",
+      "frequency": "daily",
+      "unit": "index",
+      "value_type": "numeric",
+      "query_kinds": [
+        "indicator_current",
+        "indicator_history",
+        "period_comparison",
+        "release_history"
+      ],
+      "maximum_rows": 5000,
+      "date_requirements": {
+        "start": true,
+        "end": true
+      },
+      "gap_policy": "not_applicable"
+    },
+    {
+      "indicator_id": "m2_money_stock",
+      "loader": "macro_indicator_points",
+      "local_series": "m2_money_stock",
+      "frequency": "monthly",
+      "unit": "source unit",
+      "value_type": "numeric",
+      "query_kinds": [
+        "indicator_current",
+        "indicator_history",
+        "period_comparison",
+        "release_history"
+      ],
+      "maximum_rows": 1200,
+      "date_requirements": {
+        "start": true,
+        "end": true
+      },
+      "gap_policy": "missing_periods_reported"
+    },
+    {
+      "indicator_id": "initial_claims_sa",
+      "loader": "economic_confirmation_current",
+      "local_series": "initial_claims_sa",
+      "frequency": "weekly",
+      "unit": "claims",
+      "value_type": "numeric",
+      "query_kinds": [
+        "indicator_current",
+        "indicator_history",
+        "period_comparison",
+        "release_history"
+      ],
+      "maximum_rows": 5200,
+      "date_requirements": {
+        "start": true,
+        "end": true
+      },
+      "gap_policy": "missing_periods_reported"
+    },
+    {
+      "indicator_id": "continuing_claims_sa",
+      "loader": "economic_confirmation_current",
+      "local_series": "continuing_claims_sa",
+      "frequency": "weekly",
+      "unit": "claims",
+      "value_type": "numeric",
+      "query_kinds": [
+        "indicator_current",
+        "indicator_history",
+        "period_comparison",
+        "release_history"
+      ],
+      "maximum_rows": 5200,
+      "date_requirements": {
+        "start": true,
+        "end": true
+      },
+      "gap_policy": "missing_periods_reported"
+    },
+    {
+      "indicator_id": "sp500_close",
+      "loader": "benchmark_prices",
+      "local_series": "us_sp500",
+      "frequency": "daily",
+      "unit": "index",
+      "value_type": "numeric",
+      "query_kinds": [
+        "indicator_current",
+        "indicator_history",
+        "period_comparison"
+      ],
+      "maximum_rows": 5000,
+      "date_requirements": {
+        "start": true,
+        "end": true
+      },
+      "gap_policy": "not_applicable"
+    },
+    {
+      "indicator_id": "credit_conditions",
+      "loader": "credit_conditions_history",
+      "local_series": "credit_conditions",
+      "frequency": "daily",
+      "unit": "state",
+      "value_type": "categorical",
+      "method_version": "credit_conditions_history_v1",
+      "decision_method_version": "credit_conditions_v1",
+      "state_values": [
+        "healthy",
+        "weak_credit_warning",
+        "mixed",
+        "risk_rising",
+        "crisis_stress",
+        "missing"
+      ],
+      "query_kinds": [
+        "indicator_current",
+        "indicator_history"
+      ],
+      "maximum_rows": 5000,
+      "date_requirements": {
+        "start": true,
+        "end": true
+      },
+      "gap_policy": "not_applicable"
+    }
+  ]
+}

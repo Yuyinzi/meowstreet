@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import httpx
@@ -233,5 +234,8 @@ def test_command_id_does_not_conflict_with_evaluate_id():
 
 
 def test_local_investing_artifacts_are_ignored():
-    gitignore = Path(".gitignore").read_text(encoding="utf-8")
-    assert "/data/private/investing_chrome_profile/" in gitignore
+    result = subprocess.run(
+        ["git", "check-ignore", "--quiet", "--", "data/private/investing_chrome_profile/example"],
+        check=False,
+    )
+    assert result.returncode == 0

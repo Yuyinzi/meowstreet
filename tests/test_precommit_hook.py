@@ -51,6 +51,25 @@ def test_precommit_hook_rejects_force_staged_superpowers_docs(tmp_path):
     assert "docs/superpowers/" in result.stderr
 
 
+def test_precommit_hook_rejects_force_staged_data_file(tmp_path):
+    repository = _init_repository(tmp_path)
+    document = repository / "data" / "private" / "example.json"
+    document.parent.mkdir(parents=True)
+    document.write_text("private data\n")
+    _run_git(repository, "add", "-f", "data/private/example.json")
+
+    result = _run_git(
+        repository,
+        "commit",
+        "-m",
+        "attempt prohibited data commit",
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "data/" in result.stderr
+
+
 def test_precommit_hook_allows_other_staged_files(tmp_path):
     repository = _init_repository(tmp_path)
     document = repository / "readme.txt"

@@ -1,5 +1,6 @@
 import json
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,9 @@ from app.services import market_assistant_exploration
 from app.tools import market_assistant_exploration as exploration_tools
 from app.tools.market_assistant_artifacts import validate_artifact
 from app.tools.market_assistant_exploration import validate_exploration_query
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def credit_history_connection(tmp_path):
@@ -391,6 +395,16 @@ def test_catalog_registers_seven_indicators():
         "sp500_close",
         "credit_conditions",
     ]
+
+
+def test_default_catalog_loads_from_tracked_app_tools_path():
+    assert exploration_tools.EXPLORATION_CATALOG_PATH == (
+        ROOT / "app" / "tools" / "market_assistant_exploration_catalog.v1.json"
+    )
+    assert exploration_tools.EXPLORATION_CATALOG_PATH.is_file()
+    assert exploration_tools.load_exploration_catalog()["version"] == (
+        "market_assistant_exploration_catalog_v1"
+    )
 
 
 def test_catalog_requires_registered_value_type():

@@ -12,7 +12,8 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPLORATION_CATALOG_PATH = (
-    ROOT / "data" / "local_system" / "market_assistant_exploration_catalog.v1.json"
+    Path(__file__).resolve().parent
+    / "market_assistant_exploration_catalog.v1.json"
 )
 
 QUERY_KINDS = (
