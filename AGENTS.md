@@ -147,7 +147,10 @@ python3 -m venv .venv
 
 ### Run all tests
 
+The macro dashboard static tests load the bundled assets at `static/dist/`. Rebuild them before running tests after any frontend change:
+
 ```bash
+npm run build
 .venv/bin/pytest -q
 ```
 
@@ -179,6 +182,7 @@ python3 -m py_compile app/api.py
 
 ```bash
 node --check static/method-system.js
+node --check static/dist/macro-dashboard.js
 ```
 
 ### Build the method method artifact
