@@ -514,6 +514,17 @@
       : "market-assistant-message-status";
   }
 
+  function clearStreamStatus(stream) {
+    stream.statusEl.textContent = "";
+    stream.statusEl.className = "market-assistant-message-status";
+  }
+
+  function completeStreamStatus(stream) {
+    stream.statusEl.textContent = COMPLETION_NOTICE;
+    stream.statusEl.className = "market-assistant-message-status";
+    stream.element.appendChild(stream.statusEl);
+  }
+
   function renderThinking() {
     const target = getActiveMessageStatus();
     if (!target) return;
@@ -587,6 +598,9 @@
     textEl.className = "market-assistant-message-text";
     const statusEl = document.createElement("div");
     statusEl.className = "market-assistant-message-status";
+    statusEl.setAttribute("role", "status");
+    statusEl.setAttribute("aria-live", "polite");
+    statusEl.setAttribute("aria-atomic", "true");
     const article = document.createElement("div");
     article.className = "market-assistant-message market-assistant-message-assistant";
     article.setAttribute("aria-busy", "true");
@@ -630,6 +644,7 @@
         clearProgress();
         break;
       case "validation":
+        clearStreamStatus(stream);
         if (event.status === "disabled") {
           stream.message.validation = event.status;
           renderValidationDisabledNotice();
@@ -670,10 +685,11 @@
           stream.element.appendChild(heading);
           stream.element.appendChild(renderCitations(stream.message.citations));
         }
-        stream.element.setAttribute("aria-busy", "false");
         if (stream.message.validation === "disabled") {
           renderValidationDisabledNotice();
         }
+        completeStreamStatus(stream);
+        stream.element.setAttribute("aria-busy", "false");
         pushAssistantMessage(stream.message);
         break;
     }
@@ -795,6 +811,7 @@
     const el = elements();
     const question = String(el.question.value || "").trim();
     if (!question || state.busy) return;
+    renderStatus("", false);
     state.busy = true;
     el.submit.disabled = true;
     if (el.newConversation) el.newConversation.disabled = true;
@@ -827,7 +844,6 @@
           applyStreamEvent(stream, event);
         },
       });
-      renderStatus(COMPLETION_NOTICE, false);
       emitClientTiming(requestId, timing.durations());
     } catch (error) {
       state.error = String(error.message || "request failed");

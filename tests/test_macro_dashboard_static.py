@@ -9558,7 +9558,7 @@ def test_market_assistant_stream_truncated_without_terminal_event_is_interrupted
     }
 
 
-def test_market_assistant_stream_completion_announces_in_status():
+def test_market_assistant_stream_completion_announces_on_final_message_status():
     payload = _run_market_assistant_harness(
         """
         global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
@@ -9568,8 +9568,14 @@ def test_market_assistant_stream_completion_announces_in_status():
         ]) });
         elements.marketAssistantQuestion.value = "Will this work?";
         await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[1];
+        const messageStatus = assistant.children.find(
+          (child) => child.className === "market-assistant-message-status"
+        );
         console.log(JSON.stringify({
-          status: getActiveStatus().textContent,
+          messageStatus: messageStatus.textContent,
+          messageStatusIsLast: assistant.children.at(-1) === messageStatus,
+          globalStatus: elements.marketAssistantStatus.textContent,
           busyAfter: elements.marketAssistantLog.children[1].attrs["aria-busy"],
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
         }));
@@ -9577,10 +9583,110 @@ def test_market_assistant_stream_completion_announces_in_status():
     )
 
     assert payload == {
-        "status": "已生成回答",
+        "messageStatus": "已生成回答",
+        "messageStatusIsLast": True,
+        "globalStatus": "",
         "busyAfter": "false",
         "submitEnabled": True,
     }
+
+
+def test_market_assistant_stream_completion_status_is_live_and_last_after_content():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {
+          type: "validation",
+          status: "passed",
+          error_codes: [],
+        });
+        hooks.applyStreamEvent(stream, {
+          type: "complete",
+          generation_status: "validated_first_pass",
+          answer_trace_id: "trace_1",
+          citations: [{
+            title: "Market source",
+            url: "https://example.com/market",
+            source_id: "source_1",
+          }],
+          resolution: { mode: "current" },
+        });
+        const validationBadge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        const citations = stream.element.children.find(
+          (child) => child.className === "market-assistant-citations"
+        );
+        console.log(JSON.stringify({
+          role: stream.statusEl.attrs.role,
+          ariaLive: stream.statusEl.attrs["aria-live"],
+          ariaAtomic: stream.statusEl.attrs["aria-atomic"],
+          hasValidationBadge: Boolean(validationBadge),
+          hasCitations: Boolean(citations),
+          statusIsLast: stream.element.children.at(-1) === stream.statusEl,
+        }));
+        """
+    )
+
+    assert payload == {
+        "role": "status",
+        "ariaLive": "polite",
+        "ariaAtomic": "true",
+        "hasValidationBadge": True,
+        "hasCitations": True,
+        "statusIsLast": True,
+    }
+
+
+def test_market_assistant_stream_disabled_validation_completion_is_message_local():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"status","status":"validating"}\\n',
+          '{"type":"validation","status":"disabled","error_codes":[]}\\n',
+          '{"type":"complete","generation_status":"narration_validation_disabled",'
+          + '"answer_trace_id":"trace_1","citations":[],"resolution":{"mode":"current"}}\\n',
+        ]) });
+        elements.marketAssistantQuestion.value = "现在市场怎么样？";
+        await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[1];
+        const messageStatus = assistant.children.find(
+          (child) => child.className === "market-assistant-message-status"
+        );
+        console.log(JSON.stringify({
+          messageStatus: messageStatus.textContent,
+          messageStatusIsLast: assistant.children.at(-1) === messageStatus,
+          globalStatus: elements.marketAssistantStatus.textContent,
+          validationNotice: elements.marketAssistantValidationDisabledNotice.textContent,
+        }));
+        """
+    )
+
+    assert payload == {
+        "messageStatus": "已生成回答",
+        "messageStatusIsLast": True,
+        "globalStatus": "",
+        "validationNotice": "Claim validation 当前已关闭",
+    }
+
+
+def test_market_assistant_stream_validation_clears_validating_status():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "status", status: "validating" });
+        hooks.applyStreamEvent(stream, {
+          type: "validation",
+          status: "disabled",
+          error_codes: [],
+        });
+        console.log(JSON.stringify({
+          messageStatus: stream.statusEl.textContent,
+        }));
+        """
+    )
+
+    assert payload == {"messageStatus": ""}
 
 
 def test_market_assistant_stream_message_aria_busy_lifecycle():
@@ -9658,6 +9764,42 @@ def test_market_assistant_stream_null_body_treated_as_stream_failure():
         "questionPreserved": True,
         "submitEnabled": True,
         "logChildren": 1,
+    }
+
+
+def test_market_assistant_stream_success_clears_prior_global_error():
+    payload = _run_market_assistant_harness(
+        """
+        const responses = [
+          { ok: true, status: 200, body: null },
+          { ok: true, status: 200, body: streamedBody([
+            '{"type":"answer_delta","delta":"现在"}\\n',
+            '{"type":"complete","generation_status":"validated_first_pass",'
+            + '"answer_trace_id":"trace_1","citations":[],"resolution":{"mode":"current"}}\\n',
+          ]) },
+        ];
+        global.fetch = async () => responses.shift();
+        elements.marketAssistantQuestion.value = "第一次问题";
+        await hooks.handleSubmit();
+        const errorStatus = elements.marketAssistantStatus.textContent;
+        elements.marketAssistantQuestion.value = "第二次问题";
+        await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[2];
+        const messageStatus = assistant.children.find(
+          (child) => child.className === "market-assistant-message-status"
+        );
+        console.log(JSON.stringify({
+          errorStatus,
+          globalStatus: elements.marketAssistantStatus.textContent,
+          messageStatus: messageStatus.textContent,
+        }));
+        """
+    )
+
+    assert payload == {
+        "errorStatus": "The assistant could not answer right now. Your question is preserved.",
+        "globalStatus": "",
+        "messageStatus": "已生成回答",
     }
 
 
