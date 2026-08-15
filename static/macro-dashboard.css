@@ -7090,6 +7090,21 @@ h2 {
   font-size: 12px;
 }
 
+.market-assistant-message-status {
+  margin: 4px 0 0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #7A4B14;
+  background: #FBF0DE;
+  border-left: 3px solid #E3C78F;
+}
+
+.market-assistant-message-status:empty {
+  display: none;
+}
+
 .market-assistant-validation {
   margin: 0;
   padding: 8px 10px;

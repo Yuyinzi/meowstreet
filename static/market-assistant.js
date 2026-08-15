@@ -496,41 +496,50 @@
     return list;
   }
 
-  function renderStatus(text, isError) {
+  function getActiveMessageStatus() {
     const el = elements();
-    if (!el.status) return;
-    el.status.textContent = text;
-    el.status.className = text && isError
-      ? "market-assistant-status market-assistant-status-error"
-      : "market-assistant-status";
+    const active = el.log
+      ? el.log.querySelector('.market-assistant-message[aria-busy="true"] .market-assistant-message-status')
+      : null;
+    if (active) return active;
+    return el.status || null;
+  }
+
+  function renderStatus(text, isError) {
+    const target = getActiveMessageStatus();
+    if (!target) return;
+    target.textContent = text;
+    target.className = text && isError
+      ? "market-assistant-message-status market-assistant-status-error"
+      : "market-assistant-message-status";
   }
 
   function renderThinking() {
-    const el = elements();
-    if (!el.status) return;
-    el.status.textContent = THINKING_TEXT;
-    el.status.className = "market-assistant-status market-assistant-thinking";
+    const target = getActiveMessageStatus();
+    if (!target) return;
+    target.textContent = THINKING_TEXT;
+    target.className = "market-assistant-message-status market-assistant-thinking";
   }
 
   function clearThinking() {
-    const el = elements();
-    if (!el.status || el.status.textContent !== THINKING_TEXT) return;
-    el.status.textContent = "";
-    el.status.className = "market-assistant-status";
+    const target = getActiveMessageStatus();
+    if (!target || target.textContent !== THINKING_TEXT) return;
+    target.textContent = "";
+    target.className = "market-assistant-message-status";
   }
 
   function renderProgress(message) {
-    const el = elements();
-    if (!el.status) return;
-    el.status.textContent = message;
-    el.status.className = "market-assistant-status market-assistant-progress";
+    const target = getActiveMessageStatus();
+    if (!target) return;
+    target.textContent = message;
+    target.className = "market-assistant-message-status market-assistant-progress";
   }
 
   function clearProgress() {
-    const el = elements();
-    if (!el.status || el.status.className.indexOf("market-assistant-progress") === -1) return;
-    el.status.textContent = "";
-    el.status.className = "market-assistant-status";
+    const target = getActiveMessageStatus();
+    if (!target || target.className.indexOf("market-assistant-progress") === -1) return;
+    target.textContent = "";
+    target.className = "market-assistant-message-status";
   }
 
   function renderValidationBadge(status, errorCodes) {
@@ -576,14 +585,17 @@
     };
     const textEl = document.createElement("p");
     textEl.className = "market-assistant-message-text";
+    const statusEl = document.createElement("div");
+    statusEl.className = "market-assistant-message-status";
     const article = document.createElement("div");
     article.className = "market-assistant-message market-assistant-message-assistant";
     article.setAttribute("aria-busy", "true");
     article.appendChild(textEl);
+    article.appendChild(statusEl);
     if (el.log) {
       el.log.appendChild(article);
     }
-    return { element: article, message, textEl };
+    return { element: article, message, textEl, statusEl };
   }
 
   function applyStreamEvent(stream, event) {
@@ -786,10 +798,10 @@
     state.busy = true;
     el.submit.disabled = true;
     if (el.newConversation) el.newConversation.disabled = true;
-    renderThinking();
     appendUserMessage(question);
     el.question.value = "";
     const stream = createStreamingAssistantMessage();
+    renderThinking();
     const timing = createClientTiming();
     let requestId = null;
     let bodyShown = false;
@@ -822,13 +834,13 @@
       if (bodyShown || stream.message.text) {
         stream.element.setAttribute("aria-busy", "false");
         stream.element.appendChild(renderInterruptedNotice());
-        renderStatus("", false);
         pushAssistantMessage({
           text: stream.message.text,
           citations: [],
           interrupted: true,
         });
       } else {
+        stream.element.setAttribute("aria-busy", "false");
         stream.element.remove();
         renderStatus(UNAVAILABLE_NOTICE, true);
         el.question.value = question;

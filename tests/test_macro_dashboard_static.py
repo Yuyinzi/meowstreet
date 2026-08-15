@@ -8438,7 +8438,7 @@ def test_market_setup_non_directional_confirmation_shows_status_not_test_marks()
 
 def _market_assistant_harness(test_js):
     return textwrap.dedent(
-        f"""
+        rf"""
         const fs = require("fs");
         const vm = require("vm");
 
@@ -8466,6 +8466,43 @@ def _market_assistant_harness(test_js):
               return child;
             }},
             setAttribute(name, value) {{ this.attrs[name] = value; }},
+            querySelector(sel) {{
+              if (!sel) return null;
+              const parts = sel.split(/\s+/).filter(Boolean);
+              const parsePart = (part) => {{
+                const result = {{ tagName: null, className: null, attrName: null, attrValue: null }};
+                const attrRegex = /\[(aria-[\w-]+)=["']?([^"'\]]+)["']?\]/g;
+                let m;
+                while ((m = attrRegex.exec(part)) !== null) {{
+                  result.attrName = m[1];
+                  result.attrValue = m[2];
+                }}
+                const clean = part.replace(attrRegex, "");
+                if (clean.startsWith(".")) {{
+                  result.className = clean.slice(1);
+                }} else if (clean) {{
+                  result.tagName = clean.toUpperCase();
+                }}
+                return result;
+              }};
+              const parsedParts = parts.map(parsePart);
+              const walk = (node, depth) => {{
+                if (depth >= parsedParts.length) return node;
+                const part = parsedParts[depth];
+                for (const child of node.children) {{
+                  let match = true;
+                  if (part.tagName && child.tagName !== part.tagName) match = false;
+                  if (part.className && child.className.indexOf(part.className) === -1) match = false;
+                  if (part.attrName && child.attrs[part.attrName] !== part.attrValue) match = false;
+                  if (match) {{
+                    const found = walk(child, depth + 1);
+                    if (found) return found;
+                  }}
+                }}
+                return null;
+              }};
+              return walk(this, 0);
+            }},
             addEventListener(type, fn) {{ this.listeners[type] = fn; }},
             focus() {{}},
             remove() {{
@@ -8560,6 +8597,12 @@ def _market_assistant_harness(test_js):
 
         vm.runInThisContext(fs.readFileSync("static/market-assistant.js", "utf8"));
         const hooks = window.__MEOWSTREET_TEST__;
+        function getActiveStatus() {{
+          const active = elements.marketAssistantLog
+            ? elements.marketAssistantLog.querySelector('.market-assistant-message[aria-busy="true"] .market-assistant-message-status')
+            : null;
+          return active || elements.marketAssistantStatus || {{ textContent: "", className: "" }};
+        }}
 
         (async () => {{
           {test_js}
@@ -8741,10 +8784,10 @@ def test_market_assistant_stream_thinking_state_and_first_delta_clears_it():
         elements.marketAssistantQuestion.value = "What supports the setup?";
         elements.marketAssistantQuestion.listeners.keydown({ key: "Enter", preventDefault() {} });
         const disabledDuring = elements.marketAssistantSubmit.disabled === true;
-        const statusDuring = elements.marketAssistantStatus.textContent;
-        const statusClassDuring = elements.marketAssistantStatus.className;
+        const statusDuring = getActiveStatus().textContent;
+        const statusClassDuring = getActiveStatus().className;
         await new Promise((resolve) => setTimeout(resolve, 0));
-        const thinkingClearedAfterDelta = elements.marketAssistantStatus.textContent;
+        const thinkingClearedAfterDelta = getActiveStatus().textContent;
         const textEl = elements.marketAssistantLog.children[1].children.find(
           (child) => child.className === "market-assistant-message-text"
         );
@@ -8758,7 +8801,7 @@ def test_market_assistant_stream_thinking_state_and_first_delta_clears_it():
           statusDuring,
           statusClassDuring,
           thinkingClearedAfterDelta,
-          statusAfter: elements.marketAssistantStatus.textContent,
+          statusAfter: getActiveStatus().textContent,
           textAfterDelta,
           assistantMessageCountDuring,
           question: capturedBody.question,
@@ -8772,7 +8815,7 @@ def test_market_assistant_stream_thinking_state_and_first_delta_clears_it():
         "disabledDuring": True,
         "disabledAfter": True,
         "statusDuring": "Thinking…",
-        "statusClassDuring": "market-assistant-status market-assistant-thinking",
+        "statusClassDuring": "market-assistant-message-status market-assistant-thinking",
         "thinkingClearedAfterDelta": "",
         "statusAfter": "",
         "textAfterDelta": "现在",
@@ -9025,10 +9068,10 @@ def test_market_assistant_progress_shows_before_narration_then_clears_on_first_d
         """
         const stream = hooks.createStreamingAssistantMessage();
         hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup", message: "Reading setup evidence" });
-        const progressShown = elements.marketAssistantStatus.textContent;
-        const progressClass = elements.marketAssistantStatus.className;
+        const progressShown = getActiveStatus().textContent;
+        const progressClass = getActiveStatus().className;
         hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "First delta." });
-        const statusAfterFirstDelta = elements.marketAssistantStatus.textContent;
+        const statusAfterFirstDelta = getActiveStatus().textContent;
         const textEl = stream.element.children.find((child) => child.className === "market-assistant-message-text");
         const textAfterFirstDelta = textEl.textContent;
         hooks.applyStreamEvent(stream, { type: "answer_delta", delta: " Second delta." });
@@ -9046,7 +9089,7 @@ def test_market_assistant_progress_shows_before_narration_then_clears_on_first_d
 
     assert payload == {
         "progressShown": "Reading setup evidence",
-        "progressClass": "market-assistant-status market-assistant-progress",
+        "progressClass": "market-assistant-message-status market-assistant-progress",
         "statusAfterFirstDelta": "",
         "textAfterFirstDelta": "First delta.",
         "textAfterSecondDelta": "First delta. Second delta.",
@@ -9070,7 +9113,7 @@ def test_market_assistant_progress_renders_allowlisted_stages(stage, message):
         const stream = hooks.createStreamingAssistantMessage();
         hooks.applyStreamEvent(stream, {{ type: "progress", stage: "{stage}", message: "{message}" }});
         console.log(JSON.stringify({{
-          status: elements.marketAssistantStatus.textContent,
+          status: getActiveStatus().textContent,
         }}));
         """
     )
@@ -9083,9 +9126,9 @@ def test_market_assistant_progress_ignores_unknown_stages():
         """
         const stream = hooks.createStreamingAssistantMessage();
         hooks.applyStreamEvent(stream, { type: "progress", stage: "mystery_stage", message: "Should not show" });
-        const afterUnknown = elements.marketAssistantStatus.textContent;
+        const afterUnknown = getActiveStatus().textContent;
         hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup", message: "Reading setup evidence" });
-        const afterKnown = elements.marketAssistantStatus.textContent;
+        const afterKnown = getActiveStatus().textContent;
         console.log(JSON.stringify({
           afterUnknown,
           afterKnown,
@@ -9102,7 +9145,7 @@ def test_market_assistant_progress_without_message_is_ignored():
         const stream = hooks.createStreamingAssistantMessage();
         hooks.applyStreamEvent(stream, { type: "progress", stage: "reading_setup" });
         console.log(JSON.stringify({
-          status: elements.marketAssistantStatus.textContent,
+          status: getActiveStatus().textContent,
         }));
         """
     )
@@ -9217,7 +9260,7 @@ def test_market_assistant_error_recovery_preserves_question():
         await hooks.handleSubmit();
         console.log(JSON.stringify({
           hasError: hooks.state.error !== null,
-          statusText: elements.marketAssistantStatus.textContent,
+          statusText: getActiveStatus().textContent,
           questionPreserved: elements.marketAssistantQuestion.value === "Will this work?",
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
           logChildren: elements.marketAssistantLog.children.length,
@@ -9283,7 +9326,7 @@ def test_market_assistant_stream_malformed_line_fails_stream():
         console.log(JSON.stringify({
           questionValue: elements.marketAssistantQuestion.value,
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
-          status: elements.marketAssistantStatus.textContent,
+          status: getActiveStatus().textContent,
           assistantMessages: elements.marketAssistantLog.children.filter(
             (child) => child.className.includes("market-assistant-message-assistant")
           ).length,
@@ -9526,7 +9569,7 @@ def test_market_assistant_stream_completion_announces_in_status():
         elements.marketAssistantQuestion.value = "Will this work?";
         await hooks.handleSubmit();
         console.log(JSON.stringify({
-          status: elements.marketAssistantStatus.textContent,
+          status: getActiveStatus().textContent,
           busyAfter: elements.marketAssistantLog.children[1].attrs["aria-busy"],
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
         }));
@@ -9601,7 +9644,7 @@ def test_market_assistant_stream_null_body_treated_as_stream_failure():
         await hooks.handleSubmit();
         console.log(JSON.stringify({
           hasError: hooks.state.error !== null,
-          statusText: elements.marketAssistantStatus.textContent,
+          statusText: getActiveStatus().textContent,
           questionPreserved: elements.marketAssistantQuestion.value === "Will this work?",
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
           logChildren: elements.marketAssistantLog.children.length,
@@ -9687,7 +9730,7 @@ def test_market_assistant_rendered_stream_is_beginner_language_without_internal_
           const textEl = child.children.find((c) => c.className === "market-assistant-message-text");
           return textEl ? textEl.textContent : "";
         }).join(" ");
-        const statusText = elements.marketAssistantStatus.textContent;
+        const statusText = getActiveStatus().textContent;
         const rendered = logText + " " + statusText;
         const tokens = ["bull_market", "risk_rising", "modest_long", "selective_positions", "conflicts", "artifact_id", "object_id", "decision_fact"];
         console.log(JSON.stringify({
