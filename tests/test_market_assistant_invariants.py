@@ -994,6 +994,7 @@ def _prepare_market_setup_harness(
     question="现在市场怎么样？",
     extra_env=None,
     request_overrides=None,
+    resolution_injector=None,
 ):
     _assistant_env(monkeypatch)
     monkeypatch.setenv("MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED", "true")
@@ -1006,6 +1007,8 @@ def _prepare_market_setup_harness(
     monkeypatch.setattr(us_rates_liquidity_db, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(market_setup_current, "DEFAULT_DB_PATH", db_path)
     resolution = _build_resolution(db_path, _downside_inputs(), created_at=RESOLVED_AT)
+    if resolution_injector is not None:
+        resolution = resolution_injector(resolution)
     if turn is None:
         turn = _E2EStreamTurn(steps or [])
     if audit is None:
@@ -1479,3 +1482,73 @@ async def test_react_route_prompt_stays_compact_until_validated_detail_output(
     assert "detail_only_policy_reason_7f21" in output_text
     assert "policy_action" in output_text
     assert "overall_bias" in output_text
+
+
+def test_relationship_only_policy_evidence_reports_conflict_but_action_and_tone_unavailable(
+    monkeypatch, tmp_path
+):
+    answer = (
+        "当前货币政策与增长方向不一致，显示冲突。"
+        "目前可以确认这一冲突关系；经批准的政策行动与整体基调目前不可用。"
+    )
+    run = _prepare_market_setup_harness(
+        monkeypatch,
+        tmp_path,
+        steps=[_e2e_narration_step(answer, deltas=[answer])],
+        question="货币政策为什么与增长方向冲突？目前是加息、降息还是维持，整体偏鹰还是偏鸽？",
+    )
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    first_message = result["turn"].calls[0]["input_items"][0]
+    view = json.loads(first_message["content"][1]["text"])["explanation_view"]
+    assert view["view_version"] == "evidence_detail_v1"
+    assert view["current"]["relationship_to_growth_direction"] == "conflicts"
+    assert "policy_action" not in view["current"]
+    assert "overall_bias" not in view["current"]
+
+    rendered = "".join(
+        event["delta"] for event in result["events"] if event["type"] == "answer_delta"
+    )
+    assert "冲突" in rendered
+    assert "不可用" in rendered
+    assert "维持" not in rendered
+    assert "偏鹰" not in rendered
+    assert result["trace"]["generation_status"] == "narration_validated"
+    assert any(
+        event == {"type": "validation", "status": "passed", "error_codes": []}
+        for event in result["events"]
+    )
+
+
+def test_exact_policy_wording_answers_distinguish_unavailable_original_from_approved_summary(
+    monkeypatch, tmp_path
+):
+    answer = (
+        "目前无法提供政策声明的原文措辞。经批准的行动总结是维持利率不变，整体立场偏鹰。"
+    )
+    run = _prepare_market_setup_harness(
+        monkeypatch,
+        tmp_path,
+        steps=[_e2e_narration_step(answer, deltas=[answer])],
+        question="美联储政策声明的原文措辞是什么？",
+        resolution_injector=_inject_detail_only_policy_values,
+    )
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    first_message = result["turn"].calls[0]["input_items"][0]
+    view_text = first_message["content"][1]["text"]
+    view = json.loads(view_text)["explanation_view"]
+    assert view["view_version"] == "evidence_detail_v1"
+    assert view["current"]["policy_action"] == "hold"
+    assert view["current"]["overall_bias"] == "mild_hawkish"
+    for forbidden in ("exact_wording", "exact_excerpt", "statement_text"):
+        assert forbidden not in view_text
+
+    rendered = "".join(
+        event["delta"] for event in result["events"] if event["type"] == "answer_delta"
+    )
+    assert "原文措辞" in rendered
+    assert "无法提供" in rendered
+    assert "维持" in rendered
+    assert "偏鹰" in rendered
+    assert result["trace"]["generation_status"] == "narration_validated"

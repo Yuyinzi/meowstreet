@@ -100,6 +100,65 @@ def audit_payload(answer, **span_overrides):
     return {"claims": [span]}
 
 
+def policy_detail_ref():
+    return {
+        "artifact_id": "ctx_123_evidence_detail_macro_policy_response",
+        "object_type": "evidence_detail",
+        "object_id": "ctx_123_evidence_detail_macro_policy_response",
+    }
+
+
+def policy_detail_artifacts():
+    projection = {
+        "fact_id": "macro_policy_response",
+        "label": "Monetary Policy",
+        "detail_kind": "policy_response",
+        "topics": ["current", "drivers", "source"],
+        "status": "available",
+        "current": {
+            "policy_action": "hold",
+            "overall_bias": "mild_hawkish",
+            "relationship_to_growth_direction": "conflicts",
+        },
+        "drivers": {"policy_reason": "detail_only_policy_reason_7f21"},
+        "source": {
+            "source_module": "fomc_policy_tone",
+            "source_period": {
+                "effective_date": "2026-07-01",
+                "reference_period": "2026-06",
+                "release_date": "2026-07-01",
+            },
+        },
+    }
+    ref = policy_detail_ref()
+    artifact_id = ref["artifact_id"]
+    return {
+        artifact_id: {
+            "artifact_id": artifact_id,
+            "artifact_kind": "explanation_snapshot",
+            "schema_version": "market_assistant_artifact_v1",
+            "primary_authority": "decision_fact",
+            "market_setup_relation": "authoritative_snapshot",
+            "payload": {
+                "fact_id": projection["fact_id"],
+                "detail_kind": projection["detail_kind"],
+                "topics": projection["topics"],
+                "status": projection["status"],
+                "detail": projection,
+            },
+            "object_index": [
+                {
+                    "object_type": "evidence_detail",
+                    "object_id": artifact_id,
+                    "authority": "decision_fact",
+                    "payload": projection,
+                }
+            ],
+            "integrity_hash": "c" * 64,
+        }
+    }
+
+
 def test_audit_accepts_exact_referenced_span():
     answer = "现在的市场偏积极，但仍没有得到全面确认。"
     payload = {
@@ -263,6 +322,84 @@ def test_audit_rejects_string_value_for_numeric_field_without_coercion():
     )
     with pytest.raises(ValueError, match="claim audit validation failed"):
         validate_claim_audit(payload, answer_text=answer, artifacts=setup_artifacts())
+
+
+def test_audit_accepts_policy_action_and_overall_bias_bindings():
+    answer = "The latest decision was a hold and the approved read was mildly hawkish."
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+            },
+            {
+                "name": "overall_bias",
+                "value": "mild_hawkish",
+                "source": {**policy_detail_ref(), "field": "current.overall_bias"},
+            },
+        ],
+    )
+    validated = validate_claim_audit(
+        payload,
+        answer_text=answer,
+        artifacts=policy_detail_artifacts(),
+    )
+    assert validated["coverage_ratio"] == 1.0
+    assert validated["claims"][0]["claim_id"] == "claim_1"
+
+
+def test_audit_rejects_mismatched_policy_action_binding():
+    answer = "The latest decision was a cut and the approved read was mildly hawkish."
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "cut",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_VALUE_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_supposed_quote_binding_to_nonexistent_exact_excerpt():
+    answer = 'The FOMC statement reportedly used the phrase "remain patient".'
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "exact_quote",
+                "value": "remain patient",
+                "source": {**policy_detail_ref(), "field": "exact_excerpt"},
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    matching = [
+        error for error in exc_info.value.errors if error["code"] == "FIELD_NOT_FOUND"
+    ]
+    assert matching
+    assert matching[0]["field_id"] == "exact_quote"
+    assert matching[0]["expected"] == "exact_excerpt"
 
 
 def test_audit_rejects_hypothetical_span_with_refs():
