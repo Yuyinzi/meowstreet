@@ -49,6 +49,9 @@ PERCENTILE_LABELS = [
 CREDIT_RISK_THRESHOLD = 2.0
 CREDIT_DISPERSION_THRESHOLD = 4.0
 
+CREDIT_CONDITIONS_HISTORY_METHOD_VERSION = "credit_conditions_history_v1"
+CREDIT_CONDITIONS_DECISION_METHOD_VERSION = "credit_conditions_v1"
+
 CREDIT_SERIES_IDS = [
     "aaa_corporate_yield",
     "bbb_corporate_yield",
@@ -340,6 +343,93 @@ def _credit_conditions_status_from_diagnostics(diagnostics):
     ):
         return "healthy"
     return "mixed"
+
+
+def build_credit_conditions_history(points_by_id):
+    bbb_series = _bbb_credit_spread_series(points_by_id)
+    quality_series = _ccc_bbb_quality_spread_series(points_by_id)
+    bbb_by_date = {row["date"]: row["bbb_credit_spread"] for row in bbb_series}
+    quality_by_date = {
+        row["date"]: row["ccc_bbb_quality_spread"] for row in quality_series
+    }
+    common_dates = sorted(set(bbb_by_date) & set(quality_by_date))
+    if not common_dates:
+        return []
+    bbb_dates = sorted(bbb_by_date)
+    quality_dates = sorted(quality_by_date)
+    bbb_values = [bbb_by_date[row_date] for row_date in bbb_dates]
+    quality_values = [quality_by_date[row_date] for row_date in quality_dates]
+    bbb_parsed = [_parse_series_date(row_date) for row_date in bbb_dates]
+    quality_parsed = [_parse_series_date(row_date) for row_date in quality_dates]
+    rows = []
+    for current_date in common_dates:
+        bbb_index = bisect_right(bbb_dates, current_date) - 1
+        quality_index = bisect_right(quality_dates, current_date) - 1
+        diagnostics = {
+            "bbb_credit_spread": _replay_metric_state(
+                bbb_parsed,
+                bbb_values,
+                bbb_index,
+                _bbb_credit_zone,
+            ),
+            "ccc_bbb_quality_spread": _replay_metric_state(
+                quality_parsed,
+                quality_values,
+                quality_index,
+                _ccc_bbb_quality_zone,
+            ),
+        }
+        rows.append(
+            {
+                "date": current_date,
+                "state": _credit_conditions_status_from_diagnostics(diagnostics),
+                "method_version": CREDIT_CONDITIONS_HISTORY_METHOD_VERSION,
+                "decision_method_version": CREDIT_CONDITIONS_DECISION_METHOD_VERSION,
+            }
+        )
+    return rows
+
+
+def _replay_metric_state(parsed_dates, values, current_index, zone_func):
+    latest = values[current_index]
+    latest_date = parsed_dates[current_index]
+    one_month_value = _lookback_value_at(
+        parsed_dates, values, current_index, latest_date, 1
+    )
+    three_month_value = _lookback_value_at(
+        parsed_dates, values, current_index, latest_date, 3
+    )
+    change_1m = (
+        _round(latest - one_month_value) if one_month_value is not None else None
+    )
+    change_3m = (
+        _round(latest - three_month_value) if three_month_value is not None else None
+    )
+    trend_1m = _trend_label(change_1m, 0.25)
+    trend_3m = _trend_label(change_3m, 0.50)
+    acceleration = "none"
+    if change_1m is not None and change_3m is not None:
+        monthly_three_month_rate = abs(change_3m / 3)
+        if change_1m >= 0.50 and change_1m > monthly_three_month_rate:
+            acceleration = "accelerating_up"
+        elif change_1m <= -0.50 and abs(change_1m) > monthly_three_month_rate:
+            acceleration = "accelerating_down"
+    return {
+        "zone": zone_func(latest),
+        "trend_1m": trend_1m,
+        "trend_3m": trend_3m,
+        "acceleration": acceleration,
+    }
+
+
+def _lookback_value_at(parsed_dates, values, current_index, latest_date, months):
+    target_date = _subtract_months(latest_date, months)
+    previous_index = bisect_right(parsed_dates, target_date, 0, current_index) - 1
+    if previous_index >= 0:
+        return values[previous_index]
+    if current_index > 0 and parsed_dates[0] <= target_date + timedelta(days=7):
+        return values[0]
+    return None
 
 
 def _credit_conditions_diagnostics_series(points_by_id):
