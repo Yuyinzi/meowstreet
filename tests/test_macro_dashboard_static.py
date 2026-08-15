@@ -9591,6 +9591,53 @@ def test_market_assistant_stream_completion_announces_on_final_message_status():
     }
 
 
+def test_market_assistant_stream_completion_status_is_live_and_last_after_content():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, {
+          type: "validation",
+          status: "passed",
+          error_codes: [],
+        });
+        hooks.applyStreamEvent(stream, {
+          type: "complete",
+          generation_status: "validated_first_pass",
+          answer_trace_id: "trace_1",
+          citations: [{
+            title: "Market source",
+            url: "https://example.com/market",
+            source_id: "source_1",
+          }],
+          resolution: { mode: "current" },
+        });
+        const validationBadge = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-validation") === 0
+        );
+        const citations = stream.element.children.find(
+          (child) => child.className === "market-assistant-citations"
+        );
+        console.log(JSON.stringify({
+          role: stream.statusEl.attrs.role,
+          ariaLive: stream.statusEl.attrs["aria-live"],
+          ariaAtomic: stream.statusEl.attrs["aria-atomic"],
+          hasValidationBadge: Boolean(validationBadge),
+          hasCitations: Boolean(citations),
+          statusIsLast: stream.element.children.at(-1) === stream.statusEl,
+        }));
+        """
+    )
+
+    assert payload == {
+        "role": "status",
+        "ariaLive": "polite",
+        "ariaAtomic": "true",
+        "hasValidationBadge": True,
+        "hasCitations": True,
+        "statusIsLast": True,
+    }
+
+
 def test_market_assistant_stream_disabled_validation_completion_is_message_local():
     payload = _run_market_assistant_harness(
         """

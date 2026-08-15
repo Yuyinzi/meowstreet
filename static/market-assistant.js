@@ -598,6 +598,9 @@
     textEl.className = "market-assistant-message-text";
     const statusEl = document.createElement("div");
     statusEl.className = "market-assistant-message-status";
+    statusEl.setAttribute("role", "status");
+    statusEl.setAttribute("aria-live", "polite");
+    statusEl.setAttribute("aria-atomic", "true");
     const article = document.createElement("div");
     article.className = "market-assistant-message market-assistant-message-assistant";
     article.setAttribute("aria-busy", "true");
