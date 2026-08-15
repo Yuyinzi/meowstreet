@@ -182,38 +182,77 @@ def _answer_language_label(question):
     return "Chinese" if detect_answer_language(question) == "zh" else "English"
 
 
-def _structured_answer_instructions(question):
+def _tone_instructions(tone: str) -> str:
+    if tone == "beginner_cat":
+        return (
+            "Tone: beginner_cat. "
+            "Adopt the persona of 财财 (Caicai), a curious beginner cat learning finance. "
+            "Use light cat-flavored framing and simple metaphors when they help explain, "
+            "but never change Market Setup conclusions or invent facts. "
+            "Stay warm, encouraging, and plain-language."
+        )
+    if tone == "professional_cat":
+        return (
+            "Tone: professional_cat. "
+            "Adopt the persona of 财财 (Caicai), a market-savvy cat. "
+            "You may use concise, professional terminology with a light feline observation "
+            "style, but never change Market Setup conclusions or invent facts. "
+            "Do not define common finance terms."
+        )
+    if tone == "professional_human":
+        return (
+            "Tone: professional_human. "
+            "Adopt a professional human investor tone. Use concise terminology and "
+            "direct conclusions. Do not define common finance terms. "
+            "Never change Market Setup conclusions or invent facts."
+        )
+    return (
+        "Tone: beginner_human. "
+        "Adopt a plain, beginner-friendly human tone. Write for a financial beginner. "
+        "Explain what the market state means before using technical terms, and define "
+        "every financial term on first use. Never change Market Setup conclusions or "
+        "invent facts."
+    )
+
+
+def _structured_answer_instructions(question, tone="beginner_human"):
     language = _answer_language_label(question)
     return (
         "You are the explanation layer for deterministic Market Setup v2. "
         "Produce a StructuredAnswerDraft using only the supplied artifacts. "
-        f"Answer language: {language}. Write for a financial beginner. "
-        "Each claim template is final user-facing prose after placeholder "
-        "substitution, not internal notes. Explain what the current market "
-        "state means before using technical terms. For a standard setup answer, "
-        "give one plain-language summary, up to three main reasons, conflicting "
-        "or unconfirmed evidence, the approved general posture meaning, and "
-        "backend-provided conditions that could change the conclusion. Define "
-        "financial terms on first use. Preserve level versus direction and trend "
-        "versus confirmation. Prefer labels and meanings; do not display internal "
-        "codes, artifact IDs, object IDs, authority names, or schema fields unless "
-        "the user explicitly asks for diagnostics. Use annotated artifact bindings "
-        "for every factual value or enum. Each non-hypothetical binding must contain "
-        "the supplied value and its exact artifact source. Every ref must match the "
-        "claim authority. Split different authorities into separate claims. Do not "
-        "invent facts, classifications, weights, thresholds, causality, predictions, "
-        "materiality, allocations, or trading instructions. "
-        "Serialize answer_text as the first top-level property. "
-        "answer_text must exactly equal the deterministic rendering of sections "
-        "and claims. Do not place markdown fences around the JSON object."
+        f"Answer language: {language}. "
+        + _tone_instructions(tone)
+        + " "
+        + (
+            "Each claim template is final user-facing prose after placeholder "
+            "substitution, not internal notes. Explain what the current market "
+            "state means before using technical terms. For a standard setup answer, "
+            "give one plain-language summary, up to three main reasons, conflicting "
+            "or unconfirmed evidence, the approved general posture meaning, and "
+            "backend-provided conditions that could change the conclusion. Define "
+            "financial terms on first use. Preserve level versus direction and trend "
+            "versus confirmation. Prefer labels and meanings; do not display internal "
+            "codes, artifact IDs, object IDs, authority names, or schema fields unless "
+            "the user explicitly asks for diagnostics. Use annotated artifact bindings "
+            "for every factual value or enum. Each non-hypothetical binding must contain "
+            "the supplied value and its exact artifact source. Every ref must match the "
+            "claim authority. Split different authorities into separate claims. Do not "
+            "invent facts, classifications, weights, thresholds, causality, predictions, "
+            "materiality, allocations, or trading instructions. "
+            "Serialize answer_text as the first top-level property. "
+            "answer_text must exactly equal the deterministic rendering of sections "
+            "and claims. Do not place markdown fences around the JSON object."
+        )
     )
 
 
-def _synthesis_prompt(question, plan, context_summary, artifacts):
+def _synthesis_prompt(
+    question, plan, context_summary, artifacts, tone="beginner_human"
+):
     return [
         {
             "role": "system",
-            "content": _structured_answer_instructions(question),
+            "content": _structured_answer_instructions(question, tone),
         },
         {
             "role": "user",
@@ -232,12 +271,18 @@ def _synthesis_prompt(question, plan, context_summary, artifacts):
 
 
 def _repair_prompt(
-    question, plan, context_summary, artifacts, draft, validation_report
+    question,
+    plan,
+    context_summary,
+    artifacts,
+    draft,
+    validation_report,
+    tone="beginner_human",
 ):
     return [
         {
             "role": "system",
-            "content": _structured_answer_instructions(question)
+            "content": _structured_answer_instructions(question, tone)
             + (
                 " Repair the draft using only the validation report and the same "
                 "evidence set. Do not acquire new evidence. Return the complete "

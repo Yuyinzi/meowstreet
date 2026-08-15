@@ -600,6 +600,20 @@ def test_synthesis_prompt_requires_streamable_answer_text():
     assert "Do not place markdown fences around the JSON object." in system
 
 
+def test_synthesis_prompt_includes_beginner_cat_tone():
+    prompt = market_assistant_router._synthesis_prompt(
+        "现在市场怎么样？",
+        {"intent": "decision_explanation", "answer_depth": "standard"},
+        {"mode": "current"},
+        {"ctx_1": {"object_index": []}},
+        tone="beginner_cat",
+    )
+    system = prompt[0]["content"]
+
+    assert "财财" in system or "Caicai" in system
+    assert "beginner_cat" in system
+
+
 def test_repair_prompt_preserves_beginner_contract():
     prompt = market_assistant_router._repair_prompt(
         "现在市场怎么样？",
