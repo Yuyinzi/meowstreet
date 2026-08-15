@@ -341,6 +341,22 @@ class TestEvidenceFactsSemantics:
             "reason_code": "data_missing",
         }
 
+    def test_explanation_is_separate_from_accepted_values(self):
+        inputs = _inputs()
+        inputs["policy_response"]["facts"]["macro_policy_response"]["explanation"] = {
+            "state": "restrictive_confirmed",
+            "policy_read": {"policy_action": "hold"},
+        }
+        policy = fact_by_id(_build_facts_from(inputs), "macro_policy_response")
+        assert policy["accepted_values"] == {
+            "relationship_to_growth_direction": "conflicts"
+        }
+        assert policy["explanation"]["policy_read"]["policy_action"] == "hold"
+
+    def test_fact_without_explanation_returns_empty_explanation(self):
+        facts = build_facts()
+        assert all(fact["explanation"] == {} for fact in facts)
+
     def test_source_synchronization_status_is_not_in_explanation_surface(self):
         facts = build_facts()
         baseline = [fact for fact in facts]

@@ -327,6 +327,10 @@ def _decision_relevant(fact):
     return fact["role"]["function"] not in ("watch_only", "display_only")
 
 
+def _decision_fact_projection(fact):
+    return {key: value for key, value in fact.items() if key != "explanation"}
+
+
 def _decision_contract_projection(method_contracts):
     return {
         method_id: {
@@ -343,7 +347,11 @@ def compute_decision_fingerprint(state):
         "market_setup_version": state["market_setup_version"],
         "results": state["results"],
         "decision_path": state["decision_path"],
-        "evidence": [fact for fact in state["evidence"] if _decision_relevant(fact)],
+        "evidence": [
+            _decision_fact_projection(fact)
+            for fact in state["evidence"]
+            if _decision_relevant(fact)
+        ],
         "decision_contracts": _decision_contract_projection(state["method_contracts"]),
         "counterfactuals": state["counterfactuals"],
     }
