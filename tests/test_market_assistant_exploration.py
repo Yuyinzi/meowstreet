@@ -1,14 +1,225 @@
 import json
+from datetime import date, timedelta
 
 import pytest
 
 from app.db import benchmark_market_data
 from app.db import economic_confirmation
 from app.db import macro_indicators
+from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.services import market_assistant_exploration
 from app.tools import market_assistant_exploration as exploration_tools
 from app.tools.market_assistant_artifacts import validate_artifact
 from app.tools.market_assistant_exploration import validate_exploration_query
+
+
+def credit_history_connection(tmp_path):
+    db_path = tmp_path / "credit_history.sqlite"
+    con = us_rates_liquidity_db.connect(db_path)
+    macro_indicators.connect(db_path)
+    us_rates_liquidity_db.replace_rate_series_points(
+        con,
+        {
+            "series_id": "treasury_10y",
+            "title": "10-Year Treasury",
+            "instrument_type": "nominal_treasury",
+            "maturity_months": 120,
+            "units": "percent",
+            "source_workbook": "Benchmark_Yields_US.xlsm",
+            "source_sheet": "Data",
+        },
+        [
+            {
+                "date": "2026-03-02",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-03-09",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-03-16",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-03-23",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-03-30",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-04-06",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-04-13",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-04-20",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-04-27",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-05-04",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-05-11",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-05-18",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-05-25",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-06-01",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-06-08",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-06-15",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-06-22",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-06-29",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-07-06",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-07-13",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-07-20",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-07-27",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-08-03",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-08-10",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+        ],
+    )
+    macro_indicators.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "bbb_corporate_yield",
+            "title": "BBB Corporate Yield",
+            "units": "percent",
+            "source": "BAMLC0A4CBBBEY.csv",
+        },
+        _credit_corporate_points(5.00),
+    )
+    macro_indicators.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "ccc_corporate_yield",
+            "title": "CCC Corporate Yield",
+            "units": "percent",
+            "source": "BAMLH0A3HYC.csv",
+        },
+        _credit_corporate_points(8.00, 10.00),
+    )
+    return con
+
+
+def _credit_corporate_points(low_value, high_value=None):
+    start = date(2026, 3, 2)
+    current = start
+    points = []
+    while current <= date(2026, 8, 10):
+        value = (
+            high_value
+            if high_value is not None and current >= date(2026, 7, 6)
+            else low_value
+        )
+        points.append(
+            {"date": current.isoformat(), "value": value, "source": "fred_ice_bofa"}
+        )
+        current = current + timedelta(days=7)
+    return points
+
+
+def empty_credit_history_connection(tmp_path):
+    db_path = tmp_path / "empty_credit_history.sqlite"
+    con = us_rates_liquidity_db.connect(db_path)
+    macro_indicators.connect(db_path)
+    return con
 
 
 def seeded_connection(tmp_path):
@@ -609,3 +820,55 @@ def test_result_validates_as_artifact(tmp_path):
     }
     validated = validate_artifact(envelope)
     assert validated["payload"]["result_hash"] == result["result_hash"]
+
+
+def test_credit_conditions_history_query_returns_categorical_result(tmp_path):
+    con = credit_history_connection(tmp_path)
+    result = market_assistant_exploration.execute_exploration(
+        con,
+        {
+            "query_kind": "indicator_history",
+            "indicator_id": "credit_conditions",
+            "start": "2026-04-01",
+            "end": "2026-08-10",
+            "statistics": [],
+        },
+        result_id="expl_credit_history",
+        created_at="2026-08-10T12:00:00Z",
+    )
+
+    assert result["authority"] == "local_observation"
+    assert result["market_setup_relation"] == "non_decision"
+    assert result["query_contract"]["indicator_id"] == "credit_conditions"
+    assert result["rows"]
+    assert (
+        result["rows"][-1]["state"] == result["deterministic_statistics"]["last_state"]
+    )
+    assert result["deterministic_statistics"]["current_run_start"] is not None
+    assert result["deterministic_statistics"]["latest_transition"] is not None
+    assert any(
+        obj["object_type"] == "observation_row"
+        and obj["object_id"].startswith("credit_conditions:")
+        for obj in result["object_index"]
+    )
+
+
+def test_credit_conditions_history_empty_local_data(tmp_path):
+    con = empty_credit_history_connection(tmp_path)
+    result = market_assistant_exploration.execute_exploration(
+        con,
+        {
+            "query_kind": "indicator_history",
+            "indicator_id": "credit_conditions",
+            "start": "2026-04-01",
+            "end": "2026-08-10",
+            "statistics": [],
+        },
+        result_id="expl_credit_empty",
+        created_at="2026-08-10T12:00:00Z",
+    )
+
+    assert result["rows"] == []
+    assert result["data_through"] is None
+    assert result["deterministic_statistics"]["last_state"] is None
+    assert result["deterministic_statistics"]["latest_transition"] is None

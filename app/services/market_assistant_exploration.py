@@ -3,7 +3,9 @@ import hashlib
 from app.db import benchmark_market_data
 from app.db import economic_confirmation
 from app.db import macro_indicators
+from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import market_assistant_exploration as exploration_tools
+from app.tools import us_rates_liquidity as us_rates_liquidity_tool
 from app.tools.market_assistant_artifacts import validate_artifact
 
 EXPLORATION_SCHEMA_VERSION = "market_assistant_exploration_result_v1"
@@ -268,6 +270,8 @@ def _load_rows(con, indicator):
         rows = _load_economic_confirmation(con, series)
     elif loader == "benchmark_prices":
         rows = _load_benchmark(con, series)
+    elif loader == "credit_conditions_history":
+        rows = _load_credit_conditions_history(con)
     else:
         raise ValueError(f"exploration loader is not registered: {loader}")
     return sorted(rows, key=lambda row: row["date"])
@@ -293,6 +297,17 @@ def _load_benchmark(con, series):
     return [{"date": row["date"], "value": row["close"]} for row in rows]
 
 
+def _load_credit_conditions_history(con):
+    treasury = us_rates_liquidity_db.load_rate_points_for_series(con, ["treasury_10y"])
+    corporate = macro_indicators.load_macro_indicator_points_for_series(
+        con, ["bbb_corporate_yield", "ccc_corporate_yield"]
+    )
+    points_by_id = {}
+    points_by_id.update(treasury)
+    points_by_id.update(corporate)
+    return us_rates_liquidity_tool.build_credit_conditions_history(points_by_id)
+
+
 def _filter_window(rows, start, end):
     return [row for row in rows if start <= row["date"] <= end]
 
@@ -305,6 +320,11 @@ def _check_row_limit(rows, indicator):
 
 
 def _compute_statistics(rows, query, indicator):
+    if indicator["value_type"] == "categorical":
+        return exploration_tools.compute_categorical_statistics(
+            rows,
+            state_values=indicator["state_values"],
+        )
     return exploration_tools.compute_statistics(
         rows,
         query["statistics"],
