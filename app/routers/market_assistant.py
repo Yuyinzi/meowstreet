@@ -64,6 +64,9 @@ class _QuestionRequest(BaseModel):
     deep_research_requested: bool = False
     external_search_requested: bool = False
     deep_analysis_requested: bool = Field(default=False, strict=True)
+    tone: Literal[
+        "beginner_cat", "professional_cat", "beginner_human", "professional_human"
+    ] = "beginner_human"
 
 
 class _ConversationBootstrapMessage(BaseModel):
@@ -103,10 +106,16 @@ async def _plan_llm(*, question, context_summary):
 
 
 async def _synthesize_llm(
-    *, question, plan, context_summary, artifacts, stream_observer=None
+    *,
+    question,
+    plan,
+    context_summary,
+    artifacts,
+    stream_observer=None,
+    tone="beginner_human",
 ):
     client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
-    prompt = _synthesis_prompt(question, plan, context_summary, artifacts)
+    prompt = _synthesis_prompt(question, plan, context_summary, artifacts, tone=tone)
     return await complete_structured(
         client,
         model=model,
@@ -126,10 +135,11 @@ async def _repair_llm(
     artifacts,
     draft,
     validation_report,
+    tone="beginner_human",
 ):
     client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
     prompt = _repair_prompt(
-        question, plan, context_summary, artifacts, draft, validation_report
+        question, plan, context_summary, artifacts, draft, validation_report, tone=tone
     )
     return await complete_structured(
         client,
@@ -179,38 +189,77 @@ def _answer_language_label(question):
     return "Chinese" if detect_answer_language(question) == "zh" else "English"
 
 
-def _structured_answer_instructions(question):
+def _tone_instructions(tone: str) -> str:
+    if tone == "beginner_cat":
+        return (
+            "Tone: beginner_cat. "
+            "Adopt the persona of 财财 (Caicai), a curious beginner cat learning finance. "
+            "Use light cat-flavored framing and simple metaphors when they help explain, "
+            "but never change Market Setup conclusions or invent facts. "
+            "Stay warm, encouraging, and plain-language."
+        )
+    if tone == "professional_cat":
+        return (
+            "Tone: professional_cat. "
+            "Adopt the persona of 财财 (Caicai), a market-savvy cat. "
+            "You may use concise, professional terminology with a light feline observation "
+            "style, but never change Market Setup conclusions or invent facts. "
+            "Do not define common finance terms."
+        )
+    if tone == "professional_human":
+        return (
+            "Tone: professional_human. "
+            "Adopt a professional human investor tone. Use concise terminology and "
+            "direct conclusions. Do not define common finance terms. "
+            "Never change Market Setup conclusions or invent facts."
+        )
+    return (
+        "Tone: beginner_human. "
+        "Adopt a plain, beginner-friendly human tone. Write for a financial beginner. "
+        "Explain what the market state means before using technical terms, and define "
+        "every financial term on first use. Never change Market Setup conclusions or "
+        "invent facts."
+    )
+
+
+def _structured_answer_instructions(question, tone="beginner_human"):
     language = _answer_language_label(question)
     return (
         "You are the explanation layer for deterministic Market Setup v2. "
         "Produce a StructuredAnswerDraft using only the supplied artifacts. "
-        f"Answer language: {language}. Write for a financial beginner. "
-        "Each claim template is final user-facing prose after placeholder "
-        "substitution, not internal notes. Explain what the current market "
-        "state means before using technical terms. For a standard setup answer, "
-        "give one plain-language summary, up to three main reasons, conflicting "
-        "or unconfirmed evidence, the approved general posture meaning, and "
-        "backend-provided conditions that could change the conclusion. Define "
-        "financial terms on first use. Preserve level versus direction and trend "
-        "versus confirmation. Prefer labels and meanings; do not display internal "
-        "codes, artifact IDs, object IDs, authority names, or schema fields unless "
-        "the user explicitly asks for diagnostics. Use annotated artifact bindings "
-        "for every factual value or enum. Each non-hypothetical binding must contain "
-        "the supplied value and its exact artifact source. Every ref must match the "
-        "claim authority. Split different authorities into separate claims. Do not "
-        "invent facts, classifications, weights, thresholds, causality, predictions, "
-        "materiality, allocations, or trading instructions. "
-        "Serialize answer_text as the first top-level property. "
-        "answer_text must exactly equal the deterministic rendering of sections "
-        "and claims. Do not place markdown fences around the JSON object."
+        f"Answer language: {language}. "
+        + _tone_instructions(tone)
+        + " "
+        + (
+            "Each claim template is final user-facing prose after placeholder "
+            "substitution, not internal notes. Explain what the current market "
+            "state means before using technical terms. For a standard setup answer, "
+            "give one plain-language summary, up to three main reasons, conflicting "
+            "or unconfirmed evidence, the approved general posture meaning, and "
+            "backend-provided conditions that could change the conclusion. Define "
+            "financial terms on first use. Preserve level versus direction and trend "
+            "versus confirmation. Prefer labels and meanings; do not display internal "
+            "codes, artifact IDs, object IDs, authority names, or schema fields unless "
+            "the user explicitly asks for diagnostics. Use annotated artifact bindings "
+            "for every factual value or enum. Each non-hypothetical binding must contain "
+            "the supplied value and its exact artifact source. Every ref must match the "
+            "claim authority. Split different authorities into separate claims. Do not "
+            "invent facts, classifications, weights, thresholds, causality, predictions, "
+            "materiality, allocations, or trading instructions. "
+            "Serialize answer_text as the first top-level property. "
+            "answer_text must exactly equal the deterministic rendering of sections "
+            "and claims. Do not place markdown fences around the JSON object."
+        )
     )
 
 
-def _synthesis_prompt(question, plan, context_summary, artifacts):
+def _synthesis_prompt(
+    question, plan, context_summary, artifacts, tone="beginner_human"
+):
     return [
         {
             "role": "system",
-            "content": _structured_answer_instructions(question),
+            "content": _structured_answer_instructions(question, tone),
         },
         {
             "role": "user",
@@ -229,12 +278,18 @@ def _synthesis_prompt(question, plan, context_summary, artifacts):
 
 
 def _repair_prompt(
-    question, plan, context_summary, artifacts, draft, validation_report
+    question,
+    plan,
+    context_summary,
+    artifacts,
+    draft,
+    validation_report,
+    tone="beginner_human",
 ):
     return [
         {
             "role": "system",
-            "content": _structured_answer_instructions(question)
+            "content": _structured_answer_instructions(question, tone)
             + (
                 " Repair the draft using only the validation report and the same "
                 "evidence set. Do not acquire new evidence. Return the complete "
@@ -259,20 +314,24 @@ def _repair_prompt(
     ]
 
 
-def _narration_instructions():
+def _narration_instructions(tone="beginner_human"):
     return (
         "You are the Market Setup narration assistant. "
-        "Narrate the current market setup from the evidence. "
-        "Always write for a financial beginner. "
-        "Always answer the user's question before naming system labels. "
-        "Use only supplied views and tool results. "
-        "Do not display internal codes or artifact identifiers. "
-        "When tools are needed, return tool calls only. "
-        "When answering, return plain text only. "
-        "Do not reinterpret or override Market Setup. "
-        "Answer in the user's language. "
-        "Do not invent facts, thresholds, or causality the evidence does not support. "
-        "When evidence is unavailable, say it is unavailable rather than guessing."
+        + _tone_instructions(tone)
+        + " "
+        + (
+            "Narrate the current market setup from the evidence. "
+            "Always write for a financial beginner. "
+            "Always answer the user's question before naming system labels. "
+            "Use only supplied views and tool results. "
+            "Do not display internal codes or artifact identifiers. "
+            "When tools are needed, return tool calls only. "
+            "When answering, return plain text only. "
+            "Do not reinterpret or override Market Setup. "
+            "Answer in the user's language. "
+            "Do not invent facts, thresholds, or causality the evidence does not support. "
+            "When evidence is unavailable, say it is unavailable rather than guessing."
+        )
     )
 
 
@@ -332,16 +391,17 @@ def _new_request_id():
     return f"req_{secrets.token_hex(8)}"
 
 
-def _build_dependencies():
+def _build_dependencies(request):
     config = _load_market_assistant_config_or_none()
+    tone = request.get("tone", "beginner_human")
     dependencies = {
         "config": config,
         "db_path": market_assistant_db.DEFAULT_DB_PATH,
         "plan_llm": _plan_llm,
-        "synthesize_llm": _synthesize_llm,
-        "repair_llm": _repair_llm,
+        "synthesize_llm": lambda **kwargs: _synthesize_llm(tone=tone, **kwargs),
+        "repair_llm": lambda **kwargs: _repair_llm(tone=tone, **kwargs),
         "stream_turn": _stream_turn_llm,
-        "narration_instructions": _narration_instructions,
+        "narration_instructions": lambda: _narration_instructions(tone=tone),
         "claim_audit_llm": _claim_audit_llm,
         "build_research_provider": build_research_provider,
         "exploration": execute_exploration,
@@ -413,7 +473,7 @@ async def market_assistant_questions_stream(body: dict = Body(default={})):
     started_at = monotonic()
     try:
         request = _validate_question_request(body)
-        dependencies = _build_dependencies()
+        dependencies = _build_dependencies(request)
     except ValueError as exc:
         if _is_artifact_corruption(exc):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -437,7 +497,7 @@ async def market_assistant_questions(body: dict = Body(default={})):
         raise HTTPException(status_code=400, detail="context id is required")
     try:
         return await market_assistant_service.answer_question(
-            request, dependencies=_build_dependencies()
+            request, dependencies=_build_dependencies(request)
         )
     except ValueError as exc:
         if _is_artifact_corruption(exc):

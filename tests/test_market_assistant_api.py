@@ -300,6 +300,60 @@ def test_question_accepts_deep_analysis_without_external_search(
     assert captured["request"]["external_search_requested"] is False
 
 
+def test_question_accepts_valid_tone_values(assistant_env, monkeypatch):
+    captured = {}
+
+    async def fake_answer_question(request, *, dependencies):
+        captured["request"] = request
+        return {"resolution": {"mode": "current"}}
+
+    monkeypatch.setattr(
+        market_assistant_service, "answer_question", fake_answer_question
+    )
+
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={"question": "Why?", "mode": "current", "tone": "beginner_cat"},
+    )
+
+    assert response.status_code == 200
+    assert captured["request"]["tone"] == "beginner_cat"
+
+
+def test_question_invalid_tone_returns_400(assistant_env):
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={"question": "Why?", "mode": "current", "tone": "puppy"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "question request is invalid"
+
+
+def test_tone_flows_to_service(assistant_env, monkeypatch):
+    captured = {}
+
+    async def fake_answer_question(request, *, dependencies):
+        captured["tone"] = request.get("tone")
+        return {"resolution": {"mode": "current"}}
+
+    monkeypatch.setattr(
+        market_assistant_service, "answer_question", fake_answer_question
+    )
+
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={
+            "question": "Why?",
+            "mode": "current",
+            "tone": "professional_human",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["tone"] == "professional_human"
+
+
 def test_stream_accepts_deep_analysis_without_external_search(monkeypatch):
     captured = {}
 
@@ -570,6 +624,20 @@ def test_synthesis_prompt_requires_streamable_answer_text():
     assert "Do not place markdown fences around the JSON object." in system
 
 
+def test_synthesis_prompt_includes_beginner_cat_tone():
+    prompt = market_assistant_router._synthesis_prompt(
+        "现在市场怎么样？",
+        {"intent": "decision_explanation", "answer_depth": "standard"},
+        {"mode": "current"},
+        {"ctx_1": {"object_index": []}},
+        tone="beginner_cat",
+    )
+    system = prompt[0]["content"]
+
+    assert "财财" in system or "Caicai" in system
+    assert "beginner_cat" in system
+
+
 def test_repair_prompt_preserves_beginner_contract():
     prompt = market_assistant_router._repair_prompt(
         "现在市场怎么样？",
@@ -585,6 +653,16 @@ def test_repair_prompt_preserves_beginner_contract():
     assert "financial beginner" in system
     assert "same evidence set" in system
     assert "complete corrected StructuredAnswerDraft" in system
+
+
+def test_narration_instructions_include_professional_cat_tone():
+    instructions = market_assistant_router._narration_instructions(
+        tone="professional_cat"
+    )
+
+    assert "财财" in instructions or "Caicai" in instructions
+    assert "professional_cat" in instructions
+    assert "market-savvy cat" in instructions
 
 
 def test_narration_instructions_contain_beginner_prompt_boundaries():
@@ -625,6 +703,46 @@ def test_narration_input_items_exclude_snapshot_and_schema_bulk():
     assert "view_version" in serialized
     assert "get_setup_overview" in serialized
     assert "现在市场怎么样？" in serialized
+
+
+@pytest.mark.parametrize(
+    "tone, expected",
+    [
+        ("beginner_cat", ["beginner_cat", "财财", "Caicai", "curious beginner cat"]),
+        (
+            "professional_cat",
+            ["professional_cat", "财财", "Caicai", "market-savvy cat"],
+        ),
+        ("beginner_human", ["beginner_human", "plain", "beginner-friendly"]),
+        ("professional_human", ["professional_human", "professional human"]),
+    ],
+)
+def test_synthesis_prompt_reflects_each_tone(tone, expected):
+    prompt = market_assistant_router._synthesis_prompt(
+        "Explain the market setup",
+        {"intent": "decision_explanation"},
+        {"mode": "current"},
+        {"ctx_1": {"object_index": []}},
+        tone=tone,
+    )
+    system = prompt[0]["content"]
+    for phrase in expected:
+        assert phrase in system
+
+
+@pytest.mark.parametrize(
+    "tone, expected",
+    [
+        ("beginner_cat", ["beginner_cat", "财财", "Caicai"]),
+        ("professional_cat", ["professional_cat", "财财", "Caicai"]),
+        ("beginner_human", ["beginner_human"]),
+        ("professional_human", ["professional_human"]),
+    ],
+)
+def test_narration_instructions_reflect_each_tone(tone, expected):
+    instructions = market_assistant_router._narration_instructions(tone=tone)
+    for phrase in expected:
+        assert phrase in instructions
 
 
 def test_claim_audit_prompt_receives_exact_answer_and_frozen_refs():
