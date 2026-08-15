@@ -737,6 +737,69 @@ def _daily_source_period(period):
     }
 
 
+_SURVEY_EXPLANATION_KEYS = (
+    "economic_direction",
+    "growth_momentum",
+    "survey_alignment",
+    "demand_alignment",
+    "leading_side",
+    "cross_sector_comparison",
+    "bias_confirmation",
+    "backlog_confirmation",
+    "agreements",
+    "conflicts",
+    "missing_inputs",
+    "reasons",
+)
+
+_POLICY_READ_KEYS = (
+    "policy_action",
+    "guidance_bias",
+    "language_tone",
+    "overall_bias",
+    "tone_change",
+    "confidence",
+    "reason",
+)
+
+_FINANCIAL_DETAIL_KEYS = (
+    "curve_status",
+    "credit_conditions_status",
+    "vix",
+    "ten_year_real_rate",
+)
+
+_POLICY_DETAIL_KEYS = (
+    "fomc_tone",
+    "fomc_action",
+    "m2_status",
+    "inflation_above_target",
+    "fed_balance_sheet_available",
+)
+
+_CONSUMER_EXPLANATION_KEYS = (
+    "state",
+    "direction",
+    "reason",
+    "percentile_zone",
+    "momentum",
+    "percentile_label",
+    "confirmation_state",
+)
+
+
+def _project_keys(payload, keys):
+    if not isinstance(payload, dict):
+        return {}
+    return {key: payload.get(key) for key in keys}
+
+
+def _policy_read_projection(latest_tone):
+    if not isinstance(latest_tone, dict):
+        return {}
+    return {key: latest_tone[key] for key in _POLICY_READ_KEYS if key in latest_tone}
+
+
 def _normalize_expected_growth(survey_synthesis_result):
     if survey_synthesis_result is None:
         return None
@@ -744,6 +807,7 @@ def _normalize_expected_growth(survey_synthesis_result):
         "direction": survey_synthesis_result.get("expected_gdp_direction"),
         "status": survey_synthesis_result.get("status"),
         "source_period": _monthly_source_period(survey_synthesis_result.get("period")),
+        "explanation": _project_keys(survey_synthesis_result, _SURVEY_EXPLANATION_KEYS),
     }
     return {
         "source_module": "ism_survey_synthesis",
@@ -764,6 +828,11 @@ def _normalize_market_environment(market_phase_payload):
             "sp500_market_phase": {
                 "phase": market_env.get("state"),
                 "source_period": _daily_source_period(period),
+                "explanation": {
+                    "state": market_env.get("state"),
+                    "starting_posture": market_env.get("starting_posture"),
+                    "reason": market_env.get("reason"),
+                },
             }
         },
     }
@@ -773,11 +842,12 @@ def _normalize_financial_conditions(rates_liquidity_payload, survey_direction):
     if rates_liquidity_payload is None:
         return None
     derived = rates_liquidity_payload.get("derived", {})
-    financial_state = market_setup.build_financial_conditions(
-        rates_liquidity_payload
-    ).get("state")
+    financial = market_setup.build_financial_conditions(rates_liquidity_payload)
+    financial_state = financial.get("state")
     as_of = rates_liquidity_payload.get("as_of")
     period = _daily_source_period(as_of)
+    credit_status = derived.get("credit_conditions_status")
+    vix = derived.get("vix")
     return {
         "source_module": "us_rates_liquidity",
         "method_version": "us_rates_liquidity_v1",
@@ -787,14 +857,24 @@ def _normalize_financial_conditions(rates_liquidity_payload, survey_direction):
                     "macro_financial_conditions", financial_state, survey_direction
                 ),
                 "source_period": dict(period),
+                "explanation": {
+                    "state": financial_state,
+                    "growth_confirmation": financial.get("growth_confirmation"),
+                    "reasons": list(financial.get("reasons", [])),
+                    "details": _project_keys(
+                        financial.get("details", {}), _FINANCIAL_DETAIL_KEYS
+                    ),
+                },
             },
             "credit_conditions": {
-                "status": derived.get("credit_conditions_status"),
+                "status": credit_status,
                 "source_period": dict(period),
+                "explanation": {"status": credit_status},
             },
             "vix_level": {
-                "level": derived.get("vix"),
+                "level": vix,
                 "source_period": dict(period),
+                "explanation": {"level": vix},
             },
         },
     }
@@ -807,13 +887,15 @@ def _normalize_policy_response(
     fed_balance_sheet,
     survey_direction,
 ):
-    policy_state = market_setup.build_policy_response(
+    policy = market_setup.build_policy_response(
         fomc_tone_headline,
         m2_headline,
         inflation_context,
         fed_balance_sheet,
-    ).get("state")
+    )
+    policy_state = policy.get("state")
     m2_period = (m2_headline or {}).get("period")
+    m2_status = (m2_headline or {}).get("status")
     return {
         "source_module": "fomc_policy_tone",
         "method_version": "fomc_policy_tone_v1",
@@ -825,10 +907,24 @@ def _normalize_policy_response(
                 "source_period": _monthly_source_period(
                     (fomc_tone_headline or {}).get("period") or m2_period
                 ),
+                "explanation": {
+                    "state": policy_state,
+                    "reasons": list(policy.get("reasons", [])),
+                    "details": _project_keys(
+                        policy.get("details", {}), _POLICY_DETAIL_KEYS
+                    ),
+                    "policy_read": _policy_read_projection(
+                        (fomc_tone_headline or {}).get("latest_tone")
+                    ),
+                },
             },
             "m2_liquidity": {
-                "status": (m2_headline or {}).get("status"),
+                "status": m2_status,
                 "source_period": _monthly_source_period(m2_period),
+                "explanation": {
+                    "status": m2_status,
+                    "status_label": (m2_headline or {}).get("status_label"),
+                },
             },
         },
     }
@@ -837,9 +933,8 @@ def _normalize_policy_response(
 def _normalize_consumer_demand(consumer_sentiment_summary, survey_direction):
     if consumer_sentiment_summary is None:
         return None
-    consumer_state = market_setup.build_consumer_demand_outlook(
-        consumer_sentiment_summary
-    ).get("state")
+    consumer = market_setup.build_consumer_demand_outlook(consumer_sentiment_summary)
+    consumer_state = consumer.get("state")
     return {
         "source_module": "consumer_sentiment",
         "method_version": "market_setup_v2_consumer_demand_v1",
@@ -851,6 +946,7 @@ def _normalize_consumer_demand(consumer_sentiment_summary, survey_direction):
                 "source_period": _monthly_source_period(
                     consumer_sentiment_summary.get("aligned_month")
                 ),
+                "explanation": _project_keys(consumer, _CONSUMER_EXPLANATION_KEYS),
             }
         },
     }
