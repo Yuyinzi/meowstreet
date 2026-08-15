@@ -370,6 +370,30 @@ def test_deterministic_history_question_without_window_is_unsupported():
     assert plan["operations"] == []
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What was the credit conditions history between 2026-05-01 and 2026-08-10?",
+        "信贷条件在 2026-05-01 到 2026-08-10 之间如何变化？",
+    ],
+)
+def test_credit_history_question_uses_existing_history_operation(question):
+    plan = deterministic_plan(question)
+
+    assert plan["intent"] == "local_history"
+    assert plan["operations"] == [
+        {
+            "operation_id": "query_indicator_history",
+            "parameters": {
+                "indicator_id": "credit_conditions",
+                "start": "2026-05-01",
+                "end": "2026-08-10",
+                "statistics": [],
+            },
+        }
+    ]
+
+
 def test_unsupported_question_returns_typed_unsupported_plan():
     plan = deterministic_plan("Tell me a joke")
     assert plan["intent"] == "unsupported"

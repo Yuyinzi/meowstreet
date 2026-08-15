@@ -1,3 +1,7 @@
+from datetime import date, timedelta
+
+import pytest
+
 from app.tools import us_rates_liquidity
 
 
@@ -1146,3 +1150,87 @@ def test_credit_interpretation_snapshot_is_stable_and_hashable():
     assert snapshot["metrics"]["bbb_credit_spread"]["value"] == 0.98
     assert snapshot["coverage"]["gap_start"] == "2021-01-08"
     assert snapshot["hash"] == same_snapshot["hash"]
+
+
+def _credit_history_base_dates(end):
+    start = date(2026, 3, 2)
+    current = start
+    result = []
+    while current <= end:
+        result.append(current)
+        current = current + timedelta(days=7)
+    return result
+
+
+def _credit_history_row_value(series_id, row_date, future_stress):
+    if series_id == "treasury_10y":
+        return 4.00
+    if series_id == "bbb_corporate_yield":
+        return 5.00
+    if future_stress and row_date >= date(2026, 7, 6):
+        return 12.00
+    return 8.00
+
+
+def credit_history_points(*, end="2026-08-15", future_stress=False):
+    end_date = date.fromisoformat(end)
+    points_by_id = {
+        "treasury_10y": [],
+        "bbb_corporate_yield": [],
+        "ccc_corporate_yield": [],
+    }
+    for row_date in _credit_history_base_dates(end_date):
+        for series_id in points_by_id:
+            points_by_id[series_id].append(
+                {
+                    "series_id": series_id,
+                    "date": row_date.isoformat(),
+                    "value": _credit_history_row_value(
+                        series_id, row_date, future_stress
+                    ),
+                    "source": "Corporate_Bond_Indices.xlsm",
+                }
+            )
+    return points_by_id
+
+
+def test_credit_conditions_history_replays_current_classifier_for_each_date():
+    points = credit_history_points()
+
+    rows = us_rates_liquidity.build_credit_conditions_history(points)
+    diagnostics = us_rates_liquidity._credit_diagnostics_from_series(points)
+    current = us_rates_liquidity._credit_conditions_status_from_diagnostics(diagnostics)
+
+    assert rows
+    assert rows[-1]["state"] == current
+    assert rows[-1]["method_version"] == "credit_conditions_history_v1"
+    assert rows[-1]["decision_method_version"] == "credit_conditions_v1"
+    assert set(rows[-1]) == {
+        "date",
+        "state",
+        "method_version",
+        "decision_method_version",
+    }
+    assert len({row["state"] for row in rows}) >= 2
+
+
+def test_credit_conditions_history_does_not_change_past_when_future_rows_are_added():
+    original = credit_history_points(end="2026-06-30")
+    extended = credit_history_points(end="2026-08-15", future_stress=True)
+
+    before = us_rates_liquidity.build_credit_conditions_history(original)
+    after = us_rates_liquidity.build_credit_conditions_history(extended)
+    after_through_original = [row for row in after if row["date"] <= "2026-06-30"]
+
+    assert after_through_original == before
+
+
+@pytest.mark.parametrize(
+    "missing_series",
+    ["treasury_10y", "bbb_corporate_yield", "ccc_corporate_yield"],
+)
+def test_credit_conditions_history_requires_all_source_series(missing_series):
+    points = credit_history_points()
+    points[missing_series] = []
+
+    assert us_rates_liquidity.build_credit_conditions_history(points) == []

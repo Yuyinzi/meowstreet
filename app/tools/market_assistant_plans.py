@@ -99,6 +99,10 @@ _INDICATOR_ALIASES = (
     ("s&p 500", "sp500_close"),
     ("sp 500", "sp500_close"),
     ("m2", "m2_money_stock"),
+    ("credit conditions", "credit_conditions"),
+    ("信贷条件", "credit_conditions"),
+    ("信贷", "credit_conditions"),
+    ("信用状况", "credit_conditions"),
     ("vix", "vix"),
     ("ism", "ism_manufacturing_pmi"),
 )
@@ -114,7 +118,18 @@ _SEARCH_MARKERS = (
     "latest report",
 )
 
-_HISTORY_MARKERS = ("history", "trend", "past ", "between", "since")
+_HISTORY_MARKERS = (
+    "history",
+    "trend",
+    "past ",
+    "between",
+    "since",
+    "历史",
+    "走势",
+    "变化",
+    "之间",
+    "以来",
+)
 
 _SOURCE_MARKERS = ("source of", "where does", "come from", "origin of")
 
@@ -580,7 +595,11 @@ def _parse_date_window(text):
 
 def _match_indicator(lowered):
     for alias, indicator_id in _INDICATOR_ALIASES:
-        if re.search(rf"\b{re.escape(alias)}\b", lowered):
+        if alias.isascii():
+            matched = re.search(rf"\b{re.escape(alias)}\b", lowered)
+        else:
+            matched = alias in lowered
+        if matched:
             return indicator_id
     return None
 

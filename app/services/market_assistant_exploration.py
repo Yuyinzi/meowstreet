@@ -3,7 +3,9 @@ import hashlib
 from app.db import benchmark_market_data
 from app.db import economic_confirmation
 from app.db import macro_indicators
+from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.tools import market_assistant_exploration as exploration_tools
+from app.tools import us_rates_liquidity as us_rates_liquidity_tool
 from app.tools.market_assistant_artifacts import validate_artifact
 
 EXPLORATION_SCHEMA_VERSION = "market_assistant_exploration_result_v1"
@@ -61,7 +63,7 @@ def _build_current_result(con, query, indicator, result_id):
         observed_window = {"date": latest["date"]}
         data_through = latest["date"]
         window_rows = [latest]
-    statistics = _compute_statistics(window_rows, query, indicator)
+    statistics = _compute_statistics(window_rows, query, indicator, lifecycle_rows=rows)
     return _finalize_result(
         window_rows,
         statistics,
@@ -74,11 +76,23 @@ def _build_current_result(con, query, indicator, result_id):
 
 
 def _build_history_result(con, query, indicator, result_id):
-    rows = _filter_window(_load_rows(con, indicator), query["start"], query["end"])
+    all_rows = _load_rows(con, indicator)
+    rows = _filter_window(all_rows, query["start"], query["end"])
     _check_row_limit(rows, indicator)
     observed_window = {"start": query["start"], "end": query["end"]}
     data_through = rows[-1]["date"] if rows else None
-    statistics = _compute_statistics(rows, query, indicator)
+    lifecycle_rows = (
+        [row for row in all_rows if row["date"] <= data_through]
+        if data_through is not None
+        else []
+    )
+    statistics = _compute_statistics(
+        rows,
+        query,
+        indicator,
+        lifecycle_rows=lifecycle_rows,
+        window_start=query["start"],
+    )
     return _finalize_result(
         rows,
         statistics,
@@ -226,7 +240,7 @@ def _build_result_objects(result, indicator_id):
     statistics = result["deterministic_statistics"]
     if _query_kind_is_comparison(result["query_contract"]):
         for period, period_statistics in statistics.items():
-            for statistic_id, statistic_value in period_statistics.items():
+            for statistic_id, statistic_value in _flatten_statistics(period_statistics):
                 objects.append(
                     {
                         "object_type": "deterministic_statistic",
@@ -240,7 +254,7 @@ def _build_result_objects(result, indicator_id):
                     }
                 )
     else:
-        for statistic_id, statistic_value in statistics.items():
+        for statistic_id, statistic_value in _flatten_statistics(statistics):
             objects.append(
                 {
                     "object_type": "deterministic_statistic",
@@ -253,6 +267,17 @@ def _build_result_objects(result, indicator_id):
                 }
             )
     return objects
+
+
+def _flatten_statistics(statistics):
+    flat = []
+    for statistic_id, statistic_value in statistics.items():
+        if isinstance(statistic_value, dict):
+            for child_id, child_value in statistic_value.items():
+                flat.append((f"{statistic_id}.{child_id}", child_value))
+        else:
+            flat.append((statistic_id, statistic_value))
+    return flat
 
 
 def _query_kind_is_comparison(query_contract):
@@ -268,6 +293,8 @@ def _load_rows(con, indicator):
         rows = _load_economic_confirmation(con, series)
     elif loader == "benchmark_prices":
         rows = _load_benchmark(con, series)
+    elif loader == "credit_conditions_history":
+        rows = _load_credit_conditions_history(con)
     else:
         raise ValueError(f"exploration loader is not registered: {loader}")
     return sorted(rows, key=lambda row: row["date"])
@@ -293,6 +320,17 @@ def _load_benchmark(con, series):
     return [{"date": row["date"], "value": row["close"]} for row in rows]
 
 
+def _load_credit_conditions_history(con):
+    treasury = us_rates_liquidity_db.load_rate_points_for_series(con, ["treasury_10y"])
+    corporate = macro_indicators.load_macro_indicator_points_for_series(
+        con, ["bbb_corporate_yield", "ccc_corporate_yield"]
+    )
+    points_by_id = {}
+    points_by_id.update(treasury)
+    points_by_id.update(corporate)
+    return us_rates_liquidity_tool.build_credit_conditions_history(points_by_id)
+
+
 def _filter_window(rows, start, end):
     return [row for row in rows if start <= row["date"] <= end]
 
@@ -304,7 +342,18 @@ def _check_row_limit(rows, indicator):
         )
 
 
-def _compute_statistics(rows, query, indicator):
+def _compute_statistics(
+    rows, query, indicator, *, lifecycle_rows=None, window_start=None
+):
+    if indicator["value_type"] == "categorical":
+        return exploration_tools.compute_categorical_statistics(
+            rows,
+            state_values=indicator["state_values"],
+            method_version=indicator["method_version"],
+            decision_method_version=indicator["decision_method_version"],
+            lifecycle_rows=lifecycle_rows,
+            window_start=window_start,
+        )
     return exploration_tools.compute_statistics(
         rows,
         query["statistics"],

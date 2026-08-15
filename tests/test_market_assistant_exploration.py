@@ -1,14 +1,225 @@
 import json
+from datetime import date, timedelta
 
 import pytest
 
 from app.db import benchmark_market_data
 from app.db import economic_confirmation
 from app.db import macro_indicators
+from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.services import market_assistant_exploration
 from app.tools import market_assistant_exploration as exploration_tools
 from app.tools.market_assistant_artifacts import validate_artifact
 from app.tools.market_assistant_exploration import validate_exploration_query
+
+
+def credit_history_connection(tmp_path):
+    db_path = tmp_path / "credit_history.sqlite"
+    con = us_rates_liquidity_db.connect(db_path)
+    macro_indicators.connect(db_path)
+    us_rates_liquidity_db.replace_rate_series_points(
+        con,
+        {
+            "series_id": "treasury_10y",
+            "title": "10-Year Treasury",
+            "instrument_type": "nominal_treasury",
+            "maturity_months": 120,
+            "units": "percent",
+            "source_workbook": "Benchmark_Yields_US.xlsm",
+            "source_sheet": "Data",
+        },
+        [
+            {
+                "date": "2026-03-02",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-03-09",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-03-16",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-03-23",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-03-30",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-04-06",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-04-13",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-04-20",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-04-27",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-05-04",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-05-11",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-05-18",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-05-25",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-06-01",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-06-08",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-06-15",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-06-22",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-06-29",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-07-06",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-07-13",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-07-20",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-07-27",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-08-03",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+            {
+                "date": "2026-08-10",
+                "value": 4.00,
+                "source_workbook": "Benchmark_Yields_US.xlsm",
+                "source_sheet": "Data",
+            },
+        ],
+    )
+    macro_indicators.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "bbb_corporate_yield",
+            "title": "BBB Corporate Yield",
+            "units": "percent",
+            "source": "BAMLC0A4CBBBEY.csv",
+        },
+        _credit_corporate_points(5.00),
+    )
+    macro_indicators.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "ccc_corporate_yield",
+            "title": "CCC Corporate Yield",
+            "units": "percent",
+            "source": "BAMLH0A3HYC.csv",
+        },
+        _credit_corporate_points(8.00, 10.00),
+    )
+    return con
+
+
+def _credit_corporate_points(low_value, high_value=None):
+    start = date(2026, 3, 2)
+    current = start
+    points = []
+    while current <= date(2026, 8, 10):
+        value = (
+            high_value
+            if high_value is not None and current >= date(2026, 7, 6)
+            else low_value
+        )
+        points.append(
+            {"date": current.isoformat(), "value": value, "source": "fred_ice_bofa"}
+        )
+        current = current + timedelta(days=7)
+    return points
+
+
+def empty_credit_history_connection(tmp_path):
+    db_path = tmp_path / "empty_credit_history.sqlite"
+    con = us_rates_liquidity_db.connect(db_path)
+    macro_indicators.connect(db_path)
+    return con
 
 
 def seeded_connection(tmp_path):
@@ -106,6 +317,7 @@ def valid_indicator(**overrides):
         "local_series": "vix",
         "frequency": "daily",
         "unit": "index",
+        "value_type": "numeric",
         "query_kinds": [
             "indicator_current",
             "indicator_history",
@@ -168,7 +380,7 @@ def test_query_rejects_arbitrary_table_name():
         )
 
 
-def test_catalog_registers_six_indicators():
+def test_catalog_registers_seven_indicators():
     catalog = exploration_tools.load_exploration_catalog()
     assert [indicator["indicator_id"] for indicator in catalog["indicators"]] == [
         "ism_manufacturing_pmi",
@@ -177,7 +389,192 @@ def test_catalog_registers_six_indicators():
         "initial_claims_sa",
         "continuing_claims_sa",
         "sp500_close",
+        "credit_conditions",
     ]
+
+
+def test_catalog_requires_registered_value_type():
+    payload = valid_catalog(valid_indicator())
+    del payload["indicators"][0]["value_type"]
+
+    with pytest.raises(ValueError, match="value type is required"):
+        exploration_tools.validate_exploration_catalog(payload)
+
+
+def test_categorical_catalog_requires_state_values():
+    payload = valid_catalog(
+        valid_indicator(
+            value_type="categorical",
+            loader="credit_conditions_history",
+            unit="state",
+            query_kinds=["indicator_current", "indicator_history"],
+            method_version="credit_conditions_history_v1",
+            decision_method_version="credit_conditions_v1",
+        )
+    )
+
+    with pytest.raises(ValueError, match="state values are required"):
+        exploration_tools.validate_exploration_catalog(payload)
+
+
+def _provenance_rows(rows):
+    return [
+        {
+            **row,
+            "method_version": "credit_conditions_history_v1",
+            "decision_method_version": "credit_conditions_v1",
+        }
+        for row in rows
+    ]
+
+
+def test_categorical_statistics_report_latest_transition_and_current_run():
+    rows = _provenance_rows(
+        [
+            {"date": "2026-08-01", "state": "healthy"},
+            {"date": "2026-08-04", "state": "healthy"},
+            {"date": "2026-08-05", "state": "weak_credit_warning"},
+            {"date": "2026-08-09", "state": "risk_rising"},
+            {"date": "2026-08-10", "state": "risk_rising"},
+        ]
+    )
+
+    summary = exploration_tools.compute_categorical_statistics(
+        rows,
+        state_values=[
+            "healthy",
+            "weak_credit_warning",
+            "risk_rising",
+        ],
+        method_version="credit_conditions_history_v1",
+        decision_method_version="credit_conditions_v1",
+    )
+
+    assert summary == {
+        "window_summary": {
+            "first_state": "healthy",
+            "last_state": "risk_rising",
+            "state_counts": {
+                "healthy": 2,
+                "weak_credit_warning": 1,
+                "risk_rising": 2,
+            },
+            "transition_count": 2,
+            "latest_transition": {
+                "date": "2026-08-09",
+                "from_state": "weak_credit_warning",
+                "to_state": "risk_rising",
+            },
+        },
+        "lifecycle_summary": {
+            "status": "available",
+            "state": "risk_rising",
+            "current_run_start": "2026-08-09",
+            "current_run_observations": 2,
+        },
+    }
+
+
+def test_categorical_statistics_empty_rows():
+    summary = exploration_tools.compute_categorical_statistics(
+        [],
+        state_values=["healthy", "weak_credit_warning"],
+        method_version="credit_conditions_history_v1",
+        decision_method_version="credit_conditions_v1",
+    )
+
+    assert summary == {
+        "window_summary": {
+            "first_state": None,
+            "last_state": None,
+            "state_counts": {},
+            "transition_count": 0,
+            "latest_transition": None,
+        },
+        "lifecycle_summary": {"status": "unavailable"},
+    }
+
+
+def test_categorical_statistics_lifecycle_uses_full_history_up_to_data_through():
+    window_rows = _provenance_rows(
+        [
+            {"date": "2026-03-01", "state": "risk_rising"},
+            {"date": "2026-04-01", "state": "risk_rising"},
+        ]
+    )
+    lifecycle_rows = _provenance_rows(
+        [
+            {"date": "2026-02-01", "state": "risk_rising"},
+            {"date": "2026-03-01", "state": "risk_rising"},
+            {"date": "2026-04-01", "state": "risk_rising"},
+        ]
+    )
+
+    summary = exploration_tools.compute_categorical_statistics(
+        window_rows,
+        state_values=["risk_rising"],
+        method_version="credit_conditions_history_v1",
+        decision_method_version="credit_conditions_v1",
+        lifecycle_rows=lifecycle_rows,
+        window_start="2026-03-01",
+    )
+
+    assert summary["window_summary"]["state_counts"] == {"risk_rising": 2}
+    assert summary["lifecycle_summary"] == {
+        "status": "available",
+        "state": "risk_rising",
+        "current_run_start": "2026-02-01",
+        "current_run_observations": 3,
+        "current_run_predates_window": True,
+    }
+
+
+def test_categorical_statistics_empty_window_marks_lifecycle_unavailable():
+    window_rows = []
+    lifecycle_rows = _provenance_rows(
+        [
+            {"date": "2026-02-01", "state": "risk_rising"},
+            {"date": "2026-03-01", "state": "risk_rising"},
+            {"date": "2026-04-01", "state": "risk_rising"},
+        ]
+    )
+
+    summary = exploration_tools.compute_categorical_statistics(
+        window_rows,
+        state_values=["risk_rising"],
+        method_version="credit_conditions_history_v1",
+        decision_method_version="credit_conditions_v1",
+        lifecycle_rows=lifecycle_rows,
+        window_start="2026-05-01",
+    )
+
+    assert summary["window_summary"] == {
+        "first_state": None,
+        "last_state": None,
+        "state_counts": {},
+        "transition_count": 0,
+        "latest_transition": None,
+    }
+    assert summary["lifecycle_summary"] == {"status": "unavailable"}
+
+
+def test_categorical_statistics_rejects_row_provenance_mismatch():
+    rows = [
+        {
+            "date": "2026-08-01",
+            "state": "healthy",
+            "method_version": "credit_conditions_history_old",
+            "decision_method_version": "credit_conditions_v1",
+        }
+    ]
+
+    with pytest.raises(ValueError, match="method version does not match catalog"):
+        exploration_tools.compute_categorical_statistics(
+            rows,
+            state_values=["healthy"],
+            method_version="credit_conditions_history_v1",
+            decision_method_version="credit_conditions_v1",
+        )
 
 
 def test_catalog_rejects_unknown_loader(tmp_path):
@@ -529,3 +926,93 @@ def test_result_validates_as_artifact(tmp_path):
     }
     validated = validate_artifact(envelope)
     assert validated["payload"]["result_hash"] == result["result_hash"]
+
+
+def test_credit_conditions_history_query_returns_categorical_result(tmp_path):
+    con = credit_history_connection(tmp_path)
+    result = market_assistant_exploration.execute_exploration(
+        con,
+        {
+            "query_kind": "indicator_history",
+            "indicator_id": "credit_conditions",
+            "start": "2026-04-01",
+            "end": "2026-08-10",
+            "statistics": [],
+        },
+        result_id="expl_credit_history",
+        created_at="2026-08-10T12:00:00Z",
+    )
+
+    assert result["authority"] == "local_observation"
+    assert result["market_setup_relation"] == "non_decision"
+    assert result["query_contract"]["indicator_id"] == "credit_conditions"
+    assert result["rows"]
+    assert (
+        result["rows"][-1]["state"]
+        == result["deterministic_statistics"]["window_summary"]["last_state"]
+    )
+    assert (
+        result["deterministic_statistics"]["lifecycle_summary"]["status"] == "available"
+    )
+    assert (
+        result["deterministic_statistics"]["lifecycle_summary"]["current_run_start"]
+        is not None
+    )
+    assert (
+        result["deterministic_statistics"]["window_summary"]["latest_transition"]
+        is not None
+    )
+    assert any(
+        obj["object_type"] == "observation_row"
+        and obj["object_id"].startswith("credit_conditions:")
+        for obj in result["object_index"]
+    )
+
+
+def test_credit_conditions_history_lifecycle_extends_before_query_window(tmp_path):
+    con = credit_history_connection(tmp_path)
+    result = market_assistant_exploration.execute_exploration(
+        con,
+        {
+            "query_kind": "indicator_history",
+            "indicator_id": "credit_conditions",
+            "start": "2026-07-13",
+            "end": "2026-08-10",
+            "statistics": [],
+        },
+        result_id="expl_credit_window",
+        created_at="2026-08-10T12:00:00Z",
+    )
+
+    assert result["rows"][0]["date"] == "2026-07-13"
+    lifecycle = result["deterministic_statistics"]["lifecycle_summary"]
+    assert lifecycle["current_run_start"] is not None
+    assert lifecycle["current_run_start"] < "2026-07-13"
+    assert lifecycle["current_run_predates_window"] is True
+    window = result["deterministic_statistics"]["window_summary"]
+    assert window["latest_transition"] is None
+    assert window["transition_count"] == 0
+
+
+def test_credit_conditions_history_empty_local_data(tmp_path):
+    con = empty_credit_history_connection(tmp_path)
+    result = market_assistant_exploration.execute_exploration(
+        con,
+        {
+            "query_kind": "indicator_history",
+            "indicator_id": "credit_conditions",
+            "start": "2026-04-01",
+            "end": "2026-08-10",
+            "statistics": [],
+        },
+        result_id="expl_credit_empty",
+        created_at="2026-08-10T12:00:00Z",
+    )
+
+    assert result["rows"] == []
+    assert result["data_through"] is None
+    assert result["deterministic_statistics"]["window_summary"]["last_state"] is None
+    assert (
+        result["deterministic_statistics"]["lifecycle_summary"]["status"]
+        == "unavailable"
+    )
