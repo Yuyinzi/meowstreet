@@ -9558,7 +9558,7 @@ def test_market_assistant_stream_truncated_without_terminal_event_is_interrupted
     }
 
 
-def test_market_assistant_stream_completion_announces_in_status():
+def test_market_assistant_stream_completion_announces_on_final_message_status():
     payload = _run_market_assistant_harness(
         """
         global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
@@ -9568,8 +9568,14 @@ def test_market_assistant_stream_completion_announces_in_status():
         ]) });
         elements.marketAssistantQuestion.value = "Will this work?";
         await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[1];
+        const messageStatus = assistant.children.find(
+          (child) => child.className === "market-assistant-message-status"
+        );
         console.log(JSON.stringify({
-          status: getActiveStatus().textContent,
+          messageStatus: messageStatus.textContent,
+          messageStatusIsLast: assistant.children.at(-1) === messageStatus,
+          globalStatus: elements.marketAssistantStatus.textContent,
           busyAfter: elements.marketAssistantLog.children[1].attrs["aria-busy"],
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
         }));
@@ -9577,10 +9583,63 @@ def test_market_assistant_stream_completion_announces_in_status():
     )
 
     assert payload == {
-        "status": "已生成回答",
+        "messageStatus": "已生成回答",
+        "messageStatusIsLast": True,
+        "globalStatus": "",
         "busyAfter": "false",
         "submitEnabled": True,
     }
+
+
+def test_market_assistant_stream_disabled_validation_completion_is_message_local():
+    payload = _run_market_assistant_harness(
+        """
+        global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
+          '{"type":"status","status":"validating"}\\n',
+          '{"type":"validation","status":"disabled","error_codes":[]}\\n',
+          '{"type":"complete","generation_status":"narration_validation_disabled",'
+          + '"answer_trace_id":"trace_1","citations":[],"resolution":{"mode":"current"}}\\n',
+        ]) });
+        elements.marketAssistantQuestion.value = "现在市场怎么样？";
+        await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[1];
+        const messageStatus = assistant.children.find(
+          (child) => child.className === "market-assistant-message-status"
+        );
+        console.log(JSON.stringify({
+          messageStatus: messageStatus.textContent,
+          messageStatusIsLast: assistant.children.at(-1) === messageStatus,
+          globalStatus: elements.marketAssistantStatus.textContent,
+          validationNotice: elements.marketAssistantValidationDisabledNotice.textContent,
+        }));
+        """
+    )
+
+    assert payload == {
+        "messageStatus": "已生成回答",
+        "messageStatusIsLast": True,
+        "globalStatus": "",
+        "validationNotice": "Claim validation 当前已关闭",
+    }
+
+
+def test_market_assistant_stream_validation_clears_validating_status():
+    payload = _run_market_assistant_harness(
+        """
+        const stream = hooks.createStreamingAssistantMessage();
+        hooks.applyStreamEvent(stream, { type: "status", status: "validating" });
+        hooks.applyStreamEvent(stream, {
+          type: "validation",
+          status: "disabled",
+          error_codes: [],
+        });
+        console.log(JSON.stringify({
+          messageStatus: stream.statusEl.textContent,
+        }));
+        """
+    )
+
+    assert payload == {"messageStatus": ""}
 
 
 def test_market_assistant_stream_message_aria_busy_lifecycle():
