@@ -9,7 +9,7 @@ from app.tools.market_setup_evidence_facts import load_explanation_surface
 
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = (
-    ROOT / "data" / "local_system" / "market_assistant_evidence_details.v1.json"
+    Path(__file__).resolve().parent / "market_assistant_evidence_details.v1.json"
 )
 REGISTRY_VERSION = "market_assistant_evidence_details_v1"
 
