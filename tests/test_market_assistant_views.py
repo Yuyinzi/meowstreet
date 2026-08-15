@@ -525,3 +525,160 @@ def test_comparison_view_uses_snapshot_delta_object():
     assert view["context_b_id"] == "ctx_b"
     assert view["results_changed"] is True
     assert len(view["changes"]) == 1
+
+
+def evidence_detail_route():
+    return route_question("美联储目前是加息、降息还是维持？", deep_analysis=False)
+
+
+def _evidence_detail_envelope(topics=("current", "drivers")):
+    detail = {
+        "fact_id": "macro_policy_response",
+        "label": "Policy Response",
+        "detail_kind": "policy_response",
+        "topics": list(topics),
+        "status": "available",
+        "current": {
+            "policy_action": "hold",
+            "overall_bias": "mild_hawkish",
+            "relationship_to_growth_direction": "conflicts",
+        },
+        "drivers": {
+            "policy_reason": "Hold decision with hawkish inflation language.",
+        },
+    }
+    artifact_id = f"ctx_setup_evidence_detail_macro_policy_response_{'_'.join(topics)}"
+    return {
+        "artifact_id": artifact_id,
+        "artifact_kind": "explanation_snapshot",
+        "schema_version": "market_assistant_artifact_v1",
+        "primary_authority": "decision_fact",
+        "market_setup_relation": "authoritative_snapshot",
+        "payload": {
+            "context_id": "ctx_setup",
+            "as_of": "2026-08-13",
+            "evidence_through": "2026-08-12",
+            "fact_id": "macro_policy_response",
+            "detail_kind": "policy_response",
+            "topics": list(topics),
+            "status": "available",
+            "detail": detail,
+        },
+        "object_index": [
+            {
+                "object_type": "evidence_detail",
+                "object_id": artifact_id,
+                "authority": "decision_fact",
+                "payload": detail,
+            }
+        ],
+        "integrity_hash": "x" * 64,
+    }
+
+
+def evidence_detail_artifacts(topics=("current", "drivers")):
+    envelope = _evidence_detail_envelope(topics)
+    return {envelope["artifact_id"]: envelope}
+
+
+def test_evidence_detail_view_contains_only_requested_topics():
+    view = build_explanation_view(
+        evidence_detail_route(),
+        evidence_detail_artifacts(),
+        question="美联储目前是加息、降息还是维持？",
+    )
+    assert view["view_version"] == "evidence_detail_v1"
+    assert view["question_language"] == "zh"
+    assert view["as_of"] == "2026-08-13"
+    assert view["evidence_through"] == "2026-08-12"
+    assert view["fact_id"] == "macro_policy_response"
+    assert view["label"] == "Policy Response"
+    assert view["detail_kind"] == "policy_response"
+    assert view["status"] == "可用"
+    assert view["topics"] == ["current", "drivers"]
+    assert view["current"]["policy_action"] == "hold"
+    assert view["drivers"]["policy_reason"]
+    assert "method" not in view
+    assert "source" not in view
+    assert view["audit_objects"]
+    for ref in view["audit_objects"]:
+        assert ref["object_type"] == "evidence_detail"
+        assert (
+            resolve_artifact_ref(evidence_detail_artifacts(), ref)["authority"]
+            == "decision_fact"
+        )
+
+
+def test_evidence_detail_view_keeps_method_topic_when_requested():
+    view = build_explanation_view(
+        evidence_detail_route(),
+        evidence_detail_artifacts(topics=("current", "method")),
+        question="美联储目前是加息、降息还是维持？",
+    )
+    assert view["topics"] == ["current", "method"]
+    assert view["current"]["policy_action"] == "hold"
+    assert "source" not in view
+    assert "drivers" not in view
+
+
+def test_evidence_detail_view_missing_status_is_localized():
+    envelope = _evidence_detail_envelope()
+    detail = envelope["payload"]["detail"]
+    detail["status"] = "missing"
+    envelope["payload"]["status"] = "missing"
+    del detail["current"]
+    del detail["drivers"]
+    artifacts = {envelope["artifact_id"]: envelope}
+    view = build_explanation_view(
+        evidence_detail_route(),
+        artifacts,
+        question="美联储目前是加息、降息还是维持？",
+    )
+    assert view["status"] == "数据缺失"
+    assert "current" not in view
+    assert "drivers" not in view
+
+
+def test_default_setup_view_isolates_detail_only_explanation_values():
+    snapshot = _representative_snapshot()
+    for fact in snapshot["evidence"]:
+        if fact["fact_id"] == "macro_policy_response":
+            explanation = fact.setdefault("explanation", {})
+            policy_read = explanation.setdefault("policy_read", {})
+            policy_read["reason"] = "detail_only_policy_reason_7f21"
+            policy_read["policy_action"] = "hold"
+            policy_read["overall_bias"] = "mild_hawkish"
+        if fact["fact_id"] == "macro_financial_conditions":
+            fact.setdefault("explanation", {}).setdefault("details", {})[
+                "curve_status"
+            ] = "inverted"
+        if fact["fact_id"] == "consumer_demand_outlook":
+            fact.setdefault("explanation", {})["percentile_zone"] = "elevated"
+    artifacts = {
+        envelope["artifact_id"]: envelope
+        for envelope in [
+            snapshot_artifact(snapshot),
+            _setup_overview_artifact(snapshot),
+            _macro_regime_artifact(snapshot),
+            _confirmation_tests_artifact(
+                {"test_ids": ["equity", "credit", "vix"]}, snapshot
+            ),
+            _posture_artifact(snapshot),
+            _approved_counterfactuals_artifact(snapshot),
+        ]
+    }
+    view = build_explanation_view(
+        current_setup_route(),
+        artifacts,
+        question="现在市场怎么样？",
+    )
+    assert view["view_version"] == "setup_explanation_v1"
+    serialized = canonical_json(view)
+    for forbidden in (
+        b"detail_only_policy_reason_7f21",
+        b"policy_action",
+        b"overall_bias",
+        b"curve_status",
+        b"percentile_zone",
+    ):
+        assert forbidden not in serialized

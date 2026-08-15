@@ -26,6 +26,7 @@ _REACT_TOOL_IDS = (
     "get_indicator_knowledge",
     "query_indicator_history",
     "compare_snapshots",
+    "get_evidence_detail",
 )
 
 _RESEARCH_TOOL_IDS = {
@@ -173,6 +174,14 @@ def _question_language(question):
 def _translate_initial_operation(operation):
     operation_id = operation["operation_id"]
     indicator_id = operation.get("indicator_id")
+    if operation_id == "get_evidence_detail":
+        return {
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": operation["fact_id"],
+                "topics": operation["topics"],
+            },
+        }
     if operation_id == "get_indicator_confirmation":
         test_id = _TEST_ID_BY_INDICATOR.get(indicator_id, indicator_id)
         return {

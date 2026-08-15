@@ -7,6 +7,11 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import ValidationError
 
+from app.tools.market_assistant_evidence_detail_registry import DETAIL_TOPICS
+from app.tools.market_assistant_evidence_detail_registry import (
+    match_evidence_detail_question,
+)
+
 ROUTE_IDS = (
     "current_setup_overview",
     "why_macro_regime",
@@ -15,6 +20,7 @@ ROUTE_IDS = (
     "indicator_confirmation",
     "indicator_definition",
     "indicator_method",
+    "evidence_detail",
     "react",
 )
 
@@ -28,6 +34,7 @@ _VIEW_TYPE_IDS = (
     "setup_explanation",
     "indicator_explanation",
     "method_explanation",
+    "evidence_detail",
     "react_anchor",
 )
 
@@ -40,6 +47,7 @@ _OPERATION_IDS = (
     "get_indicator_confirmation",
     "get_indicator_definition",
     "get_indicator_method",
+    "get_evidence_detail",
 )
 
 _SUPPLEMENTARY_TOOL_IDS = (
@@ -81,6 +89,7 @@ _ROUTE_OPERATIONS = {
     "indicator_confirmation": ("get_indicator_confirmation",),
     "indicator_definition": ("get_indicator_definition",),
     "indicator_method": ("get_indicator_method",),
+    "evidence_detail": ("get_evidence_detail",),
     "react": (),
 }
 
@@ -100,6 +109,7 @@ _SUPPLEMENTARY_TOOLS = {
     ),
     "indicator_definition": ("get_indicator_current", "get_indicator_method"),
     "indicator_method": ("get_indicator_current", "get_indicator_definition"),
+    "evidence_detail": (),
     "react": (),
 }
 
@@ -111,6 +121,7 @@ _VIEW_TYPES = {
     "indicator_confirmation": "indicator_explanation",
     "indicator_definition": "indicator_explanation",
     "indicator_method": "method_explanation",
+    "evidence_detail": "evidence_detail",
     "react": "react_anchor",
 }
 
@@ -208,6 +219,7 @@ _METHOD_MARKERS = (
 _HISTORY_MARKERS = (
     "历史",
     "过去",
+    "最近",
     "走势",
     "变化",
     "history",
@@ -260,6 +272,8 @@ class _RouteOperation(BaseModel):
 
     operation_id: Literal[*_OPERATION_IDS]
     indicator_id: str | None = Field(default=None, min_length=1)
+    fact_id: str | None = Field(default=None, min_length=1)
+    topics: list[Literal[*DETAIL_TOPICS]] | None = Field(default=None, min_length=1)
 
 
 class _RouteSchema(BaseModel):
@@ -317,11 +331,24 @@ def _route(normalized):
     route_id = _explanation_route(lowered, compact)
     if route_id is not None:
         return _route_match(route_id)
+    detail_match = match_evidence_detail_question(normalized)
+    if detail_match is not None:
+        return _route_match(
+            "evidence_detail",
+            fact_id=detail_match["fact_id"],
+            topics=detail_match["default_topics"],
+        )
     return _route_match(_REACT_ROUTE_ID)
 
 
-def _route_match(route_id, indicator_id=None):
-    return {"route_id": route_id, "indicator_id": indicator_id}
+def _route_match(route_id, indicator_id=None, fact_id=None, topics=None):
+    match = {"route_id": route_id}
+    if indicator_id is not None:
+        match["indicator_id"] = indicator_id
+    if fact_id is not None:
+        match["fact_id"] = fact_id
+        match["topics"] = topics
+    return match
 
 
 def _explanation_route(lowered, compact):
@@ -390,12 +417,14 @@ def _alias_present(alias, lowered, compact):
 
 def _build_route_payload(route, deep_analysis):
     route_id = route["route_id"]
-    indicator_id = route["indicator_id"]
     initial_operations = []
     for operation_id in _ROUTE_OPERATIONS[route_id]:
         operation = {"operation_id": operation_id}
-        if indicator_id is not None:
-            operation["indicator_id"] = indicator_id
+        if route.get("indicator_id") is not None:
+            operation["indicator_id"] = route["indicator_id"]
+        if route.get("fact_id") is not None:
+            operation["fact_id"] = route["fact_id"]
+            operation["topics"] = route["topics"]
         initial_operations.append(operation)
     return {
         "route_id": route_id,
@@ -446,3 +475,26 @@ def _validate_route_invariants(route):
         raise ValueError("fast path route must use deterministic routing source")
     if not route["initial_operations"]:
         raise ValueError("fast path route requires initial operations")
+    _validate_operation_detail_fields(route)
+    if route["route_id"] == "evidence_detail":
+        if len(route["initial_operations"]) != 1:
+            raise ValueError(
+                "evidence detail route requires exactly one initial operation"
+            )
+        if route["initial_operations"][0]["operation_id"] != "get_evidence_detail":
+            raise ValueError(
+                "evidence detail route requires the evidence detail operation"
+            )
+
+
+def _validate_operation_detail_fields(route):
+    for operation in route["initial_operations"]:
+        if operation["operation_id"] != "get_evidence_detail":
+            if (
+                operation.get("fact_id") is not None
+                or operation.get("topics") is not None
+            ):
+                raise ValueError("detail fields are only valid on the detail operation")
+            continue
+        if operation.get("fact_id") is None or operation.get("topics") is None:
+            raise ValueError("evidence detail operation requires fact id and topics")

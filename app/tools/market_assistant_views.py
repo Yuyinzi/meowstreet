@@ -4,6 +4,7 @@ _VIEW_VERSION_BY_TYPE = {
     "setup_explanation": "setup_explanation_v1",
     "indicator_explanation": "indicator_explanation_v1",
     "method_explanation": "method_explanation_v1",
+    "evidence_detail": "evidence_detail_v1",
     "react_anchor": "react_anchor_v1",
 }
 
@@ -128,6 +129,11 @@ _DISPLAY_LABELS = {
         "indicator_history": "历史走势",
         "period_comparison": "区间比较",
         "release_history": "发布历史",
+        "available": "可用",
+        "missing": "数据缺失",
+        "stale": "数据已过期",
+        "invalid": "数据无效",
+        "unsupported": "暂不支持",
     },
     "en": {
         "rising": "rising",
@@ -219,6 +225,11 @@ _DISPLAY_LABELS = {
         "indicator_history": "history",
         "period_comparison": "period comparison",
         "release_history": "release history",
+        "available": "available",
+        "missing": "missing",
+        "stale": "stale",
+        "invalid": "invalid",
+        "unsupported": "unsupported",
     },
 }
 
@@ -249,6 +260,10 @@ def build_explanation_view(route, artifacts, *, question, answer_language=None):
         )
     if version == "method_explanation_v1":
         return _build_method_view(route, object_map, language, as_of, evidence_through)
+    if version == "evidence_detail_v1":
+        return _build_evidence_detail_view(
+            route, artifacts, object_map, language, as_of, evidence_through
+        )
     if version == "react_anchor_v1":
         return _build_react_anchor_view(
             route, artifacts, object_map, language, as_of, evidence_through
@@ -647,6 +662,42 @@ def _build_method_view(route, object_map, language, as_of, evidence_through):
         "method_objects": method_objects,
         "audit_objects": _audit_refs(audit_entries),
     }
+
+
+def _build_evidence_detail_view(
+    route, artifacts, object_map, language, as_of, evidence_through
+):
+    for artifact_id in sorted(artifacts):
+        artifact = artifacts[artifact_id]
+        payload = artifact.get("payload") or {}
+        if payload.get("fact_id") is None:
+            continue
+        detail = payload.get("detail") or {}
+        topics = payload.get("topics") or []
+        view = {
+            "view_version": "evidence_detail_v1",
+            "question_language": language,
+            "as_of": as_of,
+            "evidence_through": evidence_through,
+            "fact_id": payload["fact_id"],
+            "label": detail.get("label"),
+            "detail_kind": detail.get("detail_kind"),
+            "status": _display(detail.get("status"), language),
+            "topics": list(topics),
+        }
+        for topic in topics:
+            if topic in detail:
+                view[topic] = detail[topic]
+        view["audit_objects"] = [
+            {
+                "artifact_id": artifact_id,
+                "object_type": obj["object_type"],
+                "object_id": obj["object_id"],
+            }
+            for obj in artifact.get("object_index") or []
+        ]
+        return view
+    raise ValueError("evidence detail artifact is not available")
 
 
 def _build_react_anchor_view(

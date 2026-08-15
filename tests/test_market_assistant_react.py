@@ -719,11 +719,10 @@ async def test_deep_analysis_exposes_only_authorized_tools():
         "get_indicator_knowledge",
         "query_indicator_history",
         "compare_snapshots",
+        "get_evidence_detail",
     ]
     assert not any(name.startswith("research_") for name in tool_names)
-    authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3][
-        "text"
-    ]
+    authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3]["text"]
     assert "research_focused" not in authorization
     assert "acquire_research" not in deps.requested
     assert result["generation_status"] == "answered"
@@ -799,9 +798,7 @@ async def test_external_search_exposes_only_requested_research_tier(
     tool_names = [tool["name"] for tool in deps.stream_turn.calls[0]["tools"]]
     research = [name for name in tool_names if name.startswith("research_")]
     assert research == expected_research
-    authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3][
-        "text"
-    ]
+    authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3]["text"]
     assert all(name in authorization for name in expected_research)
     assert all(
         name not in authorization
@@ -1173,6 +1170,22 @@ def test_translate_initial_operation_maps_indicator_operations():
     assert _translate_initial_operation({"operation_id": "get_setup_overview"}) == {
         "tool_name": "get_setup_overview",
         "arguments": {},
+    }
+
+
+def test_translate_initial_operation_maps_evidence_detail_operation():
+    assert _translate_initial_operation(
+        {
+            "operation_id": "get_evidence_detail",
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        }
+    ) == {
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        },
     }
 
 
