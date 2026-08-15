@@ -41,7 +41,10 @@ LOADERS = (
     "macro_indicator_points",
     "economic_confirmation_current",
     "benchmark_prices",
+    "credit_conditions_history",
 )
+
+VALUE_TYPES = ("numeric", "categorical")
 
 FREQUENCIES = ("daily", "weekly", "monthly")
 
@@ -136,6 +139,17 @@ def _validate_catalog_indicator(indicator, seen):
     unit = indicator.get("unit")
     if not isinstance(unit, str) or not unit:
         raise ValueError(f"exploration indicator {indicator_id} unit is required")
+    value_type = indicator.get("value_type")
+    if value_type not in VALUE_TYPES:
+        raise ValueError(f"exploration indicator {indicator_id} value type is required")
+    if value_type == "categorical":
+        _validate_categorical_catalog_fields(indicator, indicator_id)
+    else:
+        for field_name in ("state_values", "method_version", "decision_method_version"):
+            if field_name in indicator:
+                raise ValueError(
+                    f"exploration indicator {indicator_id} has unexpected {field_name}"
+                )
     query_kinds = indicator.get("query_kinds")
     if not isinstance(query_kinds, list) or not query_kinds:
         raise ValueError(
@@ -159,6 +173,29 @@ def _validate_catalog_indicator(indicator, seen):
     if gap_policy not in GAP_POLICIES:
         raise ValueError(
             f"exploration indicator {indicator_id} has unknown gap policy: {gap_policy}"
+        )
+
+
+def _validate_categorical_catalog_fields(indicator, indicator_id):
+    state_values = indicator.get("state_values")
+    if (
+        not isinstance(state_values, list)
+        or not state_values
+        or any(not isinstance(state, str) or not state for state in state_values)
+        or len(set(state_values)) != len(state_values)
+    ):
+        raise ValueError(
+            f"exploration indicator {indicator_id} state values are required"
+        )
+    method_version = indicator.get("method_version")
+    if not isinstance(method_version, str) or not method_version:
+        raise ValueError(
+            f"exploration indicator {indicator_id} method version is required"
+        )
+    decision_method_version = indicator.get("decision_method_version")
+    if not isinstance(decision_method_version, str) or not decision_method_version:
+        raise ValueError(
+            f"exploration indicator {indicator_id} decision method version is required"
         )
 
 
@@ -189,6 +226,10 @@ def validate_exploration_query(payload):
             f"query kind {query['query_kind']} is not supported for {query['indicator_id']}"
         )
     _validate_approved_statistics(query["statistics"])
+    if indicator["value_type"] == "categorical" and query["statistics"]:
+        raise ValueError(
+            f"requested statistics are not supported for categorical indicator: {query['indicator_id']}"
+        )
     _validate_query_windows(query)
     return query
 
@@ -280,6 +321,69 @@ def _normalize_row(row):
     if isinstance(value, float) and not math.isfinite(value):
         raise ValueError("exploration row value is not finite")
     return {"date": row_date, "value": float(value)}
+
+
+def compute_categorical_statistics(rows, *, state_values):
+    if not isinstance(rows, list):
+        raise ValueError("exploration rows are required")
+    if (
+        not isinstance(state_values, list)
+        or not state_values
+        or any(not isinstance(state, str) or not state for state in state_values)
+        or len(set(state_values)) != len(state_values)
+    ):
+        raise ValueError("categorical state values are required")
+    normalized = [_normalize_categorical_row(row, state_values) for row in rows]
+    transitions = [
+        {
+            "date": current["date"],
+            "from_state": previous["state"],
+            "to_state": current["state"],
+        }
+        for previous, current in zip(normalized, normalized[1:])
+        if previous["state"] != current["state"]
+    ]
+    last_state = normalized[-1]["state"] if normalized else None
+    current_run = []
+    for row in reversed(normalized):
+        if row["state"] != last_state:
+            break
+        current_run.append(row)
+    counts = {
+        state: sum(1 for row in normalized if row["state"] == state)
+        for state in state_values
+        if any(row["state"] == state for row in normalized)
+    }
+    return {
+        "first_state": normalized[0]["state"] if normalized else None,
+        "last_state": last_state,
+        "state_counts": counts,
+        "transition_count": len(transitions),
+        "latest_transition": transitions[-1] if transitions else None,
+        "current_run_start": current_run[-1]["date"] if current_run else None,
+        "current_run_observations": len(current_run),
+    }
+
+
+def _normalize_categorical_row(row, state_values):
+    if not isinstance(row, dict):
+        raise ValueError("exploration row is required to be a dict")
+    row_date = row.get("date")
+    if not isinstance(row_date, str) or not row_date:
+        raise ValueError("exploration row date is required")
+    try:
+        date.fromisoformat(row_date)
+    except ValueError as exc:
+        raise ValueError("exploration row date is invalid") from exc
+    state = row.get("state")
+    if not isinstance(state, str) or state not in state_values:
+        raise ValueError("exploration row state is not approved")
+    normalized = {"date": row_date, "state": state}
+    for field_name in ("method_version", "decision_method_version"):
+        field_value = row.get(field_name)
+        if field_value is not None:
+            normalized[field_name] = field_value
+    return normalized
 
 
 def _compute_statistic(statistic_id, rows, values, *, frequency, gap_policy):

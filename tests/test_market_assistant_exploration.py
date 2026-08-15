@@ -106,6 +106,7 @@ def valid_indicator(**overrides):
         "local_series": "vix",
         "frequency": "daily",
         "unit": "index",
+        "value_type": "numeric",
         "query_kinds": [
             "indicator_current",
             "indicator_history",
@@ -168,7 +169,7 @@ def test_query_rejects_arbitrary_table_name():
         )
 
 
-def test_catalog_registers_six_indicators():
+def test_catalog_registers_seven_indicators():
     catalog = exploration_tools.load_exploration_catalog()
     assert [indicator["indicator_id"] for indicator in catalog["indicators"]] == [
         "ism_manufacturing_pmi",
@@ -177,7 +178,86 @@ def test_catalog_registers_six_indicators():
         "initial_claims_sa",
         "continuing_claims_sa",
         "sp500_close",
+        "credit_conditions",
     ]
+
+
+def test_catalog_requires_registered_value_type():
+    payload = valid_catalog(valid_indicator())
+    del payload["indicators"][0]["value_type"]
+
+    with pytest.raises(ValueError, match="value type is required"):
+        exploration_tools.validate_exploration_catalog(payload)
+
+
+def test_categorical_catalog_requires_state_values():
+    payload = valid_catalog(
+        valid_indicator(
+            value_type="categorical",
+            loader="credit_conditions_history",
+            unit="state",
+            query_kinds=["indicator_current", "indicator_history"],
+            method_version="credit_conditions_history_v1",
+            decision_method_version="credit_conditions_v1",
+        )
+    )
+
+    with pytest.raises(ValueError, match="state values are required"):
+        exploration_tools.validate_exploration_catalog(payload)
+
+
+def test_categorical_statistics_report_latest_transition_and_current_run():
+    rows = [
+        {"date": "2026-08-01", "state": "healthy"},
+        {"date": "2026-08-04", "state": "healthy"},
+        {"date": "2026-08-05", "state": "weak_credit_warning"},
+        {"date": "2026-08-09", "state": "risk_rising"},
+        {"date": "2026-08-10", "state": "risk_rising"},
+    ]
+
+    summary = exploration_tools.compute_categorical_statistics(
+        rows,
+        state_values=[
+            "healthy",
+            "weak_credit_warning",
+            "risk_rising",
+        ],
+    )
+
+    assert summary == {
+        "first_state": "healthy",
+        "last_state": "risk_rising",
+        "state_counts": {
+            "healthy": 2,
+            "weak_credit_warning": 1,
+            "risk_rising": 2,
+        },
+        "transition_count": 2,
+        "latest_transition": {
+            "date": "2026-08-09",
+            "from_state": "weak_credit_warning",
+            "to_state": "risk_rising",
+        },
+        "current_run_start": "2026-08-09",
+        "current_run_observations": 2,
+    }
+
+
+def test_categorical_statistics_empty_rows():
+    summary = exploration_tools.compute_categorical_statistics(
+        [],
+        state_values=["healthy", "weak_credit_warning"],
+    )
+
+    assert summary == {
+        "first_state": None,
+        "last_state": None,
+        "state_counts": {},
+        "transition_count": 0,
+        "latest_transition": None,
+        "current_run_start": None,
+        "current_run_observations": 0,
+    }
 
 
 def test_catalog_rejects_unknown_loader(tmp_path):
