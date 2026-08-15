@@ -823,16 +823,6 @@ async def test_external_search_keeps_fixed_schema_and_authorizes_requested_tier(
         for name in {"research_focused", "research_standard", "research_deep"}
         - set(expected_research)
     )
-    tool_names = [tool["name"] for tool in deps.stream_turn.calls[0]["tools"]]
-    research = [name for name in tool_names if name.startswith("research_")]
-    assert research == expected_research
-    authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3]["text"]
-    assert all(name in authorization for name in expected_research)
-    assert all(
-        name not in authorization
-        for name in {"research_focused", "research_standard", "research_deep"}
-        - set(expected_research)
-    )
 
 
 @pytest.mark.asyncio
