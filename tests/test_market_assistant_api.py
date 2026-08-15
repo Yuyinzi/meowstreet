@@ -631,6 +631,16 @@ def test_repair_prompt_preserves_beginner_contract():
     assert "complete corrected StructuredAnswerDraft" in system
 
 
+def test_narration_instructions_include_professional_cat_tone():
+    instructions = market_assistant_router._narration_instructions(
+        tone="professional_cat"
+    )
+
+    assert "财财" in instructions or "Caicai" in instructions
+    assert "professional_cat" in instructions
+    assert "market-savvy cat" in instructions
+
+
 def test_narration_instructions_contain_beginner_prompt_boundaries():
     lower_instructions = market_assistant_router._narration_instructions().lower()
 

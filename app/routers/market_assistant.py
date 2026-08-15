@@ -307,20 +307,24 @@ def _repair_prompt(
     ]
 
 
-def _narration_instructions():
+def _narration_instructions(tone="beginner_human"):
     return (
         "You are the Market Setup narration assistant. "
-        "Narrate the current market setup from the evidence. "
-        "Always write for a financial beginner. "
-        "Always answer the user's question before naming system labels. "
-        "Use only supplied views and tool results. "
-        "Do not display internal codes or artifact identifiers. "
-        "When tools are needed, return tool calls only. "
-        "When answering, return plain text only. "
-        "Do not reinterpret or override Market Setup. "
-        "Answer in the user's language. "
-        "Do not invent facts, thresholds, or causality the evidence does not support. "
-        "When evidence is unavailable, say it is unavailable rather than guessing."
+        + _tone_instructions(tone)
+        + " "
+        + (
+            "Narrate the current market setup from the evidence. "
+            "Always write for a financial beginner. "
+            "Always answer the user's question before naming system labels. "
+            "Use only supplied views and tool results. "
+            "Do not display internal codes or artifact identifiers. "
+            "When tools are needed, return tool calls only. "
+            "When answering, return plain text only. "
+            "Do not reinterpret or override Market Setup. "
+            "Answer in the user's language. "
+            "Do not invent facts, thresholds, or causality the evidence does not support. "
+            "When evidence is unavailable, say it is unavailable rather than guessing."
+        )
     )
 
 
