@@ -495,7 +495,7 @@ def test_survey_synthesis_mount_is_between_market_setup_and_benchmarks():
 
 def test_benchmark_indices_has_section_spacing_after_survey_synthesis():
     html = (ROOT / "static" / "macro-dashboard.html").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert (
         'class="benchmark-indices" aria-label="Benchmark market phase overview"' in html
@@ -504,7 +504,7 @@ def test_benchmark_indices_has_section_spacing_after_survey_synthesis():
 
 
 def test_macro_dashboard_js_fetches_us_rates_liquidity_api():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert 'fetch("/api/macro-dashboard/us-rates-liquidity")' in js
     assert "renderUsRatesLiquidity" in js
@@ -529,7 +529,7 @@ def test_macro_dashboard_html_keeps_rates_credit_mount_without_mock_values():
 
 
 def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert 'fetch("/api/macro-dashboard/market-phase")' in js
     assert (
@@ -589,7 +589,7 @@ def test_macro_dashboard_js_fetches_overview_and_lazy_loads_market_detail():
 
 
 def test_macro_dashboard_js_removes_gdp_relationship_panel():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert 'fetch("/api/macro-dashboard/gdp-relationships")' not in js
     assert (
@@ -611,7 +611,7 @@ def test_macro_dashboard_js_removes_gdp_relationship_panel():
 
 
 def test_macro_dashboard_js_has_mock_lag_comparison_metrics():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "lag_correlations" not in js
     assert "renderLagComparison" not in js
@@ -620,7 +620,7 @@ def test_macro_dashboard_js_has_mock_lag_comparison_metrics():
 
 
 def test_macro_dashboard_css_has_overview_and_chart_classes():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".market-grid" in css
     assert ".market-card" in css
@@ -635,7 +635,7 @@ def test_macro_dashboard_css_has_overview_and_chart_classes():
 
 
 def test_macro_dashboard_css_has_mock_gdp_relationship_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".gdp-relationship" in css
     assert ".relationship-chart" in css
@@ -658,7 +658,7 @@ def test_macro_dashboard_css_has_mock_gdp_relationship_styles():
 
 
 def test_macro_dashboard_css_has_lag_comparison_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".lag-table" in css
     assert ".lag-row" in css
@@ -902,7 +902,7 @@ def test_macro_dashboard_js_renders_services_latest_values():
 
 
 def test_macro_dashboard_js_removes_dot_layer_and_keeps_mouse_tooltip():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert 'event.key === "Escape"' in js
     assert 'svg.addEventListener("mousemove"' in js
@@ -918,13 +918,13 @@ def test_macro_dashboard_js_removes_dot_layer_and_keeps_mouse_tooltip():
 
 
 def test_macro_dashboard_chart_css_stays_before_mobile_media_query():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert css.index(".chart-axis") < css.index("@media (max-width: 820px)")
 
 
 def test_macro_dashboard_js_explains_market_phase_method():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "function renderMarketPhaseMethod(" in js
     assert "Rolling High = highest high seen so far in the series." in js
@@ -937,7 +937,7 @@ def test_macro_dashboard_js_explains_market_phase_method():
 
 
 def test_macro_dashboard_css_has_market_phase_method_note_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".method-note" in css
     assert ".method-formula-list" in css
@@ -945,7 +945,7 @@ def test_macro_dashboard_css_has_market_phase_method_note_styles():
 
 
 def test_macro_dashboard_js_has_per_market_refresh_action():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert 'class="market-refresh"' in js
     assert 'aria-label="Refresh ${escapeHtml(market.title)}"' in js
@@ -963,14 +963,14 @@ def test_macro_dashboard_js_has_per_market_refresh_action():
 
 
 def test_macro_dashboard_css_has_refresh_button_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".market-refresh" in css
     assert ".market-refresh:disabled" in css
 
 
 def test_macro_dashboard_js_lazy_loads_us_rates_detail_charts():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "selectedRatesDetailId" in js
     assert "usRatesDetailsById" in js
@@ -997,7 +997,7 @@ def test_macro_dashboard_js_lazy_loads_us_rates_detail_charts():
 
 
 def test_macro_dashboard_js_renders_rates_detail_with_dashboard_chart_pattern():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "renderRatesTimeSeriesChart" in js
     assert "renderRatesCurveComparisonChart" in js
@@ -1026,7 +1026,7 @@ def test_macro_dashboard_js_renders_rates_detail_with_dashboard_chart_pattern():
 
 
 def test_macro_dashboard_css_has_rates_detail_clickable_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".rates-signal-card.selected" in css
     assert "min-height: 88px;" in css
@@ -1037,7 +1037,7 @@ def test_macro_dashboard_css_has_rates_detail_clickable_styles():
 
 
 def test_macro_dashboard_js_has_simplified_credit_conditions_labels():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "Credit Conditions" in js
     assert "BBB Credit Spread" in js
@@ -1055,7 +1055,7 @@ def test_macro_dashboard_js_has_simplified_credit_conditions_labels():
 
 
 def test_macro_dashboard_js_has_credit_zh_translations():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "BBB信用利差" in js
     assert "CCC信用利差" in js
@@ -1072,7 +1072,7 @@ def test_macro_dashboard_js_has_credit_zh_translations():
 
 
 def test_macro_dashboard_js_renders_credit_diagnostics():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "credit_conditions_diagnostics" in js
     assert "credit_diagnostics" in js
@@ -1097,19 +1097,19 @@ def test_macro_dashboard_js_renders_credit_diagnostics():
 
 
 def test_macro_dashboard_css_contains_credit_gap_note_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".credit-data-gap-note" in css
 
 
 def test_macro_dashboard_css_contains_credit_ai_interpretation_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".credit-ai-interpretation" in css
 
 
 def test_macro_dashboard_css_contains_credit_interpretation_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".credit-interpretation-strip" in css
     assert ".credit-interpretation-healthy" in css
@@ -1119,7 +1119,7 @@ def test_macro_dashboard_css_contains_credit_interpretation_styles():
 
 
 def test_macro_dashboard_js_fetches_and_renders_growth_cycle_m2_card():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert 'fetch("/api/macro-dashboard/growth-cycle")' in js
     assert "state.growthCycle" in js
@@ -1144,7 +1144,7 @@ def test_macro_dashboard_js_fetches_and_renders_growth_cycle_m2_card():
 
 
 def test_macro_dashboard_js_wires_growth_cycle_detail_panel():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "selectedGrowthCycleDetailId" in js
     assert "growthCycleDetailsById" in js
@@ -1160,14 +1160,14 @@ def test_macro_dashboard_js_wires_growth_cycle_detail_panel():
 
 
 def test_macro_dashboard_css_has_clickable_m2_card_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".m2-card-button" in css
     assert ".m2-card.selected" in css
 
 
 def test_macro_dashboard_css_has_growth_cycle_card_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".growth-cycle" in css
     assert ".m2-card" in css
@@ -1176,7 +1176,7 @@ def test_macro_dashboard_css_has_growth_cycle_card_styles():
 
 
 def test_macro_dashboard_js_renders_m2_ai_interpretation():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "renderMacroAiInterpretation" in js
     assert "m2_ai_interpretation" in js
@@ -1186,13 +1186,13 @@ def test_macro_dashboard_js_renders_m2_ai_interpretation():
 
 
 def test_macro_dashboard_css_contains_macro_ai_interpretation_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".macro-ai-interpretation" in css
 
 
 def test_macro_dashboard_js_renders_fed_balance_sheet_card():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "renderFedBalanceSheetCard" in js
     assert "Fed Balance Sheet" in js
@@ -1222,7 +1222,7 @@ def test_survey_synthesis_contains_services_backlog_signal_row():
 
 
 def test_macro_dashboard_js_renders_survey_synthesis_placeholder_card():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "renderSurveySynthesisCard" in js
     assert "Survey Synthesis" in js
@@ -1258,7 +1258,7 @@ def test_macro_dashboard_js_renders_survey_synthesis_placeholder_card():
 
 
 def test_macro_dashboard_js_renders_inflation_context_card():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "renderInflationContextCard" in js
     assert "Inflation Context" in js
@@ -5091,8 +5091,8 @@ def test_services_detail_edge_cases():
 
 
 def test_services_full_evidence_has_readable_responsive_styles():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text(encoding="utf-8")
-    css = (ROOT / "static" / "macro-dashboard.css").read_text(encoding="utf-8")
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text(encoding="utf-8")
 
     assert 'class="ism-services-commodity-grid"' in js
     assert 'rel="noopener noreferrer"' in js
@@ -5733,7 +5733,7 @@ def test_macro_dashboard_js_consumer_sentiment_error_uses_polite_live_region():
 
 
 def test_consumer_sentiment_loaded_layout_uses_page_section_header():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text(encoding="utf-8")
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text(encoding="utf-8")
     css = (ROOT / "static" / "consumer-sentiment.css").read_text(encoding="utf-8")
 
     render_start = js.index("function renderConsumerSentiment()")
@@ -6537,7 +6537,7 @@ def test_housing_permits_card_uses_existing_growth_card_and_detail_hooks():
 
 
 def test_housing_permits_css_reuses_growth_card_tokens():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
     assert ".housing-permits-card" in css or ".m2-card" in css
     assert "var(--" in css or ".housing-permits-detail" in css
 
@@ -7061,7 +7061,7 @@ def test_nfib_sbo_renders_context_components_in_detail():
 
 def test_macro_dashboard_loads_and_dispatches_renderer():
     html = (ROOT / "static" / "macro-dashboard.html").read_text()
-    js = (ROOT / "static" / "macro-dashboard.js").read_text()
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text()
 
     assert "/cyclical-commodities-ui.js" in html
     assert 'card.id === "cyclical_commodities"' in js
@@ -7069,7 +7069,7 @@ def test_macro_dashboard_loads_and_dispatches_renderer():
 
 def test_detail_renders_process_read_and_collapses_raw_evidence():
     js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert "Process Read" in js
     assert "Evidence unavailable" in js
@@ -7089,7 +7089,7 @@ def test_renderer_has_no_client_side_position_or_return_formula():
 
 def test_detail_uses_evidence_sections_instead_of_method_steps():
     js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert "Process Read" in js
     assert "Market Corroboration" in js
@@ -7136,7 +7136,7 @@ def test_oil_renderer_shows_weekly_attribution_changes_without_conclusion():
 
 def test_oil_renderer_places_attribution_inputs_inside_review_required_branch():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
     review_start = source.index('if (review && review.status === "review_required")')
     attribution_start = source.index("Attribution inputs", review_start)
     review_end = source.index("      }", review_start)
@@ -7150,7 +7150,7 @@ def test_oil_renderer_places_attribution_inputs_inside_review_required_branch():
 
 def test_oil_renderer_groups_attribution_rows_and_separates_role_from_metrics():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert "Supply & inventory" in source
     assert "Demand & processing" in source
@@ -7162,7 +7162,7 @@ def test_oil_renderer_groups_attribution_rows_and_separates_role_from_metrics():
 
 def test_oil_renderer_uses_backend_state_classes_and_labels():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert "daily_return_state" in source
     assert "weekly_change_state" in source
@@ -7186,7 +7186,7 @@ def test_oil_renderer_does_not_calculate_attribution_in_javascript():
 
 def test_cyclical_commodities_ui_renders_backend_distribution_labels():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert "daily_distribution" in source
     assert "weekly_distribution" in source
@@ -7235,7 +7235,7 @@ def test_non_oil_renderer_surfaces_review_label_when_series_unavailable():
 
 
 def test_non_oil_css_has_distribution_review_note_styles():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".distribution-review-note" in css
 
@@ -7254,7 +7254,7 @@ def test_usd_renderer_displays_backend_distribution_evidence():
 
 def test_usd_renderer_has_no_client_side_statistics_or_macro_conclusion():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert "Math.sqrt" not in source
     assert "standardDeviation" not in source
@@ -7368,7 +7368,7 @@ def test_renderer_renders_attribution_review_resources_without_conclusion():
 
 def test_renderer_attribution_review_resources_uses_scoped_classes():
     js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert "attribution-review-resources" in js
     assert "attribution-review-row" in js
@@ -7405,7 +7405,7 @@ def test_non_oil_row_status_sits_on_title_line():
 
 def test_non_oil_rows_use_status_background_classes():
     js = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert "market-row-normal" in js
     assert "market-row-review" in js
@@ -7458,7 +7458,7 @@ def test_evidence_renderer_shows_available_fact_fields():
 
 def test_evidence_renderer_shows_iron_unavailable_and_manual_review_resources():
     source = (ROOT / "static" / "cyclical-commodities-ui.js").read_text()
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
     start = source.index("function renderNonOilAttributionEvidence")
     end = source.index("function renderAttributionReviewResources", start)
     evidence_renderer = source[start:end]
@@ -7511,7 +7511,7 @@ def test_evidence_map_wired_from_payload_at_call_site():
 
 
 def test_evidence_css_has_scoped_classes():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".attribution-evidence" in css
     assert ".evidence-fact" in css
@@ -7572,7 +7572,7 @@ def test_macro_dashboard_js_fetches_economic_confirmation_overview_and_detail():
 
 
 def test_economic_confirmation_as_of_pill_shows_date_only():
-    js = (ROOT / "static" / "macro-dashboard.js").read_text(encoding="utf-8")
+    js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text(encoding="utf-8")
 
     render_start = js.index("function renderEconomicConfirmation()")
     render_end = js.index(
@@ -7740,7 +7740,7 @@ def test_cot_review_evidence_is_wired_into_cot_row():
 
 
 def test_cot_review_evidence_css_uses_established_tokens():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".cot-extreme-review" in css
     assert ".cot-extreme-normal" in css
@@ -7811,7 +7811,7 @@ def test_cross_market_spreads_renderer_renders_limited_lme_comex_entry():
 
 
 def test_lme_comex_leg_cards_stack_on_narrow_screens():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert (
         "@media (max-width: 768px) {\n"
@@ -7961,7 +7961,7 @@ def test_cross_market_spreads_renderer_states_no_conclusion():
 
 
 def test_cross_market_spreads_css_uses_established_tokens():
-    css = (ROOT / "static" / "macro-dashboard.css").read_text()
+    css = (ROOT / "static" / "dist" / "macro-dashboard.css").read_text()
 
     assert ".cross-market-spreads" in css
     assert ".market-status-unavailable" in css

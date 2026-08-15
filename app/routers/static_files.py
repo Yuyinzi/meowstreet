@@ -35,13 +35,16 @@ def macro_dashboard_html():
 
 @router.get("/macro-dashboard.css")
 def macro_dashboard_css():
-    return FileResponse(api.STATIC_DIR / "macro-dashboard.css", media_type="text/css")
+    return FileResponse(
+        api.STATIC_DIR / "dist" / "macro-dashboard.css", media_type="text/css"
+    )
 
 
 @router.get("/macro-dashboard.js")
 def macro_dashboard_js():
     return FileResponse(
-        api.STATIC_DIR / "macro-dashboard.js", media_type="application/javascript"
+        api.STATIC_DIR / "dist" / "macro-dashboard.js",
+        media_type="application/javascript",
     )
 
 

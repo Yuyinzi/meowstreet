@@ -11,6 +11,7 @@ export default defineConfig({
     },
     outDir: resolve(import.meta.dirname, "static/dist"),
     emptyOutDir: true,
+    target: "esnext",
     cssCodeSplit: false,
     minify: false,
     cssMinify: false,
