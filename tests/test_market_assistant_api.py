@@ -330,6 +330,30 @@ def test_question_invalid_tone_returns_400(assistant_env):
     assert response.json()["detail"] == "question request is invalid"
 
 
+def test_tone_flows_to_service(assistant_env, monkeypatch):
+    captured = {}
+
+    async def fake_answer_question(request, *, dependencies):
+        captured["tone"] = request.get("tone")
+        return {"resolution": {"mode": "current"}}
+
+    monkeypatch.setattr(
+        market_assistant_service, "answer_question", fake_answer_question
+    )
+
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={
+            "question": "Why?",
+            "mode": "current",
+            "tone": "professional_human",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["tone"] == "professional_human"
+
+
 def test_stream_accepts_deep_analysis_without_external_search(monkeypatch):
     captured = {}
 

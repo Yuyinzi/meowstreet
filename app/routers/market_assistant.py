@@ -106,10 +106,16 @@ async def _plan_llm(*, question, context_summary):
 
 
 async def _synthesize_llm(
-    *, question, plan, context_summary, artifacts, stream_observer=None
+    *,
+    question,
+    plan,
+    context_summary,
+    artifacts,
+    stream_observer=None,
+    tone="beginner_human",
 ):
     client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
-    prompt = _synthesis_prompt(question, plan, context_summary, artifacts)
+    prompt = _synthesis_prompt(question, plan, context_summary, artifacts, tone=tone)
     return await complete_structured(
         client,
         model=model,
@@ -129,10 +135,11 @@ async def _repair_llm(
     artifacts,
     draft,
     validation_report,
+    tone="beginner_human",
 ):
     client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
     prompt = _repair_prompt(
-        question, plan, context_summary, artifacts, draft, validation_report
+        question, plan, context_summary, artifacts, draft, validation_report, tone=tone
     )
     return await complete_structured(
         client,
@@ -384,16 +391,17 @@ def _new_request_id():
     return f"req_{secrets.token_hex(8)}"
 
 
-def _build_dependencies():
+def _build_dependencies(request):
     config = _load_market_assistant_config_or_none()
+    tone = request.get("tone", "beginner_human")
     dependencies = {
         "config": config,
         "db_path": market_assistant_db.DEFAULT_DB_PATH,
         "plan_llm": _plan_llm,
-        "synthesize_llm": _synthesize_llm,
-        "repair_llm": _repair_llm,
+        "synthesize_llm": lambda **kwargs: _synthesize_llm(tone=tone, **kwargs),
+        "repair_llm": lambda **kwargs: _repair_llm(tone=tone, **kwargs),
         "stream_turn": _stream_turn_llm,
-        "narration_instructions": _narration_instructions,
+        "narration_instructions": lambda: _narration_instructions(tone=tone),
         "claim_audit_llm": _claim_audit_llm,
         "build_research_provider": build_research_provider,
         "exploration": execute_exploration,
@@ -465,7 +473,7 @@ async def market_assistant_questions_stream(body: dict = Body(default={})):
     started_at = monotonic()
     try:
         request = _validate_question_request(body)
-        dependencies = _build_dependencies()
+        dependencies = _build_dependencies(request)
     except ValueError as exc:
         if _is_artifact_corruption(exc):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -489,7 +497,7 @@ async def market_assistant_questions(body: dict = Body(default={})):
         raise HTTPException(status_code=400, detail="context id is required")
     try:
         return await market_assistant_service.answer_question(
-            request, dependencies=_build_dependencies()
+            request, dependencies=_build_dependencies(request)
         )
     except ValueError as exc:
         if _is_artifact_corruption(exc):
