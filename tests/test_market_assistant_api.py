@@ -705,6 +705,46 @@ def test_narration_input_items_exclude_snapshot_and_schema_bulk():
     assert "现在市场怎么样？" in serialized
 
 
+@pytest.mark.parametrize(
+    "tone, expected",
+    [
+        ("beginner_cat", ["beginner_cat", "财财", "Caicai", "curious beginner cat"]),
+        (
+            "professional_cat",
+            ["professional_cat", "财财", "Caicai", "market-savvy cat"],
+        ),
+        ("beginner_human", ["beginner_human", "plain", "beginner-friendly"]),
+        ("professional_human", ["professional_human", "professional human"]),
+    ],
+)
+def test_synthesis_prompt_reflects_each_tone(tone, expected):
+    prompt = market_assistant_router._synthesis_prompt(
+        "Explain the market setup",
+        {"intent": "decision_explanation"},
+        {"mode": "current"},
+        {"ctx_1": {"object_index": []}},
+        tone=tone,
+    )
+    system = prompt[0]["content"]
+    for phrase in expected:
+        assert phrase in system
+
+
+@pytest.mark.parametrize(
+    "tone, expected",
+    [
+        ("beginner_cat", ["beginner_cat", "财财", "Caicai"]),
+        ("professional_cat", ["professional_cat", "财财", "Caicai"]),
+        ("beginner_human", ["beginner_human"]),
+        ("professional_human", ["professional_human"]),
+    ],
+)
+def test_narration_instructions_reflect_each_tone(tone, expected):
+    instructions = market_assistant_router._narration_instructions(tone=tone)
+    for phrase in expected:
+        assert phrase in instructions
+
+
 def test_claim_audit_prompt_receives_exact_answer_and_frozen_refs():
     answer_text = "现在的市场偏积极，但仍没有得到全面确认。"
     explanation_view = {
