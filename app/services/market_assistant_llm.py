@@ -339,8 +339,6 @@ async def _collect_response_turn(stream, *, observer, started_at):
     if not completed:
         raise ValueError("response stream did not complete")
     output_text = "".join(output_parts)
-    if tool_calls and output_text.strip():
-        raise ValueError("response turn mixes text and tool calls")
     elapsed_seconds = monotonic() - started_at
     _log_stream_usage(
         completed_response, elapsed_seconds, first_reasoning_at, first_output_at

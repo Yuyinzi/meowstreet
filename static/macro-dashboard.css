@@ -6758,6 +6758,7 @@ h2 {
   overflow-y: auto;
   padding: 14px;
   display: grid;
+  align-content: start;
   gap: 12px;
   background: #FFFDFB;
 }

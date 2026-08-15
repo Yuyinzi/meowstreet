@@ -885,7 +885,7 @@ async def test_stream_response_turn_notifies_provider_tool_call_started():
 
 
 @pytest.mark.asyncio
-async def test_stream_response_turn_rejects_mixed_text_and_tool_calls():
+async def test_stream_response_turn_returns_tool_calls_when_provider_adds_preamble_text():
     client = FakeClient(
         stream_events=[
             SimpleNamespace(type="response.output_text.delta", delta="some narration"),
@@ -923,8 +923,16 @@ async def test_stream_response_turn_rejects_mixed_text_and_tool_calls():
         ]
     )
 
-    with pytest.raises(ValueError, match="response turn mixes text and tool calls"):
-        await stream_response_turn(client, **tool_call_kwargs())
+    result = await stream_response_turn(client, **tool_call_kwargs())
+
+    assert result["output_text"] == "some narration"
+    assert result["tool_calls"] == [
+        {
+            "call_id": "call_vix",
+            "tool_name": "query_indicator_history",
+            "arguments": {},
+        }
+    ]
 
 
 @pytest.mark.asyncio

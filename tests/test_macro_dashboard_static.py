@@ -81,6 +81,14 @@ def test_macro_dashboard_css_has_floating_window_styles():
     )
 
 
+def test_market_assistant_log_keeps_message_rows_content_sized():
+    css = STATIC_CSS.read_text(encoding="utf-8")
+    log_rule = re.search(r"\.market-assistant-log\s*\{([^}]*)\}", css)
+
+    assert log_rule is not None
+    assert "align-content: start" in log_rule.group(1)
+
+
 def test_assistant_floating_window_opens_and_renders_markdown():
     script = ASSISTANT_JS.read_text(encoding="utf-8")
     assert "marketAssistantFab" in script

@@ -11,7 +11,6 @@ from app.services.market_assistant_react import run_hybrid_narration
 from app.tools.market_assistant_artifacts import resolve_artifact_ref
 from app.tools.market_assistant_routes import budget_for_mode
 from app.tools.market_assistant_routes import route_question
-from app.tools.market_assistant_tools import ALL_TOOL_IDS
 
 _FALLBACK_ZH = "当前市场证据已收集，但回答生成暂不可用。"
 
@@ -433,6 +432,39 @@ async def test_optional_round_executes_parallel_tools_then_final_narration():
 
 
 @pytest.mark.asyncio
+async def test_tool_turn_preamble_is_discarded_before_final_answer():
+    events = []
+    call = vix_confirmation_call()
+    mixed_step = tool_step([call])
+    mixed_step["result"]["output_text"] = "请稍等，我先读取市场数据。"
+    mixed_step["observer_events"] = [
+        {"type": "output_delta", "delta": "请稍等，我先读取市场数据。"}
+    ]
+    stream = _ScriptedStream(
+        [
+            mixed_step,
+            narration_step(text="当前市场偏积极。", deltas=["当前市场", "偏积极。"]),
+        ]
+    )
+    deps = fake_dependencies(stream)
+    deps.event_sink = lambda event: events.append(event)
+
+    result = await run_hybrid_narration(
+        {"question": "当前市场如何？"},
+        route=react_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+
+    visible_deltas = [
+        event["delta"] for event in events if event["type"] == "output_delta"
+    ]
+    assert result["generation_status"] == "answered"
+    assert result["answer_text"] == "当前市场偏积极。"
+    assert visible_deltas == ["当前市场", "偏积极。"]
+
+
+@pytest.mark.asyncio
 async def test_standard_budget_allows_two_optional_rounds_then_final_narration():
     events = []
     stream = _ScriptedStream(
@@ -667,7 +699,7 @@ async def test_progress_events_use_deterministic_english_copy():
 
 
 @pytest.mark.asyncio
-async def test_deep_analysis_keeps_research_schema_but_does_not_authorize_it():
+async def test_deep_analysis_exposes_only_authorized_tools():
     deps = recording_dependencies([], stream=_ScriptedStream([narration_step()]))
     request = {"question": "讲个笑话", "deep_analysis_requested": True}
     result = await run_hybrid_narration(
@@ -677,12 +709,18 @@ async def test_deep_analysis_keeps_research_schema_but_does_not_authorize_it():
         dependencies=deps,
     )
     tool_names = [tool["name"] for tool in deps.stream_turn.calls[0]["tools"]]
-    assert tool_names == list(ALL_TOOL_IDS)
-    assert [name for name in tool_names if name.startswith("research_")] == [
-        "research_focused",
-        "research_standard",
-        "research_deep",
+    assert tool_names == [
+        "get_setup_overview",
+        "get_macro_regime_explanation",
+        "get_confirmation_test",
+        "get_confirmation_tests",
+        "get_posture_explanation",
+        "get_approved_counterfactuals",
+        "get_indicator_knowledge",
+        "query_indicator_history",
+        "compare_snapshots",
     ]
+    assert not any(name.startswith("research_") for name in tool_names)
     authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3][
         "text"
     ]
@@ -743,7 +781,7 @@ async def test_visible_but_unauthorized_research_tool_is_rejected():
         ),
     ],
 )
-async def test_external_search_keeps_fixed_schema_and_authorizes_requested_tier(
+async def test_external_search_exposes_only_requested_research_tier(
     request_overrides, expected_research
 ):
     deps = recording_dependencies([], stream=_ScriptedStream([narration_step()]))
@@ -760,7 +798,7 @@ async def test_external_search_keeps_fixed_schema_and_authorizes_requested_tier(
     )
     tool_names = [tool["name"] for tool in deps.stream_turn.calls[0]["tools"]]
     research = [name for name in tool_names if name.startswith("research_")]
-    assert research == ["research_focused", "research_standard", "research_deep"]
+    assert research == expected_research
     authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3][
         "text"
     ]

@@ -10,7 +10,6 @@ from app.services.market_assistant_llm import response_items_for_next_turn
 from app.services.market_assistant_llm import stream_response_turn
 from app.services.market_assistant_tool_runtime import execute_tool_batch
 from app.services.market_assistant_tool_runtime import snapshot_artifact
-from app.tools.market_assistant_tools import ALL_TOOL_IDS
 from app.tools.market_assistant_tools import normalized_tool_call_key
 from app.tools.market_assistant_tools import tool_definitions
 from app.tools.market_assistant_tools import validate_tool_call
@@ -291,7 +290,6 @@ async def run_hybrid_narration(
     generation_status = None
     answer_text = ""
     initial_tools_seconds = 0.0
-    observer = _turn_observer(stream_state, event_sink)
 
     initial_calls = _translated_initial_calls(route)
     initial_records = []
@@ -351,7 +349,7 @@ async def run_hybrid_narration(
     current_user_item = input_items[-1]
     new_provider_items = [current_user_item]
     generated_provider_items = []
-    tools = definitions(list(ALL_TOOL_IDS))
+    tools = definitions(list(tool_ids))
 
     while True:
         if monotonic() > deadline:
@@ -360,6 +358,8 @@ async def run_hybrid_narration(
         await _emit(event_sink, {"type": "model_turn_started"})
         if turn_count > 0 or initial_calls:
             await _emit_progress(event_sink, "writing_answer", request)
+        turn_stream = {"output_events": [], "has_tool_call": False}
+        observer = _turn_observer(turn_stream, event_sink)
         try:
             turn = await _await_within_budget(
                 lambda: stream_turn(
@@ -374,18 +374,24 @@ async def run_hybrid_narration(
                 deadline,
             )
         except _DeadlineExceeded:
+            if not turn_stream["has_tool_call"]:
+                await _flush_turn_output(turn_stream, stream_state, event_sink)
             if stream_state["has_output"]:
                 generation_status = "narration_interrupted"
             else:
                 generation_status = "deadline_exceeded"
             break
         except asyncio.TimeoutError:
+            if not turn_stream["has_tool_call"]:
+                await _flush_turn_output(turn_stream, stream_state, event_sink)
             if stream_state["has_output"]:
                 generation_status = "narration_interrupted"
             else:
                 generation_status = "narration_unavailable"
             break
         except Exception:
+            if not turn_stream["has_tool_call"]:
+                await _flush_turn_output(turn_stream, stream_state, event_sink)
             if stream_state["has_output"]:
                 generation_status = "narration_interrupted"
             else:
@@ -451,6 +457,7 @@ async def run_hybrid_narration(
             generated_provider_items.extend(next_items(turn))
             generated_provider_items.extend(_output_items(accepted, records, rejected))
         else:
+            await _flush_turn_output(turn_stream, stream_state, event_sink)
             answer_text = turn["output_text"]
             new_provider_items.extend(next_items(turn))
             generated_provider_items.extend(next_items(turn))
@@ -722,16 +729,26 @@ def _record_rejected(tool_trace, rejected, phase):
         )
 
 
-def _turn_observer(stream_state, event_sink):
+def _turn_observer(turn_stream, event_sink):
     async def observer(event):
         if event["type"] == "output_delta":
-            delta = event.get("delta")
-            if isinstance(delta, str):
-                stream_state["text_parts"].append(delta)
-                stream_state["has_output"] = True
+            turn_stream["output_events"].append(event)
+            return
+        if event["type"] == "provider_tool_call_started":
+            turn_stream["has_tool_call"] = True
         await _emit(event_sink, event)
 
     return observer
+
+
+async def _flush_turn_output(turn_stream, stream_state, event_sink):
+    for event in turn_stream["output_events"]:
+        delta = event.get("delta")
+        if isinstance(delta, str):
+            stream_state["text_parts"].append(delta)
+            stream_state["has_output"] = True
+        await _emit(event_sink, event)
+    turn_stream["output_events"] = []
 
 
 def _fallback_answer(request):
