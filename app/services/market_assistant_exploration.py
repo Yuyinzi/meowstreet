@@ -82,7 +82,9 @@ def _build_history_result(con, query, indicator, result_id):
     observed_window = {"start": query["start"], "end": query["end"]}
     data_through = rows[-1]["date"] if rows else None
     lifecycle_rows = (
-        _filter_window(all_rows, all_rows[0]["date"], query["end"]) if all_rows else []
+        [row for row in all_rows if row["date"] <= data_through]
+        if data_through is not None
+        else []
     )
     statistics = _compute_statistics(
         rows,
@@ -238,7 +240,7 @@ def _build_result_objects(result, indicator_id):
     statistics = result["deterministic_statistics"]
     if _query_kind_is_comparison(result["query_contract"]):
         for period, period_statistics in statistics.items():
-            for statistic_id, statistic_value in period_statistics.items():
+            for statistic_id, statistic_value in _flatten_statistics(period_statistics):
                 objects.append(
                     {
                         "object_type": "deterministic_statistic",
@@ -252,7 +254,7 @@ def _build_result_objects(result, indicator_id):
                     }
                 )
     else:
-        for statistic_id, statistic_value in statistics.items():
+        for statistic_id, statistic_value in _flatten_statistics(statistics):
             objects.append(
                 {
                     "object_type": "deterministic_statistic",
@@ -265,6 +267,17 @@ def _build_result_objects(result, indicator_id):
                 }
             )
     return objects
+
+
+def _flatten_statistics(statistics):
+    flat = []
+    for statistic_id, statistic_value in statistics.items():
+        if isinstance(statistic_value, dict):
+            for child_id, child_value in statistic_value.items():
+                flat.append((f"{statistic_id}.{child_id}", child_value))
+        else:
+            flat.append((statistic_id, statistic_value))
+    return flat
 
 
 def _query_kind_is_comparison(query_contract):

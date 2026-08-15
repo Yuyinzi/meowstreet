@@ -451,21 +451,27 @@ def test_categorical_statistics_report_latest_transition_and_current_run():
     )
 
     assert summary == {
-        "first_state": "healthy",
-        "last_state": "risk_rising",
-        "state_counts": {
-            "healthy": 2,
-            "weak_credit_warning": 1,
-            "risk_rising": 2,
+        "window_summary": {
+            "first_state": "healthy",
+            "last_state": "risk_rising",
+            "state_counts": {
+                "healthy": 2,
+                "weak_credit_warning": 1,
+                "risk_rising": 2,
+            },
+            "transition_count": 2,
+            "latest_transition": {
+                "date": "2026-08-09",
+                "from_state": "weak_credit_warning",
+                "to_state": "risk_rising",
+            },
         },
-        "transition_count": 2,
-        "latest_transition": {
-            "date": "2026-08-09",
-            "from_state": "weak_credit_warning",
-            "to_state": "risk_rising",
+        "lifecycle_summary": {
+            "status": "available",
+            "state": "risk_rising",
+            "current_run_start": "2026-08-09",
+            "current_run_observations": 2,
         },
-        "current_run_start": "2026-08-09",
-        "current_run_observations": 2,
     }
 
 
@@ -478,17 +484,18 @@ def test_categorical_statistics_empty_rows():
     )
 
     assert summary == {
-        "first_state": None,
-        "last_state": None,
-        "state_counts": {},
-        "transition_count": 0,
-        "latest_transition": None,
-        "current_run_start": None,
-        "current_run_observations": 0,
+        "window_summary": {
+            "first_state": None,
+            "last_state": None,
+            "state_counts": {},
+            "transition_count": 0,
+            "latest_transition": None,
+        },
+        "lifecycle_summary": {"status": "unavailable"},
     }
 
 
-def test_categorical_statistics_lifecycle_uses_full_history_up_to_query_end():
+def test_categorical_statistics_lifecycle_uses_full_history_up_to_data_through():
     window_rows = _provenance_rows(
         [
             {"date": "2026-03-01", "state": "risk_rising"},
@@ -512,12 +519,43 @@ def test_categorical_statistics_lifecycle_uses_full_history_up_to_query_end():
         window_start="2026-03-01",
     )
 
-    assert summary["state_counts"] == {"risk_rising": 2}
-    assert summary["current_run_start"] == "2026-02-01"
-    assert summary["current_run_observations"] == 3
-    assert summary["latest_transition"] is None
-    assert summary["transition_count"] == 0
-    assert summary["current_run_predates_window"] is True
+    assert summary["window_summary"]["state_counts"] == {"risk_rising": 2}
+    assert summary["lifecycle_summary"] == {
+        "status": "available",
+        "state": "risk_rising",
+        "current_run_start": "2026-02-01",
+        "current_run_observations": 3,
+        "current_run_predates_window": True,
+    }
+
+
+def test_categorical_statistics_empty_window_marks_lifecycle_unavailable():
+    window_rows = []
+    lifecycle_rows = _provenance_rows(
+        [
+            {"date": "2026-02-01", "state": "risk_rising"},
+            {"date": "2026-03-01", "state": "risk_rising"},
+            {"date": "2026-04-01", "state": "risk_rising"},
+        ]
+    )
+
+    summary = exploration_tools.compute_categorical_statistics(
+        window_rows,
+        state_values=["risk_rising"],
+        method_version="credit_conditions_history_v1",
+        decision_method_version="credit_conditions_v1",
+        lifecycle_rows=lifecycle_rows,
+        window_start="2026-05-01",
+    )
+
+    assert summary["window_summary"] == {
+        "first_state": None,
+        "last_state": None,
+        "state_counts": {},
+        "transition_count": 0,
+        "latest_transition": None,
+    }
+    assert summary["lifecycle_summary"] == {"status": "unavailable"}
 
 
 def test_categorical_statistics_rejects_row_provenance_mismatch():
@@ -910,10 +948,20 @@ def test_credit_conditions_history_query_returns_categorical_result(tmp_path):
     assert result["query_contract"]["indicator_id"] == "credit_conditions"
     assert result["rows"]
     assert (
-        result["rows"][-1]["state"] == result["deterministic_statistics"]["last_state"]
+        result["rows"][-1]["state"]
+        == result["deterministic_statistics"]["window_summary"]["last_state"]
     )
-    assert result["deterministic_statistics"]["current_run_start"] is not None
-    assert result["deterministic_statistics"]["latest_transition"] is not None
+    assert (
+        result["deterministic_statistics"]["lifecycle_summary"]["status"] == "available"
+    )
+    assert (
+        result["deterministic_statistics"]["lifecycle_summary"]["current_run_start"]
+        is not None
+    )
+    assert (
+        result["deterministic_statistics"]["window_summary"]["latest_transition"]
+        is not None
+    )
     assert any(
         obj["object_type"] == "observation_row"
         and obj["object_id"].startswith("credit_conditions:")
@@ -937,10 +985,13 @@ def test_credit_conditions_history_lifecycle_extends_before_query_window(tmp_pat
     )
 
     assert result["rows"][0]["date"] == "2026-07-13"
-    assert result["deterministic_statistics"]["current_run_start"] is not None
-    assert result["deterministic_statistics"]["current_run_start"] < "2026-07-13"
-    assert result["deterministic_statistics"]["current_run_predates_window"] is True
-    assert result["deterministic_statistics"]["latest_transition"] is not None
+    lifecycle = result["deterministic_statistics"]["lifecycle_summary"]
+    assert lifecycle["current_run_start"] is not None
+    assert lifecycle["current_run_start"] < "2026-07-13"
+    assert lifecycle["current_run_predates_window"] is True
+    window = result["deterministic_statistics"]["window_summary"]
+    assert window["latest_transition"] is None
+    assert window["transition_count"] == 0
 
 
 def test_credit_conditions_history_empty_local_data(tmp_path):
@@ -960,5 +1011,8 @@ def test_credit_conditions_history_empty_local_data(tmp_path):
 
     assert result["rows"] == []
     assert result["data_through"] is None
-    assert result["deterministic_statistics"]["last_state"] is None
-    assert result["deterministic_statistics"]["latest_transition"] is None
+    assert result["deterministic_statistics"]["window_summary"]["last_state"] is None
+    assert (
+        result["deterministic_statistics"]["lifecycle_summary"]["status"]
+        == "unavailable"
+    )

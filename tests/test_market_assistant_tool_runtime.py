@@ -713,6 +713,8 @@ async def test_credit_history_tool_call_returns_bounded_categorical_artifact(tmp
         == "credit_conditions"
     )
     assert (
-        artifact_payload["payload"]["deterministic_statistics"]["last_state"]
+        artifact_payload["payload"]["deterministic_statistics"]["lifecycle_summary"][
+            "current_run_start"
+        ]
         is not None
     )

@@ -1493,21 +1493,27 @@ def _credit_conditions_exploration_payload(query, result_id):
         },
     ]
     statistics = {
-        "first_state": "healthy",
-        "last_state": "risk_rising",
-        "state_counts": {
-            "healthy": 1,
-            "weak_credit_warning": 1,
-            "risk_rising": 1,
+        "window_summary": {
+            "first_state": "healthy",
+            "last_state": "risk_rising",
+            "state_counts": {
+                "healthy": 1,
+                "weak_credit_warning": 1,
+                "risk_rising": 1,
+            },
+            "transition_count": 2,
+            "latest_transition": {
+                "date": "2026-08-10",
+                "from_state": "weak_credit_warning",
+                "to_state": "risk_rising",
+            },
         },
-        "transition_count": 2,
-        "latest_transition": {
-            "date": "2026-08-10",
-            "from_state": "weak_credit_warning",
-            "to_state": "risk_rising",
+        "lifecycle_summary": {
+            "status": "available",
+            "state": "risk_rising",
+            "current_run_start": "2026-08-10",
+            "current_run_observations": 1,
         },
-        "current_run_start": "2026-08-10",
-        "current_run_observations": 1,
     }
     objects = [
         {
@@ -1519,17 +1525,31 @@ def _credit_conditions_exploration_payload(query, result_id):
         for row in rows
     ]
     for statistic_id, statistic_value in statistics.items():
-        objects.append(
-            {
-                "object_type": "deterministic_statistic",
-                "object_id": statistic_id,
-                "authority": "local_observation",
-                "payload": {
-                    "statistic_id": statistic_id,
-                    "value": statistic_value,
-                },
-            }
-        )
+        if isinstance(statistic_value, dict):
+            for child_id, child_value in statistic_value.items():
+                objects.append(
+                    {
+                        "object_type": "deterministic_statistic",
+                        "object_id": f"{statistic_id}.{child_id}",
+                        "authority": "local_observation",
+                        "payload": {
+                            "statistic_id": f"{statistic_id}.{child_id}",
+                            "value": child_value,
+                        },
+                    }
+                )
+        else:
+            objects.append(
+                {
+                    "object_type": "deterministic_statistic",
+                    "object_id": statistic_id,
+                    "authority": "local_observation",
+                    "payload": {
+                        "statistic_id": statistic_id,
+                        "value": statistic_value,
+                    },
+                }
+            )
     return {
         "exploration_result_id": result_id,
         "artifact_schema_version": "market_assistant_exploration_result_v1",
@@ -1619,9 +1639,11 @@ def test_hybrid_stream_react_consumes_categorical_credit_history_without_new_too
     assert exploration_id in exploration_payloads
     assert credit_output["payload"] == exploration_payloads[exploration_id]
     statistics = credit_output["payload"]["deterministic_statistics"]
-    assert statistics["last_state"] == "risk_rising"
-    assert statistics["current_run_start"] == "2026-08-10"
-    assert statistics["latest_transition"]["to_state"] == "risk_rising"
+    assert statistics["window_summary"]["last_state"] == "risk_rising"
+    assert statistics["lifecycle_summary"]["current_run_start"] == "2026-08-10"
+    assert (
+        statistics["window_summary"]["latest_transition"]["to_state"] == "risk_rising"
+    )
     assert any(
         obj["object_type"] == "observation_row"
         and obj["object_id"].startswith("credit_conditions:")

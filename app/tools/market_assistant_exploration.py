@@ -354,40 +354,68 @@ def compute_categorical_statistics(
         )
         for row in lifecycle
     ]
-    transitions = [
+    window_transitions = _categorical_transitions(normalized)
+    lifecycle_transitions = _categorical_transitions(normalized_lifecycle)
+    window_summary = {
+        "first_state": normalized[0]["state"] if normalized else None,
+        "last_state": normalized[-1]["state"] if normalized else None,
+        "state_counts": _categorical_counts(normalized, state_values),
+        "transition_count": len(window_transitions),
+        "latest_transition": (window_transitions[-1] if window_transitions else None),
+    }
+    if not normalized:
+        lifecycle_summary = {"status": "unavailable"}
+    elif not normalized_lifecycle:
+        lifecycle_summary = {"status": "unavailable"}
+    else:
+        lifecycle_last = normalized_lifecycle[-1]["state"]
+        current_run = _categorical_current_run(normalized_lifecycle, lifecycle_last)
+        lifecycle_summary = {
+            "status": "available",
+            "state": lifecycle_last,
+            "current_run_start": current_run[0]["date"] if current_run else None,
+            "current_run_observations": len(current_run),
+        }
+        if window_start is not None:
+            lifecycle_summary["current_run_predates_window"] = (
+                _current_run_predates_window(
+                    lifecycle_summary["current_run_start"], window_start
+                )
+            )
+    return {
+        "window_summary": window_summary,
+        "lifecycle_summary": lifecycle_summary,
+    }
+
+
+def _categorical_transitions(normalized):
+    return [
         {
             "date": current["date"],
             "from_state": previous["state"],
             "to_state": current["state"],
         }
-        for previous, current in zip(normalized_lifecycle, normalized_lifecycle[1:])
+        for previous, current in zip(normalized, normalized[1:])
         if previous["state"] != current["state"]
     ]
-    last_state = normalized_lifecycle[-1]["state"] if normalized_lifecycle else None
-    current_run = []
-    for row in reversed(normalized_lifecycle):
-        if row["state"] != last_state:
-            break
-        current_run.append(row)
-    counts = {
+
+
+def _categorical_counts(normalized, state_values):
+    return {
         state: sum(1 for row in normalized if row["state"] == state)
         for state in state_values
         if any(row["state"] == state for row in normalized)
     }
-    summary = {
-        "first_state": normalized[0]["state"] if normalized else None,
-        "last_state": last_state,
-        "state_counts": counts,
-        "transition_count": len(transitions),
-        "latest_transition": transitions[-1] if transitions else None,
-        "current_run_start": current_run[-1]["date"] if current_run else None,
-        "current_run_observations": len(current_run),
-    }
-    if window_start is not None:
-        summary["current_run_predates_window"] = _current_run_predates_window(
-            summary["current_run_start"], window_start
-        )
-    return summary
+
+
+def _categorical_current_run(normalized, last_state):
+    current_run = []
+    for row in reversed(normalized):
+        if row["state"] != last_state:
+            break
+        current_run.append(row)
+    current_run.reverse()
+    return current_run
 
 
 def _current_run_predates_window(run_start, window_start):
