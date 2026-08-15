@@ -369,8 +369,7 @@ def test_question_passes_real_dependencies_dict(assistant_env, monkeypatch):
     assert callable(deps["plan_llm"])
     assert callable(deps["synthesize_llm"])
     assert callable(deps["repair_llm"])
-    assert callable(deps["react_turn_llm"])
-    assert deps["stream_turn"] is deps["react_turn_llm"]
+    assert callable(deps["stream_turn"])
     assert callable(deps["narration_instructions"])
     assert callable(deps["claim_audit_llm"])
     assert callable(deps["build_research_provider"])
@@ -700,7 +699,7 @@ async def test_narration_llm_adapter_delegates_with_orchestrator_signature(monke
         market_assistant_router, "stream_response_turn", fake_stream_response_turn
     )
 
-    result = await market_assistant_router._react_turn_llm(
+    result = await market_assistant_router._stream_turn_llm(
         "client",
         model="assistant-model",
         input_items=[{"type": "message", "role": "user", "content": []}],
@@ -1217,7 +1216,7 @@ def _hybrid_e2e(
         lambda db_path, *, previous_context_id, resolved_at: deepcopy(resolution),
     )
     monkeypatch.setattr(market_assistant_router, "complete_structured", audit)
-    monkeypatch.setattr(market_assistant_router, "_react_turn_llm", turn)
+    monkeypatch.setattr(market_assistant_router, "_stream_turn_llm", turn)
     if exploration is not None:
         monkeypatch.setattr(market_assistant_router, "execute_exploration", exploration)
     payload = {"question": question, "mode": "current"}

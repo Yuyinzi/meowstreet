@@ -1022,7 +1022,7 @@ def _prepare_market_setup_harness(
         lambda db_path, *, previous_context_id, resolved_at: deepcopy(resolution),
     )
     monkeypatch.setattr(market_assistant_router, "complete_structured", audit)
-    monkeypatch.setattr(market_assistant_router, "_react_turn_llm", turn)
+    monkeypatch.setattr(market_assistant_router, "_stream_turn_llm", turn)
     payload = {"question": question, "mode": "current"}
     if request_overrides:
         payload.update(request_overrides)
