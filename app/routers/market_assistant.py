@@ -64,6 +64,9 @@ class _QuestionRequest(BaseModel):
     deep_research_requested: bool = False
     external_search_requested: bool = False
     deep_analysis_requested: bool = Field(default=False, strict=True)
+    tone: Literal[
+        "beginner_cat", "professional_cat", "beginner_human", "professional_human"
+    ] = "beginner_human"
 
 
 class _ConversationBootstrapMessage(BaseModel):

@@ -300,6 +300,26 @@ def test_question_accepts_deep_analysis_without_external_search(
     assert captured["request"]["external_search_requested"] is False
 
 
+def test_question_accepts_valid_tone_values(assistant_env, monkeypatch):
+    captured = {}
+
+    async def fake_answer_question(request, *, dependencies):
+        captured["request"] = request
+        return {"resolution": {"mode": "current"}}
+
+    monkeypatch.setattr(
+        market_assistant_service, "answer_question", fake_answer_question
+    )
+
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={"question": "Why?", "mode": "current", "tone": "beginner_cat"},
+    )
+
+    assert response.status_code == 200
+    assert captured["request"]["tone"] == "beginner_cat"
+
+
 def test_stream_accepts_deep_analysis_without_external_search(monkeypatch):
     captured = {}
 
