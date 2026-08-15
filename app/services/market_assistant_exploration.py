@@ -63,7 +63,7 @@ def _build_current_result(con, query, indicator, result_id):
         observed_window = {"date": latest["date"]}
         data_through = latest["date"]
         window_rows = [latest]
-    statistics = _compute_statistics(window_rows, query, indicator)
+    statistics = _compute_statistics(window_rows, query, indicator, lifecycle_rows=rows)
     return _finalize_result(
         window_rows,
         statistics,
@@ -76,11 +76,21 @@ def _build_current_result(con, query, indicator, result_id):
 
 
 def _build_history_result(con, query, indicator, result_id):
-    rows = _filter_window(_load_rows(con, indicator), query["start"], query["end"])
+    all_rows = _load_rows(con, indicator)
+    rows = _filter_window(all_rows, query["start"], query["end"])
     _check_row_limit(rows, indicator)
     observed_window = {"start": query["start"], "end": query["end"]}
     data_through = rows[-1]["date"] if rows else None
-    statistics = _compute_statistics(rows, query, indicator)
+    lifecycle_rows = (
+        _filter_window(all_rows, all_rows[0]["date"], query["end"]) if all_rows else []
+    )
+    statistics = _compute_statistics(
+        rows,
+        query,
+        indicator,
+        lifecycle_rows=lifecycle_rows,
+        window_start=query["start"],
+    )
     return _finalize_result(
         rows,
         statistics,
@@ -319,11 +329,17 @@ def _check_row_limit(rows, indicator):
         )
 
 
-def _compute_statistics(rows, query, indicator):
+def _compute_statistics(
+    rows, query, indicator, *, lifecycle_rows=None, window_start=None
+):
     if indicator["value_type"] == "categorical":
         return exploration_tools.compute_categorical_statistics(
             rows,
             state_values=indicator["state_values"],
+            method_version=indicator["method_version"],
+            decision_method_version=indicator["decision_method_version"],
+            lifecycle_rows=lifecycle_rows,
+            window_start=window_start,
         )
     return exploration_tools.compute_statistics(
         rows,

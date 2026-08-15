@@ -323,7 +323,15 @@ def _normalize_row(row):
     return {"date": row_date, "value": float(value)}
 
 
-def compute_categorical_statistics(rows, *, state_values):
+def compute_categorical_statistics(
+    rows,
+    *,
+    state_values,
+    method_version,
+    decision_method_version,
+    lifecycle_rows=None,
+    window_start=None,
+):
     if not isinstance(rows, list):
         raise ValueError("exploration rows are required")
     if (
@@ -333,19 +341,31 @@ def compute_categorical_statistics(rows, *, state_values):
         or len(set(state_values)) != len(state_values)
     ):
         raise ValueError("categorical state values are required")
-    normalized = [_normalize_categorical_row(row, state_values) for row in rows]
+    normalized = [
+        _normalize_categorical_row(
+            row, state_values, method_version, decision_method_version
+        )
+        for row in rows
+    ]
+    lifecycle = lifecycle_rows if lifecycle_rows is not None else rows
+    normalized_lifecycle = [
+        _normalize_categorical_row(
+            row, state_values, method_version, decision_method_version
+        )
+        for row in lifecycle
+    ]
     transitions = [
         {
             "date": current["date"],
             "from_state": previous["state"],
             "to_state": current["state"],
         }
-        for previous, current in zip(normalized, normalized[1:])
+        for previous, current in zip(normalized_lifecycle, normalized_lifecycle[1:])
         if previous["state"] != current["state"]
     ]
-    last_state = normalized[-1]["state"] if normalized else None
+    last_state = normalized_lifecycle[-1]["state"] if normalized_lifecycle else None
     current_run = []
-    for row in reversed(normalized):
+    for row in reversed(normalized_lifecycle):
         if row["state"] != last_state:
             break
         current_run.append(row)
@@ -354,7 +374,7 @@ def compute_categorical_statistics(rows, *, state_values):
         for state in state_values
         if any(row["state"] == state for row in normalized)
     }
-    return {
+    summary = {
         "first_state": normalized[0]["state"] if normalized else None,
         "last_state": last_state,
         "state_counts": counts,
@@ -363,9 +383,27 @@ def compute_categorical_statistics(rows, *, state_values):
         "current_run_start": current_run[-1]["date"] if current_run else None,
         "current_run_observations": len(current_run),
     }
+    if window_start is not None:
+        summary["current_run_predates_window"] = _current_run_predates_window(
+            summary["current_run_start"], window_start
+        )
+    return summary
 
 
-def _normalize_categorical_row(row, state_values):
+def _current_run_predates_window(run_start, window_start):
+    if run_start is None:
+        return None
+    try:
+        run_date = date.fromisoformat(run_start)
+        window_date = date.fromisoformat(window_start)
+    except ValueError:
+        return None
+    return run_date < window_date
+
+
+def _normalize_categorical_row(
+    row, state_values, method_version, decision_method_version
+):
     if not isinstance(row, dict):
         raise ValueError("exploration row is required to be a dict")
     row_date = row.get("date")
@@ -378,12 +416,18 @@ def _normalize_categorical_row(row, state_values):
     state = row.get("state")
     if not isinstance(state, str) or state not in state_values:
         raise ValueError("exploration row state is not approved")
-    normalized = {"date": row_date, "state": state}
-    for field_name in ("method_version", "decision_method_version"):
-        field_value = row.get(field_name)
-        if field_value is not None:
-            normalized[field_name] = field_value
-    return normalized
+    if row.get("method_version") != method_version:
+        raise ValueError("exploration row method version does not match catalog")
+    if row.get("decision_method_version") != decision_method_version:
+        raise ValueError(
+            "exploration row decision method version does not match catalog"
+        )
+    return {
+        "date": row_date,
+        "state": state,
+        "method_version": method_version,
+        "decision_method_version": decision_method_version,
+    }
 
 
 def _compute_statistic(statistic_id, rows, values, *, frequency, gap_policy):

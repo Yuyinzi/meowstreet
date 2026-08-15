@@ -417,14 +417,27 @@ def test_categorical_catalog_requires_state_values():
         exploration_tools.validate_exploration_catalog(payload)
 
 
-def test_categorical_statistics_report_latest_transition_and_current_run():
-    rows = [
-        {"date": "2026-08-01", "state": "healthy"},
-        {"date": "2026-08-04", "state": "healthy"},
-        {"date": "2026-08-05", "state": "weak_credit_warning"},
-        {"date": "2026-08-09", "state": "risk_rising"},
-        {"date": "2026-08-10", "state": "risk_rising"},
+def _provenance_rows(rows):
+    return [
+        {
+            **row,
+            "method_version": "credit_conditions_history_v1",
+            "decision_method_version": "credit_conditions_v1",
+        }
+        for row in rows
     ]
+
+
+def test_categorical_statistics_report_latest_transition_and_current_run():
+    rows = _provenance_rows(
+        [
+            {"date": "2026-08-01", "state": "healthy"},
+            {"date": "2026-08-04", "state": "healthy"},
+            {"date": "2026-08-05", "state": "weak_credit_warning"},
+            {"date": "2026-08-09", "state": "risk_rising"},
+            {"date": "2026-08-10", "state": "risk_rising"},
+        ]
+    )
 
     summary = exploration_tools.compute_categorical_statistics(
         rows,
@@ -433,6 +446,8 @@ def test_categorical_statistics_report_latest_transition_and_current_run():
             "weak_credit_warning",
             "risk_rising",
         ],
+        method_version="credit_conditions_history_v1",
+        decision_method_version="credit_conditions_v1",
     )
 
     assert summary == {
@@ -458,6 +473,8 @@ def test_categorical_statistics_empty_rows():
     summary = exploration_tools.compute_categorical_statistics(
         [],
         state_values=["healthy", "weak_credit_warning"],
+        method_version="credit_conditions_history_v1",
+        decision_method_version="credit_conditions_v1",
     )
 
     assert summary == {
@@ -469,6 +486,57 @@ def test_categorical_statistics_empty_rows():
         "current_run_start": None,
         "current_run_observations": 0,
     }
+
+
+def test_categorical_statistics_lifecycle_uses_full_history_up_to_query_end():
+    window_rows = _provenance_rows(
+        [
+            {"date": "2026-03-01", "state": "risk_rising"},
+            {"date": "2026-04-01", "state": "risk_rising"},
+        ]
+    )
+    lifecycle_rows = _provenance_rows(
+        [
+            {"date": "2026-02-01", "state": "risk_rising"},
+            {"date": "2026-03-01", "state": "risk_rising"},
+            {"date": "2026-04-01", "state": "risk_rising"},
+        ]
+    )
+
+    summary = exploration_tools.compute_categorical_statistics(
+        window_rows,
+        state_values=["risk_rising"],
+        method_version="credit_conditions_history_v1",
+        decision_method_version="credit_conditions_v1",
+        lifecycle_rows=lifecycle_rows,
+        window_start="2026-03-01",
+    )
+
+    assert summary["state_counts"] == {"risk_rising": 2}
+    assert summary["current_run_start"] == "2026-02-01"
+    assert summary["current_run_observations"] == 3
+    assert summary["latest_transition"] is None
+    assert summary["transition_count"] == 0
+    assert summary["current_run_predates_window"] is True
+
+
+def test_categorical_statistics_rejects_row_provenance_mismatch():
+    rows = [
+        {
+            "date": "2026-08-01",
+            "state": "healthy",
+            "method_version": "credit_conditions_history_old",
+            "decision_method_version": "credit_conditions_v1",
+        }
+    ]
+
+    with pytest.raises(ValueError, match="method version does not match catalog"):
+        exploration_tools.compute_categorical_statistics(
+            rows,
+            state_values=["healthy"],
+            method_version="credit_conditions_history_v1",
+            decision_method_version="credit_conditions_v1",
+        )
 
 
 def test_catalog_rejects_unknown_loader(tmp_path):
@@ -851,6 +919,28 @@ def test_credit_conditions_history_query_returns_categorical_result(tmp_path):
         and obj["object_id"].startswith("credit_conditions:")
         for obj in result["object_index"]
     )
+
+
+def test_credit_conditions_history_lifecycle_extends_before_query_window(tmp_path):
+    con = credit_history_connection(tmp_path)
+    result = market_assistant_exploration.execute_exploration(
+        con,
+        {
+            "query_kind": "indicator_history",
+            "indicator_id": "credit_conditions",
+            "start": "2026-07-13",
+            "end": "2026-08-10",
+            "statistics": [],
+        },
+        result_id="expl_credit_window",
+        created_at="2026-08-10T12:00:00Z",
+    )
+
+    assert result["rows"][0]["date"] == "2026-07-13"
+    assert result["deterministic_statistics"]["current_run_start"] is not None
+    assert result["deterministic_statistics"]["current_run_start"] < "2026-07-13"
+    assert result["deterministic_statistics"]["current_run_predates_window"] is True
+    assert result["deterministic_statistics"]["latest_transition"] is not None
 
 
 def test_credit_conditions_history_empty_local_data(tmp_path):
