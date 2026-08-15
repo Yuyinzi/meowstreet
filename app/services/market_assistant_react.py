@@ -10,6 +10,7 @@ from app.services.market_assistant_llm import response_items_for_next_turn
 from app.services.market_assistant_llm import stream_response_turn
 from app.services.market_assistant_tool_runtime import execute_tool_batch
 from app.services.market_assistant_tool_runtime import snapshot_artifact
+from app.tools.market_assistant_tools import ALL_TOOL_IDS
 from app.tools.market_assistant_tools import normalized_tool_call_key
 from app.tools.market_assistant_tools import tool_definitions
 from app.tools.market_assistant_tools import validate_tool_call
@@ -349,7 +350,7 @@ async def run_hybrid_narration(
     current_user_item = input_items[-1]
     new_provider_items = [current_user_item]
     generated_provider_items = []
-    tools = definitions(list(tool_ids))
+    tools = definitions(list(ALL_TOOL_IDS))
 
     while True:
         if monotonic() > deadline:
