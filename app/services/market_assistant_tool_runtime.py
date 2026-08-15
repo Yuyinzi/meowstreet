@@ -13,6 +13,11 @@ from app.services.market_assistant_research import acquire_research
 from app.services.market_assistant_research import build_research_provider
 from app.tools.market_assistant_artifacts import build_object_index
 from app.tools.market_assistant_artifacts import validate_artifact
+from app.tools.market_assistant_evidence_detail_registry import evidence_detail_record
+from app.tools.market_assistant_evidence_detail_registry import (
+    load_evidence_detail_registry,
+)
+from app.tools.market_assistant_evidence_details import project_evidence_detail
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
 from app.tools.market_setup_explanation_snapshot import build_semantic_delta
 from app.tools.market_setup_explanation_snapshot import canonical_json
@@ -86,6 +91,7 @@ _DEPENDENCY_DEFAULTS = {
     "connect": connect,
     "load_snapshot": load_snapshot,
     "load_knowledge_catalog": load_knowledge_catalog,
+    "load_evidence_detail_registry": load_evidence_detail_registry,
     "exploration": execute_exploration,
     "acquire_research": acquire_research,
     "build_research_provider": build_research_provider,
@@ -104,6 +110,7 @@ _PROGRESS_LABELS = {
     "get_indicator_current": "reading the current indicator value",
     "query_indicator_history": "querying local indicator history",
     "compare_snapshots": "comparing market setup snapshots",
+    "get_evidence_detail": "reading governed evidence detail",
     "research_focused": "running focused external research",
     "research_standard": "running standard external research",
     "research_deep": "running deep external research",
@@ -284,6 +291,9 @@ async def acquire_operation_artifact(
         return _knowledge_artifact(
             parameters, _KNOWLEDGE_OBJECT_TYPE[operation_id], dependencies
         )
+    if operation_id == "get_evidence_detail":
+        snapshot = await _frozen_snapshot(dependencies, resolution)
+        return _evidence_detail_artifact(parameters, snapshot, dependencies)
     if operation_id in _EXPLORATION_QUERY_KIND:
         return _exploration_artifact(parameters, operation_id, dependencies, created_at)
     if operation_id in _RESEARCH_TIER:
@@ -836,3 +846,44 @@ def _approved_counterfactuals_artifact(snapshot):
     return _focused_snapshot_envelope(
         snapshot, f"{snapshot['context_id']}_counterfactuals", objects
     )
+
+
+def _evidence_detail_artifact(parameters, snapshot, dependencies):
+    fact_id = parameters["fact_id"]
+    topics = parameters["topics"]
+    fact = _snapshot_evidence_fact(snapshot, fact_id)
+    registry = _dependency(dependencies, "load_evidence_detail_registry")()
+    record = evidence_detail_record(registry, fact_id)
+    method_contracts = snapshot.get("method_contracts") or {}
+    projection = project_evidence_detail(fact, record, topics, method_contracts)
+    artifact_id = (
+        f"{snapshot['context_id']}_evidence_detail_{fact_id}_{'_'.join(topics)}"
+    )
+    objects = [
+        _artifact_object("evidence_detail", artifact_id, "decision_fact", projection)
+    ]
+    method = projection.get("method")
+    if method is not None:
+        objects.append(
+            _artifact_object(
+                "evidence_detail_method",
+                f"{artifact_id}_method",
+                "method_knowledge",
+                method,
+            )
+        )
+    extra = {
+        "fact_id": projection["fact_id"],
+        "detail_kind": projection["detail_kind"],
+        "topics": projection["topics"],
+        "status": projection["status"],
+        "detail": projection,
+    }
+    return _focused_snapshot_envelope(snapshot, artifact_id, objects, extra)
+
+
+def _snapshot_evidence_fact(snapshot, fact_id):
+    for fact in snapshot.get("evidence") or []:
+        if fact.get("fact_id") == fact_id:
+            return fact
+    return None

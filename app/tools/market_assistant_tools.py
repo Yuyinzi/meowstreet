@@ -11,6 +11,8 @@ from pydantic import ValidationError
 from pydantic import field_validator
 from pydantic import model_validator
 
+from app.tools.market_assistant_evidence_detail_registry import DETAIL_TOPICS
+from app.tools.market_assistant_evidence_detail_registry import EVIDENCE_DETAIL_FACT_IDS
 from app.tools.market_assistant_exploration import STATISTIC_IDS
 from app.tools.market_assistant_plans import _ALLOWED_INDICATOR_IDS
 from app.tools.market_assistant_plans import _CompareSnapshotsParams
@@ -35,6 +37,7 @@ TOOL_IDS = (
     "get_indicator_current",
     "get_indicator_definition",
     "get_indicator_method",
+    "get_evidence_detail",
     "research_focused",
     "research_standard",
     "research_deep",
@@ -66,6 +69,18 @@ class _HistoryArguments(_ToolArguments):
         if not has_window and not (has_start and has_end):
             raise ValueError("history window or dates are required")
         return self
+
+
+class _EvidenceDetailArguments(_ToolArguments):
+    fact_id: Literal[*EVIDENCE_DETAIL_FACT_IDS]
+    topics: list[Literal[*DETAIL_TOPICS]] = Field(min_length=1, max_length=4)
+
+    @field_validator("topics")
+    @classmethod
+    def _validate_unique_topics(cls, topics):
+        if len(topics) != len(set(topics)):
+            raise ValueError("evidence detail topics are duplicated")
+        return topics
 
 
 class _ToolCallRecord(BaseModel):
@@ -141,6 +156,11 @@ class _GetIndicatorMethodCall(_ToolCallRecord):
     arguments: _IndicatorIdArguments
 
 
+class _GetEvidenceDetailCall(_ToolCallRecord):
+    tool_name: Literal["get_evidence_detail"]
+    arguments: _EvidenceDetailArguments
+
+
 class _ResearchFocusedCall(_ToolCallRecord):
     tool_name: Literal["research_focused"]
     arguments: _ResearchParams
@@ -170,6 +190,7 @@ _ToolCallRecord = Annotated[
         _GetIndicatorCurrentCall,
         _GetIndicatorDefinitionCall,
         _GetIndicatorMethodCall,
+        _GetEvidenceDetailCall,
         _ResearchFocusedCall,
         _ResearchStandardCall,
         _ResearchDeepCall,
@@ -192,6 +213,7 @@ _TOOL_ARGUMENT_MODELS = {
     "get_indicator_current": _IndicatorIdArguments,
     "get_indicator_definition": _IndicatorIdArguments,
     "get_indicator_method": _IndicatorIdArguments,
+    "get_evidence_detail": _EvidenceDetailArguments,
     "research_focused": _ResearchParams,
     "research_standard": _ResearchParams,
     "research_deep": _ResearchParams,
@@ -212,6 +234,7 @@ _TOOL_DESCRIPTIONS = {
     "get_indicator_current": "read the current value of a registered indicator",
     "get_indicator_definition": "read the approved definition of a registered indicator",
     "get_indicator_method": "read the approved method of a registered indicator",
+    "get_evidence_detail": "read governed evidence detail for a market setup fact",
     "research_focused": "run a focused external research search",
     "research_standard": "run a standard external research search",
     "research_deep": "run a deep external research search",

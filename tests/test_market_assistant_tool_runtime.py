@@ -29,6 +29,61 @@ def _confirmation_evidence(fact_id, indicator_id, label):
     }
 
 
+def _policy_evidence():
+    return {
+        "fact_id": "macro_policy_response",
+        "label": "Monetary Policy Response",
+        "role": {
+            "decision_scope": "decision_input",
+            "function": "selector",
+            "target_layer": "macro_regime",
+            "allowed_effects": [],
+        },
+        "accepted_values": {"relationship_to_growth_direction": "conflicts"},
+        "data_status": {"state": "available"},
+        "participation": {"state": "applied"},
+        "provenance": {
+            "source_module": "fomc_policy_tone",
+            "source_id": "policy_2026-07-28",
+            "source_period": "2026-07-28",
+            "method_references": ["fomc_policy_tone_method_v1"],
+        },
+        "explanation": {
+            "state": "restrictive_confirmed",
+            "policy_read": {
+                "policy_action": "hold",
+                "guidance_bias": "neutral",
+                "language_tone": "hawkish",
+                "overall_bias": "mild_hawkish",
+                "tone_change": "more_hawkish",
+                "confidence": "high",
+                "reason": "Hold decision with hawkish inflation language.",
+            },
+            "details": {
+                "fomc_tone": "hawkish",
+                "fomc_action": "hold",
+                "m2_status": "available",
+                "inflation_above_target": True,
+                "fed_balance_sheet_available": True,
+            },
+            "reasons": ["Hold decision with hawkish inflation language."],
+        },
+    }
+
+
+def _vix_predicate_method():
+    return {
+        "method_id": "vix_predicate_v1",
+        "method_version": "market_setup_v2_vix_predicate_v1",
+        "kind": "predicate_method",
+        "decision_contract": {
+            "input_contract": {"fact_id": "vix_level"},
+            "predicate": {"kind": "threshold"},
+        },
+        "explanation_contract": {"summary": "vix level predicate"},
+    }
+
+
 def fake_snapshot(context_id="ctx_current"):
     return {
         "context_id": context_id,
@@ -617,6 +672,189 @@ def _credit_series_dates():
         dates.append(current)
         current = current + timedelta(days=7)
     return dates
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_returns_focused_policy_projection():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    snapshot["evidence"].append(_policy_evidence())
+    snapshot["method_contracts"]["methods"]["vix_predicate_v1"] = (
+        _vix_predicate_method()
+    )
+    resolution["snapshot"] = snapshot
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "macro_policy_response",
+                "topics": ["current", "drivers", "source"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["artifact_kind"] == "explanation_snapshot"
+    assert artifact["artifact_id"] == (
+        "ctx_current_evidence_detail_macro_policy_response_current_drivers_source"
+    )
+    payload = artifact["payload"]
+    assert payload["context_id"] == "ctx_current"
+    assert payload["as_of"] == "2026-08-13"
+    assert payload["evidence_through"] == "2026-08-12"
+    assert payload["fact_id"] == "macro_policy_response"
+    assert payload["detail_kind"] == "policy_response"
+    assert payload["topics"] == ["current", "drivers", "source"]
+    assert payload["status"] == "available"
+    assert payload["detail"]["current"]["policy_action"] == "hold"
+    assert payload["detail"]["current"]["overall_bias"] == "mild_hawkish"
+    assert (
+        payload["detail"]["current"]["relationship_to_growth_direction"] == "conflicts"
+    )
+    assert payload["detail"]["drivers"]["policy_reason"]
+    assert payload["detail"]["source"]["source_module"] == "fomc_policy_tone"
+    assert payload["detail"]["source"]["source_period"] == "2026-07-28"
+    assert "evidence" not in payload
+    assert "results" not in payload
+    object_ids = {obj["object_id"] for obj in artifact["object_index"]}
+    assert object_ids == {
+        "ctx_current_evidence_detail_macro_policy_response_current_drivers_source"
+    }
+    assert {obj["object_type"] for obj in artifact["object_index"]} == {
+        "evidence_detail"
+    }
+    assert all(obj["authority"] == "decision_fact" for obj in artifact["object_index"])
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_excludes_unrelated_facts_from_object_index():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    snapshot["evidence"].append(_policy_evidence())
+    resolution["snapshot"] = snapshot
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "macro_policy_response",
+                "topics": ["current"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    object_ids = {obj["object_id"] for obj in record["artifact"]["object_index"]}
+    assert object_ids == {"ctx_current_evidence_detail_macro_policy_response_current"}
+    assert "sp500_market_phase" not in object_ids
+    assert "credit_conditions" not in object_ids
+    assert "vix_level" not in object_ids
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_adds_method_object_when_matched():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    snapshot["method_contracts"]["methods"]["vix_predicate_v1"] = (
+        _vix_predicate_method()
+    )
+    resolution["snapshot"] = snapshot
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "vix_level",
+                "topics": ["current", "method"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    objects_by_type = {obj["object_type"]: obj for obj in artifact["object_index"]}
+    assert set(objects_by_type) == {"evidence_detail", "evidence_detail_method"}
+    detail_obj = objects_by_type["evidence_detail"]
+    assert detail_obj["authority"] == "decision_fact"
+    assert detail_obj["payload"]["status"] == "available"
+    method_obj = objects_by_type["evidence_detail_method"]
+    assert method_obj["authority"] == "method_knowledge"
+    assert method_obj["payload"]["method_references"] == []
+    assert (
+        method_obj["payload"]["method_contracts"][0]["method_id"] == "vix_predicate_v1"
+    )
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_returns_stale_projection():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    stale = _policy_evidence()
+    stale["data_status"] = {"state": "stale"}
+    stale["participation"] = {"state": "stale", "reason_code": "data_stale"}
+    snapshot["evidence"].append(stale)
+    resolution["snapshot"] = snapshot
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "macro_policy_response",
+                "topics": ["current", "source"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["payload"]["status"] == "stale"
+    assert artifact["payload"]["detail"]["status"] == "stale"
+    assert artifact["payload"]["detail"]["reason"] == "data_stale"
+    assert artifact["payload"]["detail"]["source"]["source_period"] == "2026-07-28"
+    assert "current" not in artifact["payload"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_returns_unsupported_projection():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    snapshot["evidence"].append(
+        {
+            "fact_id": "equity_breadth",
+            "label": "Equity Breadth",
+            "data_status": {"state": "available"},
+        }
+    )
+    resolution["snapshot"] = snapshot
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "equity_breadth",
+                "topics": ["current"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["payload"]["status"] == "unsupported"
+    assert artifact["payload"]["detail"]["status"] == "unsupported"
+    assert artifact["payload"]["detail"]["supported_topics"] == []
+    assert artifact["payload"]["detail"]["detail_kind"] == "unsupported"
 
 
 def _credit_series_points(value, *, high_value=None):

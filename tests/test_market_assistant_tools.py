@@ -328,6 +328,104 @@ def test_duplicate_call_keys_ignore_call_id():
     assert normalized_tool_call_key(first) == normalized_tool_call_key(second)
 
 
+def test_evidence_detail_accepts_valid_call():
+    call = {
+        "call_id": "call_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers", "source"],
+        },
+    }
+    assert validate_tool_call(call, {"get_evidence_detail"}) == call
+
+
+def test_evidence_detail_rejects_unknown_fact():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {"fact_id": "unknown_fact", "topics": ["current"]},
+            },
+            {"get_evidence_detail"},
+        )
+
+
+def test_evidence_detail_rejects_empty_topics():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {"fact_id": "macro_policy_response", "topics": []},
+            },
+            {"get_evidence_detail"},
+        )
+
+
+def test_evidence_detail_rejects_duplicate_topics():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["current", "current"],
+                },
+            },
+            {"get_evidence_detail"},
+        )
+
+
+def test_evidence_detail_rejects_unknown_topic():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["sql"],
+                },
+            },
+            {"get_evidence_detail"},
+        )
+
+
+def test_evidence_detail_rejects_extra_arguments():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["current"],
+                    "sql": "select 1",
+                },
+            },
+            {"get_evidence_detail"},
+        )
+
+
+def test_evidence_detail_rejects_model_supplied_context_id():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["current"],
+                    "context_id": "ctx_other",
+                },
+            },
+            {"get_evidence_detail"},
+        )
+
+
 def test_no_schema_contains_forbidden_properties():
     forbidden = {"url", "sql", "provider", "path", "context_id"}
     for tool_id in TOOL_IDS:
