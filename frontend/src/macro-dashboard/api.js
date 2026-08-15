@@ -1,13 +1,5 @@
 import { state } from "./state.js";
-import { $, visibleMarketPhaseMarkets } from "./utils.js";
-import { renderOverview } from "./sections/benchmark-grid.js";
-import { renderUsRatesLiquidity } from "./sections/us-rates-liquidity.js";
-import { renderGrowthCycle } from "./sections/growth-cycle.js";
-import { renderSurveySynthesis } from "./sections/survey-synthesis.js";
-import { renderConsumerSentiment } from "./sections/consumer-sentiment.js";
-import { renderEconomicConfirmation } from "./sections/economic-confirmation.js";
-import { renderMarketSetup, announceStatus } from "./sections/market-setup.js";
-import { renderDetailPanel } from "./detail-panel.js";
+import { visibleMarketPhaseMarkets } from "./utils.js";
 
 export function ratesDetailCacheKey(detailId) {
     if (detailId === "yield_curve_shape") {
@@ -17,7 +9,7 @@ export function ratesDetailCacheKey(detailId) {
   }
 
 
-export async function loadUsRatesLiquidity() {
+export async function fetchUsRatesLiquidity() {
     try {
       const response = await fetch("/api/macro-dashboard/us-rates-liquidity");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -27,7 +19,7 @@ export async function loadUsRatesLiquidity() {
       state.usRatesLiquidity = null;
       state.usRatesLiquidityError = error.message;
     }
-    renderUsRatesLiquidity();
+    return state.usRatesLiquidity;
   }
 
 
@@ -59,7 +51,7 @@ export async function loadUsRatesLiquidityDetail(detailId) {
   }
 
 
-export async function loadGrowthCycle() {
+export async function fetchGrowthCycle() {
     try {
       const response = await fetch("/api/macro-dashboard/growth-cycle");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -69,8 +61,7 @@ export async function loadGrowthCycle() {
       state.growthCycle = null;
       state.growthCycleError = error.message;
     }
-    renderGrowthCycle();
-    renderSurveySynthesis();
+    return state.growthCycle;
   }
 
 
@@ -83,26 +74,21 @@ export async function loadGrowthCycleDetail(detailId) {
   }
 
 
-export async function loadMarketSetup() {
-    state.marketSetupLoading = true;
-    state.marketSetupError = null;
-    renderMarketSetup();
-    announceStatus("Loading market setup");
+export async function fetchMarketSetup() {
     try {
       const response = await fetch("/api/macro-dashboard/market-setup");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       state.marketSetup = await response.json();
+      state.marketSetupError = null;
     } catch (error) {
       state.marketSetup = null;
       state.marketSetupError = error.message;
-    } finally {
-      state.marketSetupLoading = false;
-      renderMarketSetup();
     }
+    return state.marketSetup;
   }
 
 
-export async function loadConsumerSentiment() {
+export async function fetchConsumerSentiment() {
     try {
       const response = await fetch("/api/macro-dashboard/consumer-sentiment");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -112,7 +98,7 @@ export async function loadConsumerSentiment() {
       state.consumerSentiment = null;
       state.consumerSentimentError = error.message;
     }
-    renderConsumerSentiment();
+    return state.consumerSentiment;
   }
 
 
@@ -123,7 +109,7 @@ export async function loadConsumerSentimentDetail() {
   }
 
 
-export async function loadEconomicConfirmation() {
+export async function fetchEconomicConfirmation() {
     try {
       const response = await fetch("/api/macro-dashboard/economic-confirmation");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -133,7 +119,7 @@ export async function loadEconomicConfirmation() {
       state.economicConfirmation = null;
       state.economicConfirmationError = error.message;
     }
-    renderEconomicConfirmation();
+    return state.economicConfirmation;
   }
 
 
@@ -144,31 +130,16 @@ export async function loadEconomicConfirmationDetail() {
   }
 
 
-export async function loadDashboard() {
+export async function fetchMarketPhase() {
     const response = await fetch("/api/macro-dashboard/market-phase");
     if (response.status === 500) {
-      $("dashboardStatus").textContent = "Server error loading market data. Ensure scripts/import_benchmark_market_data.py has been run.";
-      return;
+      return null;
     }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     state.markets = visibleMarketPhaseMarkets(payload.markets || []);
     state.selectedBenchmarkId = null;
-    $("dashboardStatus").textContent = state.markets.length
-      ? `${state.markets.length} benchmark markets loaded. Workbook-seeded data may be stale until refresh is added.`
-      : "No benchmark market data found. Run scripts/import_benchmark_market_data.py.";
-    renderOverview();
-    loadUsRatesLiquidity().catch((error) => {
-      const section = $("usRatesLiquidity");
-      if (section) {
-        section.querySelector(".rates-loading")?.remove();
-        section.insertAdjacentHTML(
-          "beforeend",
-          `<div class="rates-empty">Failed to load US rates data.</div>`,
-        );
-      }
-      console.error(error);
-    });
+    return payload;
   }
 
 
@@ -184,45 +155,19 @@ export async function loadMarketDetail(benchmarkId) {
   }
 
 
-
-
-export async function refreshMarket(benchmarkId, button) {
-    if (!benchmarkId || button?.dataset.refreshing === "true") return;
-    const previousText = button?.textContent;
-    if (button) {
-      button.dataset.refreshing = "true";
-      button.setAttribute("aria-disabled", "true");
-      button.textContent = "⟳";
+export async function refreshMarketData(benchmarkId) {
+    const response = await fetch(`/api/macro-dashboard/market-phase/${encodeURIComponent(benchmarkId)}/refresh`, {
+      method: "POST",
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || `HTTP ${response.status}`);
     }
-    $("dashboardStatus").textContent = `Refreshing ${benchmarkId}...`;
-    try {
-      const response = await fetch(`/api/macro-dashboard/market-phase/${encodeURIComponent(benchmarkId)}/refresh`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.detail || `HTTP ${response.status}`);
-      }
-      const result = await response.json();
-      delete state.marketDetailsById[benchmarkId];
-      const overview = await fetch("/api/macro-dashboard/market-phase");
-      if (!overview.ok) throw new Error(`HTTP ${overview.status}`);
-      const payload = await overview.json();
-      state.markets = visibleMarketPhaseMarkets(payload.markets || []);
-      $("dashboardStatus").textContent = `${result.benchmark_id} refreshed from ${result.symbol}: ${result.rows_upserted} rows through ${result.latest_date}.`;
-      renderOverview();
-      if (state.selectedBenchmarkId === benchmarkId) {
-        renderDetailPanel();
-      }
-    } catch (error) {
-      $("dashboardStatus").textContent = `Refresh failed: ${error.message}`;
-      console.error(error);
-    } finally {
-      if (button) {
-        button.dataset.refreshing = "false";
-        button.setAttribute("aria-disabled", "false");
-        button.textContent = previousText || "↻";
-      }
-    }
+    const result = await response.json();
+    delete state.marketDetailsById[benchmarkId];
+    const overview = await fetch("/api/macro-dashboard/market-phase");
+    if (!overview.ok) throw new Error(`HTTP ${overview.status}`);
+    const payload = await overview.json();
+    state.markets = visibleMarketPhaseMarkets(payload.markets || []);
+    return result;
   }
-

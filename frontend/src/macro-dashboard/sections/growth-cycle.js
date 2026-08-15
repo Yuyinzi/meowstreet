@@ -8,12 +8,19 @@ import {
   formatMinutesConfirmation, formatRiskFocus, formatPolicyConviction,
   formatPolicyAction, formatOverallBias, formatToneChange,
 } from "../utils.js";
-import { loadGrowthCycleDetail } from "../api.js";
+import { loadGrowthCycleDetail, fetchGrowthCycle } from "../api.js";
 import { filterChartForRange, CHART_RANGE_OPTIONS } from "../charts.js";
 import { renderRatesDetailChart, attachRatesChartTooltips, renderMacroAiInterpretation, renderUsRatesLiquidity } from "./us-rates-liquidity.js";
 import { renderDetailPanel } from "../detail-panel.js";
 import { renderOverview } from "./benchmark-grid.js";
-import { renderSurveySynthesisCard } from "./survey-synthesis.js";
+import { renderSurveySynthesis, renderSurveySynthesisCard } from "./survey-synthesis.js";
+
+export async function loadGrowthCycle() {
+    await fetchGrowthCycle();
+    renderGrowthCycle();
+    renderSurveySynthesis();
+  }
+
 
 export function growthCycleCardsById(cards) {
     const result = {};

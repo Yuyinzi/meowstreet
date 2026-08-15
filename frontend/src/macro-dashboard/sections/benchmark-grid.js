@@ -1,9 +1,9 @@
 import { state } from "../state.js";
 import { $, escapeHtml, fmtStatus, fmtNumber, bilingualLabel, visibleMarketPhaseMarkets, statusClass, selectedMarket } from "../utils.js";
 import { renderMarketChart, attachChartTooltip } from "../charts.js";
-import { refreshMarket, loadMarketDetail } from "../api.js";
+import { fetchMarketPhase, refreshMarketData, loadMarketDetail } from "../api.js";
 import { renderDetailPanel } from "../detail-panel.js";
-import { renderUsRatesLiquidity } from "./us-rates-liquidity.js";
+import { renderUsRatesLiquidity, loadUsRatesLiquidity } from "./us-rates-liquidity.js";
 
 export function renderOverview() {
     const grid = $("marketGrid");
@@ -111,5 +111,58 @@ export function renderMarketPhaseMethod() {
         <p class="method-chart-key">Green line shows bull-market close segments; red line shows bear-market close segments; dashed line is the Bear/Bull Level.</p>
       </section>
     `;
+  }
+
+
+export async function loadDashboard() {
+    const payload = await fetchMarketPhase();
+    if (payload === null) {
+      $("dashboardStatus").textContent = "Server error loading market data. Ensure scripts/import_benchmark_market_data.py has been run.";
+      return;
+    }
+    $("dashboardStatus").textContent = state.markets.length
+      ? `${state.markets.length} benchmark markets loaded. Workbook-seeded data may be stale until refresh is added.`
+      : "No benchmark market data found. Run scripts/import_benchmark_market_data.py.";
+    renderOverview();
+    loadUsRatesLiquidity().catch((error) => {
+      const section = $("usRatesLiquidity");
+      if (section) {
+        section.querySelector(".rates-loading")?.remove();
+        section.insertAdjacentHTML(
+          "beforeend",
+          `<div class="rates-empty">Failed to load US rates data.</div>`,
+        );
+      }
+      console.error(error);
+    });
+  }
+
+
+export async function refreshMarket(benchmarkId, button) {
+    if (!benchmarkId || button?.dataset.refreshing === "true") return;
+    const previousText = button?.textContent;
+    if (button) {
+      button.dataset.refreshing = "true";
+      button.setAttribute("aria-disabled", "true");
+      button.textContent = "⟳";
+    }
+    $("dashboardStatus").textContent = `Refreshing ${benchmarkId}...`;
+    try {
+      const result = await refreshMarketData(benchmarkId);
+      $("dashboardStatus").textContent = `${result.benchmark_id} refreshed from ${result.symbol}: ${result.rows_upserted} rows through ${result.latest_date}.`;
+      renderOverview();
+      if (state.selectedBenchmarkId === benchmarkId) {
+        renderDetailPanel();
+      }
+    } catch (error) {
+      $("dashboardStatus").textContent = `Refresh failed: ${error.message}`;
+      console.error(error);
+    } finally {
+      if (button) {
+        button.dataset.refreshing = "false";
+        button.setAttribute("aria-disabled", "false");
+        button.textContent = previousText || "↻";
+      }
+    }
   }
 

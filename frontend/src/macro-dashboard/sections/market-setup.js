@@ -1,6 +1,17 @@
 import { state } from "../state.js";
 import { $, escapeHtml, titleCaseToken } from "../utils.js";
-import { loadMarketSetup } from "../api.js";
+import { fetchMarketSetup } from "../api.js";
+
+export async function loadMarketSetup() {
+    state.marketSetupLoading = true;
+    state.marketSetupError = null;
+    renderMarketSetup();
+    announceStatus("Loading market setup");
+    await fetchMarketSetup();
+    state.marketSetupLoading = false;
+    renderMarketSetup();
+  }
+
 
 export var MARKET_SETUP_SENTIMENT_CLASSES = {
     bull_market: "constructive",

@@ -35,14 +35,12 @@ import {
   yAxisTicks,
 } from "./charts.js";
 import { renderDetailPanel, toggleDetailPanelExpanded } from "./detail-panel.js";
-import {
-  loadDashboard,
-  loadGrowthCycle,
-  loadConsumerSentiment,
-  loadEconomicConfirmation,
-  loadMarketSetup,
-  loadEconomicConfirmationDetail,
-} from "./api.js";
+import { loadEconomicConfirmationDetail } from "./api.js";
+import { loadDashboard } from "./sections/benchmark-grid.js";
+import { loadGrowthCycle } from "./sections/growth-cycle.js";
+import { loadConsumerSentiment } from "./sections/consumer-sentiment.js";
+import { loadEconomicConfirmation } from "./sections/economic-confirmation.js";
+import { loadMarketSetup } from "./sections/market-setup.js";
 import {
   renderIsmTrendChip,
   renderIsmDetailInPanel,

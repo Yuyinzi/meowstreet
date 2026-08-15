@@ -1,9 +1,15 @@
 import { state } from "../state.js";
 import { $, escapeHtml, fmtDate, fmtNumber } from "../utils.js";
-import { loadConsumerSentiment, loadConsumerSentimentDetail } from "../api.js";
+import { loadConsumerSentimentDetail, fetchConsumerSentiment } from "../api.js";
 import { renderOverview } from "./benchmark-grid.js";
 import { renderUsRatesLiquidity } from "./us-rates-liquidity.js";
 import { renderDetailPanel } from "../detail-panel.js";
+
+export async function loadConsumerSentiment() {
+    await fetchConsumerSentiment();
+    renderConsumerSentiment();
+  }
+
 
 export function bindConsumerSentimentDetailTrigger(button, onActivate) {
     button.addEventListener("click", onActivate);

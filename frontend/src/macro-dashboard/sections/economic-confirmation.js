@@ -1,10 +1,16 @@
 import { state } from "../state.js";
 import { $, escapeHtml, fmtDateOnly, fmtNumber, fmtInteger, bilingualLabel, bilingualTitle, titleCaseToken } from "../utils.js";
-import { loadEconomicConfirmation, loadEconomicConfirmationDetail } from "../api.js";
+import { loadEconomicConfirmationDetail, fetchEconomicConfirmation } from "../api.js";
 import { renderOverview } from "./benchmark-grid.js";
 import { renderUsRatesLiquidity } from "./us-rates-liquidity.js";
 import { renderDetailPanel } from "../detail-panel.js";
 import { bindConsumerSentimentDetailTrigger } from "./consumer-sentiment.js";
+
+export async function loadEconomicConfirmation() {
+    await fetchEconomicConfirmation();
+    renderEconomicConfirmation();
+  }
+
 
 export function renderEconomicConfirmation() {
     const section = $("economicConfirmation");

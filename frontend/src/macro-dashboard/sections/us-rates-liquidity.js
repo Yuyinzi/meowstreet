@@ -5,10 +5,16 @@ import {
   accelerationGlyph, accelerationLabel, titleCaseToken, lineLabel, zhLabel,
   CREDIT_DETAIL_MAP, CREDIT_REGIME_VISIBLE_POINTS, fmtMonthYear, fmtStatus,
 } from "../utils.js";
-import { ratesDetailCacheKey, loadUsRatesLiquidityDetail } from "../api.js";
+import { ratesDetailCacheKey, loadUsRatesLiquidityDetail, fetchUsRatesLiquidity } from "../api.js";
 import { renderRelationshipLineChart, attachRelationshipChartTooltip, niceTicks } from "../charts.js";
 import { renderOverview } from "./benchmark-grid.js";
 import { renderDetailPanel } from "../detail-panel.js";
+
+export async function loadUsRatesLiquidity() {
+    await fetchUsRatesLiquidity();
+    renderUsRatesLiquidity();
+  }
+
 
 export function renderUsRatesLiquidity() {
     const section = $("usRatesLiquidity");
