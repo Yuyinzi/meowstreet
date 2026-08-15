@@ -1,0 +1,166 @@
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.benchmark-indices {
+  margin-top: 24px;
+}
+
+.market-card {
+  display: flex;
+  min-height: 132px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  border: 1px solid #E0D6C8;
+  border-radius: 10px;
+  padding: 14px;
+  background: #FFFFFF;
+  color: #3B3530;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.market-card:hover {
+  border-color: #3B3530;
+  box-shadow: 0 2px 8px rgba(59, 53, 48, 0.08);
+}
+
+.market-card.selected {
+  border-color: #D9848C;
+  box-shadow: 0 0 0 2px rgba(217, 132, 140, 0.18), 0 2px 8px rgba(217, 132, 140, 0.08);
+}
+
+.market-card-bull {
+  background: #F2FAF4;
+  border-color: #BBDCC6;
+}
+
+.market-card-bull.selected {
+  background: #E5F5EA;
+  border-color: #5DA876;
+}
+
+.market-card-bear {
+  background: #FDF2F2;
+  border-color: #E0BCBC;
+}
+
+.market-card-bear.selected {
+  background: #FBE5E5;
+  border-color: #D46A6A;
+}
+
+.market-region {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #A89B91;
+}
+
+.market-card strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #3B3530;
+}
+
+.market-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding-right: 0;
+}
+
+.market-meta-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.market-meta-label .meta-en {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8B7E74;
+}
+
+.market-meta-label .meta-zh {
+  font-size: 10px;
+  font-weight: 500;
+  color: #A89B91;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.market-meta strong.market-meta-value {
+  font-size: 15px;
+  font-weight: 400;
+  color: #8B7E74;
+  white-space: nowrap;
+  margin-left: auto;
+  text-align: right;
+}
+
+.market-status {
+  margin-top: auto;
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.market-card-bull .market-status {
+  color: #2D7A4A;
+}
+
+.market-card-bear .market-status {
+  color: #A04040;
+}
+
+.market-card-actions {
+  display: flex;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.market-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #E8E0D6;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #3B3530;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.market-refresh:hover {
+  border-color: #3B3530;
+}
+
+.market-refresh[aria-disabled="true"],
+.market-refresh:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.market-detail {
+  margin-top: 18px;
+  border: 1px solid #E8E0D6;
+  border-radius: 12px;
+  padding: 18px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(155, 130, 100, 0.05);
+}
+

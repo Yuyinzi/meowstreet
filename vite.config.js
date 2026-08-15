@@ -16,7 +16,7 @@ export default defineConfig({
     cssMinify: false,
     rollupOptions: {
       output: {
-        assetFileNames: "[name][extname]",
+        assetFileNames: "macro-dashboard[extname]",
       },
     },
   },

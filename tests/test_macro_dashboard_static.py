@@ -10,8 +10,8 @@ from app.tools import market_setup_evidence_layers
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STATIC_JS = ROOT / "static" / "macro-dashboard.js"
-STATIC_CSS = ROOT / "static" / "macro-dashboard.css"
+STATIC_JS = ROOT / "static" / "dist" / "macro-dashboard.js"
+STATIC_CSS = ROOT / "static" / "dist" / "macro-dashboard.css"
 STATIC_HTML = ROOT / "static" / "macro-dashboard.html"
 ASSISTANT_JS = ROOT / "static" / "market-assistant.js"
 
@@ -20,8 +20,8 @@ def test_macro_dashboard_html_links_assets_and_app_root():
     html = (ROOT / "static" / "macro-dashboard.html").read_text()
 
     assert 'id="macroDashboardApp"' in html
-    assert 'href="/macro-dashboard.css"' in html
-    assert 'src="/macro-dashboard.js"' in html
+    assert 'href="/static/dist/macro-dashboard.css"' in html
+    assert 'src="/static/dist/macro-dashboard.js"' in html
 
 
 def test_macro_dashboard_uses_floating_market_assistant():
@@ -688,7 +688,7 @@ def test_macro_dashboard_chart_helpers_are_exercised_with_node():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
 
         const hooks = window.__macroDashboardTestHooks;
         const series = [
@@ -808,7 +808,7 @@ def test_macro_dashboard_js_renders_services_latest_values():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
 
         const hooks = window.__macroDashboardTestHooks;
 
@@ -1271,7 +1271,7 @@ def test_macro_dashboard_js_renders_inflation_context_card():
 
 
 def test_macro_dashboard_static_includes_fomc_chart_marker_renderer():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
 
     assert "renderRelationshipEventMarkers" in js
     assert "relationship-event-marker" in js
@@ -1279,7 +1279,7 @@ def test_macro_dashboard_static_includes_fomc_chart_marker_renderer():
 
 
 def test_macro_dashboard_static_includes_fomc_card_labels():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
 
     assert "FOMC Calendar" in js
     assert "Next Meeting" in js
@@ -1287,7 +1287,7 @@ def test_macro_dashboard_static_includes_fomc_card_labels():
 
 
 def test_macro_dashboard_static_includes_fomc_tone_card():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
 
     assert "fomc_tone" in js
     assert "renderFomcToneCard" in js
@@ -1328,7 +1328,7 @@ def test_macro_dashboard_static_includes_fomc_tone_card():
 
 
 def test_macro_dashboard_renders_fomc_minutes_policy_read_rows():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
 
     assert "Minutes Confirmation" in js
     assert "Risk Focus" in js
@@ -1359,7 +1359,7 @@ def test_macro_dashboard_range_filter_hooks_filter_series_and_events():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const series = [
@@ -1415,7 +1415,7 @@ def test_macro_dashboard_range_filter_hooks_filter_series_and_events():
 
 
 def test_macro_dashboard_css_has_fomc_tone_card_styles():
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert ".fomc-tone-card .m2-detail-rows" in css
     assert ".fomc-tone-badge" in css
@@ -1425,8 +1425,8 @@ def test_macro_dashboard_css_has_fomc_tone_card_styles():
 
 
 def test_macro_dashboard_static_includes_m2_range_control():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert "renderGrowthCycleRangeControl" in js
     assert "data-growth-cycle-chart-range" in js
@@ -1443,7 +1443,7 @@ def test_macro_dashboard_static_includes_m2_range_control():
 
 
 def test_growth_cycle_detail_reloads_current_data_when_reopened():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
     function_body = js.split("async function loadGrowthCycleDetail(detailId) {", 1)[
         1
     ].split("\n  }", 1)[0]
@@ -1453,7 +1453,7 @@ def test_growth_cycle_detail_reloads_current_data_when_reopened():
 
 
 def test_macro_dashboard_static_includes_fomc_tone_tooltip_fields():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
 
     assert "tone_change" in js
     assert "statement_tone" in js
@@ -1461,8 +1461,8 @@ def test_macro_dashboard_static_includes_fomc_tone_tooltip_fields():
 
 
 def test_macro_dashboard_relationship_tooltip_uses_pinned_positioning():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert "positionRelationshipTooltip" in js
     assert "relationship-tooltip-pinned" in js
@@ -1494,7 +1494,7 @@ def test_macro_dashboard_hides_event_marker_labels_when_requested():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         const markup = hooks.renderRelationshipLineChart(
           "Test",
@@ -1549,7 +1549,7 @@ def test_macro_dashboard_renders_fomc_events_as_tone_bars_to_highest_line():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         const markup = hooks.renderRelationshipLineChart(
           "Test",
@@ -1592,8 +1592,8 @@ def test_macro_dashboard_renders_fomc_events_as_tone_bars_to_highest_line():
 
 
 def test_macro_dashboard_static_includes_expandable_detail_panel_hooks():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert "isDetailPanelExpanded" in js
     assert "toggleDetailPanelExpanded" in js
@@ -1662,7 +1662,7 @@ def test_macro_dashboard_detail_panel_expand_button_toggles_class():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         hooks.state.selectedGrowthCycleDetailId = "m2_money_supply";
         hooks.renderDetailPanel();
@@ -1687,8 +1687,8 @@ def test_macro_dashboard_detail_panel_expand_button_toggles_class():
 
 
 def test_macro_dashboard_static_includes_fomc_policy_track_renderer():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert "renderRelationshipPolicyTrack" in js
     assert "relationship-policy-track" in js
@@ -1711,7 +1711,7 @@ def test_macro_dashboard_policy_track_replaces_in_plot_event_bars_for_m2_chart()
         """
         const fs = require("fs");
         const vm = require("vm");
-        const code = fs.readFileSync("static/macro-dashboard.js", "utf8");
+        const code = fs.readFileSync("static/dist/macro-dashboard.js", "utf8");
         const sandbox = {
           window: { __MEOWSTREET_TEST__: true },
           document: {
@@ -1788,8 +1788,8 @@ def test_macro_dashboard_policy_track_replaces_in_plot_event_bars_for_m2_chart()
 
 
 def test_macro_dashboard_js_renders_growth_cycle_tabs():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert "selectedGrowthCycleSectionId" in js
     assert "function selectGrowthCycleSection(" in js
@@ -1821,14 +1821,14 @@ def test_macro_dashboard_static_assets_render_ism_industry_breadth():
 
 
 def test_macro_dashboard_js_renders_ism_overview_cards():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
 
     assert "function renderIsmManufacturingCard(" in js
     assert 'card.id === "ism_manufacturing"' in js
 
 
 def test_macro_dashboard_css_styles_ism_overview_cards():
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert ".ism-card" in css
     assert ".ism-card-primary" in css
@@ -1839,7 +1839,7 @@ def test_macro_dashboard_css_styles_ism_overview_cards():
 
 
 def test_macro_dashboard_css_styles_growth_cycle_tabs():
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert ".growth-cycle-tabs" in css
     assert ".growth-cycle-tab" in css
@@ -1852,15 +1852,15 @@ def test_macro_dashboard_css_styles_growth_cycle_tabs():
 
 
 def test_growth_cycle_tabs_wrap_instead_of_clipping_later_sections():
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
     tabs_rule = css.split(".growth-cycle-tabs {", 1)[1].split("}", 1)[0]
 
     assert "flex-wrap: wrap" in tabs_rule
 
 
 def test_growth_cycle_ism_cards_open_focused_detail_static_assets():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert "selectedGrowthCycleDetailId" in js
     assert "renderIsmManufacturingCard" in js
@@ -1871,8 +1871,8 @@ def test_growth_cycle_ism_cards_open_focused_detail_static_assets():
 
 
 def test_growth_cycle_ism_detail_renderer_static_assets():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert "function renderIsmDetailInPanel(" in js
     assert "function renderIsmDetailChart(" in js
@@ -1902,8 +1902,8 @@ def test_growth_cycle_ism_detail_renderer_static_assets():
 
 
 def test_macro_dashboard_renders_ism_report_summary_as_compact_rows():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert "ism-official-summary-row" in js
     assert "ism-official-summary-label" in js
@@ -1926,8 +1926,8 @@ def test_macro_dashboard_renders_ism_report_summary_as_compact_rows():
 
 
 def test_macro_dashboard_renders_ism_comment_expander_static_assets():
-    js = ROOT.joinpath("static/macro-dashboard.js").read_text(encoding="utf-8")
-    css = ROOT.joinpath("static/macro-dashboard.css").read_text(encoding="utf-8")
+    js = ROOT.joinpath("static/dist/macro-dashboard.js").read_text(encoding="utf-8")
+    css = ROOT.joinpath("static/dist/macro-dashboard.css").read_text(encoding="utf-8")
 
     assert "comment_preview_count" in js
     assert "ism-official-comment-row-extra" in js
@@ -2031,7 +2031,7 @@ def test_macro_dashboard_js_industry_analysis_renderers_produce_correct_html():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         // Test helper functions
@@ -2120,7 +2120,7 @@ def test_macro_dashboard_js_renders_industry_analysis_detail_view():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const analysis = {
@@ -2335,7 +2335,7 @@ def test_macro_dashboard_js_industry_analysis_evidence_section():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const coreSignals = {
@@ -2392,7 +2392,7 @@ def test_macro_dashboard_js_industry_list_renders_buttons():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const growthItems = [
@@ -2480,7 +2480,7 @@ def test_macro_dashboard_js_industry_selection_interaction():
           json: async () => ({ markets: [], headline: [], sections: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = global.window.__macroDashboardTestHooks;
 
         const analysis = {
@@ -2624,7 +2624,7 @@ def test_macro_dashboard_js_renders_survey_synthesis_card_with_available_data():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const card = {
@@ -2757,7 +2757,7 @@ def test_survey_synthesis_uses_ism_labels_and_dynamic_portfolio_bias_explanation
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         const baseCard = {
           id: "survey_synthesis",
@@ -2849,7 +2849,7 @@ def test_macro_dashboard_js_keeps_ism_policy_pressure_out_of_fomc_card():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const card = {
@@ -2952,7 +2952,7 @@ def test_macro_dashboard_js_does_not_use_ism_context_as_fomc_fallback():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const card = {
@@ -3028,7 +3028,7 @@ def test_macro_dashboard_js_renders_policy_pressure_in_ism_card():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const html = window.__macroDashboardTestHooks.renderIsmPolicyPressure({
           combined_pressure: "inflation_caution",
           growth_pressure: "less_easing_pressure",
@@ -3081,7 +3081,7 @@ def test_macro_dashboard_js_survey_synthesis_card_replaces_removed_features():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         console.log(JSON.stringify({
@@ -3134,7 +3134,7 @@ def test_macro_dashboard_js_renders_survey_synthesis_as_standalone_layer():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const growthCycle = {
@@ -3292,7 +3292,7 @@ def _market_setup_v2_hero_script(setup_json, checks):
           status: 200,
           json: async () => ({ markets: [] }),
         });
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         const setup = %s;
         const pr = hooks.buildMarketSetupPresentation(setup);
@@ -3593,7 +3593,7 @@ def test_market_setup_hero_error_state():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const errorHtml = hooks.renderMarketSetupError("Network error");
@@ -3642,7 +3642,7 @@ def test_market_setup_hero_loading_state():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const loadingHtml = hooks.renderMarketSetupLoading();
@@ -3689,7 +3689,7 @@ def test_market_setup_hero_state_sentiment_class():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         console.log(JSON.stringify({
@@ -3820,7 +3820,7 @@ def test_market_setup_hero_has_no_js_agreement_classifier():
           querySelectorAll: () => [],
         };
         global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         console.log(JSON.stringify({
           hasAgreementClassifier: typeof hooks.computeSignalAgreement !== "undefined",
@@ -3861,7 +3861,7 @@ def test_market_setup_evidence_links_are_semantic_deep_links():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         const evidenceTypes = [
           "market_phase",
@@ -3949,7 +3949,7 @@ def test_market_setup_evidence_navigation_updates_hash_and_respects_motion():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         hooks.bindEvidenceLinks(section);
         let prevented = 0;
@@ -4443,7 +4443,7 @@ def test_services_evidence_uses_readable_labels_without_schema_tokens():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         const commodities = hooks.renderServicesCommodityGroups([
           { commodity: "Aluminum", signal_type: "up_in_price", months: 4 },
@@ -4502,7 +4502,7 @@ def test_services_signal_trend_renderer_is_defined():
         global.loadConsumerSentiment = async () => {};
         global.loadMarketSetup = async () => {};
         process.on("unhandledRejection", () => {});
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         console.log(JSON.stringify({
           hasSignalTrend: typeof hooks.renderServicesSignalTrend === "function",
@@ -4541,7 +4541,7 @@ def test_services_signal_trend_renders_all_12_headers():
         global.loadMarketSetup = async () => {};
         process.on("unhandledRejection", () => {});
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const trend = [{
@@ -4608,7 +4608,7 @@ def test_services_signal_trend_listed_cell_includes_direction_and_rank():
         global.loadMarketSetup = async () => {};
         process.on("unhandledRejection", () => {});
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const trend = [{
@@ -4672,7 +4672,7 @@ def test_services_signal_trend_unavailable_not_listed_conflicting_distinct():
           return result;
         }
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const trendNotListed = [{
@@ -4741,7 +4741,7 @@ def test_services_signal_trend_shows_all_input_rows():
           return result;
         }
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const trend = [];
@@ -4788,7 +4788,7 @@ def test_services_signal_trend_returns_empty_for_no_data():
         global.loadMarketSetup = async () => {};
         process.on("unhandledRejection", () => {});
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const html = hooks.renderServicesSignalTrend([]);
@@ -4827,7 +4827,7 @@ def test_services_component_evidence_and_rank_history_replaced_by_signal_trend()
         global.loadConsumerSentiment = async () => {};
         global.loadMarketSetup = async () => {};
         process.on("unhandledRejection", () => {});
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         console.log(JSON.stringify({
           hasOldComponentEvidence: typeof hooks.renderServicesComponentEvidence === "function",
@@ -4868,7 +4868,7 @@ def test_services_detail_follows_manufacturing_display_structure():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const payload = {
@@ -5002,7 +5002,7 @@ def test_services_detail_edge_cases():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         function testEmptyEvidence() {
@@ -5125,7 +5125,7 @@ def test_services_industry_analysis_renders_ranked_master_detail():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         function industry(name, direction, rank, comments = []) {
@@ -5242,7 +5242,7 @@ def test_services_industry_selection_scopes_detail_and_comments():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const analysis = {
@@ -5355,7 +5355,7 @@ def test_services_industry_selector_change_updates_detail_and_state():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const analysis = {
@@ -5472,7 +5472,7 @@ def test_services_full_evidence_excludes_bulk_industry_content():
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const evidence = {
@@ -5546,7 +5546,7 @@ def test_services_signal_trend_detail_view_replaces_old_sections():
         global.loadConsumerSentiment = async () => {};
         global.loadMarketSetup = async () => {};
         process.on("unhandledRejection", () => {});
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const industry = {
@@ -5637,7 +5637,7 @@ def test_services_industry_selector_preserves_valid_selection_and_escapes_names(
           json: async () => ({ markets: [] }),
         });
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
         const industry = {
@@ -6251,7 +6251,7 @@ def test_consumer_sentiment_card_responds_to_keyboard():
         global.window = { __MEOWSTREET_TEST__: true };
         global.document = { getElementById: (id) => elements[id] || { innerHTML: "", querySelectorAll: () => [] } };
         global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ markets: [] }) });
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
 
         let clicked = 0;
         const listeners = {};
@@ -6565,7 +6565,7 @@ def test_growth_cycle_renders_housing_permits_card_in_dom_when_in_headline():
         };
         global.fetch = async function () { return { ok: true, status: 200, json: async function () { return { markets: [] }; } }; };
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         vm.runInThisContext(fs.readFileSync("static/housing-permits-ui.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
@@ -6645,7 +6645,7 @@ def test_growth_cycle_tabs_default_to_ism_and_render_only_selected_panel():
           addEventListener: function () {},
         };
         global.fetch = async () => ({ ok: true, json: async () => ({ markets: [] }) });
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         const sections = [
           { id: "ism_manufacturing", title: "ISM Manufacturing", subtitle: "Manufacturing", cards: [], status: "missing" },
@@ -6685,7 +6685,7 @@ def test_housing_permits_renders_card_for_unavailable_state():
         };
         global.fetch = async function () { return { ok: true, status: 200, json: async function () { return { markets: [] }; } }; };
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         vm.runInThisContext(fs.readFileSync("static/housing-permits-ui.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
 
@@ -6720,7 +6720,7 @@ def test_housing_permits_card_explains_awaiting_confirmation_against_ism_path():
         global.document = { getElementById: function () { return {}; } };
         global.fetch = async function () { return { ok: true, status: 200, json: async function () { return { markets: [] }; } }; };
 
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         vm.runInThisContext(fs.readFileSync("static/housing-permits-ui.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         const html = hooks.renderCard({
@@ -7528,7 +7528,7 @@ def test_claims_ui_renders_server_status_without_client_side_classification():
 
 def test_claims_ui_labels_the_scheduled_release_as_an_upcoming_event():
     source = Path("static/claims-confirmation-ui.js").read_text()
-    dashboard_source = Path("static/macro-dashboard.js").read_text()
+    dashboard_source = Path("static/dist/macro-dashboard.js").read_text()
 
     assert 'bilingualTitle("Upcoming Event")' in source
     assert '"Upcoming Event":' not in dashboard_source
@@ -7976,7 +7976,7 @@ def test_market_setup_js_has_evidence_layers_renderer_with_fallback():
     js = STATIC_JS.read_text()
 
     assert "function renderEvidenceLayers(" in js
-    assert "evidenceLayers: setup.evidence_layers || null," in js
+    assert "evidenceLayers: setup.evidence_layers || null" in js
     assert (
         "presentation.evidenceLayers ? renderEvidenceLayers(presentation.evidenceLayers) : renderDetailedReasoning(presentation)"
         in js
@@ -8229,7 +8229,7 @@ def _render_market_setup_v2_fixture():
           status: 200,
           json: async () => ({ markets: [] }),
         });
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         const pr = hooks.buildMarketSetupPresentation(%s);
         const html = hooks.renderDecisionHero(pr) + hooks.renderEvidenceLayers(pr.evidenceLayers);
@@ -8392,7 +8392,7 @@ def _render_market_setup_v2_non_directional_fixture():
           status: 200,
           json: async () => ({ markets: [] }),
         });
-        vm.runInThisContext(fs.readFileSync("static/macro-dashboard.js", "utf8"));
+        vm.runInThisContext(fs.readFileSync("static/dist/macro-dashboard.js", "utf8"));
         const hooks = window.__macroDashboardTestHooks;
         const pr = hooks.buildMarketSetupPresentation(%s);
         const html = hooks.renderDecisionHero(pr) + hooks.renderEvidenceLayers(pr.evidenceLayers);
