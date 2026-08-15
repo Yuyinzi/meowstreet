@@ -1,0 +1,16 @@
+{
+  "name": "meowstreet-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch --emptyOutDir false"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

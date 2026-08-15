@@ -147,7 +147,10 @@ python3 -m venv .venv
 
 ### Run all tests
 
+The macro dashboard static tests load the bundled assets at `static/dist/`. Rebuild them before running tests after any frontend change:
+
 ```bash
+npm run build
 .venv/bin/pytest -q
 ```
 
@@ -179,12 +182,22 @@ python3 -m py_compile app/api.py
 
 ```bash
 node --check static/method-system.js
+node --check static/dist/macro-dashboard.js
 ```
 
 ### Build the method method artifact
 
 ```bash
 python3 scripts/build_method.py
+```
+
+### Build frontend assets
+
+The macro dashboard is compiled from ES modules under `frontend/src/macro-dashboard/` into `static/dist/macro-dashboard.js` and `static/dist/macro-dashboard.css` with Vite. Rebuild after changing frontend source.
+
+```bash
+npm install
+npm run build
 ```
 
 There is no linter (no ruff, flake8, mypy) configured for this project.

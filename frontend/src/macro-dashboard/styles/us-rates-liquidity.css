@@ -1,0 +1,17 @@
+.rates-liquidity {
+  margin: 22px 0 24px;
+}
+
+.rates-content {
+  border: 1px solid #E0D6C8;
+  border-radius: 10px;
+  background: #FFFDFB;
+  padding: 18px 20px 20px;
+}
+
+.rates-content-head {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
