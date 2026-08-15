@@ -108,6 +108,7 @@
       deepResearch: $("marketAssistantDeepResearch"),
       deepAnalysis: $("marketAssistantDeepAnalysis"),
       status: $("marketAssistantStatus"),
+      validationDisabledNotice: $("marketAssistantValidationDisabledNotice"),
     };
   }
 
@@ -254,7 +255,11 @@
       article.appendChild(heading);
       article.appendChild(renderCitations(message.citations));
     }
-    if (message.validation && VALIDATION_BADGE_TEXT[message.validation]) {
+    if (
+      message.validation &&
+      message.validation !== "disabled" &&
+      VALIDATION_BADGE_TEXT[message.validation]
+    ) {
       article.appendChild(
         renderValidationBadge(message.validation, message.errorCodes || [])
       );
@@ -263,6 +268,32 @@
       article.appendChild(renderInterruptedNotice());
     }
     return article;
+  }
+
+  function renderValidationDisabledNotice() {
+    const el = elements();
+    if (!el.validationDisabledNotice) return;
+    el.validationDisabledNotice.textContent = VALIDATION_BADGE_TEXT.disabled;
+    el.validationDisabledNotice.className =
+      "market-assistant-validation-disabled-notice market-assistant-validation-disabled-shown";
+  }
+
+  function hideValidationDisabledNotice() {
+    const el = elements();
+    if (!el.validationDisabledNotice) return;
+    el.validationDisabledNotice.textContent = "";
+    el.validationDisabledNotice.className = "market-assistant-validation-disabled-notice";
+  }
+
+  function syncValidationDisabledNotice() {
+    const hasDisabled = state.messages.some(
+      (message) => message.role === "assistant" && message.validation === "disabled"
+    );
+    if (hasDisabled) {
+      renderValidationDisabledNotice();
+    } else {
+      hideValidationDisabledNotice();
+    }
   }
 
   function renderMessages() {
@@ -276,6 +307,7 @@
         el.log.appendChild(renderStoredAssistantMessage(message));
       }
     });
+    syncValidationDisabledNotice();
   }
 
   function openWindow() {
@@ -586,7 +618,10 @@
         clearProgress();
         break;
       case "validation":
-        if (
+        if (event.status === "disabled") {
+          stream.message.validation = event.status;
+          renderValidationDisabledNotice();
+        } else if (
           event.status !== "failed_initial" &&
           VALIDATION_BADGE_TEXT[event.status]
         ) {
@@ -624,6 +659,9 @@
           stream.element.appendChild(renderCitations(stream.message.citations));
         }
         stream.element.setAttribute("aria-busy", "false");
+        if (stream.message.validation === "disabled") {
+          renderValidationDisabledNotice();
+        }
         pushAssistantMessage(stream.message);
         break;
     }

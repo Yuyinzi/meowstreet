@@ -53,7 +53,9 @@ def test_macro_dashboard_includes_market_assistant_assets():
 def test_macro_dashboard_html_includes_deep_analysis_checkbox():
     html = STATIC_HTML.read_text(encoding="utf-8")
     window = html[html.index('id="marketAssistantWindow"') :]
-    controls = window[window.index('id="marketAssistantExternalSearch"') :]
+    controls_start = window.index('id="marketAssistantExternalSearch"')
+    controls_end = window.index("</form>", controls_start)
+    controls = window[controls_start:controls_end]
     assert 'id="marketAssistantDeepAnalysis"' in window
     assert "Deep analysis" in window
     assert 'id="marketAssistantDeepAnalysis"' in controls
@@ -8538,6 +8540,7 @@ def _market_assistant_harness(test_js):
           marketAssistantWindowHead: makeEl("div"),
           marketAssistantWindowClose: makeEl("button"),
           marketAssistantNewConversation: makeEl("button"),
+          marketAssistantValidationDisabledNotice: makeEl("div"),
           marketAssistantLog: makeEl("div"),
           marketAssistantForm: makeEl("form"),
           marketAssistantQuestion: makeEl("input"),
@@ -8665,7 +8668,7 @@ def test_market_assistant_stream_fallback_badge_does_not_invent_research_failure
     }
 
 
-def test_market_assistant_stream_marks_unvalidated_debug_with_disabled_badge():
+def test_market_assistant_stream_disabled_validation_renders_global_notice():
     payload = _run_market_assistant_harness(
         """
         const stream = hooks.createStreamingAssistantMessage();
@@ -8680,18 +8683,20 @@ def test_market_assistant_stream_marks_unvalidated_debug_with_disabled_badge():
         const badge = stream.element.children.find(
           (child) => child.className.indexOf("market-assistant-validation") === 0
         );
-        const label = badge.children[0];
+        const notice = elements.marketAssistantValidationDisabledNotice;
         console.log(JSON.stringify({
-          className: badge.className,
-          label: label.textContent,
+          hasMessageBadge: Boolean(badge),
+          noticeText: notice.textContent,
+          noticeClassName: notice.className,
           answerText: textEl.textContent,
         }));
         """
     )
 
     assert payload == {
-        "className": "market-assistant-validation market-assistant-validation-disabled",
-        "label": "Claim validation 当前已关闭",
+        "hasMessageBadge": False,
+        "noticeText": "Claim validation 当前已关闭",
+        "noticeClassName": "market-assistant-validation-disabled-notice market-assistant-validation-disabled-shown",
         "answerText": (
             "现在的市场可以理解为：经济增长正在放慢，但市场只确认了一部分风险。"
         ),
@@ -9337,11 +9342,6 @@ def test_market_assistant_stream_deltas_append_to_single_element():
             "修复后已通过验证",
         ),
         ("failed", "market-assistant-validation-failed", "未通过完整证据验证"),
-        (
-            "disabled",
-            "market-assistant-validation-disabled",
-            "Claim validation 当前已关闭",
-        ),
         ("fallback", "market-assistant-validation-passed", "已使用确定性备用回答"),
     ],
 )
@@ -9715,7 +9715,7 @@ def test_market_assistant_rendered_stream_is_beginner_language_without_internal_
     }
 
 
-def test_market_assistant_stream_disabled_validation_renders_visible_badge():
+def test_market_assistant_stream_disabled_validation_renders_global_notice_on_submit():
     payload = _run_market_assistant_harness(
         """
         global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
@@ -9729,20 +9729,19 @@ def test_market_assistant_stream_disabled_validation_renders_visible_badge():
         const badge = assistant.children.find(
           (child) => child.className.indexOf("market-assistant-validation") === 0
         );
+        const notice = elements.marketAssistantValidationDisabledNotice;
         console.log(JSON.stringify({
-          badgeClass: badge && badge.className,
-          isDisabled: Boolean(badge) && badge.className.indexOf("market-assistant-validation-disabled") !== -1,
-          isPassed: Boolean(badge) && badge.className.indexOf("market-assistant-validation-passed") !== -1,
-          label: badge && badge.children[0].textContent,
+          hasMessageBadge: Boolean(badge),
+          noticeText: notice.textContent,
+          noticeClassName: notice.className,
         }));
         """
     )
 
     assert payload == {
-        "badgeClass": "market-assistant-validation market-assistant-validation-disabled",
-        "isDisabled": True,
-        "isPassed": False,
-        "label": "Claim validation 当前已关闭",
+        "hasMessageBadge": False,
+        "noticeText": "Claim validation 当前已关闭",
+        "noticeClassName": "market-assistant-validation-disabled-notice market-assistant-validation-disabled-shown",
     }
 
 
