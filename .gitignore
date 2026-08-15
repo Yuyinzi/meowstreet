@@ -37,3 +37,5 @@ logs/*
 .superpowers/
 /data/
 /docs/
+node_modules/
+static/dist/
