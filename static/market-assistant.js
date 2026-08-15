@@ -808,6 +808,7 @@
     const el = elements();
     const question = String(el.question.value || "").trim();
     if (!question || state.busy) return;
+    renderStatus("", false);
     state.busy = true;
     el.submit.disabled = true;
     if (el.newConversation) el.newConversation.disabled = true;

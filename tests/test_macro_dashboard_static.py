@@ -9720,6 +9720,42 @@ def test_market_assistant_stream_null_body_treated_as_stream_failure():
     }
 
 
+def test_market_assistant_stream_success_clears_prior_global_error():
+    payload = _run_market_assistant_harness(
+        """
+        const responses = [
+          { ok: true, status: 200, body: null },
+          { ok: true, status: 200, body: streamedBody([
+            '{"type":"answer_delta","delta":"现在"}\\n',
+            '{"type":"complete","generation_status":"validated_first_pass",'
+            + '"answer_trace_id":"trace_1","citations":[],"resolution":{"mode":"current"}}\\n',
+          ]) },
+        ];
+        global.fetch = async () => responses.shift();
+        elements.marketAssistantQuestion.value = "第一次问题";
+        await hooks.handleSubmit();
+        const errorStatus = elements.marketAssistantStatus.textContent;
+        elements.marketAssistantQuestion.value = "第二次问题";
+        await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[2];
+        const messageStatus = assistant.children.find(
+          (child) => child.className === "market-assistant-message-status"
+        );
+        console.log(JSON.stringify({
+          errorStatus,
+          globalStatus: elements.marketAssistantStatus.textContent,
+          messageStatus: messageStatus.textContent,
+        }));
+        """
+    )
+
+    assert payload == {
+        "errorStatus": "The assistant could not answer right now. Your question is preserved.",
+        "globalStatus": "",
+        "messageStatus": "已生成回答",
+    }
+
+
 def test_market_assistant_stream_consumption_cancels_reader_on_event_error():
     payload = _run_market_assistant_harness(
         """
