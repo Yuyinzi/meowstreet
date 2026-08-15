@@ -41,7 +41,7 @@ from app.tools.market_assistant_research import RESEARCH_SCHEMA_VERSION
 from app.tools.market_assistant_routes import route_question
 from app.tools.market_setup_explanation_snapshot import canonical_json
 
-PROMPT_VERSION = "market_assistant_prompt_v1"
+PROMPT_VERSION = "market_assistant_prompt_v2"
 ASSISTANT_POLICY_VERSION = "market_assistant_policy_v1"
 ARTIFACT_SCHEMA_VERSION = "market_assistant_artifact_v1"
 LLM_ATTEMPT_TIMEOUT_SECONDS = 900.0
@@ -303,7 +303,9 @@ def _maybe_compact_conversation(con, *, history, conversation_id, question, deps
         threshold_ratio=threshold_ratio,
     ):
         return
-    language = history.get("preferred_language") or _conversation_language(question, None)
+    language = history.get("preferred_language") or _conversation_language(
+        question, None
+    )
     checkpoint = build_checkpoint(
         messages=history["messages"],
         preferred_language=language,
@@ -369,7 +371,11 @@ def _persist_conversation(request, narration, answer_text, trace, deps, db_path)
                 {
                     "type": "input_text",
                     "text": "Answer language: "
-                    + ("Chinese" if request.get("answer_language") == "zh" else "English"),
+                    + (
+                        "Chinese"
+                        if request.get("answer_language") == "zh"
+                        else "English"
+                    ),
                 },
             ],
         }
