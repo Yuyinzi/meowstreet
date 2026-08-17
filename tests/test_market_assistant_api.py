@@ -1489,11 +1489,22 @@ def test_hybrid_stream_policy_question_grounds_action_tone_and_relationship(
         "当前货币政策与增长方向不一致，显示冲突。"
         "美联储最近一次决定是维持利率不变，整体立场偏鹰。"
     )
+    detail_call = {
+        "call_id": "call_policy_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        },
+    }
     audit_recorder = []
     result = _hybrid_e2e(
         monkeypatch,
         tmp_path,
-        steps=[_narration_step(answer, deltas=[answer])],
+        steps=[
+            _tool_step([detail_call]),
+            _narration_step(answer, deltas=[answer]),
+        ],
         question="货币政策为什么与增长方向冲突？目前是加息、降息还是维持，整体偏鹰还是偏鸽？",
         audit=_grounded_policy_audit(audit_recorder),
         resolution_injector=_inject_policy_read_detail,
@@ -1519,10 +1530,21 @@ def test_hybrid_stream_policy_question_grounds_action_tone_and_relationship(
 
     first_message = result["turn"].calls[0]["input_items"][0]
     view = json.loads(first_message["content"][1]["text"])["explanation_view"]
-    assert view["view_version"] == "evidence_detail_v1"
-    assert view["current"]["policy_action"] == "hold"
-    assert view["current"]["overall_bias"] == "mild_hawkish"
-    assert view["current"]["relationship_to_growth_direction"] == "conflicts"
+    assert view["view_version"] == "react_anchor_v1"
+    first_serialized = json.dumps(
+        result["turn"].calls[0]["input_items"], ensure_ascii=False
+    )
+    for forbidden in ("policy_action", "overall_bias", "policy_reason"):
+        assert forbidden not in first_serialized
+
+    second_input = result["turn"].calls[1]["input_items"]
+    outputs = [item for item in second_input if item["type"] == "function_call_output"]
+    assert len(outputs) == 1
+    assert outputs[0]["call_id"] == "call_policy_detail"
+    output_text = outputs[0]["output"]
+    assert "policy_action" in output_text
+    assert "overall_bias" in output_text
+    assert "relationship_to_growth_direction" in output_text
 
     rendered = "".join(
         event["delta"] for event in events if event["type"] == "answer_delta"

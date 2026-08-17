@@ -823,10 +823,19 @@ async def test_unknown_knowledge_indicator_routes_to_fallback():
 
 
 @pytest.mark.asyncio
-async def test_evidence_detail_route_renders_deterministic_fallback():
-    route = route_question("美联储目前是加息、降息还是维持？", deep_analysis=False)
-    stream = _ScriptedStream([narration_step(error=RuntimeError("llm down"))])
-    deps = hybrid_dependencies(stream=stream, route=route)
+async def test_evidence_detail_artifact_renders_deterministic_fallback():
+    detail_call = {
+        "call_id": "call_policy_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        },
+    }
+    stream = _ScriptedStream(
+        [tool_step([detail_call]), narration_step(error=RuntimeError("llm down"))]
+    )
+    deps = hybrid_dependencies(stream=stream)
 
     response = await market_assistant.answer_question(
         current_question("美联储目前是加息、降息还是维持？"), dependencies=deps

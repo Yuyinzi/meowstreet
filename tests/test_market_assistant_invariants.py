@@ -921,6 +921,29 @@ def _e2e_narration_step(text, deltas=None, error=None):
     return step
 
 
+def _e2e_tool_step(calls):
+    response_items = [
+        {
+            "type": "function_call",
+            "call_id": call["call_id"],
+            "name": call["tool_name"],
+            "arguments": json.dumps(
+                call["arguments"], ensure_ascii=False, sort_keys=True
+            ),
+        }
+        for call in calls
+    ]
+    return {
+        "result": {
+            "output_text": "",
+            "tool_calls": list(calls),
+            "response_items": response_items,
+            "usage": None,
+            "timings": {},
+        }
+    }
+
+
 def _first_decision_fact_ref(artifact_projection):
     for artifact_id in sorted(artifact_projection):
         for obj in artifact_projection[artifact_id].get("object_index") or []:
@@ -1508,32 +1531,6 @@ async def test_overview_initial_prompt_omits_detail_only_explanation_values(reso
 
 
 @pytest.mark.asyncio
-async def test_policy_detail_route_initial_prompt_contains_bounded_policy_detail(
-    resolver,
-):
-    resolution = _inject_detail_only_policy_values(resolver.resolve())
-    stream = _PromptStream([_prompt_narration_step()])
-    deps = _PromptDeps(stream)
-    question = "美联储目前是加息、降息还是维持？"
-    route = route_question(question, deep_analysis=False)
-    assert route["route_id"] == "evidence_detail"
-    await run_hybrid_narration(
-        {"question": question},
-        route=route,
-        resolution=resolution,
-        dependencies=deps,
-    )
-    view = _first_turn_explanation_view(stream)
-    assert view["view_version"] == "evidence_detail_v1"
-    assert view["current"]["policy_action"] == "hold"
-    assert view["current"]["overall_bias"] == "mild_hawkish"
-    assert view["drivers"]["policy_reason"] == "detail_only_policy_reason_7f21"
-    serialized = json.dumps(stream.calls[0]["input_items"], ensure_ascii=False)
-    assert "snapshot_hash" not in serialized
-    assert "decision_fingerprint" not in serialized
-
-
-@pytest.mark.asyncio
 async def test_react_route_prompt_stays_compact_until_validated_detail_output(
     resolver,
 ):
@@ -1577,20 +1574,41 @@ def test_relationship_only_policy_evidence_reports_conflict_but_action_and_tone_
         "当前货币政策与增长方向不一致，显示冲突。"
         "目前可以确认这一冲突关系；经批准的政策行动与整体基调目前不可用。"
     )
+    detail_call = {
+        "call_id": "call_policy_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        },
+    }
     run = _prepare_market_setup_harness(
         monkeypatch,
         tmp_path,
-        steps=[_e2e_narration_step(answer, deltas=[answer])],
+        steps=[
+            _e2e_tool_step([detail_call]),
+            _e2e_narration_step(answer, deltas=[answer]),
+        ],
         question="货币政策为什么与增长方向冲突？目前是加息、降息还是维持，整体偏鹰还是偏鸽？",
     )
     result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
 
     first_message = result["turn"].calls[0]["input_items"][0]
     view = json.loads(first_message["content"][1]["text"])["explanation_view"]
-    assert view["view_version"] == "evidence_detail_v1"
-    assert view["current"]["relationship_to_growth_direction"] == "conflicts"
-    assert "policy_action" not in view["current"]
-    assert "overall_bias" not in view["current"]
+    assert view["view_version"] == "react_anchor_v1"
+    first_serialized = json.dumps(
+        result["turn"].calls[0]["input_items"], ensure_ascii=False
+    )
+    for forbidden in ("policy_action", "overall_bias"):
+        assert forbidden not in first_serialized
+
+    second_input = result["turn"].calls[1]["input_items"]
+    outputs = [item for item in second_input if item["type"] == "function_call_output"]
+    assert len(outputs) == 1
+    output_text = outputs[0]["output"]
+    assert "relationship_to_growth_direction" in output_text
+    assert "policy_action" not in output_text
+    assert "overall_bias" not in output_text
 
     rendered = "".join(
         event["delta"] for event in result["events"] if event["type"] == "answer_delta"
@@ -1612,10 +1630,21 @@ def test_exact_policy_wording_answers_distinguish_unavailable_original_from_appr
     answer = (
         "目前无法提供政策声明的原文措辞。经批准的行动总结是维持利率不变，整体立场偏鹰。"
     )
+    detail_call = {
+        "call_id": "call_policy_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        },
+    }
     run = _prepare_market_setup_harness(
         monkeypatch,
         tmp_path,
-        steps=[_e2e_narration_step(answer, deltas=[answer])],
+        steps=[
+            _e2e_tool_step([detail_call]),
+            _e2e_narration_step(answer, deltas=[answer]),
+        ],
         question="美联储政策声明的原文措辞是什么？",
         resolution_injector=_inject_detail_only_policy_values,
     )
@@ -1624,11 +1653,21 @@ def test_exact_policy_wording_answers_distinguish_unavailable_original_from_appr
     first_message = result["turn"].calls[0]["input_items"][0]
     view_text = first_message["content"][1]["text"]
     view = json.loads(view_text)["explanation_view"]
-    assert view["view_version"] == "evidence_detail_v1"
-    assert view["current"]["policy_action"] == "hold"
-    assert view["current"]["overall_bias"] == "mild_hawkish"
+    assert view["view_version"] == "react_anchor_v1"
+    first_serialized = json.dumps(
+        result["turn"].calls[0]["input_items"], ensure_ascii=False
+    )
     for forbidden in ("exact_wording", "exact_excerpt", "statement_text"):
-        assert forbidden not in view_text
+        assert forbidden not in first_serialized
+
+    second_input = result["turn"].calls[1]["input_items"]
+    outputs = [item for item in second_input if item["type"] == "function_call_output"]
+    assert len(outputs) == 1
+    output_text = outputs[0]["output"]
+    assert "policy_action" in output_text
+    assert "overall_bias" in output_text
+    for forbidden in ("exact_wording", "statement_text"):
+        assert forbidden not in output_text
 
     rendered = "".join(
         event["delta"] for event in result["events"] if event["type"] == "answer_delta"
