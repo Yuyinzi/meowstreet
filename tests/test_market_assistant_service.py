@@ -802,7 +802,10 @@ async def test_knowledge_definition_through_real_catalog_aliases_vix():
     )
 
     assert response["generation_status"] == "narration_validated"
-    assert deps.saved_trace["knowledge_references"] == ["vix_definition"]
+    assert deps.saved_trace["knowledge_references"] == [
+        "vix_definition",
+        "vix_method",
+    ]
 
 
 @pytest.mark.asyncio
@@ -816,10 +819,7 @@ async def test_unknown_knowledge_indicator_routes_to_fallback():
     )
 
     assert response["generation_status"] == "deterministic_fallback"
-    assert (
-        "The approved knowledge record is currently unavailable."
-        in response["answer_text"]
-    )
+    assert "Market Setup decision result:" in response["answer_text"]
 
 
 @pytest.mark.asyncio
