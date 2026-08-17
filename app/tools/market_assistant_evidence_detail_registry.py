@@ -1,5 +1,4 @@
 import json
-import re
 from pathlib import Path
 from typing import Literal
 
@@ -182,9 +181,6 @@ _DISABLED_FACT_CONTRACTS = {
 
 _DISABLED_FACT_IDS = frozenset(_DISABLED_FACT_CONTRACTS)
 
-_CJK_RE = re.compile(r"[\u3400-\u9fff]")
-_WHITESPACE_RE = re.compile(r"\s+")
-
 
 class EvidenceDetailRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
@@ -220,21 +216,22 @@ def evidence_detail_record(registry, fact_id):
     raise ValueError(f"evidence detail fact is not registered: {fact_id}")
 
 
-def match_evidence_detail_question(question, registry=None):
+def evidence_detail_tool_catalog(registry=None):
     if registry is None:
         registry = load_evidence_detail_registry()
-    if not isinstance(question, str) or not question.strip():
-        return None
-    normalized = _normalize_question(question)
-    matched_ids = set()
+    if not isinstance(registry, dict):
+        raise ValueError("evidence detail registry is required")
+    lines = []
     for record in registry["facts"]:
-        if _record_matches(record["aliases"], normalized):
-            matched_ids.add(record["fact_id"])
-    if len(matched_ids) != 1:
-        return None
-    fact_id = next(iter(matched_ids))
-    record = evidence_detail_record(registry, fact_id)
-    return {"fact_id": fact_id, "default_topics": list(record["default_topics"])}
+        if not record["supported_topics"]:
+            continue
+        line = (
+            f"{record['fact_id']}: "
+            f"topics={','.join(record['supported_topics'])}; "
+            f"aliases={','.join(record['aliases'])}"
+        )
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def _validate_registry(payload):
@@ -341,27 +338,3 @@ def _validate_unique_topics(record, key):
     topics = record[key]
     if len(topics) != len(set(topics)):
         raise ValueError(f"evidence detail topic is duplicated: {record['fact_id']}")
-
-
-def _record_matches(aliases, normalized_question):
-    for alias in aliases:
-        if _alias_matches(alias, normalized_question):
-            return True
-    return False
-
-
-def _alias_matches(alias, normalized_question):
-    if not isinstance(alias, str) or not alias:
-        return False
-    if _CJK_RE.search(alias):
-        return _compact_text(alias.lower()) in _compact_text(normalized_question)
-    pattern = rf"(?<![a-zA-Z0-9]){re.escape(alias.lower())}(?![a-zA-Z0-9])"
-    return re.search(pattern, normalized_question) is not None
-
-
-def _normalize_question(question):
-    return " ".join(question.lower().split())
-
-
-def _compact_text(text):
-    return _WHITESPACE_RE.sub("", text)

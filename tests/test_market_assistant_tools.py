@@ -412,6 +412,19 @@ def test_no_schema_contains_forbidden_properties():
         assert not (names & forbidden)
 
 
+def test_evidence_detail_definition_appends_tool_catalog():
+    definition = tool_definitions(["get_evidence_detail"])[0]
+    assert "macro_policy_response" in definition["description"]
+    assert "FOMC" in definition["description"]
+    assert "topics=current,drivers,source" in definition["description"]
+    assert "equity_breadth" not in definition["description"]
+
+
+def test_other_tool_definitions_do_not_include_catalog():
+    definition = tool_definitions(["get_setup_overview"])[0]
+    assert "macro_policy_response" not in definition["description"]
+
+
 def _schema_property_names(schema):
     names = set()
     if isinstance(schema, dict):

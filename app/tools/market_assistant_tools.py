@@ -13,6 +13,9 @@ from pydantic import model_validator
 
 from app.tools.market_assistant_evidence_detail_registry import DETAIL_TOPICS
 from app.tools.market_assistant_evidence_detail_registry import EVIDENCE_DETAIL_FACT_IDS
+from app.tools.market_assistant_evidence_detail_registry import (
+    evidence_detail_tool_catalog,
+)
 from app.tools.market_assistant_exploration import STATISTIC_IDS
 from app.tools.market_assistant_plans import _ALLOWED_INDICATOR_IDS
 from app.tools.market_assistant_plans import _CompareSnapshotsParams
@@ -42,6 +45,15 @@ TOOL_IDS = (
     "research_standard",
     "research_deep",
 )
+
+_EVIDENCE_DETAIL_CATALOG_CACHE = None
+
+
+def _evidence_detail_catalog():
+    global _EVIDENCE_DETAIL_CATALOG_CACHE
+    if _EVIDENCE_DETAIL_CATALOG_CACHE is None:
+        _EVIDENCE_DETAIL_CATALOG_CACHE = evidence_detail_tool_catalog()
+    return _EVIDENCE_DETAIL_CATALOG_CACHE
 
 
 class _ToolArguments(BaseModel):
@@ -254,17 +266,21 @@ def validate_tool_call(payload):
 def tool_definitions(tool_ids):
     if not isinstance(tool_ids, list):
         raise ValueError("tool ids are required")
+    catalog = _evidence_detail_catalog()
     definitions = []
     for tool_id in tool_ids:
         parameter_model = _TOOL_ARGUMENT_MODELS.get(tool_id)
         if parameter_model is None:
             raise ValueError(f"tool is not registered: {tool_id}")
         parameters = parameter_model.model_json_schema()
+        description = _TOOL_DESCRIPTIONS[tool_id]
+        if tool_id == "get_evidence_detail":
+            description = f"{description}\n\n{catalog}"
         definitions.append(
             {
                 "type": "function",
                 "name": tool_id,
-                "description": _TOOL_DESCRIPTIONS[tool_id],
+                "description": description,
                 "parameters": parameters,
             }
         )

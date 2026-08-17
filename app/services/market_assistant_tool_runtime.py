@@ -19,6 +19,7 @@ from app.tools.market_assistant_evidence_detail_registry import (
 )
 from app.tools.market_assistant_evidence_details import project_evidence_detail
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
+from app.tools.market_assistant_tools import ALL_TOOL_IDS
 from app.tools.market_setup_explanation_snapshot import build_semantic_delta
 from app.tools.market_setup_explanation_snapshot import canonical_json
 
@@ -77,6 +78,31 @@ _RESEARCH_TIER = {
     "research_standard": "standard",
     "research_deep": "deep",
 }
+
+TOOL_RUNTIME_POLICIES = {
+    "get_setup_overview": ("frozen_local", ()),
+    "get_macro_regime_explanation": ("frozen_local", ()),
+    "get_confirmation_test": ("frozen_local", ()),
+    "get_confirmation_tests": ("frozen_local", ()),
+    "get_posture_explanation": ("frozen_local", ()),
+    "get_approved_counterfactuals": ("frozen_local", ()),
+    "get_evidence_detail": ("frozen_local", ()),
+    "get_indicator_knowledge": ("local_read", ()),
+    "query_indicator_history": ("local_read", ()),
+    "compare_snapshots": ("local_read", ()),
+    "get_indicator_current": ("local_read", ()),
+    "get_indicator_definition": ("local_read", ()),
+    "get_indicator_method": ("local_read", ()),
+    "research_focused": ("external_read", ("external_search_requested",)),
+    "research_standard": ("external_read", ("external_search_requested",)),
+    "research_deep": (
+        "external_read",
+        ("external_search_requested", "deep_research_requested"),
+    ),
+}
+
+if set(TOOL_RUNTIME_POLICIES) != set(ALL_TOOL_IDS):
+    raise ValueError("tool runtime policies must cover every registered tool")
 
 _HISTORY_WINDOW_DAYS = {
     "1m": 30,

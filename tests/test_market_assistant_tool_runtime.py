@@ -7,8 +7,10 @@ import pytest
 from app.db import macro_indicators
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.services.market_assistant_exploration import execute_exploration
+from app.services.market_assistant_tool_runtime import TOOL_RUNTIME_POLICIES
 from app.services.market_assistant_tool_runtime import execute_tool_batch
 from app.services.market_assistant_tool_runtime import execute_tool_call
+from app.tools.market_assistant_tools import ALL_TOOL_IDS
 
 
 def _confirmation_evidence(fact_id, indicator_id, label):
@@ -1042,3 +1044,34 @@ async def test_credit_history_tool_call_returns_bounded_categorical_artifact(tmp
         ]
         is not None
     )
+
+
+def test_tool_runtime_policies_cover_every_registered_tool():
+    assert set(TOOL_RUNTIME_POLICIES) == set(ALL_TOOL_IDS)
+
+
+def test_tool_runtime_policies_use_only_registered_capability_classes():
+    known_capabilities = {
+        "frozen_local",
+        "local_read",
+        "external_read",
+        "side_effecting",
+    }
+    for tool_id, (capability, controls) in TOOL_RUNTIME_POLICIES.items():
+        assert capability in known_capabilities
+        assert isinstance(controls, tuple)
+        assert all(isinstance(control, str) for control in controls)
+
+
+def test_every_external_or_side_effecting_tool_names_request_controls():
+    for tool_id, (capability, controls) in TOOL_RUNTIME_POLICIES.items():
+        if capability in {"external_read", "side_effecting"}:
+            assert controls, f"{tool_id} requires a request-control guard"
+        if tool_id.startswith("research_"):
+            assert "external_search_requested" in controls
+
+
+def test_evidence_detail_is_frozen_local_without_controls():
+    capability, controls = TOOL_RUNTIME_POLICIES["get_evidence_detail"]
+    assert capability == "frozen_local"
+    assert controls == ()
