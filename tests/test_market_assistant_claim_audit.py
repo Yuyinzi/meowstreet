@@ -1218,3 +1218,78 @@ def test_audit_accepts_approved_summary_language_without_quotes():
         artifacts=policy_detail_artifacts(),
     )
     assert validated["coverage_ratio"] >= 0.8
+
+
+def test_audit_uses_source_field_not_audit_name_for_canonical_lookup():
+    answer = "The FOMC message was rates stay on hold."
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "unrelated_field",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_decimal_next_to_bound_integer():
+    answer = "The level is 2.5."
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": 2,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=numeric_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_scientific_notation_next_to_bound_integer():
+    answer = "The level is 2e3."
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": 2,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=numeric_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )

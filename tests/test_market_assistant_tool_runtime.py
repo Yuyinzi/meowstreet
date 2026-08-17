@@ -8,6 +8,7 @@ from app.db import macro_indicators
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.services.market_assistant_exploration import execute_exploration
 from app.services.market_assistant_tool_runtime import TOOL_RUNTIME_POLICIES
+from app.services.market_assistant_tool_runtime import acquire_operation_artifact
 from app.services.market_assistant_tool_runtime import execute_tool_batch
 from app.services.market_assistant_tool_runtime import execute_tool_call
 from app.tools.market_assistant_tools import ALL_TOOL_IDS
@@ -1176,3 +1177,46 @@ def test_acquire_registered_artifacts_applies_policy_gate():
         blocked[0]["payload"]["reason_code"]
         == "future_side_effect_approved_not_requested"
     )
+
+
+@pytest.mark.parametrize(
+    ("operation_id", "params"),
+    [
+        ("resolve_current_explanation", {}),
+        ("get_historical_snapshot", {"context_id": "ctx_current"}),
+        (
+            "get_snapshot_object",
+            {"object_type": "market_setup_result", "object_id": "macro_regime"},
+        ),
+        ("get_counterfactuals", {"context_id": "ctx_current"}),
+        ("get_confirmation_test", {"test_id": "vix"}),
+    ],
+)
+def test_acquire_operation_artifact_skips_gate_for_internal_operations(
+    operation_id, params
+):
+    resolution = resolved_context("ctx_current")
+    artifact = asyncio.run(
+        acquire_operation_artifact(
+            {"operation_id": operation_id, "parameters": params},
+            request={},
+            resolution=resolution,
+            dependencies=fake_dependencies(),
+            created_at="2026-08-13T00:00:00Z",
+        )
+    )
+    assert artifact is not None
+
+
+def test_acquire_operation_artifact_returns_none_for_unknown_without_keyerror():
+    resolution = resolved_context("ctx_current")
+    artifact = asyncio.run(
+        acquire_operation_artifact(
+            {"operation_id": "totally_unknown_op", "parameters": {}},
+            request={},
+            resolution=resolution,
+            dependencies=fake_dependencies(),
+            created_at="2026-08-13T00:00:00Z",
+        )
+    )
+    assert artifact is None

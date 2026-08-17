@@ -52,19 +52,8 @@ _STRIP_EDGE_PUNCT_RE = re.compile(
     r"^[\s.,;:!?。，；：！？、…\u3000]+|[\s.,;:!?。，；：！？、…\u3000]+$"
 )
 
-
-_LATIN_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
-_CJK_CHAR_RE = re.compile(r"[\u3400-\u9fff]")
-
-_NEGATION_WORDS = frozenset({"not", "no", "never", "without", "nor", "neither", "non"})
-_NEGATION_CHARS = frozenset("不没未非无别毋勿")
-
-_QUOTED_OR_ATTRIBUTED_RE = re.compile(
-    r'["“”‘’「」『』]'
-    r"|\b(?:said|says|stated|states|announced|declared|reported|reportedly|"
-    r"according to|quoted|quote|verbatim|wording)\b"
-    r"|(?:原话|原文|措辞|引述|报告称|声明称|宣布)",
-    re.IGNORECASE,
+_NUMERIC_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9_.eE-])([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?![A-Za-z0-9_.eE])"
 )
 
 _DETAIL_VALUE_LABELS = {
@@ -547,7 +536,8 @@ def _validate_atomic_facts(claim, artifacts):
     for value, (start, end) in zip(values, positions):
         fragment = value["text"]
         bound_value = value["value"]
-        if not _fragment_supports_field_value(value["name"], fragment, bound_value):
+        canonical_field = _source_field_name(value)
+        if not _fragment_supports_field_value(canonical_field, fragment, bound_value):
             errors.append(
                 _error(
                     "BINDING_TEXT_MISMATCH",
@@ -559,6 +549,13 @@ def _validate_atomic_facts(claim, artifacts):
                 )
             )
     return errors
+
+
+def _source_field_name(value):
+    field_path = value["source"]["field"]
+    if not isinstance(field_path, str) or not field_path:
+        return None
+    return field_path.split(".")[-1]
 
 
 def _ref_key(ref):
@@ -610,8 +607,34 @@ def _string_value_supported(fragment, bound_value):
 
 
 def _numeric_value_supported(fragment, bound_value):
-    token = _canonical_number_token(bound_value)
-    return _token_positively_present(fragment, token)
+    for match in _NUMERIC_TOKEN_RE.finditer(fragment):
+        if _has_negation_within_window(fragment, match.start()):
+            continue
+        token = match.group(1)
+        if _numeric_token_equals(token, bound_value):
+            return True
+    return False
+
+
+def _numeric_token_equals(token, bound_value):
+    try:
+        parsed = _parse_number_token(token)
+    except ValueError:
+        return False
+    if isinstance(bound_value, float):
+        return isinstance(parsed, float) and parsed == bound_value
+    if isinstance(bound_value, int):
+        return isinstance(parsed, int) and parsed == bound_value
+    return False
+
+
+def _parse_number_token(token):
+    if "." in token or "e" in token or "E" in token:
+        value = float(token)
+        if value.is_integer():
+            return int(value)
+        return value
+    return int(token)
 
 
 def _canonical_number_token(bound_value):

@@ -273,9 +273,10 @@ async def acquire_operation_artifact(
 ):
     operation_id = operation["operation_id"]
     parameters = operation.get("parameters") or {}
-    missing_control = _missing_policy_control(operation_id, request)
-    if missing_control is not None:
-        return _policy_blocked_artifact(operation_id, missing_control, created_at)
+    if operation_id in TOOL_RUNTIME_POLICIES:
+        missing_control = _missing_policy_control(operation_id, request)
+        if missing_control is not None:
+            return _policy_blocked_artifact(operation_id, missing_control, created_at)
     if operation_id == "resolve_current_explanation":
         snapshot = await _frozen_snapshot(dependencies, resolution)
         return snapshot_artifact(snapshot)
