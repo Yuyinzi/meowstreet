@@ -31,6 +31,61 @@ EVIDENCE_DETAIL_FACT_IDS = (
     "nfib_regional_evidence",
 )
 
+_UNSUPPORTED_VERSION = "market_assistant_evidence_detail_unsupported_v1"
+
+_FACT_CONTRACTS = {
+    "survey_growth_direction": {
+        "detail_kind": "survey_synthesis",
+        "topics": frozenset({"current", "drivers", "source"}),
+        "projection_version": "market_assistant_survey_synthesis_detail_v1",
+    },
+    "macro_financial_conditions": {
+        "detail_kind": "financial_conditions",
+        "topics": frozenset({"current", "drivers", "source"}),
+        "projection_version": "market_assistant_financial_conditions_detail_v1",
+    },
+    "macro_policy_response": {
+        "detail_kind": "policy_response",
+        "topics": frozenset({"current", "drivers", "source"}),
+        "projection_version": "market_assistant_policy_response_detail_v1",
+    },
+    "consumer_demand_outlook": {
+        "detail_kind": "consumer_demand",
+        "topics": frozenset({"current", "drivers", "source"}),
+        "projection_version": "market_assistant_consumer_demand_detail_v1",
+    },
+    "sp500_market_phase": {
+        "detail_kind": "market_phase",
+        "topics": frozenset({"current", "method", "source"}),
+        "projection_version": "market_assistant_market_phase_detail_v1",
+    },
+    "credit_conditions": {
+        "detail_kind": "credit_conditions",
+        "topics": frozenset({"current", "method", "source"}),
+        "projection_version": "market_assistant_credit_conditions_detail_v1",
+    },
+    "vix_level": {
+        "detail_kind": "vix",
+        "topics": frozenset({"current", "method", "source"}),
+        "projection_version": "market_assistant_vix_detail_v1",
+    },
+    "m2_liquidity": {
+        "detail_kind": "m2_liquidity",
+        "topics": frozenset({"current", "method", "source"}),
+        "projection_version": "market_assistant_m2_liquidity_detail_v1",
+    },
+}
+
+_DISABLED_FACT_IDS = frozenset(
+    {
+        "equity_breadth",
+        "jobless_claims",
+        "economic_confirmation",
+        "cyclical_commodities",
+        "nfib_regional_evidence",
+    }
+)
+
 _CJK_RE = re.compile(r"[\u3400-\u9fff]")
 _WHITESPACE_RE = re.compile(r"\s+")
 
@@ -126,26 +181,44 @@ def _validate_record(item):
     data = record.model_dump()
     _validate_unique_topics(data, "supported_topics")
     _validate_unique_topics(data, "default_topics")
-    if data["detail_kind"] == "unsupported":
+    fact_id = data["fact_id"]
+    if fact_id in _DISABLED_FACT_IDS:
+        if data["detail_kind"] != "unsupported":
+            raise ValueError(f"evidence detail fact is not enabled: {fact_id}")
         if data["supported_topics"]:
             raise ValueError(
-                f"unsupported evidence detail fact declares topics: {data['fact_id']}"
+                f"unsupported evidence detail fact declares topics: {fact_id}"
+            )
+        if data["projection_version"] != _UNSUPPORTED_VERSION:
+            raise ValueError(
+                f"unsupported evidence detail fact has an unknown projection version: {fact_id}"
             )
     else:
+        contract = _FACT_CONTRACTS[fact_id]
+        if data["detail_kind"] != contract["detail_kind"]:
+            raise ValueError(
+                f"evidence detail fact has the wrong detail kind: {fact_id}"
+            )
         if data["detail_kind"] not in PROJECTION_DETAIL_KINDS:
             raise ValueError(
                 f"evidence detail projection is not registered: {data['detail_kind']}"
             )
         if not data["supported_topics"]:
             raise ValueError(
-                f"evidence detail fact requires supported topics: {data['fact_id']}"
+                f"evidence detail fact requires supported topics: {fact_id}"
+            )
+        if set(data["supported_topics"]) != contract["topics"]:
+            raise ValueError(
+                f"evidence detail fact declares unsupported topics: {fact_id}"
+            )
+        if data["projection_version"] != contract["projection_version"]:
+            raise ValueError(
+                f"evidence detail fact has the wrong projection version: {fact_id}"
             )
     if not set(data["default_topics"]).issubset(set(data["supported_topics"])):
-        raise ValueError(
-            f"evidence detail default topic is not supported: {data['fact_id']}"
-        )
+        raise ValueError(f"evidence detail default topic is not supported: {fact_id}")
     if data["supported_topics"] and not data["aliases"]:
-        raise ValueError(f"evidence detail fact requires aliases: {data['fact_id']}")
+        raise ValueError(f"evidence detail fact requires aliases: {fact_id}")
     return data
 
 

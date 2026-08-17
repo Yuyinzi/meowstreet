@@ -347,7 +347,7 @@ def test_load_evidence_detail_registry_rejects_unregistered_projection_kind(
     for record in payload["facts"]:
         if record["fact_id"] == "macro_policy_response":
             record["detail_kind"] = "unregistered_kind"
-    with pytest.raises(ValueError, match="projection is not registered"):
+    with pytest.raises(ValueError, match="wrong detail kind"):
         _load_payload(tmp_path, payload)
 
 
@@ -368,6 +368,60 @@ def test_load_evidence_detail_registry_rejects_enabled_without_topics(tmp_path):
         if record["fact_id"] == "macro_policy_response":
             record["supported_topics"] = []
     with pytest.raises(ValueError, match="supported topics"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_fact_bound_to_wrong_kind(tmp_path):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "macro_policy_response":
+            record["detail_kind"] = "vix"
+    with pytest.raises(ValueError, match="detail kind"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_enabled_fact_disabled(tmp_path):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "macro_policy_response":
+            record["detail_kind"] = "unsupported"
+            record["supported_topics"] = []
+            record["default_topics"] = []
+            record["aliases"] = []
+    with pytest.raises(ValueError, match="detail kind"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_disabled_fact_enabled(tmp_path):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "equity_breadth":
+            record["detail_kind"] = "vix"
+            record["supported_topics"] = ["current"]
+            record["default_topics"] = ["current"]
+            record["aliases"] = ["test"]
+    with pytest.raises(ValueError, match="not enabled"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_topics_builder_cannot_produce(
+    tmp_path,
+):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "sp500_market_phase":
+            record["supported_topics"] = ["current", "drivers"]
+            record["default_topics"] = ["current", "drivers"]
+    with pytest.raises(ValueError, match="topics"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_wrong_projection_version(tmp_path):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "macro_policy_response":
+            record["projection_version"] = "bogus_version"
+    with pytest.raises(ValueError, match="projection version"):
         _load_payload(tmp_path, payload)
 
 

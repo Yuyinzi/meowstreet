@@ -911,6 +911,41 @@ async def test_evidence_detail_fallback_renders_missing_status():
 
 
 @pytest.mark.asyncio
+async def test_react_fallback_prefers_generated_evidence_detail_artifact():
+    route = route_question("现在市场怎么样？", deep_analysis=False)
+    route["route_id"] = "react"
+    route["routing_source"] = "react"
+    route["initial_operations"] = []
+    route["view_type"] = "react_anchor"
+    stream = _ScriptedStream(
+        [
+            tool_step(
+                [
+                    {
+                        "call_id": "call_1",
+                        "tool_name": "get_evidence_detail",
+                        "arguments": {
+                            "fact_id": "jobless_claims",
+                            "topics": ["current"],
+                        },
+                    }
+                ]
+            ),
+            narration_step(error=RuntimeError("llm down")),
+        ]
+    )
+    deps = hybrid_dependencies(stream=stream, route=route)
+
+    response = await market_assistant.answer_question(
+        current_question("失业救济数据怎么样？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "deterministic_fallback"
+    assert "cannot be answered deterministically" not in response["answer_text"]
+    assert "unavailable" in response["answer_text"].lower()
+
+
+@pytest.mark.asyncio
 async def test_exploration_operation_acquires_exploration_result_artifact():
     stream = _ScriptedStream(
         [
