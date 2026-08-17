@@ -356,23 +356,33 @@ def _validate_grounding(claim, artifacts):
     errors = []
     claim_id = claim["claim_id"]
     refs = claim["refs"]
-    if not refs:
-        return errors
     values = claim["values"]
+    detail_sources = []
+    for ref in refs:
+        resolved = _resolve_ref(claim_id, ref, artifacts)
+        if "code" in resolved:
+            continue
+        if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
+            detail_sources.append(ref)
+    for value in values:
+        source = value["source"]
+        resolved = _resolve_ref(claim_id, source, artifacts)
+        if "code" in resolved:
+            continue
+        if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
+            detail_sources.append(source)
+    if not detail_sources:
+        return errors
     if not values:
-        for ref in refs:
-            resolved = _resolve_ref(claim_id, ref, artifacts)
-            if "code" in resolved:
-                continue
-            if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
-                errors.append(
-                    _error(
-                        "UNGROUNDED_CLAIM",
-                        "detail claim must bind a value",
-                        claim_id=claim_id,
-                        field_id=_ref_id(ref),
-                    )
+        for ref in detail_sources:
+            errors.append(
+                _error(
+                    "UNGROUNDED_CLAIM",
+                    "detail claim must bind a value",
+                    claim_id=claim_id,
+                    field_id=_ref_id(ref),
                 )
+            )
     return errors
 
 
@@ -383,15 +393,38 @@ def _validate_atomic_facts(claim, artifacts):
     values = claim["values"]
     if not refs or not values:
         return errors
-    detail_ref = None
+    detail_source = None
+    ref_keys = {_ref_key(ref) for ref in refs}
     for ref in refs:
         resolved = _resolve_ref(claim_id, ref, artifacts)
         if "code" in resolved:
             continue
         if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
-            detail_ref = resolved
+            detail_source = resolved
             break
-    if detail_ref is None:
+    if detail_source is None:
+        for value in values:
+            source = value["source"]
+            resolved = _resolve_ref(claim_id, source, artifacts)
+            if "code" in resolved:
+                continue
+            if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
+                detail_source = resolved
+                break
+    if detail_source is None:
+        return errors
+    for value in values:
+        source = value["source"]
+        if _ref_key(source) not in ref_keys:
+            errors.append(
+                _error(
+                    "REFERENCE_NOT_FOUND",
+                    "value source must be a claim semantic ref",
+                    claim_id=claim_id,
+                    field_id=value["name"],
+                )
+            )
+    if errors:
         return errors
     exact_text = claim["exact_text"]
     fragments = [value.get("text") for value in values]
@@ -469,6 +502,14 @@ def _validate_atomic_facts(claim, artifacts):
                 )
             )
     return errors
+
+
+def _ref_key(ref):
+    return (
+        ref.get("artifact_id"),
+        ref.get("object_type"),
+        ref.get("object_id"),
+    )
 
 
 def _fragment_supports_value(fragment, bound_value):
