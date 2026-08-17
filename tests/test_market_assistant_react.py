@@ -579,8 +579,9 @@ async def test_first_turn_input_contains_only_question_and_compact_view():
     assert items[0]["content"][0]["text"] == "现在市场怎么样？"
     assert "explanation_view" in items[0]["content"][1]["text"]
     assert items[0]["content"][2]["text"] == "Answer language: Chinese"
-    assert items[0]["content"][3]["text"].startswith(
-        "Authorized tools for this request:"
+    assert items[0]["content"][3]["text"] == (
+        "Pre-fetched evidence is shown above. You may call any of the available "
+        "tools if you need more evidence."
     )
     assert not any(item["type"] == "function_call_output" for item in items)
     assert not any(item["type"] == "function_call" for item in items)
@@ -700,7 +701,7 @@ async def test_progress_events_use_deterministic_english_copy():
 
 
 @pytest.mark.asyncio
-async def test_deep_analysis_keeps_fixed_schema_but_does_not_authorize_research():
+async def test_deep_analysis_keeps_fixed_schema_and_exposes_all_tools():
     deps = recording_dependencies([], stream=_ScriptedStream([narration_step()]))
     request = {"question": "讲个笑话", "deep_analysis_requested": True}
     result = await run_hybrid_narration(
@@ -716,9 +717,8 @@ async def test_deep_analysis_keeps_fixed_schema_but_does_not_authorize_research(
         "research_standard",
         "research_deep",
     ]
-    authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3]["text"]
-    assert "research_focused" not in authorization
-    assert "acquire_research" not in deps.requested
+    guidance = deps.stream_turn.calls[0]["input_items"][-1]["content"][3]["text"]
+    assert "available tools" in guidance
     assert result["generation_status"] == "answered"
 
 
@@ -747,7 +747,7 @@ async def test_deterministic_and_react_routes_send_identical_tool_schemas():
 
 
 @pytest.mark.asyncio
-async def test_visible_but_unauthorized_research_tool_is_rejected():
+async def test_registered_research_tool_is_accepted_without_authorization():
     deps = recording_dependencies(
         [],
         stream=_ScriptedStream(
@@ -778,9 +778,8 @@ async def test_visible_but_unauthorized_research_tool_is_rejected():
         dependencies=deps,
     )
 
-    assert "acquire_research" not in deps.requested
-    assert result["tool_trace"][0]["status"] == "rejected"
-    assert result["tool_trace"][0]["reason"] == "tool_call_invalid"
+    assert result["tool_trace"][0]["status"] == "executed"
+    assert result["tool_trace"][0]["tool_name"] == "research_deep"
 
 
 @pytest.mark.asyncio
@@ -798,7 +797,7 @@ async def test_visible_but_unauthorized_research_tool_is_rejected():
         ),
     ],
 )
-async def test_external_search_keeps_fixed_schema_and_authorizes_requested_tier(
+async def test_external_search_keeps_fixed_schema_without_prompt_authorization(
     request_overrides, expected_research
 ):
     deps = recording_dependencies([], stream=_ScriptedStream([narration_step()]))
@@ -816,13 +815,8 @@ async def test_external_search_keeps_fixed_schema_and_authorizes_requested_tier(
     tool_names = [tool["name"] for tool in deps.stream_turn.calls[0]["tools"]]
     research = [name for name in tool_names if name.startswith("research_")]
     assert research == ["research_focused", "research_standard", "research_deep"]
-    authorization = deps.stream_turn.calls[0]["input_items"][-1]["content"][3]["text"]
-    assert all(name in authorization for name in expected_research)
-    assert all(
-        name not in authorization
-        for name in {"research_focused", "research_standard", "research_deep"}
-        - set(expected_research)
-    )
+    guidance = deps.stream_turn.calls[0]["input_items"][-1]["content"][3]["text"]
+    assert "available tools" in guidance
 
 
 @pytest.mark.asyncio
