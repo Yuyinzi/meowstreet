@@ -55,7 +55,11 @@ _SOURCE_KEYS = ("source_module", "source_id", "source_period", "method_reference
 
 def project_evidence_detail(fact, record, topics, method_contracts):
     _validate_inputs(fact, record, topics, method_contracts)
+    if fact is None:
+        return _non_available_result(fact, record, topics, "missing")
     if record["detail_kind"] == "unsupported":
+        return _unsupported_result(fact, record, topics)
+    if not set(topics).issubset(set(record.get("supported_topics") or [])):
         return _unsupported_result(fact, record, topics)
     state = _fact_state(fact)
     if state != "available":
@@ -71,6 +75,8 @@ def project_evidence_detail(fact, record, topics, method_contracts):
 def _validate_inputs(fact, record, topics, method_contracts):
     if not isinstance(record, dict) or not record.get("fact_id"):
         raise ValueError("evidence detail record is required")
+    if not isinstance(record.get("detail_kind"), str) or not record["detail_kind"]:
+        raise ValueError("evidence detail record detail kind is required")
     if not isinstance(topics, list) or not topics:
         raise ValueError("evidence detail topics are required")
     if any(not isinstance(topic, str) or not topic for topic in topics):
@@ -101,7 +107,7 @@ def _base_result(fact, record, topics, status):
 
 def _unsupported_result(fact, record, topics):
     result = _base_result(fact, record, topics, "unsupported")
-    result["supported_topics"] = []
+    result["supported_topics"] = list(record.get("supported_topics") or [])
     return result
 
 

@@ -429,6 +429,19 @@ def test_validate_route_rejects_evidence_detail_without_fact_and_topics():
         validate_route(route)
 
 
+def test_validate_route_rejects_evidence_detail_operation_on_non_detail_route():
+    route = route_question("现在市场怎么样？", deep_analysis=False)
+    route["initial_operations"][0].update(
+        {
+            "operation_id": "get_evidence_detail",
+            "fact_id": "macro_policy_response",
+            "topics": ["current"],
+        }
+    )
+    with pytest.raises(ValueError, match="requires the evidence detail route"):
+        validate_route(route)
+
+
 def test_validate_route_rejects_evidence_detail_route_with_multiple_operations():
     route = route_question("美联储目前是加息、降息还是维持？", deep_analysis=False)
     route["initial_operations"].append(dict(route["initial_operations"][0]))

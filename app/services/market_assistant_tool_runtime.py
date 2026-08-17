@@ -857,7 +857,7 @@ def _evidence_detail_artifact(parameters, snapshot, dependencies):
     method_contracts = snapshot.get("method_contracts") or {}
     projection = project_evidence_detail(fact, record, topics, method_contracts)
     artifact_id = (
-        f"{snapshot['context_id']}_evidence_detail_{fact_id}_{'_'.join(topics)}"
+        f"{snapshot['context_id']}_evidence_detail_{fact_id}_{'_'.join(sorted(topics))}"
     )
     objects = [
         _artifact_object("evidence_detail", artifact_id, "decision_fact", projection)

@@ -1,6 +1,8 @@
 import re
 from copy import deepcopy
 
+import pytest
+
 from app.services.market_assistant_tool_runtime import (
     _approved_counterfactuals_artifact,
 )
@@ -527,13 +529,17 @@ def test_comparison_view_uses_snapshot_delta_object():
     assert len(view["changes"]) == 1
 
 
-def evidence_detail_route():
-    return route_question("美联储目前是加息、降息还是维持？", deep_analysis=False)
+def evidence_detail_route(topics=("current", "drivers", "source")):
+    route = route_question("美联储目前是加息、降息还是维持？", deep_analysis=False)
+    route["initial_operations"][0]["topics"] = list(topics)
+    return route
 
 
-def _evidence_detail_envelope(topics=("current", "drivers")):
+def _evidence_detail_envelope(
+    topics=("current", "drivers"), fact_id="macro_policy_response"
+):
     detail = {
-        "fact_id": "macro_policy_response",
+        "fact_id": fact_id,
         "label": "Policy Response",
         "detail_kind": "policy_response",
         "topics": list(topics),
@@ -547,7 +553,7 @@ def _evidence_detail_envelope(topics=("current", "drivers")):
             "policy_reason": "Hold decision with hawkish inflation language.",
         },
     }
-    artifact_id = f"ctx_setup_evidence_detail_macro_policy_response_{'_'.join(topics)}"
+    artifact_id = f"ctx_setup_evidence_detail_{fact_id}_{'_'.join(topics)}"
     return {
         "artifact_id": artifact_id,
         "artifact_kind": "explanation_snapshot",
@@ -558,7 +564,7 @@ def _evidence_detail_envelope(topics=("current", "drivers")):
             "context_id": "ctx_setup",
             "as_of": "2026-08-13",
             "evidence_through": "2026-08-12",
-            "fact_id": "macro_policy_response",
+            "fact_id": fact_id,
             "detail_kind": "policy_response",
             "topics": list(topics),
             "status": "available",
@@ -583,7 +589,7 @@ def evidence_detail_artifacts(topics=("current", "drivers")):
 
 def test_evidence_detail_view_contains_only_requested_topics():
     view = build_explanation_view(
-        evidence_detail_route(),
+        evidence_detail_route(topics=("current", "drivers")),
         evidence_detail_artifacts(),
         question="美联储目前是加息、降息还是维持？",
     )
@@ -611,7 +617,7 @@ def test_evidence_detail_view_contains_only_requested_topics():
 
 def test_evidence_detail_view_keeps_method_topic_when_requested():
     view = build_explanation_view(
-        evidence_detail_route(),
+        evidence_detail_route(topics=("current", "method")),
         evidence_detail_artifacts(topics=("current", "method")),
         question="美联储目前是加息、降息还是维持？",
     )
@@ -630,13 +636,37 @@ def test_evidence_detail_view_missing_status_is_localized():
     del detail["drivers"]
     artifacts = {envelope["artifact_id"]: envelope}
     view = build_explanation_view(
-        evidence_detail_route(),
+        evidence_detail_route(topics=("current", "drivers")),
         artifacts,
         question="美联储目前是加息、降息还是维持？",
     )
     assert view["status"] == "数据缺失"
     assert "current" not in view
     assert "drivers" not in view
+
+
+def test_evidence_detail_view_scopes_selection_to_route_fact_id():
+    foreign = _evidence_detail_envelope(
+        topics=("current", "drivers"), fact_id="consumer_demand_outlook"
+    )
+    matching = _evidence_detail_envelope(topics=("current", "drivers"))
+    artifacts = {foreign["artifact_id"]: foreign, matching["artifact_id"]: matching}
+    view = build_explanation_view(
+        evidence_detail_route(topics=("current", "drivers")),
+        artifacts,
+        question="美联储目前是加息、降息还是维持？",
+    )
+    assert view["fact_id"] == "macro_policy_response"
+    assert view["label"] == "Policy Response"
+
+
+def test_evidence_detail_view_rejects_topic_mismatch_with_route():
+    with pytest.raises(ValueError, match="does not match the route operation"):
+        build_explanation_view(
+            evidence_detail_route(topics=("current", "drivers")),
+            evidence_detail_artifacts(topics=("current", "method")),
+            question="美联储目前是加息、降息还是维持？",
+        )
 
 
 def test_default_setup_view_isolates_detail_only_explanation_values():

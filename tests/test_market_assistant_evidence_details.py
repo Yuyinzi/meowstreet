@@ -712,3 +712,28 @@ def test_project_evidence_detail_rejects_empty_topics():
 def test_project_evidence_detail_rejects_invalid_record():
     with pytest.raises(ValueError, match="record is required"):
         project_evidence_detail(policy_fact(), None, ["current"], method_contracts())
+
+
+def test_project_evidence_detail_rejects_record_without_detail_kind():
+    record = dict(policy_record())
+    del record["detail_kind"]
+    with pytest.raises(ValueError, match="detail kind is required"):
+        project_evidence_detail(policy_fact(), record, ["current"], method_contracts())
+
+
+def test_enabled_fact_with_unsupported_topic_returns_unsupported():
+    result = project_evidence_detail(
+        policy_fact(), policy_record(), ["method"], method_contracts()
+    )
+    assert result["status"] == "unsupported"
+    assert result["supported_topics"] == ["current", "drivers", "source"]
+    assert "current" not in result
+
+
+def test_enabled_fact_with_partially_supported_topics_returns_unsupported():
+    result = project_evidence_detail(
+        policy_fact(), policy_record(), ["current", "method"], method_contracts()
+    )
+    assert result["status"] == "unsupported"
+    assert result["supported_topics"] == ["current", "drivers", "source"]
+    assert "current" not in result

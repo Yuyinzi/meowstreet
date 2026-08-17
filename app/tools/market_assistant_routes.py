@@ -489,12 +489,15 @@ def _validate_route_invariants(route):
 
 def _validate_operation_detail_fields(route):
     for operation in route["initial_operations"]:
-        if operation["operation_id"] != "get_evidence_detail":
-            if (
-                operation.get("fact_id") is not None
-                or operation.get("topics") is not None
-            ):
-                raise ValueError("detail fields are only valid on the detail operation")
+        if operation["operation_id"] == "get_evidence_detail":
+            if route["route_id"] != "evidence_detail":
+                raise ValueError(
+                    "evidence detail operation requires the evidence detail route"
+                )
+            if operation.get("fact_id") is None or operation.get("topics") is None:
+                raise ValueError(
+                    "evidence detail operation requires fact id and topics"
+                )
             continue
-        if operation.get("fact_id") is None or operation.get("topics") is None:
-            raise ValueError("evidence detail operation requires fact id and topics")
+        if operation.get("fact_id") is not None or operation.get("topics") is not None:
+            raise ValueError("detail fields are only valid on the detail operation")

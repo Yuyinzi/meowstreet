@@ -667,11 +667,16 @@ def _build_method_view(route, object_map, language, as_of, evidence_through):
 def _build_evidence_detail_view(
     route, artifacts, object_map, language, as_of, evidence_through
 ):
+    expected_fact_id, expected_topics = _evidence_detail_target(route)
     for artifact_id in sorted(artifacts):
         artifact = artifacts[artifact_id]
         payload = artifact.get("payload") or {}
-        if payload.get("fact_id") is None:
+        if payload.get("fact_id") != expected_fact_id:
             continue
+        if (payload.get("topics") or []) != expected_topics:
+            raise ValueError(
+                "evidence detail artifact does not match the route operation"
+            )
         detail = payload.get("detail") or {}
         topics = payload.get("topics") or []
         view = {
@@ -698,6 +703,17 @@ def _build_evidence_detail_view(
         ]
         return view
     raise ValueError("evidence detail artifact is not available")
+
+
+def _evidence_detail_target(route):
+    for operation in route.get("initial_operations") or []:
+        if operation.get("operation_id") == "get_evidence_detail":
+            fact_id = operation.get("fact_id")
+            topics = operation.get("topics")
+            if fact_id is None or topics is None:
+                raise ValueError("evidence detail route operation is invalid")
+            return fact_id, list(topics)
+    raise ValueError("evidence detail route requires the evidence detail operation")
 
 
 def _build_react_anchor_view(

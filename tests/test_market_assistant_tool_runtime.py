@@ -857,6 +857,74 @@ async def test_evidence_detail_returns_unsupported_projection():
     assert artifact["payload"]["detail"]["detail_kind"] == "unsupported"
 
 
+@pytest.mark.asyncio
+async def test_evidence_detail_returns_missing_projection():
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "jobless_claims",
+                "topics": ["current", "source"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["payload"]["status"] == "missing"
+    assert artifact["payload"]["detail"]["status"] == "missing"
+    assert artifact["payload"]["detail"]["fact_id"] == "jobless_claims"
+    assert "current" not in artifact["payload"]["detail"]
+    assert "source" not in artifact["payload"]["detail"]
+    object_ids = {obj["object_id"] for obj in artifact["object_index"]}
+    assert object_ids == {"ctx_current_evidence_detail_jobless_claims_current_source"}
+    assert {obj["object_type"] for obj in artifact["object_index"]} == {
+        "evidence_detail"
+    }
+    assert all(obj["authority"] == "decision_fact" for obj in artifact["object_index"])
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_artifact_id_is_order_independent():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    snapshot["evidence"].append(_policy_evidence())
+    resolution["snapshot"] = snapshot
+    results = await execute_tool_batch(
+        [
+            {
+                "call_id": "call_a",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["current", "source"],
+                },
+            },
+            {
+                "call_id": "call_b",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["source", "current"],
+                },
+            },
+        ],
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    assert (
+        results[0]["artifact"]["artifact_id"] == (results[1]["artifact"]["artifact_id"])
+    )
+    assert results[0]["artifact"]["artifact_id"] == (
+        "ctx_current_evidence_detail_macro_policy_response_current_source"
+    )
+
+
 def _credit_series_points(value, *, high_value=None):
     return [
         {
