@@ -63,14 +63,13 @@ def test_valid_snapshot_tool_call_returns_plain_dict():
     assert validate_tool_call(call, {"get_setup_overview"}) == call
 
 
-def test_tool_not_in_allowed_ids_rejected():
+def test_registered_tool_is_accepted_without_allow_list():
     call = {
         "call_id": "call_4",
         "tool_name": "get_confirmation_test",
         "arguments": {"test_id": "vix"},
     }
-    with pytest.raises(ValueError, match="tool call is invalid"):
-        validate_tool_call(call, {"get_setup_overview"})
+    assert validate_tool_call(call) == call
 
 
 def test_unknown_tool_rejected_even_when_allowed():

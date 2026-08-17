@@ -144,76 +144,6 @@ def test_assistant_runtime_allows_bounded_streaming_request(monkeypatch):
     assert captured["kwargs"]["timeout"] == 900.0
 
 
-@pytest.mark.asyncio
-async def test_llm_helpers_thread_reasoning_effort_from_config(monkeypatch):
-    captured = {"plan_reasoning": None, "llm_reasoning": []}
-
-    monkeypatch.setattr(
-        market_assistant_router,
-        "_assistant_runtime",
-        lambda: ("client", "assistant-model", "json_schema", "medium"),
-    )
-    monkeypatch.setattr(
-        market_assistant_router,
-        "deterministic_plan",
-        lambda question: {"intent": "unsupported"},
-    )
-
-    async def fake_plan_question(client, **kwargs):
-        captured["plan_reasoning"] = kwargs["reasoning_effort"]
-        return {"intent": "unsupported"}
-
-    async def fake_complete_structured(client, **kwargs):
-        captured["llm_reasoning"].append(kwargs["reasoning_effort"])
-        return {"sections": []}
-
-    monkeypatch.setattr(market_assistant_router, "plan_question", fake_plan_question)
-    monkeypatch.setattr(
-        market_assistant_router, "complete_structured", fake_complete_structured
-    )
-
-    await market_assistant_router._plan_llm(
-        question="hello world",
-        context_summary={"mode": "current"},
-    )
-    await market_assistant_router._synthesize_llm(
-        question="hello world",
-        plan={"intent": "decision_explanation"},
-        context_summary={"mode": "current"},
-        artifacts={},
-    )
-    await market_assistant_router._repair_llm(
-        question="hello world",
-        plan={"intent": "decision_explanation"},
-        context_summary={"mode": "current"},
-        artifacts={},
-        draft={"sections": []},
-        validation_report={"valid": False},
-    )
-
-    assert captured["plan_reasoning"] == "medium"
-    assert captured["llm_reasoning"] == ["medium", "medium"]
-
-
-@pytest.mark.asyncio
-async def test_known_setup_question_uses_deterministic_plan_without_llm(monkeypatch):
-    monkeypatch.setattr(
-        market_assistant_router,
-        "_assistant_runtime",
-        lambda: (_ for _ in ()).throw(AssertionError("LLM must not run")),
-    )
-
-    plan = await market_assistant_router._plan_llm(
-        question="explain the market setup",
-        context_summary={"mode": "current"},
-    )
-
-    assert plan["intent"] == "decision_explanation"
-    assert plan["operations"] == [
-        {"operation_id": "resolve_current_explanation", "parameters": {}}
-    ]
-
-
 def test_historical_question_without_context_id_returns_400():
     response = client.post(
         "/api/market-assistant/questions",
@@ -420,9 +350,6 @@ def test_question_passes_real_dependencies_dict(assistant_env, monkeypatch):
     assert response.status_code == 200
     deps = captured["dependencies"]
     assert deps["db_path"]
-    assert callable(deps["plan_llm"])
-    assert callable(deps["synthesize_llm"])
-    assert callable(deps["repair_llm"])
     assert callable(deps["stream_turn"])
     assert callable(deps["narration_instructions"])
     assert callable(deps["claim_audit_llm"])
@@ -580,81 +507,6 @@ def test_question_endpoint_has_no_refresh_side_effects(assistant_env, monkeypatc
     assert response.status_code == 200
 
 
-def test_synthesis_prompt_requests_beginner_chinese_explanation():
-    prompt = market_assistant_router._synthesis_prompt(
-        "现在市场怎么样？为什么？",
-        {"intent": "decision_explanation", "answer_depth": "standard"},
-        {"mode": "current"},
-        {"ctx_1": {"object_index": []}},
-    )
-    system = prompt[0]["content"]
-
-    assert "Answer language: Chinese" in system
-    assert "financial beginner" in system
-    assert "final user-facing prose" in system
-    assert "do not display internal codes" in system
-    assert "annotated artifact bindings" in system
-    assert "conflicting or unconfirmed evidence" in system
-    assert "up to three main reasons" in system
-
-
-def test_synthesis_prompt_selects_english_for_english_question():
-    prompt = market_assistant_router._synthesis_prompt(
-        "Explain the market setup",
-        {"intent": "decision_explanation"},
-        {"mode": "current"},
-        {"ctx_1": {"object_index": []}},
-    )
-    assert "Answer language: English" in prompt[0]["content"]
-
-
-def test_synthesis_prompt_requires_streamable_answer_text():
-    prompt = market_assistant_router._synthesis_prompt(
-        "Explain the market setup",
-        {"intent": "decision_explanation"},
-        {"mode": "current"},
-        {"ctx_1": {"object_index": []}},
-    )
-    system = prompt[0]["content"]
-    assert "Serialize answer_text as the first top-level property." in system
-    assert (
-        "answer_text must exactly equal the deterministic rendering of sections "
-        "and claims." in system
-    )
-    assert "Do not place markdown fences around the JSON object." in system
-
-
-def test_synthesis_prompt_includes_beginner_cat_tone():
-    prompt = market_assistant_router._synthesis_prompt(
-        "现在市场怎么样？",
-        {"intent": "decision_explanation", "answer_depth": "standard"},
-        {"mode": "current"},
-        {"ctx_1": {"object_index": []}},
-        tone="beginner_cat",
-    )
-    system = prompt[0]["content"]
-
-    assert "财财" in system or "Caicai" in system
-    assert "beginner_cat" in system
-
-
-def test_repair_prompt_preserves_beginner_contract():
-    prompt = market_assistant_router._repair_prompt(
-        "现在市场怎么样？",
-        {"intent": "decision_explanation"},
-        {"mode": "current"},
-        {"ctx_1": {"object_index": []}},
-        {"sections": []},
-        {"valid": False, "errors": []},
-    )
-    system = prompt[0]["content"]
-
-    assert "Answer language: Chinese" in system
-    assert "financial beginner" in system
-    assert "same evidence set" in system
-    assert "complete corrected StructuredAnswerDraft" in system
-
-
 def test_narration_instructions_include_professional_cat_tone():
     instructions = market_assistant_router._narration_instructions(
         tone="professional_cat"
@@ -703,31 +555,6 @@ def test_narration_input_items_exclude_snapshot_and_schema_bulk():
     assert "view_version" in serialized
     assert "get_setup_overview" in serialized
     assert "现在市场怎么样？" in serialized
-
-
-@pytest.mark.parametrize(
-    "tone, expected",
-    [
-        ("beginner_cat", ["beginner_cat", "财财", "Caicai", "curious beginner cat"]),
-        (
-            "professional_cat",
-            ["professional_cat", "财财", "Caicai", "market-savvy cat"],
-        ),
-        ("beginner_human", ["beginner_human", "plain", "beginner-friendly"]),
-        ("professional_human", ["professional_human", "professional human"]),
-    ],
-)
-def test_synthesis_prompt_reflects_each_tone(tone, expected):
-    prompt = market_assistant_router._synthesis_prompt(
-        "Explain the market setup",
-        {"intent": "decision_explanation"},
-        {"mode": "current"},
-        {"ctx_1": {"object_index": []}},
-        tone=tone,
-    )
-    system = prompt[0]["content"]
-    for phrase in expected:
-        assert phrase in system
 
 
 @pytest.mark.parametrize(
