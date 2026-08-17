@@ -286,11 +286,11 @@ def test_registry_valid_payload_returns_plain_dicts(tmp_path):
         ),
         (
             lambda payload: payload["facts"][0]["default_topics"].append("method"),
-            "default topic is not supported",
+            "wrong default topics",
         ),
         (
             lambda payload: payload["facts"][0].update({"aliases": []}),
-            "requires aliases",
+            "wrong aliases",
         ),
         (
             lambda payload: payload["facts"][0]["supported_topics"].append("current"),
@@ -422,6 +422,42 @@ def test_load_evidence_detail_registry_rejects_wrong_projection_version(tmp_path
         if record["fact_id"] == "macro_policy_response":
             record["projection_version"] = "bogus_version"
     with pytest.raises(ValueError, match="projection version"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_wrong_scope(tmp_path):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "macro_policy_response":
+            record["scope"] = "manual_review"
+    with pytest.raises(ValueError, match="scope"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_wrong_default_topics(tmp_path):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "macro_policy_response":
+            record["default_topics"] = ["current"]
+    with pytest.raises(ValueError, match="default topics"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_wrong_source_module(tmp_path):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "macro_policy_response":
+            record["source_module"] = "bogus_module"
+    with pytest.raises(ValueError, match="source module"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_wrong_aliases(tmp_path):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "macro_policy_response":
+            record["aliases"] = ["VIX"]
+    with pytest.raises(ValueError, match="aliases"):
         _load_payload(tmp_path, payload)
 
 

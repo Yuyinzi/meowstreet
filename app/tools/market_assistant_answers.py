@@ -1303,33 +1303,49 @@ def _fallback_unsupported(artifacts):
     return "This question cannot be answered deterministically."
 
 
-def _find_evidence_detail_artifact(artifacts):
+def _find_evidence_detail_artifacts(artifacts):
+    found = []
     for artifact in artifacts.values():
         payload = artifact.get("payload") or {}
         if payload.get("detail_kind") and payload.get("detail"):
-            return artifact
-    return None
+            found.append(artifact)
+    return sorted(
+        found, key=lambda artifact: artifact.get("payload", {}).get("fact_id", "")
+    )
 
 
 def _fallback_evidence_detail(artifacts):
-    artifact = _find_evidence_detail_artifact(artifacts)
-    if artifact is None:
+    detail_artifacts = _find_evidence_detail_artifacts(artifacts)
+    if not detail_artifacts:
         return "The requested evidence detail is currently unavailable."
-    payload = artifact.get("payload") or {}
-    detail = payload.get("detail") or {}
-    status = detail.get("status") or "missing"
-    label = detail.get("label") or detail.get("fact_id") or "Evidence detail"
-    if status != "available":
-        return f"{label} detail is currently unavailable ({status})."
-    lines = [f"{label} evidence detail:"]
-    current = detail.get("current")
-    if isinstance(current, dict):
-        for key, value in current.items():
-            lines.append(f"- {key}: {_format_value(value)}")
-    drivers = detail.get("drivers")
-    if isinstance(drivers, dict):
-        for key, value in drivers.items():
-            lines.append(f"- {key}: {_format_value(value)}")
+    lines = []
+    for artifact in detail_artifacts:
+        payload = artifact.get("payload") or {}
+        detail = payload.get("detail") or {}
+        status = detail.get("status") or "missing"
+        label = detail.get("label") or detail.get("fact_id") or "Evidence detail"
+        if status != "available":
+            lines.append(f"{label} detail is currently unavailable ({status}).")
+            continue
+        lines.append(f"{label} evidence detail:")
+        current = detail.get("current")
+        if isinstance(current, dict):
+            for key, value in current.items():
+                lines.append(f"- {key}: {_format_value(value)}")
+        drivers = detail.get("drivers")
+        if isinstance(drivers, dict):
+            for key, value in drivers.items():
+                lines.append(f"- {key}: {_format_value(value)}")
+        method = detail.get("method")
+        if isinstance(method, dict):
+            references = method.get("method_references") or []
+            if references:
+                lines.append("- method: " + ", ".join(str(ref) for ref in references))
+        source = detail.get("source")
+        if isinstance(source, dict):
+            source_period = source.get("source_period")
+            if source_period is not None:
+                lines.append(f"- source period: {_format_value(source_period)}")
     return "\n".join(lines)
 
 

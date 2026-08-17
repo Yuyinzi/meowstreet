@@ -35,56 +35,152 @@ _UNSUPPORTED_VERSION = "market_assistant_evidence_detail_unsupported_v1"
 
 _FACT_CONTRACTS = {
     "survey_growth_direction": {
+        "scope": "decision_input",
         "detail_kind": "survey_synthesis",
         "topics": frozenset({"current", "drivers", "source"}),
+        "default_topics": ("current", "drivers", "source"),
+        "source_module": "ism_survey_synthesis",
+        "aliases": (
+            "manufacturing and services",
+            "ISM survey",
+            "survey direction",
+            "制造业和服务业",
+            "调查方向",
+            "增长方向依据",
+        ),
         "projection_version": "market_assistant_survey_synthesis_detail_v1",
     },
     "macro_financial_conditions": {
+        "scope": "decision_input",
         "detail_kind": "financial_conditions",
         "topics": frozenset({"current", "drivers", "source"}),
+        "default_topics": ("current", "drivers", "source"),
+        "source_module": "us_rates_liquidity",
+        "aliases": (
+            "financial conditions",
+            "yield curve",
+            "real rates",
+            "金融条件",
+            "收益率曲线",
+            "实际利率",
+        ),
         "projection_version": "market_assistant_financial_conditions_detail_v1",
     },
     "macro_policy_response": {
+        "scope": "decision_input",
         "detail_kind": "policy_response",
         "topics": frozenset({"current", "drivers", "source"}),
+        "default_topics": ("current", "drivers", "source"),
+        "source_module": "fomc_policy_tone",
+        "aliases": (
+            "FOMC",
+            "Fed",
+            "monetary policy",
+            "美联储",
+            "货币政策",
+            "利率决定",
+            "鹰派",
+            "鸽派",
+        ),
         "projection_version": "market_assistant_policy_response_detail_v1",
     },
     "consumer_demand_outlook": {
+        "scope": "confirmation_input",
         "detail_kind": "consumer_demand",
         "topics": frozenset({"current", "drivers", "source"}),
+        "default_topics": ("current", "drivers", "source"),
+        "source_module": "consumer_sentiment",
+        "aliases": (
+            "consumer expectations",
+            "consumer demand",
+            "consumer confidence",
+            "消费者预期",
+            "消费者需求",
+            "消费者信心",
+        ),
         "projection_version": "market_assistant_consumer_demand_detail_v1",
     },
     "sp500_market_phase": {
+        "scope": "confirmation_input",
         "detail_kind": "market_phase",
         "topics": frozenset({"current", "method", "source"}),
+        "default_topics": ("current", "method", "source"),
+        "source_module": "market_phase",
+        "aliases": (
+            "S&P 500 phase",
+            "S&P 500",
+            "market phase",
+            "标普市场阶段",
+            "标普",
+            "牛市阶段",
+            "熊市阶段",
+        ),
         "projection_version": "market_assistant_market_phase_detail_v1",
     },
     "credit_conditions": {
+        "scope": "confirmation_input",
         "detail_kind": "credit_conditions",
         "topics": frozenset({"current", "method", "source"}),
+        "default_topics": ("current", "method", "source"),
+        "source_module": "us_rates_liquidity",
+        "aliases": (
+            "credit conditions",
+            "credit spreads",
+            "信贷条件",
+            "信用条件",
+            "信用利差",
+        ),
         "projection_version": "market_assistant_credit_conditions_detail_v1",
     },
     "vix_level": {
+        "scope": "confirmation_input",
         "detail_kind": "vix",
         "topics": frozenset({"current", "method", "source"}),
+        "default_topics": ("current", "method", "source"),
+        "source_module": "us_rates_liquidity",
+        "aliases": ("VIX", "波动率", "恐慌指数"),
         "projection_version": "market_assistant_vix_detail_v1",
     },
     "m2_liquidity": {
+        "scope": "context_only",
         "detail_kind": "m2_liquidity",
         "topics": frozenset({"current", "method", "source"}),
+        "default_topics": ("current", "method", "source"),
+        "source_module": "m2_money_supply",
+        "aliases": (
+            "M2 liquidity",
+            "M2 supply",
+            "M2 流动性",
+            "M2 货币供应",
+        ),
         "projection_version": "market_assistant_m2_liquidity_detail_v1",
     },
 }
 
-_DISABLED_FACT_IDS = frozenset(
-    {
-        "equity_breadth",
-        "jobless_claims",
-        "economic_confirmation",
-        "cyclical_commodities",
-        "nfib_regional_evidence",
-    }
-)
+_DISABLED_FACT_CONTRACTS = {
+    "equity_breadth": {
+        "scope": "observation_only",
+        "source_module": "observation_only",
+    },
+    "jobless_claims": {
+        "scope": "observation_only",
+        "source_module": "observation_only",
+    },
+    "economic_confirmation": {
+        "scope": "context_only",
+        "source_module": "economic_confirmation",
+    },
+    "cyclical_commodities": {
+        "scope": "observation_only",
+        "source_module": "cyclical_commodities",
+    },
+    "nfib_regional_evidence": {
+        "scope": "manual_review",
+        "source_module": "nfib_sbo_regional",
+    },
+}
+
+_DISABLED_FACT_IDS = frozenset(_DISABLED_FACT_CONTRACTS)
 
 _CJK_RE = re.compile(r"[\u3400-\u9fff]")
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -183,6 +279,7 @@ def _validate_record(item):
     _validate_unique_topics(data, "default_topics")
     fact_id = data["fact_id"]
     if fact_id in _DISABLED_FACT_IDS:
+        contract = _DISABLED_FACT_CONTRACTS[fact_id]
         if data["detail_kind"] != "unsupported":
             raise ValueError(f"evidence detail fact is not enabled: {fact_id}")
         if data["supported_topics"]:
@@ -192,6 +289,12 @@ def _validate_record(item):
         if data["projection_version"] != _UNSUPPORTED_VERSION:
             raise ValueError(
                 f"unsupported evidence detail fact has an unknown projection version: {fact_id}"
+            )
+        if data["scope"] != contract["scope"]:
+            raise ValueError(f"evidence detail fact has the wrong scope: {fact_id}")
+        if data["source_module"] != contract["source_module"]:
+            raise ValueError(
+                f"evidence detail fact has the wrong source module: {fact_id}"
             )
     else:
         contract = _FACT_CONTRACTS[fact_id]
@@ -215,6 +318,18 @@ def _validate_record(item):
             raise ValueError(
                 f"evidence detail fact has the wrong projection version: {fact_id}"
             )
+        if data["scope"] != contract["scope"]:
+            raise ValueError(f"evidence detail fact has the wrong scope: {fact_id}")
+        if tuple(data["default_topics"]) != contract["default_topics"]:
+            raise ValueError(
+                f"evidence detail fact has the wrong default topics: {fact_id}"
+            )
+        if data["source_module"] != contract["source_module"]:
+            raise ValueError(
+                f"evidence detail fact has the wrong source module: {fact_id}"
+            )
+        if tuple(data["aliases"]) != tuple(contract["aliases"]):
+            raise ValueError(f"evidence detail fact has the wrong aliases: {fact_id}")
     if not set(data["default_topics"]).issubset(set(data["supported_topics"])):
         raise ValueError(f"evidence detail default topic is not supported: {fact_id}")
     if data["supported_topics"] and not data["aliases"]:

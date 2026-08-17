@@ -911,6 +911,103 @@ async def test_evidence_detail_fallback_renders_missing_status():
 
 
 @pytest.mark.asyncio
+async def test_evidence_detail_fallback_renders_all_artifacts_in_order():
+    from app.tools.market_assistant_answers import render_fallback
+
+    artifacts = {
+        "ctx_setup_evidence_detail_credit_conditions_current_method_source": {
+            "artifact_id": (
+                "ctx_setup_evidence_detail_credit_conditions_current_method_source"
+            ),
+            "artifact_kind": "explanation_snapshot",
+            "primary_authority": "decision_fact",
+            "market_setup_relation": "authoritative_snapshot",
+            "payload": {
+                "fact_id": "credit_conditions",
+                "label": "Credit Conditions",
+                "detail_kind": "credit_conditions",
+                "topics": ["current", "method", "source"],
+                "status": "available",
+                "detail": {
+                    "fact_id": "credit_conditions",
+                    "label": "Credit Conditions",
+                    "detail_kind": "credit_conditions",
+                    "topics": ["current", "method", "source"],
+                    "status": "available",
+                    "current": {"status": "risk_rising"},
+                },
+            },
+            "object_index": [],
+        },
+        "ctx_setup_evidence_detail_jobless_claims_current": {
+            "artifact_id": "ctx_setup_evidence_detail_jobless_claims_current",
+            "artifact_kind": "explanation_snapshot",
+            "primary_authority": "decision_fact",
+            "market_setup_relation": "authoritative_snapshot",
+            "payload": {
+                "fact_id": "jobless_claims",
+                "label": "Jobless Claims",
+                "detail_kind": "unsupported",
+                "topics": ["current"],
+                "status": "missing",
+                "detail": {
+                    "fact_id": "jobless_claims",
+                    "label": "Jobless Claims",
+                    "detail_kind": "unsupported",
+                    "topics": ["current"],
+                    "status": "missing",
+                },
+            },
+            "object_index": [],
+        },
+        "ctx_setup_evidence_detail_macro_policy_response_current_drivers_source": {
+            "artifact_id": (
+                "ctx_setup_evidence_detail_macro_policy_response_current_drivers_source"
+            ),
+            "artifact_kind": "explanation_snapshot",
+            "primary_authority": "decision_fact",
+            "market_setup_relation": "authoritative_snapshot",
+            "payload": {
+                "fact_id": "macro_policy_response",
+                "label": "Monetary Policy",
+                "detail_kind": "policy_response",
+                "topics": ["current", "drivers", "source"],
+                "status": "available",
+                "detail": {
+                    "fact_id": "macro_policy_response",
+                    "label": "Monetary Policy",
+                    "detail_kind": "policy_response",
+                    "topics": ["current", "drivers", "source"],
+                    "status": "available",
+                    "current": {
+                        "policy_action": "hold",
+                        "overall_bias": "mild_hawkish",
+                    },
+                    "source": {
+                        "source_module": "fomc_policy_tone",
+                        "source_period": "2026-07-01",
+                    },
+                },
+            },
+            "object_index": [],
+        },
+    }
+    text = render_fallback(
+        plan={"intent": "evidence_detail"}, artifacts=artifacts, notices=[]
+    )
+    assert "Monetary Policy" in text
+    assert "hold" in text
+    assert "Credit Conditions" in text
+    assert "risk_rising" in text
+    assert "Jobless Claims" in text
+    assert "unavailable" in text.lower()
+    credit_index = text.find("Credit Conditions")
+    jobless_index = text.find("Jobless Claims")
+    policy_index = text.find("Monetary Policy")
+    assert credit_index < jobless_index < policy_index
+
+
+@pytest.mark.asyncio
 async def test_react_fallback_prefers_generated_evidence_detail_artifact():
     route = route_question("现在市场怎么样？", deep_analysis=False)
     route["route_id"] = "react"
