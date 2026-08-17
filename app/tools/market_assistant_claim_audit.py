@@ -12,6 +12,10 @@ from app.tools.market_assistant_artifacts import resolve_artifact_ref
 _MIN_COVERAGE_RATIO = 0.8
 _MAX_SPANS = 24
 
+_DETAIL_OBJECT_TYPES = frozenset(
+    {"evidence_detail", "evidence_detail_source", "evidence_detail_method"}
+)
+
 _AUTHORITIES = (
     "decision_fact",
     "method_knowledge",
@@ -37,6 +41,7 @@ _ERROR_CODES = frozenset(
         "PROHIBITED_DECISION_CLAIM",
         "ANSWER_TEXT_MISMATCH",
         "EXACT_WORDING_UNAVAILABLE",
+        "UNGROUNDED_CLAIM",
     }
 )
 
@@ -289,9 +294,34 @@ def _validate_span(claim, answer_text, artifacts):
             )
         errors.extend(_validate_span_refs(claim, artifacts))
         errors.extend(_validate_span_values(claim, artifacts))
+        errors.extend(_validate_grounding(claim, artifacts))
     if purpose == "exact_wording":
         errors.extend(_validate_exact_wording(claim, artifacts))
     errors.extend(_validate_span_language(claim))
+    return errors
+
+
+def _validate_grounding(claim, artifacts):
+    errors = []
+    claim_id = claim["claim_id"]
+    refs = claim["refs"]
+    if not refs:
+        return errors
+    values = claim["values"]
+    if not values:
+        for ref in refs:
+            resolved = _resolve_ref(claim_id, ref, artifacts)
+            if "code" in resolved:
+                continue
+            if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
+                errors.append(
+                    _error(
+                        "UNGROUNDED_CLAIM",
+                        "detail claim must bind a value",
+                        claim_id=claim_id,
+                        field_id=_ref_id(ref),
+                    )
+                )
     return errors
 
 

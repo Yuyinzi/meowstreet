@@ -977,11 +977,45 @@ def _claim_audit_factory():
                 "purpose": "decision_explanation",
                 "authority": "decision_fact",
                 "refs": [ref],
-                "values": [],
+                "values": _detail_bound_values(artifact_projection, ref),
             }
         return {"claims": [claim]}
 
     return fake_complete_structured
+
+
+def _detail_bound_values(artifact_projection, ref):
+    for artifact_id in sorted(artifact_projection):
+        for obj in artifact_projection[artifact_id].get("object_index") or []:
+            if obj.get("object_id") == ref.get("object_id") and obj.get(
+                "object_type"
+            ) == ref.get("object_type"):
+                payload = obj.get("payload") or {}
+                current = payload.get("current") or {}
+                values = []
+                for field in ("policy_action", "overall_bias"):
+                    if field in current:
+                        values.append(
+                            {
+                                "name": field,
+                                "value": current[field],
+                                "source": {**ref, "field": f"current.{field}"},
+                            }
+                        )
+                relationship = current.get("relationship_to_growth_direction")
+                if relationship is not None:
+                    values.append(
+                        {
+                            "name": "relationship_to_growth_direction",
+                            "value": relationship,
+                            "source": {
+                                **ref,
+                                "field": "current.relationship_to_growth_direction",
+                            },
+                        }
+                    )
+                return values
+    return []
 
 
 def _prepare_market_setup_harness(

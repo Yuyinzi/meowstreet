@@ -135,6 +135,10 @@ def validate_artifact(payload):
             raise ValueError(
                 f"artifact authority is not permitted: {obj['authority']} in {kind}"
             )
+        if obj.get("exact_excerpt_capable"):
+            raise ValueError(
+                f"exact excerpt capability is not approved: {obj['object_type']}"
+            )
     return payload
 
 

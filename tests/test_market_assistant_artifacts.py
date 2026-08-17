@@ -31,6 +31,22 @@ def test_local_observation_cannot_explain_a_decision():
     )
 
 
+def test_validate_artifact_rejects_self_declared_exact_excerpt_capability():
+    artifact = valid_artifact(
+        object_index=[
+            {
+                "object_type": "evidence_detail_source",
+                "object_id": "ctx_123_source",
+                "authority": "method_knowledge",
+                "payload": {"source": {"source_module": "fomc_policy_tone"}},
+                "exact_excerpt_capable": True,
+            }
+        ]
+    )
+    with pytest.raises(ValueError, match="exact excerpt"):
+        market_assistant_artifacts.validate_artifact(artifact)
+
+
 def test_reference_resolves_stable_object_id_not_json_path():
     artifact = valid_artifact(
         object_index=[
