@@ -7,12 +7,8 @@ from app.tools.market_assistant_routes import validate_route
 
 _ROUTE_QUESTIONS = {
     "current_setup_overview": "现在市场怎么样？",
-    "why_macro_regime": "为什么当前宏观环境如此？",
-    "why_market_confirmation": "为什么市场确认信号缺失？",
-    "why_portfolio_posture": "为什么当前组合姿态如此？",
-    "indicator_confirmation": "VIX的确认信号怎么样？",
-    "indicator_definition": "VIX是什么？",
-    "indicator_method": "VIX怎么计算？",
+    "indicator_question": "VIX是什么？",
+    "why_setup_layer": "为什么当前宏观环境如此？",
     "react": "讲个笑话",
 }
 
@@ -78,60 +74,60 @@ def test_english_posture_question_routes_to_posture():
     route = route_question(
         "Why is the portfolio posture Mild Risk-Off?", deep_analysis=False
     )
-    assert route["route_id"] == "why_portfolio_posture"
+    assert route["route_id"] == "why_setup_layer"
 
 
 def test_english_confirmation_question_routes_to_confirmation():
     route = route_question(
         "Why is the market confirmation missing?", deep_analysis=False
     )
-    assert route["route_id"] == "why_market_confirmation"
+    assert route["route_id"] == "why_setup_layer"
 
 
 def test_chinese_indicator_definition_routes_to_definition():
     route = route_question("VIX是什么？", deep_analysis=False)
-    assert route["route_id"] == "indicator_definition"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "vix"
 
 
 def test_chinese_indicator_method_routes_to_method():
     route = route_question("VIX怎么计算？", deep_analysis=False)
-    assert route["route_id"] == "indicator_method"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "vix"
 
 
 def test_chinese_indicator_confirmation_routes_to_confirmation():
     route = route_question("ISM的确认信号怎么样？", deep_analysis=False)
-    assert route["route_id"] == "indicator_confirmation"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "ism_manufacturing_pmi"
 
 
 def test_chinese_why_confirmation_with_vix_routes_to_indicator_confirmation():
     route = route_question("VIX 为什么没有确认", deep_analysis=False)
-    assert route["route_id"] == "indicator_confirmation"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "vix"
 
 
 def test_chinese_why_partial_confirmation_routes_to_market_confirmation():
     route = route_question("为什么只是部分确认", deep_analysis=False)
-    assert route["route_id"] == "why_market_confirmation"
+    assert route["route_id"] == "why_setup_layer"
 
 
 def test_english_why_indicator_confirmation_routes_to_indicator_confirmation():
     route = route_question("why is the ism confirmation weak", deep_analysis=False)
-    assert route["route_id"] == "indicator_confirmation"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "ism_manufacturing_pmi"
 
 
 def test_chinese_why_indicator_confirmation_routes_to_indicator_confirmation():
     route = route_question("为什么ISM的确认信号这么低？", deep_analysis=False)
-    assert route["route_id"] == "indicator_confirmation"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "ism_manufacturing_pmi"
 
 
 def test_english_indicator_question_uses_deep_analysis_budget():
     route = route_question("What is the VIX?", deep_analysis=True)
-    assert route["route_id"] == "indicator_definition"
+    assert route["route_id"] == "indicator_question"
     assert route["budget"] == deep_analysis_budget()
 
 
@@ -224,28 +220,30 @@ def test_simple_overview_questions_still_route_to_overview():
 
 def test_explain_how_indicator_is_calculated_stays_on_indicator_route():
     route = route_question("explain how vix is calculated", deep_analysis=False)
-    assert route["route_id"] == "indicator_method"
+    assert route["route_id"] == "indicator_question"
     assert route["routing_source"] == "deterministic"
 
 
 def test_why_mild_risk_on_routes_to_posture():
     route = route_question("为什么是 Mild Risk-On", deep_analysis=False)
-    assert route["route_id"] == "why_portfolio_posture"
+    assert route["route_id"] == "why_setup_layer"
     assert route["routing_source"] == "deterministic"
     assert [item["operation_id"] for item in route["initial_operations"]] == [
-        "get_posture_explanation"
+        "get_macro_regime_explanation",
+        "get_confirmation_tests",
+        "get_posture_explanation",
     ]
 
 
 def test_why_mildly_positive_routes_to_posture():
     route = route_question("为什么是轻度偏积极", deep_analysis=False)
-    assert route["route_id"] == "why_portfolio_posture"
+    assert route["route_id"] == "why_setup_layer"
     assert route["routing_source"] == "deterministic"
 
 
 def test_why_mild_risk_on_english_routes_to_posture():
     route = route_question("why is the regime mild risk on?", deep_analysis=False)
-    assert route["route_id"] == "why_portfolio_posture"
+    assert route["route_id"] == "why_setup_layer"
     assert route["routing_source"] == "deterministic"
 
 
@@ -334,12 +332,8 @@ def test_routed_payloads_validate_cleanly(question):
     ("route_id", "view_type"),
     [
         ("current_setup_overview", "setup_explanation"),
-        ("why_macro_regime", "setup_explanation"),
-        ("why_market_confirmation", "setup_explanation"),
-        ("why_portfolio_posture", "setup_explanation"),
-        ("indicator_confirmation", "indicator_explanation"),
-        ("indicator_definition", "indicator_explanation"),
-        ("indicator_method", "method_explanation"),
+        ("indicator_question", "indicator_explanation"),
+        ("why_setup_layer", "setup_explanation"),
         ("react", "react_anchor"),
     ],
 )

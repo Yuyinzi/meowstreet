@@ -411,7 +411,7 @@ def test_method_view_contains_approved_knowledge_without_setup_results():
         artifacts,
         question="VIX 怎么计算？",
     )
-    assert view["view_version"] == "method_explanation_v1"
+    assert view["view_version"] == "indicator_explanation_v1"
     assert view["indicator_id"] == "vix"
     assert view["method_objects"]
     assert view["method_objects"][0]["record_id"] == "vix_method"
