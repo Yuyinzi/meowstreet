@@ -529,6 +529,75 @@ def test_audit_rejects_method_binding_via_decision_fact_authority():
     )
 
 
+def test_audit_rejects_exact_wording_claim_without_capable_artifact():
+    answer = "The FOMC statement said remain patient."
+    payload = audit_payload(
+        answer,
+        purpose="exact_wording",
+        authority="method_knowledge",
+        refs=[policy_detail_ref()],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "EXACT_WORDING_UNAVAILABLE" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_exact_wording_claim_without_any_refs():
+    answer = "The FOMC statement said remain patient."
+    payload = audit_payload(
+        answer,
+        purpose="exact_wording",
+        authority="method_knowledge",
+        refs=[],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "EXACT_WORDING_UNAVAILABLE" for error in exc_info.value.errors
+    )
+
+
+def test_audit_accepts_exact_wording_claim_with_capable_artifact():
+    answer = "The data comes from the July policy meeting."
+    source_artifact = policy_detail_artifacts()
+    artifact = source_artifact[next(iter(source_artifact))]
+    artifact["object_index"][1]["exact_excerpt_capable"] = True
+    ref = {
+        "artifact_id": "ctx_123_evidence_detail_macro_policy_response",
+        "object_type": "evidence_detail_source",
+        "object_id": "ctx_123_evidence_detail_macro_policy_response_source",
+    }
+    payload = audit_payload(
+        answer,
+        purpose="exact_wording",
+        authority="method_knowledge",
+        refs=[ref],
+        values=[
+            {
+                "name": "source_module",
+                "value": "fomc_policy_tone",
+                "source": {**ref, "field": "source.source_module"},
+            }
+        ],
+    )
+    validated = validate_claim_audit(
+        payload,
+        answer_text=answer,
+        artifacts=source_artifact,
+    )
+    assert validated["coverage_ratio"] == 1.0
+
+
 def test_audit_rejects_hypothetical_span_with_refs():
     answer = "如果市场风险上升，结果会不同。"
     payload = {

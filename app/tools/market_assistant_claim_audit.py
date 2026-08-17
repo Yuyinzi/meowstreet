@@ -36,6 +36,7 @@ _ERROR_CODES = frozenset(
         "UNSUPPORTED_MATERIALITY",
         "PROHIBITED_DECISION_CLAIM",
         "ANSWER_TEXT_MISMATCH",
+        "EXACT_WORDING_UNAVAILABLE",
     }
 )
 
@@ -288,7 +289,38 @@ def _validate_span(claim, answer_text, artifacts):
             )
         errors.extend(_validate_span_refs(claim, artifacts))
         errors.extend(_validate_span_values(claim, artifacts))
+    if purpose == "exact_wording":
+        errors.extend(_validate_exact_wording(claim, artifacts))
     errors.extend(_validate_span_language(claim))
+    return errors
+
+
+def _validate_exact_wording(claim, artifacts):
+    errors = []
+    claim_id = claim["claim_id"]
+    refs = claim["refs"]
+    if not refs:
+        errors.append(
+            _error(
+                "EXACT_WORDING_UNAVAILABLE",
+                "exact wording requires an exact-excerpt-capable artifact",
+                claim_id=claim_id,
+            )
+        )
+        return errors
+    for ref in refs:
+        resolved = _resolve_ref(claim_id, ref, artifacts)
+        if "code" in resolved:
+            continue
+        if not resolved.get("exact_excerpt_capable"):
+            errors.append(
+                _error(
+                    "EXACT_WORDING_UNAVAILABLE",
+                    "exact wording requires an exact-excerpt-capable artifact",
+                    claim_id=claim_id,
+                    field_id=_ref_id(ref),
+                )
+            )
     return errors
 
 

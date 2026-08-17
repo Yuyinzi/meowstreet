@@ -330,6 +330,8 @@ def _narration_instructions(tone="beginner_human"):
             "Do not reinterpret or override Market Setup. "
             "Answer in the user's language. "
             "Do not invent facts, thresholds, or causality the evidence does not support. "
+            "Never quote or characterize exact statement wording; only the approved "
+            "stored extraction fields and reason are available. "
             "When evidence is unavailable, say it is unavailable rather than guessing."
         )
     )
@@ -369,7 +371,11 @@ def _claim_audit_prompt(answer_text, explanation_view, artifact_projection):
                 "Each claim span must use exact offsets and exact text copied "
                 "verbatim from the answer string. "
                 "Return only a ClaimAudit matching the supplied schema. "
-                "Do not alter the supplied answer wording or emit a corrected draft."
+                "Do not alter the supplied answer wording or emit a corrected draft. "
+                "Any span that quotes or characterizes exact statement wording must use "
+                "purpose exact_wording; exact wording is only available when the "
+                "referenced artifact object declares exact_excerpt_capable, otherwise "
+                "the claim will be rejected."
             ),
         },
         {
