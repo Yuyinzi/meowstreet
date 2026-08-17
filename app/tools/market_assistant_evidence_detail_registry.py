@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.tools.market_assistant_evidence_details import PROJECTION_DETAIL_KINDS
 from app.tools.market_setup_evidence_facts import load_explanation_surface
 
 REGISTRY_PATH = (
@@ -125,6 +126,20 @@ def _validate_record(item):
     data = record.model_dump()
     _validate_unique_topics(data, "supported_topics")
     _validate_unique_topics(data, "default_topics")
+    if data["detail_kind"] == "unsupported":
+        if data["supported_topics"]:
+            raise ValueError(
+                f"unsupported evidence detail fact declares topics: {data['fact_id']}"
+            )
+    else:
+        if data["detail_kind"] not in PROJECTION_DETAIL_KINDS:
+            raise ValueError(
+                f"evidence detail projection is not registered: {data['detail_kind']}"
+            )
+        if not data["supported_topics"]:
+            raise ValueError(
+                f"evidence detail fact requires supported topics: {data['fact_id']}"
+            )
     if not set(data["default_topics"]).issubset(set(data["supported_topics"])):
         raise ValueError(
             f"evidence detail default topic is not supported: {data['fact_id']}"

@@ -340,6 +340,37 @@ def test_load_evidence_detail_registry_rejects_missing_facts(tmp_path):
         _load_payload(tmp_path, payload)
 
 
+def test_load_evidence_detail_registry_rejects_unregistered_projection_kind(
+    tmp_path,
+):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "macro_policy_response":
+            record["detail_kind"] = "unregistered_kind"
+    with pytest.raises(ValueError, match="projection is not registered"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_unsupported_declaring_topics(
+    tmp_path,
+):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "equity_breadth":
+            record["supported_topics"] = ["current"]
+    with pytest.raises(ValueError, match="unsupported"):
+        _load_payload(tmp_path, payload)
+
+
+def test_load_evidence_detail_registry_rejects_enabled_without_topics(tmp_path):
+    payload = valid_registry()
+    for record in payload["facts"]:
+        if record["fact_id"] == "macro_policy_response":
+            record["supported_topics"] = []
+    with pytest.raises(ValueError, match="supported topics"):
+        _load_payload(tmp_path, payload)
+
+
 def test_evidence_detail_record_returns_enabled_record():
     registry = market_assistant_evidence_detail_registry.load_evidence_detail_registry()
     record = market_assistant_evidence_detail_registry.evidence_detail_record(

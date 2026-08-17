@@ -337,3 +337,5 @@ _PROJECTION_BUILDERS = {
     "vix": _vix_detail,
     "m2_liquidity": _m2_liquidity_detail,
 }
+
+PROJECTION_DETAIL_KINDS = frozenset(_PROJECTION_BUILDERS)
