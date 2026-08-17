@@ -16,6 +16,51 @@ _DETAIL_OBJECT_TYPES = frozenset(
     {"evidence_detail", "evidence_detail_source", "evidence_detail_method"}
 )
 
+_DETAIL_VALUE_LABELS = {
+    "hold": ("hold", "维持", "维持利率不变"),
+    "hike": ("hike", "加息"),
+    "cut": ("cut", "降息"),
+    "mild_hawkish": ("mild_hawkish", "mildly hawkish", "偏鹰"),
+    "hawkish": ("hawkish", "鹰派"),
+    "mild_dovish": ("mild_dovish", "mildly dovish", "偏鸽"),
+    "dovish": ("dovish", "鸽派"),
+    "more_hawkish": ("more_hawkish", "更偏鹰"),
+    "more_dovish": ("more_dovish", "更偏鸽"),
+    "unchanged": ("unchanged", "不变"),
+    "neutral": ("neutral", "中性"),
+    "conflicts": (
+        "conflicts",
+        "与当前增长方向不一致",
+        "与增长方向不一致",
+        "冲突",
+        "不一致",
+    ),
+    "supports": ("supports", "与当前增长方向一致", "与增长方向一致", "一致", "支持"),
+    "restrictive_confirmed": ("restrictive_confirmed", "紧缩"),
+    "restrictive": ("restrictive", "紧缩"),
+    "accommodative": ("accommodative", "宽松"),
+    "expanding": ("expanding", "扩张"),
+    "contracting": ("contracting", "收缩"),
+    "rising": ("rising", "上升"),
+    "falling": ("falling", "下降"),
+    "stable": ("stable", "稳定"),
+    "improving": ("improving", "改善"),
+    "slowing": ("slowing", "放缓"),
+    "bull_market": ("bull_market", "上涨趋势", "牛市"),
+    "bear_market": ("bear_market", "下跌趋势", "熊市"),
+    "aligned_expansion": ("aligned_expansion", "扩张"),
+    "aligned_contraction": ("aligned_contraction", "收缩"),
+    "aligned_neutral": ("aligned_neutral", "中性"),
+    "divergent": ("divergent", "分化"),
+    "confirms_expansion": ("confirms_expansion", "扩张"),
+    "confirms_contraction_risk": ("confirms_contraction_risk", "收缩"),
+    "mixed": ("mixed", "分化"),
+    "elevated": ("elevated", "偏高"),
+    "supportive": ("supportive", "支持"),
+    "long": ("long", "偏多", "做多"),
+    "short": ("short", "偏空", "做空"),
+}
+
 _AUTHORITIES = (
     "decision_fact",
     "method_knowledge",
@@ -42,6 +87,10 @@ _ERROR_CODES = frozenset(
         "ANSWER_TEXT_MISMATCH",
         "EXACT_WORDING_UNAVAILABLE",
         "UNGROUNDED_CLAIM",
+        "UNCOVERED_TEXT",
+        "OVERLAPPING_TEXT",
+        "TEXT_FRAGMENT_MISMATCH",
+        "BINDING_TEXT_MISMATCH",
     }
 )
 
@@ -74,6 +123,7 @@ class AuditValue(BaseModel):
     name: str = Field(min_length=1)
     value: int | float | str
     source: FieldSemanticRef
+    text: str | None = None
 
 
 class ClaimSpan(BaseModel):
@@ -295,6 +345,7 @@ def _validate_span(claim, answer_text, artifacts):
         errors.extend(_validate_span_refs(claim, artifacts))
         errors.extend(_validate_span_values(claim, artifacts))
         errors.extend(_validate_grounding(claim, artifacts))
+        errors.extend(_validate_atomic_facts(claim, artifacts))
     if purpose == "exact_wording":
         errors.extend(_validate_exact_wording(claim, artifacts))
     errors.extend(_validate_span_language(claim))
@@ -323,6 +374,112 @@ def _validate_grounding(claim, artifacts):
                     )
                 )
     return errors
+
+
+def _validate_atomic_facts(claim, artifacts):
+    errors = []
+    claim_id = claim["claim_id"]
+    refs = claim["refs"]
+    values = claim["values"]
+    if not refs or not values:
+        return errors
+    detail_ref = None
+    for ref in refs:
+        resolved = _resolve_ref(claim_id, ref, artifacts)
+        if "code" in resolved:
+            continue
+        if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
+            detail_ref = resolved
+            break
+    if detail_ref is None:
+        return errors
+    exact_text = claim["exact_text"]
+    fragments = [value.get("text") for value in values]
+    if any(not isinstance(fragment, str) or not fragment for fragment in fragments):
+        errors.append(
+            _error(
+                "TEXT_FRAGMENT_MISMATCH",
+                "detail claim value requires a text fragment",
+                claim_id=claim_id,
+            )
+        )
+        return errors
+    positions = []
+    for fragment in fragments:
+        start = exact_text.find(fragment)
+        if start < 0:
+            errors.append(
+                _error(
+                    "TEXT_FRAGMENT_MISMATCH",
+                    "detail claim fragment is not in the claim text",
+                    claim_id=claim_id,
+                    expected=fragment,
+                )
+            )
+            return errors
+        positions.append((start, start + len(fragment)))
+    positions.sort()
+    covered = 0
+    for start, end in positions:
+        if start < covered:
+            errors.append(
+                _error(
+                    "OVERLAPPING_TEXT",
+                    "detail claim fragments overlap",
+                    claim_id=claim_id,
+                    expected=covered,
+                    actual=start,
+                )
+            )
+            break
+        if start > covered:
+            errors.append(
+                _error(
+                    "UNCOVERED_TEXT",
+                    "detail claim text is not bound",
+                    claim_id=claim_id,
+                    expected=covered,
+                    actual=start,
+                )
+            )
+            break
+        covered = end
+    if not errors and covered != len(exact_text):
+        errors.append(
+            _error(
+                "UNCOVERED_TEXT",
+                "detail claim text is not bound",
+                claim_id=claim_id,
+                expected=len(exact_text),
+                actual=covered,
+            )
+        )
+    for value, (start, end) in zip(values, positions):
+        fragment = value["text"]
+        bound_value = value["value"]
+        if not _fragment_supports_value(fragment, bound_value):
+            errors.append(
+                _error(
+                    "BINDING_TEXT_MISMATCH",
+                    "detail claim fragment does not support the bound value",
+                    claim_id=claim_id,
+                    field_id=value["name"],
+                    expected=_format_value(bound_value),
+                    actual=fragment,
+                )
+            )
+    return errors
+
+
+def _fragment_supports_value(fragment, bound_value):
+    if isinstance(bound_value, str) and bound_value:
+        if bound_value in fragment:
+            return True
+        labels = _DETAIL_VALUE_LABELS.get(bound_value)
+        if labels is None:
+            return False
+        return any(label in fragment for label in labels)
+    return _format_value(bound_value) in fragment
 
 
 def _validate_exact_wording(claim, artifacts):

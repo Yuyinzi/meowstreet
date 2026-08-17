@@ -1617,37 +1617,39 @@ def _grounded_policy_audit(recorder):
                         "object_id": obj["object_id"],
                     }
         answer_text = user_payload["answer_text"]
+        bound_start = answer_text.find("当前货币政策与增长方向不一致")
+        bound_end = answer_text.find("。", answer_text.find("整体立场偏鹰"))
+        if bound_end > 0:
+            bound_end += 1
+        exact_text = answer_text[bound_start:bound_end]
+        fragments = [
+            (
+                "relationship_to_growth_direction",
+                "conflicts",
+                "当前货币政策与增长方向不一致，显示冲突。",
+            ),
+            ("policy_action", "hold", "美联储最近一次决定是维持利率不变，"),
+            ("overall_bias", "mild_hawkish", "整体立场偏鹰。"),
+        ]
         claim = {
             "claim_id": "claim_1",
-            "start": 0,
-            "end": len(answer_text),
-            "exact_text": answer_text,
+            "start": bound_start,
+            "end": bound_end,
+            "exact_text": exact_text,
             "purpose": "decision_explanation",
             "authority": "decision_fact",
-            "refs": [ref],
-            "values": [],
+            "refs": [ref] if ref is not None else [],
+            "values": [
+                {
+                    "name": name,
+                    "value": value,
+                    "source": {**ref, "field": f"current.{name}"},
+                    "text": fragment,
+                }
+                for name, value, fragment in fragments
+                if ref is not None
+            ],
         }
-        if ref is not None:
-            claim["values"] = [
-                {
-                    "name": "policy_action",
-                    "value": "hold",
-                    "source": {**ref, "field": "current.policy_action"},
-                },
-                {
-                    "name": "overall_bias",
-                    "value": "mild_hawkish",
-                    "source": {**ref, "field": "current.overall_bias"},
-                },
-                {
-                    "name": "relationship_to_growth_direction",
-                    "value": "conflicts",
-                    "source": {
-                        **ref,
-                        "field": "current.relationship_to_growth_direction",
-                    },
-                },
-            ]
         return {"claims": [claim]}
 
     return fake_complete_structured
@@ -1659,7 +1661,6 @@ def test_hybrid_stream_policy_question_grounds_action_tone_and_relationship(
     answer = (
         "当前货币政策与增长方向不一致，显示冲突。"
         "美联储最近一次决定是维持利率不变，整体立场偏鹰。"
-        "政策行动与整体基调均有批准依据，可以直接报告。"
     )
     audit_recorder = []
     result = _hybrid_e2e(

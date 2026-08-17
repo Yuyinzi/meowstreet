@@ -968,18 +968,76 @@ def _claim_audit_factory():
                 "refs": [],
                 "values": [],
             }
-        else:
+            return {"claims": [claim]}
+        bound_values = _detail_bound_values(artifact_projection, ref)
+        marked = []
+        for value in bound_values:
+            index = answer_text.find(value["text"])
+            if index < 0:
+                continue
+            marked.append((index, index + len(value["text"]), value))
+        if not marked:
             claim = {
                 "claim_id": "claim_1",
                 "start": 0,
                 "end": len(answer_text),
                 "exact_text": answer_text,
+                "purpose": "illustration",
+                "authority": "hypothetical",
+                "refs": [],
+                "values": [],
+            }
+            return {"claims": [claim]}
+        marked.sort()
+        bound_start = marked[0][0]
+        bound_end = max(position[1] for position in marked)
+        tiled_values = []
+        cursor = bound_start
+        for start, end, value in marked:
+            value = dict(value)
+            value["text"] = answer_text[cursor:end]
+            cursor = end
+            tiled_values.append(value)
+        bound_text = answer_text[bound_start:bound_end]
+        claims = [
+            {
+                "claim_id": "claim_detail",
+                "start": bound_start,
+                "end": bound_end,
+                "exact_text": bound_text,
                 "purpose": "decision_explanation",
                 "authority": "decision_fact",
                 "refs": [ref],
-                "values": _detail_bound_values(artifact_projection, ref),
+                "values": tiled_values,
             }
-        return {"claims": [claim]}
+        ]
+        if bound_start > 0:
+            claims.append(
+                {
+                    "claim_id": "claim_lead",
+                    "start": 0,
+                    "end": bound_start,
+                    "exact_text": answer_text[0:bound_start],
+                    "purpose": "illustration",
+                    "authority": "hypothetical",
+                    "refs": [],
+                    "values": [],
+                }
+            )
+        if bound_end < len(answer_text):
+            claims.append(
+                {
+                    "claim_id": "claim_tail",
+                    "start": bound_end,
+                    "end": len(answer_text),
+                    "exact_text": answer_text[bound_end : len(answer_text)],
+                    "purpose": "illustration",
+                    "authority": "hypothetical",
+                    "refs": [],
+                    "values": [],
+                }
+            )
+        return {"claims": claims}
 
     return fake_complete_structured
 
@@ -1000,6 +1058,7 @@ def _detail_bound_values(artifact_projection, ref):
                                 "name": field,
                                 "value": current[field],
                                 "source": {**ref, "field": f"current.{field}"},
+                                "text": _display_fragment(current[field]),
                             }
                         )
                 relationship = current.get("relationship_to_growth_direction")
@@ -1012,10 +1071,21 @@ def _detail_bound_values(artifact_projection, ref):
                                 **ref,
                                 "field": "current.relationship_to_growth_direction",
                             },
+                            "text": _display_fragment(relationship),
                         }
                     )
                 return values
     return []
+
+
+def _display_fragment(value):
+    labels = {
+        "hold": "维持利率不变",
+        "mild_hawkish": "整体立场偏鹰",
+        "conflicts": "与增长方向不一致",
+        "supports": "与增长方向一致",
+    }
+    return labels.get(value, str(value))
 
 
 def _prepare_market_setup_harness(

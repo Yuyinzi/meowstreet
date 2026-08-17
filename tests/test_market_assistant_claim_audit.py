@@ -345,11 +345,13 @@ def test_audit_accepts_policy_action_and_overall_bias_bindings():
                 "name": "policy_action",
                 "value": "hold",
                 "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": "The latest decision was a hold and",
             },
             {
                 "name": "overall_bias",
                 "value": "mild_hawkish",
                 "source": {**policy_detail_ref(), "field": "current.overall_bias"},
+                "text": " the approved read was mildly hawkish.",
             },
         ],
     )
@@ -477,7 +479,7 @@ def test_audit_rejects_decision_fact_claim_referencing_source_object():
 
 
 def test_audit_accepts_source_binding_via_method_knowledge_authority():
-    answer = "The data comes from the July policy meeting."
+    answer = "The data comes from the 2026-07-01 policy meeting."
     ref = {
         "artifact_id": "ctx_123_evidence_detail_macro_policy_response",
         "object_type": "evidence_detail_source",
@@ -493,6 +495,7 @@ def test_audit_accepts_source_binding_via_method_knowledge_authority():
                 "name": "source_period",
                 "value": "2026-07-01",
                 "source": {**ref, "field": "source.source_period.effective_date"},
+                "text": "The data comes from the 2026-07-01 policy meeting.",
             }
         ],
     )
@@ -547,7 +550,95 @@ def test_audit_rejects_ungrounded_decision_detail_claim():
     assert any(error["code"] == "UNGROUNDED_CLAIM" for error in exc_info.value.errors)
 
 
+def test_audit_rejects_fabricated_text_with_one_real_binding():
+    answer = "The FOMC statement said remain patient; the action was a hold."
+    payload = audit_payload(
+        answer,
+        purpose="decision_explanation",
+        authority="decision_fact",
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": "the action was a hold",
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"]
+        in {"UNCOVERED_TEXT", "OVERLAPPING_TEXT", "TEXT_FRAGMENT_MISMATCH"}
+        for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_fragment_text_not_matching_bound_value():
+    answer = "The Fed cut rates."
+    payload = audit_payload(
+        answer,
+        purpose="decision_explanation",
+        authority="decision_fact",
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": "The Fed cut rates",
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] in {"BINDING_TEXT_MISMATCH", "TEXT_FRAGMENT_MISMATCH"}
+        for error in exc_info.value.errors
+    )
+
+
 def test_audit_accepts_grounded_decision_detail_claim():
+    answer = "The action was a hold; the overall bias was mildly hawkish."
+    ref = policy_detail_ref()
+    payload = audit_payload(
+        answer,
+        purpose="decision_explanation",
+        authority="decision_fact",
+        refs=[ref],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**ref, "field": "current.policy_action"},
+                "text": "The action was a hold;",
+            },
+            {
+                "name": "overall_bias",
+                "value": "mild_hawkish",
+                "source": {**ref, "field": "current.overall_bias"},
+                "text": " the overall bias was mildly hawkish.",
+            },
+        ],
+    )
+    validated = validate_claim_audit(
+        payload,
+        answer_text=answer,
+        artifacts=policy_detail_artifacts(),
+    )
+    assert validated["coverage_ratio"] == 1.0
+
+
+def test_audit_accepts_grounded_decision_detail_claim_with_natural_fragments():
     answer = "The decision was a hold with a mildly hawkish bias."
     ref = policy_detail_ref()
     payload = audit_payload(
@@ -560,11 +651,13 @@ def test_audit_accepts_grounded_decision_detail_claim():
                 "name": "policy_action",
                 "value": "hold",
                 "source": {**ref, "field": "current.policy_action"},
+                "text": "The decision was a hold",
             },
             {
                 "name": "overall_bias",
                 "value": "mild_hawkish",
                 "source": {**ref, "field": "current.overall_bias"},
+                "text": " with a mildly hawkish bias.",
             },
         ],
     )

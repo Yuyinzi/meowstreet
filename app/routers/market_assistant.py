@@ -375,7 +375,12 @@ def _claim_audit_prompt(answer_text, explanation_view, artifact_projection):
                 "Any span that quotes or characterizes exact statement wording must use "
                 "purpose exact_wording; exact wording is only available when the "
                 "referenced artifact object declares exact_excerpt_capable, otherwise "
-                "the claim will be rejected."
+                "the claim will be rejected. "
+                "For spans referencing evidence-detail objects, every value binding "
+                "must carry the exact text fragment it supports (the substring of the "
+                "claim text that asserts that value), the fragments must cover the "
+                "claim text exactly with no gaps or overlaps, and each fragment must "
+                "contain the bound value or an approved display label."
             ),
         },
         {
