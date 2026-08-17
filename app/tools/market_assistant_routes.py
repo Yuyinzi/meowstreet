@@ -9,20 +9,12 @@ from pydantic import ValidationError
 
 ROUTE_IDS = (
     "current_setup_overview",
-    "why_macro_regime",
-    "why_market_confirmation",
-    "why_portfolio_posture",
-    "indicator_confirmation",
-    "indicator_definition",
-    "indicator_method",
+    "indicator_question",
+    "why_setup_layer",
     "react",
 )
 
 _REACT_ROUTE_ID = "react"
-
-_INDICATOR_ROUTE_IDS = frozenset(
-    {"indicator_confirmation", "indicator_definition", "indicator_method"}
-)
 
 _VIEW_TYPE_IDS = (
     "setup_explanation",
@@ -75,12 +67,16 @@ _ROUTE_OPERATIONS = {
         "get_posture_explanation",
         "get_approved_counterfactuals",
     ),
-    "why_macro_regime": ("get_macro_regime_explanation",),
-    "why_market_confirmation": ("get_confirmation_tests",),
-    "why_portfolio_posture": ("get_posture_explanation",),
-    "indicator_confirmation": ("get_indicator_confirmation",),
-    "indicator_definition": ("get_indicator_definition",),
-    "indicator_method": ("get_indicator_method",),
+    "indicator_question": (
+        "get_indicator_confirmation",
+        "get_indicator_definition",
+        "get_indicator_method",
+    ),
+    "why_setup_layer": (
+        "get_macro_regime_explanation",
+        "get_confirmation_tests",
+        "get_posture_explanation",
+    ),
     "react": (),
 }
 
@@ -90,27 +86,20 @@ _SUPPLEMENTARY_TOOLS = {
         "get_indicator_definition",
         "get_indicator_method",
     ),
-    "why_macro_regime": ("get_indicator_current", "get_indicator_definition"),
-    "why_market_confirmation": ("get_indicator_current", "get_indicator_definition"),
-    "why_portfolio_posture": ("get_indicator_current", "get_indicator_definition"),
-    "indicator_confirmation": (
+    "indicator_question": (
+        "get_indicator_current",
         "get_indicator_definition",
         "get_indicator_method",
         "query_indicator_history",
     ),
-    "indicator_definition": ("get_indicator_current", "get_indicator_method"),
-    "indicator_method": ("get_indicator_current", "get_indicator_definition"),
+    "why_setup_layer": ("get_indicator_current", "get_indicator_definition"),
     "react": (),
 }
 
 _VIEW_TYPES = {
     "current_setup_overview": "setup_explanation",
-    "why_macro_regime": "setup_explanation",
-    "why_market_confirmation": "setup_explanation",
-    "why_portfolio_posture": "setup_explanation",
-    "indicator_confirmation": "indicator_explanation",
-    "indicator_definition": "indicator_explanation",
-    "indicator_method": "method_explanation",
+    "indicator_question": "indicator_explanation",
+    "why_setup_layer": "setup_explanation",
     "react": "react_anchor",
 }
 
@@ -129,15 +118,19 @@ _INDICATOR_ALIASES = (
 )
 
 _EXPLANATION_TOPICS = (
-    ("why_macro_regime", ("宏观", "macro regime", "macro environment")),
-    ("why_market_confirmation", ("确认", "market confirmation", "confirmation")),
     (
-        "why_portfolio_posture",
+        "why_setup_layer",
         (
+            "宏观",
+            "确认",
             "组合",
             "仓位",
             "持仓",
             "偏积极",
+            "macro regime",
+            "macro environment",
+            "market confirmation",
+            "confirmation",
             "portfolio posture",
             "posture",
             "risk-on",
@@ -357,11 +350,11 @@ def _indicator_route(lowered, compact):
         return None
     indicator_id = indicator_ids[0]
     if _contains_any(compact, lowered, _CONFIRMATION_MARKERS):
-        return _route_match("indicator_confirmation", indicator_id)
+        return _route_match("indicator_question", indicator_id)
     if _contains_any(compact, lowered, _DEFINITION_MARKERS):
-        return _route_match("indicator_definition", indicator_id)
+        return _route_match("indicator_question", indicator_id)
     if _contains_any(compact, lowered, _METHOD_MARKERS):
-        return _route_match("indicator_method", indicator_id)
+        return _route_match("indicator_question", indicator_id)
     return None
 
 

@@ -59,12 +59,8 @@ _DEPENDENCY_DEFAULTS = {
 
 _FALLBACK_INTENT_BY_ROUTE = {
     "current_setup_overview": "decision_explanation",
-    "why_macro_regime": "decision_explanation",
-    "why_market_confirmation": "decision_explanation",
-    "why_portfolio_posture": "decision_explanation",
-    "indicator_confirmation": "decision_explanation",
-    "indicator_definition": "definition",
-    "indicator_method": "method",
+    "indicator_question": "decision_explanation",
+    "why_setup_layer": "decision_explanation",
     "react": "decision_explanation",
 }
 
