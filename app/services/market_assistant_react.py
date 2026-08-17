@@ -52,9 +52,14 @@ _STAGE_BY_TOOL = {
     "get_confirmation_test": "checking_confirmation",
     "get_confirmation_tests": "checking_confirmation",
     "get_indicator_knowledge": "reading_setup",
+    "get_indicator_definition": "reading_setup",
+    "get_indicator_method": "reading_setup",
     "get_indicator_current": "querying_history",
     "query_indicator_history": "querying_history",
     "compare_snapshots": "comparing_evidence",
+    "research_focused": "querying_history",
+    "research_standard": "querying_history",
+    "research_deep": "querying_history",
 }
 
 _STAGE_ORDER = (
@@ -90,8 +95,10 @@ _INSTRUCTIONS = (
     "You are the Market Setup narration assistant. "
     "Narrate the current market setup, confirmation evidence, and portfolio posture "
     "from the tool evidence provided in this conversation. "
-    "Answer in the language required by the newest user message. Only call tools listed "
-    "as authorized in that message. Do not invent facts, thresholds, or causality "
+    "Answer in the language required by the newest user message. Some relevant evidence "
+    "has already been fetched and is shown in this conversation. You may call any of "
+    "the available tools if you need additional evidence. Do not invent facts, "
+    "thresholds, or causality "
     "that the evidence does not support. When evidence is unavailable, say it is "
     "unavailable rather than guessing."
 )
@@ -207,30 +214,8 @@ def _translated_initial_calls(route):
     return calls
 
 
-def _model_tool_ids(request, route):
-    if route["route_id"] == "react":
-        tool_ids = list(_REACT_TOOL_IDS)
-    else:
-        tool_ids = list(route.get("supplementary_tools") or [])
-    tool_ids.extend(_authorized_research_tools(request))
-    seen = set()
-    unique = []
-    for tool_id in tool_ids:
-        if tool_id not in seen:
-            seen.add(tool_id)
-            unique.append(tool_id)
-    return tuple(unique)
-
-
-def _authorized_research_tools(request):
-    if not request.get("external_search_requested"):
-        return []
-    tier = request.get("research_tier")
-    if tier is None:
-        tier = "deep" if request.get("deep_research_requested") else "standard"
-    if tier not in _RESEARCH_TOOL_IDS:
-        raise ValueError("research tier is unknown")
-    return list(_RESEARCH_TOOL_IDS[tier])
+def _available_tool_ids():
+    return tuple(ALL_TOOL_IDS)
 
 
 def _validate_request(request):
@@ -260,8 +245,7 @@ async def run_hybrid_narration(
     if event_sink is None:
         event_sink = _optional_dependency(dependencies, "event_sink")
     budget = route["budget"]
-    tool_ids = _model_tool_ids(request, route)
-    tool_id_set = set(tool_ids)
+    tool_ids = _available_tool_ids()
     client = _dependency(dependencies, "client")
     model = _model(dependencies)
     reasoning_effort = _reasoning_effort(dependencies)
@@ -345,7 +329,7 @@ async def run_hybrid_narration(
         history_items,
         answer_language=request.get("answer_language")
         or _question_language(request["question"]),
-        authorized_tool_ids=tool_ids,
+            available_tool_ids=tool_ids,
     )
     current_user_item = input_items[-1]
     new_provider_items = [current_user_item]
@@ -408,7 +392,6 @@ async def run_hybrid_narration(
             round_number += 1
             accepted, rejected = _classify_calls(
                 turn["tool_calls"],
-                tool_id_set,
                 validate_call,
                 normalize_key,
                 seen_calls,
@@ -544,7 +527,7 @@ def _initial_input_items(
     view,
     history_items=None,
     answer_language=None,
-    authorized_tool_ids=(),
+    available_tool_ids=(),
 ):
     items = list(history_items or [])
     items.append(
@@ -561,8 +544,8 @@ def _initial_input_items(
                 },
                 {
                     "type": "input_text",
-                    "text": "Authorized tools for this request: "
-                    + json.dumps(list(authorized_tool_ids), ensure_ascii=False),
+                    "text": "Pre-fetched evidence is shown above. You may call any "
+                    "of the available tools if you need more evidence.",
                 },
             ],
         }
@@ -644,7 +627,6 @@ def _output_items(accepted, records, rejected):
 
 def _classify_calls(
     turn_calls,
-    tool_id_set,
     validate_call,
     normalize_key,
     seen_calls,
@@ -656,7 +638,7 @@ def _classify_calls(
     round_keys = set()
     for call in turn_calls:
         try:
-            validated = validate_call(call, tool_id_set)
+            validated = validate_call(call)
         except ValueError:
             rejected.append({"call": call, "reason": "tool_call_invalid"})
             continue
