@@ -210,16 +210,6 @@ async def _frozen_snapshot(dependencies, resolution):
 
 async def execute_tool_call(call, *, request, resolution, dependencies, created_at):
     tool_name, arguments = _normalized_call(call)
-    missing_control = _missing_policy_control(tool_name, request)
-    if missing_control is not None:
-        artifact = _policy_blocked_artifact(tool_name, missing_control, created_at)
-        return {
-            "call_id": call.get("call_id", ""),
-            "tool_name": tool_name,
-            "arguments": arguments,
-            "artifact": artifact,
-            "progress_label": _PROGRESS_LABELS.get(tool_name, "reading local evidence"),
-        }
     operation = {"operation_id": tool_name, "parameters": arguments}
     artifact = await acquire_operation_artifact(
         operation,
@@ -283,6 +273,9 @@ async def acquire_operation_artifact(
 ):
     operation_id = operation["operation_id"]
     parameters = operation.get("parameters") or {}
+    missing_control = _missing_policy_control(operation_id, request)
+    if missing_control is not None:
+        return _policy_blocked_artifact(operation_id, missing_control, created_at)
     if operation_id == "resolve_current_explanation":
         snapshot = await _frozen_snapshot(dependencies, resolution)
         return snapshot_artifact(snapshot)

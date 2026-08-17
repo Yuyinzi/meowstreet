@@ -381,7 +381,7 @@ def test_audit_rejects_string_value_for_numeric_field_without_coercion():
 
 
 def test_audit_accepts_policy_action_and_overall_bias_bindings():
-    answer = "The latest decision was a hold and the approved read was mildly hawkish."
+    answer = "最近一次政策决定为维持利率不变。整体立场为偏鹰。"
     payload = audit_payload(
         answer,
         refs=[policy_detail_ref()],
@@ -390,13 +390,13 @@ def test_audit_accepts_policy_action_and_overall_bias_bindings():
                 "name": "policy_action",
                 "value": "hold",
                 "source": {**policy_detail_ref(), "field": "current.policy_action"},
-                "text": "The latest decision was a hold and",
+                "text": "最近一次政策决定为维持利率不变",
             },
             {
                 "name": "overall_bias",
                 "value": "mild_hawkish",
                 "source": {**policy_detail_ref(), "field": "current.overall_bias"},
-                "text": " the approved read was mildly hawkish.",
+                "text": "。整体立场为偏鹰。",
             },
         ],
     )
@@ -1026,8 +1026,8 @@ def test_audit_rejects_quoted_speech_without_capable_artifact():
     )
 
 
-def test_audit_accepts_approved_summary_language_without_quotes():
-    answer = "经批准的行动总结是维持利率不变，整体立场偏鹰。"
+def test_audit_rejects_unlisted_attribution_forging_fed_wording():
+    answer = "The FOMC message was rates stay on hold."
     payload = audit_payload(
         answer,
         refs=[policy_detail_ref()],
@@ -1036,14 +1036,133 @@ def test_audit_accepts_approved_summary_language_without_quotes():
                 "name": "policy_action",
                 "value": "hold",
                 "source": {**policy_detail_ref(), "field": "current.policy_action"},
-                "text": "经批准的行动总结是维持利率不变，",
-            },
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_did_not_actually_hold():
+    answer = "The Fed did not actually hold."
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
             {
-                "name": "overall_bias",
-                "value": "mild_hawkish",
-                "source": {**policy_detail_ref(), "field": "current.overall_bias"},
-                "text": "整体立场偏鹰。",
-            },
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_no_longer_hold():
+    answer = "The policy was no longer hold."
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_signed_negative_numeric_for_positive_value():
+    answer = "The level is -2."
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": 2,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=numeric_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_chinese_negation_before_canonical_fact():
+    answer = "最近一次政策决定不是维持利率不变"
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_accepts_chinese_canonical_hold_fact():
+    answer = "最近一次政策决定为维持利率不变。"
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": "最近一次政策决定为维持利率不变。",
+            }
         ],
     )
     validated = validate_claim_audit(
@@ -1052,3 +1171,50 @@ def test_audit_accepts_approved_summary_language_without_quotes():
         artifacts=policy_detail_artifacts(),
     )
     assert validated["coverage_ratio"] == 1.0
+
+
+def test_audit_accepts_approved_summary_language_without_quotes():
+    answer = "经批准的行动总结：最近一次政策决定为维持利率不变。整体立场为偏鹰。"
+    lead = "经批准的行动总结："
+    detail_start = len(lead)
+    detail_text = answer[detail_start:]
+    detail_claim = {
+        "claim_id": "claim_detail",
+        "start": detail_start,
+        "end": len(answer),
+        "exact_text": detail_text,
+        "purpose": "decision_explanation",
+        "authority": "decision_fact",
+        "refs": [policy_detail_ref()],
+        "values": [
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": "最近一次政策决定为维持利率不变",
+            },
+            {
+                "name": "overall_bias",
+                "value": "mild_hawkish",
+                "source": {**policy_detail_ref(), "field": "current.overall_bias"},
+                "text": "。整体立场为偏鹰。",
+            },
+        ],
+    }
+    lead_claim = {
+        "claim_id": "claim_lead",
+        "start": 0,
+        "end": detail_start,
+        "exact_text": lead,
+        "purpose": "illustration",
+        "authority": "hypothetical",
+        "refs": [],
+        "values": [],
+    }
+    payload = {"claims": [lead_claim, detail_claim]}
+    validated = validate_claim_audit(
+        payload,
+        answer_text=answer,
+        artifacts=policy_detail_artifacts(),
+    )
+    assert validated["coverage_ratio"] >= 0.8

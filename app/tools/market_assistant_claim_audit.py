@@ -16,6 +16,43 @@ _DETAIL_OBJECT_TYPES = frozenset(
     {"evidence_detail", "evidence_detail_source", "evidence_detail_method"}
 )
 
+_DETAIL_FACT_TEMPLATES = {
+    ("policy_action", "hold"): "最近一次政策决定为维持利率不变",
+    ("policy_action", "hike"): "最近一次政策决定为加息",
+    ("policy_action", "cut"): "最近一次政策决定为降息",
+    ("overall_bias", "mild_hawkish"): "整体立场为偏鹰",
+    ("overall_bias", "hawkish"): "整体立场为鹰派",
+    ("overall_bias", "mild_dovish"): "整体立场为偏鸽",
+    ("overall_bias", "dovish"): "整体立场为鸽派",
+    ("overall_bias", "more_hawkish"): "立场更偏鹰",
+    ("overall_bias", "more_dovish"): "立场更偏鸽",
+    ("relationship_to_growth_direction", "conflicts"): "与当前增长方向不一致",
+    ("relationship_to_growth_direction", "supports"): "与当前增长方向一致",
+}
+
+_LATIN_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+_CJK_CHAR_RE = re.compile(r"[\u3400-\u9fff]")
+
+_NEGATION_WORDS = frozenset(
+    {"not", "no", "never", "without", "nor", "neither", "non", "un", "dis", "de"}
+)
+_NEGATION_CHARS = frozenset("不没未非无别毋勿")
+_NEGATION_WINDOW = 12
+
+_QUOTED_OR_ATTRIBUTED_RE = re.compile(
+    r'["“”‘’「」『』]'
+    r"|\b(?:said|says|stated|states|announced|declared|reported|reportedly|"
+    r"according to|quoted|quote|verbatim|wording|message|statement|"
+    r"communicated|instructed|told)\b"
+    r"|(?:原话|原文|措辞|引述|报告称|声明称|宣布|表述)",
+    re.IGNORECASE,
+)
+
+_STRIP_EDGE_PUNCT_RE = re.compile(
+    r"^[\s.,;:!?。，；：！？、…\u3000]+|[\s.,;:!?。，；：！？、…\u3000]+$"
+)
+
+
 _LATIN_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 _CJK_CHAR_RE = re.compile(r"[\u3400-\u9fff]")
 
@@ -510,7 +547,7 @@ def _validate_atomic_facts(claim, artifacts):
     for value, (start, end) in zip(values, positions):
         fragment = value["text"]
         bound_value = value["value"]
-        if not _fragment_supports_value(fragment, bound_value):
+        if not _fragment_supports_field_value(value["name"], fragment, bound_value):
             errors.append(
                 _error(
                     "BINDING_TEXT_MISMATCH",
@@ -532,10 +569,36 @@ def _ref_key(ref):
     )
 
 
-def _fragment_supports_value(fragment, bound_value):
+def _fragment_supports_field_value(field, fragment, bound_value):
+    canonical = _canonical_fact_fragment(field, bound_value)
+    if canonical is not None:
+        return _canonically_rendered(fragment, canonical)
     if isinstance(bound_value, str) and bound_value:
         return _string_value_supported(fragment, bound_value)
     return _numeric_value_supported(fragment, bound_value)
+
+
+def _canonical_fact_fragment(field, bound_value):
+    canonical = _DETAIL_FACT_TEMPLATES.get((field, bound_value))
+    if canonical is not None:
+        return canonical
+    labels = _DETAIL_VALUE_LABELS.get(bound_value)
+    if labels is None:
+        return None
+    for label in labels[1:]:
+        candidate = _DETAIL_FACT_TEMPLATES.get((field, label))
+        if candidate is not None:
+            return candidate
+    return None
+
+
+def _canonically_rendered(fragment, canonical):
+    if not fragment:
+        return False
+    core = fragment.strip()
+    core = _STRIP_EDGE_PUNCT_RE.sub("", core)
+    canonical_core = _STRIP_EDGE_PUNCT_RE.sub("", canonical)
+    return core == canonical_core
 
 
 def _string_value_supported(fragment, bound_value):
@@ -566,11 +629,20 @@ def _token_positively_present(fragment, token):
 
 
 def _latin_token_positively_present(fragment, token):
-    pattern = rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])"
+    pattern = rf"(?<![A-Za-z0-9-]){re.escape(token)}(?![0-9])"
+    return _unnegated_match(fragment, pattern)
+
+
+def _has_negation_within_window(fragment, match_start):
+    start = max(0, match_start - _NEGATION_WINDOW)
+    window = fragment[start:match_start]
+    words = _LATIN_TOKEN_RE.findall(window.lower())
+    return any(word in _NEGATION_WORDS for word in words)
+
+
+def _unnegated_match(fragment, pattern):
     for match in re.finditer(pattern, fragment, re.IGNORECASE):
-        prefix = fragment[: match.start()]
-        words = _LATIN_TOKEN_RE.findall(prefix)
-        if words and words[-1].lower() in _NEGATION_WORDS:
+        if _has_negation_within_window(fragment, match.start()):
             continue
         return True
     return False

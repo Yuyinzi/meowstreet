@@ -1143,3 +1143,36 @@ def test_missing_policy_control_reports_missing_research_control():
         _missing_policy_control("research_deep", {"external_search_requested": True})
         == "deep_research_requested"
     )
+
+
+def test_acquire_registered_artifacts_applies_policy_gate():
+    from app.services.market_assistant_tool_runtime import TOOL_RUNTIME_POLICIES
+    from app.services.market_assistant_tool_runtime import acquire_registered_artifacts
+
+    saved = TOOL_RUNTIME_POLICIES["get_setup_overview"]
+    TOOL_RUNTIME_POLICIES["get_setup_overview"] = (
+        "external_read",
+        ("future_side_effect_approved",),
+    )
+    try:
+        artifacts, _ = asyncio.run(
+            acquire_registered_artifacts(
+                [{"operation_id": "get_setup_overview", "parameters": {}}],
+                request={},
+                resolution=resolved_context("ctx_current"),
+                dependencies=fake_dependencies(),
+                created_at="2026-08-13T00:00:00Z",
+            )
+        )
+    finally:
+        TOOL_RUNTIME_POLICIES["get_setup_overview"] = saved
+    blocked = [
+        artifact
+        for artifact in artifacts.values()
+        if artifact["payload"].get("status") == "capability_unavailable"
+    ]
+    assert len(blocked) == 1
+    assert (
+        blocked[0]["payload"]["reason_code"]
+        == "future_side_effect_approved_not_requested"
+    )

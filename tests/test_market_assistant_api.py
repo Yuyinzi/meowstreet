@@ -1444,51 +1444,55 @@ def _grounded_policy_audit(recorder):
                         "object_id": obj["object_id"],
                     }
         answer_text = user_payload["answer_text"]
-        bound_start = answer_text.find("当前货币政策与增长方向不一致")
-        bound_end = answer_text.find("。", answer_text.find("整体立场偏鹰"))
-        if bound_end > 0:
-            bound_end += 1
-        exact_text = answer_text[bound_start:bound_end]
-        fragments = [
-            (
-                "relationship_to_growth_direction",
-                "conflicts",
-                "当前货币政策与增长方向不一致，显示冲突。",
-            ),
-            ("policy_action", "hold", "美联储最近一次决定是维持利率不变，"),
-            ("overall_bias", "mild_hawkish", "整体立场偏鹰。"),
+        fragments = _canonical_policy_fragments(
+            conflicts="与当前增长方向不一致",
+            hold="最近一次政策决定为维持利率不变",
+            bias="整体立场为偏鹰",
+        )
+        claim_text = "".join(fragment for _, _, fragment in fragments)
+        start = answer_text.find(next(fragment for _, _, fragment in fragments))
+        bound_end = start + len(claim_text)
+        if start < 0:
+            start = 0
+            bound_end = len(answer_text)
+        detail_values = [
+            {
+                "name": name,
+                "value": value,
+                "source": {**ref, "field": f"current.{name}"},
+                "text": fragment,
+            }
+            for name, value, fragment in fragments
         ]
-        claim = {
-            "claim_id": "claim_1",
-            "start": bound_start,
-            "end": bound_end,
-            "exact_text": exact_text,
-            "purpose": "decision_explanation",
-            "authority": "decision_fact",
-            "refs": [ref] if ref is not None else [],
-            "values": [
-                {
-                    "name": name,
-                    "value": value,
-                    "source": {**ref, "field": f"current.{name}"},
-                    "text": fragment,
-                }
-                for name, value, fragment in fragments
-                if ref is not None
-            ],
-        }
-        return {"claims": [claim]}
+        claims = [
+            {
+                "claim_id": "claim_1",
+                "start": start,
+                "end": bound_end,
+                "exact_text": claim_text,
+                "purpose": "decision_explanation",
+                "authority": "decision_fact",
+                "refs": [ref] if ref is not None else [],
+                "values": detail_values if ref is not None else [],
+            }
+        ]
+        return {"claims": claims}
 
     return fake_complete_structured
+
+
+def _canonical_policy_fragments(conflicts, hold, bias):
+    return [
+        ("relationship_to_growth_direction", "conflicts", conflicts),
+        ("policy_action", "hold", hold),
+        ("overall_bias", "mild_hawkish", bias),
+    ]
 
 
 def test_hybrid_stream_policy_question_grounds_action_tone_and_relationship(
     monkeypatch, tmp_path
 ):
-    answer = (
-        "当前货币政策与增长方向不一致，显示冲突。"
-        "美联储最近一次决定是维持利率不变，整体立场偏鹰。"
-    )
+    answer = "与当前增长方向不一致最近一次政策决定为维持利率不变整体立场为偏鹰"
     detail_call = {
         "call_id": "call_policy_detail",
         "tool_name": "get_evidence_detail",

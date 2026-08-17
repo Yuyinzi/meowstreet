@@ -225,8 +225,12 @@ def _claim_audit_prompt(answer_text, explanation_view, artifact_projection):
                 "For spans referencing evidence-detail objects, every value binding "
                 "must carry the exact text fragment it supports (the substring of the "
                 "claim text that asserts that value), the fragments must cover the "
-                "claim text exactly with no gaps or overlaps, and each fragment must "
-                "contain the bound value or an approved display label."
+                "claim text exactly with no gaps or overlaps, and each fragment for "
+                "an enumerated fact field must equal the approved canonical rendering "
+                "of that field and value (for example policy_action 'hold' renders as "
+                "'最近一次政策决定为维持利率不变'). You may write connective sentences "
+                "around facts, but you may not paraphrase or attribute the fact "
+                "assertion itself."
             ),
         },
         {
