@@ -21,7 +21,6 @@ def test_snapshot_tool_rejects_model_supplied_context_id():
                 "tool_name": "get_confirmation_test",
                 "arguments": {"test_id": "vix", "context_id": "ctx_other"},
             },
-            {"get_confirmation_test"},
         )
 
 
@@ -36,7 +35,6 @@ def test_history_tool_rejects_url_and_unknown_indicator():
                     "window": "6m",
                 },
             },
-            {"query_indicator_history"},
         )
 
 
@@ -60,17 +58,16 @@ def test_valid_snapshot_tool_call_returns_plain_dict():
         "tool_name": "get_setup_overview",
         "arguments": {},
     }
-    assert validate_tool_call(call, {"get_setup_overview"}) == call
+    assert validate_tool_call(call) == call
 
 
-def test_tool_not_in_allowed_ids_rejected():
+def test_registered_tool_is_accepted_without_allow_list():
     call = {
         "call_id": "call_4",
         "tool_name": "get_confirmation_test",
         "arguments": {"test_id": "vix"},
     }
-    with pytest.raises(ValueError, match="tool call is invalid"):
-        validate_tool_call(call, {"get_setup_overview"})
+    assert validate_tool_call(call) == call
 
 
 def test_unknown_tool_rejected_even_when_allowed():
@@ -80,7 +77,7 @@ def test_unknown_tool_rejected_even_when_allowed():
         "arguments": {"sql": "select 1"},
     }
     with pytest.raises(ValueError, match="tool call is invalid"):
-        validate_tool_call(call, {"run_sql"})
+        validate_tool_call(call)
 
 
 @pytest.mark.parametrize("call_id", ["", "   ", None, 123])
@@ -91,7 +88,7 @@ def test_empty_or_malformed_call_id_rejected(call_id):
         "arguments": {"test_id": "vix"},
     }
     with pytest.raises(ValueError, match="tool call is invalid"):
-        validate_tool_call(call, {"get_confirmation_test"})
+        validate_tool_call(call)
 
 
 @pytest.mark.parametrize("test_id", ["equity", "credit", "vix"])
@@ -102,7 +99,6 @@ def test_confirmation_test_accepts_each_test_id(test_id):
             "tool_name": "get_confirmation_test",
             "arguments": {"test_id": test_id},
         },
-        {"get_confirmation_test"},
     )
     assert validated["arguments"]["test_id"] == test_id
 
@@ -115,7 +111,6 @@ def test_confirmation_test_rejects_unknown_test_id():
                 "tool_name": "get_confirmation_test",
                 "arguments": {"test_id": "gold"},
             },
-            {"get_confirmation_test"},
         )
 
 
@@ -127,7 +122,6 @@ def test_confirmation_tests_requires_non_empty_list():
                 "tool_name": "get_confirmation_tests",
                 "arguments": {"test_ids": []},
             },
-            {"get_confirmation_tests"},
         )
 
 
@@ -138,7 +132,6 @@ def test_confirmation_tests_accepts_multiple_test_ids():
             "tool_name": "get_confirmation_tests",
             "arguments": {"test_ids": ["equity", "credit", "vix"]},
         },
-        {"get_confirmation_tests"},
     )
     assert validated["arguments"]["test_ids"] == ["equity", "credit", "vix"]
 
@@ -151,7 +144,6 @@ def test_indicator_knowledge_rejects_unknown_topic():
                 "tool_name": "get_indicator_knowledge",
                 "arguments": {"indicator_id": "vix", "topic": "sql"},
             },
-            {"get_indicator_knowledge"},
         )
 
 
@@ -163,7 +155,6 @@ def test_indicator_knowledge_rejects_sql_shaped_indicator():
                 "tool_name": "get_indicator_knowledge",
                 "arguments": {"indicator_id": "vix; drop table", "topic": "definition"},
             },
-            {"get_indicator_knowledge"},
         )
 
 
@@ -178,7 +169,6 @@ def test_history_accepts_iso_dates():
                 "end": "2026-06-30",
             },
         },
-        {"query_indicator_history"},
     )
     assert validated["arguments"]["start"] == "2026-01-01"
     assert validated["arguments"]["end"] == "2026-06-30"
@@ -198,7 +188,6 @@ def test_history_rejects_both_window_and_dates():
                     "end": "2026-06-30",
                 },
             },
-            {"query_indicator_history"},
         )
 
 
@@ -210,7 +199,6 @@ def test_history_rejects_neither_window_nor_dates():
                 "tool_name": "query_indicator_history",
                 "arguments": {"indicator_id": "vix"},
             },
-            {"query_indicator_history"},
         )
 
 
@@ -226,7 +214,6 @@ def test_history_rejects_invalid_iso_date():
                     "end": "2026-06-30",
                 },
             },
-            {"query_indicator_history"},
         )
 
 
@@ -237,7 +224,6 @@ def test_compare_snapshots_accepts_context_pairs():
             "tool_name": "compare_snapshots",
             "arguments": {"context_a_id": "ctx_a", "context_b_id": "ctx_b"},
         },
-        {"compare_snapshots"},
     )
     assert validated["arguments"]["context_a_id"] == "ctx_a"
     assert validated["arguments"]["context_b_id"] == "ctx_b"
@@ -254,7 +240,6 @@ def test_research_tool_uses_bounded_research_contract():
                 "expected_source_class": "official_publication",
             },
         },
-        {"research_focused"},
     )
     assert validated["arguments"]["queries"] == ["latest ism report"]
 
@@ -271,7 +256,6 @@ def test_research_tool_rejects_url_query():
                     "expected_source_class": "official_publication",
                 },
             },
-            {"research_deep"},
         )
 
 
@@ -337,7 +321,7 @@ def test_evidence_detail_accepts_valid_call():
             "topics": ["current", "drivers", "source"],
         },
     }
-    assert validate_tool_call(call, {"get_evidence_detail"}) == call
+    assert validate_tool_call(call) == call
 
 
 def test_evidence_detail_rejects_unknown_fact():
@@ -348,7 +332,6 @@ def test_evidence_detail_rejects_unknown_fact():
                 "tool_name": "get_evidence_detail",
                 "arguments": {"fact_id": "unknown_fact", "topics": ["current"]},
             },
-            {"get_evidence_detail"},
         )
 
 
@@ -360,7 +343,6 @@ def test_evidence_detail_rejects_empty_topics():
                 "tool_name": "get_evidence_detail",
                 "arguments": {"fact_id": "macro_policy_response", "topics": []},
             },
-            {"get_evidence_detail"},
         )
 
 
@@ -375,7 +357,6 @@ def test_evidence_detail_rejects_duplicate_topics():
                     "topics": ["current", "current"],
                 },
             },
-            {"get_evidence_detail"},
         )
 
 
@@ -390,7 +371,6 @@ def test_evidence_detail_rejects_unknown_topic():
                     "topics": ["sql"],
                 },
             },
-            {"get_evidence_detail"},
         )
 
 
@@ -406,7 +386,6 @@ def test_evidence_detail_rejects_extra_arguments():
                     "sql": "select 1",
                 },
             },
-            {"get_evidence_detail"},
         )
 
 
@@ -422,7 +401,6 @@ def test_evidence_detail_rejects_model_supplied_context_id():
                     "context_id": "ctx_other",
                 },
             },
-            {"get_evidence_detail"},
         )
 
 

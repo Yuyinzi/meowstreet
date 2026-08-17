@@ -241,13 +241,8 @@ _TOOL_DESCRIPTIONS = {
 }
 
 
-def validate_tool_call(payload, allowed_tool_ids):
+def validate_tool_call(payload):
     if not isinstance(payload, dict):
-        raise ValueError("tool call is invalid")
-    if not isinstance(allowed_tool_ids, set):
-        raise ValueError("tool call is invalid")
-    tool_name = payload.get("tool_name")
-    if tool_name not in allowed_tool_ids:
         raise ValueError("tool call is invalid")
     try:
         validated = _TOOL_CALL_ADAPTER.validate_python(payload)

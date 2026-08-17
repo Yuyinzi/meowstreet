@@ -770,14 +770,6 @@ def test_watch_only_update_changes_explanation_context_not_market_setup(resolver
     assert first["snapshot"]["results"] == second["snapshot"]["results"]
 
 
-def test_external_vix_update_cannot_change_accepted_vix_or_posture(answer_harness):
-    response = answer_harness.answer(accepted_vix=18.4, researched_vix=23.0)
-
-    assert response.trace_authorities == ["decision_fact", "external_research"]
-    assert response.snapshot["results"]["portfolio_posture"]["code"] == "mild_risk_off"
-    assert response.snapshot_fact("vix_level")["accepted_values"][0]["value"] == 18.4
-
-
 def test_stale_required_evidence_is_not_evaluated_as_false(snapshot_harness):
     fact = snapshot_harness.build(vix_status="stale").fact("vix_level")
 
@@ -800,16 +792,6 @@ def test_historical_snapshot_uses_frozen_v2_predicate_after_contract_upgrade(
         "decision_contract"
     ]["predicates"]["downside"]
     assert predicate["operand"] == 20.0
-
-
-def test_unvalidated_draft_and_failed_repair_keeps_initial_draft_visible(
-    answer_harness,
-):
-    response = answer_harness.answer(draft=invalid_draft(), repair=invalid_draft())
-
-    assert response["generation_status"] == "validation_failed_visible"
-    assert response["validation_error_codes"]
-    assert "unvalidated model text" in response["answer_text"]
 
 
 _FORBIDDEN_BEGINNER_TOKENS = (
@@ -1391,8 +1373,8 @@ def test_llm_disabled_configuration_keeps_market_setup_intact(monkeypatch, tmp_p
     )
     after = client.get("/api/macro-dashboard/market-setup").json()
 
-    assert response.status_code == 200
-    assert response.json()["generation_status"] == "fallback"
+    assert response.status_code == 400
+    assert response.json()["detail"] == "dependency is missing: client"
     assert decision_projection(before) == decision_projection(after)
 
 

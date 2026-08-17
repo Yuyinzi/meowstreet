@@ -17,15 +17,12 @@ from app.llm import load_market_assistant_config
 from app.services import market_assistant as market_assistant_service
 from app.services.market_assistant_exploration import execute_exploration
 from app.services.market_assistant_llm import complete_structured
-from app.services.market_assistant_llm import plan_question
 from app.services.market_assistant_llm import stream_response_turn
 from app.services.market_assistant_research import build_research_provider
 from app.services.market_setup_current import resolve_current_explanation
-from app.tools.market_assistant_answers import _AnswerDraft as AnswerDraftSchema
 from app.tools.market_assistant_answers import detect_answer_language
 from app.tools.market_assistant_claim_audit import ClaimAuditSchema
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
-from app.tools.market_assistant_plans import deterministic_plan
 
 router = APIRouter(prefix="/api/market-assistant", tags=["market-assistant"])
 
@@ -87,67 +84,6 @@ def _assistant_runtime():
         config["model"],
         config["structured_output_mode"],
         config.get("reasoning_effort", "low"),
-    )
-
-
-async def _plan_llm(*, question, context_summary):
-    deterministic = deterministic_plan(question)
-    if deterministic["intent"] != "unsupported":
-        return deterministic
-    client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
-    return await plan_question(
-        client,
-        model=model,
-        question=question,
-        context_summary=context_summary,
-        structured_output_mode=structured_output_mode,
-        reasoning_effort=reasoning_effort,
-    )
-
-
-async def _synthesize_llm(
-    *,
-    question,
-    plan,
-    context_summary,
-    artifacts,
-    stream_observer=None,
-    tone="beginner_human",
-):
-    client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
-    prompt = _synthesis_prompt(question, plan, context_summary, artifacts, tone=tone)
-    return await complete_structured(
-        client,
-        model=model,
-        prompt=prompt,
-        schema_type=AnswerDraftSchema,
-        structured_output_mode=structured_output_mode,
-        reasoning_effort=reasoning_effort,
-        stream_observer=stream_observer,
-    )
-
-
-async def _repair_llm(
-    *,
-    question,
-    plan,
-    context_summary,
-    artifacts,
-    draft,
-    validation_report,
-    tone="beginner_human",
-):
-    client, model, structured_output_mode, reasoning_effort = _assistant_runtime()
-    prompt = _repair_prompt(
-        question, plan, context_summary, artifacts, draft, validation_report, tone=tone
-    )
-    return await complete_structured(
-        client,
-        model=model,
-        prompt=prompt,
-        schema_type=AnswerDraftSchema,
-        structured_output_mode=structured_output_mode,
-        reasoning_effort=reasoning_effort,
     )
 
 
@@ -222,98 +158,6 @@ def _tone_instructions(tone: str) -> str:
     )
 
 
-def _structured_answer_instructions(question, tone="beginner_human"):
-    language = _answer_language_label(question)
-    return (
-        "You are the explanation layer for deterministic Market Setup v2. "
-        "Produce a StructuredAnswerDraft using only the supplied artifacts. "
-        f"Answer language: {language}. "
-        + _tone_instructions(tone)
-        + " "
-        + (
-            "Each claim template is final user-facing prose after placeholder "
-            "substitution, not internal notes. Explain what the current market "
-            "state means before using technical terms. For a standard setup answer, "
-            "give one plain-language summary, up to three main reasons, conflicting "
-            "or unconfirmed evidence, the approved general posture meaning, and "
-            "backend-provided conditions that could change the conclusion. Define "
-            "financial terms on first use. Preserve level versus direction and trend "
-            "versus confirmation. Prefer labels and meanings; do not display internal "
-            "codes, artifact IDs, object IDs, authority names, or schema fields unless "
-            "the user explicitly asks for diagnostics. Use annotated artifact bindings "
-            "for every factual value or enum. Each non-hypothetical binding must contain "
-            "the supplied value and its exact artifact source. Every ref must match the "
-            "claim authority. Split different authorities into separate claims. Do not "
-            "invent facts, classifications, weights, thresholds, causality, predictions, "
-            "materiality, allocations, or trading instructions. "
-            "Serialize answer_text as the first top-level property. "
-            "answer_text must exactly equal the deterministic rendering of sections "
-            "and claims. Do not place markdown fences around the JSON object."
-        )
-    )
-
-
-def _synthesis_prompt(
-    question, plan, context_summary, artifacts, tone="beginner_human"
-):
-    return [
-        {
-            "role": "system",
-            "content": _structured_answer_instructions(question, tone),
-        },
-        {
-            "role": "user",
-            "content": json.dumps(
-                {
-                    "question": question,
-                    "plan": plan,
-                    "context_summary": context_summary,
-                    "artifacts": artifacts,
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-            ),
-        },
-    ]
-
-
-def _repair_prompt(
-    question,
-    plan,
-    context_summary,
-    artifacts,
-    draft,
-    validation_report,
-    tone="beginner_human",
-):
-    return [
-        {
-            "role": "system",
-            "content": _structured_answer_instructions(question, tone)
-            + (
-                " Repair the draft using only the validation report and the same "
-                "evidence set. Do not acquire new evidence. Return the complete "
-                "corrected StructuredAnswerDraft."
-            ),
-        },
-        {
-            "role": "user",
-            "content": json.dumps(
-                {
-                    "question": question,
-                    "plan": plan,
-                    "context_summary": context_summary,
-                    "artifacts": artifacts,
-                    "draft": draft,
-                    "validation_report": validation_report,
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-            ),
-        },
-    ]
-
-
 def _narration_instructions(tone="beginner_human"):
     return (
         "You are the Market Setup narration assistant. "
@@ -326,6 +170,8 @@ def _narration_instructions(tone="beginner_human"):
             "Use only supplied views and tool results. "
             "Do not display internal codes or artifact identifiers. "
             "When tools are needed, return tool calls only. "
+            "Some relevant evidence has already been fetched and is shown in this conversation. "
+            "You may call any of the available tools if you need additional evidence. "
             "When answering, return plain text only. "
             "Do not reinterpret or override Market Setup. "
             "Answer in the user's language. "
@@ -408,9 +254,6 @@ def _build_dependencies(request):
     dependencies = {
         "config": config,
         "db_path": market_assistant_db.DEFAULT_DB_PATH,
-        "plan_llm": _plan_llm,
-        "synthesize_llm": lambda **kwargs: _synthesize_llm(tone=tone, **kwargs),
-        "repair_llm": lambda **kwargs: _repair_llm(tone=tone, **kwargs),
         "stream_turn": _stream_turn_llm,
         "narration_instructions": lambda: _narration_instructions(tone=tone),
         "claim_audit_llm": _claim_audit_llm,

@@ -7,34 +7,19 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import ValidationError
 
-from app.tools.market_assistant_evidence_detail_registry import DETAIL_TOPICS
-from app.tools.market_assistant_evidence_detail_registry import (
-    match_evidence_detail_question,
-)
-
 ROUTE_IDS = (
     "current_setup_overview",
-    "why_macro_regime",
-    "why_market_confirmation",
-    "why_portfolio_posture",
-    "indicator_confirmation",
-    "indicator_definition",
-    "indicator_method",
-    "evidence_detail",
+    "indicator_question",
+    "why_setup_layer",
     "react",
 )
 
 _REACT_ROUTE_ID = "react"
 
-_INDICATOR_ROUTE_IDS = frozenset(
-    {"indicator_confirmation", "indicator_definition", "indicator_method"}
-)
-
 _VIEW_TYPE_IDS = (
     "setup_explanation",
     "indicator_explanation",
     "method_explanation",
-    "evidence_detail",
     "react_anchor",
 )
 
@@ -47,7 +32,6 @@ _OPERATION_IDS = (
     "get_indicator_confirmation",
     "get_indicator_definition",
     "get_indicator_method",
-    "get_evidence_detail",
 )
 
 _SUPPLEMENTARY_TOOL_IDS = (
@@ -83,13 +67,16 @@ _ROUTE_OPERATIONS = {
         "get_posture_explanation",
         "get_approved_counterfactuals",
     ),
-    "why_macro_regime": ("get_macro_regime_explanation",),
-    "why_market_confirmation": ("get_confirmation_tests",),
-    "why_portfolio_posture": ("get_posture_explanation",),
-    "indicator_confirmation": ("get_indicator_confirmation",),
-    "indicator_definition": ("get_indicator_definition",),
-    "indicator_method": ("get_indicator_method",),
-    "evidence_detail": ("get_evidence_detail",),
+    "indicator_question": (
+        "get_indicator_confirmation",
+        "get_indicator_definition",
+        "get_indicator_method",
+    ),
+    "why_setup_layer": (
+        "get_macro_regime_explanation",
+        "get_confirmation_tests",
+        "get_posture_explanation",
+    ),
     "react": (),
 }
 
@@ -99,29 +86,20 @@ _SUPPLEMENTARY_TOOLS = {
         "get_indicator_definition",
         "get_indicator_method",
     ),
-    "why_macro_regime": ("get_indicator_current", "get_indicator_definition"),
-    "why_market_confirmation": ("get_indicator_current", "get_indicator_definition"),
-    "why_portfolio_posture": ("get_indicator_current", "get_indicator_definition"),
-    "indicator_confirmation": (
+    "indicator_question": (
+        "get_indicator_current",
         "get_indicator_definition",
         "get_indicator_method",
         "query_indicator_history",
     ),
-    "indicator_definition": ("get_indicator_current", "get_indicator_method"),
-    "indicator_method": ("get_indicator_current", "get_indicator_definition"),
-    "evidence_detail": (),
+    "why_setup_layer": ("get_indicator_current", "get_indicator_definition"),
     "react": (),
 }
 
 _VIEW_TYPES = {
     "current_setup_overview": "setup_explanation",
-    "why_macro_regime": "setup_explanation",
-    "why_market_confirmation": "setup_explanation",
-    "why_portfolio_posture": "setup_explanation",
-    "indicator_confirmation": "indicator_explanation",
-    "indicator_definition": "indicator_explanation",
-    "indicator_method": "method_explanation",
-    "evidence_detail": "evidence_detail",
+    "indicator_question": "indicator_explanation",
+    "why_setup_layer": "setup_explanation",
     "react": "react_anchor",
 }
 
@@ -140,15 +118,19 @@ _INDICATOR_ALIASES = (
 )
 
 _EXPLANATION_TOPICS = (
-    ("why_macro_regime", ("宏观", "macro regime", "macro environment")),
-    ("why_market_confirmation", ("确认", "market confirmation", "confirmation")),
     (
-        "why_portfolio_posture",
+        "why_setup_layer",
         (
+            "宏观",
+            "确认",
             "组合",
             "仓位",
             "持仓",
             "偏积极",
+            "macro regime",
+            "macro environment",
+            "market confirmation",
+            "confirmation",
             "portfolio posture",
             "posture",
             "risk-on",
@@ -219,7 +201,6 @@ _METHOD_MARKERS = (
 _HISTORY_MARKERS = (
     "历史",
     "过去",
-    "最近",
     "走势",
     "变化",
     "history",
@@ -272,8 +253,6 @@ class _RouteOperation(BaseModel):
 
     operation_id: Literal[*_OPERATION_IDS]
     indicator_id: str | None = Field(default=None, min_length=1)
-    fact_id: str | None = Field(default=None, min_length=1)
-    topics: list[Literal[*DETAIL_TOPICS]] | None = Field(default=None, min_length=1)
 
 
 class _RouteSchema(BaseModel):
@@ -331,24 +310,11 @@ def _route(normalized):
     route_id = _explanation_route(lowered, compact)
     if route_id is not None:
         return _route_match(route_id)
-    detail_match = match_evidence_detail_question(normalized)
-    if detail_match is not None:
-        return _route_match(
-            "evidence_detail",
-            fact_id=detail_match["fact_id"],
-            topics=detail_match["default_topics"],
-        )
     return _route_match(_REACT_ROUTE_ID)
 
 
-def _route_match(route_id, indicator_id=None, fact_id=None, topics=None):
-    match = {"route_id": route_id}
-    if indicator_id is not None:
-        match["indicator_id"] = indicator_id
-    if fact_id is not None:
-        match["fact_id"] = fact_id
-        match["topics"] = topics
-    return match
+def _route_match(route_id, indicator_id=None):
+    return {"route_id": route_id, "indicator_id": indicator_id}
 
 
 def _explanation_route(lowered, compact):
@@ -384,11 +350,11 @@ def _indicator_route(lowered, compact):
         return None
     indicator_id = indicator_ids[0]
     if _contains_any(compact, lowered, _CONFIRMATION_MARKERS):
-        return _route_match("indicator_confirmation", indicator_id)
+        return _route_match("indicator_question", indicator_id)
     if _contains_any(compact, lowered, _DEFINITION_MARKERS):
-        return _route_match("indicator_definition", indicator_id)
+        return _route_match("indicator_question", indicator_id)
     if _contains_any(compact, lowered, _METHOD_MARKERS):
-        return _route_match("indicator_method", indicator_id)
+        return _route_match("indicator_question", indicator_id)
     return None
 
 
@@ -417,14 +383,12 @@ def _alias_present(alias, lowered, compact):
 
 def _build_route_payload(route, deep_analysis):
     route_id = route["route_id"]
+    indicator_id = route["indicator_id"]
     initial_operations = []
     for operation_id in _ROUTE_OPERATIONS[route_id]:
         operation = {"operation_id": operation_id}
-        if route.get("indicator_id") is not None:
-            operation["indicator_id"] = route["indicator_id"]
-        if route.get("fact_id") is not None:
-            operation["fact_id"] = route["fact_id"]
-            operation["topics"] = route["topics"]
+        if indicator_id is not None:
+            operation["indicator_id"] = indicator_id
         initial_operations.append(operation)
     return {
         "route_id": route_id,
@@ -475,29 +439,3 @@ def _validate_route_invariants(route):
         raise ValueError("fast path route must use deterministic routing source")
     if not route["initial_operations"]:
         raise ValueError("fast path route requires initial operations")
-    _validate_operation_detail_fields(route)
-    if route["route_id"] == "evidence_detail":
-        if len(route["initial_operations"]) != 1:
-            raise ValueError(
-                "evidence detail route requires exactly one initial operation"
-            )
-        if route["initial_operations"][0]["operation_id"] != "get_evidence_detail":
-            raise ValueError(
-                "evidence detail route requires the evidence detail operation"
-            )
-
-
-def _validate_operation_detail_fields(route):
-    for operation in route["initial_operations"]:
-        if operation["operation_id"] == "get_evidence_detail":
-            if route["route_id"] != "evidence_detail":
-                raise ValueError(
-                    "evidence detail operation requires the evidence detail route"
-                )
-            if operation.get("fact_id") is None or operation.get("topics") is None:
-                raise ValueError(
-                    "evidence detail operation requires fact id and topics"
-                )
-            continue
-        if operation.get("fact_id") is not None or operation.get("topics") is not None:
-            raise ValueError("detail fields are only valid on the detail operation")

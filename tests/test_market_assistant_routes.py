@@ -1,11 +1,5 @@
 import pytest
 
-from app.tools.market_assistant_evidence_detail_registry import (
-    evidence_detail_record,
-)
-from app.tools.market_assistant_evidence_detail_registry import (
-    load_evidence_detail_registry,
-)
 from app.tools.market_assistant_routes import ROUTE_IDS
 from app.tools.market_assistant_routes import budget_for_mode
 from app.tools.market_assistant_routes import route_question
@@ -13,24 +7,10 @@ from app.tools.market_assistant_routes import validate_route
 
 _ROUTE_QUESTIONS = {
     "current_setup_overview": "现在市场怎么样？",
-    "why_macro_regime": "为什么当前宏观环境如此？",
-    "why_market_confirmation": "为什么市场确认信号缺失？",
-    "why_portfolio_posture": "为什么当前组合姿态如此？",
-    "indicator_confirmation": "VIX的确认信号怎么样？",
-    "indicator_definition": "VIX是什么？",
-    "indicator_method": "VIX怎么计算？",
-    "evidence_detail": "美联储目前是加息、降息还是维持？",
+    "indicator_question": "VIX是什么？",
+    "why_setup_layer": "为什么当前宏观环境如此？",
     "react": "讲个笑话",
 }
-
-_EVIDENCE_DETAIL_QUESTIONS = (
-    ("美联储目前是加息、降息还是维持？", "macro_policy_response"),
-    ("FOMC is currently hawkish or dovish?", "macro_policy_response"),
-    ("为什么金融条件与增长冲突？", "macro_financial_conditions"),
-    ("消费者预期为什么支持当前方向？", "consumer_demand_outlook"),
-    ("制造业和服务业如何得到增长方向？", "survey_growth_direction"),
-    ("为什么标普仍是牛市阶段？", "sp500_market_phase"),
-)
 
 
 def standard_budget():
@@ -94,60 +74,60 @@ def test_english_posture_question_routes_to_posture():
     route = route_question(
         "Why is the portfolio posture Mild Risk-Off?", deep_analysis=False
     )
-    assert route["route_id"] == "why_portfolio_posture"
+    assert route["route_id"] == "why_setup_layer"
 
 
 def test_english_confirmation_question_routes_to_confirmation():
     route = route_question(
         "Why is the market confirmation missing?", deep_analysis=False
     )
-    assert route["route_id"] == "why_market_confirmation"
+    assert route["route_id"] == "why_setup_layer"
 
 
 def test_chinese_indicator_definition_routes_to_definition():
     route = route_question("VIX是什么？", deep_analysis=False)
-    assert route["route_id"] == "indicator_definition"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "vix"
 
 
 def test_chinese_indicator_method_routes_to_method():
     route = route_question("VIX怎么计算？", deep_analysis=False)
-    assert route["route_id"] == "indicator_method"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "vix"
 
 
 def test_chinese_indicator_confirmation_routes_to_confirmation():
     route = route_question("ISM的确认信号怎么样？", deep_analysis=False)
-    assert route["route_id"] == "indicator_confirmation"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "ism_manufacturing_pmi"
 
 
 def test_chinese_why_confirmation_with_vix_routes_to_indicator_confirmation():
     route = route_question("VIX 为什么没有确认", deep_analysis=False)
-    assert route["route_id"] == "indicator_confirmation"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "vix"
 
 
 def test_chinese_why_partial_confirmation_routes_to_market_confirmation():
     route = route_question("为什么只是部分确认", deep_analysis=False)
-    assert route["route_id"] == "why_market_confirmation"
+    assert route["route_id"] == "why_setup_layer"
 
 
 def test_english_why_indicator_confirmation_routes_to_indicator_confirmation():
     route = route_question("why is the ism confirmation weak", deep_analysis=False)
-    assert route["route_id"] == "indicator_confirmation"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "ism_manufacturing_pmi"
 
 
 def test_chinese_why_indicator_confirmation_routes_to_indicator_confirmation():
     route = route_question("为什么ISM的确认信号这么低？", deep_analysis=False)
-    assert route["route_id"] == "indicator_confirmation"
+    assert route["route_id"] == "indicator_question"
     assert route["initial_operations"][0]["indicator_id"] == "ism_manufacturing_pmi"
 
 
 def test_english_indicator_question_uses_deep_analysis_budget():
     route = route_question("What is the VIX?", deep_analysis=True)
-    assert route["route_id"] == "indicator_definition"
+    assert route["route_id"] == "indicator_question"
     assert route["budget"] == deep_analysis_budget()
 
 
@@ -240,28 +220,30 @@ def test_simple_overview_questions_still_route_to_overview():
 
 def test_explain_how_indicator_is_calculated_stays_on_indicator_route():
     route = route_question("explain how vix is calculated", deep_analysis=False)
-    assert route["route_id"] == "indicator_method"
+    assert route["route_id"] == "indicator_question"
     assert route["routing_source"] == "deterministic"
 
 
 def test_why_mild_risk_on_routes_to_posture():
     route = route_question("为什么是 Mild Risk-On", deep_analysis=False)
-    assert route["route_id"] == "why_portfolio_posture"
+    assert route["route_id"] == "why_setup_layer"
     assert route["routing_source"] == "deterministic"
     assert [item["operation_id"] for item in route["initial_operations"]] == [
-        "get_posture_explanation"
+        "get_macro_regime_explanation",
+        "get_confirmation_tests",
+        "get_posture_explanation",
     ]
 
 
 def test_why_mildly_positive_routes_to_posture():
     route = route_question("为什么是轻度偏积极", deep_analysis=False)
-    assert route["route_id"] == "why_portfolio_posture"
+    assert route["route_id"] == "why_setup_layer"
     assert route["routing_source"] == "deterministic"
 
 
 def test_why_mild_risk_on_english_routes_to_posture():
     route = route_question("why is the regime mild risk on?", deep_analysis=False)
-    assert route["route_id"] == "why_portfolio_posture"
+    assert route["route_id"] == "why_setup_layer"
     assert route["routing_source"] == "deterministic"
 
 
@@ -350,13 +332,8 @@ def test_routed_payloads_validate_cleanly(question):
     ("route_id", "view_type"),
     [
         ("current_setup_overview", "setup_explanation"),
-        ("why_macro_regime", "setup_explanation"),
-        ("why_market_confirmation", "setup_explanation"),
-        ("why_portfolio_posture", "setup_explanation"),
-        ("indicator_confirmation", "indicator_explanation"),
-        ("indicator_definition", "indicator_explanation"),
-        ("indicator_method", "method_explanation"),
-        ("evidence_detail", "evidence_detail"),
+        ("indicator_question", "indicator_explanation"),
+        ("why_setup_layer", "setup_explanation"),
         ("react", "react_anchor"),
     ],
 )
@@ -367,83 +344,24 @@ def test_route_view_type_uses_shared_view_vocabulary(route_id, view_type):
 
 
 @pytest.mark.parametrize(
-    ("question", "fact_id"),
-    _EVIDENCE_DETAIL_QUESTIONS,
+    "question",
+    [
+        "货币政策目前是加息、降息还是维持？",
+        "FOMC is currently hawkish or dovish?",
+        "消费者预期为什么支持当前方向？",
+    ],
 )
-def test_evidence_detail_question_routes_to_detail(question, fact_id):
-    registry = load_evidence_detail_registry()
-    default_topics = evidence_detail_record(registry, fact_id)["default_topics"]
+def test_evidence_detail_questions_do_not_create_a_new_route(question):
     route = route_question(question, deep_analysis=False)
-    assert route["route_id"] == "evidence_detail"
-    assert route["routing_source"] == "deterministic"
-    assert route["view_type"] == "evidence_detail"
-    assert route["supplementary_tools"] == []
-    assert len(route["initial_operations"]) == 1
-    operation = route["initial_operations"][0]
-    assert operation["operation_id"] == "get_evidence_detail"
-    assert operation["fact_id"] == fact_id
-    assert operation["topics"] == default_topics
-
-
-def test_evidence_detail_question_uses_deep_analysis_budget():
-    route = route_question("美联储目前是加息、降息还是维持？", deep_analysis=True)
-    assert route["route_id"] == "evidence_detail"
-    assert route["budget"] == deep_analysis_budget()
-
-
-def test_compound_policy_and_financial_question_remains_react():
-    route = route_question(
-        "为什么美联储的货币政策与金融条件冲突？", deep_analysis=False
-    )
     assert route["route_id"] == "react"
-    assert route["routing_source"] == "react"
+    assert route["view_type"] == "react_anchor"
     assert route["initial_operations"] == []
+    assert "evidence_detail" not in ROUTE_IDS
 
 
-def test_detail_question_with_history_request_remains_react():
-    route = route_question("美联储过去六个月的货币政策如何？", deep_analysis=False)
-    assert route["route_id"] == "react"
-    assert route["routing_source"] == "react"
-
-
-def test_detail_alias_with_recent_history_terminology_remains_react():
-    route = route_question(
-        "信贷条件是最近才恶化，还是已经持续一段时间？", deep_analysis=False
-    )
-    assert route["route_id"] == "react"
-    assert route["routing_source"] == "react"
-
-
-def test_validate_route_rejects_detail_fields_on_non_detail_operation():
-    route = route_question("现在市场怎么样？", deep_analysis=False)
-    route["initial_operations"][0]["fact_id"] = "macro_policy_response"
-    route["initial_operations"][0]["topics"] = ["current"]
-    with pytest.raises(ValueError, match="detail fields are only valid"):
-        validate_route(route)
-
-
-def test_validate_route_rejects_evidence_detail_without_fact_and_topics():
-    route = route_question("美联储目前是加息、降息还是维持？", deep_analysis=False)
-    del route["initial_operations"][0]["fact_id"]
-    with pytest.raises(ValueError, match="requires fact id and topics"):
-        validate_route(route)
-
-
-def test_validate_route_rejects_evidence_detail_operation_on_non_detail_route():
-    route = route_question("现在市场怎么样？", deep_analysis=False)
-    route["initial_operations"][0].update(
-        {
-            "operation_id": "get_evidence_detail",
-            "fact_id": "macro_policy_response",
-            "topics": ["current"],
-        }
-    )
-    with pytest.raises(ValueError, match="requires the evidence detail route"):
-        validate_route(route)
-
-
-def test_validate_route_rejects_evidence_detail_route_with_multiple_operations():
-    route = route_question("美联储目前是加息、降息还是维持？", deep_analysis=False)
-    route["initial_operations"].append(dict(route["initial_operations"][0]))
-    with pytest.raises(ValueError, match="exactly one initial operation"):
-        validate_route(route)
+def test_no_route_operation_carries_detail_fields():
+    for route_id, question in _ROUTE_QUESTIONS.items():
+        route = route_question(question, deep_analysis=False)
+        for operation in route["initial_operations"]:
+            assert "fact_id" not in operation
+            assert "topics" not in operation

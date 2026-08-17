@@ -4,7 +4,6 @@ _VIEW_VERSION_BY_TYPE = {
     "setup_explanation": "setup_explanation_v1",
     "indicator_explanation": "indicator_explanation_v1",
     "method_explanation": "method_explanation_v1",
-    "evidence_detail": "evidence_detail_v1",
     "react_anchor": "react_anchor_v1",
 }
 
@@ -260,10 +259,6 @@ def build_explanation_view(route, artifacts, *, question, answer_language=None):
         )
     if version == "method_explanation_v1":
         return _build_method_view(route, object_map, language, as_of, evidence_through)
-    if version == "evidence_detail_v1":
-        return _build_evidence_detail_view(
-            route, artifacts, object_map, language, as_of, evidence_through
-        )
     if version == "react_anchor_v1":
         return _build_react_anchor_view(
             route, artifacts, object_map, language, as_of, evidence_through
@@ -662,58 +657,6 @@ def _build_method_view(route, object_map, language, as_of, evidence_through):
         "method_objects": method_objects,
         "audit_objects": _audit_refs(audit_entries),
     }
-
-
-def _build_evidence_detail_view(
-    route, artifacts, object_map, language, as_of, evidence_through
-):
-    expected_fact_id, expected_topics = _evidence_detail_target(route)
-    for artifact_id in sorted(artifacts):
-        artifact = artifacts[artifact_id]
-        payload = artifact.get("payload") or {}
-        if payload.get("fact_id") != expected_fact_id:
-            continue
-        if (payload.get("topics") or []) != expected_topics:
-            raise ValueError(
-                "evidence detail artifact does not match the route operation"
-            )
-        detail = payload.get("detail") or {}
-        topics = payload.get("topics") or []
-        view = {
-            "view_version": "evidence_detail_v1",
-            "question_language": language,
-            "as_of": as_of,
-            "evidence_through": evidence_through,
-            "fact_id": payload["fact_id"],
-            "label": detail.get("label"),
-            "detail_kind": detail.get("detail_kind"),
-            "status": _display(detail.get("status"), language),
-            "topics": list(topics),
-        }
-        for topic in topics:
-            if topic in detail:
-                view[topic] = detail[topic]
-        view["audit_objects"] = [
-            {
-                "artifact_id": artifact_id,
-                "object_type": obj["object_type"],
-                "object_id": obj["object_id"],
-            }
-            for obj in artifact.get("object_index") or []
-        ]
-        return view
-    raise ValueError("evidence detail artifact is not available")
-
-
-def _evidence_detail_target(route):
-    for operation in route.get("initial_operations") or []:
-        if operation.get("operation_id") == "get_evidence_detail":
-            fact_id = operation.get("fact_id")
-            topics = operation.get("topics")
-            if fact_id is None or topics is None:
-                raise ValueError("evidence detail route operation is invalid")
-            return fact_id, list(topics)
-    raise ValueError("evidence detail route requires the evidence detail operation")
 
 
 def _build_react_anchor_view(
