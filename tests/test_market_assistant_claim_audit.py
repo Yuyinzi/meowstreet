@@ -1031,9 +1031,43 @@ def test_audit_accepts_canonical_numeric_two_at_boundary():
     validated = validate_claim_audit(
         payload,
         answer_text=answer,
-        artifacts=numeric_detail_artifacts(),
+        artifacts=float_detail_artifacts(),
     )
     assert validated["coverage_ratio"] == 1.0
+
+
+@pytest.mark.parametrize(
+    ("answer", "bound_value", "artifacts"),
+    [
+        ("The level is 2..0", 2, numeric_detail_artifacts),
+        ("The level is 2..2", 2, numeric_detail_artifacts),
+        ("The level is 2.0..2", 2.0, float_detail_artifacts),
+    ],
+)
+def test_audit_rejects_consecutive_dot_composite_numbers(
+    answer, bound_value, artifacts
+):
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": bound_value,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
 
 
 def test_audit_rejects_quoted_speech_without_capable_artifact():
