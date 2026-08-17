@@ -1399,3 +1399,57 @@ def test_audit_rejects_nonintegral_float_for_integral_float_bound_value():
     assert any(
         error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
     )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "The level is 2.0.2",
+        "The level is 2.0.0",
+        "The level is 2.0e0.5",
+    ],
+)
+def test_audit_rejects_malformed_composite_numbers_for_float_bound_value(answer):
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": 2.0,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=float_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_accepts_number_with_sentence_period_suffix():
+    answer = "The level is 2.0."
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": 2.0,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": "The level is 2.0.",
+            }
+        ],
+    )
+    validated = validate_claim_audit(
+        payload,
+        answer_text=answer,
+        artifacts=float_detail_artifacts(),
+    )
+    assert validated["coverage_ratio"] == 1.0

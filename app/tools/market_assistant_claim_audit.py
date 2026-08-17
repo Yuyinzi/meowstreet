@@ -53,7 +53,7 @@ _STRIP_EDGE_PUNCT_RE = re.compile(
 )
 
 _NUMERIC_TOKEN_RE = re.compile(
-    r"(?<![A-Za-z0-9+-])([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?![A-Za-z0-9])"
+    r"(?<![A-Za-z0-9.+-])([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?![A-Za-z0-9]|\.\d)"
 )
 
 _DETAIL_VALUE_LABELS = {
