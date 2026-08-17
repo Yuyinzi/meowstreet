@@ -16,6 +16,20 @@ _DETAIL_OBJECT_TYPES = frozenset(
     {"evidence_detail", "evidence_detail_source", "evidence_detail_method"}
 )
 
+_LATIN_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+_CJK_CHAR_RE = re.compile(r"[\u3400-\u9fff]")
+
+_NEGATION_WORDS = frozenset({"not", "no", "never", "without", "nor", "neither", "non"})
+_NEGATION_CHARS = frozenset("不没未非无别毋勿")
+
+_QUOTED_OR_ATTRIBUTED_RE = re.compile(
+    r'["“”‘’「」『』]'
+    r"|\b(?:said|says|stated|states|announced|declared|reported|reportedly|"
+    r"according to|quoted|quote|verbatim|wording)\b"
+    r"|(?:原话|原文|措辞|引述|报告称|声明称|宣布)",
+    re.IGNORECASE,
+)
+
 _DETAIL_VALUE_LABELS = {
     "hold": ("hold", "维持", "维持利率不变"),
     "hike": ("hike", "加息"),
@@ -346,10 +360,16 @@ def _validate_span(claim, answer_text, artifacts):
         errors.extend(_validate_span_values(claim, artifacts))
         errors.extend(_validate_grounding(claim, artifacts))
         errors.extend(_validate_atomic_facts(claim, artifacts))
-    if purpose == "exact_wording":
+    if purpose == "exact_wording" or _claim_quotes_or_attributes_speech(claim):
         errors.extend(_validate_exact_wording(claim, artifacts))
     errors.extend(_validate_span_language(claim))
     return errors
+
+
+def _claim_quotes_or_attributes_speech(claim):
+    return bool(claim["refs"]) and (
+        _QUOTED_OR_ATTRIBUTED_RE.search(claim["exact_text"]) is not None
+    )
 
 
 def _validate_grounding(claim, artifacts):
@@ -514,13 +534,57 @@ def _ref_key(ref):
 
 def _fragment_supports_value(fragment, bound_value):
     if isinstance(bound_value, str) and bound_value:
-        if bound_value in fragment:
-            return True
-        labels = _DETAIL_VALUE_LABELS.get(bound_value)
-        if labels is None:
+        return _string_value_supported(fragment, bound_value)
+    return _numeric_value_supported(fragment, bound_value)
+
+
+def _string_value_supported(fragment, bound_value):
+    labels = _DETAIL_VALUE_LABELS.get(bound_value)
+    tokens = (bound_value,)
+    if labels is not None:
+        tokens = labels
+    return any(_token_positively_present(fragment, token) for token in tokens)
+
+
+def _numeric_value_supported(fragment, bound_value):
+    token = _canonical_number_token(bound_value)
+    return _token_positively_present(fragment, token)
+
+
+def _canonical_number_token(bound_value):
+    if isinstance(bound_value, float) and bound_value.is_integer():
+        return str(int(bound_value))
+    return _format_value(bound_value)
+
+
+def _token_positively_present(fragment, token):
+    if not token:
+        return False
+    if _CJK_CHAR_RE.search(token):
+        return _cjk_token_positively_present(fragment, token)
+    return _latin_token_positively_present(fragment, token)
+
+
+def _latin_token_positively_present(fragment, token):
+    pattern = rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])"
+    for match in re.finditer(pattern, fragment, re.IGNORECASE):
+        prefix = fragment[: match.start()]
+        words = _LATIN_TOKEN_RE.findall(prefix)
+        if words and words[-1].lower() in _NEGATION_WORDS:
+            continue
+        return True
+    return False
+
+
+def _cjk_token_positively_present(fragment, token):
+    start = 0
+    while True:
+        index = fragment.find(token, start)
+        if index < 0:
             return False
-        return any(label in fragment for label in labels)
-    return _format_value(bound_value) in fragment
+        if index == 0 or fragment[index - 1] not in _NEGATION_CHARS:
+            return True
+        start = index + len(token)
 
 
 def _validate_exact_wording(claim, artifacts):

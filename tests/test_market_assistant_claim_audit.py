@@ -108,6 +108,51 @@ def policy_detail_ref():
     }
 
 
+def numeric_detail_artifacts():
+    artifact_id = "ctx_123_evidence_detail_vix_level"
+    detail = {
+        "fact_id": "vix_level",
+        "label": "VIX",
+        "detail_kind": "vix_level",
+        "topics": ["current"],
+        "status": "available",
+        "current": {"level": 2},
+    }
+    return {
+        artifact_id: {
+            "artifact_id": artifact_id,
+            "artifact_kind": "explanation_snapshot",
+            "schema_version": "market_assistant_artifact_v1",
+            "primary_authority": "decision_fact",
+            "market_setup_relation": "authoritative_snapshot",
+            "payload": {
+                "fact_id": "vix_level",
+                "detail_kind": "vix_level",
+                "topics": ["current"],
+                "status": "available",
+                "detail": detail,
+            },
+            "object_index": [
+                {
+                    "object_type": "evidence_detail",
+                    "object_id": artifact_id,
+                    "authority": "decision_fact",
+                    "payload": detail,
+                }
+            ],
+            "integrity_hash": "d" * 64,
+        }
+    }
+
+
+def numeric_detail_ref():
+    return {
+        "artifact_id": "ctx_123_evidence_detail_vix_level",
+        "object_type": "evidence_detail",
+        "object_id": "ctx_123_evidence_detail_vix_level",
+    }
+
+
 def policy_detail_artifacts():
     projection = {
         "fact_id": "macro_policy_response",
@@ -800,3 +845,210 @@ def test_audit_report_drops_unknown_codes():
 def test_audit_report_requires_error_list():
     with pytest.raises(ValueError, match="validation errors are required"):
         build_audit_validation_report("nope")
+
+
+def test_audit_rejects_fed_cut_rates_bound_to_hold_regardless_of_purpose():
+    answer = "The Fed cut rates, not hold."
+    payload = audit_payload(
+        answer,
+        purpose="decision_explanation",
+        authority="decision_fact",
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_not_hold_fragment_supporting_hold():
+    answer = "The policy was not hold."
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_hold_inside_shareholder_token():
+    answer = "shareholders remain patient."
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_supports_label_inside_conflicts_label():
+    answer = "与增长方向不一致"
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "relationship_to_growth_direction",
+                "value": "supports",
+                "source": {
+                    **policy_detail_ref(),
+                    "field": "current.relationship_to_growth_direction",
+                },
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_numeric_two_inside_twenty():
+    answer = "the level is 20"
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": 2,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=numeric_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_accepts_canonical_numeric_two_at_boundary():
+    answer = "the level is 2"
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": 2,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": answer,
+            }
+        ],
+    )
+    validated = validate_claim_audit(
+        payload,
+        answer_text=answer,
+        artifacts=numeric_detail_artifacts(),
+    )
+    assert validated["coverage_ratio"] == 1.0
+
+
+def test_audit_rejects_quoted_speech_without_capable_artifact():
+    answer = 'The FOMC statement reportedly said "rates are on hold".'
+    payload = audit_payload(
+        answer,
+        purpose="decision_explanation",
+        authority="decision_fact",
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": answer,
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "EXACT_WORDING_UNAVAILABLE" for error in exc_info.value.errors
+    )
+
+
+def test_audit_accepts_approved_summary_language_without_quotes():
+    answer = "经批准的行动总结是维持利率不变，整体立场偏鹰。"
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "policy_action",
+                "value": "hold",
+                "source": {**policy_detail_ref(), "field": "current.policy_action"},
+                "text": "经批准的行动总结是维持利率不变，",
+            },
+            {
+                "name": "overall_bias",
+                "value": "mild_hawkish",
+                "source": {**policy_detail_ref(), "field": "current.overall_bias"},
+                "text": "整体立场偏鹰。",
+            },
+        ],
+    )
+    validated = validate_claim_audit(
+        payload,
+        answer_text=answer,
+        artifacts=policy_detail_artifacts(),
+    )
+    assert validated["coverage_ratio"] == 1.0

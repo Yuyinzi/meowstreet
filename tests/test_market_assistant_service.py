@@ -920,6 +920,53 @@ async def test_evidence_detail_fallback_renders_missing_status():
 
 
 @pytest.mark.asyncio
+async def test_evidence_detail_fallback_keeps_method_and_source_for_stale():
+    from app.tools.market_assistant_answers import render_fallback
+
+    artifacts = {
+        "ctx_setup_evidence_detail_vix_level": {
+            "artifact_id": "ctx_setup_evidence_detail_vix_level",
+            "artifact_kind": "explanation_snapshot",
+            "primary_authority": "decision_fact",
+            "market_setup_relation": "authoritative_snapshot",
+            "payload": {
+                "fact_id": "vix_level",
+                "label": "VIX",
+                "detail_kind": "vix_level",
+                "topics": ["current", "method", "source"],
+                "status": "stale",
+                "detail": {
+                    "fact_id": "vix_level",
+                    "label": "VIX",
+                    "detail_kind": "vix_level",
+                    "topics": ["current", "method", "source"],
+                    "status": "stale",
+                    "method": {
+                        "method_references": ["vix_confirmation_v2"],
+                    },
+                    "source": {
+                        "source_module": "market_setup_evidence_facts",
+                        "source_period": {
+                            "effective_date": "2026-07-01",
+                            "reference_period": "2026-06",
+                        },
+                    },
+                },
+            },
+            "object_index": [],
+        }
+    }
+    text = render_fallback(
+        plan={"intent": "evidence_detail"}, artifacts=artifacts, notices=[]
+    )
+    assert "unavailable (stale)" in text
+    assert "vix_confirmation_v2" in text
+    assert "effective_date: 2026-07-01" in text
+    assert "reference_period: 2026-06" in text
+    assert "{'effective_date'" not in text
+
+
+@pytest.mark.asyncio
 async def test_evidence_detail_fallback_renders_all_artifacts_in_order():
     from app.tools.market_assistant_answers import render_fallback
 

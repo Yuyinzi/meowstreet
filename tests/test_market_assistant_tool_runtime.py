@@ -1075,3 +1075,71 @@ def test_evidence_detail_is_frozen_local_without_controls():
     capability, controls = TOOL_RUNTIME_POLICIES["get_evidence_detail"]
     assert capability == "frozen_local"
     assert controls == ()
+
+
+def test_missing_policy_control_blocks_registered_control_without_internal_check():
+    from app.services.market_assistant_tool_runtime import TOOL_RUNTIME_POLICIES
+
+    saved = TOOL_RUNTIME_POLICIES["get_setup_overview"]
+    TOOL_RUNTIME_POLICIES["get_setup_overview"] = (
+        "external_read",
+        ("future_side_effect_approved",),
+    )
+    try:
+        record = asyncio.run(
+            execute_tool_call(
+                {
+                    "call_id": "c1",
+                    "tool_name": "get_setup_overview",
+                    "arguments": {},
+                },
+                request={},
+                resolution=resolved_context("ctx_current"),
+                dependencies=fake_dependencies(),
+                created_at="2026-08-13T00:00:00Z",
+            )
+        )
+    finally:
+        TOOL_RUNTIME_POLICIES["get_setup_overview"] = saved
+    artifact = record["artifact"]
+    assert artifact["artifact_kind"] == "exploration_result"
+    assert artifact["payload"]["status"] == "capability_unavailable"
+    assert (
+        artifact["payload"]["reason_code"]
+        == "future_side_effect_approved_not_requested"
+    )
+
+
+def test_missing_policy_control_allows_tool_when_control_satisfied():
+    from app.services.market_assistant_tool_runtime import TOOL_RUNTIME_POLICIES
+    from app.services.market_assistant_tool_runtime import _missing_policy_control
+
+    assert (
+        _missing_policy_control(
+            "get_evidence_detail", {"external_search_requested": True}
+        )
+        is None
+    )
+    assert (
+        _missing_policy_control(
+            "research_deep",
+            {"external_search_requested": True, "deep_research_requested": True},
+        )
+        is None
+    )
+    assert (
+        _missing_policy_control("research_focused", {"external_search_requested": True})
+        is None
+    )
+
+
+def test_missing_policy_control_reports_missing_research_control():
+    from app.services.market_assistant_tool_runtime import _missing_policy_control
+
+    assert (
+        _missing_policy_control("research_focused", {}) == "external_search_requested"
+    )
+    assert (
+        _missing_policy_control("research_deep", {"external_search_requested": True})
+        == "deep_research_requested"
+    )

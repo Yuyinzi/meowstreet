@@ -210,6 +210,16 @@ async def _frozen_snapshot(dependencies, resolution):
 
 async def execute_tool_call(call, *, request, resolution, dependencies, created_at):
     tool_name, arguments = _normalized_call(call)
+    missing_control = _missing_policy_control(tool_name, request)
+    if missing_control is not None:
+        artifact = _policy_blocked_artifact(tool_name, missing_control, created_at)
+        return {
+            "call_id": call.get("call_id", ""),
+            "tool_name": tool_name,
+            "arguments": arguments,
+            "artifact": artifact,
+            "progress_label": _PROGRESS_LABELS.get(tool_name, "reading local evidence"),
+        }
     operation = {"operation_id": tool_name, "parameters": arguments}
     artifact = await acquire_operation_artifact(
         operation,
@@ -665,6 +675,60 @@ async def _research_artifact(
         "object_index": build_object_index(result["object_index"]),
     }
     return _finalize_envelope(envelope)
+
+
+def _missing_policy_control(tool_name, request):
+    capability, controls = TOOL_RUNTIME_POLICIES[tool_name]
+    for control in controls:
+        if not request.get(control):
+            return control
+    return None
+
+
+def _policy_blocked_artifact(tool_name, missing_control, created_at):
+    if tool_name in _RESEARCH_TIER:
+        return _research_unavailable_artifact(
+            _new_id("res_"), created_at, _control_unavailable_reason(missing_control)
+        )
+    artifact_id = _new_id("cap_")
+    payload = {
+        "artifact_id": artifact_id,
+        "tool_name": tool_name,
+        "status": "capability_unavailable",
+        "reason_code": _control_unavailable_reason(missing_control),
+        "requested_at": created_at,
+    }
+    envelope = {
+        "artifact_id": artifact_id,
+        "artifact_kind": "exploration_result",
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
+        "primary_authority": "local_observation",
+        "market_setup_relation": "non_decision",
+        "payload": payload,
+        "object_index": build_object_index(
+            [
+                _artifact_object(
+                    "capability_unavailable",
+                    artifact_id,
+                    "local_observation",
+                    payload,
+                )
+            ]
+        ),
+    }
+    return _finalize_envelope(envelope)
+
+
+_CONTROL_UNAVAILABLE_REASON = {
+    "external_search_requested": "external_search_not_requested",
+    "deep_research_requested": "deep_research_not_requested",
+}
+
+
+def _control_unavailable_reason(missing_control):
+    return _CONTROL_UNAVAILABLE_REASON.get(
+        missing_control, f"{missing_control}_not_requested"
+    )
 
 
 def _research_unavailable_artifact(result_id, searched_at, reason_code):
