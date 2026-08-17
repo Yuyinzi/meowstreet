@@ -53,7 +53,7 @@ _STRIP_EDGE_PUNCT_RE = re.compile(
 )
 
 _NUMERIC_TOKEN_RE = re.compile(
-    r"(?<![A-Za-z0-9_.eE-])([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?![A-Za-z0-9_.eE])"
+    r"(?<![A-Za-z0-9+-])([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?![A-Za-z0-9])"
 )
 
 _DETAIL_VALUE_LABELS = {
@@ -621,11 +621,15 @@ def _numeric_token_equals(token, bound_value):
         parsed = _parse_number_token(token)
     except ValueError:
         return False
-    if isinstance(bound_value, float):
-        return isinstance(parsed, float) and parsed == bound_value
-    if isinstance(bound_value, int):
-        return isinstance(parsed, int) and parsed == bound_value
-    return False
+    return _numbers_equal(parsed, bound_value)
+
+
+def _numbers_equal(parsed, bound_value):
+    if not isinstance(parsed, (int, float)):
+        return False
+    if not isinstance(bound_value, (int, float)):
+        return False
+    return parsed == bound_value
 
 
 def _parse_number_token(token):

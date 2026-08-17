@@ -153,6 +153,43 @@ def numeric_detail_ref():
     }
 
 
+def float_detail_artifacts():
+    artifact_id = "ctx_123_evidence_detail_vix_level"
+    detail = {
+        "fact_id": "vix_level",
+        "label": "VIX",
+        "detail_kind": "vix_level",
+        "topics": ["current"],
+        "status": "available",
+        "current": {"level": 2.0},
+    }
+    return {
+        artifact_id: {
+            "artifact_id": artifact_id,
+            "artifact_kind": "explanation_snapshot",
+            "schema_version": "market_assistant_artifact_v1",
+            "primary_authority": "decision_fact",
+            "market_setup_relation": "authoritative_snapshot",
+            "payload": {
+                "fact_id": "vix_level",
+                "detail_kind": "vix_level",
+                "topics": ["current"],
+                "status": "available",
+                "detail": detail,
+            },
+            "object_index": [
+                {
+                    "object_type": "evidence_detail",
+                    "object_id": artifact_id,
+                    "authority": "decision_fact",
+                    "payload": detail,
+                }
+            ],
+            "integrity_hash": "f" * 64,
+        }
+    }
+
+
 def policy_detail_artifacts():
     projection = {
         "fact_id": "macro_policy_response",
@@ -1289,6 +1326,75 @@ def test_audit_rejects_scientific_notation_next_to_bound_integer():
             payload,
             answer_text=answer,
             artifacts=numeric_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
+    )
+
+
+def test_audit_accepts_integral_float_bound_value():
+    answer = "The level is 2.0."
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": 2.0,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": "The level is 2.0.",
+            }
+        ],
+    )
+    validated = validate_claim_audit(
+        payload,
+        answer_text=answer,
+        artifacts=float_detail_artifacts(),
+    )
+    assert validated["coverage_ratio"] == 1.0
+
+
+def test_audit_accepts_integer_token_for_integral_float_bound_value():
+    answer = "The level is 2."
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": 2.0,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": "The level is 2.",
+            }
+        ],
+    )
+    validated = validate_claim_audit(
+        payload,
+        answer_text=answer,
+        artifacts=float_detail_artifacts(),
+    )
+    assert validated["coverage_ratio"] == 1.0
+
+
+def test_audit_rejects_nonintegral_float_for_integral_float_bound_value():
+    answer = "The level is 2.5."
+    payload = audit_payload(
+        answer,
+        refs=[numeric_detail_ref()],
+        values=[
+            {
+                "name": "level",
+                "value": 2.0,
+                "source": {**numeric_detail_ref(), "field": "current.level"},
+                "text": "The level is 2.5.",
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=float_detail_artifacts(),
         )
     assert any(
         error["code"] == "BINDING_TEXT_MISMATCH" for error in exc_info.value.errors
