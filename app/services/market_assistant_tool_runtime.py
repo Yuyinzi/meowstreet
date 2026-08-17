@@ -859,9 +859,26 @@ def _evidence_detail_artifact(parameters, snapshot, dependencies):
     artifact_id = (
         f"{snapshot['context_id']}_evidence_detail_{fact_id}_{'_'.join(sorted(topics))}"
     )
+    decision_payload = {
+        key: value
+        for key, value in projection.items()
+        if key not in ("method", "source")
+    }
     objects = [
-        _artifact_object("evidence_detail", artifact_id, "decision_fact", projection)
+        _artifact_object(
+            "evidence_detail", artifact_id, "decision_fact", decision_payload
+        )
     ]
+    source = projection.get("source")
+    if source is not None:
+        objects.append(
+            _artifact_object(
+                "evidence_detail_source",
+                f"{artifact_id}_source",
+                "method_knowledge",
+                {"source": source},
+            )
+        )
     method = projection.get("method")
     if method is not None:
         objects.append(

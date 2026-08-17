@@ -722,12 +722,30 @@ async def test_evidence_detail_returns_focused_policy_projection():
     assert "results" not in payload
     object_ids = {obj["object_id"] for obj in artifact["object_index"]}
     assert object_ids == {
-        "ctx_current_evidence_detail_macro_policy_response_current_drivers_source"
+        "ctx_current_evidence_detail_macro_policy_response_current_drivers_source",
+        "ctx_current_evidence_detail_macro_policy_response_current_drivers_source_source",
     }
     assert {obj["object_type"] for obj in artifact["object_index"]} == {
-        "evidence_detail"
+        "evidence_detail",
+        "evidence_detail_source",
     }
-    assert all(obj["authority"] == "decision_fact" for obj in artifact["object_index"])
+    authorities_by_type = {
+        obj["object_type"]: obj["authority"] for obj in artifact["object_index"]
+    }
+    assert authorities_by_type["evidence_detail"] == "decision_fact"
+    assert authorities_by_type["evidence_detail_source"] == "method_knowledge"
+    source_obj = next(
+        obj
+        for obj in artifact["object_index"]
+        if obj["object_type"] == "evidence_detail_source"
+    )
+    assert source_obj["payload"]["source"]["source_module"] == "fomc_policy_tone"
+    decision_obj = next(
+        obj
+        for obj in artifact["object_index"]
+        if obj["object_type"] == "evidence_detail"
+    )
+    assert "source" not in decision_obj["payload"]
 
 
 @pytest.mark.asyncio

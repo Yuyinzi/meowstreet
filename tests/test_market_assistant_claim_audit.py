@@ -132,6 +132,11 @@ def policy_detail_artifacts():
     }
     ref = policy_detail_ref()
     artifact_id = ref["artifact_id"]
+    decision_payload = {
+        key: value
+        for key, value in projection.items()
+        if key not in ("method", "source")
+    }
     return {
         artifact_id: {
             "artifact_id": artifact_id,
@@ -151,8 +156,14 @@ def policy_detail_artifacts():
                     "object_type": "evidence_detail",
                     "object_id": artifact_id,
                     "authority": "decision_fact",
-                    "payload": projection,
-                }
+                    "payload": decision_payload,
+                },
+                {
+                    "object_type": "evidence_detail_source",
+                    "object_id": f"{artifact_id}_source",
+                    "authority": "method_knowledge",
+                    "payload": {"source": projection["source"]},
+                },
             ],
             "integrity_hash": "c" * 64,
         }
@@ -400,6 +411,122 @@ def test_audit_rejects_supposed_quote_binding_to_nonexistent_exact_excerpt():
     assert matching
     assert matching[0]["field_id"] == "exact_quote"
     assert matching[0]["expected"] == "exact_excerpt"
+
+
+def test_audit_rejects_source_binding_via_decision_fact_authority():
+    answer = "The data comes from the July policy meeting."
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "source_period",
+                "value": "2026-07-01",
+                "source": {
+                    **policy_detail_ref(),
+                    "field": "source.source_period.effective_date",
+                },
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] in {"FIELD_NOT_FOUND", "REFERENCE_AUTHORITY_MISMATCH"}
+        for error in exc_info.value.errors
+    )
+
+
+def test_audit_rejects_decision_fact_claim_referencing_source_object():
+    answer = "The data comes from the July policy meeting."
+    source_ref = {
+        "artifact_id": "ctx_123_evidence_detail_macro_policy_response",
+        "object_type": "evidence_detail_source",
+        "object_id": "ctx_123_evidence_detail_macro_policy_response_source",
+    }
+    payload = audit_payload(
+        answer,
+        purpose="decision_explanation",
+        authority="decision_fact",
+        refs=[source_ref],
+        values=[
+            {
+                "name": "source_period",
+                "value": "2026-07-01",
+                "source": {
+                    **source_ref,
+                    "field": "source.source_period.effective_date",
+                },
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] == "REFERENCE_AUTHORITY_MISMATCH"
+        for error in exc_info.value.errors
+    )
+
+
+def test_audit_accepts_source_binding_via_method_knowledge_authority():
+    answer = "The data comes from the July policy meeting."
+    ref = {
+        "artifact_id": "ctx_123_evidence_detail_macro_policy_response",
+        "object_type": "evidence_detail_source",
+        "object_id": "ctx_123_evidence_detail_macro_policy_response_source",
+    }
+    payload = audit_payload(
+        answer,
+        purpose="source_explanation",
+        authority="method_knowledge",
+        refs=[ref],
+        values=[
+            {
+                "name": "source_period",
+                "value": "2026-07-01",
+                "source": {**ref, "field": "source.source_period.effective_date"},
+            }
+        ],
+    )
+    validated = validate_claim_audit(
+        payload,
+        answer_text=answer,
+        artifacts=policy_detail_artifacts(),
+    )
+    assert validated["coverage_ratio"] == 1.0
+
+
+def test_audit_rejects_method_binding_via_decision_fact_authority():
+    answer = "The approved method determines the market phase."
+    payload = audit_payload(
+        answer,
+        refs=[policy_detail_ref()],
+        values=[
+            {
+                "name": "method_reference",
+                "value": "fomc_policy_tone_method_v1",
+                "source": {**policy_detail_ref(), "field": "method.method_references"},
+            }
+        ],
+    )
+    with pytest.raises(AuditValidationError) as exc_info:
+        validate_claim_audit(
+            payload,
+            answer_text=answer,
+            artifacts=policy_detail_artifacts(),
+        )
+    assert any(
+        error["code"] in {"REFERENCE_AUTHORITY_MISMATCH", "FIELD_NOT_FOUND"}
+        for error in exc_info.value.errors
+    )
 
 
 def test_audit_rejects_hypothetical_span_with_refs():
