@@ -92,6 +92,7 @@ _FALLBACK_ARTIFACT_KINDS = {
     "local_comparison": frozenset({"exploration_result"}),
     "release_history": frozenset({"exploration_result"}),
     "external_research": frozenset({"explanation_snapshot"}),
+    "evidence_detail": frozenset({"explanation_snapshot"}),
     "illustration": frozenset(),
     "unsupported": frozenset(),
 }
@@ -116,6 +117,7 @@ _FALLBACK_INTENT_BY_ROUTE = {
     "indicator_confirmation": "decision_explanation",
     "indicator_definition": "definition",
     "indicator_method": "method",
+    "evidence_detail": "evidence_detail",
     "react": "decision_explanation",
 }
 

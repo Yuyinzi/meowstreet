@@ -823,6 +823,94 @@ async def test_unknown_knowledge_indicator_routes_to_fallback():
 
 
 @pytest.mark.asyncio
+async def test_evidence_detail_route_renders_deterministic_fallback():
+    route = route_question("美联储目前是加息、降息还是维持？", deep_analysis=False)
+    stream = _ScriptedStream([narration_step(error=RuntimeError("llm down"))])
+    deps = hybrid_dependencies(stream=stream, route=route)
+
+    response = await market_assistant.answer_question(
+        current_question("美联储目前是加息、降息还是维持？"), dependencies=deps
+    )
+
+    assert response["generation_status"] == "deterministic_fallback"
+    assert "cannot be answered deterministically" not in response["answer_text"]
+    assert "detail is currently unavailable" in response["answer_text"]
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_fallback_renders_available_status():
+    from app.tools.market_assistant_answers import render_fallback
+
+    route = route_question("美联储目前是加息、降息还是维持？", deep_analysis=False)
+    plan = {"intent": "evidence_detail"}
+    artifacts = {
+        "ctx_setup_evidence_detail_macro_policy_response": {
+            "artifact_id": "ctx_setup_evidence_detail_macro_policy_response",
+            "artifact_kind": "explanation_snapshot",
+            "primary_authority": "decision_fact",
+            "market_setup_relation": "authoritative_snapshot",
+            "payload": {
+                "fact_id": "macro_policy_response",
+                "detail_kind": "policy_response",
+                "topics": ["current", "drivers", "source"],
+                "status": "available",
+                "detail": {
+                    "fact_id": "macro_policy_response",
+                    "label": "Monetary Policy",
+                    "detail_kind": "policy_response",
+                    "topics": ["current", "drivers", "source"],
+                    "status": "available",
+                    "current": {
+                        "policy_action": "hold",
+                        "overall_bias": "mild_hawkish",
+                        "relationship_to_growth_direction": "conflicts",
+                    },
+                    "drivers": {
+                        "policy_reason": "Hold decision with hawkish language.",
+                    },
+                },
+            },
+            "object_index": [],
+        }
+    }
+    text = render_fallback(plan=plan, artifacts=artifacts, notices=[])
+    assert "Monetary Policy" in text
+    assert "hold" in text
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_fallback_renders_missing_status():
+    from app.tools.market_assistant_answers import render_fallback
+
+    artifacts = {
+        "ctx_setup_evidence_detail_jobless_claims": {
+            "artifact_id": "ctx_setup_evidence_detail_jobless_claims",
+            "artifact_kind": "explanation_snapshot",
+            "primary_authority": "decision_fact",
+            "market_setup_relation": "authoritative_snapshot",
+            "payload": {
+                "fact_id": "jobless_claims",
+                "detail_kind": "unsupported",
+                "topics": ["current"],
+                "status": "missing",
+                "detail": {
+                    "fact_id": "jobless_claims",
+                    "label": "Jobless Claims",
+                    "detail_kind": "unsupported",
+                    "topics": ["current"],
+                    "status": "missing",
+                },
+            },
+            "object_index": [],
+        }
+    }
+    text = render_fallback(
+        plan={"intent": "evidence_detail"}, artifacts=artifacts, notices=[]
+    )
+    assert "unavailable" in text.lower()
+
+
+@pytest.mark.asyncio
 async def test_exploration_operation_acquires_exploration_result_artifact():
     stream = _ScriptedStream(
         [

@@ -1303,6 +1303,36 @@ def _fallback_unsupported(artifacts):
     return "This question cannot be answered deterministically."
 
 
+def _find_evidence_detail_artifact(artifacts):
+    for artifact in artifacts.values():
+        payload = artifact.get("payload") or {}
+        if payload.get("detail_kind") and payload.get("detail"):
+            return artifact
+    return None
+
+
+def _fallback_evidence_detail(artifacts):
+    artifact = _find_evidence_detail_artifact(artifacts)
+    if artifact is None:
+        return "The requested evidence detail is currently unavailable."
+    payload = artifact.get("payload") or {}
+    detail = payload.get("detail") or {}
+    status = detail.get("status") or "missing"
+    label = detail.get("label") or detail.get("fact_id") or "Evidence detail"
+    if status != "available":
+        return f"{label} detail is currently unavailable ({status})."
+    lines = [f"{label} evidence detail:"]
+    current = detail.get("current")
+    if isinstance(current, dict):
+        for key, value in current.items():
+            lines.append(f"- {key}: {_format_value(value)}")
+    drivers = detail.get("drivers")
+    if isinstance(drivers, dict):
+        for key, value in drivers.items():
+            lines.append(f"- {key}: {_format_value(value)}")
+    return "\n".join(lines)
+
+
 _FALLBACK_ROUTERS = {
     "decision_explanation": _fallback_decision,
     "counterfactual": _fallback_decision,
@@ -1317,6 +1347,7 @@ _FALLBACK_ROUTERS = {
     "local_history": _fallback_exploration,
     "local_comparison": _fallback_exploration,
     "release_history": _fallback_exploration,
+    "evidence_detail": _fallback_evidence_detail,
     "illustration": _fallback_teaching,
     "external_research": _fallback_research,
     "unsupported": _fallback_unsupported,
