@@ -78,6 +78,7 @@ MANUFACTURING_RANKING_LAYOUT = ism_workbook.RankingLayout(
     data_row=6,
     industry_column=2,
     first_status_column=3,
+    end_row=23,
 )
 
 

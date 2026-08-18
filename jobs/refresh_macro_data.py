@@ -14,8 +14,6 @@ from scripts import import_consumer_sentiment
 from scripts import import_economic_confirmation
 from scripts import import_fomc_calendar
 from scripts import import_gdp_market_relationships
-from scripts import import_ism_manufacturing
-from scripts import import_ism_services
 from scripts import import_m2_money_supply
 from scripts import import_nfib_sbet
 from scripts import import_nfib_sbet_regional
@@ -87,8 +85,6 @@ def _planned_tasks(
     consumer_main,
     m2_main,
     building_permits_main,
-    ism_main,
-    ism_services_main,
     ism_reports_main,
     gdp_main,
     fomc_main=import_fomc_calendar.main,
@@ -143,7 +139,6 @@ def _planned_tasks(
     if not args.skip_building_permits:
         tasks.append(("building_permits_census", building_permits_main, []))
     if not args.skip_ism:
-        tasks.append(("ism_manufacturing", ism_main, []))
         tasks.append(
             (
                 "ism_manufacturing_official",
@@ -151,7 +146,6 @@ def _planned_tasks(
                 ["--survey", "manufacturing", "--latest-only"],
             )
         )
-        tasks.append(("ism_services", ism_services_main, []))
         tasks.append(
             (
                 "ism_services_official",
@@ -210,8 +204,6 @@ def main(
     consumer_main=import_consumer_sentiment.main,
     m2_main=import_m2_money_supply.main,
     building_permits_main=import_us_building_permits.main,
-    ism_main=import_ism_manufacturing.main,
-    ism_services_main=import_ism_services.main,
     ism_reports_main=fetch_ism_reports.main,
     gdp_main=import_gdp_market_relationships.main,
     fomc_main=import_fomc_calendar.main,
@@ -274,8 +266,6 @@ def main(
         consumer_main,
         m2_main,
         building_permits_main,
-        ism_main,
-        ism_services_main,
         ism_reports_main,
         gdp_main,
         fomc_main,

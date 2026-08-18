@@ -318,6 +318,81 @@ def test_import_workbook_validation_failure_does_not_change_series(tmp_path):
     ]
 
 
+def test_parse_sector_rankings_stops_at_first_section(tmp_path):
+    workbook_path = tmp_path / "ISM_Manufacturing_Index.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Sectors"
+    sheet.append([None] * 18)
+    sheet.append([None] * 18)
+    sheet.append(
+        [
+            None,
+            "ISM Manufacturing",
+            datetime(2026, 6, 1),
+            None,
+            datetime(2026, 7, 1),
+            None,
+        ]
+    )
+    sheet.append([None] * 18)
+    sheet.append([None] * 18)
+    sheet.append([None, "Machinery", "Contraction", -2, "Contraction", -3])
+    sheet.append([None, "Wood Products", "Growth", 1, "Growth", 2])
+    # Pad to row 23 so the next section begins after end_row.
+    for _ in range(23 - 7):
+        sheet.append([None] * 18)
+    # Second section must not be parsed.
+    sheet.append(
+        [
+            None,
+            "NEW ORDERS",
+            datetime(2026, 6, 1),
+            None,
+            datetime(2026, 7, 1),
+            None,
+        ]
+    )
+    sheet.append([None] * 18)
+    sheet.append([None] * 18)
+    sheet.append([None, "Machinery", "Growth", 5, "Growth", 6])
+    sheet.append([None, "Wood Products", "Contraction", -4, "Contraction", -5])
+    workbook.save(workbook_path)
+
+    rankings = import_ism_manufacturing.parse_sector_rankings(workbook_path)
+
+    assert rankings == [
+        {
+            "date": "2026-06-01",
+            "industry": "Machinery",
+            "direction": "contraction",
+            "rank": -2,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+        {
+            "date": "2026-07-01",
+            "industry": "Machinery",
+            "direction": "contraction",
+            "rank": -3,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+        {
+            "date": "2026-06-01",
+            "industry": "Wood Products",
+            "direction": "growth",
+            "rank": 1,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+        {
+            "date": "2026-07-01",
+            "industry": "Wood Products",
+            "direction": "growth",
+            "rank": 2,
+            "source": "ISM_Manufacturing_Index.xlsx",
+        },
+    ]
+
+
 def test_parse_sector_rankings_raises_on_duplicate_row(tmp_path):
     workbook_path = tmp_path / "ISM_Manufacturing_Index.xlsx"
     workbook = Workbook()

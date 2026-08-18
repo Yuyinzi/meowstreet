@@ -46,14 +46,6 @@ def fake_building_permits_main(argv):
     return 0
 
 
-def fake_ism_main(argv):
-    return 0
-
-
-def fake_ism_services_main(argv):
-    return 0
-
-
 def fake_ism_reports_main(argv):
     return 0
 
@@ -121,10 +113,6 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         calls.append(("gdp", argv))
         return 0
 
-    def ism_main(argv):
-        calls.append(("ism", argv))
-        return 0
-
     def ism_reports_main(argv):
         calls.append(("ism_reports", argv))
         return 0
@@ -136,8 +124,6 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         consumer_main=consumer_main,
         m2_main=m2_main,
         building_permits_main=lambda argv: 0,
-        ism_main=ism_main,
-        ism_services_main=lambda argv: 0,
         ism_reports_main=ism_reports_main,
         gdp_main=gdp_main,
         fomc_main=lambda argv: 0,
@@ -192,8 +178,6 @@ def test_main_does_not_generate_ai_interpretations():
         consumer_main=recorder("consumer"),
         m2_main=recorder("m2"),
         building_permits_main=lambda argv: 0,
-        ism_main=recorder("ism"),
-        ism_services_main=recorder("services_workbook"),
         ism_reports_main=recorder("ism_reports"),
         gdp_main=recorder("gdp"),
         fomc_main=recorder("fomc"),
@@ -234,8 +218,6 @@ def test_main_continues_after_provider_failure(capsys):
         consumer_main=lambda argv: 0,
         m2_main=ok_task("m2"),
         building_permits_main=lambda argv: 0,
-        ism_main=ok_task("ism"),
-        ism_services_main=lambda argv: 0,
         ism_reports_main=lambda argv: 0,
         gdp_main=ok_task("gdp"),
         nfib_main=lambda argv: 0,
@@ -254,7 +236,6 @@ def test_main_continues_after_provider_failure(capsys):
         "rates",
         "m2",
         "m2",
-        "ism",
         "gdp",
         "gdp",
     ]
@@ -284,8 +265,6 @@ def test_main_can_stop_after_first_failure():
         consumer_main=lambda argv: 0,
         m2_main=ok_task("m2"),
         building_permits_main=lambda argv: 0,
-        ism_main=ok_task("ism"),
-        ism_services_main=lambda argv: 0,
         ism_reports_main=lambda argv: 0,
         gdp_main=ok_task("gdp"),
         nfib_main=lambda argv: 0,
@@ -333,7 +312,6 @@ def test_main_records_exceptions_as_failures(capsys):
         consumer_main=lambda argv: 0,
         m2_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        ism_main=lambda argv: 0,
         gdp_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
@@ -452,7 +430,6 @@ def test_main_skip_flags_remove_tasks():
         consumer_main=lambda argv: 0,
         m2_main=recorder("m2"),
         building_permits_main=lambda argv: 0,
-        ism_main=recorder("ism"),
         gdp_main=recorder("gdp"),
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
@@ -493,8 +470,6 @@ def test_main_runs_both_ism_surveys_in_order():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        ism_main=recorder("manufacturing_workbook"),
-        ism_services_main=recorder("services_workbook"),
         ism_reports_main=recorder("ism_reports"),
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
@@ -508,9 +483,7 @@ def test_main_runs_both_ism_surveys_in_order():
 
     assert result == 0
     assert calls == [
-        ("manufacturing_workbook", []),
         ("ism_reports", ["--survey", "manufacturing", "--latest-only"]),
-        ("services_workbook", []),
         ("ism_reports", ["--survey", "services", "--latest-only"]),
     ]
 
@@ -715,8 +688,6 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         consumer_main=lambda argv: 0,
         m2_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        ism_main=lambda argv: 0,
-        ism_services_main=lambda argv: 0,
         ism_reports_main=lambda argv: calls.append(argv) or 0,
         gdp_main=lambda argv: 0,
         fomc_main=lambda argv: 0,
@@ -871,8 +842,6 @@ def test_macro_refresh_registers_lumber_yahoo_without_method_chrome_import(monke
         fake_consumer_main,
         fake_m2_main,
         fake_building_permits_main,
-        fake_ism_main,
-        fake_ism_services_main,
         fake_ism_reports_main,
         fake_gdp_main,
         lumber_main=fake_lumber_main,
@@ -891,8 +860,6 @@ def test_macro_refresh_skip_lumber_omits_only_lumber_task():
         fake_consumer_main,
         fake_m2_main,
         fake_building_permits_main,
-        fake_ism_main,
-        fake_ism_services_main,
         fake_ism_reports_main,
         fake_gdp_main,
         lumber_main=fake_lumber_main,
@@ -908,8 +875,6 @@ def test_macro_refresh_does_not_schedule_vendor_copper_tasks():
         fake_consumer_main,
         fake_m2_main,
         fake_building_permits_main,
-        fake_ism_main,
-        fake_ism_services_main,
         fake_ism_reports_main,
         fake_gdp_main,
     )
@@ -926,8 +891,6 @@ def test_refresh_registry_runs_sina_dce_iron_ore_unless_skipped():
         fake_consumer_main,
         fake_m2_main,
         fake_building_permits_main,
-        fake_ism_main,
-        fake_ism_services_main,
         fake_ism_reports_main,
         fake_gdp_main,
         dce_iron_ore_sina_main=fake_lumber_main,
@@ -946,8 +909,6 @@ def test_macro_refresh_skip_dce_iron_ore_sina_omits_the_task():
         fake_consumer_main,
         fake_m2_main,
         fake_building_permits_main,
-        fake_ism_main,
-        fake_ism_services_main,
         fake_ism_reports_main,
         fake_gdp_main,
         dce_iron_ore_sina_main=fake_lumber_main,
@@ -964,8 +925,6 @@ def test_macro_refresh_does_not_register_vendor_lme_copper_by_default():
         fake_consumer_main,
         fake_m2_main,
         fake_building_permits_main,
-        fake_ism_main,
-        fake_ism_services_main,
         fake_ism_reports_main,
         fake_gdp_main,
     )
@@ -1041,8 +1000,6 @@ def test_planned_tasks_includes_economic_confirmation_by_default():
         fake_consumer_main,
         fake_m2_main,
         fake_building_permits_main,
-        fake_ism_main,
-        fake_ism_services_main,
         fake_ism_reports_main,
         fake_gdp_main,
         economic_confirmation_main=fake_consumer_main,
@@ -1060,8 +1017,6 @@ def test_planned_tasks_skips_economic_confirmation_when_flag_set():
         fake_consumer_main,
         fake_m2_main,
         fake_building_permits_main,
-        fake_ism_main,
-        fake_ism_services_main,
         fake_ism_reports_main,
         fake_gdp_main,
         economic_confirmation_main=fake_consumer_main,
