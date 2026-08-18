@@ -4,7 +4,7 @@ import json
 import re
 import time
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from math import isfinite
 
 import pandas as pd
@@ -65,6 +65,9 @@ def _trading_days(start, end, calendar_frame=None):
         dates = None
     first = datetime.strptime(_iso_from_compact(start), _DATE_FORMAT).date()
     last = datetime.strptime(_iso_from_compact(end), _DATE_FORMAT).date()
+    today = date.today()
+    if last > today:
+        last = today
     current = first
     days = []
     while current <= last:

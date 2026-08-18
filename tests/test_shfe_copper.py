@@ -225,7 +225,20 @@ def test_akshare_daily_fetch_requests_only_trading_days():
     assert len(records) == 2
 
 
-def test_akshare_daily_fetch_reports_each_received_trading_day():
+def test_trading_days_clamps_end_to_today():
+    calendar = _calendar_frame(
+        [
+            __import__("datetime").date(2026, 8, 17),
+            __import__("datetime").date(2026, 8, 18),
+            __import__("datetime").date(2026, 8, 19),
+            __import__("datetime").date(2026, 8, 20),
+        ]
+    )
+
+    days = shfe_copper._trading_days("20260818", "20260820", calendar_frame=calendar)
+
+    assert days == ["2026-08-18"]
+
     calendar = _calendar_frame([__import__("datetime").date(2026, 7, 27)])
     ak = _FakeAkshare(
         {
