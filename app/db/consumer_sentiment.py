@@ -38,6 +38,36 @@ def replace_michigan_series(con, series_points_list):
     macro_indicators.replace_macro_indicator_points_batch(con, series_points_list)
 
 
+def merge_michigan_points(con, series_id, points):
+    normalized = str(series_id or "").strip().lower()
+    if normalized not in MICHIGAN_SERIES_IDS:
+        raise ValueError(f"series {normalized} is not a valid michigan series id")
+    existing = con.execute(
+        "select 1 from macro_indicator_series where series_id = ?", (normalized,)
+    ).fetchone()
+    if existing is None:
+        raise ValueError(
+            f"michigan series {normalized} is not defined; run the csv import first"
+        )
+    try:
+        for point in points:
+            con.execute(
+                """
+                insert into macro_indicator_points(series_id, date, value, source)
+                values (?, ?, ?, ?)
+                on conflict(series_id, date) do update set
+                    value = excluded.value,
+                    source = excluded.source
+                """,
+                (normalized, point["date"], point["value"], point["source"]),
+            )
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    return {"series_id": normalized, "points": len(points)}
+
+
 def replace_capacity_series(con, series_points_list):
     _validate_series_ids(series_points_list, CAPACITY_SERIES_IDS, "capacity")
     macro_indicators.replace_macro_indicator_points_batch(con, series_points_list)

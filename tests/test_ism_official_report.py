@@ -244,6 +244,27 @@ def test_parse_report_accepts_singular_contraction_ranking_wording():
     }
 
 
+def test_parse_report_accepts_past_tense_single_contraction_wording():
+    html = REPORT_HTML.replace(
+        "The three industries in contraction are: Paper Products; Furniture & Related Products; and Wood Products.",
+        "The only industry in contraction was Chemical Products.",
+    )
+
+    parsed = ism_official_report.parse_report(
+        html,
+        "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/pmi/june/",
+        fetched_at="2026-07-14T10:00:00Z",
+    )
+
+    assert parsed["rankings"][-1] == {
+        "date": "2026-06-01",
+        "industry": "Chemical Products",
+        "direction": "contraction",
+        "rank": -1,
+        "source": "ISM official report",
+    }
+
+
 def test_parse_report_accepts_same_at_a_glance_rate():
     html = REPORT_HTML.replace(
         "Manufacturing PMI® 53.3 54.0 -0.7 Growing Slower 6",

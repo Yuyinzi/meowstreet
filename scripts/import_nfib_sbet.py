@@ -17,36 +17,39 @@ def main(argv=None):
     parser.add_argument(
         "--cache-path", type=Path, default=nfib_sbet_import.DEFAULT_CACHE_DIR
     )
-    parser.add_argument(
-        "--source-url", default=nfib_sbet_import.DEFAULT_NFIB_SOURCE_URL
-    )
+    parser.add_argument("--source-url", default=None)
     parser.add_argument("--release-date")
     parser.add_argument("--fetch-pdf", action="store_true")
     parser.add_argument("--import-pdf", type=Path)
     args = parser.parse_args(argv)
 
     cache_path = Path(args.cache_path)
-
-    if args.import_pdf:
-        pdf_path = args.import_pdf
-    elif args.fetch_pdf:
-        cache_path.mkdir(parents=True, exist_ok=True)
-        pdf_path = cache_path / "nfib-sbet-current.pdf"
-        nfib_sbet_import.nfib_sbet.fetch_sbet_report(str(pdf_path), args.source_url)
-    else:
-        cache_path.mkdir(parents=True, exist_ok=True)
-        pdf_path = cache_path / "nfib-sbet-current.pdf"
-        nfib_sbet_import.nfib_sbet.fetch_sbet_report(str(pdf_path), args.source_url)
-
     con = macro_indicators.connect(args.db_path)
     try:
-        count = nfib_sbet_import.import_cached_official_sbet(
-            con, str(pdf_path), args.source_url, args.release_date
-        )
+        if args.import_pdf:
+            source_url = args.source_url or nfib_sbet_import.DEFAULT_NFIB_SOURCE_URL
+            count = nfib_sbet_import.import_cached_official_sbet(
+                con, str(args.import_pdf), source_url, args.release_date
+            )
+            print(f"imported {count} nfib observations from {args.import_pdf}")
+        elif args.source_url:
+            cache_path.mkdir(parents=True, exist_ok=True)
+            pdf_path = cache_path / "nfib-sbet-current.pdf"
+            nfib_sbet_import.nfib_sbet.fetch_sbet_report(
+                str(pdf_path), args.source_url
+            )
+            count = nfib_sbet_import.import_cached_official_sbet(
+                con, str(pdf_path), args.source_url, args.release_date
+            )
+            print(f"imported {count} nfib observations from {pdf_path}")
+        else:
+            count = nfib_sbet_import.import_latest_official_sbet(
+                con, cache_path, args.release_date
+            )
+            print(f"imported {count} nfib observations from latest discovered report")
     finally:
         con.close()
 
-    print(f"imported {count} nfib observations from {pdf_path}")
     return 0
 
 

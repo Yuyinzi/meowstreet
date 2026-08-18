@@ -1,4 +1,7 @@
+import calendar
 import csv
+import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 import httpx
@@ -7,6 +10,7 @@ from app.http_client import HttpClient
 
 
 MICHIGAN_ARCHIVE_URL = "https://data.sca.isr.umich.edu/data-archive/mine.php"
+MICHIGAN_FRONT_PAGE_URL = "https://www.sca.isr.umich.edu/"
 AGGREGATE_TABLE_ID = 1
 COMPONENTS_TABLE_ID = 5
 
@@ -19,6 +23,196 @@ _REQUIRED_COLUMNS_BY_TABLE = {
     AGGREGATE_TABLE_ID: _AGGREGATE_REQUIRED_COLUMNS,
     COMPONENTS_TABLE_ID: _COMPONENTS_REQUIRED_COLUMNS,
 }
+
+_FRONT_PAGE_H1_RE = re.compile(
+    r"^(Preliminary|Final)\s+Results\s+for\s+([A-Za-z]+)\s+(\d{4})$"
+)
+
+_MONTH_LOOKUP = {
+    name.lower(): number
+    for number in range(1, 13)
+    for name in (calendar.month_name[number], calendar.month_abbr[number])
+}
+
+_FRONT_PAGE_ROW_LABELS = {
+    "index of consumer sentiment": "sentiment",
+    "current economic conditions": "current_conditions",
+    "index of consumer expectations": "expectations",
+}
+
+_FRONT_PAGE_VALUE_KEYS = ["sentiment", "current_conditions", "expectations"]
+
+
+class _FrontPageParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.h1_text = None
+        self.rows = []
+        self._in_h1 = False
+        self._h1_parts = []
+        self._in_front_table = False
+        self._table_depth = 0
+        self._current_row = None
+        self._current_cell = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "h1" and self.h1_text is None and not self._in_h1:
+            self._in_h1 = True
+            self._h1_parts = []
+        if tag == "table":
+            if self._in_front_table:
+                self._table_depth += 1
+            elif dict(attrs).get("id") == "front_table":
+                self._in_front_table = True
+                self._table_depth = 0
+        if self._in_front_table:
+            if tag == "tr":
+                self._current_row = []
+            elif tag in ("td", "th") and self._current_row is not None:
+                self._current_cell = []
+
+    def handle_endtag(self, tag):
+        if tag == "h1" and self._in_h1:
+            self._in_h1 = False
+            self.h1_text = " ".join("".join(self._h1_parts).split())
+        if self._in_front_table:
+            if tag in ("td", "th") and self._current_cell is not None:
+                self._current_row.append("".join(self._current_cell).strip())
+                self._current_cell = None
+            elif tag == "tr" and self._current_row is not None:
+                self.rows.append(self._current_row)
+                self._current_row = None
+            elif tag == "table":
+                if self._table_depth == 0:
+                    self._in_front_table = False
+                else:
+                    self._table_depth -= 1
+
+    def handle_data(self, data):
+        if self._in_h1:
+            self._h1_parts.append(data)
+        if self._current_cell is not None:
+            self._current_cell.append(data)
+
+
+def _month_number(name, context):
+    number = _MONTH_LOOKUP.get(str(name).strip().lower())
+    if number is None:
+        raise ValueError(
+            f"michigan front page {context} has unrecognized month: {name!r}"
+        )
+    return number
+
+
+def _year_number(value, context):
+    try:
+        return int(str(value).strip())
+    except ValueError as exc:
+        raise ValueError(
+            f"michigan front page {context} has non-numeric year: {value!r}"
+        ) from exc
+
+
+def _header_cell(row, index, label):
+    if len(row) <= index:
+        raise ValueError(
+            f"michigan front page {label} row has only {len(row)} cells, "
+            f"expected at least {index + 1}"
+        )
+    return row[index]
+
+
+def _numeric_cell(raw, row_label):
+    text = str(raw).strip()
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise ValueError(
+            f"michigan front page row {row_label!r} value is not numeric: {text!r}"
+        ) from exc
+
+
+def _extract_column_values(data_rows, column_index):
+    values = {}
+    for row in data_rows:
+        if not row:
+            continue
+        key = _FRONT_PAGE_ROW_LABELS.get(row[0].strip().lower())
+        if key is None:
+            continue
+        values[key] = _numeric_cell(_header_cell(row, column_index, "data"), row[0])
+    missing = [key for key in _FRONT_PAGE_VALUE_KEYS if key not in values]
+    if missing:
+        raise ValueError(
+            f"michigan front page table is missing rows: {', '.join(missing)}"
+        )
+    return values
+
+
+def _parse_front_page(html_text):
+    parser = _FrontPageParser()
+    parser.feed(html_text)
+    parser.close()
+    if parser.h1_text is None:
+        raise ValueError("michigan front page is missing the release h1 heading")
+    match = _FRONT_PAGE_H1_RE.match(parser.h1_text)
+    if match is None:
+        raise ValueError(
+            f"michigan front page h1 has unexpected format: {parser.h1_text!r}"
+        )
+    release_kind = match.group(1).lower()
+    release_month = _month_number(match.group(2), "h1")
+    release_year = int(match.group(3))
+    rows = parser.rows
+    if not rows:
+        raise ValueError("michigan front page is missing table#front_table")
+    if len(rows) < 2:
+        raise ValueError(
+            f"michigan front page table has only {len(rows)} rows, "
+            "expected 2 header rows and 3 index rows"
+        )
+    month_header, year_header = rows[0], rows[1]
+    latest_month = _month_number(
+        _header_cell(month_header, 1, "month header"), "latest column header"
+    )
+    latest_year = _year_number(
+        _header_cell(year_header, 1, "year header"), "latest column header"
+    )
+    previous_month = _month_number(
+        _header_cell(month_header, 2, "month header"), "previous column header"
+    )
+    previous_year = _year_number(
+        _header_cell(year_header, 2, "year header"), "previous column header"
+    )
+    if latest_month != release_month or latest_year != release_year:
+        raise ValueError(
+            f"michigan front page latest column {calendar.month_name[latest_month]} "
+            f"{latest_year} does not match h1 {match.group(2)} {release_year}"
+        )
+    data_rows = rows[2:]
+    latest_values = _extract_column_values(data_rows, 1)
+    previous_values = _extract_column_values(data_rows, 2)
+    return {
+        "release_kind": release_kind,
+        "latest": {
+            "date": f"{latest_year:04d}-{latest_month:02d}-01",
+            **latest_values,
+        },
+        "previous": {
+            "date": f"{previous_year:04d}-{previous_month:02d}-01",
+            **previous_values,
+        },
+    }
+
+
+def fetch_front_page_results(http_client=None):
+    client = http_client or HttpClient()
+    try:
+        response = client.request("GET", MICHIGAN_FRONT_PAGE_URL, timeout=60)
+    except httpx.HTTPError as exc:
+        raise ValueError(f"failed to fetch michigan front page: {exc}") from exc
+    html_text = response.content.decode("utf-8", errors="replace")
+    return _parse_front_page(html_text)
 
 
 class MichiganConsumerSentimentClient:

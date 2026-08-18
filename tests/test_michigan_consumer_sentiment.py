@@ -7,13 +7,51 @@ import pytest
 
 from app.data_sources.michigan_consumer_sentiment import (
     MICHIGAN_ARCHIVE_URL,
+    MICHIGAN_FRONT_PAGE_URL,
     AGGREGATE_TABLE_ID,
     COMPONENTS_TABLE_ID,
     MichiganConsumerSentimentClient,
+    fetch_front_page_results,
     parse_aggregate_csv,
     parse_components_csv,
 )
 from app.http_client import HttpClient
+
+
+FRONT_PAGE_HTML = """
+<html><body>
+<h1>Preliminary Results for August 2026</h1>
+<table id="front_table">
+  <tr><td class=""></td><td class="em">Aug</td><td>Jul</td><td>Aug</td><td>M-M</td><td>Y-Y</td></tr>
+  <tr><td></td><td class="em">2026</td><td>2026</td><td>2025</td><td>Change</td><td>Change</td></tr>
+  <tr><td>Index of Consumer Sentiment</td><td class="em">51.0</td><td>55.2</td><td>58.2</td><td>-7.6%</td><td>-12.4%</td></tr>
+  <tr><td>Current Economic Conditions</td><td class="em">51.8</td><td>54.8</td><td>61.7</td><td>-5.5%</td><td>-16.0%</td></tr>
+  <tr><td>Index of Consumer Expectations</td><td class="em">50.6</td><td>55.4</td><td>55.9</td><td>-8.7%</td><td>-9.5%</td></tr>
+</table>
+</body></html>
+"""
+
+FRONT_PAGE_FINAL_HTML = """
+<html><body>
+<h1>Final Results for July 2026</h1>
+<table id="front_table">
+  <tr><td class=""></td><td class="em">Jul</td><td>Jun</td><td>Jul</td><td>M-M</td><td>Y-Y</td></tr>
+  <tr><td></td><td class="em">2026</td><td>2026</td><td>2025</td><td>Change</td><td>Change</td></tr>
+  <tr><td>Index of Consumer Sentiment</td><td class="em">55.2</td><td>49.5</td><td>61.0</td><td>11.5%</td><td>-9.5%</td></tr>
+  <tr><td>Current Economic Conditions</td><td class="em">54.8</td><td>53.0</td><td>62.0</td><td>3.4%</td><td>-11.6%</td></tr>
+  <tr><td>Index of Consumer Expectations</td><td class="em">55.4</td><td>47.1</td><td>60.5</td><td>17.6%</td><td>-8.4%</td></tr>
+</table>
+</body></html>
+"""
+
+
+def _front_page_client(html_text):
+    def handler(request):
+        assert request.method == "GET"
+        assert request.url == MICHIGAN_FRONT_PAGE_URL
+        return httpx.Response(200, content=html_text.encode("utf-8"))
+
+    return HttpClient(transport=httpx.MockTransport(handler))
 
 
 TABLE_1_CSV = (
@@ -303,3 +341,86 @@ def test_parse_aggregate_csv_rejects_title_without_header(tmp_path):
 
     with pytest.raises(ValueError, match="only 1 lines"):
         parse_aggregate_csv(path)
+
+
+def test_fetch_front_page_results_parses_preliminary_two_months():
+    results = fetch_front_page_results(_front_page_client(FRONT_PAGE_HTML))
+
+    assert results["release_kind"] == "preliminary"
+    assert results["latest"] == {
+        "date": "2026-08-01",
+        "sentiment": 51.0,
+        "current_conditions": 51.8,
+        "expectations": 50.6,
+    }
+    assert results["previous"] == {
+        "date": "2026-07-01",
+        "sentiment": 55.2,
+        "current_conditions": 54.8,
+        "expectations": 55.4,
+    }
+
+
+def test_fetch_front_page_results_parses_final_release():
+    results = fetch_front_page_results(_front_page_client(FRONT_PAGE_FINAL_HTML))
+
+    assert results["release_kind"] == "final"
+    assert results["latest"]["date"] == "2026-07-01"
+    assert results["latest"]["sentiment"] == 55.2
+    assert results["previous"]["date"] == "2026-06-01"
+    assert results["previous"]["expectations"] == 47.1
+
+
+def test_fetch_front_page_results_rejects_h1_table_mismatch():
+    html = FRONT_PAGE_HTML.replace(
+        "Preliminary Results for August 2026", "Preliminary Results for September 2026"
+    )
+
+    with pytest.raises(ValueError, match="does not match h1"):
+        fetch_front_page_results(_front_page_client(html))
+
+
+def test_fetch_front_page_results_rejects_unexpected_h1():
+    html = FRONT_PAGE_HTML.replace(
+        "Preliminary Results for August 2026", "Surveys of Consumers"
+    )
+
+    with pytest.raises(ValueError, match="unexpected format"):
+        fetch_front_page_results(_front_page_client(html))
+
+
+def test_fetch_front_page_results_rejects_missing_h1():
+    html = FRONT_PAGE_HTML.replace(
+        "<h1>Preliminary Results for August 2026</h1>", ""
+    )
+
+    with pytest.raises(ValueError, match="missing the release h1"):
+        fetch_front_page_results(_front_page_client(html))
+
+
+def test_fetch_front_page_results_rejects_missing_table():
+    html = FRONT_PAGE_HTML.replace('id="front_table"', 'id="other_table"')
+
+    with pytest.raises(ValueError, match="missing table#front_table"):
+        fetch_front_page_results(_front_page_client(html))
+
+
+def test_fetch_front_page_results_rejects_missing_index_row():
+    html = FRONT_PAGE_HTML.replace(
+        "  <tr><td>Index of Consumer Expectations</td><td class=\"em\">50.6</td>"
+        "<td>55.4</td><td>55.9</td><td>-8.7%</td><td>-9.5%</td></tr>\n",
+        "",
+    )
+
+    with pytest.raises(ValueError, match="missing rows: expectations"):
+        fetch_front_page_results(_front_page_client(html))
+
+
+def test_fetch_front_page_results_rejects_non_numeric_value():
+    html = FRONT_PAGE_HTML.replace(
+        "<td>Current Economic Conditions</td><td class=\"em\">51.8</td>",
+        "<td>Current Economic Conditions</td><td class=\"em\">N/A</td>",
+    )
+
+    with pytest.raises(ValueError, match="not numeric"):
+        fetch_front_page_results(_front_page_client(html))

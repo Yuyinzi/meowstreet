@@ -185,7 +185,7 @@ def parse_rankings(text, report_month):
         text,
     )
     contraction_match = re.search(
-        r"The\s+\w+\s+(?:manufacturing\s+)?industr(?:y|ies)(?:\s+in contraction|\s+reporting contraction(?:\s+in\s+[A-Za-z]+)?)\s+(?:is|are):?\s+(.*?)\.",
+        r"The\s+\w+\s+(?:manufacturing\s+)?industr(?:y|ies)(?:\s+in contraction|\s+reporting contraction(?:\s+in\s+[A-Za-z]+)?)\s+(?:is|are|was|were):?\s+(.*?)\.",
         text,
     )
     if not growth_match or not contraction_match:

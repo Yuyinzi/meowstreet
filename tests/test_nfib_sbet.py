@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -215,3 +216,106 @@ def test_fetch_sbet_report_creates_parent_directory(tmp_path):
     assert result.parent.exists()
     assert result == dest
     assert dest.read_bytes() == b"%PDF-fake"
+
+
+def test_discover_latest_sbet_url_probes_candidates_in_priority_order():
+    requested = []
+
+    def handler(request):
+        assert request.method == "HEAD"
+        requested.append(str(request.url))
+        if (
+            str(request.url)
+            == "https://www.nfib.com/wp-content/uploads/2026/08/NFIB-SBET-Report-July-2026.pdf"
+        ):
+            return httpx.Response(200)
+        return httpx.Response(404)
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    url = nfib_sbet.discover_latest_sbet_url(
+        reference_date=date(2026, 8, 18), http_client=client
+    )
+    assert (
+        url
+        == "https://www.nfib.com/wp-content/uploads/2026/08/NFIB-SBET-Report-July-2026.pdf"
+    )
+    assert requested[:3] == [
+        "https://www.nfib.com/wp-content/uploads/2026/08/NFIB-July-2026-SBET-Report.pdf",
+        "https://www.nfib.com/wp-content/uploads/2026/07/NFIB-July-2026-SBET-Report.pdf",
+        "https://www.nfib.com/wp-content/uploads/2026/08/NFIB-SBET-Report-July-2026.pdf",
+    ]
+
+
+def test_discover_latest_sbet_url_skips_missing_months():
+    def handler(request):
+        if (
+            str(request.url)
+            == "https://www.nfib.com/wp-content/uploads/2026/07/NFIB-June-2026-SBET-Report.pdf"
+        ):
+            return httpx.Response(200)
+        return httpx.Response(404)
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    url = nfib_sbet.discover_latest_sbet_url(
+        reference_date=date(2026, 8, 18), http_client=client
+    )
+    assert (
+        url
+        == "https://www.nfib.com/wp-content/uploads/2026/07/NFIB-June-2026-SBET-Report.pdf"
+    )
+
+
+def test_discover_latest_sbet_url_supports_legacy_monthly_economic_report_name():
+    def handler(request):
+        if (
+            str(request.url)
+            == "https://www.nfib.com/wp-content/uploads/2025/08/Monthly-Economic-Report-July-2025.pdf"
+        ):
+            return httpx.Response(200)
+        return httpx.Response(404)
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    url = nfib_sbet.discover_latest_sbet_url(
+        reference_date=date(2025, 8, 20), http_client=client
+    )
+    assert (
+        url
+        == "https://www.nfib.com/wp-content/uploads/2025/08/Monthly-Economic-Report-July-2025.pdf"
+    )
+
+
+def test_discover_latest_sbet_url_raises_when_no_candidate_exists():
+    def handler(request):
+        return httpx.Response(404)
+
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(ValueError, match="no report pdf found"):
+        nfib_sbet.discover_latest_sbet_url(
+            reference_date=date(2026, 8, 18), http_client=client
+        )
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        (
+            "https://www.nfib.com/wp-content/uploads/2026/07/NFIB-June-2026-SBET-Report.pdf",
+            (2026, 6),
+        ),
+        (
+            "https://www.nfib.com/wp-content/uploads/2026/08/NFIB-SBET-Report-July-2026.pdf",
+            (2026, 7),
+        ),
+        (
+            "https://www.nfib.com/wp-content/uploads/2025/08/Monthly-Economic-Report-August-2025.pdf",
+            (2025, 8),
+        ),
+    ],
+)
+def test_report_month_from_url_extracts_month_and_year(url, expected):
+    assert nfib_sbet.report_month_from_url(url) == expected
+
+
+def test_report_month_from_url_rejects_unrecognized_name():
+    with pytest.raises(ValueError, match="cannot determine report month"):
+        nfib_sbet.report_month_from_url("https://www.nfib.com/wp-content/uploads/report.pdf")

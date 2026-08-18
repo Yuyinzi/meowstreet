@@ -35,6 +35,8 @@ HTML = """
 <p>New Export Orders 48.5 50.6 -2.1 Contracting From Growing 1</p>
 <p>Imports 52.9 53.0 -0.1 Growing Slower 5</p>
 <p>The one manufacturing industry reporting growth is Printing & Related Support Activities.</p>
+<p>The 1 manufacturing industries reporting growth in June — listed in order — are: Printing & Related Support Activities.</p>
+<p>The only industry in contraction was Chemical Products.</p>
 <p>The one manufacturing industry that reported growth in new orders is Primary Metals.</p>
 <p>The next ISM® Manufacturing PMI® Report featuring July 2026 data will be released at 10:00 a.m. ET on Monday, August 3, 2026.</p>
 </body>
@@ -136,7 +138,7 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
     assert result == {
         "report_id": "ism_manufacturing_2026_06",
         "metrics": 11,
-        "rankings": 0,
+        "rankings": 2,
         "comments": 1,
         "at_a_glance_rows": 11,
         "source_name": "ismworld",
@@ -168,6 +170,17 @@ def test_import_report_fetches_and_stores_official_ism_data(tmp_path):
     assert rows[0]["point_change"] == 1.0
     assert rows[0]["direction"] == "Growing"
     assert rows[0]["rate_of_change"] == "Faster"
+    rankings = growth_cycle.load_latest_ism_industry_rankings(con)
+    assert len(rankings) == 2
+    assert rankings[0]["industry"] == "Printing & Related Support Activities"
+    assert rankings[0]["direction"] == "growth"
+    assert rankings[-1] == {
+        "date": "2026-06-01",
+        "industry": "Chemical Products",
+        "direction": "contraction",
+        "rank": -1,
+        "source": "ISM official report",
+    }
 
 
 def test_requested_months_defaults_to_previous_month(monkeypatch):
@@ -242,7 +255,7 @@ def test_main_imports_requested_months(tmp_path, monkeypatch, capsys):
     assert exit_code == 0
     out = capsys.readouterr().out
     assert (
-        "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=0 comments=1 "
+        "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=2 comments=1 "
         "at_a_glance_rows=11" in out
     )
 
@@ -289,7 +302,7 @@ def test_main_current_year_uses_prnewswire_for_history_and_official_for_latest(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert (
-        "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=0 comments=1 "
+        "ism_manufacturing_2026_06: source=ismworld metrics=11 rankings=2 comments=1 "
         "at_a_glance_rows=11" in captured.out
     )
 
@@ -453,7 +466,7 @@ def test_import_report_url_uses_checkpointed_extraction(tmp_path, monkeypatch):
         fetch=lambda url: (
             "<html><article>Manufacturing PMI at 50.0%; June 2026 ISM "
             "Manufacturing PMI Report text. WHAT RESPONDENTS ARE SAYING "
-            '"Input costs remain elevated." [Chemical Products]</article></html>'
+            '"Input costs remain elevated." [Chemical Products] The one manufacturing industry reporting growth is Printing & Related Support Activities. The one manufacturing industry that reported growth in new orders is Primary Metals. The 1 manufacturing industries reporting growth in June — listed in order — are: Printing & Related Support Activities. The only industry in contraction was Chemical Products.</article></html>'
         ),
         now=lambda: "2026-07-15T00:00:00Z",
         ai_client=object(),
@@ -527,7 +540,7 @@ def test_import_report_url_uses_factual_extraction_by_default(tmp_path):
         fetch=lambda url: (
             "<html><article>Manufacturing PMI at 50.0%; June 2026 ISM "
             "Manufacturing PMI Report text. WHAT RESPONDENTS ARE SAYING "
-            '"Input costs remain elevated." [Chemical Products]</article></html>'
+            '"Input costs remain elevated." [Chemical Products] The one manufacturing industry reporting growth is Printing & Related Support Activities. The one manufacturing industry that reported growth in new orders is Primary Metals. The 1 manufacturing industries reporting growth in June — listed in order — are: Printing & Related Support Activities. The only industry in contraction was Chemical Products.</article></html>'
         ),
         now=lambda: "2026-07-15T00:00:00Z",
         ai_client=FakeClient(),
@@ -642,7 +655,7 @@ def test_main_imports_one_report_month_with_ai(tmp_path, capsys, monkeypatch):
         fetch=lambda url: (
             "<html><article>Manufacturing PMI at 50.0%; "
             "June 2026 ISM Manufacturing PMI Report text. WHAT RESPONDENTS "
-            'ARE SAYING "Input costs remain elevated." [Chemical Products]</article>'
+            'ARE SAYING "Input costs remain elevated." [Chemical Products] The one manufacturing industry reporting growth is Printing & Related Support Activities. The one manufacturing industry that reported growth in new orders is Primary Metals. The 1 manufacturing industries reporting growth in June — listed in order — are: Printing & Related Support Activities. The only industry in contraction was Chemical Products.</article>'
         ),
         ai_client_factory=lambda config: FakeClient(),
     )
@@ -1049,6 +1062,6 @@ def test_main_continues_when_prnewswire_article_fetch_fails(
     assert exit_code == 1
     assert f"ism_official_report/{bad_url}: failed -" in captured.err
     assert (
-        "ism_manufacturing_2026_06: source=prnewswire metrics=11 rankings=0 "
+        "ism_manufacturing_2026_06: source=prnewswire metrics=11 rankings=2 "
         "comments=1 at_a_glance_rows=11" in captured.out
     )

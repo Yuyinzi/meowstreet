@@ -476,8 +476,6 @@ def test_macro_refresh_does_not_register_http_commodity_task_by_default():
         consumer_main=lambda argv: 0,
         m2_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        ism_main=lambda argv: 0,
-        ism_services_main=lambda argv: 0,
         ism_reports_main=lambda argv: 0,
         gdp_main=lambda argv: 0,
         fomc_main=lambda argv: 0,

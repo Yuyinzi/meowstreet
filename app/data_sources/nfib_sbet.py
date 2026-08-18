@@ -1,7 +1,10 @@
 import hashlib
 import re
 from calendar import monthrange
+from datetime import date
 from pathlib import Path
+
+import httpx
 
 try:
     from pypdf import PdfReader
@@ -94,6 +97,18 @@ _MONTH_HEADER_RE = re.compile(
 )
 
 _GRID_ROW_RE = re.compile(r"(\d{4})\s+((-?\d+\.?\d*\s*)+)")
+
+_UPLOAD_BASE_URL = "https://www.nfib.com/wp-content/uploads"
+
+_DISCOVER_LOOKBACK_MONTHS = 3
+
+_REPORT_URL_TEMPLATES = (
+    "NFIB-{month_name}-{year}-SBET-Report.pdf",
+    "NFIB-SBET-Report-{month_name}-{year}.pdf",
+    "Monthly-Economic-Report-{month_name}-{year}.pdf",
+)
+
+_MONTH_NAME = {number: name for name, number in _MONTH_NUM.items()}
 
 _SECTION_MARKERS = [
     ("OPTIMISM INDEX", _OPTIMISM_SERIES, True),
@@ -493,3 +508,46 @@ def fetch_sbet_report(destination, source_url, http_client=None):
     response = client.request("GET", source_url, timeout=60)
     dest.write_bytes(response.content)
     return dest
+
+
+def _shift_month(year, month, delta):
+    total = int(year) * 12 + int(month) - 1 + delta
+    return total // 12, total % 12 + 1
+
+
+def _candidate_report_urls(reference_date):
+    today = reference_date or date.today()
+    urls = []
+    for offset in range(1, _DISCOVER_LOOKBACK_MONTHS + 1):
+        report_year, report_month = _shift_month(today.year, today.month, -offset)
+        upload_dirs = [
+            _shift_month(report_year, report_month, 1),
+            (report_year, report_month),
+        ]
+        for template in _REPORT_URL_TEMPLATES:
+            filename = template.format(
+                month_name=_MONTH_NAME[report_month], year=report_year
+            )
+            for upload_year, upload_month in upload_dirs:
+                urls.append(
+                    f"{_UPLOAD_BASE_URL}/{upload_year:04d}/{upload_month:02d}/{filename}"
+                )
+    return urls
+
+
+def discover_latest_sbet_url(reference_date=None, http_client=None):
+    client = http_client or HttpClient()
+    for url in _candidate_report_urls(reference_date):
+        try:
+            client.request("HEAD", url, timeout=30)
+        except httpx.HTTPStatusError:
+            continue
+        return url
+    raise ValueError("nfib sbet: no report pdf found for recent months")
+
+
+def report_month_from_url(source_url):
+    match = re.search(r"([A-Z][a-z]+)-(\d{4})", Path(source_url).name)
+    if not match or match.group(1) not in _MONTH_NUM:
+        raise ValueError(f"nfib sbet: cannot determine report month from url: {source_url}")
+    return int(match.group(2)), _MONTH_NUM[match.group(1)]

@@ -1,5 +1,7 @@
+import argparse
 import csv
 import sys
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -7,6 +9,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.data_sources.fred import FredClient
 from app.data_sources.fred import compute_yoy
+from app.data_sources.fred import date_iso
 from app.data_sources.fred import parse_fred_csv
 from app.data_sources.fred import resample_to_weekly_sundays
 from app.db import macro_indicators
@@ -135,7 +138,7 @@ def import_fred_macro_csvs(
             resample_to_weekly_sundays(
                 cpi_yoy,
                 start_date=start_date,
-                end_date=end_date,
+                end_date=end_date or date_iso(date.today()),
             )
         ),
         "vix": _fred_points_payload(
@@ -196,16 +199,22 @@ def import_csv(con, csv_path=DEFAULT_CSV_PATH):
     return inserted
 
 
-def main():
-    args = set(sys.argv[1:])
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Import US P4 macro indicators from CSV or FRED"
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--fetch-fred-csv", action="store_true")
+    mode.add_argument("--fred-csv-merge", action="store_true")
+    args = parser.parse_args(argv)
+    if args.fetch_fred_csv:
+        fetched = fetch_fred_csvs()
+        for series_id, path in fetched.items():
+            print(f"{series_id}: {path}")
+        return 0
     con = us_rates_liquidity.connect()
     try:
-        if "--fetch-fred-csv" in args:
-            fetched = fetch_fred_csvs()
-            for series_id, path in fetched.items():
-                print(f"{series_id}: {path}")
-            return
-        if "--fred-csv-merge" in args:
+        if args.fred_csv_merge:
             inserted = import_fred_macro_csvs(con)
         else:
             inserted = import_csv(con)
@@ -213,7 +222,8 @@ def main():
             print(f"{series_id}: {count}")
     finally:
         con.close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

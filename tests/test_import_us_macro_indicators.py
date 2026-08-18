@@ -304,3 +304,44 @@ def test_import_fred_macro_csvs_saves_fed_balance_sheet_series(tmp_path):
         "value": 6710000.0,
         "source": "FRED weekly",
     }
+
+
+def test_import_fred_macro_csvs_extends_cpi_yoy_tail_to_recent_sundays(tmp_path):
+    fred_dir = tmp_path / "fred"
+    fred_dir.mkdir()
+    (fred_dir / "CPIAUCSL.csv").write_text(
+        "observation_date,CPIAUCSL\n2019-12-01,258.203\n2020-12-01,262.035\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "VIXCLS.csv").write_text(
+        "observation_date,VIXCLS\n2020-12-24,21.53\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "PCEPILFE.csv").write_text(
+        "observation_date,PCEPILFE\n2020-12-01,130.0\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "WALCL.csv").write_text(
+        "observation_date,WALCL\n2020-12-30,6500000.0\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "TREAST.csv").write_text(
+        "observation_date,TREAST\n2020-12-30,4200000.0\n",
+        encoding="utf-8",
+    )
+    (fred_dir / "WSHOMCB.csv").write_text(
+        "observation_date,WSHOMCB\n2020-12-30,2100000.0\n",
+        encoding="utf-8",
+    )
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+
+    import_us_macro_indicators.import_fred_macro_csvs(con, fred_dir)
+
+    points = macro_indicators.load_macro_indicator_points(con, "cpi_yoy")
+    assert points[0] == {
+        "date": "2020-12-06",
+        "value": 1.48,
+        "source": "FRED weekly Sunday resample",
+    }
+    assert points[-1]["date"] > "2020-12-01"
+    assert points[-1]["value"] == 1.48

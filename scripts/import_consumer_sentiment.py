@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT))
 from app.data_sources.fred import FredClient, parse_fred_csv
 from app.data_sources.michigan_consumer_sentiment import (
     MichiganConsumerSentimentClient,
+    fetch_front_page_results,
     parse_aggregate_csv,
     parse_components_csv,
 )
@@ -15,11 +16,11 @@ from app.db import consumer_sentiment
 
 
 FRED_CAPACITY_SERIES = {
-    "HDTGPDUSQ163N": {
+    "BOGZ1FL010000336Q": {
         "series_id": "household_debt_to_gdp",
         "title": "Household Debt to GDP",
         "units": "percent",
-        "source": "FRED HDTGPDUSQ163N",
+        "source": "FRED BOGZ1FL010000336Q",
     },
     "TDSP": {
         "series_id": "household_debt_service_ratio",
@@ -47,6 +48,16 @@ MICHIGAN_SOURCES = {
     "umcsi_expectations": "University of Michigan Table 5",
     "umcsi_current_conditions": "University of Michigan Table 5",
 }
+
+MICHIGAN_FRONT_PAGE_SOURCE = (
+    "University of Michigan Surveys of Consumers front page"
+)
+
+_FRONT_PAGE_SERIES = [
+    ("umcsi_aggregate", "sentiment"),
+    ("umcsi_expectations", "expectations"),
+    ("umcsi_current_conditions", "current_conditions"),
+]
 
 
 def _michigan_series_payload(series_id, title, units):
@@ -125,6 +136,28 @@ def import_michigan_csvs(table_1_path, table_5_path, db_path):
     return series_points_list
 
 
+def import_front_page_results(db_path, http_client=None):
+    results = fetch_front_page_results(http_client)
+    months = [results["previous"], results["latest"]]
+    con = consumer_sentiment.connect(db_path)
+    try:
+        imported = []
+        for series_id, value_key in _FRONT_PAGE_SERIES:
+            points = [
+                {
+                    "date": month["date"],
+                    "value": month[value_key],
+                    "source": MICHIGAN_FRONT_PAGE_SOURCE,
+                }
+                for month in months
+            ]
+            consumer_sentiment.merge_michigan_points(con, series_id, points)
+            imported.append({"series_id": series_id, "points": points})
+    finally:
+        con.close()
+    return imported
+
+
 def import_fred_csvs(csv_dir, db_path):
     csv_dir = Path(csv_dir)
     series_points_list = []
@@ -164,6 +197,7 @@ def main(argv=None):
     mode.add_argument(
         "--michigan-csv-import", nargs=2, metavar=("TABLE_1_PATH", "TABLE_5_PATH")
     )
+    mode.add_argument("--fetch-front-page-import", action="store_true")
     mode.add_argument("--fetch-fred-csv", type=Path, metavar="DESTINATION_DIR")
     mode.add_argument("--fred-csv-import", type=Path, metavar="DIRECTORY")
     args = parser.parse_args(argv)
@@ -183,6 +217,16 @@ def main(argv=None):
             for item in result:
                 print(f"{item['series']['series_id']}: {len(item['points'])}")
             print(f"total: {total}")
+            return 0
+        if args.fetch_front_page_import:
+            result = import_front_page_results(args.db_path)
+            print(f"db: {args.db_path}")
+            for item in result:
+                dates = [point["date"] for point in item["points"]]
+                print(
+                    f"{item['series_id']}: {len(item['points'])} points "
+                    f"({dates[0]}..{dates[-1]})"
+                )
             return 0
         if args.fetch_fred_csv:
             client = FredClient(args.fetch_fred_csv)

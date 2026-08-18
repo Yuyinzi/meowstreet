@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 from app.http_client import HttpClient
 
 from app.db import growth_cycle
+from app.db import ism_surveys
 from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from app.tools import ism_ai_extraction, ism_official_report, ism_prnewswire_archive
@@ -426,6 +427,15 @@ def import_report_url(
             f"llm returned {payload['report']['report_month']}"
         )
     metric_count = merge_ai_metrics(con, payload)
+    ranking_rows = ism_official_report.parse_rankings(
+        ism_official_report.normalize_text(prepared["report_text"]),
+        prepared["report_month"],
+    )
+    con.execute(
+        "delete from ism_industry_rankings where survey_type = 'manufacturing' and date = ?",
+        (prepared["report_month"],),
+    )
+    ism_surveys.merge_industry_rankings(con, "manufacturing", ranking_rows)
     growth_cycle.replace_ism_at_a_glance_rows(
         con, ai_at_a_glance_rows(payload, url, source_hash)
     )
@@ -447,7 +457,7 @@ def import_report_url(
     return {
         "report_id": payload["report"]["report_id"],
         "metrics": metric_count,
-        "rankings": 0,
+        "rankings": len(ranking_rows),
         "comments": len(payload["respondent_comments"]),
         "at_a_glance_rows": len(payload["at_a_glance_rows"]),
         "source_name": source_name,

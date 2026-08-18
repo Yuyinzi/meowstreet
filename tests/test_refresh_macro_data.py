@@ -9,6 +9,7 @@ def args_without_skips():
         skip_rates=False,
         skip_consumer_sentiment=False,
         skip_m2=False,
+        skip_macro=False,
         skip_building_permits=False,
         skip_ism=False,
         skip_gdp=False,
@@ -65,7 +66,7 @@ def test_main_refreshes_official_building_permits_when_enabled():
         calls.append(argv)
         return 0
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -76,6 +77,7 @@ def test_main_refreshes_official_building_permits_when_enabled():
             "--skip-fomc",
         ],
         building_permits_main=permits_main,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -117,7 +119,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         calls.append(("ism_reports", argv))
         return 0
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         ["--skip-fomc"],
         benchmark_main=benchmark_main,
         rates_main=rates_main,
@@ -127,6 +129,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         ism_reports_main=ism_reports_main,
         gdp_main=gdp_main,
         fomc_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -171,7 +174,7 @@ def test_main_does_not_generate_ai_interpretations():
 
         return _record
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         ["--skip-fomc"],
         benchmark_main=recorder("benchmark"),
         rates_main=recorder("rates"),
@@ -181,6 +184,7 @@ def test_main_does_not_generate_ai_interpretations():
         ism_reports_main=recorder("ism_reports"),
         gdp_main=recorder("gdp"),
         fomc_main=recorder("fomc"),
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -211,7 +215,7 @@ def test_main_continues_after_provider_failure(capsys):
 
         return _ok
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         ["--skip-fomc"],
         benchmark_main=failing_benchmark,
         rates_main=ok_task("rates"),
@@ -220,6 +224,7 @@ def test_main_continues_after_provider_failure(capsys):
         building_permits_main=lambda argv: 0,
         ism_reports_main=lambda argv: 0,
         gdp_main=ok_task("gdp"),
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -258,7 +263,7 @@ def test_main_can_stop_after_first_failure():
 
         return _ok
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         ["--stop-on-error", "--skip-fomc"],
         benchmark_main=failing_benchmark,
         rates_main=ok_task("rates"),
@@ -267,6 +272,7 @@ def test_main_can_stop_after_first_failure():
         building_permits_main=lambda argv: 0,
         ism_reports_main=lambda argv: 0,
         gdp_main=ok_task("gdp"),
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -299,7 +305,7 @@ def test_main_records_exceptions_as_failures(capsys):
     def raising_benchmark(argv):
         raise ValueError("yahoo rate limited")
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         [
             "--skip-rates",
             "--skip-m2",
@@ -313,6 +319,7 @@ def test_main_records_exceptions_as_failures(capsys):
         m2_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
         gdp_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -335,7 +342,7 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
         calls.append(argv)
         return 0
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -349,6 +356,7 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
         fomc_main=fake_task,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -376,7 +384,7 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
         calls.append(argv)
         return 0
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -393,6 +401,7 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
         fomc_document_main=lambda argv: 0,
         fomc_policy_tone_main=lambda argv: 0,
         fomc_minutes_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -417,7 +426,7 @@ def test_main_skip_flags_remove_tasks():
 
         return _record
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-ism",
@@ -431,6 +440,7 @@ def test_main_skip_flags_remove_tasks():
         m2_main=recorder("m2"),
         building_permits_main=lambda argv: 0,
         gdp_main=recorder("gdp"),
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -459,7 +469,7 @@ def test_main_runs_both_ism_surveys_in_order():
 
         return run
 
-    result = refresh_macro_data.main(
+    result = refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -471,6 +481,7 @@ def test_main_runs_both_ism_surveys_in_order():
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
         ism_reports_main=recorder("ism_reports"),
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -498,7 +509,7 @@ def test_planned_tasks_includes_nfib_import_by_default():
 
         return run
 
-    refresh_macro_data.main(
+    refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -510,9 +521,11 @@ def test_planned_tasks_includes_nfib_import_by_default():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=record("nfib"),
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
         dce_iron_ore_sina_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
@@ -523,7 +536,7 @@ def test_planned_tasks_includes_nfib_import_by_default():
 
 
 def test_skip_nfib_sbo_removes_nfib_task():
-    refresh_macro_data.main(
+    refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -536,11 +549,13 @@ def test_skip_nfib_sbo_removes_nfib_task():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: (_ for _ in ()).throw(
             AssertionError("should not be called")
         ),
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
         dce_iron_ore_sina_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
@@ -558,7 +573,7 @@ def test_planned_tasks_includes_nfib_regional_import_by_default():
 
         return run
 
-    refresh_macro_data.main(
+    refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -570,9 +585,11 @@ def test_planned_tasks_includes_nfib_regional_import_by_default():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=record("nfib"),
         nfib_regional_main=record("nfib_regional"),
         main=lambda argv: 0,
+        oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
         dce_iron_ore_sina_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
@@ -592,7 +609,7 @@ def test_planned_tasks_includes_unless_skipped():
 
         return run
 
-    refresh_macro_data.main(
+    refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -604,6 +621,7 @@ def test_planned_tasks_includes_unless_skipped():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=record(""),
@@ -618,7 +636,7 @@ def test_planned_tasks_includes_unless_skipped():
 
 
 def test_skip_cyclical_commodities_removes_task():
-    refresh_macro_data.main(
+    refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -631,6 +649,7 @@ def test_skip_cyclical_commodities_removes_task():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: (_ for _ in ()).throw(
@@ -645,7 +664,7 @@ def test_skip_cyclical_commodities_removes_task():
 
 
 def test_skip_nfib_sbo_regional_removes_nfib_regional_task():
-    refresh_macro_data.main(
+    refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -658,6 +677,7 @@ def test_skip_nfib_sbo_regional_removes_nfib_regional_task():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: (_ for _ in ()).throw(
             AssertionError("should not be called")
@@ -674,7 +694,7 @@ def test_skip_nfib_sbo_regional_removes_nfib_regional_task():
 def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
     calls = []
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -691,6 +711,7 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         ism_reports_main=lambda argv: calls.append(argv) or 0,
         gdp_main=lambda argv: 0,
         fomc_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -733,7 +754,7 @@ def test_main_runs_all_fomc_tasks_in_order(tmp_path):
         calls.append(("minutes_structure", argv))
         return 0
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -750,6 +771,7 @@ def test_main_runs_all_fomc_tasks_in_order(tmp_path):
         fomc_document_main=documents_recorder,
         fomc_policy_tone_main=tone_recorder,
         fomc_minutes_main=minutes_recorder,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -770,7 +792,7 @@ def test_main_runs_all_fomc_tasks_in_order(tmp_path):
 
 
 def test_main_skips_all_fomc_tasks_when_skip_fomc_flag():
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -794,6 +816,7 @@ def test_main_skips_all_fomc_tasks_when_skip_fomc_flag():
         fomc_minutes_main=lambda argv: (_ for _ in ()).throw(
             AssertionError("should not be called")
         ),
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -808,7 +831,7 @@ def test_main_skips_all_fomc_tasks_when_skip_fomc_flag():
 
 
 def test_skip_oil_removes_oil_task():
-    refresh_macro_data.main(
+    refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -821,12 +844,79 @@ def test_skip_oil_removes_oil_task():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
         oil_main=lambda argv: (_ for _ in ()).throw(
             AssertionError("should not be called")
         ),
+        lumber_main=lambda argv: 0,
+        dce_iron_ore_sina_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
+        economic_confirmation_main=lambda argv: 0,
+    )
+
+
+def test_planned_tasks_includes_macro_fred_tasks_by_default():
+    calls = []
+
+    def record(label):
+        def run(argv):
+            calls.append((label, argv))
+            return 0
+
+        return run
+
+    refresh_macro_data.run(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-consumer-sentiment",
+            "--skip-ism",
+            "--skip-gdp",
+            "--skip-fomc",
+        ],
+        m2_main=lambda argv: 0,
+        p4_macro_main=record("p4_macro"),
+        building_permits_main=lambda argv: 0,
+        nfib_main=lambda argv: 0,
+        nfib_regional_main=lambda argv: 0,
+        main=lambda argv: 0,
+        oil_main=lambda argv: 0,
+        lumber_main=lambda argv: 0,
+        dce_iron_ore_sina_main=lambda argv: 0,
+        shfe_copper_main=lambda argv: 0,
+        economic_confirmation_main=lambda argv: 0,
+    )
+
+    assert calls == [
+        ("p4_macro", ["--fetch-fred-csv"]),
+        ("p4_macro", ["--fred-csv-merge"]),
+    ]
+
+
+def test_skip_macro_removes_tasks():
+    refresh_macro_data.run(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-consumer-sentiment",
+            "--skip-m2",
+            "--skip-ism",
+            "--skip-gdp",
+            "--skip-fomc",
+            "--skip-p4-macro",
+        ],
+        consumer_main=lambda argv: 0,
+        building_permits_main=lambda argv: 0,
+        nfib_main=lambda argv: 0,
+        nfib_regional_main=lambda argv: 0,
+        p4_macro_main=lambda argv: (_ for _ in ()).throw(
+            AssertionError("should not be called")
+        ),
+        main=lambda argv: 0,
+        oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
         dce_iron_ore_sina_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
@@ -939,7 +1029,7 @@ def test_refresh_registry_runs_economic_confirmation_by_default():
         calls.append(argv)
         return 0
 
-    exit_code = refresh_macro_data.main(
+    exit_code = refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -951,6 +1041,7 @@ def test_refresh_registry_runs_economic_confirmation_by_default():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -966,7 +1057,7 @@ def test_refresh_registry_runs_economic_confirmation_by_default():
 
 
 def test_skip_economic_confirmation_removes_task():
-    refresh_macro_data.main(
+    refresh_macro_data.run(
         [
             "--skip-yahoo",
             "--skip-rates",
@@ -979,6 +1070,7 @@ def test_skip_economic_confirmation_removes_task():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
+        p4_macro_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
