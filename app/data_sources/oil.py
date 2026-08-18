@@ -1,6 +1,8 @@
 import json
 import math
 
+import httpx
+
 from app.http_client import HttpClient
 
 
@@ -65,9 +67,9 @@ def _build_params(
         "frequency": frequency,
     }
     if start_date:
-        params["start[0]"] = start_date
+        params["start"] = start_date
     if end_date:
-        params["end[0]"] = end_date
+        params["end"] = end_date
     if offset is not None:
         params["offset"] = offset
     return params
@@ -104,13 +106,15 @@ def _build_route_url(route):
 
 
 def _request_payload(client, route_url, params, series_id):
-    request_failed = False
+    detail = None
     try:
         response = client.request("GET", route_url, params=params, timeout=30)
-    except Exception:
-        request_failed = True
-    if request_failed:
-        raise ValueError(f"eia request failed for {series_id}")
+    except httpx.HTTPStatusError as exc:
+        detail = f"http {exc.response.status_code}"
+    except Exception as exc:
+        detail = type(exc).__name__
+    if detail is not None:
+        raise ValueError(f"eia request failed for {series_id}: {detail}")
     data = response.content
     return json.loads(data)
 

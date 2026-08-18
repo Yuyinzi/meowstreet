@@ -199,6 +199,36 @@ def test_price_requests_include_daily_frequency():
             )
 
 
+def test_start_and_end_use_plain_eia_v2_param_names():
+    captured_urls = []
+
+    def handler(request):
+        url = str(request.url)
+        captured_urls.append(url)
+        return httpx.Response(200, json={"response": {"data": []}})
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(transport=transport)
+    oil.fetch_oil_observations(
+        "test-key",
+        http_client=client,
+        price_start_date="2026-07-01",
+        attribution_start_date="2026-06-01",
+    )
+
+    assert captured_urls
+    for url in captured_urls:
+        assert "start%5B0%5D" not in url and "end%5B0%5D" not in url, (
+            f"eia v2 rejects start[0]/end[0] with 500: {url}"
+        )
+    assert any("start=2026-07-01" in url for url in captured_urls if "pri/spt" in url)
+    assert any(
+        "start=2026-06-01" in url
+        for url in captured_urls
+        if "stoc/wstk" in url or "sum/sndw" in url
+    )
+
+
 def test_fetch_rejects_nan_value():
     def handler(request):
         return httpx.Response(
@@ -249,6 +279,16 @@ def test_http_error_does_not_leak_api_key_in_exception():
             assert "test-key" not in url_str, (
                 f"API key leaked in exception.{attr_name}.url: {url_str}"
             )
+
+
+def test_http_error_includes_status_code_without_leaking_url():
+    def handler(request):
+        return httpx.Response(500, json={"error": "server error"})
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(transport=transport, max_attempts=1)
+    with pytest.raises(ValueError, match=r"eia request failed for RWTC: http 500"):
+        oil.fetch_oil_observations("test-key", http_client=client)
 
 
 def test_oil_benchmark_payload_includes_source_provenance():
