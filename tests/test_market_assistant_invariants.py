@@ -14,6 +14,7 @@ from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.routers import market_assistant as market_assistant_router
 from app.services import market_assistant as market_assistant_service
 from app.services import market_setup_current
+from app.services.market_assistant_react import run_hybrid_narration
 from app.services.market_assistant_tool_runtime import (
     _approved_counterfactuals_artifact,
 )
@@ -26,6 +27,7 @@ from app.tools import market_setup_explanation_snapshot
 from app.tools import market_setup_predicates
 from app.tools import market_setup_v2
 from app.tools.market_assistant_plans import validate_task_plan
+from app.tools.market_assistant_routes import route_question
 from app.tools.market_assistant_views import build_explanation_view
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -919,6 +921,29 @@ def _e2e_narration_step(text, deltas=None, error=None):
     return step
 
 
+def _e2e_tool_step(calls):
+    response_items = [
+        {
+            "type": "function_call",
+            "call_id": call["call_id"],
+            "name": call["tool_name"],
+            "arguments": json.dumps(
+                call["arguments"], ensure_ascii=False, sort_keys=True
+            ),
+        }
+        for call in calls
+    ]
+    return {
+        "result": {
+            "output_text": "",
+            "tool_calls": list(calls),
+            "response_items": response_items,
+            "usage": None,
+            "timings": {},
+        }
+    }
+
+
 def _first_decision_fact_ref(artifact_projection):
     for artifact_id in sorted(artifact_projection):
         for obj in artifact_projection[artifact_id].get("object_index") or []:
@@ -948,20 +973,124 @@ def _claim_audit_factory():
                 "refs": [],
                 "values": [],
             }
-        else:
+            return {"claims": [claim]}
+        bound_values = _detail_bound_values(artifact_projection, ref)
+        marked = []
+        for value in bound_values:
+            index = answer_text.find(value["text"])
+            if index < 0:
+                continue
+            marked.append((index, index + len(value["text"]), value))
+        if not marked:
             claim = {
                 "claim_id": "claim_1",
                 "start": 0,
                 "end": len(answer_text),
                 "exact_text": answer_text,
+                "purpose": "illustration",
+                "authority": "hypothetical",
+                "refs": [],
+                "values": [],
+            }
+            return {"claims": [claim]}
+        marked.sort()
+        bound_start = marked[0][0]
+        bound_end = max(position[1] for position in marked)
+        tiled_values = []
+        cursor = bound_start
+        for start, end, value in marked:
+            value = dict(value)
+            value["text"] = answer_text[cursor:end]
+            cursor = end
+            tiled_values.append(value)
+        bound_text = answer_text[bound_start:bound_end]
+        claims = [
+            {
+                "claim_id": "claim_detail",
+                "start": bound_start,
+                "end": bound_end,
+                "exact_text": bound_text,
                 "purpose": "decision_explanation",
                 "authority": "decision_fact",
                 "refs": [ref],
-                "values": [],
+                "values": tiled_values,
             }
-        return {"claims": [claim]}
+        ]
+        if bound_start > 0:
+            claims.append(
+                {
+                    "claim_id": "claim_lead",
+                    "start": 0,
+                    "end": bound_start,
+                    "exact_text": answer_text[0:bound_start],
+                    "purpose": "illustration",
+                    "authority": "hypothetical",
+                    "refs": [],
+                    "values": [],
+                }
+            )
+        if bound_end < len(answer_text):
+            claims.append(
+                {
+                    "claim_id": "claim_tail",
+                    "start": bound_end,
+                    "end": len(answer_text),
+                    "exact_text": answer_text[bound_end : len(answer_text)],
+                    "purpose": "illustration",
+                    "authority": "hypothetical",
+                    "refs": [],
+                    "values": [],
+                }
+            )
+        return {"claims": claims}
 
     return fake_complete_structured
+
+
+def _detail_bound_values(artifact_projection, ref):
+    for artifact_id in sorted(artifact_projection):
+        for obj in artifact_projection[artifact_id].get("object_index") or []:
+            if obj.get("object_id") == ref.get("object_id") and obj.get(
+                "object_type"
+            ) == ref.get("object_type"):
+                payload = obj.get("payload") or {}
+                current = payload.get("current") or {}
+                values = []
+                for field in ("policy_action", "overall_bias"):
+                    if field in current:
+                        values.append(
+                            {
+                                "name": field,
+                                "value": current[field],
+                                "source": {**ref, "field": f"current.{field}"},
+                                "text": _display_fragment(current[field]),
+                            }
+                        )
+                relationship = current.get("relationship_to_growth_direction")
+                if relationship is not None:
+                    values.append(
+                        {
+                            "name": "relationship_to_growth_direction",
+                            "value": relationship,
+                            "source": {
+                                **ref,
+                                "field": "current.relationship_to_growth_direction",
+                            },
+                            "text": _display_fragment(relationship),
+                        }
+                    )
+                return values
+    return []
+
+
+def _display_fragment(value):
+    labels = {
+        "hold": "维持利率不变",
+        "mild_hawkish": "整体立场偏鹰",
+        "conflicts": "与增长方向不一致",
+        "supports": "与增长方向一致",
+    }
+    return labels.get(value, str(value))
 
 
 def _prepare_market_setup_harness(
@@ -974,6 +1103,7 @@ def _prepare_market_setup_harness(
     question="现在市场怎么样？",
     extra_env=None,
     request_overrides=None,
+    resolution_injector=None,
 ):
     _assistant_env(monkeypatch)
     monkeypatch.setenv("MARKET_ASSISTANT_CLAIM_VALIDATION_ENABLED", "true")
@@ -986,6 +1116,8 @@ def _prepare_market_setup_harness(
     monkeypatch.setattr(us_rates_liquidity_db, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(market_setup_current, "DEFAULT_DB_PATH", db_path)
     resolution = _build_resolution(db_path, _downside_inputs(), created_at=RESOLVED_AT)
+    if resolution_injector is not None:
+        resolution = resolution_injector(resolution)
     if turn is None:
         turn = _E2EStreamTurn(steps or [])
     if audit is None:
@@ -1267,3 +1399,281 @@ def test_llm_disabled_configuration_keeps_market_setup_intact(monkeypatch, tmp_p
     assert response.status_code == 400
     assert response.json()["detail"] == "dependency is missing: client"
     assert decision_projection(before) == decision_projection(after)
+
+
+def _inject_detail_only_policy_values(resolution):
+    for fact in resolution["snapshot"]["evidence"]:
+        if fact["fact_id"] == "macro_policy_response":
+            explanation = fact.setdefault("explanation", {})
+            policy_read = explanation.setdefault("policy_read", {})
+            policy_read["reason"] = "detail_only_policy_reason_7f21"
+            policy_read["policy_action"] = "hold"
+            policy_read["overall_bias"] = "mild_hawkish"
+        if fact["fact_id"] == "macro_financial_conditions":
+            fact.setdefault("explanation", {}).setdefault("details", {})[
+                "curve_status"
+            ] = "inverted"
+        if fact["fact_id"] == "consumer_demand_outlook":
+            fact.setdefault("explanation", {})["percentile_zone"] = "elevated"
+    return resolution
+
+
+class _PromptDeps:
+    def __init__(self, stream):
+        self.client = object()
+        self.model = "assistant-model"
+        self.reasoning_effort = "medium"
+        self.stream_turn = stream
+        self.event_sink = None
+        self.db_path = ":memory:"
+        self.requested = []
+        self.config = {
+            "model": "assistant-model",
+            "research_model": "research-model",
+            "provider": "openai_responses",
+            "research_enabled": True,
+            "supports_web_search": True,
+            "api_key": "sk-secret-test-key",
+            "base_url": None,
+        }
+
+    def connect(self, db_path):
+        self.requested.append("connect")
+        return _DummyCon()
+
+    def load_snapshot(self, con, context_id):
+        self.requested.append("load_snapshot")
+        return None
+
+
+class _PromptStream:
+    def __init__(self, steps):
+        self.steps = list(steps)
+        self.calls = []
+
+    async def __call__(
+        self,
+        client,
+        *,
+        model,
+        input_items,
+        instructions,
+        tools,
+        reasoning_effort,
+        observer=None,
+    ):
+        step = self.steps.pop(0)
+        self.calls.append({"input_items": input_items, "tools": tools})
+        return step["result"]
+
+
+def _prompt_narration_step(text="现在的市场偏积极，但仍需保持谨慎。"):
+    return {
+        "result": {
+            "output_text": text,
+            "tool_calls": [],
+            "response_items": [],
+            "usage": None,
+            "timings": {},
+        }
+    }
+
+
+def _prompt_tool_step(calls):
+    response_items = [
+        {
+            "type": "function_call",
+            "call_id": call["call_id"],
+            "name": call["tool_name"],
+            "arguments": json.dumps(
+                call["arguments"], ensure_ascii=False, sort_keys=True
+            ),
+        }
+        for call in calls
+    ]
+    return {
+        "result": {
+            "output_text": "",
+            "tool_calls": list(calls),
+            "response_items": response_items,
+            "usage": None,
+            "timings": {},
+        }
+    }
+
+
+def _first_turn_explanation_view(stream):
+    first_message = stream.calls[0]["input_items"][0]
+    view_text = first_message["content"][1]["text"]
+    return json.loads(view_text)["explanation_view"]
+
+
+@pytest.mark.asyncio
+async def test_overview_initial_prompt_omits_detail_only_explanation_values(resolver):
+    resolution = _inject_detail_only_policy_values(resolver.resolve())
+    stream = _PromptStream([_prompt_narration_step()])
+    deps = _PromptDeps(stream)
+    await run_hybrid_narration(
+        {"question": "现在市场怎么样？"},
+        route=route_question("现在市场怎么样？", deep_analysis=False),
+        resolution=resolution,
+        dependencies=deps,
+    )
+    serialized = json.dumps(stream.calls[0]["input_items"], ensure_ascii=False)
+    for forbidden in (
+        "detail_only_policy_reason_7f21",
+        "policy_action",
+        "overall_bias",
+        "curve_status",
+        "percentile_zone",
+    ):
+        assert forbidden not in serialized
+
+
+@pytest.mark.asyncio
+async def test_react_route_prompt_stays_compact_until_validated_detail_output(
+    resolver,
+):
+    resolution = _inject_detail_only_policy_values(resolver.resolve())
+    detail_call = {
+        "call_id": "call_policy_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        },
+    }
+    stream = _PromptStream([_prompt_tool_step([detail_call]), _prompt_narration_step()])
+    deps = _PromptDeps(stream)
+    await run_hybrid_narration(
+        {"question": "美联储目前是加息、降息还是维持？"},
+        route=route_question("讲个笑话", deep_analysis=False),
+        resolution=resolution,
+        dependencies=deps,
+    )
+    assert len(stream.calls) == 2
+    anchor = _first_turn_explanation_view(stream)
+    assert anchor["view_version"] == "react_anchor_v1"
+    first_serialized = json.dumps(stream.calls[0]["input_items"], ensure_ascii=False)
+    assert "detail_only_policy_reason_7f21" not in first_serialized
+    assert "policy_action" not in first_serialized
+    second_input = stream.calls[1]["input_items"]
+    outputs = [item for item in second_input if item["type"] == "function_call_output"]
+    assert len(outputs) == 1
+    assert outputs[0]["call_id"] == "call_policy_detail"
+    output_text = outputs[0]["output"]
+    assert "detail_only_policy_reason_7f21" in output_text
+    assert "policy_action" in output_text
+    assert "overall_bias" in output_text
+
+
+def test_relationship_only_policy_evidence_reports_conflict_but_action_and_tone_unavailable(
+    monkeypatch, tmp_path
+):
+    answer = (
+        "当前货币政策与增长方向不一致，显示冲突。"
+        "目前可以确认这一冲突关系；经批准的政策行动与整体基调目前不可用。"
+    )
+    detail_call = {
+        "call_id": "call_policy_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        },
+    }
+    run = _prepare_market_setup_harness(
+        monkeypatch,
+        tmp_path,
+        steps=[
+            _e2e_tool_step([detail_call]),
+            _e2e_narration_step(answer, deltas=[answer]),
+        ],
+        question="货币政策为什么与增长方向冲突？目前是加息、降息还是维持，整体偏鹰还是偏鸽？",
+    )
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    first_message = result["turn"].calls[0]["input_items"][0]
+    view = json.loads(first_message["content"][1]["text"])["explanation_view"]
+    assert view["view_version"] == "react_anchor_v1"
+    first_serialized = json.dumps(
+        result["turn"].calls[0]["input_items"], ensure_ascii=False
+    )
+    for forbidden in ("policy_action", "overall_bias"):
+        assert forbidden not in first_serialized
+
+    second_input = result["turn"].calls[1]["input_items"]
+    outputs = [item for item in second_input if item["type"] == "function_call_output"]
+    assert len(outputs) == 1
+    output_text = outputs[0]["output"]
+    assert "relationship_to_growth_direction" in output_text
+    assert "policy_action" not in output_text
+    assert "overall_bias" not in output_text
+
+    rendered = "".join(
+        event["delta"] for event in result["events"] if event["type"] == "answer_delta"
+    )
+    assert "冲突" in rendered
+    assert "不可用" in rendered
+    assert "维持" not in rendered
+    assert "偏鹰" not in rendered
+    assert result["trace"]["generation_status"] == "narration_validated"
+    assert any(
+        event == {"type": "validation", "status": "passed", "error_codes": []}
+        for event in result["events"]
+    )
+
+
+def test_exact_policy_wording_answers_distinguish_unavailable_original_from_approved_summary(
+    monkeypatch, tmp_path
+):
+    answer = (
+        "目前无法提供政策声明的原文措辞。经批准的行动总结是维持利率不变，整体立场偏鹰。"
+    )
+    detail_call = {
+        "call_id": "call_policy_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        },
+    }
+    run = _prepare_market_setup_harness(
+        monkeypatch,
+        tmp_path,
+        steps=[
+            _e2e_tool_step([detail_call]),
+            _e2e_narration_step(answer, deltas=[answer]),
+        ],
+        question="美联储政策声明的原文措辞是什么？",
+        resolution_injector=_inject_detail_only_policy_values,
+    )
+    result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
+
+    first_message = result["turn"].calls[0]["input_items"][0]
+    view_text = first_message["content"][1]["text"]
+    view = json.loads(view_text)["explanation_view"]
+    assert view["view_version"] == "react_anchor_v1"
+    first_serialized = json.dumps(
+        result["turn"].calls[0]["input_items"], ensure_ascii=False
+    )
+    for forbidden in ("exact_wording", "exact_excerpt", "statement_text"):
+        assert forbidden not in first_serialized
+
+    second_input = result["turn"].calls[1]["input_items"]
+    outputs = [item for item in second_input if item["type"] == "function_call_output"]
+    assert len(outputs) == 1
+    output_text = outputs[0]["output"]
+    assert "policy_action" in output_text
+    assert "overall_bias" in output_text
+    for forbidden in ("exact_wording", "statement_text"):
+        assert forbidden not in output_text
+
+    rendered = "".join(
+        event["delta"] for event in result["events"] if event["type"] == "answer_delta"
+    )
+    assert "原文措辞" in rendered
+    assert "无法提供" in rendered
+    assert "维持" in rendered
+    assert "偏鹰" in rendered
+    assert result["trace"]["generation_status"] == "narration_validated"

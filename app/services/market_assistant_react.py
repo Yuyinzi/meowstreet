@@ -56,6 +56,7 @@ _STAGE_BY_TOOL = {
     "get_indicator_method": "reading_setup",
     "get_indicator_current": "querying_history",
     "query_indicator_history": "querying_history",
+    "get_evidence_detail": "reading_setup",
     "compare_snapshots": "comparing_evidence",
     "research_focused": "querying_history",
     "research_standard": "querying_history",
@@ -329,7 +330,7 @@ async def run_hybrid_narration(
         history_items,
         answer_language=request.get("answer_language")
         or _question_language(request["question"]),
-            available_tool_ids=tool_ids,
+        available_tool_ids=tool_ids,
     )
     current_user_item = input_items[-1]
     new_provider_items = [current_user_item]

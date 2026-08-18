@@ -1303,6 +1303,68 @@ def _fallback_unsupported(artifacts):
     return "This question cannot be answered deterministically."
 
 
+def _find_evidence_detail_artifacts(artifacts):
+    found = []
+    for artifact in artifacts.values():
+        payload = artifact.get("payload") or {}
+        if payload.get("detail_kind") and payload.get("detail"):
+            found.append(artifact)
+    return sorted(
+        found, key=lambda artifact: artifact.get("payload", {}).get("fact_id", "")
+    )
+
+
+def _fallback_evidence_detail(artifacts):
+    detail_artifacts = _find_evidence_detail_artifacts(artifacts)
+    if not detail_artifacts:
+        return "The requested evidence detail is currently unavailable."
+    lines = []
+    for artifact in detail_artifacts:
+        payload = artifact.get("payload") or {}
+        detail = payload.get("detail") or {}
+        status = detail.get("status") or "missing"
+        label = detail.get("label") or detail.get("fact_id") or "Evidence detail"
+        if status != "available":
+            lines.append(f"{label} detail is currently unavailable ({status}).")
+        else:
+            lines.append(f"{label} evidence detail:")
+        if status == "available":
+            current = detail.get("current")
+            if isinstance(current, dict):
+                for key, value in current.items():
+                    lines.append(f"- {key}: {_format_value(value)}")
+            drivers = detail.get("drivers")
+            if isinstance(drivers, dict):
+                for key, value in drivers.items():
+                    lines.append(f"- {key}: {_format_value(value)}")
+        method = detail.get("method")
+        if isinstance(method, dict):
+            references = method.get("method_references") or []
+            if references:
+                lines.append("- method: " + ", ".join(str(ref) for ref in references))
+        source = detail.get("source")
+        if isinstance(source, dict):
+            source_period = source.get("source_period")
+            if source_period is not None:
+                lines.append(f"- source period: {_format_source_period(source_period)}")
+    return "\n".join(lines)
+
+
+def _format_source_period(source_period):
+    if isinstance(source_period, str):
+        return source_period
+    if not isinstance(source_period, dict):
+        return _format_value(source_period)
+    parts = []
+    for key in ("effective_date", "reference_period", "release_date"):
+        value = source_period.get(key)
+        if value is not None:
+            parts.append(f"{key}: {_format_value(value)}")
+    if not parts:
+        return _format_value(source_period)
+    return "; ".join(parts)
+
+
 _FALLBACK_ROUTERS = {
     "decision_explanation": _fallback_decision,
     "counterfactual": _fallback_decision,
@@ -1317,6 +1379,7 @@ _FALLBACK_ROUTERS = {
     "local_history": _fallback_exploration,
     "local_comparison": _fallback_exploration,
     "release_history": _fallback_exploration,
+    "evidence_detail": _fallback_evidence_detail,
     "illustration": _fallback_teaching,
     "external_research": _fallback_research,
     "unsupported": _fallback_unsupported,

@@ -12,6 +12,95 @@ from app.tools.market_assistant_artifacts import resolve_artifact_ref
 _MIN_COVERAGE_RATIO = 0.8
 _MAX_SPANS = 24
 
+_DETAIL_OBJECT_TYPES = frozenset(
+    {"evidence_detail", "evidence_detail_source", "evidence_detail_method"}
+)
+
+_DETAIL_FACT_TEMPLATES = {
+    ("policy_action", "hold"): "最近一次政策决定为维持利率不变",
+    ("policy_action", "hike"): "最近一次政策决定为加息",
+    ("policy_action", "cut"): "最近一次政策决定为降息",
+    ("overall_bias", "mild_hawkish"): "整体立场为偏鹰",
+    ("overall_bias", "hawkish"): "整体立场为鹰派",
+    ("overall_bias", "mild_dovish"): "整体立场为偏鸽",
+    ("overall_bias", "dovish"): "整体立场为鸽派",
+    ("overall_bias", "more_hawkish"): "立场更偏鹰",
+    ("overall_bias", "more_dovish"): "立场更偏鸽",
+    ("relationship_to_growth_direction", "conflicts"): "与当前增长方向不一致",
+    ("relationship_to_growth_direction", "supports"): "与当前增长方向一致",
+}
+
+_LATIN_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+_CJK_CHAR_RE = re.compile(r"[\u3400-\u9fff]")
+
+_NEGATION_WORDS = frozenset(
+    {"not", "no", "never", "without", "nor", "neither", "non", "un", "dis", "de"}
+)
+_NEGATION_CHARS = frozenset("不没未非无别毋勿")
+_NEGATION_WINDOW = 12
+
+_QUOTED_OR_ATTRIBUTED_RE = re.compile(
+    r'["“”‘’「」『』]'
+    r"|\b(?:said|says|stated|states|announced|declared|reported|reportedly|"
+    r"according to|quoted|quote|verbatim|wording|message|statement|"
+    r"communicated|instructed|told)\b"
+    r"|(?:原话|原文|措辞|引述|报告称|声明称|宣布|表述)",
+    re.IGNORECASE,
+)
+
+_STRIP_EDGE_PUNCT_RE = re.compile(
+    r"^[\s.,;:!?。，；：！？、…\u3000]+|[\s.,;:!?。，；：！？、…\u3000]+$"
+)
+
+_NUMERIC_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9.+-])([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?![A-Za-z0-9]|\.(?=[.\d]))"
+)
+
+_DETAIL_VALUE_LABELS = {
+    "hold": ("hold", "维持", "维持利率不变"),
+    "hike": ("hike", "加息"),
+    "cut": ("cut", "降息"),
+    "mild_hawkish": ("mild_hawkish", "mildly hawkish", "偏鹰"),
+    "hawkish": ("hawkish", "鹰派"),
+    "mild_dovish": ("mild_dovish", "mildly dovish", "偏鸽"),
+    "dovish": ("dovish", "鸽派"),
+    "more_hawkish": ("more_hawkish", "更偏鹰"),
+    "more_dovish": ("more_dovish", "更偏鸽"),
+    "unchanged": ("unchanged", "不变"),
+    "neutral": ("neutral", "中性"),
+    "conflicts": (
+        "conflicts",
+        "与当前增长方向不一致",
+        "与增长方向不一致",
+        "冲突",
+        "不一致",
+    ),
+    "supports": ("supports", "与当前增长方向一致", "与增长方向一致", "一致", "支持"),
+    "restrictive_confirmed": ("restrictive_confirmed", "紧缩"),
+    "restrictive": ("restrictive", "紧缩"),
+    "accommodative": ("accommodative", "宽松"),
+    "expanding": ("expanding", "扩张"),
+    "contracting": ("contracting", "收缩"),
+    "rising": ("rising", "上升"),
+    "falling": ("falling", "下降"),
+    "stable": ("stable", "稳定"),
+    "improving": ("improving", "改善"),
+    "slowing": ("slowing", "放缓"),
+    "bull_market": ("bull_market", "上涨趋势", "牛市"),
+    "bear_market": ("bear_market", "下跌趋势", "熊市"),
+    "aligned_expansion": ("aligned_expansion", "扩张"),
+    "aligned_contraction": ("aligned_contraction", "收缩"),
+    "aligned_neutral": ("aligned_neutral", "中性"),
+    "divergent": ("divergent", "分化"),
+    "confirms_expansion": ("confirms_expansion", "扩张"),
+    "confirms_contraction_risk": ("confirms_contraction_risk", "收缩"),
+    "mixed": ("mixed", "分化"),
+    "elevated": ("elevated", "偏高"),
+    "supportive": ("supportive", "支持"),
+    "long": ("long", "偏多", "做多"),
+    "short": ("short", "偏空", "做空"),
+}
+
 _AUTHORITIES = (
     "decision_fact",
     "method_knowledge",
@@ -36,6 +125,12 @@ _ERROR_CODES = frozenset(
         "UNSUPPORTED_MATERIALITY",
         "PROHIBITED_DECISION_CLAIM",
         "ANSWER_TEXT_MISMATCH",
+        "EXACT_WORDING_UNAVAILABLE",
+        "UNGROUNDED_CLAIM",
+        "UNCOVERED_TEXT",
+        "OVERLAPPING_TEXT",
+        "TEXT_FRAGMENT_MISMATCH",
+        "BINDING_TEXT_MISMATCH",
     }
 )
 
@@ -68,6 +163,7 @@ class AuditValue(BaseModel):
     name: str = Field(min_length=1)
     value: int | float | str
     source: FieldSemanticRef
+    text: str | None = None
 
 
 class ClaimSpan(BaseModel):
@@ -288,7 +384,334 @@ def _validate_span(claim, answer_text, artifacts):
             )
         errors.extend(_validate_span_refs(claim, artifacts))
         errors.extend(_validate_span_values(claim, artifacts))
+        errors.extend(_validate_grounding(claim, artifacts))
+        errors.extend(_validate_atomic_facts(claim, artifacts))
+    if purpose == "exact_wording" or _claim_quotes_or_attributes_speech(claim):
+        errors.extend(_validate_exact_wording(claim, artifacts))
     errors.extend(_validate_span_language(claim))
+    return errors
+
+
+def _claim_quotes_or_attributes_speech(claim):
+    return bool(claim["refs"]) and (
+        _QUOTED_OR_ATTRIBUTED_RE.search(claim["exact_text"]) is not None
+    )
+
+
+def _validate_grounding(claim, artifacts):
+    errors = []
+    claim_id = claim["claim_id"]
+    refs = claim["refs"]
+    values = claim["values"]
+    detail_sources = []
+    for ref in refs:
+        resolved = _resolve_ref(claim_id, ref, artifacts)
+        if "code" in resolved:
+            continue
+        if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
+            detail_sources.append(ref)
+    for value in values:
+        source = value["source"]
+        resolved = _resolve_ref(claim_id, source, artifacts)
+        if "code" in resolved:
+            continue
+        if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
+            detail_sources.append(source)
+    if not detail_sources:
+        return errors
+    if not values:
+        for ref in detail_sources:
+            errors.append(
+                _error(
+                    "UNGROUNDED_CLAIM",
+                    "detail claim must bind a value",
+                    claim_id=claim_id,
+                    field_id=_ref_id(ref),
+                )
+            )
+    return errors
+
+
+def _validate_atomic_facts(claim, artifacts):
+    errors = []
+    claim_id = claim["claim_id"]
+    refs = claim["refs"]
+    values = claim["values"]
+    if not refs or not values:
+        return errors
+    detail_source = None
+    ref_keys = {_ref_key(ref) for ref in refs}
+    for ref in refs:
+        resolved = _resolve_ref(claim_id, ref, artifacts)
+        if "code" in resolved:
+            continue
+        if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
+            detail_source = resolved
+            break
+    if detail_source is None:
+        for value in values:
+            source = value["source"]
+            resolved = _resolve_ref(claim_id, source, artifacts)
+            if "code" in resolved:
+                continue
+            if resolved.get("object_type") in _DETAIL_OBJECT_TYPES:
+                detail_source = resolved
+                break
+    if detail_source is None:
+        return errors
+    for value in values:
+        source = value["source"]
+        if _ref_key(source) not in ref_keys:
+            errors.append(
+                _error(
+                    "REFERENCE_NOT_FOUND",
+                    "value source must be a claim semantic ref",
+                    claim_id=claim_id,
+                    field_id=value["name"],
+                )
+            )
+    if errors:
+        return errors
+    exact_text = claim["exact_text"]
+    fragments = [value.get("text") for value in values]
+    if any(not isinstance(fragment, str) or not fragment for fragment in fragments):
+        errors.append(
+            _error(
+                "TEXT_FRAGMENT_MISMATCH",
+                "detail claim value requires a text fragment",
+                claim_id=claim_id,
+            )
+        )
+        return errors
+    positions = []
+    for fragment in fragments:
+        start = exact_text.find(fragment)
+        if start < 0:
+            errors.append(
+                _error(
+                    "TEXT_FRAGMENT_MISMATCH",
+                    "detail claim fragment is not in the claim text",
+                    claim_id=claim_id,
+                    expected=fragment,
+                )
+            )
+            return errors
+        positions.append((start, start + len(fragment)))
+    positions.sort()
+    covered = 0
+    for start, end in positions:
+        if start < covered:
+            errors.append(
+                _error(
+                    "OVERLAPPING_TEXT",
+                    "detail claim fragments overlap",
+                    claim_id=claim_id,
+                    expected=covered,
+                    actual=start,
+                )
+            )
+            break
+        if start > covered:
+            errors.append(
+                _error(
+                    "UNCOVERED_TEXT",
+                    "detail claim text is not bound",
+                    claim_id=claim_id,
+                    expected=covered,
+                    actual=start,
+                )
+            )
+            break
+        covered = end
+    if not errors and covered != len(exact_text):
+        errors.append(
+            _error(
+                "UNCOVERED_TEXT",
+                "detail claim text is not bound",
+                claim_id=claim_id,
+                expected=len(exact_text),
+                actual=covered,
+            )
+        )
+    for value, (start, end) in zip(values, positions):
+        fragment = value["text"]
+        bound_value = value["value"]
+        canonical_field = _source_field_name(value)
+        if not _fragment_supports_field_value(canonical_field, fragment, bound_value):
+            errors.append(
+                _error(
+                    "BINDING_TEXT_MISMATCH",
+                    "detail claim fragment does not support the bound value",
+                    claim_id=claim_id,
+                    field_id=value["name"],
+                    expected=_format_value(bound_value),
+                    actual=fragment,
+                )
+            )
+    return errors
+
+
+def _source_field_name(value):
+    field_path = value["source"]["field"]
+    if not isinstance(field_path, str) or not field_path:
+        return None
+    return field_path.split(".")[-1]
+
+
+def _ref_key(ref):
+    return (
+        ref.get("artifact_id"),
+        ref.get("object_type"),
+        ref.get("object_id"),
+    )
+
+
+def _fragment_supports_field_value(field, fragment, bound_value):
+    canonical = _canonical_fact_fragment(field, bound_value)
+    if canonical is not None:
+        return _canonically_rendered(fragment, canonical)
+    if isinstance(bound_value, str) and bound_value:
+        return _string_value_supported(fragment, bound_value)
+    return _numeric_value_supported(fragment, bound_value)
+
+
+def _canonical_fact_fragment(field, bound_value):
+    canonical = _DETAIL_FACT_TEMPLATES.get((field, bound_value))
+    if canonical is not None:
+        return canonical
+    labels = _DETAIL_VALUE_LABELS.get(bound_value)
+    if labels is None:
+        return None
+    for label in labels[1:]:
+        candidate = _DETAIL_FACT_TEMPLATES.get((field, label))
+        if candidate is not None:
+            return candidate
+    return None
+
+
+def _canonically_rendered(fragment, canonical):
+    if not fragment:
+        return False
+    core = fragment.strip()
+    core = _STRIP_EDGE_PUNCT_RE.sub("", core)
+    canonical_core = _STRIP_EDGE_PUNCT_RE.sub("", canonical)
+    return core == canonical_core
+
+
+def _string_value_supported(fragment, bound_value):
+    labels = _DETAIL_VALUE_LABELS.get(bound_value)
+    tokens = (bound_value,)
+    if labels is not None:
+        tokens = labels
+    return any(_token_positively_present(fragment, token) for token in tokens)
+
+
+def _numeric_value_supported(fragment, bound_value):
+    for match in _NUMERIC_TOKEN_RE.finditer(fragment):
+        if _has_negation_within_window(fragment, match.start()):
+            continue
+        token = match.group(1)
+        if _numeric_token_equals(token, bound_value):
+            return True
+    return False
+
+
+def _numeric_token_equals(token, bound_value):
+    try:
+        parsed = _parse_number_token(token)
+    except ValueError:
+        return False
+    return _numbers_equal(parsed, bound_value)
+
+
+def _numbers_equal(parsed, bound_value):
+    if not isinstance(parsed, (int, float)):
+        return False
+    if not isinstance(bound_value, (int, float)):
+        return False
+    return parsed == bound_value
+
+
+def _parse_number_token(token):
+    if "." in token or "e" in token or "E" in token:
+        value = float(token)
+        if value.is_integer():
+            return int(value)
+        return value
+    return int(token)
+
+
+def _canonical_number_token(bound_value):
+    if isinstance(bound_value, float) and bound_value.is_integer():
+        return str(int(bound_value))
+    return _format_value(bound_value)
+
+
+def _token_positively_present(fragment, token):
+    if not token:
+        return False
+    if _CJK_CHAR_RE.search(token):
+        return _cjk_token_positively_present(fragment, token)
+    return _latin_token_positively_present(fragment, token)
+
+
+def _latin_token_positively_present(fragment, token):
+    pattern = rf"(?<![A-Za-z0-9-]){re.escape(token)}(?![0-9])"
+    return _unnegated_match(fragment, pattern)
+
+
+def _has_negation_within_window(fragment, match_start):
+    start = max(0, match_start - _NEGATION_WINDOW)
+    window = fragment[start:match_start]
+    words = _LATIN_TOKEN_RE.findall(window.lower())
+    return any(word in _NEGATION_WORDS for word in words)
+
+
+def _unnegated_match(fragment, pattern):
+    for match in re.finditer(pattern, fragment, re.IGNORECASE):
+        if _has_negation_within_window(fragment, match.start()):
+            continue
+        return True
+    return False
+
+
+def _cjk_token_positively_present(fragment, token):
+    start = 0
+    while True:
+        index = fragment.find(token, start)
+        if index < 0:
+            return False
+        if index == 0 or fragment[index - 1] not in _NEGATION_CHARS:
+            return True
+        start = index + len(token)
+
+
+def _validate_exact_wording(claim, artifacts):
+    errors = []
+    claim_id = claim["claim_id"]
+    refs = claim["refs"]
+    if not refs:
+        errors.append(
+            _error(
+                "EXACT_WORDING_UNAVAILABLE",
+                "exact wording requires an exact-excerpt-capable artifact",
+                claim_id=claim_id,
+            )
+        )
+        return errors
+    for ref in refs:
+        resolved = _resolve_ref(claim_id, ref, artifacts)
+        if "code" in resolved:
+            continue
+        if not resolved.get("exact_excerpt_capable"):
+            errors.append(
+                _error(
+                    "EXACT_WORDING_UNAVAILABLE",
+                    "exact wording requires an exact-excerpt-capable artifact",
+                    claim_id=claim_id,
+                    field_id=_ref_id(ref),
+                )
+            )
     return errors
 
 

@@ -305,6 +305,7 @@ class EvidenceFact(BaseModel):
     decision_result: DecisionResult
     provenance: Provenance
     finding: dict
+    explanation: dict = Field(default_factory=dict)
 
 
 def load_explanation_surface(path=SURFACE_PATH):
@@ -392,6 +393,7 @@ def _build_fact(setup_result, fact_id, fact, record):
         "decision_result": decision_result,
         "provenance": _provenance(record, fact_id, fact),
         "finding": finding,
+        "explanation": _explanation(fact),
     }
 
 
@@ -506,8 +508,13 @@ def _accepted_values(fact):
     return {
         key: value
         for key, value in fact.items()
-        if key != "source_period" and "sync" not in key
+        if key != "source_period" and "sync" not in key and key != "explanation"
     }
+
+
+def _explanation(fact):
+    explanation = fact.get("explanation") if fact else None
+    return dict(explanation) if isinstance(explanation, dict) else {}
 
 
 def _classifications(fact):

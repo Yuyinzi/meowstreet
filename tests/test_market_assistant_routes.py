@@ -341,3 +341,27 @@ def test_route_view_type_uses_shared_view_vocabulary(route_id, view_type):
     route = route_question(_ROUTE_QUESTIONS[route_id], deep_analysis=False)
     assert route["route_id"] == route_id
     assert route["view_type"] == view_type
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "货币政策目前是加息、降息还是维持？",
+        "FOMC is currently hawkish or dovish?",
+        "消费者预期为什么支持当前方向？",
+    ],
+)
+def test_evidence_detail_questions_do_not_create_a_new_route(question):
+    route = route_question(question, deep_analysis=False)
+    assert route["route_id"] == "react"
+    assert route["view_type"] == "react_anchor"
+    assert route["initial_operations"] == []
+    assert "evidence_detail" not in ROUTE_IDS
+
+
+def test_no_route_operation_carries_detail_fields():
+    for route_id, question in _ROUTE_QUESTIONS.items():
+        route = route_question(question, deep_analysis=False)
+        for operation in route["initial_operations"]:
+            assert "fact_id" not in operation
+            assert "topics" not in operation

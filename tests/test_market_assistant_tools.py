@@ -21,7 +21,6 @@ def test_snapshot_tool_rejects_model_supplied_context_id():
                 "tool_name": "get_confirmation_test",
                 "arguments": {"test_id": "vix", "context_id": "ctx_other"},
             },
-            {"get_confirmation_test"},
         )
 
 
@@ -36,7 +35,6 @@ def test_history_tool_rejects_url_and_unknown_indicator():
                     "window": "6m",
                 },
             },
-            {"query_indicator_history"},
         )
 
 
@@ -60,7 +58,7 @@ def test_valid_snapshot_tool_call_returns_plain_dict():
         "tool_name": "get_setup_overview",
         "arguments": {},
     }
-    assert validate_tool_call(call, {"get_setup_overview"}) == call
+    assert validate_tool_call(call) == call
 
 
 def test_registered_tool_is_accepted_without_allow_list():
@@ -79,7 +77,7 @@ def test_unknown_tool_rejected_even_when_allowed():
         "arguments": {"sql": "select 1"},
     }
     with pytest.raises(ValueError, match="tool call is invalid"):
-        validate_tool_call(call, {"run_sql"})
+        validate_tool_call(call)
 
 
 @pytest.mark.parametrize("call_id", ["", "   ", None, 123])
@@ -90,7 +88,7 @@ def test_empty_or_malformed_call_id_rejected(call_id):
         "arguments": {"test_id": "vix"},
     }
     with pytest.raises(ValueError, match="tool call is invalid"):
-        validate_tool_call(call, {"get_confirmation_test"})
+        validate_tool_call(call)
 
 
 @pytest.mark.parametrize("test_id", ["equity", "credit", "vix"])
@@ -101,7 +99,6 @@ def test_confirmation_test_accepts_each_test_id(test_id):
             "tool_name": "get_confirmation_test",
             "arguments": {"test_id": test_id},
         },
-        {"get_confirmation_test"},
     )
     assert validated["arguments"]["test_id"] == test_id
 
@@ -114,7 +111,6 @@ def test_confirmation_test_rejects_unknown_test_id():
                 "tool_name": "get_confirmation_test",
                 "arguments": {"test_id": "gold"},
             },
-            {"get_confirmation_test"},
         )
 
 
@@ -126,7 +122,6 @@ def test_confirmation_tests_requires_non_empty_list():
                 "tool_name": "get_confirmation_tests",
                 "arguments": {"test_ids": []},
             },
-            {"get_confirmation_tests"},
         )
 
 
@@ -137,7 +132,6 @@ def test_confirmation_tests_accepts_multiple_test_ids():
             "tool_name": "get_confirmation_tests",
             "arguments": {"test_ids": ["equity", "credit", "vix"]},
         },
-        {"get_confirmation_tests"},
     )
     assert validated["arguments"]["test_ids"] == ["equity", "credit", "vix"]
 
@@ -150,7 +144,6 @@ def test_indicator_knowledge_rejects_unknown_topic():
                 "tool_name": "get_indicator_knowledge",
                 "arguments": {"indicator_id": "vix", "topic": "sql"},
             },
-            {"get_indicator_knowledge"},
         )
 
 
@@ -162,7 +155,6 @@ def test_indicator_knowledge_rejects_sql_shaped_indicator():
                 "tool_name": "get_indicator_knowledge",
                 "arguments": {"indicator_id": "vix; drop table", "topic": "definition"},
             },
-            {"get_indicator_knowledge"},
         )
 
 
@@ -177,7 +169,6 @@ def test_history_accepts_iso_dates():
                 "end": "2026-06-30",
             },
         },
-        {"query_indicator_history"},
     )
     assert validated["arguments"]["start"] == "2026-01-01"
     assert validated["arguments"]["end"] == "2026-06-30"
@@ -197,7 +188,6 @@ def test_history_rejects_both_window_and_dates():
                     "end": "2026-06-30",
                 },
             },
-            {"query_indicator_history"},
         )
 
 
@@ -209,7 +199,6 @@ def test_history_rejects_neither_window_nor_dates():
                 "tool_name": "query_indicator_history",
                 "arguments": {"indicator_id": "vix"},
             },
-            {"query_indicator_history"},
         )
 
 
@@ -225,7 +214,6 @@ def test_history_rejects_invalid_iso_date():
                     "end": "2026-06-30",
                 },
             },
-            {"query_indicator_history"},
         )
 
 
@@ -236,7 +224,6 @@ def test_compare_snapshots_accepts_context_pairs():
             "tool_name": "compare_snapshots",
             "arguments": {"context_a_id": "ctx_a", "context_b_id": "ctx_b"},
         },
-        {"compare_snapshots"},
     )
     assert validated["arguments"]["context_a_id"] == "ctx_a"
     assert validated["arguments"]["context_b_id"] == "ctx_b"
@@ -253,7 +240,6 @@ def test_research_tool_uses_bounded_research_contract():
                 "expected_source_class": "official_publication",
             },
         },
-        {"research_focused"},
     )
     assert validated["arguments"]["queries"] == ["latest ism report"]
 
@@ -270,7 +256,6 @@ def test_research_tool_rejects_url_query():
                     "expected_source_class": "official_publication",
                 },
             },
-            {"research_deep"},
         )
 
 
@@ -327,12 +312,117 @@ def test_duplicate_call_keys_ignore_call_id():
     assert normalized_tool_call_key(first) == normalized_tool_call_key(second)
 
 
+def test_evidence_detail_accepts_valid_call():
+    call = {
+        "call_id": "call_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers", "source"],
+        },
+    }
+    assert validate_tool_call(call) == call
+
+
+def test_evidence_detail_rejects_unknown_fact():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {"fact_id": "unknown_fact", "topics": ["current"]},
+            },
+        )
+
+
+def test_evidence_detail_rejects_empty_topics():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {"fact_id": "macro_policy_response", "topics": []},
+            },
+        )
+
+
+def test_evidence_detail_rejects_duplicate_topics():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["current", "current"],
+                },
+            },
+        )
+
+
+def test_evidence_detail_rejects_unknown_topic():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["sql"],
+                },
+            },
+        )
+
+
+def test_evidence_detail_rejects_extra_arguments():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["current"],
+                    "sql": "select 1",
+                },
+            },
+        )
+
+
+def test_evidence_detail_rejects_model_supplied_context_id():
+    with pytest.raises(ValueError, match="tool call is invalid"):
+        validate_tool_call(
+            {
+                "call_id": "call_detail",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["current"],
+                    "context_id": "ctx_other",
+                },
+            },
+        )
+
+
 def test_no_schema_contains_forbidden_properties():
     forbidden = {"url", "sql", "provider", "path", "context_id"}
     for tool_id in TOOL_IDS:
         definition = tool_definitions([tool_id])[0]
         names = _schema_property_names(definition["parameters"])
         assert not (names & forbidden)
+
+
+def test_evidence_detail_definition_appends_tool_catalog():
+    definition = tool_definitions(["get_evidence_detail"])[0]
+    assert "macro_policy_response" in definition["description"]
+    assert "FOMC" in definition["description"]
+    assert "topics=current,drivers,source" in definition["description"]
+    assert "equity_breadth" not in definition["description"]
+
+
+def test_other_tool_definitions_do_not_include_catalog():
+    definition = tool_definitions(["get_setup_overview"])[0]
+    assert "macro_policy_response" not in definition["description"]
 
 
 def _schema_property_names(schema):

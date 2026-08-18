@@ -128,6 +128,11 @@ _DISPLAY_LABELS = {
         "indicator_history": "历史走势",
         "period_comparison": "区间比较",
         "release_history": "发布历史",
+        "available": "可用",
+        "missing": "数据缺失",
+        "stale": "数据已过期",
+        "invalid": "数据无效",
+        "unsupported": "暂不支持",
     },
     "en": {
         "rising": "rising",
@@ -219,6 +224,11 @@ _DISPLAY_LABELS = {
         "indicator_history": "history",
         "period_comparison": "period comparison",
         "release_history": "release history",
+        "available": "available",
+        "missing": "missing",
+        "stale": "stale",
+        "invalid": "invalid",
+        "unsupported": "unsupported",
     },
 }
 

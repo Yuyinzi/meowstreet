@@ -1,5 +1,6 @@
 import hashlib
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -189,6 +190,22 @@ def finalized_snapshot(context_id="ctx_A", created_at="2026-08-10T01:00:00Z", **
 
 
 class TestSnapshotHashes:
+    def test_explanation_only_change_preserves_decision_fingerprint(self):
+        before = snapshot_state()
+        after = deepcopy(before)
+        policy = next(
+            fact
+            for fact in after["evidence"]
+            if fact["fact_id"] == "macro_policy_response"
+        )
+        policy["explanation"] = {"policy_read": {"policy_action": "hold"}}
+        assert market_setup_explanation_snapshot.compute_decision_fingerprint(
+            before
+        ) == market_setup_explanation_snapshot.compute_decision_fingerprint(after)
+        assert market_setup_explanation_snapshot.compute_explanation_fingerprint(
+            before
+        ) != market_setup_explanation_snapshot.compute_explanation_fingerprint(after)
+
     def test_watch_only_change_invalidates_explanation_not_decision(self):
         before = snapshot_state(equity_breadth=50.0)
         after = snapshot_state(equity_breadth=42.0)

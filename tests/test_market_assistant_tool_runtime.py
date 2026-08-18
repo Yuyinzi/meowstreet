@@ -7,8 +7,11 @@ import pytest
 from app.db import macro_indicators
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.services.market_assistant_exploration import execute_exploration
+from app.services.market_assistant_tool_runtime import TOOL_RUNTIME_POLICIES
+from app.services.market_assistant_tool_runtime import acquire_operation_artifact
 from app.services.market_assistant_tool_runtime import execute_tool_batch
 from app.services.market_assistant_tool_runtime import execute_tool_call
+from app.tools.market_assistant_tools import ALL_TOOL_IDS
 
 
 def _confirmation_evidence(fact_id, indicator_id, label):
@@ -26,6 +29,61 @@ def _confirmation_evidence(fact_id, indicator_id, label):
         "data_status": {"state": "available"},
         "participation": {"state": "applied"},
         "decision_result": {"evaluation": {"state": "evaluated"}},
+    }
+
+
+def _policy_evidence():
+    return {
+        "fact_id": "macro_policy_response",
+        "label": "Monetary Policy Response",
+        "role": {
+            "decision_scope": "decision_input",
+            "function": "selector",
+            "target_layer": "macro_regime",
+            "allowed_effects": [],
+        },
+        "accepted_values": {"relationship_to_growth_direction": "conflicts"},
+        "data_status": {"state": "available"},
+        "participation": {"state": "applied"},
+        "provenance": {
+            "source_module": "fomc_policy_tone",
+            "source_id": "policy_2026-07-28",
+            "source_period": "2026-07-28",
+            "method_references": ["fomc_policy_tone_method_v1"],
+        },
+        "explanation": {
+            "state": "restrictive_confirmed",
+            "policy_read": {
+                "policy_action": "hold",
+                "guidance_bias": "neutral",
+                "language_tone": "hawkish",
+                "overall_bias": "mild_hawkish",
+                "tone_change": "more_hawkish",
+                "confidence": "high",
+                "reason": "Hold decision with hawkish inflation language.",
+            },
+            "details": {
+                "fomc_tone": "hawkish",
+                "fomc_action": "hold",
+                "m2_status": "available",
+                "inflation_above_target": True,
+                "fed_balance_sheet_available": True,
+            },
+            "reasons": ["Hold decision with hawkish inflation language."],
+        },
+    }
+
+
+def _vix_predicate_method():
+    return {
+        "method_id": "vix_predicate_v1",
+        "method_version": "market_setup_v2_vix_predicate_v1",
+        "kind": "predicate_method",
+        "decision_contract": {
+            "input_contract": {"fact_id": "vix_level"},
+            "predicate": {"kind": "threshold"},
+        },
+        "explanation_contract": {"summary": "vix level predicate"},
     }
 
 
@@ -619,6 +677,275 @@ def _credit_series_dates():
     return dates
 
 
+@pytest.mark.asyncio
+async def test_evidence_detail_returns_focused_policy_projection():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    snapshot["evidence"].append(_policy_evidence())
+    snapshot["method_contracts"]["methods"]["vix_predicate_v1"] = (
+        _vix_predicate_method()
+    )
+    resolution["snapshot"] = snapshot
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "macro_policy_response",
+                "topics": ["current", "drivers", "source"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["artifact_kind"] == "explanation_snapshot"
+    assert artifact["artifact_id"] == (
+        "ctx_current_evidence_detail_macro_policy_response_current_drivers_source"
+    )
+    payload = artifact["payload"]
+    assert payload["context_id"] == "ctx_current"
+    assert payload["as_of"] == "2026-08-13"
+    assert payload["evidence_through"] == "2026-08-12"
+    assert payload["fact_id"] == "macro_policy_response"
+    assert payload["detail_kind"] == "policy_response"
+    assert payload["topics"] == ["current", "drivers", "source"]
+    assert payload["status"] == "available"
+    assert payload["detail"]["current"]["policy_action"] == "hold"
+    assert payload["detail"]["current"]["overall_bias"] == "mild_hawkish"
+    assert (
+        payload["detail"]["current"]["relationship_to_growth_direction"] == "conflicts"
+    )
+    assert payload["detail"]["drivers"]["policy_reason"]
+    assert payload["detail"]["source"]["source_module"] == "fomc_policy_tone"
+    assert payload["detail"]["source"]["source_period"] == "2026-07-28"
+    assert "evidence" not in payload
+    assert "results" not in payload
+    object_ids = {obj["object_id"] for obj in artifact["object_index"]}
+    assert object_ids == {
+        "ctx_current_evidence_detail_macro_policy_response_current_drivers_source",
+        "ctx_current_evidence_detail_macro_policy_response_current_drivers_source_source",
+    }
+    assert {obj["object_type"] for obj in artifact["object_index"]} == {
+        "evidence_detail",
+        "evidence_detail_source",
+    }
+    authorities_by_type = {
+        obj["object_type"]: obj["authority"] for obj in artifact["object_index"]
+    }
+    assert authorities_by_type["evidence_detail"] == "decision_fact"
+    assert authorities_by_type["evidence_detail_source"] == "method_knowledge"
+    source_obj = next(
+        obj
+        for obj in artifact["object_index"]
+        if obj["object_type"] == "evidence_detail_source"
+    )
+    assert source_obj["payload"]["source"]["source_module"] == "fomc_policy_tone"
+    decision_obj = next(
+        obj
+        for obj in artifact["object_index"]
+        if obj["object_type"] == "evidence_detail"
+    )
+    assert "source" not in decision_obj["payload"]
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_excludes_unrelated_facts_from_object_index():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    snapshot["evidence"].append(_policy_evidence())
+    resolution["snapshot"] = snapshot
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "macro_policy_response",
+                "topics": ["current"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    object_ids = {obj["object_id"] for obj in record["artifact"]["object_index"]}
+    assert object_ids == {"ctx_current_evidence_detail_macro_policy_response_current"}
+    assert "sp500_market_phase" not in object_ids
+    assert "credit_conditions" not in object_ids
+    assert "vix_level" not in object_ids
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_adds_method_object_when_matched():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    snapshot["method_contracts"]["methods"]["vix_predicate_v1"] = (
+        _vix_predicate_method()
+    )
+    resolution["snapshot"] = snapshot
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "vix_level",
+                "topics": ["current", "method"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    objects_by_type = {obj["object_type"]: obj for obj in artifact["object_index"]}
+    assert set(objects_by_type) == {"evidence_detail", "evidence_detail_method"}
+    detail_obj = objects_by_type["evidence_detail"]
+    assert detail_obj["authority"] == "decision_fact"
+    assert detail_obj["payload"]["status"] == "available"
+    method_obj = objects_by_type["evidence_detail_method"]
+    assert method_obj["authority"] == "method_knowledge"
+    assert method_obj["payload"]["method_references"] == []
+    assert (
+        method_obj["payload"]["method_contracts"][0]["method_id"] == "vix_predicate_v1"
+    )
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_returns_stale_projection():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    stale = _policy_evidence()
+    stale["data_status"] = {"state": "stale"}
+    stale["participation"] = {"state": "stale", "reason_code": "data_stale"}
+    snapshot["evidence"].append(stale)
+    resolution["snapshot"] = snapshot
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "macro_policy_response",
+                "topics": ["current", "source"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["payload"]["status"] == "stale"
+    assert artifact["payload"]["detail"]["status"] == "stale"
+    assert artifact["payload"]["detail"]["reason"] == "data_stale"
+    assert artifact["payload"]["detail"]["source"]["source_period"] == "2026-07-28"
+    assert "current" not in artifact["payload"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_returns_unsupported_projection():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    snapshot["evidence"].append(
+        {
+            "fact_id": "equity_breadth",
+            "label": "Equity Breadth",
+            "data_status": {"state": "available"},
+        }
+    )
+    resolution["snapshot"] = snapshot
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "equity_breadth",
+                "topics": ["current"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["payload"]["status"] == "unsupported"
+    assert artifact["payload"]["detail"]["status"] == "unsupported"
+    assert artifact["payload"]["detail"]["supported_topics"] == []
+    assert artifact["payload"]["detail"]["detail_kind"] == "unsupported"
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_returns_missing_projection():
+    record = await execute_tool_call(
+        {
+            "call_id": "call_detail",
+            "tool_name": "get_evidence_detail",
+            "arguments": {
+                "fact_id": "jobless_claims",
+                "topics": ["current", "source"],
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["payload"]["status"] == "missing"
+    assert artifact["payload"]["detail"]["status"] == "missing"
+    assert artifact["payload"]["detail"]["fact_id"] == "jobless_claims"
+    assert "current" not in artifact["payload"]["detail"]
+    assert "source" not in artifact["payload"]["detail"]
+    object_ids = {obj["object_id"] for obj in artifact["object_index"]}
+    assert object_ids == {"ctx_current_evidence_detail_jobless_claims_current_source"}
+    assert {obj["object_type"] for obj in artifact["object_index"]} == {
+        "evidence_detail"
+    }
+    assert all(obj["authority"] == "decision_fact" for obj in artifact["object_index"])
+
+
+@pytest.mark.asyncio
+async def test_evidence_detail_artifact_id_is_order_independent():
+    resolution = resolved_context("ctx_current")
+    snapshot = fake_snapshot("ctx_current")
+    snapshot["evidence"].append(_policy_evidence())
+    resolution["snapshot"] = snapshot
+    results = await execute_tool_batch(
+        [
+            {
+                "call_id": "call_a",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["current", "source"],
+                },
+            },
+            {
+                "call_id": "call_b",
+                "tool_name": "get_evidence_detail",
+                "arguments": {
+                    "fact_id": "macro_policy_response",
+                    "topics": ["source", "current"],
+                },
+            },
+        ],
+        request={"external_search_requested": False},
+        resolution=resolution,
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    assert (
+        results[0]["artifact"]["artifact_id"] == (results[1]["artifact"]["artifact_id"])
+    )
+    assert results[0]["artifact"]["artifact_id"] == (
+        "ctx_current_evidence_detail_macro_policy_response_current_source"
+    )
+
+
 def _credit_series_points(value, *, high_value=None):
     return [
         {
@@ -718,3 +1045,178 @@ async def test_credit_history_tool_call_returns_bounded_categorical_artifact(tmp
         ]
         is not None
     )
+
+
+def test_tool_runtime_policies_cover_every_registered_tool():
+    assert set(TOOL_RUNTIME_POLICIES) == set(ALL_TOOL_IDS)
+
+
+def test_tool_runtime_policies_use_only_registered_capability_classes():
+    known_capabilities = {
+        "frozen_local",
+        "local_read",
+        "external_read",
+        "side_effecting",
+    }
+    for tool_id, (capability, controls) in TOOL_RUNTIME_POLICIES.items():
+        assert capability in known_capabilities
+        assert isinstance(controls, tuple)
+        assert all(isinstance(control, str) for control in controls)
+
+
+def test_every_external_or_side_effecting_tool_names_request_controls():
+    for tool_id, (capability, controls) in TOOL_RUNTIME_POLICIES.items():
+        if capability in {"external_read", "side_effecting"}:
+            assert controls, f"{tool_id} requires a request-control guard"
+        if tool_id.startswith("research_"):
+            assert "external_search_requested" in controls
+
+
+def test_evidence_detail_is_frozen_local_without_controls():
+    capability, controls = TOOL_RUNTIME_POLICIES["get_evidence_detail"]
+    assert capability == "frozen_local"
+    assert controls == ()
+
+
+def test_missing_policy_control_blocks_registered_control_without_internal_check():
+    from app.services.market_assistant_tool_runtime import TOOL_RUNTIME_POLICIES
+
+    saved = TOOL_RUNTIME_POLICIES["get_setup_overview"]
+    TOOL_RUNTIME_POLICIES["get_setup_overview"] = (
+        "external_read",
+        ("future_side_effect_approved",),
+    )
+    try:
+        record = asyncio.run(
+            execute_tool_call(
+                {
+                    "call_id": "c1",
+                    "tool_name": "get_setup_overview",
+                    "arguments": {},
+                },
+                request={},
+                resolution=resolved_context("ctx_current"),
+                dependencies=fake_dependencies(),
+                created_at="2026-08-13T00:00:00Z",
+            )
+        )
+    finally:
+        TOOL_RUNTIME_POLICIES["get_setup_overview"] = saved
+    artifact = record["artifact"]
+    assert artifact["artifact_kind"] == "exploration_result"
+    assert artifact["payload"]["status"] == "capability_unavailable"
+    assert (
+        artifact["payload"]["reason_code"]
+        == "future_side_effect_approved_not_requested"
+    )
+
+
+def test_missing_policy_control_allows_tool_when_control_satisfied():
+    from app.services.market_assistant_tool_runtime import TOOL_RUNTIME_POLICIES
+    from app.services.market_assistant_tool_runtime import _missing_policy_control
+
+    assert (
+        _missing_policy_control(
+            "get_evidence_detail", {"external_search_requested": True}
+        )
+        is None
+    )
+    assert (
+        _missing_policy_control(
+            "research_deep",
+            {"external_search_requested": True, "deep_research_requested": True},
+        )
+        is None
+    )
+    assert (
+        _missing_policy_control("research_focused", {"external_search_requested": True})
+        is None
+    )
+
+
+def test_missing_policy_control_reports_missing_research_control():
+    from app.services.market_assistant_tool_runtime import _missing_policy_control
+
+    assert (
+        _missing_policy_control("research_focused", {}) == "external_search_requested"
+    )
+    assert (
+        _missing_policy_control("research_deep", {"external_search_requested": True})
+        == "deep_research_requested"
+    )
+
+
+def test_acquire_registered_artifacts_applies_policy_gate():
+    from app.services.market_assistant_tool_runtime import TOOL_RUNTIME_POLICIES
+    from app.services.market_assistant_tool_runtime import acquire_registered_artifacts
+
+    saved = TOOL_RUNTIME_POLICIES["get_setup_overview"]
+    TOOL_RUNTIME_POLICIES["get_setup_overview"] = (
+        "external_read",
+        ("future_side_effect_approved",),
+    )
+    try:
+        artifacts, _ = asyncio.run(
+            acquire_registered_artifacts(
+                [{"operation_id": "get_setup_overview", "parameters": {}}],
+                request={},
+                resolution=resolved_context("ctx_current"),
+                dependencies=fake_dependencies(),
+                created_at="2026-08-13T00:00:00Z",
+            )
+        )
+    finally:
+        TOOL_RUNTIME_POLICIES["get_setup_overview"] = saved
+    blocked = [
+        artifact
+        for artifact in artifacts.values()
+        if artifact["payload"].get("status") == "capability_unavailable"
+    ]
+    assert len(blocked) == 1
+    assert (
+        blocked[0]["payload"]["reason_code"]
+        == "future_side_effect_approved_not_requested"
+    )
+
+
+@pytest.mark.parametrize(
+    ("operation_id", "params"),
+    [
+        ("resolve_current_explanation", {}),
+        ("get_historical_snapshot", {"context_id": "ctx_current"}),
+        (
+            "get_snapshot_object",
+            {"object_type": "market_setup_result", "object_id": "macro_regime"},
+        ),
+        ("get_counterfactuals", {"context_id": "ctx_current"}),
+        ("get_confirmation_test", {"test_id": "vix"}),
+    ],
+)
+def test_acquire_operation_artifact_skips_gate_for_internal_operations(
+    operation_id, params
+):
+    resolution = resolved_context("ctx_current")
+    artifact = asyncio.run(
+        acquire_operation_artifact(
+            {"operation_id": operation_id, "parameters": params},
+            request={},
+            resolution=resolution,
+            dependencies=fake_dependencies(),
+            created_at="2026-08-13T00:00:00Z",
+        )
+    )
+    assert artifact is not None
+
+
+def test_acquire_operation_artifact_returns_none_for_unknown_without_keyerror():
+    resolution = resolved_context("ctx_current")
+    artifact = asyncio.run(
+        acquire_operation_artifact(
+            {"operation_id": "totally_unknown_op", "parameters": {}},
+            request={},
+            resolution=resolution,
+            dependencies=fake_dependencies(),
+            created_at="2026-08-13T00:00:00Z",
+        )
+    )
+    assert artifact is None

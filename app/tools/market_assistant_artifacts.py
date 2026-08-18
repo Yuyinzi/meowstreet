@@ -25,6 +25,7 @@ Purpose = Literal[
     "method_explanation",
     "source_explanation",
     "governance_explanation",
+    "exact_wording",
     "observation",
     "bounded_interpretation",
     "illustration",
@@ -36,6 +37,7 @@ _PURPOSE_AUTHORITIES = {
     "method_explanation": {"method_knowledge"},
     "source_explanation": {"method_knowledge", "external_research"},
     "governance_explanation": {"decision_fact", "method_knowledge"},
+    "exact_wording": {"method_knowledge", "external_research"},
     "observation": {"local_observation", "external_research"},
     "bounded_interpretation": {"local_observation", "external_research"},
     "illustration": {"hypothetical"},
@@ -70,6 +72,7 @@ class ArtifactObject(BaseModel):
     object_id: str = Field(min_length=1)
     authority: Authority
     payload: dict
+    exact_excerpt_capable: bool = Field(default=False)
 
 
 class ArtifactEnvelope(BaseModel):
@@ -131,6 +134,10 @@ def validate_artifact(payload):
         if obj["authority"] not in allowed:
             raise ValueError(
                 f"artifact authority is not permitted: {obj['authority']} in {kind}"
+            )
+        if obj.get("exact_excerpt_capable"):
+            raise ValueError(
+                f"exact excerpt capability is not approved: {obj['object_type']}"
             )
     return payload
 

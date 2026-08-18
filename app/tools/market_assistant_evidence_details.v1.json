@@ -1,0 +1,135 @@
+{
+  "version": "market_assistant_evidence_details_v1",
+  "facts": [
+    {
+      "fact_id": "survey_growth_direction",
+      "scope": "decision_input",
+      "detail_kind": "survey_synthesis",
+      "supported_topics": ["current", "drivers", "source"],
+      "default_topics": ["current", "drivers", "source"],
+      "aliases": ["manufacturing and services", "ISM survey", "survey direction", "制造业和服务业", "调查方向", "增长方向依据"],
+      "source_module": "ism_survey_synthesis",
+      "projection_version": "market_assistant_survey_synthesis_detail_v1"
+    },
+    {
+      "fact_id": "macro_financial_conditions",
+      "scope": "decision_input",
+      "detail_kind": "financial_conditions",
+      "supported_topics": ["current", "drivers", "source"],
+      "default_topics": ["current", "drivers", "source"],
+      "aliases": ["financial conditions", "yield curve", "real rates", "金融条件", "收益率曲线", "实际利率"],
+      "source_module": "us_rates_liquidity",
+      "projection_version": "market_assistant_financial_conditions_detail_v1"
+    },
+    {
+      "fact_id": "macro_policy_response",
+      "scope": "decision_input",
+      "detail_kind": "policy_response",
+      "supported_topics": ["current", "drivers", "source"],
+      "default_topics": ["current", "drivers", "source"],
+      "aliases": ["FOMC", "Fed", "monetary policy", "美联储", "货币政策", "利率决定", "鹰派", "鸽派"],
+      "source_module": "fomc_policy_tone",
+      "projection_version": "market_assistant_policy_response_detail_v1"
+    },
+    {
+      "fact_id": "consumer_demand_outlook",
+      "scope": "confirmation_input",
+      "detail_kind": "consumer_demand",
+      "supported_topics": ["current", "drivers", "source"],
+      "default_topics": ["current", "drivers", "source"],
+      "aliases": ["consumer expectations", "consumer demand", "consumer confidence", "消费者预期", "消费者需求", "消费者信心"],
+      "source_module": "consumer_sentiment",
+      "projection_version": "market_assistant_consumer_demand_detail_v1"
+    },
+    {
+      "fact_id": "sp500_market_phase",
+      "scope": "confirmation_input",
+      "detail_kind": "market_phase",
+      "supported_topics": ["current", "method", "source"],
+      "default_topics": ["current", "method", "source"],
+      "aliases": ["S&P 500 phase", "S&P 500", "market phase", "标普市场阶段", "标普", "牛市阶段", "熊市阶段"],
+      "source_module": "market_phase",
+      "projection_version": "market_assistant_market_phase_detail_v1"
+    },
+    {
+      "fact_id": "credit_conditions",
+      "scope": "confirmation_input",
+      "detail_kind": "credit_conditions",
+      "supported_topics": ["current", "method", "source"],
+      "default_topics": ["current", "method", "source"],
+      "aliases": ["credit conditions", "credit spreads", "信贷条件", "信用条件", "信用利差"],
+      "source_module": "us_rates_liquidity",
+      "projection_version": "market_assistant_credit_conditions_detail_v1"
+    },
+    {
+      "fact_id": "vix_level",
+      "scope": "confirmation_input",
+      "detail_kind": "vix",
+      "supported_topics": ["current", "method", "source"],
+      "default_topics": ["current", "method", "source"],
+      "aliases": ["VIX", "波动率", "恐慌指数"],
+      "source_module": "us_rates_liquidity",
+      "projection_version": "market_assistant_vix_detail_v1"
+    },
+    {
+      "fact_id": "m2_liquidity",
+      "scope": "context_only",
+      "detail_kind": "m2_liquidity",
+      "supported_topics": ["current", "method", "source"],
+      "default_topics": ["current", "method", "source"],
+      "aliases": ["M2 liquidity", "M2 supply", "M2 流动性", "M2 货币供应"],
+      "source_module": "m2_money_supply",
+      "projection_version": "market_assistant_m2_liquidity_detail_v1"
+    },
+    {
+      "fact_id": "equity_breadth",
+      "scope": "observation_only",
+      "detail_kind": "unsupported",
+      "supported_topics": [],
+      "default_topics": [],
+      "aliases": [],
+      "source_module": "observation_only",
+      "projection_version": "market_assistant_evidence_detail_unsupported_v1"
+    },
+    {
+      "fact_id": "jobless_claims",
+      "scope": "observation_only",
+      "detail_kind": "unsupported",
+      "supported_topics": [],
+      "default_topics": [],
+      "aliases": [],
+      "source_module": "observation_only",
+      "projection_version": "market_assistant_evidence_detail_unsupported_v1"
+    },
+    {
+      "fact_id": "economic_confirmation",
+      "scope": "context_only",
+      "detail_kind": "unsupported",
+      "supported_topics": [],
+      "default_topics": [],
+      "aliases": [],
+      "source_module": "economic_confirmation",
+      "projection_version": "market_assistant_evidence_detail_unsupported_v1"
+    },
+    {
+      "fact_id": "cyclical_commodities",
+      "scope": "observation_only",
+      "detail_kind": "unsupported",
+      "supported_topics": [],
+      "default_topics": [],
+      "aliases": [],
+      "source_module": "cyclical_commodities",
+      "projection_version": "market_assistant_evidence_detail_unsupported_v1"
+    },
+    {
+      "fact_id": "nfib_regional_evidence",
+      "scope": "manual_review",
+      "detail_kind": "unsupported",
+      "supported_topics": [],
+      "default_topics": [],
+      "aliases": [],
+      "source_module": "nfib_sbo_regional",
+      "projection_version": "market_assistant_evidence_detail_unsupported_v1"
+    }
+  ]
+}

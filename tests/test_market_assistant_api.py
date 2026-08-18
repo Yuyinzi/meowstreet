@@ -1138,11 +1138,14 @@ def _hybrid_e2e(
     exploration=None,
     audit=None,
     order=None,
+    resolution_injector=None,
 ):
     _e2e_env(monkeypatch)
     db_path = tmp_path / "assistant.sqlite"
     monkeypatch.setattr(market_assistant_db, "DEFAULT_DB_PATH", db_path)
     resolution = _build_resolution(db_path)
+    if resolution_injector is not None:
+        resolution = resolution_injector(resolution)
     turn = _ScriptedStreamTurn(steps, order=order)
     audit_recorder = []
     if audit is None:
@@ -1413,6 +1416,147 @@ def test_hybrid_stream_react_two_rounds_immutable_artifacts_and_audit(
     vix_output = json.loads(_function_call_output(second_items, "call_vix"))
     assert vix_output["primary_authority"] == "decision_fact"
     assert vix_output["market_setup_relation"] == "authoritative_snapshot"
+
+
+def _inject_policy_read_detail(resolution):
+    for fact in resolution["snapshot"]["evidence"]:
+        if fact["fact_id"] == "macro_policy_response":
+            policy_read = fact.setdefault("explanation", {}).setdefault(
+                "policy_read", {}
+            )
+            policy_read["policy_action"] = "hold"
+            policy_read["overall_bias"] = "mild_hawkish"
+    return resolution
+
+
+def _grounded_policy_audit(recorder):
+    async def fake_complete_structured(client, **kwargs):
+        recorder.append(kwargs)
+        user_payload = json.loads(kwargs["prompt"][1]["content"])
+        artifact_projection = user_payload["artifact_projection"]
+        ref = None
+        for artifact_id in sorted(artifact_projection):
+            for obj in artifact_projection[artifact_id].get("object_index") or []:
+                if obj.get("object_type") == "evidence_detail":
+                    ref = {
+                        "artifact_id": artifact_id,
+                        "object_type": "evidence_detail",
+                        "object_id": obj["object_id"],
+                    }
+        answer_text = user_payload["answer_text"]
+        fragments = _canonical_policy_fragments(
+            conflicts="与当前增长方向不一致",
+            hold="最近一次政策决定为维持利率不变",
+            bias="整体立场为偏鹰",
+        )
+        claim_text = "".join(fragment for _, _, fragment in fragments)
+        start = answer_text.find(next(fragment for _, _, fragment in fragments))
+        bound_end = start + len(claim_text)
+        if start < 0:
+            start = 0
+            bound_end = len(answer_text)
+        detail_values = [
+            {
+                "name": name,
+                "value": value,
+                "source": {**ref, "field": f"current.{name}"},
+                "text": fragment,
+            }
+            for name, value, fragment in fragments
+        ]
+        claims = [
+            {
+                "claim_id": "claim_1",
+                "start": start,
+                "end": bound_end,
+                "exact_text": claim_text,
+                "purpose": "decision_explanation",
+                "authority": "decision_fact",
+                "refs": [ref] if ref is not None else [],
+                "values": detail_values if ref is not None else [],
+            }
+        ]
+        return {"claims": claims}
+
+    return fake_complete_structured
+
+
+def _canonical_policy_fragments(conflicts, hold, bias):
+    return [
+        ("relationship_to_growth_direction", "conflicts", conflicts),
+        ("policy_action", "hold", hold),
+        ("overall_bias", "mild_hawkish", bias),
+    ]
+
+
+def test_hybrid_stream_policy_question_grounds_action_tone_and_relationship(
+    monkeypatch, tmp_path
+):
+    answer = "与当前增长方向不一致最近一次政策决定为维持利率不变整体立场为偏鹰"
+    detail_call = {
+        "call_id": "call_policy_detail",
+        "tool_name": "get_evidence_detail",
+        "arguments": {
+            "fact_id": "macro_policy_response",
+            "topics": ["current", "drivers"],
+        },
+    }
+    audit_recorder = []
+    result = _hybrid_e2e(
+        monkeypatch,
+        tmp_path,
+        steps=[
+            _tool_step([detail_call]),
+            _narration_step(answer, deltas=[answer]),
+        ],
+        question="货币政策为什么与增长方向冲突？目前是加息、降息还是维持，整体偏鹰还是偏鸽？",
+        audit=_grounded_policy_audit(audit_recorder),
+        resolution_injector=_inject_policy_read_detail,
+    )
+
+    events = result["events"]
+    assert result["status_code"] == 200
+    assert any(
+        event == {"type": "validation", "status": "passed", "error_codes": []}
+        for event in events
+    )
+    assert events[-1]["type"] == "complete"
+
+    con = market_assistant_db.connect(result["db_path"])
+    try:
+        trace = market_assistant_db.load_answer_trace(
+            con, events[-1]["answer_trace_id"]
+        )
+    finally:
+        con.close()
+    assert trace["generation_status"] == "narration_validated"
+    assert trace["claim_audit"]["audit"]["claims"][0]["values"]
+
+    first_message = result["turn"].calls[0]["input_items"][0]
+    view = json.loads(first_message["content"][1]["text"])["explanation_view"]
+    assert view["view_version"] == "react_anchor_v1"
+    first_serialized = json.dumps(
+        result["turn"].calls[0]["input_items"], ensure_ascii=False
+    )
+    for forbidden in ("policy_action", "overall_bias", "policy_reason"):
+        assert forbidden not in first_serialized
+
+    second_input = result["turn"].calls[1]["input_items"]
+    outputs = [item for item in second_input if item["type"] == "function_call_output"]
+    assert len(outputs) == 1
+    assert outputs[0]["call_id"] == "call_policy_detail"
+    output_text = outputs[0]["output"]
+    assert "policy_action" in output_text
+    assert "overall_bias" in output_text
+    assert "relationship_to_growth_direction" in output_text
+
+    rendered = "".join(
+        event["delta"] for event in events if event["type"] == "answer_delta"
+    )
+    assert rendered == answer
+    assert "维持" in rendered
+    assert "偏鹰" in rendered
+    assert "不可用" not in rendered
 
 
 def _credit_conditions_exploration_payload(query, result_id):

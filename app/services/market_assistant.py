@@ -479,9 +479,10 @@ async def _answer_hybrid(
     attempts = {"narration": 1, "audit": 0}
     if outcome == "fallback":
         generation_status = "deterministic_fallback"
+        fallback_artifacts = _fallback_artifacts(resolution, frozen_artifacts)
         answer_text = render_fallback(
-            plan=_fallback_plan(route),
-            artifacts=_fallback_artifacts(resolution, frozen_artifacts),
+            plan=_fallback_plan(route, fallback_artifacts),
+            artifacts=fallback_artifacts,
             notices=[],
         )
         await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
@@ -631,9 +632,22 @@ def _narration_outcome(narration):
     return "fallback", ""
 
 
-def _fallback_plan(route):
+def _fallback_plan(route, artifacts=None):
+    if _has_evidence_detail_artifact(artifacts):
+        return {"intent": "evidence_detail"}
     intent = _FALLBACK_INTENT_BY_ROUTE.get(route["route_id"], "unsupported")
     return {"intent": intent}
+
+
+def _has_evidence_detail_artifact(artifacts):
+    if not isinstance(artifacts, dict):
+        return False
+    return any(
+        isinstance(artifact.get("payload"), dict)
+        and artifact["payload"].get("detail_kind")
+        and artifact["payload"].get("detail")
+        for artifact in artifacts.values()
+    )
 
 
 def _fallback_artifacts(resolution, artifacts):

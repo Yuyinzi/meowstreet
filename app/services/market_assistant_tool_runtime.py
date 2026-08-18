@@ -13,7 +13,13 @@ from app.services.market_assistant_research import acquire_research
 from app.services.market_assistant_research import build_research_provider
 from app.tools.market_assistant_artifacts import build_object_index
 from app.tools.market_assistant_artifacts import validate_artifact
+from app.tools.market_assistant_evidence_detail_registry import evidence_detail_record
+from app.tools.market_assistant_evidence_detail_registry import (
+    load_evidence_detail_registry,
+)
+from app.tools.market_assistant_evidence_details import project_evidence_detail
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
+from app.tools.market_assistant_tools import ALL_TOOL_IDS
 from app.tools.market_setup_explanation_snapshot import build_semantic_delta
 from app.tools.market_setup_explanation_snapshot import canonical_json
 
@@ -73,6 +79,31 @@ _RESEARCH_TIER = {
     "research_deep": "deep",
 }
 
+TOOL_RUNTIME_POLICIES = {
+    "get_setup_overview": ("frozen_local", ()),
+    "get_macro_regime_explanation": ("frozen_local", ()),
+    "get_confirmation_test": ("frozen_local", ()),
+    "get_confirmation_tests": ("frozen_local", ()),
+    "get_posture_explanation": ("frozen_local", ()),
+    "get_approved_counterfactuals": ("frozen_local", ()),
+    "get_evidence_detail": ("frozen_local", ()),
+    "get_indicator_knowledge": ("local_read", ()),
+    "query_indicator_history": ("local_read", ()),
+    "compare_snapshots": ("local_read", ()),
+    "get_indicator_current": ("local_read", ()),
+    "get_indicator_definition": ("local_read", ()),
+    "get_indicator_method": ("local_read", ()),
+    "research_focused": ("external_read", ("external_search_requested",)),
+    "research_standard": ("external_read", ("external_search_requested",)),
+    "research_deep": (
+        "external_read",
+        ("external_search_requested", "deep_research_requested"),
+    ),
+}
+
+if set(TOOL_RUNTIME_POLICIES) != set(ALL_TOOL_IDS):
+    raise ValueError("tool runtime policies must cover every registered tool")
+
 _HISTORY_WINDOW_DAYS = {
     "1m": 30,
     "3m": 90,
@@ -86,6 +117,7 @@ _DEPENDENCY_DEFAULTS = {
     "connect": connect,
     "load_snapshot": load_snapshot,
     "load_knowledge_catalog": load_knowledge_catalog,
+    "load_evidence_detail_registry": load_evidence_detail_registry,
     "exploration": execute_exploration,
     "acquire_research": acquire_research,
     "build_research_provider": build_research_provider,
@@ -104,6 +136,7 @@ _PROGRESS_LABELS = {
     "get_indicator_current": "reading the current indicator value",
     "query_indicator_history": "querying local indicator history",
     "compare_snapshots": "comparing market setup snapshots",
+    "get_evidence_detail": "reading governed evidence detail",
     "research_focused": "running focused external research",
     "research_standard": "running standard external research",
     "research_deep": "running deep external research",
@@ -240,6 +273,10 @@ async def acquire_operation_artifact(
 ):
     operation_id = operation["operation_id"]
     parameters = operation.get("parameters") or {}
+    if operation_id in TOOL_RUNTIME_POLICIES:
+        missing_control = _missing_policy_control(operation_id, request)
+        if missing_control is not None:
+            return _policy_blocked_artifact(operation_id, missing_control, created_at)
     if operation_id == "resolve_current_explanation":
         snapshot = await _frozen_snapshot(dependencies, resolution)
         return snapshot_artifact(snapshot)
@@ -284,6 +321,9 @@ async def acquire_operation_artifact(
         return _knowledge_artifact(
             parameters, _KNOWLEDGE_OBJECT_TYPE[operation_id], dependencies
         )
+    if operation_id == "get_evidence_detail":
+        snapshot = await _frozen_snapshot(dependencies, resolution)
+        return _evidence_detail_artifact(parameters, snapshot, dependencies)
     if operation_id in _EXPLORATION_QUERY_KIND:
         return _exploration_artifact(parameters, operation_id, dependencies, created_at)
     if operation_id in _RESEARCH_TIER:
@@ -631,6 +671,60 @@ async def _research_artifact(
     return _finalize_envelope(envelope)
 
 
+def _missing_policy_control(tool_name, request):
+    capability, controls = TOOL_RUNTIME_POLICIES[tool_name]
+    for control in controls:
+        if not request.get(control):
+            return control
+    return None
+
+
+def _policy_blocked_artifact(tool_name, missing_control, created_at):
+    if tool_name in _RESEARCH_TIER:
+        return _research_unavailable_artifact(
+            _new_id("res_"), created_at, _control_unavailable_reason(missing_control)
+        )
+    artifact_id = _new_id("cap_")
+    payload = {
+        "artifact_id": artifact_id,
+        "tool_name": tool_name,
+        "status": "capability_unavailable",
+        "reason_code": _control_unavailable_reason(missing_control),
+        "requested_at": created_at,
+    }
+    envelope = {
+        "artifact_id": artifact_id,
+        "artifact_kind": "exploration_result",
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
+        "primary_authority": "local_observation",
+        "market_setup_relation": "non_decision",
+        "payload": payload,
+        "object_index": build_object_index(
+            [
+                _artifact_object(
+                    "capability_unavailable",
+                    artifact_id,
+                    "local_observation",
+                    payload,
+                )
+            ]
+        ),
+    }
+    return _finalize_envelope(envelope)
+
+
+_CONTROL_UNAVAILABLE_REASON = {
+    "external_search_requested": "external_search_not_requested",
+    "deep_research_requested": "deep_research_not_requested",
+}
+
+
+def _control_unavailable_reason(missing_control):
+    return _CONTROL_UNAVAILABLE_REASON.get(
+        missing_control, f"{missing_control}_not_requested"
+    )
+
+
 def _research_unavailable_artifact(result_id, searched_at, reason_code):
     payload = {
         "research_result_id": result_id,
@@ -836,3 +930,61 @@ def _approved_counterfactuals_artifact(snapshot):
     return _focused_snapshot_envelope(
         snapshot, f"{snapshot['context_id']}_counterfactuals", objects
     )
+
+
+def _evidence_detail_artifact(parameters, snapshot, dependencies):
+    fact_id = parameters["fact_id"]
+    topics = parameters["topics"]
+    fact = _snapshot_evidence_fact(snapshot, fact_id)
+    registry = _dependency(dependencies, "load_evidence_detail_registry")()
+    record = evidence_detail_record(registry, fact_id)
+    method_contracts = snapshot.get("method_contracts") or {}
+    projection = project_evidence_detail(fact, record, topics, method_contracts)
+    artifact_id = (
+        f"{snapshot['context_id']}_evidence_detail_{fact_id}_{'_'.join(sorted(topics))}"
+    )
+    decision_payload = {
+        key: value
+        for key, value in projection.items()
+        if key not in ("method", "source")
+    }
+    objects = [
+        _artifact_object(
+            "evidence_detail", artifact_id, "decision_fact", decision_payload
+        )
+    ]
+    source = projection.get("source")
+    if source is not None:
+        objects.append(
+            _artifact_object(
+                "evidence_detail_source",
+                f"{artifact_id}_source",
+                "method_knowledge",
+                {"source": source},
+            )
+        )
+    method = projection.get("method")
+    if method is not None:
+        objects.append(
+            _artifact_object(
+                "evidence_detail_method",
+                f"{artifact_id}_method",
+                "method_knowledge",
+                method,
+            )
+        )
+    extra = {
+        "fact_id": projection["fact_id"],
+        "detail_kind": projection["detail_kind"],
+        "topics": projection["topics"],
+        "status": projection["status"],
+        "detail": projection,
+    }
+    return _focused_snapshot_envelope(snapshot, artifact_id, objects, extra)
+
+
+def _snapshot_evidence_fact(snapshot, fact_id):
+    for fact in snapshot.get("evidence") or []:
+        if fact.get("fact_id") == fact_id:
+            return fact
+    return None

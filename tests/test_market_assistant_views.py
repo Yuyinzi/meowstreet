@@ -1,6 +1,8 @@
 import re
 from copy import deepcopy
 
+import pytest
+
 from app.services.market_assistant_tool_runtime import (
     _approved_counterfactuals_artifact,
 )
@@ -525,3 +527,48 @@ def test_comparison_view_uses_snapshot_delta_object():
     assert view["context_b_id"] == "ctx_b"
     assert view["results_changed"] is True
     assert len(view["changes"]) == 1
+
+
+def test_default_setup_view_isolates_detail_only_explanation_values():
+    snapshot = _representative_snapshot()
+    for fact in snapshot["evidence"]:
+        if fact["fact_id"] == "macro_policy_response":
+            explanation = fact.setdefault("explanation", {})
+            policy_read = explanation.setdefault("policy_read", {})
+            policy_read["reason"] = "detail_only_policy_reason_7f21"
+            policy_read["policy_action"] = "hold"
+            policy_read["overall_bias"] = "mild_hawkish"
+        if fact["fact_id"] == "macro_financial_conditions":
+            fact.setdefault("explanation", {}).setdefault("details", {})[
+                "curve_status"
+            ] = "inverted"
+        if fact["fact_id"] == "consumer_demand_outlook":
+            fact.setdefault("explanation", {})["percentile_zone"] = "elevated"
+    artifacts = {
+        envelope["artifact_id"]: envelope
+        for envelope in [
+            snapshot_artifact(snapshot),
+            _setup_overview_artifact(snapshot),
+            _macro_regime_artifact(snapshot),
+            _confirmation_tests_artifact(
+                {"test_ids": ["equity", "credit", "vix"]}, snapshot
+            ),
+            _posture_artifact(snapshot),
+            _approved_counterfactuals_artifact(snapshot),
+        ]
+    }
+    view = build_explanation_view(
+        current_setup_route(),
+        artifacts,
+        question="现在市场怎么样？",
+    )
+    assert view["view_version"] == "setup_explanation_v1"
+    serialized = canonical_json(view)
+    for forbidden in (
+        b"detail_only_policy_reason_7f21",
+        b"policy_action",
+        b"overall_bias",
+        b"curve_status",
+        b"percentile_zone",
+    ):
+        assert forbidden not in serialized
