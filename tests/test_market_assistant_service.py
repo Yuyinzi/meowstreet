@@ -790,7 +790,9 @@ async def test_knowledge_operation_acquires_knowledge_record_artifact():
     )
 
     assert response["generation_status"] == "narration_validated"
-    assert deps.saved_trace["knowledge_references"] == ["vix_definition"]
+    assert deps.saved_trace["knowledge_references"] == [
+        "vix_definition_vix_confirmation_v2"
+    ]
 
 
 @pytest.mark.asyncio
@@ -803,8 +805,8 @@ async def test_knowledge_definition_through_real_catalog_aliases_vix():
 
     assert response["generation_status"] == "narration_validated"
     assert deps.saved_trace["knowledge_references"] == [
-        "vix_definition",
-        "vix_method",
+        "vix_definition_vix_confirmation_v2",
+        "vix_method_vix_confirmation_method_v1",
     ]
 
 

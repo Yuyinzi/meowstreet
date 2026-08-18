@@ -512,7 +512,7 @@ def _knowledge_artifact(parameters, object_type, dependencies):
     if record is None:
         return None
     envelope = {
-        "artifact_id": record["record_id"],
+        "artifact_id": f"{record['record_id']}_{record['version']}",
         "artifact_kind": "knowledge_record",
         "schema_version": ARTIFACT_SCHEMA_VERSION,
         "primary_authority": "method_knowledge",
@@ -928,7 +928,7 @@ def _approved_counterfactuals_artifact(snapshot):
     if not objects:
         return None
     return _focused_snapshot_envelope(
-        snapshot, f"{snapshot['context_id']}_counterfactuals", objects
+        snapshot, f"{snapshot['context_id']}_approved_counterfactuals", objects
     )
 
 

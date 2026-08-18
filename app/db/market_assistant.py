@@ -393,7 +393,12 @@ def _insert_artifact(con, artifact):
             and existing["artifact_json"] == canonical_text
         ):
             return
-        raise ValueError("artifact id conflicts with a stored artifact")
+        raise ValueError(
+            f"artifact id conflicts with a stored artifact: {artifact['artifact_id']} "
+            f"(kind={artifact['artifact_kind']}, "
+            f"existing_hash={existing['integrity_hash']}, "
+            f"new_hash={artifact['integrity_hash']})"
+        )
     con.execute(
         f"""insert into {table}({_ARTIFACT_TABLE_COLUMNS})
             values ({_ARTIFACT_TABLE_PLACEHOLDERS})""",

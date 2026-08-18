@@ -513,6 +513,30 @@ async def test_snapshot_tools_return_only_frozen_authorities():
 
 
 @pytest.mark.asyncio
+async def test_counterfactual_and_approved_counterfactual_artifact_ids_differ():
+    results = await execute_tool_batch(
+        [
+            {
+                "call_id": "c1",
+                "tool_name": "get_counterfactuals",
+                "arguments": {"context_id": "ctx_current"},
+            },
+            {
+                "call_id": "c2",
+                "tool_name": "get_approved_counterfactuals",
+                "arguments": {},
+            },
+        ],
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=fake_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    ids = {record["artifact"]["artifact_id"] for record in results}
+    assert len(ids) == 2
+
+
+@pytest.mark.asyncio
 async def test_knowledge_returns_method_knowledge_objects():
     record = await execute_tool_call(
         {

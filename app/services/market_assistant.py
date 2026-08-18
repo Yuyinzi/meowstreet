@@ -471,6 +471,12 @@ async def _answer_hybrid(
     if recorder is not None:
         recorder.record("narration_completed")
     outcome, answer_text = _narration_outcome(narration)
+    LOGGER.info(
+        "market assistant narration outcome outcome=%s generation_status=%s answer_length=%d",
+        outcome,
+        narration["generation_status"],
+        len(answer_text),
+    )
     frozen_artifacts = deepcopy(narration["artifacts"])
     claim_audit = None
     validation_report = None
