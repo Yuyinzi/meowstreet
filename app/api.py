@@ -15,6 +15,7 @@ from app.routers import (
     macro_dashboard as macro_dashboard_router,
     market_assistant as market_assistant_router,
     static_files as static_files_router,
+    ticker_context as ticker_context_router,
     ticker_workflow as ticker_workflow_router,
 )
 from app.services import consumer_sentiment_dashboard
@@ -230,3 +231,4 @@ app.include_router(static_files_router.router)
 app.include_router(ticker_workflow_router.router)
 app.include_router(macro_dashboard_router.router)
 app.include_router(market_assistant_router.router)
+app.include_router(ticker_context_router.router)

@@ -33,6 +33,23 @@ def macro_dashboard_html():
     return FileResponse(api.STATIC_DIR / "macro-dashboard.html")
 
 
+@router.get("/ticker-context.html")
+def ticker_context_html():
+    return FileResponse(api.STATIC_DIR / "ticker-context.html")
+
+
+@router.get("/ticker-context.css")
+def ticker_context_css():
+    return FileResponse(api.STATIC_DIR / "ticker-context.css", media_type="text/css")
+
+
+@router.get("/ticker-context.js")
+def ticker_context_js():
+    return FileResponse(
+        api.STATIC_DIR / "ticker-context.js", media_type="application/javascript"
+    )
+
+
 @router.get("/consumer-sentiment.js")
 def consumer_sentiment_js():
     return FileResponse(

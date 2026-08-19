@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meowstreet — Ticker Industry Context</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/ticker-context.css?v=1" />
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/" class="nav-brand">Meowstreet</a>
+    <a href="/ticker-workflow.html" class="nav-link">Ticker Workflow</a>
+    <a href="/ticker-context.html" class="nav-link active">Ticker Context</a>
+    <a href="/macro-dashboard.html" class="nav-link">Macro Dashboard</a>
+  </nav>
+
+  <main class="method-shell">
+    <section class="graph-hero">
+      <div class="hero-head">
+        <h1>Ticker Industry Context</h1>
+        <div class="hero-meta">GICS industry &amp; business-cycle tag</div>
+      </div>
+
+      <div class="command-card">
+        <form id="lookupForm" class="lookup-form">
+          <div class="ticker-row">
+            <label class="ticker-field">
+              <span>Symbol</span>
+              <input type="text" name="symbol" placeholder="NVDA" required autocomplete="off" />
+            </label>
+            <button type="submit" class="primary-button">Look up</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="resultRegion" class="result-region" aria-live="polite"></div>
+
+      <p class="provenance-note">
+        Cyclical/Defensive tags: method-derived (2021 GICS vintage), mapped to current GICS industry names.
+      </p>
+    </section>
+  </main>
+
+  <script src="/ticker-context.js?v=1"></script>
+</body>
+</html>
