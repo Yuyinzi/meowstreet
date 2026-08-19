@@ -1,4 +1,7 @@
+import functools
+import inspect
 import logging
+import time
 from datetime import date
 from datetime import datetime
 from datetime import timezone
@@ -31,6 +34,40 @@ from app.tools import benchmark_market_data as benchmark_market_data_tool
 
 router = APIRouter(prefix="/api/macro-dashboard", tags=["macro-dashboard"])
 
+_DASHBOARD_CACHE = {}
+_DASHBOARD_CACHE_TTL_SECONDS = 300
+
+
+def _dashboard_cache_key(endpoint_name, *args, **kwargs):
+    return (endpoint_name, date.today().isoformat(), args, tuple(sorted(kwargs.items())))
+
+
+def _cached_endpoint(endpoint_name, ttl_seconds=_DASHBOARD_CACHE_TTL_SECONDS):
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            key = _dashboard_cache_key(endpoint_name, *args, **kwargs)
+            now = time.time()
+            cached = _DASHBOARD_CACHE.get(key)
+            if cached is not None:
+                ts, payload = cached
+                if now - ts < ttl_seconds:
+                    return payload
+            payload = fn(*args, **kwargs)
+            _DASHBOARD_CACHE[key] = (now, payload)
+            return payload
+
+        wrapper.__signature__ = inspect.signature(fn)
+        return wrapper
+
+    return decorator
+
+
+def _invalidate_dashboard_cache(*endpoint_names):
+    for key in list(_DASHBOARD_CACHE):
+        if key[0] in endpoint_names:
+            del _DASHBOARD_CACHE[key]
+
 
 @router.get("/consumer-sentiment")
 def macro_dashboard_consumer_sentiment():
@@ -54,16 +91,37 @@ def macro_dashboard_consumer_sentiment_detail():
         con.close()
 
 
-def _macro_growth_context():
-    growth_cycle_payload = macro_dashboard_growth_cycle()
-    survey_synthesis = next(
-        (
-            card
-            for card in growth_cycle_payload.get("headline", [])
-            if card.get("id") == "survey_synthesis"
-        ),
-        {},
+def _survey_synthesis_direction(con):
+    ism_industry_breadth = api._load_latest_ism_industry_breadth(con)
+    ism_reports = growth_cycle.load_recent_ism_report_snapshots(con, limit=6)
+    ism_macro_signal_result = None
+    if ism_reports:
+        report_ids = [r["report_id"] for r in ism_reports]
+        report_at_a_glance = growth_cycle.load_ism_at_a_glance_rows_for_reports(
+            con, report_ids
+        )
+        try:
+            ism_macro_signal_result = ism_macro_signal.build_ism_macro_signal(
+                ism_reports,
+                report_at_a_glance,
+                industry_breadth=ism_industry_breadth,
+            )
+        except ValueError:
+            logging.warning("ism macro signal build failed", exc_info=True)
+            ism_macro_signal_result = None
+    ism_services_data = ism_services_dashboard.load_overview(con)
+    survey_synthesis_result = ism_survey_synthesis.build_survey_synthesis(
+        ism_macro_signal_result,
+        ism_services_data["signal"],
     )
+    return {
+        "status": survey_synthesis_result.get("status"),
+        "expected_gdp_direction": survey_synthesis_result.get("expected_gdp_direction"),
+    }
+
+
+def _macro_growth_context(con):
+    survey_synthesis = _survey_synthesis_direction(con)
     return {"expected_gdp_direction": survey_synthesis.get("expected_gdp_direction")}
 
 
@@ -72,12 +130,13 @@ def _utc_timestamp():
 
 
 @router.get("/economic-confirmation")
+@_cached_endpoint("economic-confirmation")
 def macro_dashboard_economic_confirmation():
     con = economic_confirmation.connect()
     try:
         return economic_confirmation_dashboard.load_overview(
             con,
-            _macro_growth_context(),
+            _macro_growth_context(con),
             _utc_timestamp(),
         )
     except ValueError as exc:
@@ -87,12 +146,13 @@ def macro_dashboard_economic_confirmation():
 
 
 @router.get("/economic-confirmation/detail")
+@_cached_endpoint("economic-confirmation-detail")
 def macro_dashboard_economic_confirmation_detail():
     con = economic_confirmation.connect()
     try:
         return economic_confirmation_dashboard.load_detail(
             con,
-            _macro_growth_context(),
+            _macro_growth_context(con),
             _utc_timestamp(),
         )
     except ValueError as exc:
@@ -102,6 +162,7 @@ def macro_dashboard_economic_confirmation_detail():
 
 
 @router.get("/market-phase")
+@_cached_endpoint("market-phase")
 def macro_dashboard_market_phase():
     con = benchmark_market_data.connect()
     try:
@@ -116,6 +177,7 @@ def macro_dashboard_market_phase():
 
 
 @router.get("/market-phase/{benchmark_id}")
+@_cached_endpoint("market-phase-detail")
 def macro_dashboard_market_phase_detail(benchmark_id):
     con = benchmark_market_data.connect()
     try:
@@ -135,10 +197,12 @@ def macro_dashboard_market_phase_refresh(benchmark_id):
         results = benchmark_market_data_tool.refresh_benchmarks([benchmark_id])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _invalidate_dashboard_cache("market-phase", "market-phase-detail", "market-setup")
     return results[0]
 
 
 @router.get("/growth-cycle")
+@_cached_endpoint("growth-cycle")
 def macro_dashboard_growth_cycle():
     con = us_rates_liquidity_db.connect()
     growth_cycle.init_db(con)
@@ -371,6 +435,7 @@ def macro_dashboard_growth_cycle():
 
 
 @router.get("/market-setup")
+@_cached_endpoint("market-setup")
 def macro_dashboard_market_setup():
     from app import api
 
@@ -401,15 +466,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             observations = macro_indicators_db.load_macro_indicator_observations(
                 con, "building_permits_saar"
             )
-            growth_cycle_payload = macro_dashboard_growth_cycle()
-            survey_synthesis = next(
-                (
-                    card
-                    for card in growth_cycle_payload.get("headline", [])
-                    if card.get("id") == "survey_synthesis"
-                ),
-                {},
-            )
+            survey_synthesis = _survey_synthesis_direction(con)
             signal = housing_permits.build_housing_permits_signal(
                 observations, survey_synthesis, date.today().isoformat()
             )
@@ -423,15 +480,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                     api.NFIB_SERIES_IDS,
                 )
             )
-            growth_cycle_payload = macro_dashboard_growth_cycle()
-            survey_synthesis = next(
-                (
-                    card
-                    for card in growth_cycle_payload.get("headline", [])
-                    if card.get("id") == "survey_synthesis"
-                ),
-                {},
-            )
+            survey_synthesis = _survey_synthesis_direction(con)
             signal = nfib_sbo.build_nfib_sbo_signal(
                 nfib_sbo_observations,
                 survey_synthesis,

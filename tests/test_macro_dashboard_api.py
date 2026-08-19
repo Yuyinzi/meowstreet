@@ -10,6 +10,15 @@ from app.api import app
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _clear_dashboard_cache():
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    macro_dashboard_router._DASHBOARD_CACHE.clear()
+    yield
+    macro_dashboard_router._DASHBOARD_CACHE.clear()
+
+
 def _market_setup_payload():
     payload = client.get("/api/macro-dashboard/market-setup").json()
     payload.pop("generated_at", None)
@@ -6622,12 +6631,8 @@ def test_economic_confirmation_api_returns_limited_coverage_payload(monkeypatch)
     )
     monkeypatch.setattr(
         macro_dashboard_router,
-        "macro_dashboard_growth_cycle",
-        lambda: {
-            "headline": [
-                {"id": "survey_synthesis", "expected_gdp_direction": "slowing"}
-            ]
-        },
+        "_survey_synthesis_direction",
+        lambda con: {"status": "available", "expected_gdp_direction": "slowing"},
     )
 
     response = client.get("/api/macro-dashboard/economic-confirmation")
@@ -6660,12 +6665,8 @@ def test_economic_confirmation_api_ignores_query_param_direction(monkeypatch):
     )
     monkeypatch.setattr(
         macro_dashboard_router,
-        "macro_dashboard_growth_cycle",
-        lambda: {
-            "headline": [
-                {"id": "survey_synthesis", "expected_gdp_direction": "falling"}
-            ]
-        },
+        "_survey_synthesis_direction",
+        lambda con: {"status": "available", "expected_gdp_direction": "falling"},
     )
 
     response = client.get(
@@ -6723,12 +6724,8 @@ def test_economic_confirmation_detail_api_returns_payload(monkeypatch):
     )
     monkeypatch.setattr(
         macro_dashboard_router,
-        "macro_dashboard_growth_cycle",
-        lambda: {
-            "headline": [
-                {"id": "survey_synthesis", "expected_gdp_direction": "improving"}
-            ]
-        },
+        "_survey_synthesis_direction",
+        lambda con: {"status": "available", "expected_gdp_direction": "improving"},
     )
 
     response = client.get("/api/macro-dashboard/economic-confirmation/detail")
@@ -6849,12 +6846,8 @@ def test_economic_confirmation_routes_serve_html_labor_snapshots(monkeypatch):
     )
     monkeypatch.setattr(
         macro_dashboard_router,
-        "macro_dashboard_growth_cycle",
-        lambda: {
-            "headline": [
-                {"id": "survey_synthesis", "expected_gdp_direction": "slowing"}
-            ]
-        },
+        "_survey_synthesis_direction",
+        lambda con: {"status": "available", "expected_gdp_direction": "slowing"},
     )
 
     overview = client.get("/api/macro-dashboard/economic-confirmation")
@@ -6897,3 +6890,98 @@ def test_market_setup_api_returns_the_v2_layered_contract(monkeypatch):
     assert response.json()["version"] == "market_setup_v2"
     assert "setup_type" not in response.json()
     assert "market_conclusion" not in response.json()
+
+
+def test_macro_growth_context_uses_lightweight_survey_synthesis(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    calls = []
+
+    monkeypatch.setattr(
+        macro_dashboard_router,
+        "macro_dashboard_growth_cycle",
+        lambda: calls.append("growth_cycle") or {
+            "headline": [{"id": "survey_synthesis", "expected_gdp_direction": "rising"}]
+        },
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router,
+        "_survey_synthesis_direction",
+        lambda con: calls.append("survey_synthesis_direction") or {
+            "status": "available",
+            "expected_gdp_direction": "falling",
+        },
+    )
+
+    result = macro_dashboard_router._macro_growth_context(type("C", (), {})())
+    assert result == {"expected_gdp_direction": "falling"}
+    assert "survey_synthesis_direction" in calls
+    assert "growth_cycle" not in calls
+
+
+def test_economic_confirmation_endpoint_caches_overview(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation,
+        "connect",
+        lambda: type("C", (_FakeConStubs,), {})(),
+    )
+    calls = []
+
+    def fake_load_overview(con, macro_growth_context, as_of_timestamp):
+        calls.append(as_of_timestamp)
+        return _economic_confirmation_payload(as_of_timestamp)
+
+    monkeypatch.setattr(
+        macro_dashboard_router.economic_confirmation_dashboard,
+        "load_overview",
+        fake_load_overview,
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router,
+        "_survey_synthesis_direction",
+        lambda con: {"status": "available", "expected_gdp_direction": "slowing"},
+    )
+
+    r1 = client.get("/api/macro-dashboard/economic-confirmation")
+    r2 = client.get("/api/macro-dashboard/economic-confirmation")
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.json() == r2.json()
+    assert len(calls) == 1
+
+
+def test_market_phase_refresh_invalidates_cache(monkeypatch):
+    from app.routers import macro_dashboard as macro_dashboard_router
+
+    build_calls = []
+
+    def fake_build_dashboard_payload(loader, benchmark_ids):
+        build_calls.append("build")
+        return {"price_load_count": len(build_calls)}
+
+    monkeypatch.setattr(
+        macro_dashboard_router.market_phase,
+        "build_dashboard_payload",
+        fake_build_dashboard_payload,
+    )
+    monkeypatch.setattr(
+        macro_dashboard_router.benchmark_market_data_tool,
+        "refresh_benchmarks",
+        lambda ids: [{"benchmark_id": ids[0], "status": "ok"}],
+    )
+
+    r1 = client.get("/api/macro-dashboard/market-phase")
+    r2 = client.get("/api/macro-dashboard/market-phase")
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.json() == r2.json()
+    assert len(build_calls) == 1
+
+    refresh = client.post("/api/macro-dashboard/market-phase/us_sp500/refresh")
+    assert refresh.status_code == 200
+
+    r3 = client.get("/api/macro-dashboard/market-phase")
+    assert r3.status_code == 200
+    assert r3.json()["price_load_count"] == 2
