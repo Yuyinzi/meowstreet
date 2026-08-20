@@ -35,6 +35,13 @@ def test_required_json_resources_exist():
         assert path.suffix == ".json"
 
 
+def test_required_reference_resources_exist():
+    path = resource_path("gics_reference")
+
+    assert path.is_file()
+    assert path.suffix == ".csv"
+
+
 def test_resource_path_rejects_unknown_id():
     with pytest.raises(ValueError, match="resource unknown is unknown"):
         resource_path("unknown")

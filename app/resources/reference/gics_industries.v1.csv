@@ -1,0 +1,221 @@
+record_type,source,source_value,industry,industry_group,sector,official_industry,cycle_tag,tag_source,source_vintage,resource_version
+industry,,,Entertainment,Media & Entertainment,Communication Services,Entertainment,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Interactive Media & Services,Media & Entertainment,Communication Services,Interactive Media & Services,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Media,Media & Entertainment,Communication Services,Media,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Diversified Telecommunication Services,Telecommunication Services,Communication Services,Diversified Telecommunication Services,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Wireless Telecommunication Services,Telecommunication Services,Communication Services,Wireless Telecommunication Services,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Auto Components,Automobiles & Components,Consumer Discretionary,Automobile Components,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Automobiles,Automobiles & Components,Consumer Discretionary,Automobiles,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Household Durables,Consumer Durables & Apparel,Consumer Discretionary,Household Durables,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Leisure Products,Consumer Durables & Apparel,Consumer Discretionary,Leisure Products,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,"Textiles, Apparel, Luxury Goods.",Consumer Durables & Apparel,Consumer Discretionary,"Textiles, Apparel & Luxury Goods",cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Diversified Consumer Services,Consumer Services,Consumer Discretionary,Diversified Consumer Services,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,"Hotels, Restaurants, Leisure",Consumer Services,Consumer Discretionary,"Hotels, Restaurants & Leisure",cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Distributors,Retailing,Consumer Discretionary,Distributors,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Internet & Direct Marketing Retail,Retailing,Consumer Discretionary,Broadline Retail,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Multiline Retail,Retailing,Consumer Discretionary,Broadline Retail,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Specialty Retail,Retailing,Consumer Discretionary,Specialty Retail,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Food & Staples Retail,Food & Staples Retail,Consumer Staples,Consumer Staples Distribution & Retail,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Beverages,"Food, Beverage & Tobacco",Consumer Staples,Beverages,both,method_workbook,2021-gics,gics_reference_v1
+industry,,,Food Products,"Food, Beverage & Tobacco",Consumer Staples,Food Products,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Tobacco,"Food, Beverage & Tobacco",Consumer Staples,Tobacco,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Household Products,Household & Personal Products,Consumer Staples,Household Products,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Personal Products,Household & Personal Products,Consumer Staples,Personal Care Products,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Energy Equipment & Services,Energy,Energy,Energy Equipment & Services,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Oil & Gas Consumable Fuels,Energy,Energy,"Oil, Gas & Consumable Fuels",cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Banks,Banks,Financials,Banks,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Thrifts and Mortgage Finance,Banks,Financials,Banks,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Capital Markets,Diversified Financials,Financials,Capital Markets,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Consumer Finance,Diversified Financials,Financials,Consumer Finance,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Diversified Financial Services,Diversified Financials,Financials,Financial Services,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Mortgage REITS,Diversified Financials,Financials,Mortgage Real Estate Investment Trusts (REITs),cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Insurance,Insurance,Financials,Insurance,both,method_workbook,2021-gics,gics_reference_v1
+industry,,,Healthcare Equipment & Supplies,Healthcare Equipment & Services,Health Care,Health Care Equipment & Supplies,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Healthcare Providers & Services,Healthcare Equipment & Services,Health Care,Health Care Providers & Services,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Healthcare Technology,Healthcare Equipment & Services,Health Care,Health Care Technology,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Biotechnology,"Pharmaceuticals, Biotech, Life Sciences",Health Care,Biotechnology,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Life Sciences Tools and Services,"Pharmaceuticals, Biotech, Life Sciences",Health Care,Life Sciences Tools & Services,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Pharmaceuticals,"Pharmaceuticals, Biotech, Life Sciences",Health Care,Pharmaceuticals,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Aerospace & Defense,Capital Goods,Industrials,Aerospace & Defense,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Building Products,Capital Goods,Industrials,Building Products,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Construction & Engineering,Capital Goods,Industrials,Construction & Engineering,both,method_workbook,2021-gics,gics_reference_v1
+industry,,,Electrical Equipment,Capital Goods,Industrials,Electrical Equipment,both,method_workbook,2021-gics,gics_reference_v1
+industry,,,Industrial Conglomerates,Capital Goods,Industrials,Industrial Conglomerates,both,method_workbook,2021-gics,gics_reference_v1
+industry,,,Machinery,Capital Goods,Industrials,Machinery,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Trading Companies & Distributors,Capital Goods,Industrials,Trading Companies & Distributors,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Commercial Services and Supplies,Commerical and Professional Services,Industrials,Commercial Services & Supplies,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Professional Services,Commerical and Professional Services,Industrials,Professional Services,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Air Freight & Logistics,Transportation,Industrials,Air Freight & Logistics,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Airlines,Transportation,Industrials,Passenger Airlines,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Marine,Transportation,Industrials,Marine Transportation,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Road and Rail,Transportation,Industrials,Ground Transportation,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Transportation Infrastructure,Transportation,Industrials,Transportation Infrastructure,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Semiconductors & Semi Conductor Equipment,Semiconductors & Semi Conductor Equipment,Information Technology,Semiconductors & Semiconductor Equipment,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,IT Services,Software & Services,Information Technology,IT Services,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Software,Software & Services,Information Technology,Software,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Communications Equipment,Tech Hardware and Equipment,Information Technology,Communications Equipment,both,method_workbook,2021-gics,gics_reference_v1
+industry,,,"Electronic Equipment, Instruments, Components",Tech Hardware and Equipment,Information Technology,"Electronic Equipment, Instruments & Components",cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Tech Hardware Storage & Peripherals,Tech Hardware and Equipment,Information Technology,"Technology Hardware, Storage & Peripherals",cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Chemicals,Materials,Materials,Chemicals,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Construction Materials,Materials,Materials,Construction Materials,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Containers & Packaging,Materials,Materials,Containers & Packaging,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Metals & Mining,Materials,Materials,Metals & Mining,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Paper & Forest Products,Materials,Materials,Paper & Forest Products,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Equity REITS,Real Estate,Real Estate,Discontinued March 2023; split into 8 property-type REIT industries,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Real Estate Management & Development,Real Estate,Real Estate,Real Estate Management & Development,cyclical,method_workbook,2021-gics,gics_reference_v1
+industry,,,Electric Utilities,Utilities,Utilities,Electric Utilities,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Gas Utilities,Utilities,Utilities,Gas Utilities,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Independent Power & Renewables,Utilities,Utilities,Independent Power and Renewable Electricity Producers,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Multi Utilities,Utilities,Utilities,Multi-Utilities,defensive,method_workbook,2021-gics,gics_reference_v1
+industry,,,Water Utilities,Utilities,Utilities,Water Utilities,defensive,method_workbook,2021-gics,gics_reference_v1
+alias,yahoo,Advertising Agencies,Media,,,,,,,gics_reference_v1
+alias,yahoo,Aerospace & Defense,Aerospace & Defense,,,,,,,gics_reference_v1
+alias,yahoo,Agricultural Inputs,Chemicals,,,,,,,gics_reference_v1
+alias,yahoo,Air Freight & Logistics,Air Freight & Logistics,,,,,,,gics_reference_v1
+alias,yahoo,Airlines,Airlines,,,,,,,gics_reference_v1
+alias,yahoo,Aluminum,Metals & Mining,,,,,,,gics_reference_v1
+alias,yahoo,Apparel Manufacturing,"Textiles, Apparel, Luxury Goods.",,,,,,,gics_reference_v1
+alias,yahoo,Apparel Retail,Specialty Retail,,,,,,,gics_reference_v1
+alias,yahoo,Asset Management,Capital Markets,,,,,,,gics_reference_v1
+alias,yahoo,Auto & Truck Dealerships,Specialty Retail,,,,,,,gics_reference_v1
+alias,yahoo,Auto Manufacturers,Automobiles,,,,,,,gics_reference_v1
+alias,yahoo,Auto Parts,Auto Components,,,,,,,gics_reference_v1
+alias,yahoo,Banks - Diversified,Banks,,,,,,,gics_reference_v1
+alias,yahoo,Banks - Regional,Banks,,,,,,,gics_reference_v1
+alias,yahoo,Banks—Diversified,Banks,,,,,,,gics_reference_v1
+alias,yahoo,Banks—Regional,Banks,,,,,,,gics_reference_v1
+alias,yahoo,Beverages - Brewers,Beverages,,,,,,,gics_reference_v1
+alias,yahoo,Beverages - Non-Alcoholic,Beverages,,,,,,,gics_reference_v1
+alias,yahoo,Beverages - Wineries & Distilleries,Beverages,,,,,,,gics_reference_v1
+alias,yahoo,Beverages—Brewers,Beverages,,,,,,,gics_reference_v1
+alias,yahoo,Beverages—Non-Alcoholic,Beverages,,,,,,,gics_reference_v1
+alias,yahoo,Beverages—Wineries & Distilleries,Beverages,,,,,,,gics_reference_v1
+alias,yahoo,Broadcasting,Media,,,,,,,gics_reference_v1
+alias,yahoo,Building Materials,Construction Materials,,,,,,,gics_reference_v1
+alias,yahoo,Building Products & Equipment,Building Products,,,,,,,gics_reference_v1
+alias,yahoo,Business Equipment & Supplies,Commercial Services and Supplies,,,,,,,gics_reference_v1
+alias,yahoo,Capital Markets,Capital Markets,,,,,,,gics_reference_v1
+alias,yahoo,Chemicals,Chemicals,,,,,,,gics_reference_v1
+alias,yahoo,Coking Coal,Oil & Gas Consumable Fuels,,,,,,,gics_reference_v1
+alias,yahoo,Communication Equipment,Communications Equipment,,,,,,,gics_reference_v1
+alias,yahoo,Computer Hardware,Tech Hardware Storage & Peripherals,,,,,,,gics_reference_v1
+alias,yahoo,Confectioners,Food Products,,,,,,,gics_reference_v1
+alias,yahoo,Conglomerates,Industrial Conglomerates,,,,,,,gics_reference_v1
+alias,yahoo,Consulting Services,Professional Services,,,,,,,gics_reference_v1
+alias,yahoo,Consumer Electronics,Tech Hardware Storage & Peripherals,,,,,,,gics_reference_v1
+alias,yahoo,Copper,Metals & Mining,,,,,,,gics_reference_v1
+alias,yahoo,Credit Services,Consumer Finance,,,,,,,gics_reference_v1
+alias,yahoo,Department Stores,Multiline Retail,,,,,,,gics_reference_v1
+alias,yahoo,Discount Stores,Multiline Retail,,,,,,,gics_reference_v1
+alias,yahoo,Education & Training Services,Diversified Consumer Services,,,,,,,gics_reference_v1
+alias,yahoo,Electrical Equipment & Parts,Electrical Equipment,,,,,,,gics_reference_v1
+alias,yahoo,Electronic Components,"Electronic Equipment, Instruments, Components",,,,,,,gics_reference_v1
+alias,yahoo,Electronic Gaming & Multimedia,Entertainment,,,,,,,gics_reference_v1
+alias,yahoo,Engineering & Construction,Construction & Engineering,,,,,,,gics_reference_v1
+alias,yahoo,Entertainment,Entertainment,,,,,,,gics_reference_v1
+alias,yahoo,Farm & Heavy Construction Machinery,Machinery,,,,,,,gics_reference_v1
+alias,yahoo,Farm Products,Food Products,,,,,,,gics_reference_v1
+alias,yahoo,Financial Data & Stock Exchanges,Capital Markets,,,,,,,gics_reference_v1
+alias,yahoo,Food Distribution,Food & Staples Retail,,,,,,,gics_reference_v1
+alias,yahoo,Footwear & Accessories,"Textiles, Apparel, Luxury Goods.",,,,,,,gics_reference_v1
+alias,yahoo,"Furnishings, Fixtures & Appliances",Household Durables,,,,,,,gics_reference_v1
+alias,yahoo,Gambling,"Hotels, Restaurants, Leisure",,,,,,,gics_reference_v1
+alias,yahoo,Gold,Metals & Mining,,,,,,,gics_reference_v1
+alias,yahoo,Grocery Stores,Food & Staples Retail,,,,,,,gics_reference_v1
+alias,yahoo,Home Improvement Retail,Specialty Retail,,,,,,,gics_reference_v1
+alias,yahoo,Industrial Distribution,Trading Companies & Distributors,,,,,,,gics_reference_v1
+alias,yahoo,Information Technology Services,IT Services,,,,,,,gics_reference_v1
+alias,yahoo,Infrastructure Operations,Transportation Infrastructure,,,,,,,gics_reference_v1
+alias,yahoo,Insurance - Diversified,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Insurance - Life,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Insurance - Property & Casualty,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Insurance - Reinsurance,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Insurance - Specialty,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Insurance Brokers,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Insurance—Diversified,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Insurance—Life,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Insurance—Property & Casualty,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Insurance—Reinsurance,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Insurance—Specialty,Insurance,,,,,,,gics_reference_v1
+alias,yahoo,Internet Content & Information,Interactive Media & Services,,,,,,,gics_reference_v1
+alias,yahoo,Internet Retail,Internet & Direct Marketing Retail,,,,,,,gics_reference_v1
+alias,yahoo,Leisure,Leisure Products,,,,,,,gics_reference_v1
+alias,yahoo,Lodging,"Hotels, Restaurants, Leisure",,,,,,,gics_reference_v1
+alias,yahoo,Lumber & Wood Production,Paper & Forest Products,,,,,,,gics_reference_v1
+alias,yahoo,Luxury Goods,"Textiles, Apparel, Luxury Goods.",,,,,,,gics_reference_v1
+alias,yahoo,Marine Shipping,Marine,,,,,,,gics_reference_v1
+alias,yahoo,Mortgage Finance,Thrifts and Mortgage Finance,,,,,,,gics_reference_v1
+alias,yahoo,Oil & Gas Drilling,Energy Equipment & Services,,,,,,,gics_reference_v1
+alias,yahoo,Oil & Gas E&P,Oil & Gas Consumable Fuels,,,,,,,gics_reference_v1
+alias,yahoo,Oil & Gas Equipment & Services,Energy Equipment & Services,,,,,,,gics_reference_v1
+alias,yahoo,Oil & Gas Integrated,Oil & Gas Consumable Fuels,,,,,,,gics_reference_v1
+alias,yahoo,Oil & Gas Midstream,Oil & Gas Consumable Fuels,,,,,,,gics_reference_v1
+alias,yahoo,Oil & Gas Refining & Marketing,Oil & Gas Consumable Fuels,,,,,,,gics_reference_v1
+alias,yahoo,Other Precious Metals & Mining,Metals & Mining,,,,,,,gics_reference_v1
+alias,yahoo,Packaged Foods,Food Products,,,,,,,gics_reference_v1
+alias,yahoo,Packaging & Containers,Containers & Packaging,,,,,,,gics_reference_v1
+alias,yahoo,Paper & Paper Products,Paper & Forest Products,,,,,,,gics_reference_v1
+alias,yahoo,Personal Services,Diversified Consumer Services,,,,,,,gics_reference_v1
+alias,yahoo,Publishing,Media,,,,,,,gics_reference_v1
+alias,yahoo,REIT - Diversified,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT - Healthcare Facilities,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT - Hotel & Motel,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT - Industrial,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT - Mortgage,Mortgage REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT - Office,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT - Residential,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT - Retail,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT - Specialty,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT—Diversified,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT—Healthcare Facilities,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT—Hotel & Motel,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT—Industrial,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT—Mortgage,Mortgage REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT—Office,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT—Residential,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT—Retail,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,REIT—Specialty,Equity REITS,,,,,,,gics_reference_v1
+alias,yahoo,Railroads,Road and Rail,,,,,,,gics_reference_v1
+alias,yahoo,Real Estate - Development,Real Estate Management & Development,,,,,,,gics_reference_v1
+alias,yahoo,Real Estate - Diversified,Real Estate Management & Development,,,,,,,gics_reference_v1
+alias,yahoo,Real Estate Services,Real Estate Management & Development,,,,,,,gics_reference_v1
+alias,yahoo,Real Estate—Development,Real Estate Management & Development,,,,,,,gics_reference_v1
+alias,yahoo,Real Estate—Diversified,Real Estate Management & Development,,,,,,,gics_reference_v1
+alias,yahoo,Rental & Leasing Services,Commercial Services and Supplies,,,,,,,gics_reference_v1
+alias,yahoo,Residential Construction,Household Durables,,,,,,,gics_reference_v1
+alias,yahoo,Resorts & Casinos,"Hotels, Restaurants, Leisure",,,,,,,gics_reference_v1
+alias,yahoo,Restaurants,"Hotels, Restaurants, Leisure",,,,,,,gics_reference_v1
+alias,yahoo,Scientific & Technical Instruments,"Electronic Equipment, Instruments, Components",,,,,,,gics_reference_v1
+alias,yahoo,Security & Protection Services,Commercial Services and Supplies,,,,,,,gics_reference_v1
+alias,yahoo,Semiconductor Equipment & Materials,Semiconductors & Semi Conductor Equipment,,,,,,,gics_reference_v1
+alias,yahoo,Semiconductors,Semiconductors & Semi Conductor Equipment,,,,,,,gics_reference_v1
+alias,yahoo,Silver,Metals & Mining,,,,,,,gics_reference_v1
+alias,yahoo,Software - Application,Software,,,,,,,gics_reference_v1
+alias,yahoo,Software - Infrastructure,Software,,,,,,,gics_reference_v1
+alias,yahoo,Software—Application,Software,,,,,,,gics_reference_v1
+alias,yahoo,Software—Infrastructure,Software,,,,,,,gics_reference_v1
+alias,yahoo,Solar,Independent Power & Renewables,,,,,,,gics_reference_v1
+alias,yahoo,Specialty Chemicals,Chemicals,,,,,,,gics_reference_v1
+alias,yahoo,Specialty Industrial Machinery,Machinery,,,,,,,gics_reference_v1
+alias,yahoo,Specialty Retail,Specialty Retail,,,,,,,gics_reference_v1
+alias,yahoo,Staffing & Employment Services,Professional Services,,,,,,,gics_reference_v1
+alias,yahoo,Steel,Metals & Mining,,,,,,,gics_reference_v1
+alias,yahoo,Telecom Services,Diversified Telecommunication Services,,,,,,,gics_reference_v1
+alias,yahoo,Thermal Coal,Oil & Gas Consumable Fuels,,,,,,,gics_reference_v1
+alias,yahoo,Tobacco,Tobacco,,,,,,,gics_reference_v1
+alias,yahoo,Travel Services,"Hotels, Restaurants, Leisure",,,,,,,gics_reference_v1
+alias,yahoo,Trucking,Road and Rail,,,,,,,gics_reference_v1
+alias,yahoo,Uranium,Oil & Gas Consumable Fuels,,,,,,,gics_reference_v1
+alias,yahoo,Utilities - Diversified,Multi Utilities,,,,,,,gics_reference_v1
+alias,yahoo,Utilities - Independent Power Producers,Independent Power & Renewables,,,,,,,gics_reference_v1
+alias,yahoo,Utilities - Regulated Electric,Electric Utilities,,,,,,,gics_reference_v1
+alias,yahoo,Utilities - Regulated Gas,Gas Utilities,,,,,,,gics_reference_v1
+alias,yahoo,Utilities - Regulated Water,Water Utilities,,,,,,,gics_reference_v1
+alias,yahoo,Utilities - Renewable,Independent Power & Renewables,,,,,,,gics_reference_v1
+alias,yahoo,Utilities—Diversified,Multi Utilities,,,,,,,gics_reference_v1
+alias,yahoo,Utilities—Independent Power Producers,Independent Power & Renewables,,,,,,,gics_reference_v1
+alias,yahoo,Utilities—Regulated Electric,Electric Utilities,,,,,,,gics_reference_v1
+alias,yahoo,Utilities—Regulated Gas,Gas Utilities,,,,,,,gics_reference_v1
+alias,yahoo,Utilities—Regulated Water,Water Utilities,,,,,,,gics_reference_v1
+alias,yahoo,Utilities—Renewable,Independent Power & Renewables,,,,,,,gics_reference_v1
+alias,yahoo,Waste Management,Commercial Services and Supplies,,,,,,,gics_reference_v1

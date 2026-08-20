@@ -1,7 +1,5 @@
 import argparse
-import json
 import sys
-from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,23 +7,12 @@ sys.path.insert(0, str(ROOT))
 
 from openpyxl import load_workbook
 
+from app.data_sources import gics_reference
 from app.db import ticker_context as ticker_context_db
+from app.resources import resource_path
 
 
-DEFAULT_ARTIFACT_PATH = ROOT / "data" / "local_system" / "gics_industry_tags.v1.json"
-WORKBOOK_PATH = ROOT / "data" / "materials" / "Video 16" / "GICS Breakdown.xlsx"
-EXPECTED_TAG_COUNTS = {"cyclical": 41, "defensive": 22, "both": 6}
-
-
-def load_artifact(artifact_path):
-    payload = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
-    industries = payload.get("industries") or []
-    if len(industries) != 69:
-        raise ValueError(f"artifact has {len(industries)} industries, expected 69")
-    counts = Counter(row["cycle_tag"] for row in industries)
-    if dict(counts) != EXPECTED_TAG_COUNTS:
-        raise ValueError(f"artifact tag counts {dict(counts)} do not match the workbook")
-    return payload
+DEFAULT_REFERENCE_PATH = resource_path("gics_reference")
 
 
 def workbook_tags(workbook_path):
@@ -53,41 +40,35 @@ def workbook_tags(workbook_path):
 
 def verify_against_workbook(industries, workbook_path):
     workbook = workbook_tags(workbook_path)
-    artifact = {row["industry"]: row["cycle_tag"] for row in industries}
-    if artifact != workbook:
-        missing = sorted(set(workbook) - set(artifact))
-        extra = sorted(set(artifact) - set(workbook))
+    reference = {row["industry"]: row["cycle_tag"] for row in industries}
+    if reference != workbook:
+        missing = sorted(set(workbook) - set(reference))
+        extra = sorted(set(reference) - set(workbook))
         mismatched = sorted(
-            name for name in set(artifact) & set(workbook) if artifact[name] != workbook[name]
+            name
+            for name in set(reference) & set(workbook)
+            if reference[name] != workbook[name]
         )
         raise ValueError(
-            f"artifact does not match the workbook: missing={missing} extra={extra} mismatched={mismatched}"
+            f"reference does not match the workbook: missing={missing} extra={extra} mismatched={mismatched}"
         )
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Import GICS industry cycle tags into SQLite")
-    parser.add_argument("--artifact", default=str(DEFAULT_ARTIFACT_PATH))
+    parser.add_argument("--reference", default=str(DEFAULT_REFERENCE_PATH))
     parser.add_argument("--db", default=str(ticker_context_db.DEFAULT_DB_PATH))
-    parser.add_argument("--skip-workbook-check", action="store_true")
+    parser.add_argument("--verify-workbook")
     args = parser.parse_args(argv)
 
-    payload = load_artifact(args.artifact)
-    if not args.skip_workbook_check:
-        verify_against_workbook(payload["industries"], WORKBOOK_PATH)
+    payload = gics_reference.load_gics_reference(args.reference)
+    if args.verify_workbook is not None:
+        verify_against_workbook(payload["industries"], args.verify_workbook)
 
     con = ticker_context_db.connect(args.db)
     try:
         saved_tags = ticker_context_db.save_industry_tags(con, payload["industries"])
-        aliases = [
-            {
-                "source": "yahoo",
-                "source_industry": alias["yahoo_industry"],
-                "gics_industry": alias["gics_industry"],
-            }
-            for alias in payload.get("yahoo_aliases") or []
-        ]
-        saved_aliases = ticker_context_db.save_industry_aliases(con, aliases)
+        saved_aliases = ticker_context_db.save_industry_aliases(con, payload["aliases"])
     finally:
         con.close()
 
