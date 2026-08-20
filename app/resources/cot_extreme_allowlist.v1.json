@@ -1,0 +1,95 @@
+{
+  "version": "cot_historical_extreme_allowlist_v1",
+  "report_type": "disaggregated_futures_only",
+  "position_category": "managed_money",
+  "generated_at": "2026-08-03T07:05:04.910484+00:00",
+  "source_documents": [
+    "cftc disaggregated futures-only historical archives"
+  ],
+  "entries": [
+    {
+      "commodity_id": "aluminium",
+      "market_name": "ALUMINUM - COMMODITY EXCHANGE INC.",
+      "contract_code": "191691",
+      "active": true,
+      "reason": null
+    },
+    {
+      "commodity_id": "copper",
+      "market_name": "COPPER- #1 - COMMODITY EXCHANGE INC.",
+      "contract_code": "085692",
+      "active": true,
+      "reason": null
+    },
+    {
+      "commodity_id": "crude_oil_brent",
+      "market_name": "BRENT LAST DAY - NEW YORK MERCANTILE EXCHANGE",
+      "contract_code": "06765T",
+      "active": true,
+      "reason": null
+    },
+    {
+      "commodity_id": "crude_oil_wti",
+      "market_name": "CRUDE OIL, LIGHT SWEET-WTI - ICE FUTURES EUROPE",
+      "contract_code": "067411",
+      "active": true,
+      "reason": null
+    },
+    {
+      "commodity_id": "gold",
+      "market_name": "GOLD - COMMODITY EXCHANGE INC.",
+      "contract_code": "088691",
+      "active": true,
+      "reason": null
+    },
+    {
+      "commodity_id": "heating_oil",
+      "market_name": "NY HARBOR ULSD - NEW YORK MERCANTILE EXCHANGE",
+      "contract_code": "022651",
+      "active": true,
+      "reason": null
+    },
+    {
+      "commodity_id": "natural_gas",
+      "market_name": "NATURAL GAS INDEX: EP SAN JUAN - ICE FUTURES ENERGY DIV",
+      "contract_code": null,
+      "active": false,
+      "reason": "unsupported_contract"
+    },
+    {
+      "commodity_id": "palladium",
+      "market_name": "PALLADIUM - NEW YORK MERCANTILE EXCHANGE",
+      "contract_code": "075651",
+      "active": true,
+      "reason": null
+    },
+    {
+      "commodity_id": "platinum",
+      "market_name": "PLATINUM - NEW YORK MERCANTILE EXCHANGE",
+      "contract_code": "076651",
+      "active": true,
+      "reason": null
+    },
+    {
+      "commodity_id": "silver",
+      "market_name": "SILVER - COMMODITY EXCHANGE INC.",
+      "contract_code": "084691",
+      "active": true,
+      "reason": null
+    },
+    {
+      "commodity_id": "steel",
+      "market_name": "STEEL-HRC - COMMODITY EXCHANGE INC.",
+      "contract_code": "192651",
+      "active": true,
+      "reason": null
+    },
+    {
+      "commodity_id": "us_natural_gas",
+      "market_name": "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE",
+      "contract_code": "023651",
+      "active": true,
+      "reason": null
+    }
+  ]
+}

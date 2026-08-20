@@ -1,13 +1,11 @@
 import json
-from pathlib import Path
-
 import pytest
 
+from app.resources import resource_path
 from app.tools import market_setup_evidence_facts
 from app.tools import market_setup_v2
 
-ROOT = Path(__file__).resolve().parents[1]
-SURFACE_PATH = ROOT / "data" / "local_system" / "market_assistant_surface.v1.json"
+SURFACE_PATH = resource_path("assistant_surface")
 
 _SURFACE_FACT_IDS = [
     "survey_growth_direction",

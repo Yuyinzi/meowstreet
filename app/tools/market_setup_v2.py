@@ -4,10 +4,10 @@ from datetime import datetime
 from datetime import timezone
 from pathlib import Path
 
+from app.resources import resource_path
 from app.tools import market_setup_predicates
 
-ROOT = Path(__file__).resolve().parents[2]
-REGISTRY_PATH = ROOT / "data" / "local_system" / "market_setup_input_registry.v1.json"
+REGISTRY_PATH = resource_path("market_setup_inputs")
 
 VALID_SCOPES = {
     "decision_input",

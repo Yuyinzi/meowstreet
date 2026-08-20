@@ -8,16 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.services import non_oil_attribution_source_audit as audit_service
+from app.resources import resource_path
 
-DEFAULT_CATALOG = (
-    ROOT
-    / "data"
-    / "local_system"
-    / "commodity_attribution_evidence_catalog.v1.json"
-)
-DEFAULT_OUTPUT = (
-    ROOT / "data" / "local_system" / "non_oil_attribution_source_audit.v1.json"
-)
+DEFAULT_CATALOG = resource_path("attribution_catalog")
+DEFAULT_OUTPUT = resource_path("attribution_source_audit")
 
 
 def build_arg_parser():

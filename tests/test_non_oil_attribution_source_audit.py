@@ -1,25 +1,14 @@
 import json
 from collections import Counter
-from pathlib import Path
-
 import pytest
 
 from app.data_sources import commodity_attribution_catalog as catalog_source
 from app.data_sources import non_oil_attribution_source_audit as audit
+from app.resources import resource_path
 from app.services import non_oil_attribution_source_audit as service
 
-ROOT = Path(__file__).resolve().parents[1]
-
-CATALOG_PATH = (
-    ROOT
-    / "data"
-    / "local_system"
-    / "commodity_attribution_evidence_catalog.v1.json"
-)
-
-AUDIT_PATH = (
-    ROOT / "data" / "local_system" / "non_oil_attribution_source_audit.v1.json"
-)
+CATALOG_PATH = resource_path("attribution_catalog")
+AUDIT_PATH = resource_path("attribution_source_audit")
 
 COMMODITY_DEFAULTS = {
     "copper": {

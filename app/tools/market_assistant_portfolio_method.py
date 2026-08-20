@@ -8,8 +8,9 @@ from pydantic import Field
 from pydantic import ValidationError
 from pydantic import model_validator
 
-ROOT = Path(__file__).resolve().parents[2]
-KNOWLEDGE_PATH = ROOT / "data" / "local_system" / "portfolio_method_knowledge.v1.json"
+from app.resources import resource_path
+
+KNOWLEDGE_PATH = resource_path("portfolio_method")
 
 OPERATION_IDS = (
     "ticker_risk_profile",

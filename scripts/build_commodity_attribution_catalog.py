@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.services import commodity_attribution_catalog as catalog_service
+from app.resources import resource_path
 
 DEFAULT_SOURCE = (
     ROOT
@@ -16,12 +17,7 @@ DEFAULT_SOURCE = (
     / "Video 12"
     / "Cyclical_Commodities_Demand_Supply_Factors.pdf"
 )
-DEFAULT_OUTPUT = (
-    ROOT
-    / "data"
-    / "local_system"
-    / "commodity_attribution_evidence_catalog.v1.json"
-)
+DEFAULT_OUTPUT = resource_path("attribution_catalog")
 
 
 def build_arg_parser():

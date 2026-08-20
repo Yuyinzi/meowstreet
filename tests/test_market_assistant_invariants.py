@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.api import app
 from app.db import market_assistant as market_assistant_db
 from app.db import us_rates_liquidity as us_rates_liquidity_db
+from app.resources import resource_path
 from app.routers import market_assistant as market_assistant_router
 from app.services import market_assistant as market_assistant_service
 from app.services import market_setup_current
@@ -30,10 +31,7 @@ from app.tools.market_assistant_plans import validate_task_plan
 from app.tools.market_assistant_routes import route_question
 from app.tools.market_assistant_views import build_explanation_view
 
-ROOT = Path(__file__).resolve().parents[1]
-METHOD_CONTRACTS_PATH = (
-    ROOT / "data" / "local_system" / "market_setup_confirmation_methods.v1.json"
-)
+METHOD_CONTRACTS_PATH = resource_path("market_setup_confirmation")
 
 client = TestClient(app)
 

@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-KNOWLEDGE_PATH = ROOT / "data" / "local_system" / "market_assistant_knowledge.v1.json"
+from app.resources import resource_path
+
+KNOWLEDGE_PATH = resource_path("assistant_knowledge")
 
 _OBJECT_TYPES = frozenset(
     {"indicator_definition", "indicator_method", "indicator_source"}

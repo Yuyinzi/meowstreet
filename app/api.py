@@ -35,21 +35,17 @@ from app.tools import (
     us_rates_liquidity,
 )
 from app.routers.macro_dashboard import macro_dashboard_market_setup
+from app.resources import resource_path
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
-METHOD_PATH = ROOT / "data" / "local_system" / "synthesis" / "method.v1.json"
-_ATTRIBUTION_CATALOG_PATH = (
-    ROOT
-    / "data"
-    / "local_system"
-    / "commodity_attribution_evidence_catalog.v1.json"
-)
+METHOD_PATH = resource_path("workflow_method")
+_ATTRIBUTION_CATALOG_PATH = resource_path("attribution_catalog")
 _NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH = (
-    ROOT / "data" / "local_system" / "non_oil_attribution_source_audit.v1.json"
+    resource_path("attribution_source_audit")
 )
 _COT_HISTORICAL_EXTREME_ALLOWLIST_PATH = (
-    ROOT / "data" / "local_system" / "cot_historical_extreme_allowlist.v1.json"
+    resource_path("cot_extreme_allowlist")
 )
 
 US_BENCHMARK_IDS = ["us_sp500", "us_nasdaq_100", "us_nasdaq_composite", "us_djia"]

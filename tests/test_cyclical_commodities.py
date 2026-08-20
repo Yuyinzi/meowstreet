@@ -1740,7 +1740,7 @@ def audit_payload():
         "version": "non_oil_attribution_source_audit_v1",
         "generated_at": "2026-08-02T00:00:00+00:00",
         "source_catalog_version": "commodity_attribution_evidence_catalog_v1",
-        "source_catalog": "data/local_system/commodity_attribution_evidence_catalog.v1.json",
+        "source_catalog": "app/resources/attribution_catalog.v1.json",
         "audits": [
             _audit_row(
                 "copper",

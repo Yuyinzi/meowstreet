@@ -1,0 +1,29 @@
+{
+  "version": "market_setup_confirmation_methods_v1",
+  "methods": {
+    "equity_confirmation_v2": {
+      "method_version": "equity_confirmation_v2",
+      "input_contract": {"fact_id": "sp500_market_phase", "field_id": "phase", "type": "string", "unit": null},
+      "predicates": {
+        "downside": {"predicate_id": "downside", "field_id": "phase", "operator": "eq", "operand": "bear_market"},
+        "upside": {"predicate_id": "upside", "field_id": "phase", "operator": "eq", "operand": "bull_market"}
+      }
+    },
+    "credit_confirmation_v2": {
+      "method_version": "credit_confirmation_v2",
+      "input_contract": {"fact_id": "credit_conditions", "field_id": "status", "type": "string", "unit": null},
+      "predicates": {
+        "downside": {"predicate_id": "downside", "field_id": "status", "operator": "in", "operand": ["crisis_stress", "risk_off", "risk_rising", "serious_deterioration", "stress"]},
+        "upside": {"predicate_id": "upside", "field_id": "status", "operator": "in", "operand": ["healthy", "supportive"]}
+      }
+    },
+    "vix_confirmation_v2": {
+      "method_version": "vix_confirmation_v2",
+      "input_contract": {"fact_id": "vix_level", "field_id": "level", "type": "number", "unit": "index"},
+      "predicates": {
+        "downside": {"predicate_id": "downside", "field_id": "level", "operator": "gte", "operand": 20.0},
+        "upside": {"predicate_id": "upside", "field_id": "level", "operator": "lt", "operand": 20.0}
+      }
+    }
+  }
+}

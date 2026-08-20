@@ -6,11 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.data_sources import cftc_cot
+from app.resources import resource_path
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ALLOWLIST_PATH = (
-    ROOT / "data" / "local_system" / "cot_historical_extreme_allowlist.v1.json"
-)
+DEFAULT_ALLOWLIST_PATH = resource_path("cot_extreme_allowlist")
 
 VERSION = "cot_historical_extreme_allowlist_v1"
 REPORT_TYPE = "disaggregated_futures_only"

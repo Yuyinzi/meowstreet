@@ -6,20 +6,13 @@ from pathlib import Path
 import pytest
 
 from app.data_sources import non_oil_attribution_source_audit as source
+from app.resources import resource_path
 from app.services import non_oil_attribution_source_audit as service
 
 ROOT = Path(__file__).resolve().parents[1]
 
-CATALOG_PATH = (
-    ROOT
-    / "data"
-    / "local_system"
-    / "commodity_attribution_evidence_catalog.v1.json"
-)
-
-AUDIT_PATH = (
-    ROOT / "data" / "local_system" / "non_oil_attribution_source_audit.v1.json"
-)
+CATALOG_PATH = resource_path("attribution_catalog")
+AUDIT_PATH = resource_path("attribution_source_audit")
 
 SOURCE_REF = "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
 CATALOG_VERSION = "commodity_attribution_evidence_catalog_v1"
@@ -180,7 +173,7 @@ def test_load_returns_artifact_and_rejects_invalid_version(tmp_path):
         "version": service.VERSION,
         "generated_at": "2026-08-02T00:00:00+00:00",
         "source_catalog_version": CATALOG_VERSION,
-        "source_catalog": "data/local_system/commodity_attribution_evidence_catalog.v1.json",
+        "source_catalog": "app/resources/attribution_catalog.v1.json",
         "audits": [copper_audit()],
     }
     valid_path = tmp_path / "valid.json"
@@ -225,12 +218,7 @@ def test_seed_regeneration_matches_checked_in_audit():
 def test_build_script_writes_audit_and_exits_zero(tmp_path):
     script = ROOT / "scripts" / "build_non_oil_attribution_source_audit.py"
     destination = tmp_path / "audit.v1.json"
-    catalog = (
-        ROOT
-        / "data"
-        / "local_system"
-        / "commodity_attribution_evidence_catalog.v1.json"
-    )
+    catalog = resource_path("attribution_catalog")
 
     result = subprocess.run(
         [

@@ -1,0 +1,119 @@
+{
+  "version": "market_setup_input_registry_v1",
+  "description": "Declares which normalized source facts may enter each Market Setup v2 decision layer and with which effects. Runtime builders consume only records whose target layer and allowed effect match the operation they perform.",
+  "facts": {
+    "survey_growth_direction": {
+      "fact_id": "survey_growth_direction",
+      "decision_scope": "decision_input",
+      "target_layers": ["macro_regime"],
+      "allowed_effects": ["regime_selector"],
+      "required_for_layer": ["macro_regime"],
+      "source_module": "ism_survey_synthesis",
+      "method_version": "ism_survey_synthesis_v1",
+      "freshness_required": true
+    },
+    "macro_financial_conditions": {
+      "fact_id": "macro_financial_conditions",
+      "decision_scope": "decision_input",
+      "target_layers": ["macro_regime"],
+      "allowed_effects": ["supports", "conflicts"],
+      "required_for_layer": [],
+      "source_module": "us_rates_liquidity",
+      "method_version": "market_setup_v2_macro_financial_conditions_v1",
+      "relationship_method_version": "market_setup_v2_relationship_v1",
+      "freshness_required": true
+    },
+    "macro_policy_response": {
+      "fact_id": "macro_policy_response",
+      "decision_scope": "decision_input",
+      "target_layers": ["macro_regime"],
+      "allowed_effects": ["supports", "conflicts"],
+      "required_for_layer": [],
+      "source_module": "fomc_policy_tone",
+      "method_version": "market_setup_v2_macro_policy_response_v1",
+      "relationship_method_version": "market_setup_v2_relationship_v1",
+      "freshness_required": true
+    },
+    "consumer_demand_outlook": {
+      "fact_id": "consumer_demand_outlook",
+      "decision_scope": "confirmation_input",
+      "target_layers": ["macro_regime"],
+      "allowed_effects": ["supports", "conflicts"],
+      "required_for_layer": [],
+      "source_module": "consumer_sentiment",
+      "method_version": "market_setup_v2_consumer_demand_v1",
+      "relationship_method_version": "market_setup_v2_relationship_v1",
+      "freshness_required": true
+    },
+    "sp500_market_phase": {
+      "fact_id": "sp500_market_phase",
+      "decision_scope": "confirmation_input",
+      "target_layers": ["market_confirmation"],
+      "allowed_effects": ["confirmation_test"],
+      "required_for_layer": ["market_confirmation"],
+      "source_module": "market_phase",
+      "method_version": "market_phase_v1",
+      "freshness_required": true
+    },
+    "credit_conditions": {
+      "fact_id": "credit_conditions",
+      "decision_scope": "confirmation_input",
+      "target_layers": ["market_confirmation"],
+      "allowed_effects": ["confirmation_test"],
+      "required_for_layer": ["market_confirmation"],
+      "source_module": "us_rates_liquidity",
+      "method_version": "credit_conditions_v1",
+      "freshness_required": true
+    },
+    "vix_level": {
+      "fact_id": "vix_level",
+      "decision_scope": "confirmation_input",
+      "target_layers": ["market_confirmation"],
+      "allowed_effects": ["confirmation_test"],
+      "required_for_layer": ["market_confirmation"],
+      "source_module": "us_rates_liquidity",
+      "method_version": "vix_confirmation_v2",
+      "freshness_required": true
+    },
+    "m2_liquidity": {
+      "fact_id": "m2_liquidity",
+      "decision_scope": "context_only",
+      "target_layers": ["market_confirmation"],
+      "allowed_effects": ["offset"],
+      "required_for_layer": [],
+      "source_module": "m2_money_supply",
+      "method_version": "m2_liquidity_v1",
+      "freshness_required": true
+    },
+    "economic_confirmation": {
+      "fact_id": "economic_confirmation",
+      "decision_scope": "context_only",
+      "target_layers": [],
+      "allowed_effects": ["display_only"],
+      "required_for_layer": [],
+      "source_module": "economic_confirmation",
+      "method_version": "economic_confirmation_v1",
+      "freshness_required": false
+    },
+    "cyclical_commodities": {
+      "fact_id": "cyclical_commodities",
+      "decision_scope": "observation_only",
+      "target_layers": [],
+      "allowed_effects": ["display_only"],
+      "required_for_layer": [],
+      "source_module": "cyclical_commodities",
+      "method_version": "cyclical_commodities_v1",
+      "freshness_required": false
+    },
+    "nfib_regional_evidence": {
+      "fact_id": "nfib_regional_evidence",
+      "decision_scope": "manual_review",
+      "target_layers": [],
+      "allowed_effects": ["display_only"],
+      "required_for_layer": [],
+      "source_module": "nfib_sbo_regional",
+      "method_version": "nfib_regional_v1",
+      "freshness_required": false
+    }
+  }
+}

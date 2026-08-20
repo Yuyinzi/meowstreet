@@ -6,10 +6,9 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from pydantic import field_validator, model_validator
 
-ROOT = Path(__file__).resolve().parents[2]
-METHOD_CONTRACTS_PATH = (
-    ROOT / "data" / "local_system" / "market_setup_confirmation_methods.v1.json"
-)
+from app.resources import resource_path
+
+METHOD_CONTRACTS_PATH = resource_path("market_setup_confirmation")
 
 _STRING_OPERATORS = {"eq", "in"}
 _NUMERIC_OPERATORS = {"lt", "gte"}

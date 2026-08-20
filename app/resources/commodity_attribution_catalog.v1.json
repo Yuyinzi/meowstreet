@@ -1,0 +1,535 @@
+{
+  "version": "commodity_attribution_evidence_catalog_v1",
+  "generated_at": "2026-08-02T06:05:48.826986+00:00",
+  "source_document": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+  "resources": [
+    {
+      "commodity_id": "copper",
+      "source_name": "Chilean Copper Commission",
+      "source_url": "https://www.cochilco.cl/",
+      "source_type": "official_data",
+      "coverage": [
+        "mining_production",
+        "refined_inventories",
+        "prices",
+        "production_sales",
+        "inventories"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "copper",
+      "source_name": "Chilean Copper Commission",
+      "source_url": "https://www.cochilco.cl/Paginas/English/Statistics/Data-Base.aspx#",
+      "source_type": "official_data",
+      "coverage": [
+        "mining_production",
+        "refined_inventories",
+        "prices",
+        "production_sales",
+        "inventories"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "copper",
+      "source_name": "Chilean Copper Commission",
+      "source_url": "https://www.cochilco.cl/Paginas/English/Statistics/Publications/Trading-Pit.aspx",
+      "source_type": "official_data",
+      "coverage": [
+        "mining_production",
+        "refined_inventories",
+        "prices",
+        "production_sales",
+        "inventories"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "copper",
+      "source_name": "Chilean Copper Commission",
+      "source_url": "https://www.cochilco.cl/Paginas/Estadisticas/Publicaciones/BoletinMensualElectronico.aspx",
+      "source_type": "official_data",
+      "coverage": [
+        "mining_production",
+        "refined_inventories",
+        "prices",
+        "production_sales",
+        "inventories"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "copper",
+      "source_name": "International Copper Study Group",
+      "source_url": "https://www.icsg.org/",
+      "source_type": "industry_body",
+      "coverage": [
+        "production",
+        "usage",
+        "stocks",
+        "forecasts"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "copper",
+      "source_name": "International Wrought Copper Council",
+      "source_url": "http://www.coppercouncil.org/iwcc-statistics-and-data",
+      "source_type": "industry_body",
+      "coverage": [
+        "semis_production",
+        "demand",
+        "end_use"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "copper",
+      "source_name": "Kitco Metals",
+      "source_url": "http://www.kitcometals.com/charts/copper_historical.html",
+      "source_type": "reference_market_data",
+      "coverage": [
+        "inventories"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "copper",
+      "source_name": "US Geological Survey",
+      "source_url": "https://www.usgs.gov/centers/nmic/copper-statistics-and-information",
+      "source_type": "official_data",
+      "coverage": [
+        "industry_surveys",
+        "publications"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "copper",
+      "source_name": "World Bank Commodity Markets",
+      "source_url": "https://www.worldbank.org/en/research/commodity-markets",
+      "source_type": "reference_market_data",
+      "coverage": [
+        "prices"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "iron_ore",
+      "source_name": "Government of Western Australia",
+      "source_url": "https://www.dmp.wa.gov.au/",
+      "source_type": "official_data",
+      "coverage": [
+        "statistics_digest",
+        "statistics_releases",
+        "industry_activity_indicators"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "iron_ore",
+      "source_name": "Government of Western Australia",
+      "source_url": "https://www.dmp.wa.gov.au/About-Us-Careers/Latest-Resources-Investment-4083.aspx",
+      "source_type": "official_data",
+      "coverage": [
+        "statistics_digest",
+        "statistics_releases",
+        "industry_activity_indicators"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "iron_ore",
+      "source_name": "Government of Western Australia",
+      "source_url": "https://www.dmp.wa.gov.au/About-Us-Careers/Latest-Statistics-Release-4081.aspx",
+      "source_type": "official_data",
+      "coverage": [
+        "statistics_digest",
+        "statistics_releases",
+        "industry_activity_indicators"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "iron_ore",
+      "source_name": "Government of Western Australia",
+      "source_url": "https://www.dmp.wa.gov.au/About-Us-Careers/Statistics-Digest-3962.aspx",
+      "source_type": "official_data",
+      "coverage": [
+        "statistics_digest",
+        "statistics_releases",
+        "industry_activity_indicators"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "iron_ore",
+      "source_name": "US Geological Survey",
+      "source_url": "https://www.usgs.gov/centers/nmic/iron-ore-statistics-and-information",
+      "source_type": "official_data",
+      "coverage": [
+        "industry_surveys",
+        "publications"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "iron_ore",
+      "source_name": "World Bank Commodity Markets",
+      "source_url": "https://www.worldbank.org/en/research/commodity-markets",
+      "source_type": "reference_market_data",
+      "coverage": [
+        "prices"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "lumber",
+      "source_name": "Food and Agriculture Organization of the United Nations",
+      "source_url": "https://www.fao.org/faostat/en/#data/FO",
+      "source_type": "official_data",
+      "coverage": [
+        "production",
+        "imports",
+        "exports"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "lumber",
+      "source_name": "International Tropical Timber Organization",
+      "source_url": "https://www.itto.int/",
+      "source_type": "industry_body",
+      "coverage": [
+        "production",
+        "trade"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "lumber",
+      "source_name": "International Tropical Timber Organization",
+      "source_url": "https://www.itto.int/biennal_review/",
+      "source_type": "industry_body",
+      "coverage": [
+        "production",
+        "trade"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "lumber",
+      "source_name": "Joint Forest Sector Questionnaire",
+      "source_url": "https://www.forestresearch.gov.uk/tools-and-resources/statistics/statistics-by-topic/international-returns/joint-forest-sector-questionnaire/",
+      "source_type": "official_data",
+      "coverage": [
+        "production",
+        "trade"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "lumber",
+      "source_name": "World Bank Commodity Markets",
+      "source_url": "https://www.worldbank.org/en/research/commodity-markets",
+      "source_type": "reference_market_data",
+      "coverage": [
+        "prices"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "BP World Energy",
+      "source_url": "https://www.bp.com/en/global/corporate/energy-economics/statistical-review-of-world-energy.html",
+      "source_type": "reference_market_data",
+      "coverage": [
+        "reserves",
+        "production",
+        "consumption",
+        "prices",
+        "refining",
+        "trade"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "Energy Information Administration",
+      "source_url": "https://www.eia.gov/analysis/projection-data.php",
+      "source_type": "official_data",
+      "coverage": [
+        "prices",
+        "reserves",
+        "production",
+        "refining",
+        "processing",
+        "imports",
+        "exports",
+        "movements",
+        "stocks",
+        "consumption",
+        "sales"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "Energy Information Administration",
+      "source_url": "https://www.eia.gov/analysis/reports.php#/T186",
+      "source_type": "official_data",
+      "coverage": [
+        "prices",
+        "reserves",
+        "production",
+        "refining",
+        "processing",
+        "imports",
+        "exports",
+        "movements",
+        "stocks",
+        "consumption",
+        "sales"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "Energy Information Administration",
+      "source_url": "https://www.eia.gov/international/data/world",
+      "source_type": "official_data",
+      "coverage": [
+        "prices",
+        "reserves",
+        "production",
+        "refining",
+        "processing",
+        "imports",
+        "exports",
+        "movements",
+        "stocks",
+        "consumption",
+        "sales"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "Energy Information Administration",
+      "source_url": "https://www.eia.gov/outlooks/aeo/data/browser/?src=-f1",
+      "source_type": "official_data",
+      "coverage": [
+        "prices",
+        "reserves",
+        "production",
+        "refining",
+        "processing",
+        "imports",
+        "exports",
+        "movements",
+        "stocks",
+        "consumption",
+        "sales"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "Energy Information Administration",
+      "source_url": "https://www.eia.gov/outlooks/aeo/data/browser/?src=-f1#/?id=3-IEO2017",
+      "source_type": "official_data",
+      "coverage": [
+        "prices",
+        "reserves",
+        "production",
+        "refining",
+        "processing",
+        "imports",
+        "exports",
+        "movements",
+        "stocks",
+        "consumption",
+        "sales"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "Energy Information Administration",
+      "source_url": "https://www.eia.gov/outlooks/steo/data/browser/",
+      "source_type": "official_data",
+      "coverage": [
+        "prices",
+        "reserves",
+        "production",
+        "refining",
+        "processing",
+        "imports",
+        "exports",
+        "movements",
+        "stocks",
+        "consumption",
+        "sales"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "Energy Information Administration",
+      "source_url": "https://www.eia.gov/petroleum/",
+      "source_type": "official_data",
+      "coverage": [
+        "prices",
+        "reserves",
+        "production",
+        "refining",
+        "processing",
+        "imports",
+        "exports",
+        "movements",
+        "stocks",
+        "consumption",
+        "sales"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "Energy Information Administration",
+      "source_url": "https://www.eia.gov/petroleum/data.php",
+      "source_type": "official_data",
+      "coverage": [
+        "prices",
+        "reserves",
+        "production",
+        "refining",
+        "processing",
+        "imports",
+        "exports",
+        "movements",
+        "stocks",
+        "consumption",
+        "sales"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "International Energy Agency",
+      "source_url": "https://www.iea.org/",
+      "source_type": "official_data",
+      "coverage": [
+        "production",
+        "trade",
+        "final_consumption",
+        "sector_consumption",
+        "stocks",
+        "market_reports"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "International Energy Agency",
+      "source_url": "https://www.iea.org/fuels-and-technologies/oil",
+      "source_type": "official_data",
+      "coverage": [
+        "production",
+        "trade",
+        "final_consumption",
+        "sector_consumption",
+        "stocks",
+        "market_reports"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "OPEC",
+      "source_url": "https://www.opec.org/opec_web/en/",
+      "source_type": "industry_body",
+      "coverage": [
+        "reserves",
+        "upstream_investment",
+        "downstream_capacity",
+        "market_indicators",
+        "production"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "OPEC",
+      "source_url": "https://www.opec.org/opec_web/en/21.htm",
+      "source_type": "industry_body",
+      "coverage": [
+        "reserves",
+        "upstream_investment",
+        "downstream_capacity",
+        "market_indicators",
+        "production"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "OPEC",
+      "source_url": "https://www.opec.org/opec_web/en/data_graphs/40.htm",
+      "source_type": "industry_body",
+      "coverage": [
+        "reserves",
+        "upstream_investment",
+        "downstream_capacity",
+        "market_indicators",
+        "production"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    },
+    {
+      "commodity_id": "oil",
+      "source_name": "World Bank Commodity Markets",
+      "source_url": "https://www.worldbank.org/en/research/commodity-markets",
+      "source_type": "reference_market_data",
+      "coverage": [
+        "prices"
+      ],
+      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "status": "cataloged"
+    }
+  ]
+}

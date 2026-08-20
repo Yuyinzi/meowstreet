@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from app.resources import resource_path
 from app.services import cot_historical_extremes_catalog as catalog
 
 FIXTURE_PATH = (
@@ -66,12 +67,7 @@ def _write_payload(tmp_path, payload):
 
 
 def test_load_accepts_the_checked_in_allowlist():
-    path = (
-        catalog.ROOT
-        / "data"
-        / "local_system"
-        / "cot_historical_extreme_allowlist.v1.json"
-    )
+    path = resource_path("cot_extreme_allowlist")
     payload = catalog.load_cot_historical_extreme_allowlist(path)
 
     assert payload["version"] == catalog.VERSION
@@ -91,10 +87,7 @@ def test_load_accepts_the_checked_in_allowlist():
 
 def test_active_entries_are_unambiguous():
     payload = catalog.load_cot_historical_extreme_allowlist(
-        catalog.ROOT
-        / "data"
-        / "local_system"
-        / "cot_historical_extreme_allowlist.v1.json"
+        resource_path("cot_extreme_allowlist")
     )
     active = catalog.active_allowlist_entries(payload)
 

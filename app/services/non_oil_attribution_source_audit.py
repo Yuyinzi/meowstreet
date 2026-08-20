@@ -6,9 +6,7 @@ from app.services import commodity_attribution_catalog as catalog_service
 from app.data_sources import non_oil_attribution_source_audit as source
 
 VERSION = "non_oil_attribution_source_audit_v1"
-SOURCE_CATALOG_PATH = (
-    "data/local_system/commodity_attribution_evidence_catalog.v1.json"
-)
+SOURCE_CATALOG_PATH = "app/resources/attribution_catalog.v1.json"
 
 
 def build_non_oil_attribution_source_audit(catalog_path, generated_at=None):

@@ -7,13 +7,13 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic import model_validator
 
+from app.resources import resource_path
 from app.tools import market_setup_predicates
 from app.tools import market_setup_v2
 
-ROOT = Path(__file__).resolve().parents[2]
-SURFACE_PATH = ROOT / "data" / "local_system" / "market_assistant_surface.v1.json"
+SURFACE_PATH = resource_path("assistant_surface")
 SURFACE_VERSION = "market_assistant_surface_v1"
-REGISTRY_PATH = ROOT / "data" / "local_system" / "market_setup_input_registry.v1.json"
+REGISTRY_PATH = resource_path("market_setup_inputs")
 
 KNOWN_FACT_IDS = frozenset(
     {

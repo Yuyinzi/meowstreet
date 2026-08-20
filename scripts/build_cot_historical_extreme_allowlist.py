@@ -8,9 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.services import cot_historical_extremes_catalog as allowlist_service
+from app.resources import resource_path
 
 DEFAULT_CACHE_DIR = ROOT / "data" / ""
-DEFAULT_OUTPUT = allowlist_service.DEFAULT_ALLOWLIST_PATH
+DEFAULT_OUTPUT = resource_path("cot_extreme_allowlist")
 
 ALLOWLIST_RECORDS = [
     {

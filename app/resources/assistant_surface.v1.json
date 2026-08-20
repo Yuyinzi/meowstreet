@@ -1,0 +1,18 @@
+{
+  "version": "market_assistant_surface_v1",
+  "facts": [
+    "survey_growth_direction",
+    "macro_financial_conditions",
+    "macro_policy_response",
+    "consumer_demand_outlook",
+    "sp500_market_phase",
+    "credit_conditions",
+    "vix_level",
+    "m2_liquidity",
+    "equity_breadth",
+    "jobless_claims",
+    "economic_confirmation",
+    "cyclical_commodities",
+    "nfib_regional_evidence"
+  ]
+}

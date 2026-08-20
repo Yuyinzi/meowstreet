@@ -1,0 +1,597 @@
+{
+  "version": "market_assistant_knowledge_v1",
+  "records": [
+    {
+      "record_id": "market_setup_v2_method",
+      "version": "market_setup_v2",
+      "object_type": "indicator_method",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "market_setup",
+      "label": "Market Setup v2",
+      "title": "Market Setup v2 classification method",
+      "source": {
+        "source_module": "market_setup_v2",
+        "method_version": "market_setup_v2",
+        "source_period": "on_demand"
+      },
+      "method_notes": [
+        "Market Setup v2 combines Macro Regime and Market Confirmation through an approved setup matrix",
+        "Macro Regime is selected from the ISM survey synthesis direction",
+        "Market Confirmation aggregates equity trend, credit, and volatility confirmation tests and the M2 liquidity offset",
+        "Market Setup v2 is executed by the deterministic Market Setup v2 engine; the assistant may explain it but never change it"
+      ],
+      "explanation": "Market Setup v2 is the approved deterministic method that classifies the current market setup. The assistant explains the method and its results but has no authority to change them."
+    },
+    {
+      "record_id": "portfolio_posture_method",
+      "version": "market_setup_v2_portfolio_posture_v1",
+      "object_type": "indicator_method",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "portfolio_posture",
+      "label": "Portfolio Posture",
+      "title": "Portfolio posture contract method",
+      "source": {
+        "source_module": "market_setup_v2",
+        "method_version": "market_setup_v2_portfolio_posture_v1",
+        "source_period": "on_demand"
+      },
+      "method_notes": [
+        "Portfolio posture is derived from the approved posture matrix keyed by the Market Setup code",
+        "Posture codes include risk_on, mild_risk_on, neutral_selective, defensive, mild_risk_off, and insufficient_data",
+        "Each posture contract embeds net exposure, gross exposure, implementation, broad beta, positioning, and avoid guidance",
+        "Portfolio posture is executed by the deterministic Market Setup v2 engine; the assistant may explain the selected posture contract but never change it"
+      ],
+      "explanation": "Portfolio posture translates the current Market Setup classification into the approved posture contract. It is a deterministic engine output and never invents allocation percentages or instruments."
+    },
+    {
+      "record_id": "ism_survey_synthesis_method",
+      "version": "ism_survey_synthesis_v1",
+      "object_type": "indicator_method",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "ism_survey_synthesis",
+      "label": "ISM Survey Synthesis",
+      "title": "ISM Survey Synthesis direction method",
+      "source": {
+        "source_module": "ism_survey_synthesis",
+        "method_version": "ism_survey_synthesis_v1",
+        "source_period": "monthly"
+      },
+      "method_notes": [
+        "ISM Survey Synthesis combines ISM Manufacturing and ISM Services survey signals into an economic direction and growth momentum",
+        "Economic direction values are aligned_expansion, aligned_contraction, aligned_neutral, and divergent",
+        "Growth momentum values are rising, falling, flat, and mixed",
+        "Expected GDP direction values include rising, slowing, falling, improving, rebound_risk, and stable",
+        "The synthesis is executed by the deterministic engine; the assistant may explain it but never change it"
+      ],
+      "explanation": "ISM Survey Synthesis is the sole macro regime selector input. It combines the two ISM surveys into a single survey growth direction."
+    },
+    {
+      "record_id": "vix_method",
+      "version": "vix_confirmation_method_v1",
+      "object_type": "indicator_method",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "vix_level",
+      "label": "VIX Confirmation Method",
+      "title": "VIX confirmation v2 threshold method",
+      "source": {
+        "source_module": "us_rates_liquidity",
+        "method_version": "vix_confirmation_v2",
+        "source_period": "daily"
+      },
+      "method_notes": [
+        "VIX confirmation v2 classifies VIX as stress at or above the approved 20.0 threshold and normal below it",
+        "It participates in Market Confirmation as one confirmation test",
+        "The assistant may explain the method but never change it"
+      ],
+      "explanation": "VIX confirmation is a level threshold test executed by the deterministic engine. The assistant may explain the approved method but has no authority to change it."
+    },
+    {
+      "record_id": "ism_manufacturing_pmi_method",
+      "version": "ism_manufacturing_pmi_method_v1",
+      "object_type": "indicator_method",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "ism_manufacturing_pmi",
+      "label": "ISM Manufacturing PMI Method",
+      "title": "ISM Manufacturing PMI diffusion index method",
+      "formula": "% Better + 0.5 × % Same",
+      "source": {
+        "source_module": "ism_macro_signal",
+        "method_version": "ism_survey_synthesis_v1",
+        "source_period": "monthly"
+      },
+      "method_notes": [
+        "The PMI level and its direction are separate classification dimensions",
+        "The level and direction are classified by the deterministic engine and the assistant must never infer one from the other",
+        "The assistant may explain the method but never change it"
+      ],
+      "explanation": "ISM Manufacturing PMI is a monthly diffusion index computed as the share reporting better plus half the share reporting the same. Its level and its direction are separate classifications executed by the deterministic engine."
+    },
+    {
+      "record_id": "m2_liquidity_method",
+      "version": "m2_liquidity_method_v1",
+      "object_type": "indicator_method",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "m2_liquidity",
+      "label": "M2 Liquidity Offset Method",
+      "title": "M2 money supply liquidity offset method",
+      "source": {
+        "source_module": "m2_money_supply",
+        "method_version": "m2_liquidity_v1",
+        "source_period": "monthly"
+      },
+      "method_notes": [
+        "The M2 liquidity offset status is expanding or shock",
+        "The offset participates in Market Confirmation as an offset and is not counted in the confirmation test count",
+        "The assistant may explain the method but never change it"
+      ],
+      "explanation": "M2 money supply is a liquidity offset that can support a directional confirmation. Its offset status is executed by the deterministic engine and never changes the confirmation test count."
+    },
+    {
+      "record_id": "sp500_market_phase_method",
+      "version": "market_phase_method_v1",
+      "object_type": "indicator_method",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "sp500_market_phase",
+      "label": "S&P 500 Market Phase Method",
+      "title": "S&P 500 market phase method",
+      "formula": "close <= rolling_high x 0.8",
+      "source": {
+        "source_module": "market_phase",
+        "method_version": "market_phase_v1",
+        "source_period": "daily"
+      },
+      "method_notes": [
+        "A bear market phase occurs when the close is at or below 80 percent of the rolling price high",
+        "The market phase is executed by the deterministic market phase method and consumed as one market confirmation test",
+        "The assistant may explain the method but never change it"
+      ],
+      "explanation": "The S&P 500 market phase classifies the market as a bull or bear phase against its rolling high. It is one confirmation test within Market Confirmation."
+    },
+    {
+      "record_id": "credit_conditions_method",
+      "version": "credit_conditions_method_v1",
+      "object_type": "indicator_method",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "credit_conditions",
+      "label": "Credit Conditions Method",
+      "title": "Credit conditions status classification method",
+      "source": {
+        "source_module": "us_rates_liquidity",
+        "method_version": "credit_conditions_v1",
+        "source_period": "daily"
+      },
+      "method_notes": [
+        "Credit conditions status is one of the approved ten-state vocabulary",
+        "It participates in Market Confirmation as one confirmation test",
+        "The assistant may explain the method but never change it"
+      ],
+      "explanation": "Credit Conditions classifies corporate credit spreads into one of the approved ten states. It is one confirmation test within Market Confirmation."
+    },
+    {
+      "record_id": "jobless_claims_method",
+      "version": "jobless_claims_method_v1",
+      "object_type": "indicator_method",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "jobless_claims",
+      "label": "Jobless Claims Method",
+      "title": "Jobless claims observation method",
+      "source": {
+        "source_module": "dol_ui_claims",
+        "method_version": "claims_confirmation_v1.0",
+        "source_period": "weekly"
+      },
+      "method_notes": [
+        "Jobless claims is an observation-only watch item with no decision effect",
+        "It does not participate in any Market Setup decision layer",
+        "The assistant may explain the observation method but never change it"
+      ],
+      "explanation": "Jobless claims is watched as observation evidence only. It never changes a Market Setup decision."
+    },
+    {
+      "record_id": "ism_manufacturing_pmi_definition",
+      "version": "ism_manufacturing_pmi_v1",
+      "object_type": "indicator_definition",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "ism_manufacturing_pmi",
+      "label": "ISM Manufacturing PMI",
+      "title": "ISM Manufacturing Purchasing Managers Index",
+      "units": "index points",
+      "frequency": "monthly",
+      "source": {
+        "source_module": "ism_macro_signal",
+        "method_version": "ism_survey_synthesis_v1",
+        "source_period": "monthly",
+        "periods": ["latest accepted monthly ISM Manufacturing survey"]
+      },
+      "source_period_required": true,
+      "level_contract": {
+        "above": "expansion",
+        "at": "neutral",
+        "below": "contraction",
+        "separate_from_direction": true,
+        "wording": "A reading above 50 indicates expansion, below 50 indicates contraction, and equal to 50 is neutral"
+      },
+      "direction_contract": {
+        "rule": "use approved direction method",
+        "momentum_values": ["rising", "flat", "falling"],
+        "separate_from_level": true,
+        "wording": "Direction is the month-over-month momentum classified by the approved direction method and is never inferred from the level"
+      },
+      "formula": "% Better + 0.5 × % Same",
+      "method_notes": [
+        "The PMI level and its direction are separate classification dimensions; a low level does not imply deterioration and a high level does not imply acceleration",
+        "The level and direction are classified by the deterministic engine and the assistant must never infer one from the other"
+      ],
+      "explanation": "The ISM Manufacturing PMI is a monthly diffusion index of manufacturing survey responses. Its level and its direction are separate classifications and must be reported independently."
+    },
+    {
+      "record_id": "sp500_market_phase_definition",
+      "version": "market_phase_v1",
+      "object_type": "indicator_definition",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "sp500_market_phase",
+      "label": "S&P 500 Market Phase",
+      "title": "S&P 500 market phase",
+      "units": "state",
+      "frequency": "daily",
+      "source": {
+        "source_module": "market_phase",
+        "method_version": "market_phase_v1",
+        "source_period": "daily",
+        "periods": ["latest accepted S&P 500 price close"]
+      },
+      "source_period_required": true,
+      "level_contract": {
+        "states": ["bull_market", "bear_market"],
+        "separate_from_direction": true,
+        "wording": "The S&P 500 market phase is bull_market or bear_market relative to a rolling price high"
+      },
+      "direction_contract": {
+        "rule": "not_applicable",
+        "wording": "Market phase is a level state; no separate direction classification is defined for this indicator"
+      },
+      "formula": "close <= rolling_high x 0.8",
+      "method_notes": [
+        "A bear market phase occurs when the close is at or below 80 percent of the rolling price high",
+        "The market phase is executed by the deterministic market phase method and consumed as one market confirmation test"
+      ],
+      "explanation": "The S&P 500 market phase classifies the market as a bull or bear phase against its rolling high. It participates in Market Confirmation as one confirmation test."
+    },
+    {
+      "record_id": "credit_conditions_definition",
+      "version": "credit_conditions_v1",
+      "object_type": "indicator_definition",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "credit_conditions",
+      "label": "Credit Conditions",
+      "title": "Credit Conditions status",
+      "units": "state",
+      "frequency": "daily",
+      "source": {
+        "source_module": "us_rates_liquidity",
+        "method_version": "credit_conditions_v1",
+        "source_period": "daily",
+        "periods": ["latest accepted corporate credit spread observations"]
+      },
+      "source_period_required": true,
+      "level_contract": {
+        "states": [
+          "healthy",
+          "supportive",
+          "weak_credit_warning",
+          "mixed",
+          "selective",
+          "risk_rising",
+          "crisis_stress",
+          "stress",
+          "risk_off",
+          "serious_deterioration"
+        ],
+        "separate_from_direction": true,
+        "wording": "Credit conditions status is one of the approved ten-state vocabulary"
+      },
+      "direction_contract": {
+        "rule": "not_applicable",
+        "wording": "Credit conditions is a level status classification; no separate direction dimension is defined"
+      },
+      "method_notes": [
+        "Credit conditions participates in Market Confirmation as one confirmation test",
+        "The approved status vocabulary is consumed from the shared confirmation contract by the deterministic engine"
+      ],
+      "explanation": "Credit Conditions classifies corporate credit spreads into one of the approved ten states. It is one confirmation test within Market Confirmation."
+    },
+    {
+      "record_id": "vix_definition",
+      "version": "vix_confirmation_v2",
+      "object_type": "indicator_definition",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "vix_level",
+      "label": "VIX",
+      "title": "CBOE Volatility Index",
+      "units": "index",
+      "frequency": "daily",
+      "source": {
+        "source_module": "us_rates_liquidity",
+        "method_version": "vix_confirmation_v2",
+        "source_period": "daily",
+        "periods": ["latest accepted daily VIX level"]
+      },
+      "source_period_required": true,
+      "level_contract": {
+        "zones": ["normal", "stress"],
+        "threshold_note": "20.0 is the approved v2 confirmation threshold",
+        "separate_from_direction": true,
+        "wording": "VIX is classified as stress at or above the approved 20.0 threshold and normal below it"
+      },
+      "direction_contract": {
+        "rule": "not_applicable",
+        "wording": "VIX confirmation is a level threshold test; no separate direction classification is defined"
+      },
+      "method_notes": [
+        "The approved v2 threshold is 20.0 as executed by vix_confirmation_v2",
+        "Historical context or an economic rationale for the 20.0 threshold is separate exploration or research unless an approved rationale exists"
+      ],
+      "explanation": "VIX measures implied volatility and is used as a volatility confirmation test. The approved v2 threshold is 20.0. No economic rationale for the threshold is asserted beyond the approved method."
+    },
+    {
+      "record_id": "m2_liquidity_definition",
+      "version": "m2_liquidity_v1",
+      "object_type": "indicator_definition",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "m2_liquidity",
+      "label": "M2 Money Supply",
+      "title": "M2 money supply liquidity",
+      "units": "state",
+      "frequency": "monthly",
+      "source": {
+        "source_module": "m2_money_supply",
+        "method_version": "m2_liquidity_v1",
+        "source_period": "monthly",
+        "periods": ["latest accepted M2 money stock observation"]
+      },
+      "source_period_required": true,
+      "level_contract": {
+        "statuses": ["expanding", "shock"],
+        "separate_from_direction": true,
+        "wording": "The M2 liquidity offset status is expanding or shock"
+      },
+      "direction_contract": {
+        "rule": "not_applicable",
+        "wording": "M2 offset status is a level classification; no separate direction dimension is defined"
+      },
+      "method_notes": [
+        "The M2 offset status participates in Market Confirmation as an offset and is not counted in the confirmation test count",
+        "The offset status is executed by the deterministic engine"
+      ],
+      "explanation": "M2 money supply is a liquidity offset that can support a directional confirmation. Its offset status is expanding or shock and it never changes the confirmation test count."
+    },
+    {
+      "record_id": "jobless_claims_definition",
+      "version": "jobless_claims_v1",
+      "object_type": "indicator_definition",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "jobless_claims",
+      "label": "Jobless Claims",
+      "title": "Jobless claims observation",
+      "units": "number of weekly claims",
+      "frequency": "weekly",
+      "source": {
+        "source_module": "dol_ui_claims",
+        "method_version": "claims_confirmation_v1.0",
+        "source_period": "weekly",
+        "periods": ["latest accepted initial and continuing claims observations"]
+      },
+      "source_period_required": true,
+      "level_contract": {
+        "rule": "not_applicable",
+        "wording": "Jobless claims is an observation-only watch item with no approved level classification"
+      },
+      "direction_contract": {
+        "rule": "not_applicable",
+        "wording": "Jobless claims is an observation-only watch item with no approved direction classification"
+      },
+      "method_notes": [
+        "Jobless claims is an observation-only watch item with no decision effect",
+        "It does not participate in any Market Setup decision layer"
+      ],
+      "explanation": "Jobless claims is watched as observation evidence only. It never changes a Market Setup decision."
+    },
+    {
+      "record_id": "equity_breadth_definition",
+      "version": "equity_breadth_v1",
+      "object_type": "indicator_definition",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "equity_breadth",
+      "label": "Equity Breadth",
+      "title": "Equity breadth observation",
+      "units": "n/a",
+      "frequency": "observation-only",
+      "source": {
+        "source_module": "market_setup_v2",
+        "method_version": "market_setup_v2",
+        "source_period": "observation-only"
+      },
+      "source_period_required": false,
+      "level_contract": {
+        "rule": "not_applicable",
+        "wording": "Equity breadth is an observation-only watch item with no approved level classification"
+      },
+      "direction_contract": {
+        "rule": "not_applicable",
+        "wording": "Equity breadth is an observation-only watch item with no approved direction classification"
+      },
+      "method_notes": [
+        "Equity breadth is an observation-only watch item with no decision effect",
+        "It does not participate in any Market Setup decision layer",
+        "No accepted local equity breadth data source is configured in v1"
+      ],
+      "explanation": "Equity breadth is watched as observation evidence only. It never changes a Market Setup decision."
+    },
+    {
+      "record_id": "ism_surveys_source",
+      "version": "ism_surveys_source_v1",
+      "object_type": "indicator_source",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "ism_surveys",
+      "label": "ISM Surveys",
+      "title": "ISM Manufacturing and Services survey sources",
+      "source": {
+        "source_module": "ism_official_report",
+        "method_version": "ism_survey_synthesis_v1",
+        "source_period": "monthly",
+        "periods": ["official ISM monthly survey releases accepted by the dashboard"]
+      },
+      "source_period_required": true,
+      "method_notes": [
+        "The dashboard consumes normalized ISM Manufacturing and Services survey signals from official ISM report data"
+      ],
+      "explanation": "ISM survey data is the accepted local source for the survey signals consumed by the dashboard."
+    },
+    {
+      "record_id": "sp500_market_phase_source",
+      "version": "sp500_market_phase_source_v1",
+      "object_type": "indicator_source",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "sp500_market_phase",
+      "label": "S&P 500 Price Source",
+      "title": "S&P 500 benchmark price source",
+      "source": {
+        "source_module": "benchmark_market_data",
+        "method_version": "market_phase_v1",
+        "source_period": "daily",
+        "periods": ["accepted S&P 500 price history used by the dashboard"]
+      },
+      "source_period_required": true,
+      "method_notes": [
+        "S&P 500 price history is persisted from the accepted benchmark price workbook and consumed as the market phase input"
+      ],
+      "explanation": "The dashboard's S&P 500 market phase is computed from accepted benchmark price data."
+    },
+    {
+      "record_id": "credit_conditions_source",
+      "version": "credit_conditions_source_v1",
+      "object_type": "indicator_source",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "credit_conditions",
+      "label": "Credit Conditions Source",
+      "title": "Corporate credit spread source",
+      "source": {
+        "source_module": "us_rates_liquidity",
+        "method_version": "credit_conditions_v1",
+        "source_period": "daily",
+        "periods": ["P05 workbook history merged with FRED ICE/BofA observations"]
+      },
+      "source_period_required": true,
+      "method_notes": [
+        "Credit spread history is merged from the P05 workbook with the latest FRED ICE/BofA observations",
+        "Missing dates are shown as a data gap and are not interpolated"
+      ],
+      "explanation": "Corporate credit spread data is the accepted local source for the credit conditions status."
+    },
+    {
+      "record_id": "vix_source",
+      "version": "vix_source_v1",
+      "object_type": "indicator_source",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "vix_level",
+      "label": "VIX Source",
+      "title": "CBOE VIX source",
+      "source": {
+        "source_module": "us_rates_liquidity",
+        "method_version": "vix_confirmation_v2",
+        "source_period": "daily",
+        "periods": ["FRED VIXCLS observations accepted by the dashboard"]
+      },
+      "source_period_required": true,
+      "method_notes": [
+        "The dashboard's accepted VIX level comes from the FRED VIXCLS series",
+        "The underlying indicator is the CBOE Volatility Index (VIX)"
+      ],
+      "explanation": "The VIX level consumed by the dashboard comes from the FRED VIXCLS series for the CBOE VIX index."
+    },
+    {
+      "record_id": "m2_liquidity_source",
+      "version": "m2_liquidity_source_v1",
+      "object_type": "indicator_source",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "m2_liquidity",
+      "label": "M2 Money Supply Source",
+      "title": "M2 money stock source",
+      "source": {
+        "source_module": "m2_money_supply",
+        "method_version": "m2_liquidity_v1",
+        "source_period": "monthly",
+        "periods": ["nominal M2 monthly workbook observations accepted by the dashboard"]
+      },
+      "source_period_required": true,
+      "method_notes": [
+        "The dashboard's M2 money stock is imported from the approved monthly workbook"
+      ],
+      "explanation": "Nominal M2 money stock is the accepted local source for the M2 liquidity offset."
+    },
+    {
+      "record_id": "jobless_claims_source",
+      "version": "jobless_claims_source_v1",
+      "object_type": "indicator_source",
+      "authority": "method_knowledge",
+      "decision_effect": "none",
+      "market_setup_relation": "non_decision",
+      "indicator_id": "jobless_claims",
+      "label": "Jobless Claims Source",
+      "title": "Department of Labor UI claims source",
+      "source": {
+        "source_module": "dol_ui_claims",
+        "method_version": "claims_confirmation_v1.0",
+        "source_period": "weekly",
+        "periods": ["latest accepted initial and continuing claims observations"]
+      },
+      "source_period_required": true,
+      "method_notes": [
+        "Weekly UI claims are fetched from the Department of Labor UI claims source"
+      ],
+      "explanation": "Weekly UI claims are the accepted local source for the jobless claims observation item."
+    }
+  ]
+}

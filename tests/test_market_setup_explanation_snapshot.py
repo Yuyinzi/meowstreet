@@ -1,16 +1,14 @@
 import hashlib
 import json
 from copy import deepcopy
-from pathlib import Path
-
 import pytest
 
+from app.resources import resource_path
 from app.tools import market_setup_evidence_facts
 from app.tools import market_setup_explanation_snapshot
 from app.tools import market_setup_v2
 
-ROOT = Path(__file__).resolve().parents[1]
-REGISTRY_PATH = ROOT / "data" / "local_system" / "market_setup_input_registry.v1.json"
+REGISTRY_PATH = resource_path("market_setup_inputs")
 
 
 def _monthly_period(effective_date="2026-06-30", reference_period="2026-06"):

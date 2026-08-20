@@ -176,6 +176,8 @@ def test_build_script_writes_catalog_and_exits_zero(tmp_path):
         / "Video 12"
         / "Cyclical_Commodities_Demand_Supply_Factors.pdf"
     )
+    if not source.is_file():
+        pytest.skip(" attribution source pdf is not available locally")
 
     result = subprocess.run(
         [
