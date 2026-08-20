@@ -195,7 +195,11 @@ def _narration_instructions(tone="beginner_human"):
             "back unavailable, retry once with the single most likely corrected "
             "symbol and never repeat an identical call. If the symbol is still "
             "unresolved, ask the user to confirm the ticker. Answer only from tool "
-            "results, and never give buy/sell advice or claim predictive certainty."
+            "results, and never give buy/sell advice or claim predictive certainty. "
+            "When the question is about a ticker or portfolio, treat the market "
+            "setup as context: weave it into the interpretation of the numbers "
+            "instead of opening with a standalone explanation of setup labels; "
+            "explain a term inline only when the answer actually uses it."
         )
     )
 
