@@ -50,6 +50,23 @@ def ticker_context_js():
     )
 
 
+@router.get("/portfolio.html")
+def portfolio_html():
+    return FileResponse(api.STATIC_DIR / "portfolio.html")
+
+
+@router.get("/portfolio.css")
+def portfolio_css():
+    return FileResponse(api.STATIC_DIR / "portfolio.css", media_type="text/css")
+
+
+@router.get("/portfolio.js")
+def portfolio_js():
+    return FileResponse(
+        api.STATIC_DIR / "portfolio.js", media_type="application/javascript"
+    )
+
+
 @router.get("/consumer-sentiment.js")
 def consumer_sentiment_js():
     return FileResponse(

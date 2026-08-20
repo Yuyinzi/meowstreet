@@ -44,6 +44,8 @@ TOOL_IDS = (
     "research_focused",
     "research_standard",
     "research_deep",
+    "get_portfolio_method",
+    "portfolio_query",
 )
 
 _EVIDENCE_DETAIL_CATALOG_CACHE = None
@@ -188,6 +190,26 @@ class _ResearchDeepCall(_ToolCallRecord):
     arguments: _ResearchParams
 
 
+class _GetPortfolioMethodCall(_ToolCallRecord):
+    tool_name: Literal["get_portfolio_method"]
+    arguments: _EmptyParams
+
+
+class _PortfolioQueryArguments(_ToolArguments):
+    operation: Literal[
+        "ticker_risk_profile",
+        "portfolio_analysis",
+        "pair_analysis",
+        "ticker_industry_context",
+    ]
+    params: dict = Field(default_factory=dict)
+
+
+class _PortfolioQueryCall(_ToolCallRecord):
+    tool_name: Literal["portfolio_query"]
+    arguments: _PortfolioQueryArguments
+
+
 _ToolCallRecord = Annotated[
     Union[
         _GetSetupOverviewCall,
@@ -206,6 +228,8 @@ _ToolCallRecord = Annotated[
         _ResearchFocusedCall,
         _ResearchStandardCall,
         _ResearchDeepCall,
+        _GetPortfolioMethodCall,
+        _PortfolioQueryCall,
     ],
     Field(discriminator="tool_name"),
 ]
@@ -229,6 +253,8 @@ _TOOL_ARGUMENT_MODELS = {
     "research_focused": _ResearchParams,
     "research_standard": _ResearchParams,
     "research_deep": _ResearchParams,
+    "get_portfolio_method": _EmptyParams,
+    "portfolio_query": _PortfolioQueryArguments,
 }
 
 ALL_TOOL_IDS = tuple(_TOOL_ARGUMENT_MODELS)
@@ -250,6 +276,8 @@ _TOOL_DESCRIPTIONS = {
     "research_focused": "run a focused external research search",
     "research_standard": "run a standard external research search",
     "research_deep": "run a deep external research search",
+    "get_portfolio_method": "read the portfolio methodology knowledge and the portfolio_query operation contracts",
+    "portfolio_query": "run one deterministic ticker or portfolio operation",
 }
 
 

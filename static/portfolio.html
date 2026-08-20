@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meowstreet — Portfolio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/portfolio.css?v=3" />
+  <link rel="stylesheet" href="/market-assistant.css?v=2" />
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/" class="nav-brand">Meowstreet</a>
+    <a href="/ticker-workflow.html" class="nav-link">Ticker Workflow</a>
+    <a href="/ticker-context.html" class="nav-link">Ticker Context</a>
+    <a href="/macro-dashboard.html" class="nav-link">Macro Dashboard</a>
+    <a href="/portfolio.html" class="nav-link active">Portfolio</a>
+  </nav>
+
+  <main class="method-shell">
+    <section class="graph-hero">
+      <div class="hero-head">
+        <h1>Portfolio</h1>
+        <div class="hero-meta">Ticker risk profile &amp; portfolio gates</div>
+      </div>
+
+      <div class="command-card">
+        <div class="card-title">Ticker risk profile</div>
+        <form id="riskForm" class="lookup-form">
+          <div class="ticker-row ticker-row-single">
+            <label class="ticker-field">
+              <span>Symbol</span>
+              <input type="text" name="symbol" placeholder="NVDA" required autocomplete="off" />
+            </label>
+            <button type="submit" class="primary-button">Look up</button>
+          </div>
+        </form>
+        <div id="riskRegion" class="result-region" aria-live="polite"></div>
+      </div>
+
+      <div class="command-card">
+        <div class="card-title">Portfolio analysis</div>
+        <form id="portfolioForm">
+          <div class="position-head">
+            <span>Symbol</span>
+            <span>Side</span>
+            <span>Allocation ($)</span>
+            <span></span>
+          </div>
+          <div id="positionRows" class="position-rows"></div>
+          <div class="position-actions">
+            <button type="button" class="ghost-button" id="addPosition">+ Add position</button>
+          </div>
+          <div class="options-row">
+            <label class="field">
+              <span>Margin capital (optional)</span>
+              <input type="number" name="marginCapital" min="0" step="any" placeholder="50000" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Declared bias</span>
+              <select name="declaredBias">
+                <option value="">Unset</option>
+                <option value="long">Long</option>
+                <option value="short">Short</option>
+                <option value="neutral">Neutral</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Instrument</span>
+              <select name="instrument">
+                <option value="">Unset</option>
+                <option value="options">Options</option>
+                <option value="cfd">CFD</option>
+                <option value="us_stock">US stock</option>
+              </select>
+            </label>
+          </div>
+          <button type="submit" class="primary-button">Analyze portfolio</button>
+        </form>
+        <div id="portfolioRegion" class="result-region" aria-live="polite"></div>
+      </div>
+
+      <p class="provenance-note">
+        Beta &amp; volatility vs S&amp;P 500 (^GSPC), weekly closes. Gates and sizing scenarios are
+        method-derived head checks (P21), not recommendations.
+      </p>
+    </section>
+  </main>
+
+  <button class="market-assistant-fab" id="marketAssistantFab" type="button" aria-label="Open Market Setup Assistant" aria-controls="marketAssistantWindow">
+    <img src="/static/cat-icon.svg" alt="" aria-hidden="true" />
+  </button>
+  <div class="market-assistant-window" id="marketAssistantWindow" role="dialog" aria-label="Market Setup Assistant" aria-hidden="true">
+    <div class="market-assistant-window-head" id="marketAssistantWindowHead">
+      <h2>Market Setup Assistant</h2>
+      <div class="market-assistant-window-actions">
+        <button class="market-assistant-window-new" id="marketAssistantNewConversation" type="button" aria-label="Start new conversation">New conversation</button>
+        <button class="market-assistant-window-close" id="marketAssistantWindowClose" type="button" aria-label="Close assistant">×</button>
+      </div>
+    </div>
+    <div class="market-assistant-log" id="marketAssistantLog"></div>
+    <form class="market-assistant-form" id="marketAssistantForm">
+      <div class="market-assistant-input-row">
+        <input type="text" id="marketAssistantQuestion" name="question" autocomplete="off" placeholder="e.g. What supports the current market setup?" />
+        <button type="submit" id="marketAssistantSubmit">Ask</button>
+      </div>
+      <div class="market-assistant-controls">
+        <label class="market-assistant-option">
+          <input type="checkbox" id="marketAssistantExternalSearch" />
+          <span>Search external sources</span>
+        </label>
+        <label class="market-assistant-option">
+          <input type="checkbox" id="marketAssistantDeepResearch" />
+          <span>Deep research</span>
+        </label>
+        <label class="market-assistant-option">
+          <input type="checkbox" id="marketAssistantDeepAnalysis" />
+          <span>Deep analysis</span>
+        </label>
+      </div>
+    </form>
+    <div class="market-assistant-status" id="marketAssistantStatus" aria-live="polite"></div>
+    <div class="market-assistant-validation-disabled-notice" id="marketAssistantValidationDisabledNotice" aria-live="polite"></div>
+    <div class="market-assistant-resize market-assistant-resize-n" data-edge="n" aria-hidden="true"></div>
+    <div class="market-assistant-resize market-assistant-resize-e" data-edge="e" aria-hidden="true"></div>
+    <div class="market-assistant-resize market-assistant-resize-s" data-edge="s" aria-hidden="true"></div>
+    <div class="market-assistant-resize market-assistant-resize-w" data-edge="w" aria-hidden="true"></div>
+    <div class="market-assistant-resize market-assistant-resize-ne" data-edge="ne" aria-hidden="true"></div>
+    <div class="market-assistant-resize market-assistant-resize-se" data-edge="se" aria-hidden="true"></div>
+    <div class="market-assistant-resize market-assistant-resize-sw" data-edge="sw" aria-hidden="true"></div>
+    <div class="market-assistant-resize market-assistant-resize-nw" data-edge="nw" aria-hidden="true"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="/portfolio.js?v=6"></script>
+  <script src="/market-assistant.js?v=3"></script>
+</body>
+</html>

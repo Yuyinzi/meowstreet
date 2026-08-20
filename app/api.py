@@ -15,6 +15,7 @@ from app.routers import (
     macro_dashboard as macro_dashboard_router,
     market_assistant as market_assistant_router,
     pair_analysis as pair_analysis_router,
+    portfolio_analysis as portfolio_analysis_router,
     static_files as static_files_router,
     ticker_context as ticker_context_router,
     ticker_workflow as ticker_workflow_router,
@@ -234,3 +235,4 @@ app.include_router(macro_dashboard_router.router)
 app.include_router(market_assistant_router.router)
 app.include_router(ticker_context_router.router)
 app.include_router(pair_analysis_router.router)
+app.include_router(portfolio_analysis_router.router)

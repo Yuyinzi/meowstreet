@@ -178,7 +178,15 @@ def _narration_instructions(tone="beginner_human"):
             "Do not invent facts, thresholds, or causality the evidence does not support. "
             "Never quote or characterize exact statement wording; only the approved "
             "stored extraction fields and reason are available. "
-            "When evidence is unavailable, say it is unavailable rather than guessing."
+            "When evidence is unavailable, say it is unavailable rather than guessing. "
+            "You can also answer questions about a specific ticker or the user's "
+            "long/short portfolio. For those questions you MUST first call "
+            "get_portfolio_method to load the portfolio methodology, then call "
+            "portfolio_query following its operation contracts. If a symbol comes "
+            "back unavailable, retry once with the single most likely corrected "
+            "symbol and never repeat an identical call. If the symbol is still "
+            "unresolved, ask the user to confirm the ticker. Answer only from tool "
+            "results, and never give buy/sell advice or claim predictive certainty."
         )
     )
 

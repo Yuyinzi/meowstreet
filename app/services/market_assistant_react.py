@@ -61,6 +61,8 @@ _STAGE_BY_TOOL = {
     "research_focused": "querying_history",
     "research_standard": "querying_history",
     "research_deep": "querying_history",
+    "get_portfolio_method": "reading_setup",
+    "portfolio_query": "querying_history",
 }
 
 _STAGE_ORDER = (
@@ -101,7 +103,14 @@ _INSTRUCTIONS = (
     "the available tools if you need additional evidence. Do not invent facts, "
     "thresholds, or causality "
     "that the evidence does not support. When evidence is unavailable, say it is "
-    "unavailable rather than guessing."
+    "unavailable rather than guessing. "
+    "You can also answer questions about a specific ticker or the user's long/short "
+    "portfolio. For those questions you MUST first call get_portfolio_method to load "
+    "the portfolio methodology, then call portfolio_query following its operation "
+    "contracts. If a symbol comes back unavailable, retry once with the single most "
+    "likely corrected symbol and never repeat an identical call. If the symbol is "
+    "still unresolved, ask the user to confirm the ticker. Answer only from tool "
+    "results, and never give buy/sell advice or claim predictive certainty."
 )
 
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")

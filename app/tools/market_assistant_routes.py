@@ -42,10 +42,10 @@ _SUPPLEMENTARY_TOOL_IDS = (
 )
 
 _STANDARD_BUDGET = {
-    "max_rounds": 2,
+    "max_rounds": 3,
     "max_parallel_calls": 4,
-    "max_tool_calls": 8,
-    "max_tool_result_bytes": 32 * 1024,
+    "max_tool_calls": 10,
+    "max_tool_result_bytes": 64 * 1024,
     "deadline_seconds": 90.0,
 }
 

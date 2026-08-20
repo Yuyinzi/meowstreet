@@ -1244,3 +1244,301 @@ def test_acquire_operation_artifact_returns_none_for_unknown_without_keyerror():
         )
     )
     assert artifact is None
+
+
+def portfolio_method_record():
+    return {
+        "version": "portfolio_method_knowledge_v1",
+        "record_id": "portfolio_method",
+        "operations": [
+            {
+                "operation": operation,
+                "summary": f"{operation} summary",
+                "params_contract": f"{operation} contract",
+            }
+            for operation in (
+                "ticker_risk_profile",
+                "portfolio_analysis",
+                "pair_analysis",
+                "ticker_industry_context",
+            )
+        ],
+        "interpretation_guide": "guide",
+        "interaction_rules": "rules",
+    }
+
+
+def portfolio_dependencies():
+    dependencies = fake_dependencies()
+    dependencies.load_portfolio_method_knowledge = portfolio_method_record
+    return dependencies
+
+
+def ticker_risk_result(symbol):
+    return {
+        "symbol": symbol,
+        "benchmark": "^GSPC",
+        "beta": {
+            "windows": [
+                {
+                    "window": 105,
+                    "label": "2y",
+                    "status": "ok",
+                    "beta": 1.4,
+                    "standard_error": 0.21,
+                    "sample_size": 105,
+                }
+            ],
+            "rolling_beta": [{"end_date": "2026-08-01", "beta": 1.4}],
+        },
+        "realized_volatility": {
+            "daily": {"stdev": 0.02, "annualized": 0.32, "sample_size": 250}
+        },
+        "data": {
+            "weekly_start": "2024-01-01",
+            "weekly_end": "2026-08-01",
+            "weekly_count": 105,
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_method_returns_knowledge_record_artifact():
+    record = await execute_tool_call(
+        {
+            "call_id": "call_method",
+            "tool_name": "get_portfolio_method",
+            "arguments": {},
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=portfolio_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["artifact_kind"] == "knowledge_record"
+    assert artifact["primary_authority"] == "method_knowledge"
+    assert artifact["market_setup_relation"] == "non_decision"
+    assert artifact["payload"]["record_id"] == "portfolio_method"
+    assert artifact["object_index"][0]["object_type"] == "portfolio_method"
+    assert record["progress_label"] == "reading the portfolio method knowledge"
+
+
+@pytest.mark.asyncio
+async def test_portfolio_query_happy_path_returns_compacted_artifact():
+    dependencies = portfolio_dependencies()
+    dependencies.get_ticker_risk_profile = ticker_risk_result
+    record = await execute_tool_call(
+        {
+            "call_id": "call_risk",
+            "tool_name": "portfolio_query",
+            "arguments": {
+                "operation": "ticker_risk_profile",
+                "params": {"symbol": "NVDA"},
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=dependencies,
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["artifact_kind"] == "exploration_result"
+    assert artifact["primary_authority"] == "local_observation"
+    assert artifact["market_setup_relation"] == "non_decision"
+    payload = artifact["payload"]
+    assert payload["status"] == "ok"
+    assert payload["operation"] == "ticker_risk_profile"
+    assert payload["params"] == {"symbol": "NVDA"}
+    assert payload["result"]["symbol"] == "NVDA"
+    assert payload["result"]["beta"]["windows"][0]["beta"] == 1.4
+    assert artifact["object_index"][0]["object_type"] == "portfolio_ticker_risk_profile"
+
+
+@pytest.mark.asyncio
+async def test_portfolio_query_portfolio_analysis_happy_path():
+    def fake_portfolio_analysis(payload):
+        return {
+            "positions": payload["positions"],
+            "missing_inputs": [],
+            "window": None,
+            "volatility": {
+                "status": "insufficient_data",
+                "reason": "fewer than 2 usable positions",
+            },
+            "correlation": {
+                "status": "insufficient_data",
+                "reason": "fewer than 2 usable positions",
+            },
+            "beta": {
+                "status": "insufficient_data",
+                "reason": "fewer than 2 usable positions",
+            },
+            "gates": {
+                "position_count": {
+                    "status": "unknown",
+                    "reason": "margin_capital not provided",
+                }
+            },
+            "outperformance_inference": {
+                "status": "insufficient_data",
+                "reason": "both long and short gross exposure are required",
+                "gross_long": 100.0,
+                "gross_short": 0.0,
+            },
+        }
+
+    dependencies = portfolio_dependencies()
+    dependencies.get_portfolio_analysis = fake_portfolio_analysis
+    record = await execute_tool_call(
+        {
+            "call_id": "call_portfolio",
+            "tool_name": "portfolio_query",
+            "arguments": {
+                "operation": "portfolio_analysis",
+                "params": {
+                    "positions": [
+                        {"symbol": "NVDA", "side": "long", "allocation": 100}
+                    ]
+                },
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=dependencies,
+        created_at="2026-08-13T00:00:00Z",
+    )
+    payload = record["artifact"]["payload"]
+    assert payload["status"] == "ok"
+    assert payload["params"]["positions"] == [
+        {"symbol": "NVDA", "side": "long", "allocation": 100.0}
+    ]
+    assert payload["result"]["volatility"]["status"] == "insufficient_data"
+    assert "matrix" not in payload["result"]["correlation"]
+
+
+@pytest.mark.asyncio
+async def test_portfolio_query_invalid_params_returns_artifact_not_none():
+    record = await execute_tool_call(
+        {
+            "call_id": "call_bad",
+            "tool_name": "portfolio_query",
+            "arguments": {"operation": "ticker_risk_profile", "params": {}},
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=portfolio_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    artifact = record["artifact"]
+    assert artifact["artifact_kind"] == "exploration_result"
+    assert artifact["primary_authority"] == "local_observation"
+    payload = artifact["payload"]
+    assert payload["status"] == "invalid_params"
+    assert "symbol" in payload["detail"]
+
+
+@pytest.mark.asyncio
+async def test_portfolio_query_invalid_pair_sessions_returns_artifact():
+    record = await execute_tool_call(
+        {
+            "call_id": "call_bad_pair",
+            "tool_name": "portfolio_query",
+            "arguments": {
+                "operation": "pair_analysis",
+                "params": {
+                    "long_symbol": "NVDA",
+                    "short_symbol": "AMD",
+                    "sessions": 500,
+                },
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=portfolio_dependencies(),
+        created_at="2026-08-13T00:00:00Z",
+    )
+    assert record["artifact"]["payload"]["status"] == "invalid_params"
+
+
+@pytest.mark.asyncio
+async def test_portfolio_query_service_value_error_returns_none():
+    def failing_service(symbol):
+        raise ValueError(f"symbol {symbol} is unknown")
+
+    dependencies = portfolio_dependencies()
+    dependencies.get_ticker_risk_profile = failing_service
+    record = await execute_tool_call(
+        {
+            "call_id": "call_typo",
+            "tool_name": "portfolio_query",
+            "arguments": {
+                "operation": "ticker_risk_profile",
+                "params": {"symbol": "NVDIA"},
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=dependencies,
+        created_at="2026-08-13T00:00:00Z",
+    )
+    assert record["artifact"] is None
+
+
+@pytest.mark.asyncio
+async def test_portfolio_query_pair_analysis_happy_path():
+    captured = {}
+
+    def fake_pair_analysis(long_symbol, short_symbol, sessions=60):
+        captured["args"] = (long_symbol, short_symbol, sessions)
+        context = {
+            "symbol": long_symbol,
+            "company_name": long_symbol,
+            "status": "resolved",
+            "sector": "IT",
+            "industry_group": "Semi",
+            "industry": "Semi",
+            "cycle_tag": "cyclical",
+            "regime_bias": "unknown",
+            "side_support": "unknown",
+            "regime_note": None,
+        }
+        return {
+            "long": context,
+            "short": {**context, "symbol": short_symbol},
+            "pair": {
+                "pair_type": "intra_sector_constituent",
+                "retained_risks": ["stock"],
+                "missing": [],
+            },
+            "window": {"sessions": 5, "start_date": "2026-01-01", "end_date": "2026-01-07"},
+            "outperformance": {"sessions": 5, "outperformance": 0.1},
+            "series": {
+                "dates": ["2026-01-01", "2026-01-02"],
+                "ratio": [1.0, 1.1],
+                "spread": [5.0, 6.0],
+                "cew_index": [100.0, 100.5],
+            },
+        }
+
+    dependencies = portfolio_dependencies()
+    dependencies.get_pair_analysis = fake_pair_analysis
+    record = await execute_tool_call(
+        {
+            "call_id": "call_pair",
+            "tool_name": "portfolio_query",
+            "arguments": {
+                "operation": "pair_analysis",
+                "params": {"long_symbol": "NVDA", "short_symbol": "AMD"},
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=dependencies,
+        created_at="2026-08-13T00:00:00Z",
+    )
+    assert captured["args"] == ("NVDA", "AMD", 60)
+    payload = record["artifact"]["payload"]
+    assert payload["status"] == "ok"
+    assert payload["result"]["pair"]["pair_type"] == "intra_sector_constituent"
+    assert payload["result"]["series"]["spread"]["last"] == 6.0

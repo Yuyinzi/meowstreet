@@ -511,7 +511,7 @@ async def test_standard_budget_allows_two_optional_rounds_then_final_narration()
 
 
 @pytest.mark.asyncio
-async def test_third_optional_round_in_standard_is_refused_after_budget():
+async def test_fourth_optional_round_in_standard_is_refused_after_budget():
     stream = _ScriptedStream(
         [
             tool_step(
@@ -541,6 +541,15 @@ async def test_third_optional_round_in_standard_is_refused_after_budget():
                     }
                 ]
             ),
+            tool_step(
+                [
+                    {
+                        "call_id": "call_source",
+                        "tool_name": "get_indicator_current",
+                        "arguments": {"indicator_id": "sp500_close"},
+                    }
+                ]
+            ),
         ]
     )
     deps = recording_dependencies([], stream=stream)
@@ -551,8 +560,8 @@ async def test_third_optional_round_in_standard_is_refused_after_budget():
         dependencies=deps,
     )
     assert result["generation_status"] == "budget_exhausted"
-    assert result["timings"]["optional_rounds"] == 2
-    assert len(stream.calls) == 3
+    assert result["timings"]["optional_rounds"] == 3
+    assert len(stream.calls) == 4
     assert result["answer_text"] == _FALLBACK_ZH
 
 
@@ -962,6 +971,15 @@ async def test_budget_exhaustion_selects_deterministic_fallback():
                         }
                     ]
                 ),
+                tool_step(
+                    [
+                        {
+                            "call_id": "call_confirmation",
+                            "tool_name": "get_confirmation_tests",
+                            "arguments": {"test_ids": ["equity"]},
+                        }
+                    ]
+                ),
             ]
         ),
     )
@@ -1350,3 +1368,99 @@ async def test_provider_items_keep_multi_round_tool_continuity_in_order():
     ]
     assert result["generated_provider_items"][0]["call_id"] == "call_vix"
     assert result["generated_provider_items"][1]["call_id"] == "call_vix"
+
+
+def portfolio_ticker_risk_result(symbol):
+    if symbol == "NVDIA":
+        raise ValueError(f"symbol {symbol} is unknown")
+    return {
+        "symbol": symbol,
+        "benchmark": "^GSPC",
+        "beta": {
+            "windows": [
+                {
+                    "window": 105,
+                    "label": "2y",
+                    "status": "ok",
+                    "beta": 1.4,
+                    "standard_error": 0.21,
+                    "sample_size": 105,
+                }
+            ],
+            "rolling_beta": [{"end_date": "2026-08-01", "beta": 1.4}],
+        },
+        "realized_volatility": {
+            "daily": {"stdev": 0.02, "annualized": 0.32, "sample_size": 250}
+        },
+        "data": {
+            "weekly_start": "2024-01-01",
+            "weekly_end": "2026-08-01",
+            "weekly_count": 105,
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_ticker_typo_scenario_retries_corrected_symbol_then_narrates():
+    stream = _ScriptedStream(
+        [
+            tool_step(
+                [
+                    {
+                        "call_id": "call_method",
+                        "tool_name": "get_portfolio_method",
+                        "arguments": {},
+                    }
+                ]
+            ),
+            tool_step(
+                [
+                    {
+                        "call_id": "call_typo",
+                        "tool_name": "portfolio_query",
+                        "arguments": {
+                            "operation": "ticker_risk_profile",
+                            "params": {"symbol": "NVDIA"},
+                        },
+                    }
+                ]
+            ),
+            tool_step(
+                [
+                    {
+                        "call_id": "call_fixed",
+                        "tool_name": "portfolio_query",
+                        "arguments": {
+                            "operation": "ticker_risk_profile",
+                            "params": {"symbol": "NVDA"},
+                        },
+                    }
+                ]
+            ),
+            narration_step(text="NVDA 的 2 年 beta 约为 1.4。"),
+        ]
+    )
+    deps = fake_dependencies(stream)
+    deps.get_ticker_risk_profile = portfolio_ticker_risk_result
+    question = "NVDIA 这只票的风险怎么样？"
+    result = await run_hybrid_narration(
+        {"question": question, "deep_analysis_requested": True},
+        route=route_question(question, deep_analysis=True),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+    assert result["generation_status"] == "answered"
+    assert result["answer_text"] == "NVDA 的 2 年 beta 约为 1.4。"
+    optional = [item for item in result["tool_trace"] if item["phase"] == "optional"]
+    assert [item["tool_name"] for item in optional] == [
+        "get_portfolio_method",
+        "portfolio_query",
+        "portfolio_query",
+    ]
+    assert [item["status"] for item in optional] == [
+        "executed",
+        "unavailable",
+        "executed",
+    ]
+    risk_artifact = result["artifacts"][optional[2]["artifact_id"]]
+    assert risk_artifact["payload"]["result"]["symbol"] == "NVDA"

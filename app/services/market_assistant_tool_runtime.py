@@ -11,6 +11,10 @@ from app.db.market_assistant import load_snapshot
 from app.services.market_assistant_exploration import execute_exploration
 from app.services.market_assistant_research import acquire_research
 from app.services.market_assistant_research import build_research_provider
+from app.services.pair_analysis import get_pair_analysis
+from app.services.portfolio_analysis import get_portfolio_analysis
+from app.services.portfolio_analysis import get_ticker_risk_profile
+from app.services.ticker_industry_context import get_ticker_industry_context
 from app.tools.market_assistant_artifacts import build_object_index
 from app.tools.market_assistant_artifacts import validate_artifact
 from app.tools.market_assistant_evidence_detail_registry import evidence_detail_record
@@ -19,6 +23,11 @@ from app.tools.market_assistant_evidence_detail_registry import (
 )
 from app.tools.market_assistant_evidence_details import project_evidence_detail
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
+from app.tools.market_assistant_portfolio_method import (
+    load_portfolio_method_knowledge,
+)
+from app.tools.market_assistant_portfolio_method import validate_operation_params
+from app.tools.market_assistant_portfolio_views import compact_portfolio_result
 from app.tools.market_assistant_tools import ALL_TOOL_IDS
 from app.tools.market_setup_explanation_snapshot import build_semantic_delta
 from app.tools.market_setup_explanation_snapshot import canonical_json
@@ -99,6 +108,8 @@ TOOL_RUNTIME_POLICIES = {
         "external_read",
         ("external_search_requested", "deep_research_requested"),
     ),
+    "get_portfolio_method": ("local_read", ()),
+    "portfolio_query": ("local_read", ()),
 }
 
 if set(TOOL_RUNTIME_POLICIES) != set(ALL_TOOL_IDS):
@@ -121,6 +132,11 @@ _DEPENDENCY_DEFAULTS = {
     "exploration": execute_exploration,
     "acquire_research": acquire_research,
     "build_research_provider": build_research_provider,
+    "load_portfolio_method_knowledge": load_portfolio_method_knowledge,
+    "get_ticker_risk_profile": get_ticker_risk_profile,
+    "get_portfolio_analysis": get_portfolio_analysis,
+    "get_pair_analysis": get_pair_analysis,
+    "get_ticker_industry_context": get_ticker_industry_context,
 }
 
 _PROGRESS_LABELS = {
@@ -140,6 +156,8 @@ _PROGRESS_LABELS = {
     "research_focused": "running focused external research",
     "research_standard": "running standard external research",
     "research_deep": "running deep external research",
+    "get_portfolio_method": "reading the portfolio method knowledge",
+    "portfolio_query": "running a ticker or portfolio operation",
 }
 
 
@@ -326,6 +344,10 @@ async def acquire_operation_artifact(
         return _evidence_detail_artifact(parameters, snapshot, dependencies)
     if operation_id in _EXPLORATION_QUERY_KIND:
         return _exploration_artifact(parameters, operation_id, dependencies, created_at)
+    if operation_id == "get_portfolio_method":
+        return _portfolio_method_artifact(dependencies)
+    if operation_id == "portfolio_query":
+        return await _portfolio_query_artifact(parameters, dependencies)
     if operation_id in _RESEARCH_TIER:
         return await _research_artifact(
             request, operation_id, parameters, dependencies, created_at
@@ -614,6 +636,105 @@ def _window_end_date(created_at):
         else:
             return parsed.date()
     return date.today()
+
+
+_PORTFOLIO_OPERATION_DEPENDENCY = {
+    "ticker_risk_profile": "get_ticker_risk_profile",
+    "portfolio_analysis": "get_portfolio_analysis",
+    "pair_analysis": "get_pair_analysis",
+    "ticker_industry_context": "get_ticker_industry_context",
+}
+
+
+def _portfolio_method_artifact(dependencies):
+    record = _dependency(dependencies, "load_portfolio_method_knowledge")()
+    envelope = {
+        "artifact_id": f"{record['record_id']}_{record['version']}",
+        "artifact_kind": "knowledge_record",
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
+        "primary_authority": "method_knowledge",
+        "market_setup_relation": "non_decision",
+        "payload": record,
+        "object_index": build_object_index(
+            [
+                _artifact_object(
+                    "portfolio_method", record["record_id"], "method_knowledge", record
+                )
+            ]
+        ),
+    }
+    return _finalize_envelope(envelope)
+
+
+async def _portfolio_query_artifact(parameters, dependencies):
+    operation_name = parameters["operation"]
+    try:
+        validated = validate_operation_params(
+            operation_name, parameters.get("params") or {}
+        )
+    except ValueError as exc:
+        return _portfolio_invalid_params_artifact(operation_name, str(exc))
+    service = _dependency(
+        dependencies, _PORTFOLIO_OPERATION_DEPENDENCY[operation_name]
+    )
+    try:
+        result = await asyncio.to_thread(
+            _run_portfolio_operation, operation_name, validated, service
+        )
+    except ValueError:
+        return None
+    return _portfolio_result_envelope(operation_name, validated, result)
+
+
+def _run_portfolio_operation(operation_name, params, service):
+    if operation_name == "ticker_risk_profile":
+        return service(params["symbol"])
+    if operation_name == "portfolio_analysis":
+        return service(params)
+    if operation_name == "pair_analysis":
+        kwargs = {}
+        if "sessions" in params:
+            kwargs["sessions"] = params["sessions"]
+        return service(params["long_symbol"], params["short_symbol"], **kwargs)
+    return service(params["symbol"])
+
+
+def _portfolio_envelope(artifact_id, payload, object_type):
+    envelope = {
+        "artifact_id": artifact_id,
+        "artifact_kind": "exploration_result",
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
+        "primary_authority": "local_observation",
+        "market_setup_relation": "non_decision",
+        "payload": payload,
+        "object_index": build_object_index(
+            [_artifact_object(object_type, artifact_id, "local_observation", payload)]
+        ),
+    }
+    return _finalize_envelope(envelope)
+
+
+def _portfolio_invalid_params_artifact(operation_name, detail):
+    artifact_id = _new_id("pq_")
+    payload = {
+        "artifact_id": artifact_id,
+        "operation": operation_name,
+        "status": "invalid_params",
+        "detail": detail,
+    }
+    return _portfolio_envelope(artifact_id, payload, "portfolio_query_invalid")
+
+
+def _portfolio_result_envelope(operation_name, params, result):
+    artifact_id = _new_id("pq_")
+    payload = {
+        "artifact_id": artifact_id,
+        "operation": operation_name,
+        "params": params,
+        "status": "ok",
+        "result": compact_portfolio_result(operation_name, result),
+    }
+    return _portfolio_envelope(artifact_id, payload, f"portfolio_{operation_name}")
 
 
 async def _research_artifact(

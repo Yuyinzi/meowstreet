@@ -237,6 +237,7 @@
       validation: message.validation || null,
       errorCodes: message.errorCodes || [],
       interrupted: Boolean(message.interrupted),
+      context: Boolean(message.context),
     });
     saveState();
   }
@@ -244,6 +245,19 @@
   function renderStoredAssistantMessage(message) {
     const article = document.createElement("div");
     article.className = "market-assistant-message market-assistant-message-assistant";
+    if (message.context) {
+      const details = document.createElement("details");
+      details.className = "market-assistant-context-note";
+      const summary = document.createElement("summary");
+      summary.textContent = "Page results attached as context";
+      const textEl = document.createElement("p");
+      textEl.className = "market-assistant-message-text";
+      setAssistantMessageHtml(textEl, message.text || "");
+      details.appendChild(summary);
+      details.appendChild(textEl);
+      article.appendChild(details);
+      return article;
+    }
     const textEl = document.createElement("p");
     textEl.className = "market-assistant-message-text";
     setAssistantMessageHtml(textEl, message.text || "");
@@ -1020,6 +1034,28 @@
   } else {
     renderMessages();
   }
+
+  function openWithContext(options) {
+    const seedText = options && options.seedText ? String(options.seedText).trim() : "";
+    const question = options && options.question ? String(options.question).trim() : "";
+    if (!seedText && !question) return;
+    if (!startNewConversation()) return;
+    if (seedText) {
+      pushAssistantMessage({ text: seedText, context: true });
+    }
+    openWindow();
+    if (question) {
+      const el = elements();
+      if (el.question) {
+        el.question.value = question;
+        handleSubmit();
+      }
+    }
+  }
+
+  window.marketAssistant = {
+    openWithContext: openWithContext,
+  };
 
   if (typeof window !== "undefined" && window.__MEOWSTREET_TEST__) {
     window.__MEOWSTREET_TEST__ = {
