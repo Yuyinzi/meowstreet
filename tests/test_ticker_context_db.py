@@ -35,6 +35,26 @@ def industry_tags():
     ]
 
 
+def industry_row(industry):
+    return {
+        "industry": industry,
+        "sector": "Communication Services",
+        "industry_group": "Media & Entertainment",
+        "official_industry": industry,
+        "cycle_tag": "cyclical",
+        "tag_source": "method_workbook",
+        "source_vintage": "2021-gics",
+    }
+
+
+def alias_row(source_industry, gics_industry):
+    return {
+        "source": "yahoo",
+        "source_industry": source_industry,
+        "gics_industry": gics_industry,
+    }
+
+
 def test_save_and_load_ticker_profile(tmp_path):
     con = ticker_context.connect(tmp_path / "ticker_context.sqlite")
 
@@ -129,3 +149,24 @@ def test_save_and_load_industry_aliases(tmp_path):
     alias = ticker_context.load_industry_alias(con, "yahoo", "Semiconductors")
     assert alias["gics_industry"] == "Semiconductors & Semi Conductor Equipment"
     assert ticker_context.load_industry_alias(con, "yahoo", "Unknown") is None
+
+
+def test_replace_industry_reference_data_is_atomic(tmp_path):
+    con = ticker_context.connect(tmp_path / "market_data.sqlite")
+    ticker_context.replace_industry_reference_data(
+        con,
+        [industry_row("Media")],
+        [alias_row("Advertising Agencies", "Media")],
+    )
+
+    with pytest.raises(ValueError, match="alias industry Missing is unknown"):
+        ticker_context.replace_industry_reference_data(
+            con,
+            [industry_row("Media")],
+            [alias_row("Advertising Agencies", "Missing")],
+        )
+
+    assert ticker_context.load_industry_tags(con) == [industry_row("Media")]
+    assert ticker_context.load_industry_alias(
+        con, "yahoo", "Advertising Agencies"
+    )["gics_industry"] == "Media"

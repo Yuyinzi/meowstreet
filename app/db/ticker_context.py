@@ -92,14 +92,39 @@ def load_ticker_profile(con, symbol):
     return dict(row) if row else None
 
 
-def save_industry_tags(con, rows):
+def _validate_industry_tag(row):
+    industry = str(row.get("industry") or "").strip()
+    if not industry:
+        raise ValueError("industry is required for every tag row")
+    cycle_tag = str(row.get("cycle_tag") or "").strip().lower()
+    if cycle_tag not in _VALID_CYCLE_TAGS:
+        raise ValueError(f"cycle tag {cycle_tag or 'missing'} is invalid for {industry}")
+    required_fields = ("sector", "industry_group", "tag_source", "source_vintage")
+    if any(not str(row.get(field) or "").strip() for field in required_fields):
+        raise ValueError(f"industry tag fields are required for {industry}")
+    return industry, cycle_tag
+
+
+def _validate_industry_alias(alias):
+    source = str(alias.get("source") or "").strip()
+    source_industry = str(alias.get("source_industry") or "").strip()
+    gics_industry = str(alias.get("gics_industry") or "").strip()
+    if not source or not source_industry or not gics_industry:
+        raise ValueError("alias source, source_industry and gics_industry are required")
+    return source, source_industry, gics_industry
+
+
+def _validate_industry_reference_data(industries, aliases):
+    industry_names = {_validate_industry_tag(row)[0] for row in industries}
+    for alias in aliases:
+        _, _, gics_industry = _validate_industry_alias(alias)
+        if gics_industry not in industry_names:
+            raise ValueError(f"alias industry {gics_industry} is unknown")
+
+
+def _insert_industry_tags(con, rows):
     for row in rows:
-        industry = str(row.get("industry") or "").strip()
-        if not industry:
-            raise ValueError("industry is required for every tag row")
-        cycle_tag = str(row.get("cycle_tag") or "").strip().lower()
-        if cycle_tag not in _VALID_CYCLE_TAGS:
-            raise ValueError(f"cycle tag {cycle_tag or 'missing'} is invalid for {industry}")
+        industry, cycle_tag = _validate_industry_tag(row)
         con.execute(
             """
             insert or replace into gics_industry_tags(
@@ -117,6 +142,10 @@ def save_industry_tags(con, rows):
                 row["source_vintage"],
             ),
         )
+
+
+def save_industry_tags(con, rows):
+    _insert_industry_tags(con, rows)
     con.commit()
     return len(rows)
 
@@ -146,13 +175,9 @@ def load_industry_tags(con):
     return [dict(row) for row in rows]
 
 
-def save_industry_aliases(con, aliases):
+def _insert_industry_aliases(con, aliases):
     for alias in aliases:
-        source = str(alias.get("source") or "").strip()
-        source_industry = str(alias.get("source_industry") or "").strip()
-        gics_industry = str(alias.get("gics_industry") or "").strip()
-        if not source or not source_industry or not gics_industry:
-            raise ValueError("alias source, source_industry and gics_industry are required")
+        source, source_industry, gics_industry = _validate_industry_alias(alias)
         con.execute(
             """
             insert or replace into industry_aliases(source, source_industry, gics_industry)
@@ -160,8 +185,26 @@ def save_industry_aliases(con, aliases):
             """,
             (source, source_industry, gics_industry),
         )
+
+
+def save_industry_aliases(con, aliases):
+    _insert_industry_aliases(con, aliases)
     con.commit()
     return len(aliases)
+
+
+def replace_industry_reference_data(con, industries, aliases):
+    _validate_industry_reference_data(industries, aliases)
+    try:
+        con.execute("delete from industry_aliases")
+        con.execute("delete from gics_industry_tags")
+        _insert_industry_tags(con, industries)
+        _insert_industry_aliases(con, aliases)
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    return {"industries": len(industries), "aliases": len(aliases)}
 
 
 def load_industry_alias(con, source, source_industry):
