@@ -196,8 +196,6 @@ def save_industry_aliases(con, aliases):
 def replace_industry_reference_data(con, industries, aliases):
     _validate_industry_reference_data(industries, aliases)
     try:
-        con.execute("delete from industry_aliases")
-        con.execute("delete from gics_industry_tags")
         _insert_industry_tags(con, industries)
         _insert_industry_aliases(con, aliases)
         con.commit()
