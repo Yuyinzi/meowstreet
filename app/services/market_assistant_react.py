@@ -340,6 +340,7 @@ async def run_hybrid_narration(
         answer_language=request.get("answer_language")
         or _question_language(request["question"]),
         available_tool_ids=tool_ids,
+        budget=budget,
     )
     current_user_item = input_items[-1]
     new_provider_items = [current_user_item]
@@ -408,13 +409,16 @@ async def run_hybrid_narration(
                     }
                     for call in turn["tool_calls"]
                 ]
+                post_items = rejected_outputs + [
+                    _budget_state_item(round_number, call_count, budget)
+                ]
                 input_items = _next_input_items(
-                    input_items, next_items(turn), rejected_outputs
+                    input_items, next_items(turn), post_items
                 )
                 new_provider_items.extend(next_items(turn))
-                new_provider_items.extend(rejected_outputs)
+                new_provider_items.extend(post_items)
                 generated_provider_items.extend(next_items(turn))
-                generated_provider_items.extend(rejected_outputs)
+                generated_provider_items.extend(post_items)
                 force_final_narration = True
                 continue
             round_number += 1
@@ -462,15 +466,18 @@ async def run_hybrid_narration(
                 byte_budget_exceeded = False
             call_count += len(accepted) + len(rejected)
             executed_calls += len(records)
+            post_items = output_items + [
+                _budget_state_item(round_number, call_count, budget)
+            ]
             input_items = _next_input_items(
                 input_items,
                 next_items(turn),
-                output_items,
+                post_items,
             )
             new_provider_items.extend(next_items(turn))
-            new_provider_items.extend(output_items)
+            new_provider_items.extend(post_items)
             generated_provider_items.extend(next_items(turn))
-            generated_provider_items.extend(output_items)
+            generated_provider_items.extend(post_items)
             if byte_budget_exceeded:
                 force_final_narration = True
         else:
@@ -555,32 +562,61 @@ def _view_text(view):
     return json.dumps({"explanation_view": view}, ensure_ascii=False, sort_keys=True)
 
 
+def _budget_state_text(round_number, call_count, budget):
+    return (
+        "Tool budget state: tool rounds used "
+        f"{round_number}/{budget['max_rounds']}, tool calls used "
+        f"{call_count}/{budget['max_tool_calls']}. "
+        "Plan your remaining tool calls accordingly and write the final answer "
+        "before the budget runs out."
+    )
+
+
+def _budget_state_item(round_number, call_count, budget):
+    return {
+        "type": "message",
+        "role": "user",
+        "content": [
+            {
+                "type": "input_text",
+                "text": _budget_state_text(round_number, call_count, budget),
+            }
+        ],
+    }
+
+
 def _initial_input_items(
     question,
     view,
     history_items=None,
     answer_language=None,
     available_tool_ids=(),
+    budget=None,
 ):
     items = list(history_items or [])
+    content = [
+        {"type": "input_text", "text": question},
+        {"type": "input_text", "text": _view_text(view)},
+        {
+            "type": "input_text",
+            "text": "Answer language: "
+            + ("Chinese" if answer_language == "zh" else "English"),
+        },
+        {
+            "type": "input_text",
+            "text": "Pre-fetched evidence is shown above. You may call any "
+            "of the available tools if you need more evidence.",
+        },
+    ]
+    if budget:
+        content.append(
+            {"type": "input_text", "text": _budget_state_text(0, 0, budget)}
+        )
     items.append(
         {
             "type": "message",
             "role": "user",
-            "content": [
-                {"type": "input_text", "text": question},
-                {"type": "input_text", "text": _view_text(view)},
-                {
-                    "type": "input_text",
-                    "text": "Answer language: "
-                    + ("Chinese" if answer_language == "zh" else "English"),
-                },
-                {
-                    "type": "input_text",
-                    "text": "Pre-fetched evidence is shown above. You may call any "
-                    "of the available tools if you need more evidence.",
-                },
-            ],
+            "content": content,
         }
     )
     return items

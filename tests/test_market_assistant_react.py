@@ -589,6 +589,7 @@ async def test_first_turn_input_contains_only_question_and_compact_view():
         "input_text",
         "input_text",
         "input_text",
+        "input_text",
     ]
     assert items[0]["content"][0]["text"] == "现在市场怎么样？"
     assert "explanation_view" in items[0]["content"][1]["text"]
@@ -596,6 +597,9 @@ async def test_first_turn_input_contains_only_question_and_compact_view():
     assert items[0]["content"][3]["text"] == (
         "Pre-fetched evidence is shown above. You may call any of the available "
         "tools if you need more evidence."
+    )
+    assert items[0]["content"][4]["text"].startswith(
+        "Tool budget state: tool rounds used 0/3, tool calls used 0/10."
     )
     assert not any(item["type"] == "function_call_output" for item in items)
     assert not any(item["type"] == "function_call" for item in items)
@@ -1371,9 +1375,14 @@ async def test_provider_items_keep_multi_round_tool_continuity_in_order():
     assert [item["type"] for item in result["generated_provider_items"]] == [
         "function_call",
         "function_call_output",
+        "message",
     ]
     assert result["generated_provider_items"][0]["call_id"] == "call_vix"
     assert result["generated_provider_items"][1]["call_id"] == "call_vix"
+    assert result["generated_provider_items"][2]["role"] == "user"
+    assert result["generated_provider_items"][2]["content"][0]["text"].startswith(
+        "Tool budget state: tool rounds used 1/3"
+    )
 
 
 def portfolio_ticker_risk_result(symbol):

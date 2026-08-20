@@ -1245,7 +1245,9 @@ def test_hybrid_stream_fast_path_sequence_and_narration_prompt_contract(
         "input_text",
         "input_text",
         "input_text",
+        "input_text",
     ]
+    assert first_items[0]["content"][4]["text"].startswith("Tool budget state:")
     assert not any(item["type"] == "function_call_output" for item in first_items)
     assert not any(item["type"] == "function_call" for item in first_items)
     from app.services.market_assistant_tool_runtime import snapshot_artifact
