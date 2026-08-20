@@ -284,6 +284,7 @@ async def run_hybrid_narration(
     generation_status = None
     answer_text = ""
     initial_tools_seconds = 0.0
+    force_final_narration = False
 
     initial_calls = _translated_initial_calls(route)
     initial_records = []
@@ -361,7 +362,7 @@ async def run_hybrid_narration(
                     model=model,
                     input_items=input_items,
                     instructions=instructions,
-                    tools=tools,
+                    tools=[] if force_final_narration else tools,
                     reasoning_effort=reasoning_effort,
                     observer=observer,
                 ),
@@ -392,12 +393,30 @@ async def run_hybrid_narration(
                 generation_status = "narration_unavailable"
             break
         if turn["tool_calls"]:
+            if force_final_narration:
+                generation_status = "budget_exhausted"
+                break
             if (
                 round_number >= budget["max_rounds"]
                 or call_count >= budget["max_tool_calls"]
             ):
-                generation_status = "budget_exhausted"
-                break
+                rejected_outputs = [
+                    {
+                        "type": "function_call_output",
+                        "call_id": call.get("call_id", ""),
+                        "output": _rejected_output("tool_budget_exhausted"),
+                    }
+                    for call in turn["tool_calls"]
+                ]
+                input_items = _next_input_items(
+                    input_items, next_items(turn), rejected_outputs
+                )
+                new_provider_items.extend(next_items(turn))
+                new_provider_items.extend(rejected_outputs)
+                generated_provider_items.extend(next_items(turn))
+                generated_provider_items.extend(rejected_outputs)
+                force_final_narration = True
+                continue
             round_number += 1
             accepted, rejected = _classify_calls(
                 turn["tool_calls"],
@@ -435,12 +454,12 @@ async def run_hybrid_narration(
                 seen_calls.update(_call_keys(normalize_key, accepted))
                 output_items = _output_items(accepted, records, rejected)
                 result_bytes += _result_bytes(output_items)
-                if result_bytes > budget["max_tool_result_bytes"]:
-                    generation_status = "budget_exhausted"
-                    break
-                await _emit(event_sink, {"type": "optional_round_completed"})
+                byte_budget_exceeded = result_bytes > budget["max_tool_result_bytes"]
+                if not byte_budget_exceeded:
+                    await _emit(event_sink, {"type": "optional_round_completed"})
             if not accepted:
                 output_items = _output_items(accepted, records, rejected)
+                byte_budget_exceeded = False
             call_count += len(accepted) + len(rejected)
             executed_calls += len(records)
             input_items = _next_input_items(
@@ -452,6 +471,8 @@ async def run_hybrid_narration(
             new_provider_items.extend(output_items)
             generated_provider_items.extend(next_items(turn))
             generated_provider_items.extend(output_items)
+            if byte_budget_exceeded:
+                force_final_narration = True
         else:
             await _flush_turn_output(turn_stream, stream_state, event_sink)
             answer_text = turn["output_text"]

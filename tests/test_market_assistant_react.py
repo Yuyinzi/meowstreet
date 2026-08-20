@@ -511,7 +511,7 @@ async def test_standard_budget_allows_two_optional_rounds_then_final_narration()
 
 
 @pytest.mark.asyncio
-async def test_fourth_optional_round_in_standard_is_refused_after_budget():
+async def test_budget_exhaustion_forces_final_narration_without_tools():
     stream = _ScriptedStream(
         [
             tool_step(
@@ -550,6 +550,7 @@ async def test_fourth_optional_round_in_standard_is_refused_after_budget():
                     }
                 ]
             ),
+            narration_step(),
         ]
     )
     deps = recording_dependencies([], stream=stream)
@@ -559,10 +560,14 @@ async def test_fourth_optional_round_in_standard_is_refused_after_budget():
         resolution=resolved_context("ctx_1"),
         dependencies=deps,
     )
-    assert result["generation_status"] == "budget_exhausted"
+    assert result["generation_status"] == "answered"
     assert result["timings"]["optional_rounds"] == 3
-    assert len(stream.calls) == 4
-    assert result["answer_text"] == _FALLBACK_ZH
+    assert len(stream.calls) == 5
+    assert stream.calls[-1]["tools"] == []
+    executed_ids = {
+        item["call_id"] for item in result["tool_trace"] if item["status"] == "executed"
+    }
+    assert "call_source" not in executed_ids
 
 
 @pytest.mark.asyncio
@@ -980,6 +985,7 @@ async def test_budget_exhaustion_selects_deterministic_fallback():
                         }
                     ]
                 ),
+                narration_step(error=ValueError("provider down")),
             ]
         ),
     )
@@ -989,27 +995,27 @@ async def test_budget_exhaustion_selects_deterministic_fallback():
         resolution=resolved_context("ctx_1"),
         dependencies=deps,
     )
-    assert result["generation_status"] == "budget_exhausted"
+    assert result["generation_status"] == "narration_unavailable"
     assert result["answer_text"] == _FALLBACK_ZH
 
 
 @pytest.mark.asyncio
-async def test_result_byte_budget_stops_optional_loop():
-    deps = fake_dependencies(
-        stream=_ScriptedStream(
-            [
-                tool_step(
-                    [
-                        {
-                            "call_id": "call_history",
-                            "tool_name": "query_indicator_history",
-                            "arguments": {"indicator_id": "vix", "window": "6m"},
-                        }
-                    ]
-                )
-            ]
-        )
+async def test_result_byte_budget_forces_final_narration():
+    stream = _ScriptedStream(
+        [
+            tool_step(
+                [
+                    {
+                        "call_id": "call_history",
+                        "tool_name": "query_indicator_history",
+                        "arguments": {"indicator_id": "vix", "window": "6m"},
+                    }
+                ]
+            ),
+            narration_step(),
+        ]
     )
+    deps = fake_dependencies(stream=stream)
     deps._exploration = huge_exploration_result()
     deps.event_sink = lambda event: None
     result = await run_hybrid_narration(
@@ -1018,8 +1024,8 @@ async def test_result_byte_budget_stops_optional_loop():
         resolution=resolved_context("ctx_1"),
         dependencies=deps,
     )
-    assert result["generation_status"] == "budget_exhausted"
-    assert result["answer_text"] == _FALLBACK_ZH
+    assert result["generation_status"] == "answered"
+    assert stream.calls[-1]["tools"] == []
 
 
 class _SlowStream:

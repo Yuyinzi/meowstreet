@@ -1734,7 +1734,9 @@ async def test_thirteenth_deep_analysis_call_is_rejected_without_execution():
         _history_call("c14", indicator_id="vix", window="2y"),
     ]
     rounds = [calls[0:4], calls[4:8], calls[8:11], calls[11:13], calls[13:14]]
-    stream = _ScriptedStream([tool_step(round_calls) for round_calls in rounds])
+    stream = _ScriptedStream(
+        [tool_step(round_calls) for round_calls in rounds] + [narration_step()]
+    )
     deps = _ReactDeps(stream)
 
     result = await run_hybrid_narration(
@@ -1744,7 +1746,9 @@ async def test_thirteenth_deep_analysis_call_is_rejected_without_execution():
         dependencies=deps,
     )
 
-    assert result["generation_status"] == "budget_exhausted"
+    assert result["generation_status"] == "answered"
+    assert len(stream.calls) == 6
+    assert stream.calls[-1]["tools"] == []
     rejected = [
         entry for entry in result["tool_trace"] if entry["status"] == "rejected"
     ]
@@ -1790,13 +1794,14 @@ async def test_tool_result_context_overflow_stops_loop_without_more_execution():
         dependencies=deps,
     )
 
-    assert result["generation_status"] == "budget_exhausted"
+    assert result["generation_status"] == "answered"
     executed = [
         entry for entry in result["tool_trace"] if entry["status"] == "executed"
     ]
     assert len(executed) == 1
     assert executed[0]["tool_name"] == "query_indicator_history"
-    assert len(stream.calls) == 1
+    assert len(stream.calls) == 2
+    assert stream.calls[-1]["tools"] == []
 
 
 @pytest.mark.asyncio
