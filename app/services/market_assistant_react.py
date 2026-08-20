@@ -269,7 +269,6 @@ async def run_hybrid_narration(
     normalize_key = _dependency(dependencies, "normalized_tool_call_key")
     next_items = _dependency(dependencies, "response_items_for_next_turn")
     build_view = _dependency(dependencies, "build_explanation_view")
-    measure = _dependency(dependencies, "canonical_json")
     started_at = monotonic()
     created_at = _now_iso()
     artifacts = {}
@@ -434,22 +433,25 @@ async def run_hybrid_narration(
                     break
                 _merge_records(artifacts, records, tool_trace, "optional")
                 seen_calls.update(_call_keys(normalize_key, accepted))
-                result_bytes += _result_bytes(measure, records)
+                output_items = _output_items(accepted, records, rejected)
+                result_bytes += _result_bytes(output_items)
                 if result_bytes > budget["max_tool_result_bytes"]:
                     generation_status = "budget_exhausted"
                     break
                 await _emit(event_sink, {"type": "optional_round_completed"})
+            if not accepted:
+                output_items = _output_items(accepted, records, rejected)
             call_count += len(accepted) + len(rejected)
             executed_calls += len(records)
             input_items = _next_input_items(
                 input_items,
                 next_items(turn),
-                _output_items(accepted, records, rejected),
+                output_items,
             )
             new_provider_items.extend(next_items(turn))
-            new_provider_items.extend(_output_items(accepted, records, rejected))
+            new_provider_items.extend(output_items)
             generated_provider_items.extend(next_items(turn))
-            generated_provider_items.extend(_output_items(accepted, records, rejected))
+            generated_provider_items.extend(output_items)
         else:
             await _flush_turn_output(turn_stream, stream_state, event_sink)
             answer_text = turn["output_text"]
@@ -578,6 +580,13 @@ def _seed_snapshot_anchor(artifacts, resolution):
     artifacts.setdefault(envelope["artifact_id"], envelope)
 
 
+def _slim_object_index(object_index):
+    return [
+        {key: value for key, value in entry.items() if key != "payload"}
+        for entry in object_index or []
+    ]
+
+
 def _provider_tool_output(record):
     artifact = record["artifact"]
     if artifact is None:
@@ -600,7 +609,7 @@ def _provider_tool_output(record):
             "primary_authority": artifact["primary_authority"],
             "market_setup_relation": artifact["market_setup_relation"],
             "payload": artifact["payload"],
-            "object_index": artifact["object_index"],
+            "object_index": _slim_object_index(artifact["object_index"]),
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -678,12 +687,12 @@ def _call_keys(normalize_key, calls):
     return {normalize_key(call) for call in calls}
 
 
-def _result_bytes(measure, records):
+def _result_bytes(output_items):
     total = 0
-    for record in records:
-        artifact = record["artifact"]
-        if artifact is not None:
-            total += len(measure(artifact))
+    for item in output_items:
+        output = item.get("output")
+        if output is not None:
+            total += len(output.encode("utf-8"))
     return total
 
 
