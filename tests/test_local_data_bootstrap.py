@@ -9,6 +9,7 @@ OBSERVATION_TABLES = (
     "macro_indicator_points",
     "economic_confirmation_vintages",
     "ism_report_snapshots",
+    "answer_traces",
     "assistant_conversations",
 )
 
