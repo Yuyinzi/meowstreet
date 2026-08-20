@@ -168,3 +168,14 @@ def test_load_gics_reference_rejects_invalid_headers(tmp_path, contents):
 
     with pytest.raises(ValueError, match="gics reference csv headers are invalid"):
         gics_reference.load_gics_reference(path)
+
+
+def test_load_gics_reference_rejects_surplus_row_fields(tmp_path):
+    path = write_csv(tmp_path, valid_rows())
+    with path.open("a", newline="", encoding="utf-8") as handle:
+        csv.writer(handle).writerow(
+            [*valid_rows()[1].values(), "unexpected"]
+        )
+
+    with pytest.raises(ValueError, match="gics reference csv row fields are invalid"):
+        gics_reference.load_gics_reference(path)

@@ -40,6 +40,8 @@ def load_gics_reference(path=GICS_REFERENCE_PATH):
 
 
 def _normalize_rows(rows):
+    if any(None in row for row in rows):
+        raise ValueError("gics reference csv row fields are invalid")
     normalized_rows = [
         {key: (value or "").strip() for key, value in row.items()} for row in rows
     ]
