@@ -1652,7 +1652,7 @@ async def test_hostile_tool_calls_are_rejected_without_execution(tool_name, argu
 
 
 @pytest.mark.asyncio
-async def test_repeated_tool_call_stops_loop_before_any_execution():
+async def test_repeated_tool_call_is_rejected_and_forces_final_narration():
     call = _confirmation_call("call_dup", "vix")
     stream = _ScriptedStream([tool_step([dict(call), dict(call)]), narration_step()])
     deps = _ReactDeps(stream)
@@ -1664,10 +1664,14 @@ async def test_repeated_tool_call_stops_loop_before_any_execution():
         dependencies=deps,
     )
 
-    assert result["generation_status"] == "duplicate_tool_call"
+    assert result["generation_status"] == "answered"
     assert deps.executed == []
-    assert len(stream.calls) == 1
-    assert not any(entry["status"] == "executed" for entry in result["tool_trace"])
+    assert len(stream.calls) == 2
+    assert stream.calls[-1]["tools"] == []
+    rejected = [
+        entry for entry in result["tool_trace"] if entry["status"] == "rejected"
+    ]
+    assert [entry["reason"] for entry in rejected] == ["duplicate_tool_call"]
 
 
 @pytest.mark.asyncio

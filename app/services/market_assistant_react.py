@@ -443,8 +443,34 @@ async def run_hybrid_narration(
                 call_count,
             )
             if any(item["reason"] == "duplicate_tool_call" for item in rejected):
-                generation_status = "duplicate_tool_call"
-                break
+                _record_rejected(tool_trace, rejected, "optional")
+                duplicate_outputs = [
+                    {
+                        "type": "function_call_output",
+                        "call_id": item["call"].get("call_id", ""),
+                        "output": _rejected_output(item["reason"]),
+                    }
+                    for item in rejected
+                ] + [
+                    {
+                        "type": "function_call_output",
+                        "call_id": call.get("call_id", ""),
+                        "output": _rejected_output("not_executed_duplicate_turn"),
+                    }
+                    for call in accepted
+                ]
+                post_items = duplicate_outputs + [
+                    _budget_state_item(round_number, call_count, budget)
+                ]
+                input_items = _next_input_items(
+                    input_items, next_items(turn), post_items
+                )
+                new_provider_items.extend(next_items(turn))
+                new_provider_items.extend(post_items)
+                generated_provider_items.extend(next_items(turn))
+                generated_provider_items.extend(post_items)
+                force_final_narration = True
+                continue
             _record_rejected(tool_trace, rejected, "optional")
             records = []
             if accepted:

@@ -632,13 +632,14 @@ async def test_first_turn_preserves_prior_provider_history_before_new_message():
 
 
 @pytest.mark.asyncio
-async def test_duplicate_normalized_call_stops_loop_without_more_budget():
+async def test_duplicate_normalized_call_is_rejected_and_forces_final_narration():
     events = []
     repeated = vix_confirmation_call()
     stream = _ScriptedStream(
         [
             tool_step([dict(repeated)]),
             tool_step([dict(repeated)]),
+            narration_step(),
         ]
     )
     deps = recording_dependencies(events, stream=stream)
@@ -648,12 +649,13 @@ async def test_duplicate_normalized_call_stops_loop_without_more_budget():
         resolution=resolved_context("ctx_1"),
         dependencies=deps,
     )
-    assert result["generation_status"] == "duplicate_tool_call"
-    assert len(stream.calls) == 2
+    assert result["generation_status"] == "answered"
+    assert len(stream.calls) == 3
+    assert stream.calls[-1]["tools"] == []
     optional = [item for item in result["tool_trace"] if item["phase"] == "optional"]
-    assert len(optional) == 1
-    assert optional[0]["status"] == "executed"
-    assert result["answer_text"] == _FALLBACK_ZH
+    assert [item["status"] for item in optional] == ["executed", "rejected"]
+    assert optional[1]["reason"] == "duplicate_tool_call"
+    assert result["answer_text"] == "现在的市场偏积极，但仍需保持谨慎。"
 
 
 @pytest.mark.asyncio
