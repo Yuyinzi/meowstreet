@@ -8692,30 +8692,37 @@ def test_market_assistant_bootstraps_old_local_history_only_until_server_sync():
     }
 
 
-def test_market_assistant_stream_fallback_badge_does_not_invent_research_failure():
+def test_market_assistant_stream_answer_failed_renders_retry_notice():
     payload = _run_market_assistant_harness(
         """
         const stream = hooks.createStreamingAssistantMessage();
-        hooks.applyStreamEvent(stream, { type: "answer_replace", text: "确定性备用回答内容" });
-        hooks.applyStreamEvent(stream, { type: "validation", status: "fallback", error_codes: [] });
-        const badge = stream.element.children.find(
-          (child) => child.className.indexOf("market-assistant-validation") === 0
+        stream.question = "现在市场怎么样？";
+        hooks.applyStreamEvent(stream, { type: "answer_failed" });
+        hooks.applyStreamEvent(stream, {
+          type: "complete",
+          resolution: { mode: "current" },
+          generation_status: "answer_unavailable",
+          answer_trace_id: "trace_1",
+          citations: [],
+        });
+        const notice = stream.element.children.find(
+          (child) => child.className.indexOf("market-assistant-notice-failed") !== -1
         );
-        const label = badge.children[0];
+        const retry = notice.children.find((child) => child.tagName === "button");
         console.log(JSON.stringify({
-          className: badge.className,
-          label: label.textContent,
-          mentionsResearchFailure: label.textContent.indexOf("research failure") !== -1,
-          answerText: stream.message.text,
+          noticeText: notice.children[0].textContent,
+          retryLabel: retry.textContent,
+          busyAfter: stream.element.attrs["aria-busy"],
+          persistedMessages: hooks.state.messages.length,
         }));
         """
     )
 
     assert payload == {
-        "className": "market-assistant-validation market-assistant-validation-passed",
-        "label": "已使用确定性备用回答",
-        "mentionsResearchFailure": False,
-        "answerText": "确定性备用回答内容",
+        "noticeText": "当前出现错误，请重试",
+        "retryLabel": "重试",
+        "busyAfter": "false",
+        "persistedMessages": 0,
     }
 
 
@@ -9260,16 +9267,19 @@ def test_market_assistant_stream_context_notice_requires_previous_context():
     }
 
 
-def test_market_assistant_error_recovery_preserves_question():
+def test_market_assistant_error_recovery_renders_retry_notice():
     payload = _run_market_assistant_harness(
         """
         global.fetch = async () => { throw new Error("network down"); };
         elements.marketAssistantQuestion.value = "Will this work?";
         await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[1];
+        const notice = assistant.children.find(
+          (child) => child.className.indexOf("market-assistant-notice-failed") !== -1
+        );
         console.log(JSON.stringify({
           hasError: hooks.state.error !== null,
-          statusText: getActiveStatus().textContent,
-          questionPreserved: elements.marketAssistantQuestion.value === "Will this work?",
+          notice: notice && notice.children[0].textContent,
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
           logChildren: elements.marketAssistantLog.children.length,
         }));
@@ -9278,10 +9288,9 @@ def test_market_assistant_error_recovery_preserves_question():
 
     assert payload == {
         "hasError": True,
-        "statusText": "The assistant could not answer right now. Your question is preserved.",
-        "questionPreserved": True,
+        "notice": "当前出现错误，请重试",
         "submitEnabled": True,
-        "logChildren": 1,
+        "logChildren": 2,
     }
 
 
@@ -9343,12 +9352,10 @@ def test_market_assistant_stream_malformed_line_fails_stream():
     )
 
     assert payload == {
-        "questionValue": "What supports the setup?",
+        "questionValue": "",
         "submitEnabled": True,
-        "status": (
-            "The assistant could not answer right now. Your question is preserved."
-        ),
-        "assistantMessages": 0,
+        "status": "",
+        "assistantMessages": 1,
     }
 
 
@@ -9393,7 +9400,6 @@ def test_market_assistant_stream_deltas_append_to_single_element():
             "修复后已通过验证",
         ),
         ("failed", "market-assistant-validation-failed", "未通过完整证据验证"),
-        ("fallback", "market-assistant-validation-passed", "已使用确定性备用回答"),
     ],
 )
 def test_market_assistant_stream_validation_badge_statuses(
@@ -9494,7 +9500,7 @@ def test_market_assistant_stream_answer_replace_replaces_text_without_duplicate(
     }
 
 
-def test_market_assistant_stream_error_after_body_keeps_text_and_reenables():
+def test_market_assistant_stream_error_after_body_renders_retry_notice():
     payload = _run_market_assistant_harness(
         """
         global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
@@ -9504,15 +9510,13 @@ def test_market_assistant_stream_error_after_body_keeps_text_and_reenables():
         elements.marketAssistantQuestion.value = "Will this work?";
         await hooks.handleSubmit();
         const assistant = elements.marketAssistantLog.children[1];
-        const textEl = assistant.children.find(
-          (child) => child.className === "market-assistant-message-text"
-        );
         const notice = assistant.children.find(
-          (child) => child.className === "market-assistant-notice market-assistant-notice-fallback"
+          (child) => child.className.indexOf("market-assistant-notice-failed") !== -1
         );
+        const retry = notice && notice.children.find((child) => child.tagName === "button");
         console.log(JSON.stringify({
-          text: textEl.textContent,
-          notice: notice && notice.textContent,
+          notice: notice && notice.children[0].textContent,
+          retryLabel: retry && retry.textContent,
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
           questionCleared: elements.marketAssistantQuestion.value === "",
           logChildren: elements.marketAssistantLog.children.length,
@@ -9522,8 +9526,8 @@ def test_market_assistant_stream_error_after_body_keeps_text_and_reenables():
     )
 
     assert payload == {
-        "text": "现在",
-        "notice": "连接中断，回答可能不完整",
+        "notice": "当前出现错误，请重试",
+        "retryLabel": "重试",
         "submitEnabled": True,
         "questionCleared": True,
         "logChildren": 2,
@@ -9531,7 +9535,56 @@ def test_market_assistant_stream_error_after_body_keeps_text_and_reenables():
     }
 
 
-def test_market_assistant_stream_truncated_without_terminal_event_is_interrupted():
+def test_market_assistant_retry_button_resends_without_duplicate_user_bubble():
+    payload = _run_market_assistant_harness(
+        """
+        let calls = 0;
+        global.fetch = async () => {
+          calls += 1;
+          if (calls === 1) {
+            return { ok: true, status: 200, body: streamedBody([
+              '{"type":"answer_failed"}\\n',
+              '{"type":"complete","resolution":{"mode":"current"},'
+              + '"generation_status":"answer_unavailable","answer_trace_id":"t1","citations":[]}\\n',
+            ]) };
+          }
+          return { ok: true, status: 200, body: streamedBody([
+            '{"type":"answer_delta","delta":"回答内容"}\\n',
+            '{"type":"complete","resolution":{"mode":"current"},'
+            + '"generation_status":"narration_validated","answer_trace_id":"t2","citations":[]}\\n',
+          ]) };
+        };
+        elements.marketAssistantQuestion.value = "现在市场怎么样？";
+        await hooks.handleSubmit();
+        const failed = elements.marketAssistantLog.children[1];
+        const retry = failed.children[0].children.find((child) => child.tagName === "button");
+        retry.listeners.click();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const userBubbles = elements.marketAssistantLog.children.filter(
+          (child) => child.className.indexOf("market-assistant-message-user") !== -1
+        );
+        const lastAssistant = elements.marketAssistantLog.children.at(-1);
+        const lastText = lastAssistant.children.find(
+          (child) => child.className === "market-assistant-message-text"
+        );
+        console.log(JSON.stringify({
+          fetchCalls: calls,
+          userBubbleCount: userBubbles.length,
+          finalText: lastText.textContent,
+          logChildren: elements.marketAssistantLog.children.length,
+        }));
+        """
+    )
+
+    assert payload == {
+        "fetchCalls": 2,
+        "userBubbleCount": 1,
+        "finalText": "回答内容",
+        "logChildren": 2,
+    }
+
+
+def test_market_assistant_stream_truncated_without_terminal_event_renders_retry_notice():
     payload = _run_market_assistant_harness(
         """
         global.fetch = async () => ({ ok: true, status: 200, body: streamedBody([
@@ -9541,15 +9594,11 @@ def test_market_assistant_stream_truncated_without_terminal_event_is_interrupted
         elements.marketAssistantQuestion.value = "Will this work?";
         await hooks.handleSubmit();
         const assistant = elements.marketAssistantLog.children[1];
-        const textEl = assistant.children.find(
-          (child) => child.className === "market-assistant-message-text"
-        );
         const notice = assistant.children.find(
-          (child) => child.className === "market-assistant-notice market-assistant-notice-fallback"
+          (child) => child.className.indexOf("market-assistant-notice-failed") !== -1
         );
         console.log(JSON.stringify({
-          text: textEl.textContent,
-          notice: notice && notice.textContent,
+          notice: notice && notice.children[0].textContent,
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
           busyAfter: assistant.attrs["aria-busy"],
           logChildren: elements.marketAssistantLog.children.length,
@@ -9558,8 +9607,7 @@ def test_market_assistant_stream_truncated_without_terminal_event_is_interrupted
     )
 
     assert payload == {
-        "text": "现在市场",
-        "notice": "连接中断，回答可能不完整",
+        "notice": "当前出现错误，请重试",
         "submitEnabled": True,
         "busyAfter": "false",
         "logChildren": 2,
@@ -9756,10 +9804,13 @@ def test_market_assistant_stream_null_body_treated_as_stream_failure():
         global.fetch = async () => ({ ok: true, status: 200, body: null });
         elements.marketAssistantQuestion.value = "Will this work?";
         await hooks.handleSubmit();
+        const assistant = elements.marketAssistantLog.children[1];
+        const notice = assistant.children.find(
+          (child) => child.className.indexOf("market-assistant-notice-failed") !== -1
+        );
         console.log(JSON.stringify({
           hasError: hooks.state.error !== null,
-          statusText: getActiveStatus().textContent,
-          questionPreserved: elements.marketAssistantQuestion.value === "Will this work?",
+          notice: notice && notice.children[0].textContent,
           submitEnabled: elements.marketAssistantSubmit.disabled === false,
           logChildren: elements.marketAssistantLog.children.length,
         }));
@@ -9768,10 +9819,9 @@ def test_market_assistant_stream_null_body_treated_as_stream_failure():
 
     assert payload == {
         "hasError": True,
-        "statusText": "The assistant could not answer right now. Your question is preserved.",
-        "questionPreserved": True,
+        "notice": "当前出现错误，请重试",
         "submitEnabled": True,
-        "logChildren": 1,
+        "logChildren": 2,
     }
 
 
@@ -9789,15 +9839,17 @@ def test_market_assistant_stream_success_clears_prior_global_error():
         global.fetch = async () => responses.shift();
         elements.marketAssistantQuestion.value = "第一次问题";
         await hooks.handleSubmit();
-        const errorStatus = elements.marketAssistantStatus.textContent;
+        const failedNotice = elements.marketAssistantLog.children[1].children.find(
+          (child) => child.className.indexOf("market-assistant-notice-failed") !== -1
+        );
         elements.marketAssistantQuestion.value = "第二次问题";
         await hooks.handleSubmit();
-        const assistant = elements.marketAssistantLog.children[2];
+        const assistant = elements.marketAssistantLog.children[3];
         const messageStatus = assistant.children.find(
           (child) => child.className === "market-assistant-message-status"
         );
         console.log(JSON.stringify({
-          errorStatus,
+          failedNotice: failedNotice && failedNotice.children[0].textContent,
           globalStatus: elements.marketAssistantStatus.textContent,
           messageStatus: messageStatus.textContent,
         }));
@@ -9805,7 +9857,7 @@ def test_market_assistant_stream_success_clears_prior_global_error():
     )
 
     assert payload == {
-        "errorStatus": "The assistant could not answer right now. Your question is preserved.",
+        "failedNotice": "当前出现错误，请重试",
         "globalStatus": "",
         "messageStatus": "已生成回答",
     }
@@ -9963,32 +10015,4 @@ def test_market_assistant_stream_unavailable_validation_renders_badge():
         "isPassed": False,
         "label": "验证不可用，回答未验证",
         "answerText": "现在的市场偏积极。",
-    }
-
-
-def test_market_assistant_stream_interrupted_validation_renders_badge():
-    payload = _run_market_assistant_harness(
-        """
-        const stream = hooks.createStreamingAssistantMessage();
-        hooks.applyStreamEvent(stream, { type: "answer_delta", delta: "部分回答" });
-        hooks.applyStreamEvent(stream, { type: "validation", status: "interrupted", error_codes: [] });
-        const badge = stream.element.children.find(
-          (child) => child.className.indexOf("market-assistant-validation") === 0
-        );
-        console.log(JSON.stringify({
-          className: badge && badge.className,
-          isInterrupted: Boolean(badge) && badge.className.indexOf("market-assistant-validation-interrupted") !== -1,
-          isPassed: Boolean(badge) && badge.className.indexOf("market-assistant-validation-passed") !== -1,
-          label: badge && badge.children[0].textContent,
-          answerText: stream.message.text,
-        }));
-        """
-    )
-
-    assert payload == {
-        "className": "market-assistant-validation market-assistant-validation-interrupted",
-        "isInterrupted": True,
-        "isPassed": False,
-        "label": "连接中断，回答可能不完整",
-        "answerText": "部分回答",
     }

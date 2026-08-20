@@ -57,9 +57,8 @@
 
   const THINKING_TEXT = "Thinking…";
   const COMPLETION_NOTICE = "已生成回答";
-  const UNAVAILABLE_NOTICE =
-    "The assistant could not answer right now. Your question is preserved.";
-  const INTERRUPTED_NOTICE = "连接中断，回答可能不完整";
+  const FAILED_NOTICE = "当前出现错误，请重试";
+  const RETRY_LABEL = "重试";
 
   const PROGRESS_STAGES = [
     "reading_setup",
@@ -74,9 +73,7 @@
     repaired_and_passed: "修复后已通过验证",
     failed: "未通过完整证据验证",
     disabled: "Claim validation 当前已关闭",
-    fallback: "已使用确定性备用回答",
     unavailable: "验证不可用，回答未验证",
-    interrupted: INTERRUPTED_NOTICE,
   };
 
   const VALIDATION_BADGE_CLASS = {
@@ -84,9 +81,7 @@
     repaired_and_passed: "market-assistant-validation-passed",
     failed: "market-assistant-validation-failed",
     disabled: "market-assistant-validation-disabled",
-    fallback: "market-assistant-validation-passed",
     unavailable: "market-assistant-validation-unavailable",
-    interrupted: "market-assistant-validation-interrupted",
   };
 
   function $(id) {
@@ -236,7 +231,6 @@
       citations: message.citations || [],
       validation: message.validation || null,
       errorCodes: message.errorCodes || [],
-      interrupted: Boolean(message.interrupted),
       context: Boolean(message.context),
     });
     saveState();
@@ -277,9 +271,6 @@
       article.appendChild(
         renderValidationBadge(message.validation, message.errorCodes || [])
       );
-    }
-    if (message.interrupted) {
-      article.appendChild(renderInterruptedNotice());
     }
     return article;
   }
@@ -583,11 +574,27 @@
     return badge;
   }
 
-  function renderInterruptedNotice() {
-    const notice = document.createElement("p");
-    notice.className = "market-assistant-notice market-assistant-notice-fallback";
-    notice.textContent = INTERRUPTED_NOTICE;
-    return notice;
+  function renderFailure(stream, question) {
+    stream.message.failed = true;
+    stream.element.setAttribute("aria-busy", "false");
+    stream.element.textContent = "";
+    const notice = document.createElement("div");
+    notice.className = "market-assistant-notice market-assistant-notice-failed";
+    const text = document.createElement("span");
+    text.className = "market-assistant-notice-failed-text";
+    text.textContent = FAILED_NOTICE;
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "market-assistant-retry-button";
+    retry.textContent = RETRY_LABEL;
+    retry.addEventListener("click", () => {
+      if (state.busy) return;
+      stream.element.remove();
+      sendQuestion(question, { recordUser: false });
+    });
+    notice.appendChild(text);
+    notice.appendChild(retry);
+    stream.element.appendChild(notice);
   }
 
   function appendUserMessage(text) {
@@ -687,9 +694,18 @@
           renderProgress(event.message);
         }
         break;
+      case "answer_failed":
+        stream.message.failed = true;
+        clearThinking();
+        clearProgress();
+        break;
       case "complete":
         state.serverHistoryReady = true;
         stream.message.complete = true;
+        if (stream.message.failed) {
+          renderFailure(stream, stream.question || "");
+          break;
+        }
         stream.message.citations = event.citations || [];
         setAssistantMessageHtml(stream.textEl, stream.message.text);
         if (stream.message.citations.length) {
@@ -821,21 +837,23 @@
     });
   }
 
-  async function handleSubmit() {
+  async function sendQuestion(question, options) {
     const el = elements();
-    const question = String(el.question.value || "").trim();
+    const recordUser = !options || options.recordUser !== false;
     if (!question || state.busy) return;
     renderStatus("", false);
     state.busy = true;
     el.submit.disabled = true;
     if (el.newConversation) el.newConversation.disabled = true;
-    appendUserMessage(question);
+    if (recordUser) {
+      appendUserMessage(question);
+    }
     el.question.value = "";
     const stream = createStreamingAssistantMessage();
+    stream.question = question;
     renderThinking();
     const timing = createClientTiming();
     let requestId = null;
-    let bodyShown = false;
     try {
       await submitQuestionStream(question, {
         onEvent: (event) => {
@@ -852,35 +870,25 @@
           if (event.type === "complete") {
             timing.markComplete();
           }
-          if (event.type === "answer_delta" || event.type === "answer_replace") {
-            bodyShown = true;
-          }
           applyStreamEvent(stream, event);
         },
       });
       emitClientTiming(requestId, timing.durations());
     } catch (error) {
       state.error = String(error.message || "request failed");
-      if (bodyShown || stream.message.text) {
-        stream.element.setAttribute("aria-busy", "false");
-        stream.element.appendChild(renderInterruptedNotice());
-        pushAssistantMessage({
-          text: stream.message.text,
-          citations: [],
-          interrupted: true,
-        });
-      } else {
-        stream.element.setAttribute("aria-busy", "false");
-        stream.element.remove();
-        renderStatus(UNAVAILABLE_NOTICE, true);
-        el.question.value = question;
-      }
+      renderFailure(stream, question);
     } finally {
       state.busy = false;
       el.submit.disabled = false;
       if (el.newConversation) el.newConversation.disabled = false;
       el.question.focus();
     }
+  }
+
+  async function handleSubmit() {
+    const el = elements();
+    const question = String(el.question.value || "").trim();
+    await sendQuestion(question);
   }
 
   function syncDeepResearchEnabled() {
@@ -1081,6 +1089,7 @@
       toggleWindow,
       startNewConversation,
       handleSubmit,
+      sendQuestion,
       state,
     };
   }

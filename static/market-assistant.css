@@ -288,6 +288,33 @@
   border-left: 3px solid #D8C9B4;
 }
 
+.market-assistant-notice-failed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #A04040;
+  background: #FDF2F2;
+  border-left: 3px solid #C62828;
+}
+
+.market-assistant-retry-button {
+  flex: 0 0 auto;
+  border: 1px solid #C62828;
+  border-radius: 6px;
+  background: transparent;
+  color: #A04040;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.market-assistant-retry-button:hover:not(:disabled) {
+  background: #FBE3E3;
+}
+
 .market-assistant-notice-debug {
   color: #7A4B14;
   background: #FBF0DE;

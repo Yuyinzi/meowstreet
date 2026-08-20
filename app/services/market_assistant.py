@@ -18,9 +18,7 @@ from app.services import market_assistant_tool_runtime
 from app.services.market_assistant_exploration import EXPLORATION_SCHEMA_VERSION
 from app.services.market_assistant_react import run_hybrid_narration
 from app.services.market_assistant_tool_runtime import ARTIFACT_SCHEMA_VERSION
-from app.services.market_assistant_tool_runtime import snapshot_artifact
 from app.services.market_setup_current import resolve_current_explanation
-from app.tools.market_assistant_answers import render_fallback
 from app.tools.market_assistant_claim_audit import AuditValidationError
 from app.tools.market_assistant_claim_audit import build_audit_validation_report
 from app.tools.market_assistant_claim_audit import validate_claim_audit
@@ -55,13 +53,6 @@ _DEPENDENCY_DEFAULTS = {
     "append_conversation_turn": append_conversation_turn,
     "save_conversation_checkpoint": save_conversation_checkpoint,
     "save_bundle": save_answer_bundle,
-}
-
-_FALLBACK_INTENT_BY_ROUTE = {
-    "current_setup_overview": "decision_explanation",
-    "indicator_question": "decision_explanation",
-    "why_setup_layer": "decision_explanation",
-    "react": "decision_explanation",
 }
 
 _ENGLISH_LANGUAGE_REQUESTS = (
@@ -326,17 +317,10 @@ def _persist_conversation(request, narration, answer_text, trace, deps, db_path)
         }
     user_items = [current_user_item]
     assistant_items = list(narration.get("generated_provider_items") or [])
-    if trace["generation_status"] == "deterministic_fallback":
+    if trace["generation_status"] == "answer_unavailable":
         assistant_items = [
             item for item in assistant_items if item.get("type") != "message"
         ]
-        assistant_items.append(
-            {
-                "type": "message",
-                "role": "assistant",
-                "content": [{"type": "output_text", "text": answer_text}],
-            }
-        )
     elif not any(
         item.get("type") == "message" and item.get("role") == "assistant"
         for item in assistant_items
@@ -483,20 +467,7 @@ async def _answer_hybrid(
     validation_error_codes = []
     audit_seconds = None
     attempts = {"narration": 1, "audit": 0}
-    if outcome == "fallback":
-        generation_status = "deterministic_fallback"
-        fallback_artifacts = _fallback_artifacts(resolution, frozen_artifacts)
-        answer_text = render_fallback(
-            plan=_fallback_plan(route, fallback_artifacts),
-            artifacts=fallback_artifacts,
-            notices=[],
-        )
-        await _emit(event_sink, {"type": "answer_replace", "text": answer_text})
-        await _emit_validation(event_sink, "fallback", [])
-    elif outcome == "interrupted":
-        generation_status = "narration_interrupted"
-        await _emit_validation(event_sink, "interrupted", [])
-    else:
+    if outcome == "answered":
         await _emit(event_sink, {"type": "status", "status": "validating"})
         (
             validation_status,
@@ -511,6 +482,10 @@ async def _answer_hybrid(
             if recorder is not None:
                 recorder.record("audit_completed")
         await _emit_validation(event_sink, validation_status, validation_error_codes)
+    else:
+        generation_status = "answer_unavailable"
+        answer_text = ""
+        await _emit(event_sink, {"type": "answer_failed"})
     generated_at = _now_iso()
     trace = _build_hybrid_trace(
         request=request,
@@ -628,37 +603,9 @@ def _route_for_request(request, deps):
 
 
 def _narration_outcome(narration):
-    status = narration["generation_status"]
-    if status == "answered":
+    if narration["generation_status"] == "answered":
         return "answered", narration["answer_text"]
-    if status == "narration_interrupted":
-        return "interrupted", narration["answer_text"]
-    if status == "budget_exhausted" and narration["answer_text"].strip():
-        return "interrupted", narration["answer_text"]
-    return "fallback", ""
-
-
-def _fallback_plan(route, artifacts=None):
-    if _has_evidence_detail_artifact(artifacts):
-        return {"intent": "evidence_detail"}
-    intent = _FALLBACK_INTENT_BY_ROUTE.get(route["route_id"], "unsupported")
-    return {"intent": intent}
-
-
-def _has_evidence_detail_artifact(artifacts):
-    if not isinstance(artifacts, dict):
-        return False
-    return any(
-        isinstance(artifact.get("payload"), dict)
-        and artifact["payload"].get("detail_kind")
-        and artifact["payload"].get("detail")
-        for artifact in artifacts.values()
-    )
-
-
-def _fallback_artifacts(resolution, artifacts):
-    snapshot = snapshot_artifact(resolution["snapshot"])
-    return {snapshot["artifact_id"]: snapshot, **artifacts}
+    return "failed", ""
 
 
 def _audit_timeout_seconds(deps):

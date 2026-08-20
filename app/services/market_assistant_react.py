@@ -89,11 +89,6 @@ _PROGRESS_MESSAGES = {
     },
 }
 
-_FALLBACK_ANSWERS = {
-    "zh": "当前市场证据已收集，但回答生成暂不可用。",
-    "en": "Market evidence was collected, but answer generation is currently unavailable.",
-}
-
 _INSTRUCTIONS = (
     "You are the Market Setup narration assistant. "
     "Narrate the current market setup, confirmation evidence, and portfolio posture "
@@ -537,7 +532,7 @@ async def run_hybrid_narration(
     elif stream_state["has_output"]:
         answer_text = "".join(stream_state["text_parts"])
     else:
-        answer_text = _fallback_answer(request)
+        answer_text = ""
     view = build_view(
         route,
         artifacts,
@@ -846,11 +841,6 @@ async def _flush_turn_output(turn_stream, stream_state, event_sink):
             stream_state["has_output"] = True
         await _emit(event_sink, event)
     turn_stream["output_events"] = []
-
-
-def _fallback_answer(request):
-    language = request.get("answer_language") or _question_language(request["question"])
-    return _FALLBACK_ANSWERS[language]
 
 
 async def _emit(event_sink, event):

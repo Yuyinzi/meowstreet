@@ -997,6 +997,7 @@ class TestAnswerBundle:
             "narration_validation_disabled",
             "narration_interrupted",
             "deterministic_fallback",
+            "answer_unavailable",
         ],
     )
     def test_save_answer_trace_accepts_hybrid_generation_statuses(

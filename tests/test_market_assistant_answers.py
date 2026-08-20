@@ -8,7 +8,6 @@ from app.tools.market_assistant_answers import calculate_hypothetical
 from app.tools.market_assistant_answers import collect_citations
 from app.tools.market_assistant_answers import detect_answer_language
 from app.tools.market_assistant_answers import render_answer
-from app.tools.market_assistant_answers import render_fallback
 from app.tools.market_assistant_answers import render_unvalidated_debug_answer
 from app.tools.market_assistant_answers import validate_answer_draft
 from app.tools.market_assistant_answers import validate_answer_draft_schema
@@ -1439,61 +1438,6 @@ def test_render_answer_localizes_chinese_observation_heading():
     assert "Local Observations" not in rendered
 
 
-def test_render_fallback_decision_renders_four_layers_and_path():
-    plan = _fallback_plan("decision_explanation")
-    rendered = render_fallback(plan=plan, artifacts=artifacts(), notices=[])
-    assert "Macro Regime" in rendered
-    assert "growth_decelerating" in rendered
-    assert "Defensive Posture" in rendered
-    assert "Macro Thesis" in rendered
-    assert "Portfolio Action" in rendered
-
-
-def test_render_fallback_method_renders_contract_and_predicate():
-    plan = _fallback_plan("method")
-    rendered = render_fallback(plan=plan, artifacts=artifacts(), notices=[])
-    assert "vix_confirmation_v2" in rendered
-    assert "20.0" in rendered
-
-
-def test_render_fallback_knowledge_renders_record_prose():
-    plan = _fallback_plan("definition")
-    rendered = render_fallback(plan=plan, artifacts=artifacts(), notices=[])
-    assert "expected 30-day volatility" in rendered
-
-
-def test_render_fallback_exploration_renders_rows_and_statistics():
-    plan = _fallback_plan("local_history")
-    rendered = render_fallback(plan=plan, artifacts=artifacts(), notices=[])
-    assert "2026-07-01" in rendered
-    assert "18.4" in rendered
-
-
-def test_render_fallback_research_reports_unavailable_and_local_facts():
-    plan = _fallback_plan("external_research")
-    rendered = render_fallback(plan=plan, artifacts=artifacts(), notices=[])
-    assert "unavailable" in rendered
-    assert "VIX" in rendered
-
-
-def test_render_fallback_teaching_reports_could_not_generate():
-    plan = _fallback_plan("illustration")
-    rendered = render_fallback(plan=plan, artifacts=artifacts(), notices=[])
-    assert "could not be generated" in rendered
-
-
-def test_render_fallback_unsupported_is_deterministic():
-    plan = _fallback_plan("unsupported")
-    rendered = render_fallback(plan=plan, artifacts={}, notices=[])
-    assert "cannot be answered deterministically" in rendered
-
-
-def test_render_fallback_missing_snapshot_is_deterministic():
-    plan = _fallback_plan("decision_explanation")
-    rendered = render_fallback(plan=plan, artifacts={}, notices=[])
-    assert "unavailable" in rendered
-
-
 def test_answer_draft_schema_accepts_answer_text():
     payload = vix_decision_draft()
     payload["answer_text"] = "当前市场处于轻度避险状态。"
@@ -1579,13 +1523,3 @@ def test_answer_text_mismatch_does_not_mask_broken_reference():
     codes = {error["code"] for error in exc_info.value.errors}
     assert "REFERENCE_NOT_FOUND" in codes
     assert "ANSWER_TEXT_MISMATCH" not in codes
-
-
-def _fallback_plan(intent):
-    return {
-        "intent": intent,
-        "context_mode": "current",
-        "operations": [],
-        "answer_depth": "standard",
-        "research_tier": None,
-    }

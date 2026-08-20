@@ -254,6 +254,7 @@ _TRACE_GENERATION_STATUSES = frozenset(
         "narration_validation_disabled",
         "narration_interrupted",
         "deterministic_fallback",
+        "answer_unavailable",
     }
 )
 

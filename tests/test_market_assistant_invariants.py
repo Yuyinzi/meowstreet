@@ -747,7 +747,7 @@ def test_market_setup_is_byte_identical_with_assistant_enabled_or_unavailable(
         json={"question": "Why?", "mode": "current"},
     )
     assert response.status_code == 200
-    assert response.json()["generation_status"] == "deterministic_fallback"
+    assert response.json()["generation_status"] == "answer_unavailable"
     after = client.get("/api/macro-dashboard/market-setup").json()
 
     assert decision_projection(before) == decision_projection(after)
@@ -1312,15 +1312,11 @@ def test_provider_outage_before_narration_keeps_market_setup_intact(
     run = _prepare_market_setup_harness(monkeypatch, tmp_path, turn=_FailingTurn())
     result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
 
-    assert result["trace"]["generation_status"] == "deterministic_fallback"
-    assert result["trace"]["answer_text"].startswith("Market Setup decision result:")
-    assert any(event["type"] == "answer_replace" for event in result["events"])
-    validations = [event for event in result["events"] if event["type"] == "validation"]
-    assert validations[-1] == {
-        "type": "validation",
-        "status": "fallback",
-        "error_codes": [],
-    }
+    assert result["trace"]["generation_status"] == "answer_unavailable"
+    assert result["trace"]["answer_text"] == ""
+    assert any(event["type"] == "answer_failed" for event in result["events"])
+    assert not any(event["type"] == "answer_replace" for event in result["events"])
+    assert not any(event["type"] == "validation" for event in result["events"])
 
 
 def test_provider_interruption_after_narration_keeps_market_setup_intact(
@@ -1337,15 +1333,11 @@ def test_provider_interruption_after_narration_keeps_market_setup_intact(
     )
     result = _assert_market_setup_unchanged(monkeypatch, tmp_path, run=run)
 
-    assert result["trace"]["generation_status"] == "narration_interrupted"
-    assert result["trace"]["answer_text"] == partial
+    assert result["trace"]["generation_status"] == "answer_unavailable"
+    assert result["trace"]["answer_text"] == ""
     assert any(event["type"] == "answer_delta" for event in result["events"])
-    validations = [event for event in result["events"] if event["type"] == "validation"]
-    assert validations[-1] == {
-        "type": "validation",
-        "status": "interrupted",
-        "error_codes": [],
-    }
+    assert any(event["type"] == "answer_failed" for event in result["events"])
+    assert not any(event["type"] == "validation" for event in result["events"])
 
 
 def test_unavailable_local_evidence_keeps_market_setup_intact(monkeypatch, tmp_path):

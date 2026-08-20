@@ -13,8 +13,6 @@ from app.tools.market_assistant_routes import budget_for_mode
 from app.tools.market_assistant_routes import route_question
 from app.tools.market_assistant_tools import ALL_TOOL_IDS
 
-_FALLBACK_ZH = "当前市场证据已收集，但回答生成暂不可用。"
-
 
 def current_setup_route():
     return route_question("现在市场怎么样？", deep_analysis=False)
@@ -927,7 +925,7 @@ async def test_provider_failure_before_text_returns_narration_unavailable():
         dependencies=deps,
     )
     assert result["generation_status"] == "narration_unavailable"
-    assert result["answer_text"] == _FALLBACK_ZH
+    assert result["answer_text"] == ""
 
 
 @pytest.mark.asyncio
@@ -950,7 +948,7 @@ async def test_provider_failure_after_deltas_retains_partial_text():
 
 
 @pytest.mark.asyncio
-async def test_budget_exhaustion_selects_deterministic_fallback():
+async def test_budget_exhaustion_failed_forced_narration_returns_empty_answer():
     deps = recording_dependencies(
         [],
         stream=_ScriptedStream(
@@ -1002,7 +1000,7 @@ async def test_budget_exhaustion_selects_deterministic_fallback():
         dependencies=deps,
     )
     assert result["generation_status"] == "narration_unavailable"
-    assert result["answer_text"] == _FALLBACK_ZH
+    assert result["answer_text"] == ""
 
 
 @pytest.mark.asyncio
@@ -1080,7 +1078,7 @@ async def test_deadline_bounds_slow_model_turn_before_answer():
         dependencies=deps,
     )
     assert result["generation_status"] == "deadline_exceeded"
-    assert result["answer_text"] == _FALLBACK_ZH
+    assert result["answer_text"] == ""
     assert len(stream.calls) == 1
 
 
@@ -1116,7 +1114,7 @@ async def test_deadline_bounds_slow_optional_tool_batch():
         dependencies=deps,
     )
     assert result["generation_status"] == "deadline_exceeded"
-    assert result["answer_text"] == _FALLBACK_ZH
+    assert result["answer_text"] == ""
 
 
 @pytest.mark.asyncio
@@ -1172,7 +1170,7 @@ async def test_model_timeout_under_remaining_budget_is_narration_unavailable():
         dependencies=deps,
     )
     assert result["generation_status"] == "narration_unavailable"
-    assert result["answer_text"] == _FALLBACK_ZH
+    assert result["answer_text"] == ""
 
 
 def test_translate_initial_operation_maps_indicator_operations():

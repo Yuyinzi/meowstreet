@@ -592,7 +592,7 @@ async def test_audit_timeout_emits_validation_unavailable_without_repair():
 
 
 @pytest.mark.asyncio
-async def test_narration_failure_before_text_renders_deterministic_fallback(caplog):
+async def test_narration_failure_before_text_returns_answer_unavailable(caplog):
     stream = _ScriptedStream([narration_step(error=RuntimeError("llm down"))])
     deps = hybrid_dependencies(stream=stream)
     sink = RecordingSink()
@@ -603,19 +603,17 @@ async def test_narration_failure_before_text_renders_deterministic_fallback(capl
         event_sink=sink,
     )
 
-    assert response["generation_status"] == "deterministic_fallback"
-    assert response["answer_text"].startswith("Market Setup decision result:")
-    assert deps.saved_trace["generation_status"] == "deterministic_fallback"
+    assert response["generation_status"] == "answer_unavailable"
+    assert response["answer_text"] == ""
+    assert deps.saved_trace["generation_status"] == "answer_unavailable"
     assert deps.saved_trace["narration_status"] == "narration_unavailable"
-    assert any(event["type"] == "answer_replace" for event in sink.events)
-    validations = [event for event in sink.events if event["type"] == "validation"]
-    assert validations == [
-        {"type": "validation", "status": "fallback", "error_codes": []}
-    ]
+    assert any(event["type"] == "answer_failed" for event in sink.events)
+    assert not any(event["type"] == "answer_replace" for event in sink.events)
+    assert not any(event["type"] == "validation" for event in sink.events)
 
 
 @pytest.mark.asyncio
-async def test_narration_interrupted_keeps_partial_text_and_emits_notice():
+async def test_narration_interrupted_returns_answer_unavailable():
     stream = _ScriptedStream(
         [narration_step(deltas=["部分文本"], error=RuntimeError("cut off"))]
     )
@@ -628,14 +626,12 @@ async def test_narration_interrupted_keeps_partial_text_and_emits_notice():
         event_sink=sink,
     )
 
-    assert response["generation_status"] == "narration_interrupted"
-    assert response["answer_text"] == "部分文本"
-    assert deps.saved_trace["generation_status"] == "narration_interrupted"
+    assert response["generation_status"] == "answer_unavailable"
+    assert response["answer_text"] == ""
+    assert deps.saved_trace["generation_status"] == "answer_unavailable"
     assert "audit" not in deps.llm_calls
-    validations = [event for event in sink.events if event["type"] == "validation"]
-    assert validations == [
-        {"type": "validation", "status": "interrupted", "error_codes": []}
-    ]
+    assert any(event["type"] == "answer_failed" for event in sink.events)
+    assert not any(event["type"] == "validation" for event in sink.events)
 
 
 @pytest.mark.asyncio
@@ -811,7 +807,7 @@ async def test_knowledge_definition_through_real_catalog_aliases_vix():
 
 
 @pytest.mark.asyncio
-async def test_unknown_knowledge_indicator_routes_to_fallback():
+async def test_unknown_knowledge_indicator_returns_answer_unavailable():
     catalog = {"version": "market_assistant_knowledge_v1", "records": []}
     stream = _ScriptedStream([narration_step(error=RuntimeError("llm down"))])
     deps = hybrid_dependencies(stream=stream, catalog=catalog)
@@ -820,12 +816,12 @@ async def test_unknown_knowledge_indicator_routes_to_fallback():
         current_question("VIX 是什么？"), dependencies=deps
     )
 
-    assert response["generation_status"] == "deterministic_fallback"
-    assert "Market Setup decision result:" in response["answer_text"]
+    assert response["generation_status"] == "answer_unavailable"
+    assert response["answer_text"] == ""
 
 
 @pytest.mark.asyncio
-async def test_evidence_detail_artifact_renders_deterministic_fallback():
+async def test_evidence_detail_artifact_narration_failure_returns_answer_unavailable():
     detail_call = {
         "call_id": "call_policy_detail",
         "tool_name": "get_evidence_detail",
@@ -843,230 +839,12 @@ async def test_evidence_detail_artifact_renders_deterministic_fallback():
         current_question("美联储目前是加息、降息还是维持？"), dependencies=deps
     )
 
-    assert response["generation_status"] == "deterministic_fallback"
-    assert "cannot be answered deterministically" not in response["answer_text"]
-    assert "detail is currently unavailable" in response["answer_text"]
+    assert response["generation_status"] == "answer_unavailable"
+    assert response["answer_text"] == ""
 
 
 @pytest.mark.asyncio
-async def test_evidence_detail_fallback_renders_available_status():
-    from app.tools.market_assistant_answers import render_fallback
-
-    route = route_question("美联储目前是加息、降息还是维持？", deep_analysis=False)
-    plan = {"intent": "evidence_detail"}
-    artifacts = {
-        "ctx_setup_evidence_detail_macro_policy_response": {
-            "artifact_id": "ctx_setup_evidence_detail_macro_policy_response",
-            "artifact_kind": "explanation_snapshot",
-            "primary_authority": "decision_fact",
-            "market_setup_relation": "authoritative_snapshot",
-            "payload": {
-                "fact_id": "macro_policy_response",
-                "detail_kind": "policy_response",
-                "topics": ["current", "drivers", "source"],
-                "status": "available",
-                "detail": {
-                    "fact_id": "macro_policy_response",
-                    "label": "Monetary Policy",
-                    "detail_kind": "policy_response",
-                    "topics": ["current", "drivers", "source"],
-                    "status": "available",
-                    "current": {
-                        "policy_action": "hold",
-                        "overall_bias": "mild_hawkish",
-                        "relationship_to_growth_direction": "conflicts",
-                    },
-                    "drivers": {
-                        "policy_reason": "Hold decision with hawkish language.",
-                    },
-                },
-            },
-            "object_index": [],
-        }
-    }
-    text = render_fallback(plan=plan, artifacts=artifacts, notices=[])
-    assert "Monetary Policy" in text
-    assert "hold" in text
-
-
-@pytest.mark.asyncio
-async def test_evidence_detail_fallback_renders_missing_status():
-    from app.tools.market_assistant_answers import render_fallback
-
-    artifacts = {
-        "ctx_setup_evidence_detail_jobless_claims": {
-            "artifact_id": "ctx_setup_evidence_detail_jobless_claims",
-            "artifact_kind": "explanation_snapshot",
-            "primary_authority": "decision_fact",
-            "market_setup_relation": "authoritative_snapshot",
-            "payload": {
-                "fact_id": "jobless_claims",
-                "detail_kind": "unsupported",
-                "topics": ["current"],
-                "status": "missing",
-                "detail": {
-                    "fact_id": "jobless_claims",
-                    "label": "Jobless Claims",
-                    "detail_kind": "unsupported",
-                    "topics": ["current"],
-                    "status": "missing",
-                },
-            },
-            "object_index": [],
-        }
-    }
-    text = render_fallback(
-        plan={"intent": "evidence_detail"}, artifacts=artifacts, notices=[]
-    )
-    assert "unavailable" in text.lower()
-
-
-@pytest.mark.asyncio
-async def test_evidence_detail_fallback_keeps_method_and_source_for_stale():
-    from app.tools.market_assistant_answers import render_fallback
-
-    artifacts = {
-        "ctx_setup_evidence_detail_vix_level": {
-            "artifact_id": "ctx_setup_evidence_detail_vix_level",
-            "artifact_kind": "explanation_snapshot",
-            "primary_authority": "decision_fact",
-            "market_setup_relation": "authoritative_snapshot",
-            "payload": {
-                "fact_id": "vix_level",
-                "label": "VIX",
-                "detail_kind": "vix_level",
-                "topics": ["current", "method", "source"],
-                "status": "stale",
-                "detail": {
-                    "fact_id": "vix_level",
-                    "label": "VIX",
-                    "detail_kind": "vix_level",
-                    "topics": ["current", "method", "source"],
-                    "status": "stale",
-                    "method": {
-                        "method_references": ["vix_confirmation_v2"],
-                    },
-                    "source": {
-                        "source_module": "market_setup_evidence_facts",
-                        "source_period": {
-                            "effective_date": "2026-07-01",
-                            "reference_period": "2026-06",
-                        },
-                    },
-                },
-            },
-            "object_index": [],
-        }
-    }
-    text = render_fallback(
-        plan={"intent": "evidence_detail"}, artifacts=artifacts, notices=[]
-    )
-    assert "unavailable (stale)" in text
-    assert "vix_confirmation_v2" in text
-    assert "effective_date: 2026-07-01" in text
-    assert "reference_period: 2026-06" in text
-    assert "{'effective_date'" not in text
-
-
-@pytest.mark.asyncio
-async def test_evidence_detail_fallback_renders_all_artifacts_in_order():
-    from app.tools.market_assistant_answers import render_fallback
-
-    artifacts = {
-        "ctx_setup_evidence_detail_credit_conditions_current_method_source": {
-            "artifact_id": (
-                "ctx_setup_evidence_detail_credit_conditions_current_method_source"
-            ),
-            "artifact_kind": "explanation_snapshot",
-            "primary_authority": "decision_fact",
-            "market_setup_relation": "authoritative_snapshot",
-            "payload": {
-                "fact_id": "credit_conditions",
-                "label": "Credit Conditions",
-                "detail_kind": "credit_conditions",
-                "topics": ["current", "method", "source"],
-                "status": "available",
-                "detail": {
-                    "fact_id": "credit_conditions",
-                    "label": "Credit Conditions",
-                    "detail_kind": "credit_conditions",
-                    "topics": ["current", "method", "source"],
-                    "status": "available",
-                    "current": {"status": "risk_rising"},
-                },
-            },
-            "object_index": [],
-        },
-        "ctx_setup_evidence_detail_jobless_claims_current": {
-            "artifact_id": "ctx_setup_evidence_detail_jobless_claims_current",
-            "artifact_kind": "explanation_snapshot",
-            "primary_authority": "decision_fact",
-            "market_setup_relation": "authoritative_snapshot",
-            "payload": {
-                "fact_id": "jobless_claims",
-                "label": "Jobless Claims",
-                "detail_kind": "unsupported",
-                "topics": ["current"],
-                "status": "missing",
-                "detail": {
-                    "fact_id": "jobless_claims",
-                    "label": "Jobless Claims",
-                    "detail_kind": "unsupported",
-                    "topics": ["current"],
-                    "status": "missing",
-                },
-            },
-            "object_index": [],
-        },
-        "ctx_setup_evidence_detail_macro_policy_response_current_drivers_source": {
-            "artifact_id": (
-                "ctx_setup_evidence_detail_macro_policy_response_current_drivers_source"
-            ),
-            "artifact_kind": "explanation_snapshot",
-            "primary_authority": "decision_fact",
-            "market_setup_relation": "authoritative_snapshot",
-            "payload": {
-                "fact_id": "macro_policy_response",
-                "label": "Monetary Policy",
-                "detail_kind": "policy_response",
-                "topics": ["current", "drivers", "source"],
-                "status": "available",
-                "detail": {
-                    "fact_id": "macro_policy_response",
-                    "label": "Monetary Policy",
-                    "detail_kind": "policy_response",
-                    "topics": ["current", "drivers", "source"],
-                    "status": "available",
-                    "current": {
-                        "policy_action": "hold",
-                        "overall_bias": "mild_hawkish",
-                    },
-                    "source": {
-                        "source_module": "fomc_policy_tone",
-                        "source_period": "2026-07-01",
-                    },
-                },
-            },
-            "object_index": [],
-        },
-    }
-    text = render_fallback(
-        plan={"intent": "evidence_detail"}, artifacts=artifacts, notices=[]
-    )
-    assert "Monetary Policy" in text
-    assert "hold" in text
-    assert "Credit Conditions" in text
-    assert "risk_rising" in text
-    assert "Jobless Claims" in text
-    assert "unavailable" in text.lower()
-    credit_index = text.find("Credit Conditions")
-    jobless_index = text.find("Jobless Claims")
-    policy_index = text.find("Monetary Policy")
-    assert credit_index < jobless_index < policy_index
-
-
-@pytest.mark.asyncio
-async def test_react_fallback_prefers_generated_evidence_detail_artifact():
+async def test_react_narration_failure_with_evidence_detail_returns_answer_unavailable():
     route = route_question("现在市场怎么样？", deep_analysis=False)
     route["route_id"] = "react"
     route["routing_source"] = "react"
@@ -1095,9 +873,8 @@ async def test_react_fallback_prefers_generated_evidence_detail_artifact():
         current_question("失业救济数据怎么样？"), dependencies=deps
     )
 
-    assert response["generation_status"] == "deterministic_fallback"
-    assert "cannot be answered deterministically" not in response["answer_text"]
-    assert "unavailable" in response["answer_text"].lower()
+    assert response["generation_status"] == "answer_unavailable"
+    assert response["answer_text"] == ""
 
 
 @pytest.mark.asyncio
@@ -1907,6 +1684,6 @@ async def test_deadline_exhaustion_freezes_deadline_exceeded_in_trace():
         event_sink=sink,
     )
 
-    assert response["generation_status"] == "deterministic_fallback"
-    assert deps.saved_trace["generation_status"] == "deterministic_fallback"
+    assert response["generation_status"] == "answer_unavailable"
+    assert deps.saved_trace["generation_status"] == "answer_unavailable"
     assert deps.saved_trace["narration_status"] == "deadline_exceeded"
