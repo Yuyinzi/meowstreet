@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import subprocess
 import sys
@@ -5,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from app.services import commodity_attribution_catalog as service
 from app.data_sources import commodity_attribution_catalog as catalog_source
+from app.resources import resource_path
+from app.services import commodity_attribution_catalog as service
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -47,6 +49,51 @@ def _stub_parser(monkeypatch, records):
         "parse_commodity_attribution_pdf",
         lambda path: list(records),
     )
+
+
+def _write_catalog_pdf(path):
+    content = b"""BT
+/F1 12 Tf
+72 720 Td
+(Oil) Tj
+0 -18 Td
+(Energy Information Administration https://example.com/eia) Tj
+ET"""
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        b"<< /Length "
+        + str(len(content)).encode()
+        + b" >>\nstream\n"
+        + content
+        + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    payload = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"
+    offsets = []
+    for number, obj in enumerate(objects, start=1):
+        offsets.append(len(payload))
+        payload += f"{number} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref_offset = len(payload)
+    payload += b"xref\n0 6\n0000000000 65535 f \n"
+    payload += b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets)
+    payload += (
+        b"trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n"
+        + str(xref_offset).encode()
+        + b"\n%%EOF\n"
+    )
+    path.write_bytes(payload)
+
+
+def _load_build_script():
+    path = ROOT / "scripts" / "build_commodity_attribution_catalog.py"
+    spec = importlib.util.spec_from_file_location(
+        "build_commodity_attribution_catalog", path
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_build_returns_versioned_artifact_with_injected_timestamp(monkeypatch):
@@ -166,18 +213,19 @@ def test_load_returns_artifact_and_rejects_invalid_version(tmp_path):
         service.load_commodity_attribution_catalog(invalid_path)
 
 
-def test_build_script_writes_catalog_and_exits_zero(tmp_path):
+def test_build_script_defaults_to_attribution_catalog_resource():
+    module = _load_build_script()
+
+    args = module.build_arg_parser().parse_args([])
+
+    assert Path(args.output_path) == resource_path("attribution_catalog")
+
+
+def test_build_script_writes_catalog_from_temporary_pdf_and_exits_zero(tmp_path):
     script = ROOT / "scripts" / "build_commodity_attribution_catalog.py"
     destination = tmp_path / "catalog.v1.json"
-    source = (
-        ROOT
-        / "data"
-        / "materials"
-        / "Video 12"
-        / "Cyclical_Commodities_Demand_Supply_Factors.pdf"
-    )
-    if not source.is_file():
-        pytest.skip(" attribution source pdf is not available locally")
+    source = tmp_path / "catalog.pdf"
+    _write_catalog_pdf(source)
 
     result = subprocess.run(
         [
@@ -197,4 +245,26 @@ def test_build_script_writes_catalog_and_exits_zero(tmp_path):
     assert destination.exists()
     payload = json.loads(destination.read_text())
     assert payload["version"] == "commodity_attribution_evidence_catalog_v1"
-    assert len(payload["resources"]) == 35
+    assert payload["resources"] == [
+        {
+            "commodity_id": "oil",
+            "source_name": "Energy Information Administration",
+            "source_url": "https://example.com/eia",
+            "source_type": "official_data",
+            "coverage": [
+                "prices",
+                "reserves",
+                "production",
+                "refining",
+                "processing",
+                "imports",
+                "exports",
+                "movements",
+                "stocks",
+                "consumption",
+                "sales",
+            ],
+            "source_ref": catalog_source.SOURCE_REF,
+            "status": "cataloged",
+        }
+    ]
