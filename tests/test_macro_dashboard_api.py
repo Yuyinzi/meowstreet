@@ -188,16 +188,16 @@ def test_cyclical_commodities_script_is_served():
 def test_commodity_ids_keep_the_dce_iron_ore_id():
     from app import api
 
-    assert "iron_ore_dce" in api.method_COMMODITY_SERIES_IDS
+    assert "iron_ore_dce" in api.COMMODITY_SERIES_IDS
 
 
 def test_commodity_ids_use_investing_copper():
     from app import api
 
-    assert "copper_comex" in api.method_COMMODITY_SERIES_IDS
-    assert "copper_lme" in api.method_COMMODITY_SERIES_IDS
-    assert "copper_comex_hg_yahoo_v1" not in api.method_COMMODITY_SERIES_IDS
-    assert "copper_lme_sina_cad_v1" not in api.method_COMMODITY_SERIES_IDS
+    assert "copper_comex" in api.COMMODITY_SERIES_IDS
+    assert "copper_lme" in api.COMMODITY_SERIES_IDS
+    assert "copper_comex_hg_yahoo_v1" not in api.COMMODITY_SERIES_IDS
+    assert "copper_lme_sina_cad_v1" not in api.COMMODITY_SERIES_IDS
 
 
 def test_growth_cycle_ism_industry_breadth_prefers_latest_official_report(monkeypatch):
@@ -5884,7 +5884,7 @@ def _non_oil_attribution_audit_payload():
                 "Western Australia",
                 "annual",
                 "kt, AUD m",
-                "Method URL redirects to the WA Resources industry data page.",
+                "Source URL redirects to the WA Resources industry data page.",
             ),
             audit_row(
                 "iron_ore",
@@ -5896,7 +5896,7 @@ def _non_oil_attribution_audit_payload():
                 "Western Australia",
                 "annual",
                 "kt, AUD m",
-                "Method URL redirects to the WA Mineral and Petroleum statistics digest page.",
+                "Source URL redirects to the WA Mineral and Petroleum statistics digest page.",
             ),
             audit_row(
                 "iron_ore",

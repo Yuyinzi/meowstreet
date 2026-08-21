@@ -2,23 +2,19 @@
 
 ## Project Overview
 
-Meowstreet is a local-first method-based trade workflow system. Python 3.13, FastAPI, vanilla HTML/CSS/JS, pytest.
+Meowstreet is a local-first method-driven trade workflow system. Python 3.13, FastAPI, vanilla HTML/CSS/JS, pytest.
 
-The project is based on:
+The project is based on historical design documents covering the workflow decision system, the workflow graph, and the Meowstreet migration.
 
-- `2026-06-26-method-workflow-decision-system-design.md`
-- `2026-06-26-method-workflow-graph.md`
-- `2026-06-29-meowstreet-migration.md`
-
-Use these design docs for product intent, but follow the current standalone `app/`, `static/`, `method_notes/`, and `app/resources/` structure in this repo when implementing changes.
+Use those design docs for product intent, but follow the current standalone `app/`, `static/`, `method_notes/`, and `app/resources/` structure in this repo when implementing changes.
 
 ## Session Handoff
 
-Before starting a new method chapter or resuming prior work, read `progress.md`. Its latest chapter section records the authoritative current method contract, dashboard interpretation, constraints, and handoff state; older entries are historical context only.
+Before starting a new workflow chapter or resuming prior work, read `progress.md`. Its latest chapter section records the authoritative current method contract, dashboard interpretation, constraints, and handoff state; older entries are historical context only.
 
-## Method Workflow Model
+## Workflow Method Model
 
-Meowstreet is not a learning site and should not behave like raw RAG over method notes. It is a ticker-first workflow console that evaluates a ticker through a deterministic method-method graph.
+Meowstreet is not a learning site and should not behave like raw RAG over method notes. It is a ticker-first workflow console that evaluates a ticker through a deterministic workflow-method graph.
 
 Runtime evaluation must:
 
@@ -40,13 +36,13 @@ Allowed final classifications include:
 - `conflicting_evidence`
 - `reject`
 
-The same inputs and the same method method version should produce the same classification. Do not add runtime logic that silently asks an LLM to decide whether a ticker is good or bad. LLMs may only be used offline to extract or organize method methodology before validating a structured artifact.
+The same inputs and the same method version should produce the same classification. Do not add runtime logic that silently asks an LLM to decide whether a ticker is good or bad. LLMs may only be used offline to extract or organize methodology before validating a structured artifact.
 
 Method concepts become executable workflow nodes only when they affect trading decisions: continue, wait, reject, downgrade, support long/short bias, require input, affect timing, position sizing, portfolio fit, risk, or final synthesis. Concepts that are only mindset or background should remain supporting documentation attached to relevant nodes.
 
 ## Method Evolution
 
-Method material is the seed methodology and source lineage, not an immutable runtime rulebook or required dashboard vocabulary.
+Source material is the seed methodology and source lineage, not an immutable runtime rulebook or required dashboard vocabulary.
 
 Meowstreet may supersede an inherited rule with a system-owned method when the replacement:
 
@@ -58,7 +54,7 @@ Meowstreet may supersede an inherited rule with a system-owned method when the r
 - distinguishes validated conclusions from hypotheses and supporting context;
 - does not use an LLM at runtime.
 
-Rules that claim to implement method guidance must preserve source fidelity. Rules identified as system-owned must cite their approved Meowstreet specification instead.
+Rules that claim to implement source guidance must preserve source fidelity. Rules identified as system-owned must cite their approved Meowstreet specification instead.
 
 Dashboard copy presents the system's current method and conclusions. It does not need to expose method terminology or source gaps unless provenance is operationally relevant.
 
@@ -104,20 +100,7 @@ Tests for operational features must verify the metric-to-decision linkage, suppo
 
 ## Method Data Sources
 
-The source material for the method graph lives in `method_notes/*.md`. These markdown files use repeated sections:
-
-- `Key Points`
-- `Learning Path / Reasoning Chain`
-- `Concepts & Definitions`
-- `Methodology / Workflow`
-- `Examples & Applications`
-- `Cautions / Common Mistakes`
-- `Transcript Gaps / Incomplete Segments`
-- `Actionable Checklist`
-
-Use `Methodology / Workflow` and `Actionable Checklist` as the primary source for workflow steps, required inputs, checks, and next actions. Use `Concepts & Definitions` for vocabulary, `Cautions / Common Mistakes` for blockers and warnings, and `Transcript Gaps / Incomplete Segments` only for extraction warnings.
-
-Regenerate the method artifact with `python3 scripts/build_method.py` after changing method-note parsing, graph node definitions, checks, or method notes.
+The method artifact at `app/resources/workflow_method.v1.json` is a versioned, committed static file. The method notes (`method_notes/`) and the offline build pipeline that produces the artifact are local, private, and not part of this repository.
 
 ## GDP Relationship Source Caveat
 
@@ -136,7 +119,6 @@ For `data/source_material/Video 03/GDP_Correlations.xlsx`:
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python scripts/build_method.py
 ```
 
 ### Run
@@ -157,13 +139,13 @@ npm run build
 ### Run a single test file
 
 ```bash
-.venv/bin/pytest tests/test_method_notes_parser.py -q
+.venv/bin/pytest tests/test_method_schema.py -q
 ```
 
 ### Run a single test function
 
 ```bash
-.venv/bin/pytest tests/test_method_notes_parser.py::test_parse_method_note_sections_extracts_known_sections -q
+.venv/bin/pytest tests/test_method_schema.py::test_normalize_method_payload_rejects_missing_symbol -q
 ```
 
 ### Run tests matching a pattern
@@ -181,14 +163,8 @@ python3 -m py_compile app/api.py
 ### Check JS syntax
 
 ```bash
-node --check static/method-system.js
+node --check static/ticker-workflow.js
 node --check static/dist/macro-dashboard.js
-```
-
-### Build the method method artifact
-
-```bash
-python3 scripts/build_method.py
 ```
 
 ### Build frontend assets
@@ -227,7 +203,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app import method_builder
+from app import method_schema
 ```
 
 ### Naming
@@ -263,7 +239,7 @@ except ValueError as exc:
 
 ### Data Modeling
 
-Runtime payloads, API responses, DB rows, and method-method artifacts remain plain nested dicts with string keys. Observation payloads use dotted-path keys (e.g., `"signals.trend"`, `"metrics.price"`). Access dict paths with a custom `_get_path()` resolver (see `workflow_engine.py`). Dataclasses may be used for configuration and internal value objects, but not as the public API payload format. Do not introduce ORM models for stored rows unless the project explicitly adopts one later.
+Runtime payloads, API responses, DB rows, and workflow-method artifacts remain plain nested dicts with string keys. Observation payloads use dotted-path keys (e.g., `"signals.trend"`, `"metrics.price"`). Access dict paths with a custom `_get_path()` resolver (see `workflow_engine.py`). Dataclasses may be used for configuration and internal value objects, but not as the public API payload format. Do not introduce ORM models for stored rows unless the project explicitly adopts one later.
 
 The method artifact should include `version`, `generated_at`, `source_documents`, `concepts`, `workflow_nodes`, `node_checks`, `decision_rules`, and `extraction_warnings`. Workflow nodes should include decision questions, required inputs, criteria, tool hooks, source refs, incoming edges, and outgoing edges. Node checks should remain structured and deterministic.
 
@@ -322,30 +298,26 @@ When a feature crosses layers, create focused files at these boundaries rather t
 - Test helper functions return expected payloads as dicts, not pytest fixtures
 - Tests should be self-contained — create any needed markdown files inline in the test body
 - API tests use `fastapi.testclient.TestClient`; do not start a server in tests
-- The subprocess test in `test_method_builder.py` uses a hardcoded absolute `cwd=`
 
 ## Target File Structure
 
 ```
 app/              # Python package (all application code)
   __init__.py
-  method_notes_parser.py
   method_schema.py
-  method_builder.py
   workflow_engine.py
+  method_indicators.py
+  tool_runner.py
   api.py
+  http_client.py
+  llm.py
 tests/                   # pytest tests
   conftest.py
   test_*.py
 scripts/                 # CLI entry points
-  build_method.py
 static/                  # vanilla HTML/CSS/JS (served by FastAPI)
-  method-system.html
-  method-system.css
-  method-system.js
-method_notes/            # source markdown parsed by the builder
 app/resources/           # versioned, tracked method artifacts loaded at runtime
-data/local_system/      # local runtime data (SQLite, caches; git-ignored)
+data/local_system/       # local runtime data (SQLite, caches; git-ignored)
 ```
 
 ### Outbound HTTP

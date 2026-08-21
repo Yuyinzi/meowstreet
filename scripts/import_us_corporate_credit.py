@@ -13,7 +13,7 @@ from app.db import macro_indicators
 from app.db import us_rates_liquidity
 
 DEFAULT_WORKBOOK_PATH = (
-    ROOT / "data" / "materials" / "Video 05" / "Corporate_Bond_Indices.xlsm"
+    ROOT / "data" / "source_material" / "Video 05" / "Corporate_Bond_Indices.xlsm"
 )
 DEFAULT_FRED_DIR = DEFAULT_WORKBOOK_PATH.parent / "fred"
 COMBINED_SOURCE = "P05 workbook + FRED"

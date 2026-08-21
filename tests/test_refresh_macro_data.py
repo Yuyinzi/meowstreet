@@ -924,7 +924,7 @@ def test_skip_macro_indicators_removes_tasks():
     )
 
 
-def test_macro_refresh_registers_lumber_yahoo_without_method_chrome_import(monkeypatch):
+def test_macro_refresh_registers_lumber_yahoo_without_chrome_import(monkeypatch):
     tasks = refresh_macro_data._planned_tasks(
         args_without_skips(),
         fake_benchmark_main,

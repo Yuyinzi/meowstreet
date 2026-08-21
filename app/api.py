@@ -97,7 +97,7 @@ OIL_SERIES_IDS = [
     "oil_petroleum_products_supplied",
 ]
 
-method_COMMODITY_SERIES_IDS = [
+COMMODITY_SERIES_IDS = [
     "copper_comex",
     "copper_lme",
     "copper_shanghai",

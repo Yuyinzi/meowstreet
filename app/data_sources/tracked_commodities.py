@@ -9,8 +9,8 @@ from app.http_client import HttpClient
 INVESTING_BASE = "https://www.investing.com"
 
 # instrument_id values must be confirmed from each market's actual
-# Investing.com page request before claiming data matches the method
-# market.  The cid parameters in the method URLs provide probable
+# Investing.com page request before claiming data matches the source market
+# market.  The cid parameters in the source URLs provide probable
 # IDs (used below) but these should be verified against the XHR
 # request the page makes to /api/financialdata/historical/<id>.
 
@@ -105,11 +105,11 @@ def validate_free_web_markets(series_ids):
     for series_id in series_ids:
         if series_id not in allowed:
             raise ValueError(
-                f"method commodity market {series_id} is not an Investing method market"
+                f"commodity market {series_id} is not an Investing market"
             )
 
 
-def _normalize_method_price(row, series_id, source_url, retrieved_at):
+def _normalize_price(row, series_id, source_url, retrieved_at):
     return {
         "date": row["date"],
         "value": float(row["price"]),
@@ -125,7 +125,7 @@ def parse_commodity_csv(csv_text, series_id, source_url=None, retrieved_at=None)
     reader = csv.DictReader(io.StringIO(csv_text.lstrip("\ufeff")))
     if "Date" not in reader.fieldnames or "Price" not in reader.fieldnames:
         raise ValueError(
-            f"method commodity csv for {series_id} is missing required Date/Price columns"
+            f"commodity csv for {series_id} is missing required Date/Price columns"
         )
     rows = []
     for record in reader:
@@ -152,7 +152,7 @@ def parse_commodity_csv(csv_text, series_id, source_url=None, retrieved_at=None)
     effective_source_url = source_url or meta.get("price_page_url", "")
     effective_retrieved_at = retrieved_at or datetime.now(timezone.utc).isoformat()
     return [
-        _normalize_method_price(
+        _normalize_price(
             r, series_id, effective_source_url, effective_retrieved_at
         )
         for r in deduped
@@ -190,7 +190,7 @@ def parse_investing_history_payload(payload, series_id, retrieved_at=None):
             seen.add(row["date"])
             deduped.append(row)
     return [
-        _normalize_method_price(r, series_id, source_url, effective_retrieved_at)
+        _normalize_price(r, series_id, source_url, effective_retrieved_at)
         for r in deduped
     ]
 
@@ -199,7 +199,7 @@ def build_commodity_series_payload(series_id, observations):
     meta = MARKET_SERIES[series_id]
     if meta.get("source_class", "free_web") != "free_web":
         raise ValueError(
-            f"method commodity series {series_id} is not an Investing method market"
+            f"commodity series {series_id} is not an Investing market"
         )
     return {
         "series": {
@@ -394,7 +394,7 @@ def fetch_commodity_observations(
         if end_date:
             parsed = [r for r in parsed if r["date"] <= end_date]
         observations = [
-            _normalize_method_price(r, series_id, source_url, retrieved_at)
+            _normalize_price(r, series_id, source_url, retrieved_at)
             for r in parsed
         ]
         result[series_id] = {

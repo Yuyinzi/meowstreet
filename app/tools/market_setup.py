@@ -1427,7 +1427,7 @@ def build_market_setup(
         "pending_confirmations": pending_confirmations,
         "claims_confirmation_qualifier": claims_confirmation_qualifier,
         "limitations": [
-            "This is a deterministic connection layer over Methods P2-P9. It does not calculate a numeric confidence score.",
+            "This is a deterministic connection layer over method sections P2-P9. It does not calculate a numeric confidence score.",
             "Later-method leading-indicator modules may still change the outlook when implemented.",
         ],
     }

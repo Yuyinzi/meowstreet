@@ -23,7 +23,6 @@ EXPECTED_RESOURCE_FILES = {
 
 def test_resource_mapping_uses_neutral_tracked_names():
     assert RESOURCE_FILES == EXPECTED_RESOURCE_FILES
-    assert all("method_" not in filename for filename in RESOURCE_FILES.values())
 
 
 def test_required_json_resources_exist():

@@ -11,7 +11,7 @@ from app.db import us_rates_liquidity
 from app.tools import ism_workbook
 
 DEFAULT_WORKBOOK_PATH = (
-    ROOT / "data" / "materials" / "Video 07" / "ISM_Manufacturing_Index.xlsx"
+    ROOT / "data" / "source_material" / "Video 07" / "ISM_Manufacturing_Index.xlsx"
 )
 
 SERIES_CONFIG = {

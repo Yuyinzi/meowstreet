@@ -14,7 +14,7 @@ from app.db import macro_indicators
 from app.db import us_rates_liquidity
 
 DEFAULT_WORKBOOK_PATH = (
-    ROOT / "data" / "materials" / "Video 06" / "US_M2_Money_Supply_Template.xlsx"
+    ROOT / "data" / "source_material" / "Video 06" / "US_M2_Money_Supply_Template.xlsx"
 )
 M2_SHEET_NAME = "Nominal M2 - Monthly"
 M2_SERIES_ID = "m2_money_stock"

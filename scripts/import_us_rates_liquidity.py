@@ -11,7 +11,7 @@ from app.db import us_rates_liquidity
 from scripts import import_benchmark_market_data
 
 
-DEFAULT_WORKBOOK_PATH = ROOT / "data" / "materials" / "Video 04" / "Benchmark_Yields_US.xlsm"
+DEFAULT_WORKBOOK_PATH = ROOT / "data" / "source_material" / "Video 04" / "Benchmark_Yields_US.xlsm"
 DEFAULT_FRED_DIR = DEFAULT_WORKBOOK_PATH.parent / "fred"
 FRED_SOURCE_SHEET = "FRED weekly Sunday resample"
 DATA_SHEET_NAME = "Data"

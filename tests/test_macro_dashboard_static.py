@@ -6030,7 +6030,7 @@ def test_consumer_sentiment_card_renders_v2_compact_rows():
             !html.includes("This long headline")
             && !html.includes("This long explanation"),
           noLegacyCopy:
-            !/Bullish|Bearish|Peak|Trough|Ambiguous|method/i.test(html),
+            !/Bullish|Bearish|Peak|Trough|Ambiguous/i.test(html),
           hasTrigger:
             html.includes(
               'data-consumer-detail-id="consumer_sentiment"'
@@ -7513,7 +7513,7 @@ def test_evidence_map_wired_from_payload_at_call_site():
 
     assert "payload.non_oil_attribution_evidence" in source
     assert (
-        "renderNonOilRow(methodData[methodIds[ci]], reviewResourcesByCommodity, evidenceByCommodity)"
+        "renderNonOilRow(nonOilData[nonOilIds[ci]], reviewResourcesByCommodity, evidenceByCommodity)"
         in source
     )
 

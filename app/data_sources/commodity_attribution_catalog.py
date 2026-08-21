@@ -310,6 +310,6 @@ def _validate_record(record):
             f"commodities attribution coverage {unknown} is not in the method vocabulary"
         )
     if record["source_ref"] != SOURCE_REF:
-        raise ValueError("commodities attribution source_ref is not the method pdf path")
+        raise ValueError("commodities attribution source_ref is not the source pdf path")
     if record["status"] != STATUS_CATALOGED:
         raise ValueError(f"commodities attribution status {record['status']} is not cataloged")

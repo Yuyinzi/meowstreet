@@ -19,7 +19,7 @@ from app.db import macro_indicators
 
 def _require_active_market(series_id):
     if series_id not in ACTIVE_MARKET_SERIES:
-        raise ValueError(f"unknown or archived method commodity market: {series_id}")
+        raise ValueError(f"unknown or archived commodity market: {series_id}")
     return series_id
 
 

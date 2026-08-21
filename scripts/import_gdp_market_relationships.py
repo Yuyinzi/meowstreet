@@ -70,20 +70,20 @@ _LAG_GROUPS = [
 ]
 
 
-def _default_materials_path(*parts):
-    path = ROOT / "data" / "materials" / Path(*parts)
+def _default_source_material_path(*parts):
+    path = ROOT / "data" / "source_material" / Path(*parts)
     if path.exists():
         return path
     if ROOT.parent.name == ".worktrees":
-        fallback = ROOT.parents[1] / "data" / "materials" / Path(*parts)
+        fallback = ROOT.parents[1] / "data" / "source_material" / Path(*parts)
         if fallback.exists():
             return fallback
     return path
 
 
-DEFAULT_WORKBOOK_PATH = _default_materials_path("Video 03", "GDP_Correlations.xlsx")
-DEFAULT_GDPC1_CSV_PATH = _default_materials_path("Video 03", "GDPC1.csv")
-DEFAULT_SP500_CSV_PATH = _default_materials_path("Video 03", "SP500.csv")
+DEFAULT_WORKBOOK_PATH = _default_source_material_path("Video 03", "GDP_Correlations.xlsx")
+DEFAULT_GDPC1_CSV_PATH = _default_source_material_path("Video 03", "GDPC1.csv")
+DEFAULT_SP500_CSV_PATH = _default_source_material_path("Video 03", "SP500.csv")
 DEFAULT_FRED_DIR = DEFAULT_GDPC1_CSV_PATH.parent
 
 

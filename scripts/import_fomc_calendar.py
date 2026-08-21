@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.db import us_rates_liquidity
 
-DEFAULT_CALENDAR_PATH = ROOT / "data" / "materials" / "Video 06" / "fomc_calendar.csv"
+DEFAULT_CALENDAR_PATH = ROOT / "data" / "source_material" / "Video 06" / "fomc_calendar.csv"
 FOMC_EVENT_TYPE = "fomc_meeting"
 FOMC_SOURCE = "Federal Reserve"
 

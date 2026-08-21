@@ -283,10 +283,10 @@ def macro_dashboard_growth_cycle():
                 api.OIL_SERIES_IDS,
             )
         )
-        method_observations = (
+        commodity_observations = (
             macro_indicators_db.load_macro_indicator_observations_for_series(
                 con,
-                api.method_COMMODITY_SERIES_IDS,
+                api.COMMODITY_SERIES_IDS,
             )
         )
         shfe_main_observations = macro_indicators_db.load_shfe_cu_main_observations(
@@ -318,7 +318,7 @@ def macro_dashboard_growth_cycle():
                 "usd_observations_by_series": usd_observations,
                 "oil_observations_by_series": oil_observations,
                 "oil_series_metadata_by_id": oil_series_metadata,
-                "commodity_observations": method_observations,
+                "commodity_observations": commodity_observations,
                 "shfe_cu_main_observations": shfe_main_observations,
                 "attribution_review_catalog": api._load_attribution_catalog(),
                 "non_oil_attribution_facts": non_oil_attribution_facts,
@@ -529,10 +529,10 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                     api.OIL_SERIES_IDS,
                 )
             )
-            method_observations = (
+            commodity_observations = (
                 macro_indicators_db.load_macro_indicator_observations_for_series(
                     con,
-                    api.method_COMMODITY_SERIES_IDS,
+                    api.COMMODITY_SERIES_IDS,
                 )
             )
             shfe_main_observations = (
@@ -554,7 +554,7 @@ def macro_dashboard_growth_cycle_detail(detail_id):
                 oil_observations,
                 date.today().isoformat(),
                 oil_series_metadata_by_id=oil_series_metadata,
-                commodity_observations=method_observations,
+                commodity_observations=commodity_observations,
                 shfe_cu_main_observations=shfe_main_observations,
                 attribution_review_catalog=attribution_catalog,
                 non_oil_attribution_facts=non_oil_attribution_facts,

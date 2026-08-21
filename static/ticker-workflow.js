@@ -1,5 +1,5 @@
 (function () {
-  const LOCAL_STORAGE_KEY = "methodWorkflowRuns.v1";
+  const LOCAL_STORAGE_KEY = "workflowRuns.v1";
 
   const MAIN_PIPELINE = [
     "data_readiness",

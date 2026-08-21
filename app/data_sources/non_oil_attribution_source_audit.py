@@ -577,7 +577,7 @@ def _reject_unknown_coverage_tokens(source_coverage):
     unknown = [token for token in source_coverage if token not in COVERAGE_VOCABULARY]
     if unknown:
         raise ValueError(
-            f"commodities non-oil attribution method coverage {unknown} is not in the method vocabulary"
+            f"commodities non-oil attribution source coverage {unknown} is not in the method vocabulary"
         )
 
 
@@ -592,11 +592,11 @@ def _reject_catalog_mismatch(record, catalog_resource):
         )
     if record["source_coverage"] != catalog_resource["coverage"]:
         raise ValueError(
-            f"commodities non-oil attribution method coverage does not match the catalog for {record['source_url']}"
+            f"commodities non-oil attribution source coverage does not match the catalog for {record['source_url']}"
         )
     if record["source_ref"] != catalog_resource["source_ref"]:
         raise ValueError(
-            f"commodities non-oil attribution method reference does not match the catalog for {record['source_url']}"
+            f"commodities non-oil attribution source reference does not match the catalog for {record['source_url']}"
         )
 
 

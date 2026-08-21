@@ -87,7 +87,7 @@ def _load_investing_target(client, cdp_endpoint):
         return _reauth(
             f"No Investing.com page found in the Chrome session at {cdp_endpoint}. "
             "Start the dedicated Chrome with scripts/start_investing_chrome.py, "
-            "open and verify an Investing.com method page, and leave it open."
+            "open and verify an Investing.com price page, and leave it open."
         )
     return target
 

@@ -29,7 +29,7 @@ def build_prompt(snapshot):
             "Do not name historical causes, policy programs, COVID, fiscal stimulus, Federal Reserve actions, or news events unless the snapshot contains a sourced event context.",
             "If no sourced event context is present, say the dashboard does not attach a named cause and explain the metric pattern only.",
             "Do not change the status. Do not give buy or sell instructions.",
-            "Do not mention P06, method, class, or lesson.",
+            "Do not mention P06, training material, class, or lesson.",
             "Do not expose raw enum labels such as strong_injection; translate them into plain language.",
             "Use one small cat or fish analogy only if it helps the explanation.",
             "Use at most two cute cat-flavored phrases, and never let them replace the financial explanation.",

@@ -101,7 +101,7 @@ def test_refresh_rolls_back_when_a_market_requires_reauthentication(tmp_path):
     assert macro_indicators.load_macro_indicator_points(con, "copper_lme") == []
 
 
-def test_refresh_merges_method_prices_and_preserves_source_metadata(tmp_path):
+def test_refresh_merges_prices_and_preserves_source_metadata(tmp_path):
     db_path = tmp_path / "test.db"
     con = macro_indicators.connect(db_path)
 
@@ -120,7 +120,7 @@ def test_refresh_rejects_archived_lumber(tmp_path):
     con = macro_indicators.connect(db_path)
 
     with pytest.raises(
-        ValueError, match="archived method commodity market: lumber"
+        ValueError, match="archived commodity market: lumber"
     ):
         refresh_tracked_commodities(
             con, fetcher=_fake_fetcher, markets=["lumber"]
@@ -175,7 +175,7 @@ def test_cli_csv_rejects_archived_lumber(tmp_path, capsys):
     )
     assert exit_code == 1
     captured = capsys.readouterr()
-    assert "archived method commodity market cannot be imported: lumber" in (
+    assert "archived commodity market cannot be imported: lumber" in (
         captured.err
     )
 
@@ -197,7 +197,7 @@ def test_cli_reports_chrome_start_command_when_cdp_session_is_missing(
             "No Investing.com page found in the Chrome session at "
             "http://127.0.0.1:9222. "
             "Start the dedicated Chrome with scripts/start_investing_chrome.py, "
-            "open and verify an Investing.com method page, and leave it open."
+            "open and verify an Investing.com price page, and leave it open."
         )
 
     monkeypatch.setattr(
@@ -273,7 +273,7 @@ def test_rendered_history_aborts_before_writes_when_an_archived_market_is_reques
         return rendered_result([("Jul 31, 2026", "98.00")])
 
     with pytest.raises(
-        ValueError, match="archived method commodity market: lumber"
+        ValueError, match="archived commodity market: lumber"
     ):
         import_commodity_browser_rows(
             con,
@@ -362,7 +362,7 @@ def test_default_cli_reports_missing_investing_tab(monkeypatch, capsys):
     def missing_tab_import(con, **kwargs):
         raise ValueError(
             "No Investing.com page found in the Chrome session; "
-            "open and verify an Investing.com method page and leave it open"
+            "open and verify an Investing.com price page and leave it open"
         )
 
     monkeypatch.setattr(

@@ -351,7 +351,7 @@ def test_parse_commodity_attribution_text_raises_when_empty():
 def test_parse_commodity_attribution_pdf_requires_existing_file():
     with pytest.raises(ValueError, match="does not exist"):
         catalog.parse_commodity_attribution_pdf(
-            ROOT / "data" / "materials" / "Video 12" / "missing.pdf"
+            ROOT / "data" / "source_material" / "Video 12" / "missing.pdf"
         )
 
 
@@ -359,7 +359,7 @@ def test_parse_commodity_attribution_pdf_extracts_all_commodities():
     pdf_path = (
         ROOT
         / "data"
-        / "materials"
+        / "source_material"
         / "Video 12"
         / "Cyclical_Commodities_Demand_Supply_Factors.pdf"
     )

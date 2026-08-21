@@ -6,7 +6,7 @@ from app.api import app
 client = TestClient(app)
 
 
-def test_method_endpoint_returns_graph():
+def test_workflow_method_endpoint_returns_graph():
     response = client.get("/api/ticker-workflow/method")
 
     assert response.status_code == 200
@@ -16,7 +16,7 @@ def test_method_endpoint_returns_graph():
     assert payload["node_checks"]
 
 
-def test_method_endpoint_uses_stable_top_level_graph():
+def test_workflow_method_endpoint_uses_stable_top_level_graph():
     response = client.get("/api/ticker-workflow/method")
 
     assert response.status_code == 200

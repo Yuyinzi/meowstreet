@@ -3,7 +3,7 @@ import pytest
 
 from app.data_sources.tracked_commodities import (
     MARKET_SERIES,
-    _normalize_method_price,
+    _normalize_price,
     _parse_investing_html,
     fetch_commodity_observations,
     parse_commodity_csv,
@@ -11,7 +11,7 @@ from app.data_sources.tracked_commodities import (
 )
 
 
-def test_method_market_registry_preserves_the_six_workbook_urls():
+def test_market_registry_preserves_the_six_workbook_urls():
     assert list(MARKET_SERIES) == [
         "copper_comex",
         "copper_lme",
@@ -37,14 +37,14 @@ def test_dce_iron_ore_registry_uses_the_sina_i0_temporary_contract():
     assert dce["instrument"] == "DCE Iron Ore continuous series (I0)"
 
 
-def test_method_market_series_includes_units():
+def test_market_series_includes_units():
     for sid, meta in MARKET_SERIES.items():
         assert "units" in meta, f"{sid} missing units"
 
 
-def test_normalized_method_price_preserves_non_official_provenance():
+def test_normalized_price_preserves_non_official_provenance():
     row = {"date": "2026-07-24", "price": 5.7}
-    result = _normalize_method_price(
+    result = _normalize_price(
         row,
         "copper_comex",
         "https://www.investing.com/commodities/copper-historical-data",
@@ -284,7 +284,7 @@ def test_parse_commodity_csv_deduplicates_dates():
     assert observations[0]["date"] == "2026-07-23"
 
 
-def test_method_market_registry_marks_shanghai_as_shfe_official():
+def test_market_registry_marks_shanghai_as_shfe_official():
     shanghai = MARKET_SERIES["copper_shanghai"]
     assert shanghai["source"] == "shfe"
     assert shanghai["source_class"] == "official_exchange"
@@ -298,12 +298,12 @@ def test_free_web_import_rejects_archived_lumber():
     from app.data_sources import tracked_commodities
 
     with pytest.raises(
-        ValueError, match="lumber is not an Investing method market"
+        ValueError, match="lumber is not an Investing market"
     ):
         tracked_commodities.validate_free_web_markets(["lumber"])
 
 
-def test_lme_copper_is_active_method_investing_market():
+def test_lme_copper_is_active_investing_market():
     from app.data_sources.tracked_commodities import (
         ACTIVE_MARKET_SERIES,
         ARCHIVED_MARKET_SERIES,
@@ -315,7 +315,7 @@ def test_lme_copper_is_active_method_investing_market():
     assert "copper_lme" in free_web_series()
 
 
-def test_comex_copper_is_active_method_investing_market():
+def test_comex_copper_is_active_investing_market():
     from app.data_sources.tracked_commodities import (
         ACTIVE_MARKET_SERIES,
         ARCHIVED_MARKET_SERIES,
@@ -327,7 +327,7 @@ def test_comex_copper_is_active_method_investing_market():
     assert "copper_comex" in free_web_series()
 
 
-def test_method_market_registry_has_investing_instrument_ids():
+def test_market_registry_has_investing_instrument_ids():
     assert all(
         meta.get("instrument_id")
         for meta in MARKET_SERIES.values()

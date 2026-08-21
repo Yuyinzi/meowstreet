@@ -17,7 +17,7 @@ from app.db import us_rates_liquidity
 from scripts import import_benchmark_market_data
 
 
-DEFAULT_CSV_PATH = ROOT / "data" / "materials" / "Video 04" / "US_P4_Macro_Indicators.csv"
+DEFAULT_CSV_PATH = ROOT / "data" / "source_material" / "Video 04" / "US_P4_Macro_Indicators.csv"
 DEFAULT_FRED_DIR = DEFAULT_CSV_PATH.parent / "fred"
 FRED_SOURCE = "FRED weekly Sunday resample"
 FRED_MONTHLY_SOURCE = "FRED monthly"

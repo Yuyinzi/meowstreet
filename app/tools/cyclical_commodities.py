@@ -1057,7 +1057,7 @@ def _non_oil_attribution_evidence(commodity, facts, audit, refresh_status=None):
                 "reason": _iron_ore_unavailable_reason(audit),
                 "next_action": (
                     "open the Western Australia manual review resources to inspect "
-                    "the method-listed Excel, Statistics Digest, and statistics-release URLs"
+                    "the source-listed Excel, Statistics Digest, and statistics-release URLs"
                 ),
                 "manual_review_resources": wa_resources,
             }

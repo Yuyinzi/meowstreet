@@ -13,7 +13,7 @@ from app.resources import resource_path
 DEFAULT_SOURCE = (
     ROOT
     / "data"
-    / "materials"
+    / "source_material"
     / "Video 12"
     / "Cyclical_Commodities_Demand_Supply_Factors.pdf"
 )

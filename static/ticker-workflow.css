@@ -61,7 +61,7 @@ button {
   color: #3B3530;
 }
 
-.method-shell {
+.workflow-shell {
   max-width: 1400px;
   margin: 0 auto;
   padding: 28px 24px 48px;
@@ -1241,7 +1241,7 @@ button {
 }
 
 @media (max-width: 820px) {
-  .method-shell {
+  .workflow-shell {
     padding: 16px 12px 36px;
   }
 

@@ -195,7 +195,7 @@
           var unavailableLine = series.review_label
             || (series.source_class === "official_exchange"
               ? "Not available — SHFE official data not yet imported"
-              : "Not available — commodity market data not yet fetched");
+              : "Not available — commodity data not yet fetched");
           return '<div class="workflow-row ' + renderNonOilRowStatusClass(series) + '">'
             + '<div class="workflow-label">' + h.escapeHtml(series.display_name) + renderNonOilReviewStatus(series) + '</div>'
             + '<div class="workflow-metrics"><span>' + h.escapeHtml(unavailableLine) + '</span></div>'
@@ -675,7 +675,7 @@
 
       html += '<section class="evidence-section">';
       html += '<h3>Commodity Market Data</h3>';
-      var methodData = payload.non_oil_observation || {};
+      var nonOilData = payload.non_oil_observation || {};
       var reviewResourcesByCommodity = {};
       var attributionResources = payload.attribution_review_resources || [];
       for (var ari = 0; ari < attributionResources.length; ari++) {
@@ -685,9 +685,9 @@
         reviewResourcesByCommodity[attributionResource.commodity_id] = commodityResources;
       }
       var evidenceByCommodity = payload.non_oil_attribution_evidence || {};
-      var methodIds = Object.keys(methodData).sort();
-      for (var ci = 0; ci < methodIds.length; ci++) {
-        html += renderNonOilRow(methodData[methodIds[ci]], reviewResourcesByCommodity, evidenceByCommodity);
+      var nonOilIds = Object.keys(nonOilData).sort();
+      for (var ci = 0; ci < nonOilIds.length; ci++) {
+        html += renderNonOilRow(nonOilData[nonOilIds[ci]], reviewResourcesByCommodity, evidenceByCommodity);
       }
       html += '</section>';
 

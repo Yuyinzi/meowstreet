@@ -12,7 +12,7 @@ from app.tools import ism_workbook
 from app.tools import ism_services_industry
 
 DEFAULT_WORKBOOK_PATH = (
-    ROOT / "data" / "materials" / "Video 08" / "ISM_NonManufacturing_Index.xlsx"
+    ROOT / "data" / "source_material" / "Video 08" / "ISM_NonManufacturing_Index.xlsx"
 )
 
 SERIES_CONFIG = {

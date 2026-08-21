@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT))
 from app.db import benchmark_market_data
 
 
-DEFAULT_WORKBOOK_PATH = ROOT / "data" / "materials" / "Video 02" / "Bull_Bear_Markets.xlsx"
+DEFAULT_WORKBOOK_PATH = ROOT / "data" / "source_material" / "Video 02" / "Bull_Bear_Markets.xlsx"
 WORKBOOK_BENCHMARK_SHEETS = [
     {"benchmark_id": "us_sp500", "sheet": "S&P 500"},
     {"benchmark_id": "us_nasdaq_100", "sheet": "Nasdaq 100"},

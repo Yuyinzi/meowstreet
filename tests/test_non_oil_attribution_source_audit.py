@@ -68,7 +68,7 @@ def audit_record(commodity_id, url, catalog=None):
         "units": "metric tons",
         "publication_date_status": "published",
         "stability": "stable",
-        "audit_basis": "audited against the method evidence catalog",
+        "audit_basis": "audited against the source evidence catalog",
         "audited_at": "2026-08-02",
         "source_ref": catalog["source_ref"],
     }
@@ -303,7 +303,7 @@ def test_validate_rejects_audit_source_coverage_mismatch():
     record = audit_record("copper", "https://example.test/copper")
     record["source_coverage"] = ["prices"]
 
-    with pytest.raises(ValueError, match="method coverage does not match"):
+    with pytest.raises(ValueError, match="source coverage does not match"):
         audit.validate_non_oil_attribution_audits(
             [record], [catalog_record("copper", "https://example.test/copper")]
         )
@@ -313,7 +313,7 @@ def test_validate_rejects_audit_source_ref_mismatch():
     record = audit_record("copper", "https://example.test/copper")
     record["source_ref"] = "some_other_source"
 
-    with pytest.raises(ValueError, match="method reference does not match"):
+    with pytest.raises(ValueError, match="source reference does not match"):
         audit.validate_non_oil_attribution_audits(
             [record], [catalog_record("copper", "https://example.test/copper")]
         )

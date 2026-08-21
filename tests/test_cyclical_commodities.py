@@ -1026,7 +1026,7 @@ def test_oil_distribution_v2_excludes_pre_2016_observations_from_returns():
     assert result["sample_standard_deviation"] == expected["sample_standard_deviation"]
 
 
-_method_ROWS = {
+_COMMODITY_ROWS = {
     "iron_ore_62_cfr_china": [
         {"date": "2026-07-22", "value": 10400.0},
         {"date": "2026-07-23", "value": 10380.0},
@@ -1106,13 +1106,13 @@ def payload_with_lbr_and_archive():
     )
 
 
-def test_detail_builds_method_market_observation_without_attribution_conclusion():
+def test_detail_builds_market_observation_without_attribution_conclusion():
     payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS,
         USD_ROWS,
         _OIL_ROWS,
         "2026-07-25",
-        commodity_observations=_method_ROWS,
+        commodity_observations=_COMMODITY_ROWS,
     )
     detail = commodities.build_cyclical_commodities_detail(payload)
     copper = detail["non_oil_observation"]["iron_ore_62_cfr_china"]
@@ -1201,7 +1201,7 @@ def test_renderer_uses_backend_source_label_and_does_not_hard_code_investing_for
     assert "<span>Source: Investing.com</span>" not in source
 
 
-def test_static_labels_method_market_source_without_claiming_official_settlement():
+def test_static_labels_market_source_without_claiming_official_settlement():
     source = (
         Path(__file__).resolve().parents[1]
         / "static"
@@ -1216,9 +1216,8 @@ def test_static_labels_method_market_source_without_claiming_official_settlement
     assert "Vendor market data; not official exchange settlement." not in source
     assert "series.source_label" in source
     assert "Investing.com reference data" not in source
-    assert "Method-Specified Commodity Markets" not in source
-    assert "Method-specified market data from Investing.com" not in source
-    assert "method-market data not yet fetched" not in source
+    assert "Specified Commodity Markets" not in source
+    assert "Specified market data from Investing.com" not in source
     assert "<span>Source: Investing.com</span>" not in source
 
 
@@ -1788,7 +1787,7 @@ def audit_payload():
                 "Western Australia",
                 "annual",
                 "kt, AUD m",
-                "Method URL redirects to the WA Resources industry data page.",
+                "Source URL redirects to the WA Resources industry data page.",
             ),
             _audit_row(
                 "iron_ore",
@@ -1800,7 +1799,7 @@ def audit_payload():
                 "Western Australia",
                 "annual",
                 "kt, AUD m",
-                "Method URL redirects to the WA Mineral and Petroleum statistics digest page.",
+                "Source URL redirects to the WA Mineral and Petroleum statistics digest page.",
             ),
             _audit_row(
                 "iron_ore",

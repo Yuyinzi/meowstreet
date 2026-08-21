@@ -21,14 +21,14 @@ def _parse_csv_arg(csv_arg):
             raise ValueError(f"--csv entry must be market_id=path, got: {entry}")
         market_id, path = entry.split("=", 1)
         if market_id not in MARKET_SERIES:
-            raise ValueError(f"unknown method commodity market: {market_id}")
+            raise ValueError(f"unknown commodity market: {market_id}")
         if market_id not in ACTIVE_MARKET_SERIES:
             raise ValueError(
-                f"archived method commodity market cannot be imported: {market_id}"
+                f"archived commodity market cannot be imported: {market_id}"
             )
         if market_id not in free_web_series():
             raise ValueError(
-                f"method commodity market is not an Investing method market: {market_id}"
+                f"commodity market is not an Investing market: {market_id}"
             )
         result[market_id] = Path(path)
     return result
@@ -47,7 +47,7 @@ def main(argv=None):
         nargs="*",
         default=list(free_web_series()),
         choices=list(free_web_series()),
-        help="specific markets to refresh (default: all active Investing method markets)",
+        help="specific markets to refresh (default: all active Investing markets)",
     )
     parser.add_argument(
         "--cdp-endpoint",
@@ -71,14 +71,14 @@ def main(argv=None):
     if args.csv is not None:
         if not args.csv:
             print(
-                "commodities method commodity error: --csv requires at least one market_id=path.csv entry",
+                "commodities commodity error: --csv requires at least one market_id=path.csv entry",
                 file=sys.stderr,
             )
             return 1
         try:
             csv_paths_by_market = _parse_csv_arg(args.csv)
         except ValueError as exc:
-            print(f"commodities method commodity csv error: {exc}", file=sys.stderr)
+            print(f"commodities commodity csv error: {exc}", file=sys.stderr)
             return 1
         if args.dry_run:
             from app.data_sources.tracked_commodities import (
@@ -110,7 +110,7 @@ def main(argv=None):
             print(f"series: {result['series']}, observations: {result['observations']}")
             return 0
         except ValueError as exc:
-            print(f"commodities method commodity csv error: {exc}", file=sys.stderr)
+            print(f"commodities commodity csv error: {exc}", file=sys.stderr)
             return 1
         finally:
             con.close()
@@ -136,7 +136,7 @@ def main(argv=None):
         print(f"series: {result['series']}, observations: {result['observations']}")
         return 0
     except ValueError as exc:
-        print(f"commodities method commodity rendered refresh error: {exc}", file=sys.stderr)
+        print(f"commodities commodity rendered refresh error: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()
