@@ -10,7 +10,7 @@ The project is based on:
 - `2026-06-26-method-workflow-graph.md`
 - `2026-06-29-meowstreet-migration.md`
 
-Use these design docs for product intent, but follow the current standalone `app/`, `static/`, `method_notes/`, and `data/local_system/` structure in this repo when implementing changes.
+Use these design docs for product intent, but follow the current standalone `app/`, `static/`, `method_notes/`, and `app/resources/` structure in this repo when implementing changes.
 
 ## Session Handoff
 
@@ -22,7 +22,7 @@ Meowstreet is not a learning site and should not behave like raw RAG over method
 
 Runtime evaluation must:
 
-- Load the versioned artifact at `data/local_system/method.v1.json`
+- Load the versioned artifact at `app/resources/workflow_method.v1.json`
 - Normalize ticker and observation payloads
 - Run all available workflow nodes in parallel where data exists
 - Produce side-specific long/short node results
@@ -344,7 +344,8 @@ static/                  # vanilla HTML/CSS/JS (served by FastAPI)
   method-system.css
   method-system.js
 method_notes/            # source markdown parsed by the builder
-data/local_system/      # generated JSON method artifacts
+app/resources/           # versioned, tracked method artifacts loaded at runtime
+data/local_system/      # local runtime data (SQLite, caches; git-ignored)
 ```
 
 ### Outbound HTTP
