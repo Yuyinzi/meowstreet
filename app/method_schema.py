@@ -234,12 +234,12 @@ def _normalize_graph_review(normalized):
 
 def normalize_method_payload(payload):
     if not isinstance(payload, dict):
-        raise ValueError("method method payload must be an object")
+        raise ValueError("method payload must be an object")
 
     normalized = _value(payload)
     version = _text(normalized.get("version"))
     if not version:
-        raise ValueError("method method version is required")
+        raise ValueError("method version is required")
     normalized["version"] = version
 
     workflow_nodes = _array(normalized, "workflow_nodes")

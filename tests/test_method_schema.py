@@ -80,7 +80,7 @@ def test_normalize_method_payload_trims_version_and_keeps_graph():
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [
-        (lambda p: p.pop("version"), "method method version is required"),
+        (lambda p: p.pop("version"), "method version is required"),
         (
             lambda p: p.__setitem__("workflow_nodes", []),
             "workflow_nodes must not be empty",

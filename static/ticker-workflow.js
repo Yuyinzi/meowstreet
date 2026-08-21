@@ -288,7 +288,7 @@
     });
   }
 
-  function rendermethodBasisItems(methodBasis) {
+  function renderMethodBasisItems(methodBasis) {
     if (Array.isArray(methodBasis)) {
       return methodBasis
         .map((ref) => `<li>${escapeHtml(fmtSourceDocument(ref.document) || ref.title || ref.check_id || "")} <span class="muted">${escapeHtml(ref.section || ref.status || "")}</span></li>`)
@@ -697,8 +697,8 @@
     const longChecks = renderGroupedChecks(node.long.checks || []);
     const shortChecks = renderGroupedChecks(node.short.checks || []);
     const methodChecks = renderGroupedChecks(methodChecksForNode(state.selectedNodeId), { isMethod: true });
-    const sourceRefs = rendermethodBasisItems(node.source_refs);
-    const evaluationBasis = rendermethodBasisItems(node.evaluation_basis);
+    const sourceRefs = renderMethodBasisItems(node.source_refs);
+    const evaluationBasis = renderMethodBasisItems(node.evaluation_basis);
     const nextActions = [...(node.long.next_actions || []), ...(node.short.next_actions || [])]
       .map((action) => `<li>${escapeHtml(action)}</li>`)
       .join("");
