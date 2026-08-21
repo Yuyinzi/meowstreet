@@ -17,7 +17,7 @@ DEFAULT_SOURCE = (
     / "Video 12"
     / "Cyclical_Commodities_Demand_Supply_Factors.pdf"
 )
-DEFAULT_OUTPUT = resource_path("attribution_catalog")
+DEFAULT_OUTPUT = resource_path("commodity_attribution_catalog")
 
 
 def build_arg_parser():

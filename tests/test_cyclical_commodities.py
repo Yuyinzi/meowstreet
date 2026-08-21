@@ -1586,7 +1586,7 @@ def _catalog_resource(commodity_id, source_name, source_url):
         "source_url": source_url,
         "source_type": "official_data",
         "coverage": ["production"],
-        "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "source_ref": "cyclical_commodities_demand_supply",
         "status": "cataloged",
     }
 
@@ -1595,7 +1595,7 @@ def _copper_lumber_oil_catalog():
     return {
         "version": "commodity_attribution_evidence_catalog_v1",
         "generated_at": "2026-08-02T00:00:00+00:00",
-        "source_document": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "source_document": "cyclical_commodities_demand_supply",
         "resources": [
             _catalog_resource(
                 "copper", "International Copper Study Group", "https://www.icsg.org/"
@@ -1731,7 +1731,7 @@ def _audit_row(
         "stability": "manual",
         "audit_basis": audit_basis,
         "audited_at": "2026-08-02",
-        "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "source_ref": "cyclical_commodities_demand_supply",
     }
 
 
@@ -1740,7 +1740,7 @@ def audit_payload():
         "version": "non_oil_attribution_source_audit_v1",
         "generated_at": "2026-08-02T00:00:00+00:00",
         "source_catalog_version": "commodity_attribution_evidence_catalog_v1",
-        "source_catalog": "app/resources/attribution_catalog.v1.json",
+        "source_catalog": "app/resources/commodity_attribution_catalog.v1.json",
         "audits": [
             _audit_row(
                 "copper",

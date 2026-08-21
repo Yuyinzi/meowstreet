@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 from app.services import non_oil_attribution_source_audit as audit_service
 from app.resources import resource_path
 
-DEFAULT_CATALOG = resource_path("attribution_catalog")
+DEFAULT_CATALOG = resource_path("commodity_attribution_catalog")
 DEFAULT_OUTPUT = resource_path("attribution_source_audit")
 
 

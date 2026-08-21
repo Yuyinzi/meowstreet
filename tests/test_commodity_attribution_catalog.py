@@ -322,9 +322,7 @@ def test_parse_commodity_attribution_text_populates_all_evidence_fields():
         assert record["commodity_id"] in catalog.VALID_COMMODITY_IDS
         assert record["source_type"] in catalog.VALID_SOURCE_TYPES
         assert record["status"] == "cataloged"
-        assert record["source_ref"] == (
-            "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
-        )
+        assert record["source_ref"] == "cyclical_commodities_demand_supply"
         assert record["coverage"]
         assert set(record["coverage"]) <= catalog.COVERAGE_VOCABULARY
 

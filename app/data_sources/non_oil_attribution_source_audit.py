@@ -60,7 +60,7 @@ _REQUIRED_RECORD_KEYS = frozenset(
     }
 )
 
-_SOURCE_REF = "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+_SOURCE_REF = "cyclical_commodities_demand_supply"
 _AUDITED_AT = "2026-08-02"
 
 AUDITED_RECORDS = [
@@ -110,7 +110,7 @@ AUDITED_RECORDS = [
         "units": None,
         "publication_date_status": "not_published",
         "stability": "blocked",
-        "audit_basis": "Exact method URL returns HTTP 404; the Cochilco site was redesigned and the Data-Base page retired. A successor interactive statistics portal exists at cochilco.cl:4040/boletin-web but the method URL itself is no longer accessible.",
+        "audit_basis": "Exact source URL returns HTTP 404; the Cochilco site was redesigned and the Data-Base page retired. A successor interactive statistics portal exists at cochilco.cl:4040/boletin-web but the source URL itself is no longer accessible.",
         "audited_at": _AUDITED_AT,
         "source_ref": _SOURCE_REF,
     },
@@ -135,7 +135,7 @@ AUDITED_RECORDS = [
         "units": None,
         "publication_date_status": "not_published",
         "stability": "blocked",
-        "audit_basis": "Exact method URL returns HTTP 404; the Trading Pit daily/monthly inventory page was retired in the Cochilco site redesign. Current daily/monthly LME/COMEX/SHFE inventory data is exposed in the successor Base de Datos Electrónica portal.",
+        "audit_basis": "Exact source URL returns HTTP 404; the Trading Pit daily/monthly inventory page was retired in the Cochilco site redesign. Current daily/monthly LME/COMEX/SHFE inventory data is exposed in the successor Base de Datos Electrónica portal.",
         "audited_at": _AUDITED_AT,
         "source_ref": _SOURCE_REF,
     },
@@ -160,7 +160,7 @@ AUDITED_RECORDS = [
         "units": None,
         "publication_date_status": "not_published",
         "stability": "blocked",
-        "audit_basis": "Exact method URL returns HTTP 404; the electronic monthly bulletin page was retired in the Cochilco site redesign and is now served under /web/boletin-mensual-electronico/.",
+        "audit_basis": "Exact source URL returns HTTP 404; the electronic monthly bulletin page was retired in the Cochilco site redesign and is now served under /web/boletin-mensual-electronico/.",
         "audited_at": _AUDITED_AT,
         "source_ref": _SOURCE_REF,
     },
@@ -217,7 +217,7 @@ AUDITED_RECORDS = [
         "units": "USD/lb",
         "publication_date_status": "published",
         "stability": "interactive",
-        "audit_basis": "Method URL redirects to the current Kitco live copper price page (interactive bid/ask and chart in USD/lb); the method-listed historical LME copper inventory chart page is retired and no historical inventory series is directly downloadable.",
+        "audit_basis": "Source URL redirects to the current Kitco live copper price page (interactive bid/ask and chart in USD/lb); the source-listed historical LME copper inventory chart page is retired and no historical inventory series is directly downloadable.",
         "audited_at": _AUDITED_AT,
         "source_ref": _SOURCE_REF,
     },
@@ -396,7 +396,7 @@ AUDITED_RECORDS = [
         "units": "AUD m, FTE",
         "publication_date_status": "published",
         "stability": "manual",
-        "audit_basis": "Method URL redirects to the WA Economic indicators page with an annual Excel data file covering employment, investment, and exploration; the original ASPX URL is retired but resolves to the current data page.",
+        "audit_basis": "Source URL redirects to the WA Economic indicators page with an annual Excel data file covering employment, investment, and exploration; the original ASPX URL is retired but resolves to the current data page.",
         "audited_at": _AUDITED_AT,
         "source_ref": _SOURCE_REF,
     },
@@ -419,7 +419,7 @@ AUDITED_RECORDS = [
         "units": "kt, AUD m",
         "publication_date_status": "published",
         "stability": "manual",
-        "audit_basis": "Method URL redirects to the WA Resources industry data page exposing annual Excel data files for major commodities (sales values/quantities, prices, exports, production), economic indicators, and spatial/regional data; the original ASPX URL is retired.",
+        "audit_basis": "Source URL redirects to the WA Resources industry data page exposing annual Excel data files for major commodities (sales values/quantities, prices, exports, production), economic indicators, and spatial/regional data; the original ASPX URL is retired.",
         "audited_at": _AUDITED_AT,
         "source_ref": _SOURCE_REF,
     },
@@ -442,7 +442,7 @@ AUDITED_RECORDS = [
         "units": "kt, AUD m",
         "publication_date_status": "published",
         "stability": "manual",
-        "audit_basis": "Method URL redirects to the WA Mineral and Petroleum statistics digest page, an annual document of record published as PDF with current and historical digests; the original ASPX URL is retired.",
+        "audit_basis": "Source URL redirects to the WA Mineral and Petroleum statistics digest page, an annual document of record published as PDF with current and historical digests; the original ASPX URL is retired.",
         "audited_at": _AUDITED_AT,
         "source_ref": _SOURCE_REF,
     },

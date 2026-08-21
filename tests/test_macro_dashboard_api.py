@@ -5829,14 +5829,14 @@ def _non_oil_attribution_audit_payload():
             "stability": "manual",
             "audit_basis": audit_basis,
             "audited_at": "2026-08-02",
-            "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+            "source_ref": "cyclical_commodities_demand_supply",
         }
 
     return {
         "version": "non_oil_attribution_source_audit_v1",
         "generated_at": "2026-08-02T00:00:00+00:00",
         "source_catalog_version": "commodity_attribution_evidence_catalog_v1",
-        "source_catalog": "app/resources/attribution_catalog.v1.json",
+        "source_catalog": "app/resources/commodity_attribution_catalog.v1.json",
         "audits": [
             audit_row(
                 "copper",
@@ -6003,7 +6003,7 @@ def _catalog_with_copper():
     return {
         "version": "commodity_attribution_evidence_catalog_v1",
         "generated_at": "2026-08-02T00:00:00+00:00",
-        "source_document": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "source_document": "cyclical_commodities_demand_supply",
         "resources": [
             {
                 "commodity_id": "copper",
@@ -6011,7 +6011,7 @@ def _catalog_with_copper():
                 "source_url": "https://www.icsg.org/",
                 "source_type": "industry_body",
                 "coverage": ["production", "usage", "stocks", "forecasts"],
-                "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+                "source_ref": "cyclical_commodities_demand_supply",
                 "status": "cataloged",
             },
             {
@@ -6020,7 +6020,7 @@ def _catalog_with_copper():
                 "source_url": "https://www.eia.gov/petroleum/",
                 "source_type": "official_data",
                 "coverage": ["prices"],
-                "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+                "source_ref": "cyclical_commodities_demand_supply",
                 "status": "cataloged",
             },
         ],

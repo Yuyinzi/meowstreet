@@ -1,7 +1,7 @@
 {
   "version": "commodity_attribution_evidence_catalog_v1",
-  "generated_at": "2026-08-02T06:05:48.826986+00:00",
-  "source_document": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+  "generated_at": "2026-08-21T05:11:34.734832+00:00",
+  "source_document": "cyclical_commodities_demand_supply",
   "resources": [
     {
       "commodity_id": "copper",
@@ -15,7 +15,7 @@
         "production_sales",
         "inventories"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -30,7 +30,7 @@
         "production_sales",
         "inventories"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -45,7 +45,7 @@
         "production_sales",
         "inventories"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -60,7 +60,7 @@
         "production_sales",
         "inventories"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -74,7 +74,7 @@
         "stocks",
         "forecasts"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -87,7 +87,7 @@
         "demand",
         "end_use"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -98,7 +98,7 @@
       "coverage": [
         "inventories"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -110,7 +110,7 @@
         "industry_surveys",
         "publications"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -121,7 +121,7 @@
       "coverage": [
         "prices"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -134,7 +134,7 @@
         "statistics_releases",
         "industry_activity_indicators"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -147,7 +147,7 @@
         "statistics_releases",
         "industry_activity_indicators"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -160,7 +160,7 @@
         "statistics_releases",
         "industry_activity_indicators"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -173,7 +173,7 @@
         "statistics_releases",
         "industry_activity_indicators"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -185,7 +185,7 @@
         "industry_surveys",
         "publications"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -196,7 +196,7 @@
       "coverage": [
         "prices"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -209,7 +209,7 @@
         "imports",
         "exports"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -221,7 +221,7 @@
         "production",
         "trade"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -233,7 +233,7 @@
         "production",
         "trade"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -245,7 +245,7 @@
         "production",
         "trade"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -256,7 +256,7 @@
       "coverage": [
         "prices"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -272,7 +272,7 @@
         "refining",
         "trade"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -293,7 +293,7 @@
         "consumption",
         "sales"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -314,7 +314,7 @@
         "consumption",
         "sales"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -335,7 +335,7 @@
         "consumption",
         "sales"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -356,7 +356,7 @@
         "consumption",
         "sales"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -377,7 +377,7 @@
         "consumption",
         "sales"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -398,7 +398,7 @@
         "consumption",
         "sales"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -419,7 +419,7 @@
         "consumption",
         "sales"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -440,7 +440,7 @@
         "consumption",
         "sales"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -456,7 +456,7 @@
         "stocks",
         "market_reports"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -472,7 +472,7 @@
         "stocks",
         "market_reports"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -487,7 +487,7 @@
         "market_indicators",
         "production"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -502,7 +502,7 @@
         "market_indicators",
         "production"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -517,7 +517,7 @@
         "market_indicators",
         "production"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     },
     {
@@ -528,7 +528,7 @@
       "coverage": [
         "prices"
       ],
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+      "source_ref": "cyclical_commodities_demand_supply",
       "status": "cataloged"
     }
   ]

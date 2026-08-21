@@ -100,14 +100,14 @@ def test_build_returns_versioned_artifact_with_injected_timestamp(monkeypatch):
     _stub_parser(monkeypatch, [OIL_RECORD, COPPER_RECORD, LUMBER_RECORD])
 
     payload = service.build_commodity_attribution_catalog(
-        "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "cyclical_commodities_demand_supply",
         generated_at="2026-08-02T00:00:00+00:00",
     )
 
     assert payload["version"] == "commodity_attribution_evidence_catalog_v1"
     assert payload["generated_at"] == "2026-08-02T00:00:00+00:00"
     assert payload["source_document"] == (
-        "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+        "cyclical_commodities_demand_supply"
     )
 
 
@@ -115,7 +115,7 @@ def test_build_sorts_resources_by_commodity_name_url(monkeypatch):
     _stub_parser(monkeypatch, [OIL_RECORD, LUMBER_RECORD, COPPER_RECORD])
 
     payload = service.build_commodity_attribution_catalog(
-        "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "cyclical_commodities_demand_supply",
         generated_at="2026-08-02T00:00:00+00:00",
     )
 
@@ -131,7 +131,7 @@ def test_build_defaults_timestamp_when_not_injected(monkeypatch):
     _stub_parser(monkeypatch, [OIL_RECORD])
 
     payload = service.build_commodity_attribution_catalog(
-        "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+        "cyclical_commodities_demand_supply"
     )
 
     assert payload["generated_at"]
@@ -182,7 +182,7 @@ def test_write_persists_deterministic_json(tmp_path, monkeypatch):
 
     payload = service.write_commodity_attribution_catalog(
         destination,
-        "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "cyclical_commodities_demand_supply",
         generated_at="2026-08-02T00:00:00+00:00",
     )
 
@@ -196,7 +196,7 @@ def test_load_returns_artifact_and_rejects_invalid_version(tmp_path):
     valid = {
         "version": "commodity_attribution_evidence_catalog_v1",
         "generated_at": "2026-08-02T00:00:00+00:00",
-        "source_document": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf",
+        "source_document": "cyclical_commodities_demand_supply",
         "resources": [COPPER_RECORD],
     }
     valid_path = tmp_path / "valid.json"
@@ -218,7 +218,7 @@ def test_build_script_defaults_to_attribution_catalog_resource():
 
     args = module.build_arg_parser().parse_args([])
 
-    assert Path(args.output_path) == resource_path("attribution_catalog")
+    assert Path(args.output_path) == resource_path("commodity_attribution_catalog")
 
 
 def test_build_script_writes_catalog_from_temporary_pdf_and_exits_zero(tmp_path):

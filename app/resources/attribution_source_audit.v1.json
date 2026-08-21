@@ -1,8 +1,8 @@
 {
   "version": "non_oil_attribution_source_audit_v1",
-  "generated_at": "2026-08-02T09:19:59.964806+00:00",
+  "generated_at": "2026-08-21T05:13:18.549987+00:00",
   "source_catalog_version": "commodity_attribution_evidence_catalog_v1",
-  "source_catalog": "app/resources/attribution_catalog.v1.json",
+  "source_catalog": "app/resources/commodity_attribution_catalog.v1.json",
   "audits": [
     {
       "commodity_id": "copper",
@@ -31,7 +31,7 @@
       "stability": "interactive",
       "audit_basis": "Root resolves to the redesigned Cochilco site landing page linking to the interactive Base de Datos Electrónica statistics portal (daily/monthly/annual prices, exchange inventories, production, exports); the root URL itself is a navigation landing page, not a repeatable table.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "copper",
@@ -58,9 +58,9 @@
       "units": null,
       "publication_date_status": "not_published",
       "stability": "blocked",
-      "audit_basis": "Exact method URL returns HTTP 404; the Cochilco site was redesigned and the Data-Base page retired. A successor interactive statistics portal exists at cochilco.cl:4040/boletin-web but the method URL itself is no longer accessible.",
+      "audit_basis": "Exact source URL returns HTTP 404; the Cochilco site was redesigned and the Data-Base page retired. A successor interactive statistics portal exists at cochilco.cl:4040/boletin-web but the source URL itself is no longer accessible.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "copper",
@@ -86,9 +86,9 @@
       "units": null,
       "publication_date_status": "not_published",
       "stability": "blocked",
-      "audit_basis": "Exact method URL returns HTTP 404; the Trading Pit daily/monthly inventory page was retired in the Cochilco site redesign. Current daily/monthly LME/COMEX/SHFE inventory data is exposed in the successor Base de Datos Electrónica portal.",
+      "audit_basis": "Exact source URL returns HTTP 404; the Trading Pit daily/monthly inventory page was retired in the Cochilco site redesign. Current daily/monthly LME/COMEX/SHFE inventory data is exposed in the successor Base de Datos Electrónica portal.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "copper",
@@ -116,9 +116,9 @@
       "units": null,
       "publication_date_status": "not_published",
       "stability": "blocked",
-      "audit_basis": "Exact method URL returns HTTP 404; the electronic monthly bulletin page was retired in the Cochilco site redesign and is now served under /web/boletin-mensual-electronico/.",
+      "audit_basis": "Exact source URL returns HTTP 404; the electronic monthly bulletin page was retired in the Cochilco site redesign and is now served under /web/boletin-mensual-electronico/.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "copper",
@@ -146,7 +146,7 @@
       "stability": "manual",
       "audit_basis": "Homepage describes monthly copper bulletin, statistical yearbook, factbook, and forecasts; the ICSG online statistical database is membership-gated and publications are order-based, so no repeatable public table is directly downloadable from this URL.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "copper",
@@ -172,7 +172,7 @@
       "stability": "stable",
       "audit_basis": "Page exposes direct public XLSX downloads for global semis production and demand (2012-2024) and end-use summaries, with country/region grouping; the Statistical Bulletin and World Trade Database require membership.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "copper",
@@ -193,9 +193,9 @@
       "units": "USD/lb",
       "publication_date_status": "published",
       "stability": "interactive",
-      "audit_basis": "Method URL redirects to the current Kitco live copper price page (interactive bid/ask and chart in USD/lb); the method-listed historical LME copper inventory chart page is retired and no historical inventory series is directly downloadable.",
+      "audit_basis": "Source URL redirects to the current Kitco live copper price page (interactive bid/ask and chart in USD/lb); the source-listed historical LME copper inventory chart page is retired and no historical inventory series is directly downloadable.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "copper",
@@ -220,7 +220,7 @@
       "stability": "manual",
       "audit_basis": "Page documents monthly Mineral Industry Surveys (PDF+XLSX) and annual Mineral Commodity Summaries (PDF) with data download links, but public MIS posting is paused pending a ScienceBase transition with the latest posted data dated December 2025 and no announced resumption date; the source cannot currently support a recurring importer and requires manual review.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "copper",
@@ -243,7 +243,7 @@
       "stability": "stable",
       "audit_basis": "Page publishes the monthly Pink Sheet commodity prices and historical monthly/annual price XLS downloads with named commodity series; the exact World Bank URL is shared across copper, lumber, and iron ore catalog entries.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "iron_ore",
@@ -270,7 +270,7 @@
       "stability": "interactive",
       "audit_basis": "Root resolves to the reshaped WA department landing page (LGIRS/DMPE); mining statistics are published on sub-pages for major commodities, economic indicators, and the statistics digest rather than on the root URL itself.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "iron_ore",
@@ -293,9 +293,9 @@
       "units": "AUD m, FTE",
       "publication_date_status": "published",
       "stability": "manual",
-      "audit_basis": "Method URL redirects to the WA Economic indicators page with an annual Excel data file covering employment, investment, and exploration; the original ASPX URL is retired but resolves to the current data page.",
+      "audit_basis": "Source URL redirects to the WA Economic indicators page with an annual Excel data file covering employment, investment, and exploration; the original ASPX URL is retired but resolves to the current data page.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "iron_ore",
@@ -320,9 +320,9 @@
       "units": "kt, AUD m",
       "publication_date_status": "published",
       "stability": "manual",
-      "audit_basis": "Method URL redirects to the WA Resources industry data page exposing annual Excel data files for major commodities (sales values/quantities, prices, exports, production), economic indicators, and spatial/regional data; the original ASPX URL is retired.",
+      "audit_basis": "Source URL redirects to the WA Resources industry data page exposing annual Excel data files for major commodities (sales values/quantities, prices, exports, production), economic indicators, and spatial/regional data; the original ASPX URL is retired.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "iron_ore",
@@ -347,9 +347,9 @@
       "units": "kt, AUD m",
       "publication_date_status": "published",
       "stability": "manual",
-      "audit_basis": "Method URL redirects to the WA Mineral and Petroleum statistics digest page, an annual document of record published as PDF with current and historical digests; the original ASPX URL is retired.",
+      "audit_basis": "Source URL redirects to the WA Mineral and Petroleum statistics digest page, an annual document of record published as PDF with current and historical digests; the original ASPX URL is retired.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "iron_ore",
@@ -374,7 +374,7 @@
       "stability": "manual",
       "audit_basis": "Page documents monthly Mineral Industry Surveys (PDF+XLSX) and annual Mineral Commodity Summaries (PDF) with data download links, but public MIS posting is paused pending a ScienceBase transition with the latest posted data dated December 2025 and no announced resumption date; the source cannot currently support a recurring importer and requires manual review.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "iron_ore",
@@ -397,7 +397,7 @@
       "stability": "stable",
       "audit_basis": "Same World Bank commodity-markets page: monthly Pink Sheet commodity prices and historical monthly/annual price XLS downloads with named commodity series.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "lumber",
@@ -423,7 +423,7 @@
       "stability": "stable",
       "audit_basis": "FAOSTAT Forestry Production and Trade bulk-download dataset (FO) exposes country/year quantities and values via bulk ZIP/CSV and the public FAOSTAT API; item and element filters are required.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "lumber",
@@ -448,7 +448,7 @@
       "stability": "interactive",
       "audit_basis": "Root resolves to the ITTO homepage landing page linking to the biennial review statistics database and publications; the root URL itself does not expose a repeatable data table.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "lumber",
@@ -474,7 +474,7 @@
       "stability": "manual",
       "audit_basis": "Page exposes biennial review editions as ZIP/PDF report downloads covering production and trade data from 1994 to present, and links the separate online statistics database; the page itself is a report archive, not a machine-readable table.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "lumber",
@@ -499,7 +499,7 @@
       "stability": "manual",
       "audit_basis": "Page exposes annual UK JFSQ returns as ODS downloads (final and provisional, 2015-2025) covering removals, production, and trade; Forest Research states this is the last release and future data moves to FAOSTAT.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     },
     {
       "commodity_id": "lumber",
@@ -522,7 +522,7 @@
       "stability": "stable",
       "audit_basis": "Same World Bank commodity-markets page: monthly Pink Sheet commodity prices and historical monthly/annual price XLS downloads with named commodity series.",
       "audited_at": "2026-08-02",
-      "source_ref": "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+      "source_ref": "cyclical_commodities_demand_supply"
     }
   ]
 }

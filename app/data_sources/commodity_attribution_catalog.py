@@ -3,8 +3,7 @@ from pathlib import Path
 
 from pypdf import PdfReader
 
-SOURCE_REF = "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
-method_PDF_REL_PATH = SOURCE_REF
+SOURCE_REF = "cyclical_commodities_demand_supply"
 STATUS_CATALOGED = "cataloged"
 
 VALID_COMMODITY_IDS = frozenset({"oil", "copper", "lumber", "iron_ore"})

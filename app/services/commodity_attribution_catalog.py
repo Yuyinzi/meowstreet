@@ -5,7 +5,7 @@ from pathlib import Path
 from app.data_sources import commodity_attribution_catalog as catalog_source
 
 VERSION = "commodity_attribution_evidence_catalog_v1"
-SOURCE_DOCUMENT = "data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf"
+SOURCE_DOCUMENT = "cyclical_commodities_demand_supply"
 
 
 def build_commodity_attribution_catalog(source_path, generated_at=None):

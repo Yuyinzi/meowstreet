@@ -1,664 +1,6 @@
 {
   "version": "v1",
   "generated_at": "2026-08-04T05:34:12+00:00",
-  "source_documents": [
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "ff814442ff44bd00f7393be36894db45d3566386d434b09cdc4d38b6515834cf",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "d8afce4a8f619bc95ba37581ef2fe33715481e43c6743a537ae3c49c98aa99b0",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "c4f8b7e2f9ee3b4faa6e6b888dee4d9e3866197addc1af18b4a571828f2b19c9",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "45287832e154873583bc7526055f4a98d1ba96a33bcaf01a09e895b308e06cb9",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "91a8cb03d73f958a5726b0a1bbc940038dcdbc87f8e4238779c1e56225e4297d",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "7ec964db841b7bde472111df4f5071adea8d68cc51122ab9fcc15c89b18be2af",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "d7dcdfe98e49f226fdfc20527bb7b72d0bfc2e8985983c1d9ab9a9cdf901e809",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "b27d212c1baf39c2e4c2d5d492aa3b4b275f1bd2b0821cee87d052294a57e31c",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "15f97ea2af49f1052397f8c858c31f942ea2628c994866eba312d261d59a038c",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "f9180d4614be85b9fab1a1b4b5e9ad616c92797ce7ea3bcd64cc842db1f0b15c",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "79fce350e8df6ebbf9e7f3736719508a4e8338dfb55bc30f4d5e6cacdb25b91b",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "8631f2eee66ec13bbc6941407a4f79d46e6b016535e2f84a11feaf78e4c46a07",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "e454ca8fdec163c0efabf845dfc004f957aa3a379679fa68405ec3449042ac4f",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "efce6848add823ba4b135c552cf058a859e4e63f3149138febe4823d9807fb7d",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "eb9bcd1c20fbc84e887e166764c4ebeeb6f22f37e617b1274c836c56c90877fe",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "faa191fff0b80538a2d069a1ae6906e4e732a9ce8083019cbb73385df69f5096",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "21078495a89b6cec8d6b92adba869c5b50278b01e766f33027d5ae1e0a014b76",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "d9ea2bf6fed0f3091bb888a82794a90fb1d38e675fb3c0312a062ffc3979f453",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "698baf8ffd58fc8e768ffc87e8d8bc1328ec2e2979d29ae11557d6b6f19134a4",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "955bbdeb607c1aa674ecbec4d0a7a2460fd641742544c860fa15c6f56ed6f79f",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "613e355fe320ca76b9df591a88f5b8b540c4d89ae5c0a3873b77dd46a269c8ea",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "5be81e93f6d8b61cf60f0e120101429bdddcef128ddaa736b4b69af764ebe24d",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "621d638c20a2739823a9518cf32e326ae47f0f51e37af713b22afcccc50df224",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "5c69cacbc39ac640f02a321c82718912029145ed6d18ec42650634fb62bb9af6",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "e51b4f2c0be30b8bdb2ede1c0852d77f3bcc824ff2cc5ae8e394cd1c69f5872e",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "2cb53c9b0b56998a3cd79a4db2bceb5a29525df7899f59648194a1df4dfc3a24",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "6674b63aacac4dbab9834f46e1f6e321240fef896d866e577f7751e12dbeb940",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "1c3a5f38fbc2f6f7ad69b041ccac088ef0e4d4dcfae8b610b3d9343de1a3f4c2",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "aafaa13e14aa358d2d82bcd82e45435d010e4fd31e5ae4fe7519cc166bf689ca",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "3bf008adddf5659d535a679c01de42635c8b8112468a8bccf71b565fc429fc58",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "c10636cc150a92d9bdbdfc1e2bf2ab01d9b0fbd3ff989ad6116a0a22543b3188",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "936770a1cf1b5c9ce272dfcacd095f8ad0b062ec8e2e3a170fe02b393f0a4ed3",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "ce7f2bc0310e29c78830163c5127f13eeedc4638d611f1e6c661526f6cb75de7",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "d72a069e9abff9c3eb192b5a43926a9113bcee47c6ed658857a91f7eb5b6183d",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "a2dd78f281684d5d022d26913e5ac80f91ebae170bb5340d15759d7562a1a995",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "305ad84fad12daa4a72f7115d17fc366c1ba5a285282b9b19cd2577c9f8312ab",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "337fcf11d105ee24551740e372b5db3cf426e1e46a0d85de900256d380ba79f4",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "213f28c425c5348f7ecfe3f7196a83325e7f0c7a74863c7f6b47b033385e2324",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "22475f40b000f6a0d5cddd0db4b61a1f46dbb1a84572f8f5f32552ecbaf1f503",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "c006f41507cc779597d9479db4a58e00e9b88ff6d52a3e5975ef32a588ce9f27",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    },
-    {
-      "path": "",
-      "title": "",
-      "source": "",
-      "sha256": "a2e234ce8e96eb829a1772e058ad56f2605c0d009f751e411d2b3347ca989645",
-      "section_order": [
-        "Key Points",
-        "Learning Path / Reasoning Chain",
-        "Concepts & Definitions",
-        "Methodology / Workflow",
-        "Examples & Applications",
-        "Cautions / Common Mistakes",
-        "Transcript Gaps / Incomplete Segments",
-        "Actionable Checklist"
-      ]
-    }
-  ],
   "concepts": [
     {
       "id": "catalyst",
@@ -667,47 +9,36 @@
       "supporting_only": false,
       "source_refs": [
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         }
       ]
@@ -719,123 +50,93 @@
       "supporting_only": false,
       "source_refs": [
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         },
         {
-          "document": "",
           "section": "Concepts & Definitions"
         }
       ]
@@ -847,7 +148,6 @@
       "supporting_only": true,
       "source_refs": [
         {
-          "document": "",
           "section": "Concepts & Definitions"
         }
       ]
@@ -882,111 +182,84 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -1019,87 +292,66 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -1134,83 +386,63 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -1247,107 +479,81 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -1380,79 +586,60 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -1487,39 +674,30 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -1554,91 +732,69 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -1672,55 +828,42 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -1755,99 +898,75 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -1883,35 +1002,27 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -1923,7 +1034,7 @@
     {
       "id": "process_discipline",
       "title": "Process Discipline",
-      "decision_question": "Is the idea being evaluated through the method process rather than impulse?",
+      "decision_question": "Is the idea being evaluated through the workflow process rather than impulse?",
       "description": "Captures process, psychology, and discipline methods that prevent forced trades.",
       "required_inputs": [
         "process.source",
@@ -1942,99 +1053,75 @@
       ],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -2046,7 +1133,7 @@
     {
       "id": "final_synthesis",
       "title": "Final Synthesis",
-      "decision_question": "What is the method-method classification after all runnable nodes finish?",
+      "decision_question": "What is the workflow classification after all runnable nodes finish?",
       "description": "Aggregates node outputs into qualified candidate, watchlist, timing wait, insufficient data, conflict, or reject.",
       "required_inputs": [
         "node_results"
@@ -2063,11 +1150,9 @@
       "outgoing_edges": [],
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -2089,91 +1174,69 @@
       "fail_effect": "reject",
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -2190,91 +1253,69 @@
       "fail_effect": "reject",
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -2292,91 +1333,69 @@
       "fail_effect": "watchlist",
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ],
@@ -2394,91 +1413,69 @@
       "fail_effect": "wait_for_research",
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ]
@@ -2494,91 +1491,69 @@
       "fail_effect": "watchlist",
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ]
@@ -2594,91 +1569,69 @@
       "fail_effect": "insufficient_data",
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ]
@@ -2694,51 +1647,39 @@
       "fail_effect": "wait_for_research",
       "source_refs": [
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         },
         {
-          "document": "",
           "section": "Actionable Checklist"
         }
       ],
@@ -2755,91 +1696,69 @@
       "fail_effect": "wait_for_timing",
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ]
@@ -2855,91 +1774,69 @@
       "fail_effect": "wait_for_timing",
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ]
@@ -2955,91 +1852,69 @@
       "fail_effect": "wait_for_research",
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ]
@@ -3055,91 +1930,69 @@
       "fail_effect": "wait_for_research",
       "source_refs": [
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         },
         {
-          "document": "",
           "section": "Methodology / Workflow"
         }
       ]

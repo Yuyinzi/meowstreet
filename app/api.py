@@ -40,7 +40,7 @@ from app.resources import resource_path
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
 METHOD_PATH = resource_path("workflow_method")
-_ATTRIBUTION_CATALOG_PATH = resource_path("attribution_catalog")
+_ATTRIBUTION_CATALOG_PATH = resource_path("commodity_attribution_catalog")
 _NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH = (
     resource_path("attribution_source_audit")
 )

@@ -7,7 +7,7 @@ from app.data_sources import non_oil_attribution_source_audit as audit
 from app.resources import resource_path
 from app.services import non_oil_attribution_source_audit as service
 
-CATALOG_PATH = resource_path("attribution_catalog")
+CATALOG_PATH = resource_path("commodity_attribution_catalog")
 AUDIT_PATH = resource_path("attribution_source_audit")
 
 COMMODITY_DEFAULTS = {
@@ -311,7 +311,7 @@ def test_validate_rejects_audit_source_coverage_mismatch():
 
 def test_validate_rejects_audit_source_ref_mismatch():
     record = audit_record("copper", "https://example.test/copper")
-    record["source_ref"] = "data/source_material/Video 12/some_other.pdf"
+    record["source_ref"] = "some_other_source"
 
     with pytest.raises(ValueError, match="method reference does not match"):
         audit.validate_non_oil_attribution_audits(

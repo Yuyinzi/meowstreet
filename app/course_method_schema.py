@@ -80,7 +80,8 @@ def _source_refs(source_refs, label):
     for index, source_ref in enumerate(source_refs):
         if not isinstance(source_ref, dict):
             raise ValueError(f"{label} source_ref {index} must be an object")
-        _required_text(source_ref, "document", f"{label} source_ref {index}")
+        if "document" in source_ref:
+            _required_text(source_ref, "document", f"{label} source_ref {index}")
         _required_text(source_ref, "section", f"{label} source_ref {index}")
     return source_refs
 
@@ -310,16 +311,15 @@ def normalize_method_payload(payload):
             raise ValueError(f"node check {check_id} source_refs must be a list")
         check["required"] = check.get("required") is True
 
-    for key in (
-        "source_documents",
-        "concepts",
-        "decision_rules",
-        "extraction_warnings",
-    ):
+    for key in ("concepts", "decision_rules", "extraction_warnings"):
         if key not in normalized:
             normalized[key] = []
         if not isinstance(normalized[key], list):
             raise ValueError(f"{key} must be a list")
+    if "source_documents" in normalized and not isinstance(
+        normalized["source_documents"], list
+    ):
+        raise ValueError("source_documents must be a list")
 
     _normalize_graph_review(normalized)
 
