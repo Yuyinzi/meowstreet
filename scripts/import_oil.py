@@ -12,7 +12,7 @@ from app.services import oil_import
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Import  oil evidence from EIA")
+    parser = argparse.ArgumentParser(description="Import oil evidence from EIA")
     parser.add_argument(
         "--db-path", type=Path, default=macro_indicators.DEFAULT_DB_PATH
     )

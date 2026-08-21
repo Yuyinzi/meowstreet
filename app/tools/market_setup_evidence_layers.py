@@ -236,7 +236,7 @@ _EXCLUDED_FACT_LABELS = {
     "macro_policy_response": "Monetary Policy",
     "consumer_demand_outlook": "Consumer Demand Outlook",
     "economic_confirmation": "Economic Confirmation",
-    "cyclical_commodities": " Cyclical Commodities",
+    "cyclical_commodities": "Cyclical Commodities",
     "nfib_regional_evidence": "NFIB Regional Evidence",
     "sp500_market_phase": "S&P 500 Market Phase",
     "credit_conditions": "Credit Conditions",

@@ -61,7 +61,7 @@ _FACT_LABELS = {
     "equity_breadth": "Equity Breadth",
     "jobless_claims": "Jobless Claims",
     "economic_confirmation": "Economic Confirmation",
-    "cyclical_commodities": " Cyclical Commodities",
+    "cyclical_commodities": "Cyclical Commodities",
     "nfib_regional_evidence": "NFIB Regional Evidence",
 }
 

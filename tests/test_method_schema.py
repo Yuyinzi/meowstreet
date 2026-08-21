@@ -7,7 +7,7 @@ def valid_method():
     return {
         "version": " v1 ",
         "generated_at": "2026-06-29T00:00:00+00:00",
-        "source_documents": [{"path": "", "title": "P1"}],
+        "source_documents": [{"path": "method_notes/P1.md", "title": "P1"}],
         "concepts": [],
         "workflow_nodes": [
             {
@@ -22,7 +22,7 @@ def valid_method():
                 "outgoing_edges": ["final_synthesis"],
                 "source_refs": [
                     {
-                        "document": "",
+                        "document": "method_notes/P1.md",
                         "section": "Methodology / Workflow",
                     }
                 ],
@@ -39,7 +39,7 @@ def valid_method():
                 "outgoing_edges": [],
                 "source_refs": [
                     {
-                        "document": "",
+                        "document": "method_notes/P1.md",
                         "section": "Methodology / Workflow",
                     }
                 ],
@@ -58,7 +58,7 @@ def valid_method():
                 "fail_effect": "reject",
                 "source_refs": [
                     {
-                        "document": "",
+                        "document": "method_notes/P1.md",
                         "section": "Actionable Checklist",
                     }
                 ],
@@ -162,7 +162,7 @@ def test_normalize_method_payload_keeps_enriched_node_fields():
             "summary": "Compare analyst estimate mean to the range midpoint.",
             "source_refs": [
                 {
-                    "document": "",
+                    "document": "method_notes/P31 Trade Idea Generation – Qualitative Processing 2_method_notes.md",
                     "section": "Methodology / Workflow",
                 }
             ],
@@ -183,7 +183,7 @@ def test_normalize_method_payload_keeps_enriched_node_fields():
             "future_tool_hooks": ["analyst_estimates"],
             "source_refs": [
                 {
-                    "document": "",
+                    "document": "method_notes/P31 Trade Idea Generation – Qualitative Processing 2_method_notes.md",
                     "section": "Methodology / Workflow",
                 }
             ],
@@ -196,7 +196,7 @@ def test_normalize_method_payload_keeps_enriched_node_fields():
             "summary": "Do not rely on ratings as leading indicators.",
             "source_refs": [
                 {
-                    "document": "",
+                    "document": "method_notes/P31 Trade Idea Generation – Qualitative Processing 2_method_notes.md",
                     "section": "Cautions / Common Mistakes",
                 }
             ],
@@ -224,7 +224,7 @@ def test_normalize_method_payload_rejects_bad_indicator_compute_status():
             "compute_status": "bad",
             "source_refs": [
                 {
-                    "document": "",
+                    "document": "method_notes/P31 Trade Idea Generation – Qualitative Processing 2_method_notes.md",
                     "section": "Methodology / Workflow",
                 }
             ],

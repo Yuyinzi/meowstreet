@@ -11,7 +11,7 @@ from app.services import lumber_import
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Import  Yahoo LBR lumber observations"
+        description="Import Yahoo LBR lumber observations"
     )
     parser.add_argument(
         "--db-path", type=Path, default=macro_indicators.DEFAULT_DB_PATH

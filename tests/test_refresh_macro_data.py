@@ -896,7 +896,7 @@ def test_planned_tasks_includes_macro_indicators_fred_tasks_by_default():
     ]
 
 
-def test_skip_macro_indicators_removes_tasks():
+def test_skip_macro_indicators_removes_p4_tasks():
     refresh_macro_data.run(
         [
             "--skip-yahoo",

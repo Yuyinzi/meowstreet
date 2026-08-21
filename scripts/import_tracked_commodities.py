@@ -36,7 +36,7 @@ def _parse_csv_arg(csv_arg):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Incrementally refresh  method-specified commodity prices "
+        description="Incrementally refresh method-specified commodity prices "
         "from the rendered Investing.com history table"
     )
     parser.add_argument(

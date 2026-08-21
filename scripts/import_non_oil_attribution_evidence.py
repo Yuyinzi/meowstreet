@@ -11,7 +11,7 @@ from app.services import non_oil_attribution_evidence_import
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Import  non-oil attribution evidence facts"
+        description="Import non-oil attribution evidence facts"
     )
     parser.add_argument(
         "--db-path", type=Path, default=macro_indicators.DEFAULT_DB_PATH

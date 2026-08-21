@@ -1122,7 +1122,7 @@ def build_cyclical_commodities_headline(payload):
             "id": "cyclical_commodities",
             "title": "Cyclical Commodities & USD",
             "status": "partial_official_evidence",
-            "reason": "no official  observations loaded; run import_cyclical_commodities to fetch CFTC, USD, and CPI/PPI data",
+            "reason": "no official observations loaded; run import_cyclical_commodities to fetch CFTC, USD, and CPI/PPI data",
             "available_evidence": [],
             "observation_date": payload.get("as_of_date"),
             "freshness": {},

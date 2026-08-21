@@ -22,7 +22,7 @@ _REMEDIATION = (
 
 def main(argv=None, refresh=refresh_investing_rendered):
     parser = argparse.ArgumentParser(
-        description="Refresh the  Iron Ore 62% CFR China rendered "
+        description="Refresh the Iron Ore 62% CFR China rendered "
         "Investing.com history through an already-open verified Chrome session"
     )
     parser.add_argument(
