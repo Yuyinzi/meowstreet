@@ -245,6 +245,14 @@
       "</div>";
   }
 
+  function riskFailureContextText(symbol, detail) {
+    return [
+      "The user tried to look up a ticker risk profile on the Meowstreet portfolio page, but the lookup failed.",
+      "Symbol: " + symbol + " | Error: " + detail,
+      "If the symbol looks like a typo, help the user find the intended ticker and verify it with the portfolio tools.",
+    ].join("\n");
+  }
+
   function renderRiskError(symbol, message) {
     riskSeedText = null;
     riskRegion.innerHTML =
@@ -265,7 +273,12 @@
       })
       .then(function (result) {
         if (!result.ok) {
-          renderRiskError(symbol, result.body.detail || "Risk profile lookup failed.");
+          var detail = result.body.detail || "Risk profile lookup failed.";
+          renderRiskError(symbol, detail);
+          askAssistant(
+            riskFailureContextText(symbol, detail),
+            "我查询 " + symbol + " 的风险失败了（" + detail + "）。帮我看看这是不是 ticker 拼写错误，我想查的可能是哪只？"
+          );
           return;
         }
         renderRisk(result.body);
@@ -866,6 +879,21 @@
     return { positions: positions, error: error };
   }
 
+  function analysisFailureContextText(payload, detail) {
+    var lines = [
+      "The user tried to run a portfolio analysis on the Meowstreet portfolio page, but it failed.",
+      "Error: " + detail,
+      "Submitted positions:",
+    ];
+    (payload.positions || []).forEach(function (position) {
+      lines.push("- " + position.symbol + " " + position.side + " $" + position.allocation);
+    });
+    lines.push(
+      "If a symbol looks like a typo, help the user find the intended ticker and verify it with the portfolio tools."
+    );
+    return lines.join("\n");
+  }
+
   function analyzePortfolio() {
     var collected = collectPositions();
     if (collected.error) {
@@ -904,7 +932,12 @@
       })
       .then(function (result) {
         if (!result.ok) {
-          renderAnalysisError(result.body.detail || "Portfolio analysis failed.");
+          var detail = result.body.detail || "Portfolio analysis failed.";
+          renderAnalysisError(detail);
+          askAssistant(
+            analysisFailureContextText(payload, detail),
+            "我的组合分析失败了（" + detail + "）。帮我看看是哪个 ticker 出了问题，会不会是拼写错误？"
+          );
           return;
         }
         renderAnalysis(result.body);
