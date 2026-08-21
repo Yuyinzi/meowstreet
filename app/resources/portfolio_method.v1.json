@@ -4,25 +4,25 @@
   "operations": [
     {
       "operation": "ticker_risk_profile",
-      "summary": "单票风险画像：相对标普500的 beta（2/3/5 年窗口与滚动 beta）以及多期限已实现波动率（realized volatility）。",
-      "params_contract": "params = {\"symbol\": str}；symbol 为股票代码，例如 \"NVDA\"。"
+      "summary": "Single-ticker risk profile: beta vs the S&P 500 (2/3/5-year windows and rolling beta) plus realized volatility across multiple horizons.",
+      "params_contract": "params = {\"symbol\": str}; symbol is the stock ticker, e.g. \"NVDA\"."
     },
     {
       "operation": "portfolio_analysis",
-      "summary": "多空组合体检：组合波动率、符号化相关性（signed correlation）、组合 beta、P21 门槛（gates）、超额收益推断与 sizing 情景。",
-      "params_contract": "params = {\"positions\": [{\"symbol\": str, \"side\": \"long\"|\"short\", \"allocation\": 正数}], \"margin_capital\"?: 正数, \"declared_bias\"?: \"long\"|\"short\"|\"neutral\", \"instrument\"?: \"options\"|\"cfd\"|\"us_stock\"}；positions 至少 1 个且 symbol 不重复；不提供 margin_capital / declared_bias / instrument 时对应门槛为 unknown。"
+      "summary": "Long/short portfolio health check: portfolio volatility, signed correlation, portfolio beta, P21 gates, outperformance inference, and sizing scenarios.",
+      "params_contract": "params = {\"positions\": [{\"symbol\": str, \"side\": \"long\"|\"short\", \"allocation\": positive number}], \"margin_capital\"?: positive number, \"declared_bias\"?: \"long\"|\"short\"|\"neutral\", \"instrument\"?: \"options\"|\"cfd\"|\"us_stock\"}; at least 1 position and symbols must be unique; when margin_capital / declared_bias / instrument are omitted, the corresponding gates are unknown."
     },
     {
       "operation": "pair_analysis",
-      "summary": "多空配对分析：两腿的行业上下文、配对分类（pair classification）、窗口超额收益（outperformance）与比值序列（ratio series）。",
-      "params_contract": "params = {\"long_symbol\": str, \"short_symbol\": str, \"sessions\"?: int}；sessions 取值 2–260，默认 60。"
+      "summary": "Long/short pair analysis: industry context of both legs, pair classification, window outperformance, and the ratio series.",
+      "params_contract": "params = {\"long_symbol\": str, \"short_symbol\": str, \"sessions\"?: int}; sessions ranges 2-260, default 60."
     },
     {
       "operation": "ticker_industry_context",
-      "summary": "单票行业上下文：板块（sector）、行业（industry）、周期标签（cycle tag）与当前制度下的多空支持方向（side support）。",
-      "params_contract": "params = {\"symbol\": str}；symbol 为股票代码。"
+      "summary": "Single-ticker industry context: sector, industry, cycle tag, and side support under the current regime.",
+      "params_contract": "params = {\"symbol\": str}; symbol is the stock ticker."
     }
   ],
-  "interpretation_guide": "Beta：以标普500（^GSPC）为基准、用周收益（weekly returns）回归得到的 2/3/5 年窗口斜率。标准误（standard error）偏大时不要解读小数点后的差异；滚动 beta（rolling beta）只用于观察漂移方向；beta 是历史快照而非精确的风控旋钮；绝不能仅凭 beta 判断一只股票好坏。已实现波动率（realized volatility）：日/周收益标准差的年化值（annualized stdev），提供 1D/1W/1M/1Q 四个期限；它描述历史而非预测。符号化相关性（signed correlation）：按多空方向调整符号的两两相关性，等权（equal-weighted）且仅为指示性指标；不足 1 年的窗口不具参考性；危机中相关性趋向 1；不得用相关性推翻基本面判断。P21 门槛（gates）：持仓数量按保证金资本（margin capital）分层（2.5万–10万美元对应 8–12 只，25万–100万对应 10–14 只，200万–500万对应 12–16 只）；组合年化波动率目标区间 15–30%，现实可行上限不超过 22.5%；平均相关性绝对值不超过 0.3；净 beta（net beta）绝对值不超过 0.30；目标收益 = 最低夏普 × 波动率（options 3.3、cfd 1.5、us_stock 2.0），用于设定目标而不是门槛；组合 beta 方向需与声明的多空倾向（declared bias）一致。超额收益推断（outperformance inference）：只有当多头与空头总敞口（gross exposure）相等时，组合收益才能说明多头是否跑赢空头。Sizing 情景（equal weight / risk parity / beta parity）：仅是基准性的头脑检查（baseline head check），不是配置建议。候选比较工作流：当两个候选在基本面上打平时，优先选择能降低组合波动率与平均相关性的那个。",
-  "interaction_rules": "若某次操作对某个 symbol 返回 unavailable 或 invalid，用最可能纠正后的单个代码重试一次（修正字母颠倒或常见拼写错误，例如 NVDIA→NVDA）；绝不要重复完全相同的调用；重试 1–2 次仍失败时请用户确认代码。只依据工具返回结果作答，并使用用户的语言；绝不给出买入或卖出建议，也不宣称预测的确定性；对 insufficient_data 或 unknown 状态要如实说明，不要编造数值。"
+  "interpretation_guide": "Beta: the slope from regressing weekly returns against the S&P 500 (^GSPC) over 2/3/5-year windows. Do not read into decimal-level differences when the standard error is large; rolling beta is only for observing drift direction; beta is a historical snapshot, not a precise risk-control dial; never judge a stock by beta alone. Realized volatility: annualized standard deviation of daily/weekly returns, provided at 1D/1W/1M/1Q horizons; it describes history, not a forecast. Signed correlation: pairwise correlations sign-adjusted for long/short direction, equal-weighted and indicative only; windows shorter than 1 year are not meaningful; correlations converge toward 1 in crises; never use correlation to overrule fundamental judgement. P21 gates: position count tiers by margin capital ($25k-$100k maps to 8-12 names, $250k-$1M to 10-14, $2M-$5M to 12-16); portfolio annualized volatility target band 15-30% with a realistic achievable ceiling of 22.5%; average absolute correlation at most 0.3; absolute net beta at most 0.30; target return = minimum Sharpe x volatility (options 3.3, cfd 1.5, us_stock 2.0), used to set targets rather than gates; portfolio beta direction must match the declared bias. Outperformance inference: only when gross long and gross short exposure are equal can portfolio gains say anything about whether longs beat shorts. Sizing scenarios (equal weight / risk parity / beta parity): baseline head checks only, not allocation advice. Candidate comparison workflow: when two candidates are fundamentally tied, prefer the one that lowers portfolio volatility and average correlation.",
+  "interaction_rules": "If an operation returns unavailable or invalid for a symbol, retry once with the single most likely corrected ticker (fix transposed letters or common misspellings, e.g. NVDIA->NVDA); never repeat an identical call; if 1-2 retries still fail, ask the user to confirm the ticker. Answer only from tool results and use the user's language; never give buy or sell advice and never claim predictive certainty; state insufficient_data or unknown statuses honestly and never fabricate numbers."
 }
