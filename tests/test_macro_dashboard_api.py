@@ -501,7 +501,7 @@ def test_us_rates_liquidity_api_returns_dashboard_payload(monkeypatch):
                 "series_id": "cpi_yoy",
                 "date": "2021-01-03",
                 "value": 1.40,
-                "source": "US_P4_Macro_Indicators.csv",
+                "source": "macro_indicators.csv",
             }
         ]
 

@@ -4,8 +4,6 @@ import pytest
 
 from app.data_sources import commodity_attribution_catalog as catalog
 
-ROOT = Path(__file__).resolve().parents[1]
-
 
 def attribution_text():
     return """Oil
@@ -145,7 +143,7 @@ China 83,051,198,717.00
 
 def parsed_records(text):
     return catalog.parse_commodity_attribution_text(
-        text, Path("data/source_material/Video 12/Cyclical_Commodities_Demand_Supply_Factors.pdf")
+        text, Path("cyclical_commodities_demand_supply.pdf")
     )
 
 
@@ -348,38 +346,6 @@ def test_parse_commodity_attribution_text_raises_when_empty():
         parsed_records("   \n  \n")
 
 
-def test_parse_commodity_attribution_pdf_requires_existing_file():
+def test_parse_commodity_attribution_pdf_requires_existing_file(tmp_path):
     with pytest.raises(ValueError, match="does not exist"):
-        catalog.parse_commodity_attribution_pdf(
-            ROOT / "data" / "source_material" / "Video 12" / "missing.pdf"
-        )
-
-
-def test_parse_commodity_attribution_pdf_extracts_all_commodities():
-    pdf_path = (
-        ROOT
-        / "data"
-        / "source_material"
-        / "Video 12"
-        / "Cyclical_Commodities_Demand_Supply_Factors.pdf"
-    )
-    records = catalog.parse_commodity_attribution_pdf(pdf_path)
-
-    assert {record["commodity_id"] for record in records} == {
-        "oil",
-        "copper",
-        "lumber",
-        "iron_ore",
-    }
-    for record in records:
-        assert record["source_url"].startswith(("http://", "https://"))
-    copper_names = {
-        record["source_name"]
-        for record in records
-        if record["commodity_id"] == "copper"
-    }
-    assert {
-        "International Copper Study Group",
-        "Chilean Copper Commission",
-        "International Wrought Copper Council",
-    } <= copper_names
+        catalog.parse_commodity_attribution_pdf(tmp_path / "missing.pdf")

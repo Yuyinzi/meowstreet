@@ -1,8 +1,6 @@
+import argparse
 import sys
-from datetime import datetime
 from pathlib import Path
-
-import openpyxl
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -12,14 +10,8 @@ from app.data_sources.fred import parse_fred_csv
 from app.db import macro_indicators
 from app.db import us_rates_liquidity
 
-DEFAULT_WORKBOOK_PATH = (
-    ROOT / "data" / "source_material" / "Video 05" / "Corporate_Bond_Indices.xlsm"
-)
-DEFAULT_FRED_DIR = DEFAULT_WORKBOOK_PATH.parent / "fred"
-COMBINED_SOURCE = "P05 workbook + FRED"
-DATA_SHEET_NAME = "Data - US Corp Yields"
-ID_ROW = 1
-DATA_START_ROW = 8
+DEFAULT_FRED_DIR = ROOT / "data" / "downloads" / "fred"
+COMBINED_SOURCE = "historical reference data + FRED"
 
 FRED_SERIES_MAP = {
     "BAMLC0A1CAAAEY": "aaa_corporate_yield",
@@ -32,88 +24,6 @@ SERIES_TITLES = {
     "bbb_corporate_yield": "BBB Corporate Yield",
     "ccc_corporate_yield": "CCC Corporate Yield",
 }
-
-
-def _float_or_none(value):
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str) and value.strip().upper() in ("#N/A", "", "NA", "N/A"):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _date_iso(value):
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d")
-    return str(value).strip()
-
-
-def _parse_date_cell(value):
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d")
-    if isinstance(value, str):
-        return value.strip()
-    return None
-
-
-def parse_workbook(workbook_path=DEFAULT_WORKBOOK_PATH):
-    path = Path(workbook_path)
-    if not path.exists():
-        raise ValueError(f"workbook does not exist: {path}")
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    ws = wb[DATA_SHEET_NAME]
-    rows = list(ws.iter_rows(values_only=True))
-    wb.close()
-    id_row = rows[ID_ROW - 1]
-    series_columns = {}
-    for col_index, cell_value in enumerate(id_row):
-        if cell_value and str(cell_value).strip() in FRED_SERIES_MAP:
-            fred_id = str(cell_value).strip()
-            series_columns[col_index] = FRED_SERIES_MAP[fred_id]
-    parsed = {}
-    for col_index, series_id in series_columns.items():
-        parsed[series_id] = {
-            "series": {
-                "series_id": series_id,
-                "title": SERIES_TITLES[series_id],
-                "units": "percent",
-                "source": path.name,
-            },
-            "points": [],
-        }
-    for row in rows[DATA_START_ROW - 1 :]:
-        for col_index, series_id in series_columns.items():
-            date_val = _parse_date_cell(row[col_index])
-            value_val = _float_or_none(row[col_index + 1])
-            if date_val and value_val is not None:
-                parsed[series_id]["points"].append(
-                    {
-                        "date": date_val,
-                        "value": value_val,
-                        "source": path.name,
-                    }
-                )
-    for payload in parsed.values():
-        payload["points"] = sorted(payload["points"], key=lambda p: p["date"])
-    return parsed
-
-
-def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
-    parsed = parse_workbook(workbook_path)
-    inserted = {}
-    for series_id, payload in parsed.items():
-        saved = macro_indicators.replace_macro_indicator_points(
-            con,
-            payload["series"],
-            payload["points"],
-        )
-        inserted[series_id] = saved["points"]
-    return inserted
 
 
 def _fred_series_payload(fred_series_id):
@@ -177,19 +87,22 @@ def import_fred_csvs(con, fred_dir=DEFAULT_FRED_DIR, fred_series_ids=None):
     return inserted
 
 
-def main():
-    args = set(sys.argv[1:])
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Import US corporate credit yields from FRED"
+    )
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--fetch-fred-csv", action="store_true")
+    mode.add_argument("--fred-csv-merge", action="store_true")
+    args = parser.parse_args(argv)
+    if args.fetch_fred_csv:
+        fetched = fetch_fred_csvs()
+        for series_id, path in fetched.items():
+            print(f"{series_id}: {path}")
+        return
     con = us_rates_liquidity.connect()
     try:
-        if "--fetch-fred-csv" in args:
-            fetched = fetch_fred_csvs()
-            for series_id, path in fetched.items():
-                print(f"{series_id}: {path}")
-            return
-        if "--fred-csv-merge" in args:
-            inserted = import_fred_csvs(con)
-        else:
-            inserted = import_workbook(con)
+        inserted = import_fred_csvs(con)
         for series_id, count in inserted.items():
             print(f"{series_id}: {count}")
     finally:

@@ -155,7 +155,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
                 "us_djia",
             ],
         ),
-        ("rates", ["--skip-credit-workbook"]),
+        ("rates", []),
     ]
     assert calls[2][0] == "consumer"
     out = capsys.readouterr().out
@@ -453,7 +453,7 @@ def test_main_skip_flags_remove_tasks():
 
     assert exit_code == 0
     assert calls == [
-        ("rates", ["--skip-credit-workbook"]),
+        ("rates", []),
         ("m2", ["--fetch-fred-csv"]),
         ("m2", ["--fred-csv-merge"]),
     ]
@@ -896,7 +896,7 @@ def test_planned_tasks_includes_macro_indicators_fred_tasks_by_default():
     ]
 
 
-def test_skip_macro_indicators_removes_p4_tasks():
+def test_skip_macro_indicators_removes_macro_indicator_tasks():
     refresh_macro_data.run(
         [
             "--skip-yahoo",

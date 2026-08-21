@@ -117,12 +117,12 @@ export function renderMarketPhaseMethod() {
 export async function loadDashboard() {
     const payload = await fetchMarketPhase();
     if (payload === null) {
-      $("dashboardStatus").textContent = "Server error loading market data. Ensure scripts/import_benchmark_market_data.py has been run.";
+      $("dashboardStatus").textContent = "Server error loading market data. Ensure the required data has been imported with the offline tooling.";
       return;
     }
     $("dashboardStatus").textContent = state.markets.length
       ? `${state.markets.length} benchmark markets loaded. Workbook-seeded data may be stale until refresh is added.`
-      : "No benchmark market data found. Run scripts/import_benchmark_market_data.py.";
+      : "No benchmark market data found. Import the required data with the offline tooling.";
     renderOverview();
     loadUsRatesLiquidity().catch((error) => {
       const section = $("usRatesLiquidity");
@@ -165,4 +165,3 @@ export async function refreshMarket(benchmarkId, button) {
       }
     }
   }
-

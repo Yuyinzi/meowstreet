@@ -1097,7 +1097,7 @@ def test_macro_dashboard_js_renders_credit_diagnostics():
     assert "Crisis Stress" in js
     assert "renderCreditCoverageNote" in js
     assert "credit-data-gap-note" in js
-    assert "P05 workbook history is merged with latest FRED ICE/BofA observations" in js
+    assert "Historical reference data is merged with latest FRED ICE/BofA observations" in js
     assert "renderCreditAiInterpretation" in js
     assert "credit-ai-interpretation" in js
     assert "CaiCai" in js

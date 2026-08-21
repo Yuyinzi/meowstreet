@@ -17,11 +17,24 @@ def copy_tracked_runtime(tmp_path):
         check=True,
         capture_output=True,
     )
+    deleted_result = subprocess.run(
+        ["git", "ls-files", "-z", "--deleted"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    )
+    deleted_paths = {
+        raw_path.decode("utf-8")
+        for raw_path in deleted_result.stdout.split(b"\0")
+        if raw_path
+    }
     excluded_prefixes = ("docs/", "method_notes/", "static/dist/")
     for raw_path in result.stdout.split(b"\0"):
         if not raw_path:
             continue
         relative = Path(raw_path.decode("utf-8"))
+        if relative.as_posix() in deleted_paths:
+            continue
         if relative.as_posix().startswith(excluded_prefixes):
             continue
         destination = repository / relative

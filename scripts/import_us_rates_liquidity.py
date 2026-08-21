@@ -1,3 +1,4 @@
+import argparse
 import sys
 from pathlib import Path
 
@@ -8,15 +9,10 @@ from app.data_sources.fred import FredClient
 from app.data_sources.fred import parse_fred_csv
 from app.data_sources.fred import resample_to_weekly_sundays
 from app.db import us_rates_liquidity
-from scripts import import_benchmark_market_data
 
 
-DEFAULT_WORKBOOK_PATH = ROOT / "data" / "source_material" / "Video 04" / "Benchmark_Yields_US.xlsm"
-DEFAULT_FRED_DIR = DEFAULT_WORKBOOK_PATH.parent / "fred"
+DEFAULT_FRED_DIR = ROOT / "data" / "downloads" / "fred"
 FRED_SOURCE_SHEET = "FRED weekly Sunday resample"
-DATA_SHEET_NAME = "Data"
-DATA_HEADER_ROW = 1
-DATA_FIRST_VALUE_ROW = 4
 RATE_SERIES_CONFIG = {
     "Fed Funds": {
         "series_id": "fed_funds",
@@ -143,28 +139,6 @@ FRED_RATE_SERIES_CONFIG = {
 }
 
 
-def _series_payload(header, workbook_path):
-    config = RATE_SERIES_CONFIG[header]
-    return {
-        "series_id": config["series_id"],
-        "title": config["title"],
-        "instrument_type": config["instrument_type"],
-        "maturity_months": config["maturity_months"],
-        "units": "percent",
-        "source_workbook": Path(workbook_path).name,
-        "source_sheet": DATA_SHEET_NAME,
-    }
-
-
-def _point_payload(date_iso, value, workbook_path):
-    return {
-        "date": date_iso,
-        "value": value,
-        "source_workbook": Path(workbook_path).name,
-        "source_sheet": DATA_SHEET_NAME,
-    }
-
-
 def _fred_series_payload(fred_series_id, csv_path):
     header = FRED_RATE_SERIES_CONFIG[fred_series_id]
     config = RATE_SERIES_CONFIG[header]
@@ -226,73 +200,22 @@ def import_fred_csvs(con, fred_dir=DEFAULT_FRED_DIR, fred_series_ids=None):
     return inserted
 
 
-def parse_data_sheet(workbook_path=DEFAULT_WORKBOOK_PATH):
-    sheet = import_benchmark_market_data.load_workbook_sheet(
-        workbook_path,
-        DATA_SHEET_NAME,
-        data_only=True,
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Import US rates and liquidity series from FRED"
     )
-    headers = [cell.value for cell in sheet[DATA_HEADER_ROW]]
-    parsed = {}
-    for column_index, header in enumerate(headers[1:], start=2):
-        if header not in RATE_SERIES_CONFIG:
-            continue
-        series_id = RATE_SERIES_CONFIG[header]["series_id"]
-        parsed[series_id] = {
-            "series": _series_payload(header, workbook_path),
-            "points": [],
-        }
-        for row in sheet.iter_rows(
-            min_row=DATA_FIRST_VALUE_ROW,
-            min_col=1,
-            max_col=column_index,
-            values_only=True,
-        ):
-            date_value = row[0]
-            rate_value = row[column_index - 1]
-            value = import_benchmark_market_data.float_or_none(rate_value)
-            if date_value is None or value is None:
-                continue
-            parsed[series_id]["points"].append(
-                _point_payload(
-                    import_benchmark_market_data.cell_date_iso(date_value),
-                    value,
-                    workbook_path,
-                )
-            )
-        parsed[series_id]["points"] = sorted(
-            parsed[series_id]["points"],
-            key=lambda point: point["date"],
-        )
-    return parsed
-
-
-def import_workbook(con, workbook_path=DEFAULT_WORKBOOK_PATH):
-    parsed = parse_data_sheet(workbook_path)
-    inserted = {}
-    for series_id, payload in parsed.items():
-        saved = us_rates_liquidity.replace_rate_series_points(
-            con,
-            payload["series"],
-            payload["points"],
-        )
-        inserted[series_id] = saved["points"]
-    return inserted
-
-
-def main():
-    args = set(sys.argv[1:])
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--fetch-fred-csv", action="store_true")
+    mode.add_argument("--fred-csv-merge", action="store_true")
+    args = parser.parse_args(argv)
+    if args.fetch_fred_csv:
+        fetched = fetch_fred_csvs()
+        for series_id, path in fetched.items():
+            print(f"{series_id}: {path}")
+        return
     con = us_rates_liquidity.connect()
     try:
-        if "--fetch-fred-csv" in args:
-            fetched = fetch_fred_csvs()
-            for series_id, path in fetched.items():
-                print(f"{series_id}: {path}")
-            return
-        if "--fred-csv-merge" in args:
-            inserted = import_fred_csvs(con)
-        else:
-            inserted = import_workbook(con)
+        inserted = import_fred_csvs(con)
         for series_id, count in inserted.items():
             print(f"{series_id}: {count}")
     finally:

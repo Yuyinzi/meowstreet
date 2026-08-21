@@ -333,7 +333,7 @@ export function renderCreditCoverageNote(coverage) {
     const gapZh = hasGap
       ? `数据缺口：${coverage.gap_start} - ${coverage.gap_end}`
       : "未检测到数据缺口";
-    const sourceNote = coverage.source_note || "P05 workbook history is merged with latest FRED ICE/BofA observations. Missing dates are shown as a data gap and are not interpolated.";
+    const sourceNote = coverage.source_note || "Historical reference data is merged with latest FRED ICE/BofA observations. Missing dates are shown as a data gap and are not interpolated.";
     return `
       <div class="credit-data-gap-note ${hasGap ? "has-gap" : ""}">
         <strong>${escapeHtml(gapText)}<small>${escapeHtml(gapZh)}</small></strong>
@@ -652,4 +652,3 @@ export function renderRatesDetailPayload(detail, payload, context) {
     bindRatesCurveControls(detail, context);
     attachRatesChartTooltips(detail, payload.charts);
   }
-

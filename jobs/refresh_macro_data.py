@@ -127,7 +127,7 @@ def _planned_tasks(
             )
         )
     if rates_main is not None and not args.skip_rates:
-        tasks.append(("rates_fred", rates_main, ["--skip-credit-workbook"]))
+        tasks.append(("rates_fred", rates_main, []))
     if consumer_main is not None and not args.skip_consumer_sentiment:
         cache_dir = _consumer_cache_dir()
         consumer_db_path = ROOT / "data" / "local_system" / "market_data.sqlite"

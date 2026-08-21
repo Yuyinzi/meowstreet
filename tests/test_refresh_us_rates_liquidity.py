@@ -48,11 +48,6 @@ def test_main_fetches_and_imports_fred_by_default(capsys):
         calls.append(("fetch_credit",))
         return {"BAMLC0A4CBBBEY": Path("fred/BAMLC0A4CBBBEY.csv")}
 
-    def fake_import_credit_workbook(con):
-        assert con is connection
-        calls.append(("import_credit_workbook",))
-        return {"bbb_corporate_yield": 6269}
-
     def fake_import_credit_fred(con):
         assert con is connection
         calls.append(("import_credit_fred",))
@@ -66,7 +61,6 @@ def test_main_fetches_and_imports_fred_by_default(capsys):
         fetch_credit=fake_fetch_credit,
         import_rates=fake_import_rates,
         import_macro=fake_import_macro,
-        import_credit_workbook=fake_import_credit_workbook,
         import_credit_fred=fake_import_credit_fred,
     )
 
@@ -80,7 +74,6 @@ def test_main_fetches_and_imports_fred_by_default(capsys):
         ("fetch_credit",),
         ("import_rates",),
         ("import_macro",),
-        ("import_credit_workbook",),
         ("import_credit_fred",),
     ]
     assert connection.closed is True
@@ -89,7 +82,6 @@ def test_main_fetches_and_imports_fred_by_default(capsys):
     assert "credit fetched: 1" in captured.out
     assert "treasury_10y: 3079" in captured.out
     assert "vix: 1800" in captured.out
-    assert "corporate credit workbook imported:" in captured.out
     assert "corporate credit fred imported:" in captured.out
     assert captured.err == ""
 
@@ -122,10 +114,6 @@ def test_main_skip_fetch_only_imports_existing_csvs(capsys):
         calls.append(("fetch_credit",))
         return {}
 
-    def fake_import_credit_workbook(con):
-        calls.append(("import_credit_workbook",))
-        return {"aaa_corporate_yield": 6269}
-
     def fake_import_credit_fred(con):
         calls.append(("import_credit_fred",))
         return {"bbb_corporate_yield": 700}
@@ -138,7 +126,6 @@ def test_main_skip_fetch_only_imports_existing_csvs(capsys):
         fetch_credit=fake_fetch_credit,
         import_rates=fake_import_rates,
         import_macro=fake_import_macro,
-        import_credit_workbook=fake_import_credit_workbook,
         import_credit_fred=fake_import_credit_fred,
     )
 
@@ -150,47 +137,9 @@ def test_main_skip_fetch_only_imports_existing_csvs(capsys):
         ("connect", refresh_us_rates_liquidity.us_rates_liquidity.DEFAULT_DB_PATH),
         ("import_rates",),
         ("import_macro",),
-        ("import_credit_workbook",),
         ("import_credit_fred",),
     ]
     assert "fetch skipped" in captured.out
-    assert captured.err == ""
-
-
-def test_main_can_skip_credit_workbook_import(capsys):
-    calls = []
-    connection = FakeConnection()
-
-    def fake_connect(db_path):
-        calls.append(("connect", db_path))
-        return connection
-
-    exit_code = refresh_us_rates_liquidity.main(
-        ["--skip-fetch", "--skip-credit-workbook"],
-        connect=fake_connect,
-        fetch_rates=lambda: {},
-        fetch_macro=lambda: {},
-        fetch_credit=lambda: {},
-        import_rates=lambda con: calls.append(("import_rates",)) or {},
-        import_macro=lambda con: calls.append(("import_macro",)) or {},
-        import_credit_workbook=lambda con: calls.append(
-            ("import_credit_workbook",)
-        )
-        or {},
-        import_credit_fred=lambda con: calls.append(("import_credit_fred",)) or {},
-    )
-
-    captured = capsys.readouterr()
-
-    assert exit_code == 0
-    assert calls == [
-        ("connect", refresh_us_rates_liquidity.us_rates_liquidity.DEFAULT_DB_PATH),
-        ("import_rates",),
-        ("import_macro",),
-        ("import_credit_fred",),
-    ]
-    assert "corporate credit workbook import skipped" in captured.out
-    assert "corporate credit fred imported:" in captured.out
     assert captured.err == ""
 
 
@@ -210,7 +159,6 @@ def test_main_forwards_custom_db_path(capsys):
         fetch_credit=lambda: {},
         import_rates=lambda con: {},
         import_macro=lambda con: {},
-        import_credit_workbook=lambda con: {},
         import_credit_fred=lambda con: {},
     )
 
@@ -234,7 +182,6 @@ def test_main_reports_value_errors(capsys):
         fetch_credit=lambda: {},
         import_rates=lambda con: {},
         import_macro=lambda con: {},
-        import_credit_workbook=lambda con: {},
         import_credit_fred=lambda con: {},
     )
 
@@ -273,10 +220,6 @@ def test_main_imports_corporate_credit_after_rates_and_macro(capsys):
         calls.append(("fetch_credit",))
         return {}
 
-    def fake_import_credit_workbook(con):
-        calls.append(("import_credit_workbook",))
-        return {"aaa_corporate_yield": 6269, "bbb_corporate_yield": 6269}
-
     def fake_import_credit_fred(con):
         calls.append(("import_credit_fred",))
         return {"bbb_corporate_yield": 700}
@@ -289,23 +232,17 @@ def test_main_imports_corporate_credit_after_rates_and_macro(capsys):
         fetch_credit=fake_fetch_credit,
         import_rates=fake_import_rates,
         import_macro=fake_import_macro,
-        import_credit_workbook=fake_import_credit_workbook,
         import_credit_fred=fake_import_credit_fred,
     )
 
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert ("import_credit_workbook",) in calls
     assert ("import_credit_fred",) in calls
-    assert calls.index(("import_rates",)) < calls.index(("import_credit_workbook",))
-    assert calls.index(("import_macro",)) < calls.index(("import_credit_workbook",))
-    assert calls.index(("import_credit_workbook",)) < calls.index(
-        ("import_credit_fred",)
-    )
-    assert "corporate credit workbook imported:" in captured.out
+    assert calls.index(("import_rates",)) < calls.index(("import_credit_fred",))
+    assert calls.index(("import_macro",)) < calls.index(("import_credit_fred",))
     assert "corporate credit fred imported:" in captured.out
-    assert "aaa_corporate_yield: 6269" in captured.out
+    assert "bbb_corporate_yield: 700" in captured.out
 
 
 def test_main_can_generate_credit_interpretation_after_refresh(capsys):
@@ -327,7 +264,6 @@ def test_main_can_generate_credit_interpretation_after_refresh(capsys):
         fetch_credit=lambda: {},
         import_rates=lambda con: {},
         import_macro=lambda con: {},
-        import_credit_workbook=lambda con: {},
         import_credit_fred=lambda con: {},
         generate_credit_interpretation=fake_generate_credit_interpretation,
     )

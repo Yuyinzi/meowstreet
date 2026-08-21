@@ -1,5 +1,4 @@
 import argparse
-import csv
 import sys
 from datetime import date
 from pathlib import Path
@@ -14,11 +13,9 @@ from app.data_sources.fred import parse_fred_csv
 from app.data_sources.fred import resample_to_weekly_sundays
 from app.db import macro_indicators
 from app.db import us_rates_liquidity
-from scripts import import_benchmark_market_data
 
 
-DEFAULT_CSV_PATH = ROOT / "data" / "source_material" / "Video 04" / "US_P4_Macro_Indicators.csv"
-DEFAULT_FRED_DIR = DEFAULT_CSV_PATH.parent / "fred"
+DEFAULT_FRED_DIR = ROOT / "data" / "downloads" / "fred"
 FRED_SOURCE = "FRED weekly Sunday resample"
 FRED_MONTHLY_SOURCE = "FRED monthly"
 FRED_WEEKLY_SOURCE = "FRED weekly"
@@ -48,24 +45,6 @@ FRED_MACRO_SERIES_CONFIG = {
     "TREAST": "fed_treasury_holdings",
     "WSHOMCB": "fed_mbs_holdings",
 }
-
-
-def _series_payload(series_id, csv_path):
-    config = SERIES_CONFIG[series_id]
-    return {
-        "series_id": series_id,
-        "title": config["title"],
-        "units": config["units"],
-        "source": Path(csv_path).name,
-    }
-
-
-def _point_payload(row, series_id, csv_path):
-    return {
-        "date": row["date"],
-        "value": import_benchmark_market_data.float_or_none(row.get(series_id)),
-        "source": Path(csv_path).name,
-    }
 
 
 def _fred_series_payload(series_id):
@@ -164,46 +143,11 @@ def import_fred_macro_csvs(
     return inserted
 
 
-def parse_csv(csv_path=DEFAULT_CSV_PATH):
-    path = Path(csv_path)
-    if not path.exists():
-        raise ValueError(f"csv does not exist: {path}")
-    parsed = {
-        series_id: {"series": _series_payload(series_id, path), "points": []}
-        for series_id in SERIES_CONFIG
-    }
-    with path.open(newline="") as handle:
-        for row in csv.DictReader(handle):
-            if not row.get("date"):
-                continue
-            for series_id in SERIES_CONFIG:
-                point = _point_payload(row, series_id, path)
-                if point["value"] is None:
-                    continue
-                parsed[series_id]["points"].append(point)
-    for payload in parsed.values():
-        payload["points"] = sorted(payload["points"], key=lambda point: point["date"])
-    return parsed
-
-
-def import_csv(con, csv_path=DEFAULT_CSV_PATH):
-    parsed = parse_csv(csv_path)
-    inserted = {}
-    for series_id, payload in parsed.items():
-        saved = macro_indicators.replace_macro_indicator_points(
-            con,
-            payload["series"],
-            payload["points"],
-        )
-        inserted[series_id] = saved["points"]
-    return inserted
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Import US P4 macro indicators from CSV or FRED"
+        description="Import US macro indicators from FRED"
     )
-    mode = parser.add_mutually_exclusive_group()
+    mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--fetch-fred-csv", action="store_true")
     mode.add_argument("--fred-csv-merge", action="store_true")
     args = parser.parse_args(argv)
@@ -214,10 +158,7 @@ def main(argv=None):
         return 0
     con = us_rates_liquidity.connect()
     try:
-        if args.fred_csv_merge:
-            inserted = import_fred_macro_csvs(con)
-        else:
-            inserted = import_csv(con)
+        inserted = import_fred_macro_csvs(con)
         for series_id, count in inserted.items():
             print(f"{series_id}: {count}")
     finally:

@@ -104,7 +104,7 @@ The method artifact at `app/resources/workflow_method.v1.json` is a versioned, c
 
 ## GDP Relationship Source Caveat
 
-For `data/source_material/Video 03/GDP_Correlations.xlsx`:
+For the local GDP relationship workbook kept outside the repository:
 
 - Treat workbook-imported GDP relationship rows as the current dashboard source of truth.
 - Recomputed lag metrics are verified against the workbook for all configured relationships.

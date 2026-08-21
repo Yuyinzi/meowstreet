@@ -1,6 +1,6 @@
 {
   "source": {
-    "workbook": "data/source_material/Video 17/Portfolio_Modelling.xlsx",
+    "workbook": "method_workbook",
     "sheets": [
       {
         "sheet": "Portfolio NRB Perf",

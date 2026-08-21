@@ -517,11 +517,11 @@
         "source_module": "us_rates_liquidity",
         "method_version": "credit_conditions_v1",
         "source_period": "daily",
-        "periods": ["P05 workbook history merged with FRED ICE/BofA observations"]
+        "periods": ["Historical reference data merged with FRED ICE/BofA observations"]
       },
       "source_period_required": true,
       "method_notes": [
-        "Credit spread history is merged from the P05 workbook with the latest FRED ICE/BofA observations",
+        "Credit spread history is merged from historical reference data with the latest FRED ICE/BofA observations",
         "Missing dates are shown as a data gap and are not interpolated"
       ],
       "explanation": "Corporate credit spread data is the accepted local source for the credit conditions status."

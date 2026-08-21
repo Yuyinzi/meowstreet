@@ -62,7 +62,7 @@ CREDIT_GAP_THRESHOLD_DAYS = 14
 CREDIT_INTERPRETATION_SCOPE = "us_credit_conditions"
 CREDIT_INTERPRETATION_PROMPT_VERSION = "credit-cat-v1"
 CREDIT_SOURCE_NOTE = (
-    "P05 workbook history is merged with latest FRED ICE/BofA observations. "
+    "Historical reference data is merged with latest FRED ICE/BofA observations. "
     "Missing dates are shown as a data gap and are not interpolated."
 )
 

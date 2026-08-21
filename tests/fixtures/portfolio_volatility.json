@@ -1,6 +1,6 @@
 {
   "source": {
-    "workbook": "data/source_material/Video 18/Portfolio_Volatility.xlsm",
+    "workbook": "method_workbook",
     "sheets": [
       {
         "sheet": "Portfolio Volatility Practice",

@@ -88,13 +88,13 @@ def test_build_dashboard_payload_computes_key_method_indicators():
                 "series_id": "cpi_yoy",
                 "date": "2021-01-03",
                 "value": 1.40,
-                "source": "US_P4_Macro_Indicators.csv",
+                "source": "macro_indicators.csv",
             },
             {
                 "series_id": "vix",
                 "date": "2021-01-03",
                 "value": 22.90,
-                "source": "US_P4_Macro_Indicators.csv",
+                "source": "macro_indicators.csv",
             },
         ],
     )
@@ -301,24 +301,24 @@ def test_build_cpi_real_rate_detail_payload_compares_with_vix_only():
                 {
                     "date": "2020-12-27",
                     "value": 1.30,
-                    "source": "US_P4_Macro_Indicators.csv",
+                    "source": "macro_indicators.csv",
                 },
                 {
                     "date": "2021-01-03",
                     "value": 1.40,
-                    "source": "US_P4_Macro_Indicators.csv",
+                    "source": "macro_indicators.csv",
                 },
             ],
             "vix": [
                 {
                     "date": "2020-12-27",
                     "value": 22.00,
-                    "source": "US_P4_Macro_Indicators.csv",
+                    "source": "macro_indicators.csv",
                 },
                 {
                     "date": "2021-01-03",
                     "value": 22.90,
-                    "source": "US_P4_Macro_Indicators.csv",
+                    "source": "macro_indicators.csv",
                 },
             ],
         },
@@ -1094,7 +1094,7 @@ def test_build_dashboard_payload_reports_credit_data_gap():
         "gap_start": "2021-01-08",
         "gap_end": "2023-09-30",
         "has_gap": True,
-        "source_note": "P05 workbook history is merged with latest FRED ICE/BofA observations. Missing dates are shown as a data gap and are not interpolated.",
+        "source_note": "Historical reference data is merged with latest FRED ICE/BofA observations. Missing dates are shown as a data gap and are not interpolated.",
     }
 
 

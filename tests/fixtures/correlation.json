@@ -1,6 +1,6 @@
 {
   "source": {
-    "workbook": "data/source_material/Video 19/Portfolio_Volatility_and_Correlation.xlsm",
+    "workbook": "method_workbook",
     "sheets": [
       {
         "sheet": "Correlation Function",

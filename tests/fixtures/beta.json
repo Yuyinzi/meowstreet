@@ -1,6 +1,6 @@
 {
   "source": {
-    "workbook": "data/source_material/Video 20/Calculating_Beta.xlsx",
+    "workbook": "method_workbook",
     "sheets": [
       {
         "sheet": "Equity Beta",
