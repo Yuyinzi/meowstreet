@@ -21,3 +21,4 @@ logs/*
 /docs/
 node_modules/
 static/dist/
+/pipeline/
