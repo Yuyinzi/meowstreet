@@ -46,11 +46,11 @@ export function renderEconomicConfirmation() {
       fmtNumber,
       isSelectedEconomicConfirmationDetailId: (id) => state.selectedEconomicConfirmationDetailId === id,
     });
-    const asOf = state.economicConfirmation.as_of;
+    const evidenceThrough = state.economicConfirmation.evidence_through;
     section.innerHTML = `
       <div class="relationship-head">
         ${head.innerHTML}
-        ${asOf ? `<span class="mock-pill">Data as of ${escapeHtml(fmtDateOnly(asOf))}</span>` : ""}
+        ${evidenceThrough ? `<span class="mock-pill">Claims evidence through ${escapeHtml(fmtDateOnly(evidenceThrough))}</span>` : ""}
       </div>
       <div class="economic-confirmation-layer-body">${cardHtml}</div>
     `;
@@ -99,4 +99,3 @@ export function renderEconomicConfirmationDetailInPanel(body) {
         console.error(error);
       });
   }
-

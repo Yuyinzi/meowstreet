@@ -132,6 +132,21 @@ def test_service_composes_claims_confirmation_with_direction_and_status(tmp_path
     assert claims["confirmation_status"] == "partial"
 
 
+def test_claims_evidence_through_uses_earlier_latest_release_date(tmp_path):
+    initial = _claims_trend_observations("initial_claims_sa", 0.035)
+    continuing = _claims_trend_observations("continuing_claims_sa", 0.0)
+    initial[-1]["release_date"] = "2026-07-29"
+    continuing[-1]["release_date"] = "2026-07-27"
+    con = economic_confirmation_db.connect(tmp_path / "market.sqlite")
+    economic_confirmation_db.record_vintage_batch(con, initial + continuing)
+
+    payload = economic_confirmation.load_overview(
+        con, {"expected_gdp_direction": "growth_decelerating"}, NOW
+    )
+
+    assert payload["evidence_through"] == "2026-07-27"
+
+
 def test_national_claims_history_rows_classify_both_series(tmp_path):
     initial = _claims_trend_observations("initial_claims_sa", 0.035)
     continuing = _claims_trend_observations("continuing_claims_sa", 0.0)

@@ -83,6 +83,7 @@ def _compose(
 ):
     return {
         "as_of": as_of_timestamp,
+        "evidence_through": _claims_evidence_through(series),
         "method_version": ECONOMIC_CONFIRMATION_VERSION,
         "vintage_policy": vintage_policy,
         "claims_confirmation": claims,
@@ -92,6 +93,19 @@ def _compose(
         "economic_confirmation": _economic_confirmation(),
         "macro_growth_context": macro_growth_context,
     }
+
+
+def _claims_evidence_through(series):
+    release_dates = []
+    for series_id in _CLAIMS_SERIES_IDS:
+        rows = series.get(series_id) or []
+        if not rows:
+            return None
+        release_date = rows[-1].get("release_date")
+        if not release_date:
+            return None
+        release_dates.append(release_date)
+    return min(release_dates)
 
 
 def _expected_gdp_direction(macro_growth_context):

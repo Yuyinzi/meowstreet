@@ -177,13 +177,16 @@
     html += '<summary>' + h.bilingualLabel("Vintages") + '</summary>';
     Object.keys(bySeries).forEach(function (seriesId) {
       var label = seriesLabels[seriesId] || titleCaseToken(seriesId);
+      var seriesRows = bySeries[seriesId].slice().sort(function (left, right) {
+        return String(right.reference_period || "").localeCompare(String(left.reference_period || ""));
+      });
       html += '<h4 class="claims-metric-label">' + h.bilingualLabel(label) + '</h4>';
       html += '<table class="claims-vintage-table"><thead><tr>';
       html += '<th>' + h.escapeHtml("Period") + '</th>';
       html += '<th>' + h.escapeHtml("Value (person/\u4eba)") + '</th>';
       html += '<th>' + h.escapeHtml("Release") + '</th>';
       html += '</tr></thead><tbody>';
-      bySeries[seriesId].forEach(function (row) {
+      seriesRows.forEach(function (row) {
         html += '<tr>';
         html += '<td>' + h.escapeHtml(row.reference_period || "\u2014") + '</td>';
         html += '<td>' + h.escapeHtml(h.fmtInteger(row.value)) + '</td>';

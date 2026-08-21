@@ -382,6 +382,21 @@ def test_parse_claims_release_text_extracts_release_and_revision():
     )
 
 
+def test_parse_claims_release_text_accepts_revision_without_by():
+    text = _RELEASE_TEXT.replace("revised down by 7,000", "revised down 7,000")
+
+    observations = dol_ui_claims.parse_claims_release_text(text, RELEASE_URL)
+    continuing = [
+        row for row in observations if row["series_id"] == "continuing_claims_sa"
+    ]
+
+    assert len(continuing) == 2
+    assert continuing[1]["reference_period"] == "2026-07-11"
+    assert continuing[1]["value_at_release"] == 1796000.0
+    assert continuing[1]["latest_revised_value"] == 1789000.0
+    assert continuing[1]["revision_number"] == 1
+
+
 def test_parse_claims_release_text_without_revision_yields_current_week_only():
     text = _RELEASE_TEXT.replace(
         " The previous week's level was revised up by 1,000 from 187,000 to 188,000.",

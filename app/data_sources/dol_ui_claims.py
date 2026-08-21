@@ -57,7 +57,7 @@ _CONTINUING_VALUE_RE = re.compile(
     re.IGNORECASE,
 )
 _REVISION_RE = re.compile(
-    r"revised (?:up|down) by [\d,]+ from ([\d,]+) to ([\d,]+)",
+    r"revised (?:up|down) (?:by )?[\d,]+ from ([\d,]+) to ([\d,]+)",
     re.IGNORECASE,
 )
 _FORM_RE = re.compile(

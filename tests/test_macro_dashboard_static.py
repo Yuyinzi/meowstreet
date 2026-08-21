@@ -7579,7 +7579,7 @@ def test_macro_dashboard_js_fetches_economic_confirmation_overview_and_detail():
     assert "selectedEconomicConfirmationDetailId" in js
 
 
-def test_economic_confirmation_as_of_pill_shows_date_only():
+def test_economic_confirmation_pill_shows_claims_evidence_date():
     js = (ROOT / "static" / "dist" / "macro-dashboard.js").read_text(encoding="utf-8")
 
     render_start = js.index("function renderEconomicConfirmation()")
@@ -7588,9 +7588,55 @@ def test_economic_confirmation_as_of_pill_shows_date_only():
     )
     render_body = js[render_start:render_end]
 
-    assert "Data as of ${escapeHtml(fmtDateOnly(asOf))}" in render_body
+    assert "Claims evidence through ${escapeHtml(fmtDateOnly(evidenceThrough))}" in render_body
     assert "fmtDateOnly" in js
-    assert "Data as of ${escapeHtml(fmtDate(asOf))}" not in render_body
+    assert "state.economicConfirmation.as_of" not in render_body
+
+
+def test_claims_ui_renders_vintages_latest_first():
+    script = textwrap.dedent("""
+        const fs = require("fs");
+        const vm = require("vm");
+
+        global.window = {};
+        global.document = {};
+        vm.runInThisContext(fs.readFileSync("static/claims-confirmation-ui.js", "utf8"));
+
+        const helpers = {
+          escapeHtml: function (value) { return String(value || ""); },
+          bilingualLabel: function (value) { return value; },
+          bilingualTitle: function (value) { return value; },
+          fmtNumber: function (value) { return String(value); },
+          fmtInteger: function (value) { return String(value); },
+        };
+        const payload = {
+          claims_confirmation: {
+            confirmation_status: "confirming",
+            initial_claims: {},
+            continuing_claims: {},
+            vintages: [
+              { series_id: "initial_claims_sa", reference_period: "2026-07-18", value: 220000 },
+              { series_id: "initial_claims_sa", reference_period: "2026-07-25", value: 210000 },
+            ],
+          },
+          labor_context: {},
+          real_activity: {},
+          event_risk: {},
+          economic_confirmation: {},
+        };
+        const body = { innerHTML: "" };
+        window.claimsConfirmationUi.renderDetail(body, payload, helpers);
+
+        console.log(JSON.stringify({
+          latestFirst: body.innerHTML.indexOf("2026-07-25") < body.innerHTML.indexOf("2026-07-18"),
+        }));
+    """)
+
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+
+    assert json.loads(result.stdout) == {"latestFirst": True}
 
 
 def test_claims_ui_handles_all_confirmation_statuses():
