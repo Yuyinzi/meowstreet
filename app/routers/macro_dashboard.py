@@ -92,6 +92,7 @@ def macro_dashboard_consumer_sentiment_detail():
 
 
 def _survey_synthesis_direction(con):
+    growth_cycle.init_db(con)
     ism_industry_breadth = api._load_latest_ism_industry_breadth(con)
     ism_reports = growth_cycle.load_recent_ism_report_snapshots(con, limit=6)
     ism_macro_signal_result = None
