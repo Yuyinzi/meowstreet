@@ -22,7 +22,7 @@ DEFAULT_OUTPUT = resource_path("commodity_attribution_catalog")
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(
-        description="Build the  commodity attribution evidence catalog."
+        description="Build the commodities commodity attribution evidence catalog."
     )
     parser.add_argument("--source-path", default=str(DEFAULT_SOURCE))
     parser.add_argument("--output-path", default=str(DEFAULT_OUTPUT))

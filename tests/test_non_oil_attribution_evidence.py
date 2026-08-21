@@ -266,7 +266,7 @@ def test_normalize_rejects_missing_period_geography_unit_factor_or_numeric_value
     ]:
         raw = valid_fact()
         raw[field] = value
-        with pytest.raises(ValueError, match=" non-oil attribution fact"):
+        with pytest.raises(ValueError, match="commodities non-oil attribution fact"):
             evidence.normalize_non_oil_attribution_fact(raw)
 
 

@@ -28,7 +28,7 @@ def main(argv=None):
             initial=args.initial,
         )
     except ValueError as exc:
-        print(f" lme copper import error: {exc}", file=sys.stderr)
+        print(f"commodities lme copper import error: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()

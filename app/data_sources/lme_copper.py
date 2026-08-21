@@ -47,11 +47,11 @@ def _as_finite_float(value):
     return parsed
 
 
-_LME_COPPER_SERIES_ID = "copper_lme_sina_cad_v1"
-_LME_COPPER_CUTOVER_DATE = "2026-07-31"
+LME_COPPER_SERIES_ID = "copper_lme_sina_cad_v1"
+LME_COPPER_CUTOVER_DATE = "2026-07-31"
 
-_LME_COPPER_SERIES = {
-    "series_id": _LME_COPPER_SERIES_ID,
+LME_COPPER_SERIES = {
+    "series_id": LME_COPPER_SERIES_ID,
     "title": "Copper (LME 3M)",
     "units": "USD/tonne",
     "source": "sina_finance",
@@ -69,7 +69,7 @@ _LME_COPPER_SERIES = {
         "price_field": "close",
         "price_adjustment": "none",
         "official_settlement": False,
-        "cutover_date": _LME_COPPER_CUTOVER_DATE,
+        "cutover_date": LME_COPPER_CUTOVER_DATE,
     },
 }
 
@@ -120,7 +120,7 @@ def fetch_lme_copper_cad(adapter=None):
     except Exception as exc:
         raise ValueError(f"sina CAD fetch failed: {exc}") from exc
     return {
-        "series": _LME_COPPER_SERIES,
+        "series": LME_COPPER_SERIES,
         "observations": normalize_lme_copper_cad_daily(
             frame, _retrieved_at(), adapter_version
         ),

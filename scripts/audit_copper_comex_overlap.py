@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.data_sources.copper_comex import (
-    _COPPER_COMEX_START_DATE,
+    COPPER_COMEX_START_DATE,
     fetch_copper_comex_series,
 )
 from app.db import macro_indicators
@@ -36,12 +36,12 @@ def main(argv=None):
         archived_rows = macro_indicators.load_macro_indicator_observations(
             con, copper_comex_import.ARCHIVED_COPPER_COMEX_SERIES_ID
         )
-        payload = fetch_copper_comex_series(_COPPER_COMEX_START_DATE, end_date)
+        payload = fetch_copper_comex_series(COPPER_COMEX_START_DATE, end_date)
         audit = copper_comex_import.audit_copper_comex_overlap(
             archived_rows, payload["observations"]
         )
     except ValueError as exc:
-        print(f" copper comex overlap audit failed: {exc}", file=sys.stderr)
+        print(f"commodities copper comex overlap audit failed: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()

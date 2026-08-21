@@ -30,13 +30,13 @@ def _acquire_lock(lock_path):
         lock_file = open(lock_path, "w")
     except OSError as exc:
         raise ValueError(
-            f" investing rendered refresh cannot create lock file {lock_path}: {exc}"
+            f"commodities investing rendered refresh cannot create lock file {lock_path}: {exc}"
         ) from exc
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         lock_file.close()
-        raise ValueError(" investing rendered refresh already running (lock held)")
+        raise ValueError("commodities investing rendered refresh already running (lock held)")
     return lock_file
 
 

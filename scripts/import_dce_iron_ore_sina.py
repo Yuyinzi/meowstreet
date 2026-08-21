@@ -28,7 +28,7 @@ def main(argv=None):
             initial=args.initial,
         )
     except ValueError as exc:
-        print(f" dce iron ore sina error: {exc}", file=sys.stderr)
+        print(f"commodities dce iron ore sina error: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()

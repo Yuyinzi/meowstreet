@@ -410,7 +410,7 @@ def test_fetch_shfe_copper_contract_rows_uses_injected_adapter():
     assert [row["contract"] for row in rows] == ["CU2608", "CU2609", "CU2701"]
 
 
-from app.tools import shfe_copper
+from app.tools import shfe_copper as shfe_copper_tools
 
 
 def _raw_contract_row(trade_date, contract, close, open_interest, **overrides):
@@ -440,7 +440,7 @@ def raw_contract_rows():
 
 
 def test_main_contract_selects_highest_oi_excludes_delivery_month_and_never_rolls_back():
-    rows = shfe_copper.build_shfe_cu_main_series(raw_contract_rows())
+    rows = shfe_copper_tools.build_shfe_cu_main_series(raw_contract_rows())
 
     assert [row["selected_contract"] for row in rows] == ["CU2609", "CU2610", "CU2610"]
     assert rows[1]["contract_roll"] is True
@@ -456,7 +456,7 @@ def test_main_contract_equal_oi_breaks_to_nearest_expiry():
         _raw_contract_row("2026-07-29", "CU2610", 79500.0, 150000.0),
     ]
 
-    rows = shfe_copper.build_shfe_cu_main_series(rows)
+    rows = shfe_copper_tools.build_shfe_cu_main_series(rows)
 
     assert [row["selected_contract"] for row in rows] == ["CU2609", "CU2609"]
 
@@ -469,7 +469,7 @@ def test_main_contract_never_selects_an_expiry_earlier_than_prior_selected():
         _raw_contract_row("2026-07-29", "CU2610", 79500.0, 150000.0),
     ]
 
-    rows = shfe_copper.build_shfe_cu_main_series(rows)
+    rows = shfe_copper_tools.build_shfe_cu_main_series(rows)
 
     assert [row["selected_contract"] for row in rows] == ["CU2610", "CU2610"]
 
@@ -480,14 +480,14 @@ def test_main_contract_reports_unavailable_when_no_eligible_contract():
         _raw_contract_row("2026-07-29", "CU2607", 79000.0, 100000.0),
     ]
 
-    rows = shfe_copper.build_shfe_cu_main_series(rows)
+    rows = shfe_copper_tools.build_shfe_cu_main_series(rows)
 
     assert rows[0]["status"] == "unavailable"
     assert rows[1]["status"] == "unavailable"
 
 
 def test_main_contract_same_contract_return_is_none_on_first_day():
-    rows = shfe_copper.build_shfe_cu_main_series(raw_contract_rows())
+    rows = shfe_copper_tools.build_shfe_cu_main_series(raw_contract_rows())
 
     assert rows[0]["same_contract_return"] is None
 
@@ -504,7 +504,7 @@ def switched_rows():
 
 
 def test_separated_returns_keep_roll_gap_auditable_but_exclude_from_distribution():
-    switched = shfe_copper.build_shfe_cu_main_series(switched_rows())
+    switched = shfe_copper_tools.build_shfe_cu_main_series(switched_rows())
 
     assert switched[1]["selected_contract"] == "CU2610"
     assert switched[1]["unadjusted_continuous_return"] == pytest.approx(
@@ -518,7 +518,7 @@ def test_separated_returns_keep_roll_gap_auditable_but_exclude_from_distribution
 
 
 def test_main_series_rows_include_method_versions_and_provenance():
-    rows = shfe_copper.build_shfe_cu_main_series(raw_contract_rows())
+    rows = shfe_copper_tools.build_shfe_cu_main_series(raw_contract_rows())
 
     assert rows[0]["selection_rule_version"] == "shfe_cu_main_oi_v1"
     assert rows[0]["price_series_version"] == "shfe_cu_oi_main_unadjusted_v1"
@@ -534,9 +534,9 @@ def same_contract_week_rows():
 
 
 def test_weekly_returns_compound_valid_same_contract_returns_by_iso_week():
-    main_rows = shfe_copper.build_shfe_cu_main_series(same_contract_week_rows())
+    main_rows = shfe_copper_tools.build_shfe_cu_main_series(same_contract_week_rows())
 
-    weekly = shfe_copper.build_shfe_cu_weekly_returns(main_rows)
+    weekly = shfe_copper_tools.build_shfe_cu_weekly_returns(main_rows)
 
     assert weekly[0]["year"] == 2026
     assert weekly[0]["week"] == 31
@@ -545,18 +545,18 @@ def test_weekly_returns_compound_valid_same_contract_returns_by_iso_week():
 
 
 def test_weekly_returns_mark_week_with_contract_roll():
-    main_rows = shfe_copper.build_shfe_cu_main_series(switched_rows())
+    main_rows = shfe_copper_tools.build_shfe_cu_main_series(switched_rows())
 
-    weekly = shfe_copper.build_shfe_cu_weekly_returns(main_rows)
+    weekly = shfe_copper_tools.build_shfe_cu_weekly_returns(main_rows)
 
     assert weekly[0]["return"] == pytest.approx(80500 / 80200 - 1)
     assert weekly[0]["roll_in_week"] is True
 
 
 def test_weekly_returns_use_same_contract_returns_not_unadjusted():
-    main_rows = shfe_copper.build_shfe_cu_main_series(switched_rows())
+    main_rows = shfe_copper_tools.build_shfe_cu_main_series(switched_rows())
 
-    weekly = shfe_copper.build_shfe_cu_weekly_returns(main_rows)
+    weekly = shfe_copper_tools.build_shfe_cu_weekly_returns(main_rows)
 
     assert weekly[0]["return"] != pytest.approx(80500 / 79000 - 1)
     assert "unadjusted_continuous_return" not in weekly[0]
@@ -568,9 +568,9 @@ def test_weekly_returns_is_empty_when_no_valid_same_contract_return():
         _raw_contract_row("2026-07-29", "CU2609", 79500.0, 100000.0),
         _raw_contract_row("2026-07-29", "CU2610", 80500.0, 220000.0),
     ]
-    main_rows = shfe_copper.build_shfe_cu_main_series(no_prior_close_rows)
+    main_rows = shfe_copper_tools.build_shfe_cu_main_series(no_prior_close_rows)
 
-    weekly = shfe_copper.build_shfe_cu_weekly_returns(main_rows)
+    weekly = shfe_copper_tools.build_shfe_cu_weekly_returns(main_rows)
 
     assert weekly == []
 
@@ -585,7 +585,7 @@ def test_same_contract_return_is_none_when_contract_misses_prior_trading_day():
         _raw_contract_row("2026-07-30", "CU2609", 80500.0, 200000.0),
         _raw_contract_row("2026-07-30", "CU2610", 80800.0, 150000.0),
     ]
-    main_rows = shfe_copper.build_shfe_cu_main_series(gap_rows)
+    main_rows = shfe_copper_tools.build_shfe_cu_main_series(gap_rows)
 
     assert [row.get("selected_contract") for row in main_rows] == [
         "CU2609",
@@ -603,7 +603,7 @@ def test_rebuild_window_boundary_cannot_roll_back_to_earlier_expiry():
         _raw_contract_row("2026-07-30", "CU2609", 80500.0, 250000.0),
         _raw_contract_row("2026-07-30", "CU2610", 80800.0, 150000.0),
     ]
-    main_rows = shfe_copper.build_shfe_cu_main_series(
+    main_rows = shfe_copper_tools.build_shfe_cu_main_series(
         window_rows,
         initial_selected_contract="CU2610",
         initial_close=80200.0,
@@ -622,7 +622,7 @@ def test_rebuild_window_boundary_first_day_same_contract_return_is_none():
         _raw_contract_row("2026-07-30", "CU2609", 80500.0, 250000.0),
         _raw_contract_row("2026-07-30", "CU2610", 80800.0, 150000.0),
     ]
-    main_rows = shfe_copper.build_shfe_cu_main_series(
+    main_rows = shfe_copper_tools.build_shfe_cu_main_series(
         window_rows,
         initial_selected_contract="CU2609",
         initial_close=80200.0,

@@ -74,13 +74,13 @@ def test_refresh_official_fetches_cot_and_all_three_usd_series(tmp_path):
 
     _make_fake_cot_zip(cache_dir / "cftc-disaggregated-futures-only-2026.zip")
 
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
 
     usd_series = list(usd.USD_SERIES) + list(usd.INFLATION_SERIES)
     fake_fred = FakeFredClient(cache_dir)
     fake_fred.fetch_csvs(usd_series)
 
-    result = cyclical_commodities_import.import_cached_official_(
+    result = cyclical_commodities_import.import_cached_official_commodities(
         con, cache_dir, [2026]
     )
 
@@ -96,7 +96,7 @@ def test_replace_cot_history_rebuilds_scope_with_contract_identity(tmp_path):
     _make_fake_cot_zip(cache_dir / "cftc-disaggregated-futures-only-2026.zip")
     allowlist_path = _copper_and_wti_allowlist(tmp_path)
 
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     result = cyclical_commodities_import.replace_cot_history(
         con, cache_dir, [2026], allowlist_path=allowlist_path
     )
@@ -175,7 +175,7 @@ def test_replace_cot_history_keeps_inactive_natural_gas_and_scopes_henry_hub(tmp
         ],
     )
 
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     cyclical_commodities_import.replace_cot_history(
         con, cache_dir, [2026], allowlist_path=legacy_allowlist_path
     )
@@ -204,7 +204,7 @@ def test_replace_cot_history_rolls_back_on_missing_archive(tmp_path):
     cache_dir.mkdir(parents=True, exist_ok=True)
     allowlist_path = _copper_and_wti_allowlist(tmp_path)
 
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     _make_fake_cot_zip(cache_dir / "cftc-disaggregated-futures-only-2026.zip")
     cyclical_commodities_import.replace_cot_history(
         con, cache_dir, [2026], allowlist_path=allowlist_path
@@ -235,7 +235,7 @@ def test_replace_cot_history_rejects_allowlist_code_mismatch(tmp_path):
         ],
     )
 
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     with pytest.raises(ValueError, match="does not match the allowlist"):
         cyclical_commodities_import.replace_cot_history(
             con, cache_dir, [2026], allowlist_path=allowlist_path
@@ -267,7 +267,7 @@ def test_replace_cot_history_skips_inactive_commodity_rows(tmp_path):
         ],
     )
 
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     result = cyclical_commodities_import.replace_cot_history(
         con, cache_dir, [2026], allowlist_path=allowlist_path
     )
@@ -294,7 +294,7 @@ def test_replace_cot_history_matches_renamed_market_by_code(tmp_path):
     )
     allowlist_path = _copper_and_wti_allowlist(tmp_path)
 
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     result = cyclical_commodities_import.replace_cot_history(
         con, cache_dir, [2021], allowlist_path=allowlist_path
     )

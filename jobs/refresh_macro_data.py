@@ -93,7 +93,7 @@ def _planned_tasks(
     building_permits_main=None,
     ism_reports_main=None,
     gdp_main=None,
-    p4_macro_main=None,
+    macro_indicators_main=None,
     fomc_main=None,
     fomc_document_main=None,
     fomc_policy_tone_main=None,
@@ -143,9 +143,9 @@ def _planned_tasks(
     if m2_main is not None and not args.skip_m2:
         tasks.append(("m2_fred_fetch", m2_main, ["--fetch-fred-csv"]))
         tasks.append(("m2_fred_merge", m2_main, ["--fred-csv-merge"]))
-    if p4_macro_main is not None and not args.skip_macro:
-        tasks.append(("p4_macro_fred_fetch", p4_macro_main, ["--fetch-fred-csv"]))
-        tasks.append(("p4_macro_fred_merge", p4_macro_main, ["--fred-csv-merge"]))
+    if macro_indicators_main is not None and not args.skip_macro_indicators:
+        tasks.append(("macro_indicators_fred_fetch", macro_indicators_main, ["--fetch-fred-csv"]))
+        tasks.append(("macro_indicators_fred_merge", macro_indicators_main, ["--fred-csv-merge"]))
     if building_permits_main is not None and not args.skip_building_permits:
         tasks.append(("building_permits_census", building_permits_main, []))
     if ism_reports_main is not None and not args.skip_ism:
@@ -216,7 +216,7 @@ def run(
     building_permits_main=None,
     ism_reports_main=None,
     gdp_main=None,
-    p4_macro_main=None,
+    macro_indicators_main=None,
     fomc_main=None,
     fomc_document_main=None,
     fomc_policy_tone_main=None,
@@ -236,14 +236,14 @@ def run(
     parser.add_argument("--skip-rates", action="store_true")
     parser.add_argument("--skip-consumer-sentiment", action="store_true")
     parser.add_argument("--skip-m2", action="store_true")
-    parser.add_argument("--skip-p4-macro", action="store_true")
+    parser.add_argument("--skip-macro-indicators", action="store_true")
     parser.add_argument("--skip-building-permits", action="store_true")
     parser.add_argument("--skip-ism", action="store_true")
     parser.add_argument("--skip-gdp", action="store_true")
     parser.add_argument("--skip-fomc", action="store_true")
     parser.add_argument("--skip-nfib-sbo", action="store_true")
     parser.add_argument("--skip-nfib-sbo-regional", action="store_true")
-    parser.add_argument("--skip-method-commodities", action="store_true")
+    parser.add_argument("--skip-tracked-commodities", action="store_true")
     parser.add_argument("--skip-cyclical-commodities", action="store_true")
     parser.add_argument("--skip-oil", action="store_true")
     parser.add_argument("--skip-lumber", action="store_true")
@@ -268,7 +268,7 @@ def run(
         building_permits_main,
         ism_reports_main,
         gdp_main,
-        p4_macro_main,
+        macro_indicators_main,
         fomc_main,
         fomc_document_main,
         fomc_policy_tone_main,
@@ -304,7 +304,7 @@ def main(argv=None):
         building_permits_main=import_us_building_permits.main,
         ism_reports_main=fetch_ism_reports.main,
         gdp_main=import_gdp_market_relationships.main,
-        p4_macro_main=import_us_macro_indicators.main,
+        macro_indicators_main=import_us_macro_indicators.main,
         fomc_main=import_fomc_calendar.main,
         fomc_document_main=fetch_fomc_documents.main,
         fomc_policy_tone_main=generate_fomc_policy_tone.main,

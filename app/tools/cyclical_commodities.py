@@ -4,7 +4,7 @@ from app.data_sources.tracked_commodities import (
     ACTIVE_MARKET_SERIES,
     MARKET_SERIES,
 )
-from app.data_sources.lumber import _LUMBER_SERIES
+from app.data_sources.lumber import LUMBER_SERIES
 from app.tools import cot_historical_extremes
 from app.tools import cross_market_spreads
 from app.tools import inflation_distribution
@@ -13,7 +13,7 @@ from app.tools import price_distribution
 from app.tools import shfe_copper
 from app.tools import usd_distribution
 
-_CYCLICAL_COMMODITIES_VERSION = "cyclical_commodities_v1"
+CYCLICAL_COMMODITIES_VERSION = "cyclical_commodities_v1"
 
 _NON_OIL_METHOD_VERSION = "non_oil_price_distribution_v1"
 _NON_OIL_DISTRIBUTION_WINDOW = "2016-01-01_to_latest_available"
@@ -545,12 +545,12 @@ def _commodity_display_registry():
                 "source_url": meta["source_url"],
                 "source_class": "vendor_free_market_data",
             }
-    registry[_LUMBER_SERIES["series_id"]] = {
-        "display_name": _LUMBER_SERIES["title"],
+    registry[LUMBER_SERIES["series_id"]] = {
+        "display_name": LUMBER_SERIES["title"],
         "exchange_label": "CME",
         "source_label": "Yahoo Finance LBR=F",
-        "source_url": _LUMBER_SERIES["source_url"],
-        "source_class": _LUMBER_SERIES["source_class"],
+        "source_url": LUMBER_SERIES["source_url"],
+        "source_class": LUMBER_SERIES["source_class"],
     }
     return registry
 
@@ -876,7 +876,7 @@ def build_cyclical_commodities_payload(
         as_of,
     )
     return {
-        "version": _CYCLICAL_COMMODITIES_VERSION,
+        "version": CYCLICAL_COMMODITIES_VERSION,
         "as_of_date": as_of,
         "cot": cot_payload,
         "usd": usd_payload,

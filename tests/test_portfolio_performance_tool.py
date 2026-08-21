@@ -5,36 +5,36 @@ import pytest
 
 from app.tools import portfolio_performance
 
-FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "p17_portfolio_performance.json"
+FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "portfolio_performance.json"
 
 
-def p17_fixture():
+def fixture():
     return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
 def nrb_positions():
     return [
         {"symbol": position["ticker"], "shares": position["shares"], "side": position["sign"]}
-        for position in p17_fixture()["nrb"]["positions"]
+        for position in fixture()["nrb"]["positions"]
     ]
 
 
 def cw_positions():
     return [
         {"symbol": position["ticker"], "weight": position["weight"], "side": position["sign"]}
-        for position in p17_fixture()["cw"]["positions"]
+        for position in fixture()["cw"]["positions"]
     ]
 
 
 def nrb_series():
-    nrb = p17_fixture()["nrb"]
+    nrb = fixture()["nrb"]
     return portfolio_performance.nrb_portfolio_series(
         nrb_positions(), nrb["grid"]["dates"], nrb["grid"]["prices"]
     )
 
 
 def test_equal_dollar_shares_matches_workbook_share_counts():
-    nrb = p17_fixture()["nrb"]
+    nrb = fixture()["nrb"]
 
     for position in nrb["positions"]:
         start_price = nrb["grid"]["prices"][position["ticker"]][0]
@@ -52,7 +52,7 @@ def test_equal_dollar_shares_rejects_non_positive_target_gross():
 
 
 def test_nrb_portfolio_series_matches_workbook_samples():
-    nrb = p17_fixture()["nrb"]
+    nrb = fixture()["nrb"]
 
     result = nrb_series()
 
@@ -70,7 +70,7 @@ def test_nrb_portfolio_series_matches_workbook_samples():
 
 
 def test_nrb_initial_value_is_gross_exposure_not_signed():
-    nrb = p17_fixture()["nrb"]
+    nrb = fixture()["nrb"]
     first_prices = nrb["grid"]["prices"]
 
     result = nrb_series()
@@ -89,7 +89,7 @@ def test_nrb_initial_value_is_gross_exposure_not_signed():
 
 
 def test_nrb_weights_are_gross_weights_summing_to_one():
-    nrb = p17_fixture()["nrb"]
+    nrb = fixture()["nrb"]
 
     result = nrb_series()
 
@@ -102,7 +102,7 @@ def test_nrb_weights_are_gross_weights_summing_to_one():
 
 
 def test_nrb_portfolio_series_rejects_missing_symbol():
-    nrb = p17_fixture()["nrb"]
+    nrb = fixture()["nrb"]
     prices = {key: value for key, value in nrb["grid"]["prices"].items() if key != "FRPT"}
 
     with pytest.raises(ValueError, match="missing prices for symbol FRPT"):
@@ -110,7 +110,7 @@ def test_nrb_portfolio_series_rejects_missing_symbol():
 
 
 def test_nrb_portfolio_series_rejects_misaligned_series():
-    nrb = p17_fixture()["nrb"]
+    nrb = fixture()["nrb"]
     prices = dict(nrb["grid"]["prices"])
     prices["FRPT"] = prices["FRPT"][:-1]
 
@@ -133,7 +133,7 @@ def test_nrb_portfolio_series_rejects_invalid_side():
 
 
 def test_cw_portfolio_series_matches_workbook_samples():
-    cw = p17_fixture()["cw"]
+    cw = fixture()["cw"]
 
     result = portfolio_performance.cw_portfolio_series(
         cw_positions(), cw["grid"]["dates"], cw["grid"]["returns"]
@@ -150,7 +150,7 @@ def test_cw_portfolio_series_matches_workbook_samples():
 
 
 def test_cw_portfolio_series_compounds_from_start_index():
-    cw = p17_fixture()["cw"]
+    cw = fixture()["cw"]
 
     result = portfolio_performance.cw_portfolio_series(
         cw_positions(), cw["grid"]["dates"], cw["grid"]["returns"], start_index=50_000
@@ -163,7 +163,7 @@ def test_cw_portfolio_series_compounds_from_start_index():
 
 
 def test_cw_portfolio_series_rejects_non_positive_start_index():
-    cw = p17_fixture()["cw"]
+    cw = fixture()["cw"]
 
     with pytest.raises(ValueError, match="start index must be positive"):
         portfolio_performance.cw_portfolio_series(
@@ -172,7 +172,7 @@ def test_cw_portfolio_series_rejects_non_positive_start_index():
 
 
 def test_cw_portfolio_series_rejects_missing_symbol():
-    cw = p17_fixture()["cw"]
+    cw = fixture()["cw"]
     returns = {key: value for key, value in cw["grid"]["returns"].items() if key != "EIX"}
 
     with pytest.raises(ValueError, match="missing returns for symbol EIX"):

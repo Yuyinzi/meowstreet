@@ -364,7 +364,7 @@ def test_load_macro_indicator_series_for_ids_returns_only_requested_series(tmp_p
 
 
 def test_merge_cot_observations_updates_same_commodity_and_report_date(tmp_path):
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     macro_indicators.merge_cot_observations(con, [_COT_ROW])
     macro_indicators.merge_cot_observations(
         con, [{**_COT_ROW, "manager_longs": 201000.0}]
@@ -376,7 +376,7 @@ def test_merge_cot_observations_updates_same_commodity_and_report_date(tmp_path)
 
 
 def test_merge_cot_observations_persists_contract_identity(tmp_path):
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     macro_indicators.merge_cot_observations(con, [_COT_ROW])
 
     loaded = macro_indicators.load_cot_observations(con)[0]
@@ -386,31 +386,31 @@ def test_merge_cot_observations_persists_contract_identity(tmp_path):
 
 
 def test_merge_cot_observations_requires_contract_market_code(tmp_path):
-    con = macro_indicators.connect(tmp_path / ".sqlite")
-    with pytest.raises(ValueError, match=" cot contract market code is required"):
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
+    with pytest.raises(ValueError, match="commodities cot contract market code is required"):
         macro_indicators.merge_cot_observations(
             con, [{**_COT_ROW, "cftc_contract_market_code": None}]
         )
 
 
 def test_merge_cot_observations_requires_fixed_report_type(tmp_path):
-    con = macro_indicators.connect(tmp_path / ".sqlite")
-    with pytest.raises(ValueError, match=" cot report type must be"):
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
+    with pytest.raises(ValueError, match="commodities cot report type must be"):
         macro_indicators.merge_cot_observations(
             con, [{**_COT_ROW, "report_type": "futures_and_options"}]
         )
 
 
 def test_merge_cot_observations_requires_managed_money_category(tmp_path):
-    con = macro_indicators.connect(tmp_path / ".sqlite")
-    with pytest.raises(ValueError, match=" cot position category must be"):
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
+    with pytest.raises(ValueError, match="commodities cot position category must be"):
         macro_indicators.merge_cot_observations(
             con, [{**_COT_ROW, "position_category": "commercial"}]
         )
 
 
 def test_merge_cot_observations_rejects_exact_key_with_different_code(tmp_path):
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     macro_indicators.merge_cot_observations(con, [_COT_ROW])
     with pytest.raises(ValueError, match="different contract market code"):
         macro_indicators.merge_cot_observations(
@@ -419,7 +419,7 @@ def test_merge_cot_observations_rejects_exact_key_with_different_code(tmp_path):
 
 
 def test_replace_cot_history_rebuilds_scope_and_leaves_others(tmp_path):
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     copper_row = {
         **_COT_ROW,
         "commodity_id": "copper",
@@ -441,10 +441,10 @@ def test_replace_cot_history_rebuilds_scope_and_leaves_others(tmp_path):
 
 
 def test_replace_cot_history_rolls_back_on_invalid_row(tmp_path):
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     macro_indicators.merge_cot_observations(con, [_COT_ROW])
 
-    with pytest.raises(ValueError, match=" cot contract market code is required"):
+    with pytest.raises(ValueError, match="commodities cot contract market code is required"):
         macro_indicators.replace_cot_history(
             con,
             [{**_COT_ROW, "cftc_contract_market_code": None}],
@@ -484,7 +484,7 @@ def test_connect_migrates_cot_identity_columns(tmp_path):
 
 
 def test_legacy_null_identity_cot_row_remains_loadable(tmp_path):
-    con = macro_indicators.connect(tmp_path / ".sqlite")
+    con = macro_indicators.connect(tmp_path / "commodities.sqlite")
     con.execute(
         """insert into cot_observations(
             commodity_id, report_date, manager_longs, manager_shorts, open_interest,

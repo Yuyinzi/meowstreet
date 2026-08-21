@@ -312,9 +312,9 @@ def test_oil_benchmark_payload_includes_source_provenance():
     client = HttpClient(transport=transport)
     raw = oil.fetch_oil_observations("test-key", http_client=client)
 
-    from app.tools import cyclical_commodities as 
+    from app.tools import cyclical_commodities as commodities
 
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         {

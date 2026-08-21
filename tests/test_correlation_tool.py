@@ -6,10 +6,10 @@ import pytest
 
 from app.tools import correlation
 
-FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "p19_correlation.json"
+FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "correlation.json"
 
 
-def p19_fixture():
+def fixture():
     return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
@@ -38,32 +38,32 @@ def test_pearson_rejects_zero_variance_series():
 
 
 def test_pearson_matches_workbook_overall_wms_ogs():
-    fixture = p19_fixture()["wms_ogs"]
+    fixture_data = fixture()["wms_ogs"]
 
-    result = correlation.pearson(fixture["wms_returns"], fixture["ogs_returns"])
+    result = correlation.pearson(fixture_data["wms_returns"], fixture_data["ogs_returns"])
 
-    assert result == pytest.approx(fixture["expected"]["overall_correl"], abs=1e-9)
+    assert result == pytest.approx(fixture_data["expected"]["overall_correl"], abs=1e-9)
 
 
 def test_correlation_windows_match_workbook_wms_ogs():
-    fixture = p19_fixture()["wms_ogs"]
+    fixture_data = fixture()["wms_ogs"]
 
     result = correlation.correlation_windows(
-        fixture["dates"], fixture["wms_returns"], fixture["ogs_returns"]
+        fixture_data["dates"], fixture_data["wms_returns"], fixture_data["ogs_returns"]
     )
 
     assert result["overall"]["status"] == "ok"
     assert result["overall"]["correlation"] == pytest.approx(
-        fixture["expected"]["overall_correl"], abs=1e-9
+        fixture_data["expected"]["overall_correl"], abs=1e-9
     )
     assert result["overall"]["sample_size"] == 308
     assert result["one_year"]["status"] == "ok"
     assert result["one_year"]["correlation"] == pytest.approx(
-        fixture["expected"]["one_year_correl"], abs=1e-9
+        fixture_data["expected"]["one_year_correl"], abs=1e-9
     )
     assert result["two_year"]["status"] == "ok"
     assert result["two_year"]["correlation"] == pytest.approx(
-        fixture["expected"]["two_year_correl"], abs=1e-9
+        fixture_data["expected"]["two_year_correl"], abs=1e-9
     )
 
 
@@ -115,12 +115,12 @@ def test_rolling_correlation_requires_aligned_inputs():
 
 
 def signed_matrix_fixture_result():
-    fixture = p19_fixture()["portfolio"]
+    fixture_data = fixture()["portfolio"]
     positions = [
         {"symbol": position["ticker"], "side": position["side"]}
-        for position in fixture["positions"]
+        for position in fixture_data["positions"]
     ]
-    return fixture, correlation.signed_correlation_matrix(positions, fixture["returns"]["series"])
+    return fixture_data, correlation.signed_correlation_matrix(positions, fixture_data["returns"]["series"])
 
 
 def test_signed_correlation_matrix_matches_workbook():

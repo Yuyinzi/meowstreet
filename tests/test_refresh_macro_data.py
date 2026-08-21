@@ -9,7 +9,7 @@ def args_without_skips():
         skip_rates=False,
         skip_consumer_sentiment=False,
         skip_m2=False,
-        skip_macro=False,
+        skip_macro_indicators=False,
         skip_building_permits=False,
         skip_ism=False,
         skip_gdp=False,
@@ -77,7 +77,7 @@ def test_main_refreshes_official_building_permits_when_enabled():
             "--skip-fomc",
         ],
         building_permits_main=permits_main,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -129,7 +129,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
         ism_reports_main=ism_reports_main,
         gdp_main=gdp_main,
         fomc_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -184,7 +184,7 @@ def test_main_does_not_generate_ai_interpretations():
         ism_reports_main=recorder("ism_reports"),
         gdp_main=recorder("gdp"),
         fomc_main=recorder("fomc"),
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -224,7 +224,7 @@ def test_main_continues_after_provider_failure(capsys):
         building_permits_main=lambda argv: 0,
         ism_reports_main=lambda argv: 0,
         gdp_main=ok_task("gdp"),
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -272,7 +272,7 @@ def test_main_can_stop_after_first_failure():
         building_permits_main=lambda argv: 0,
         ism_reports_main=lambda argv: 0,
         gdp_main=ok_task("gdp"),
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -319,7 +319,7 @@ def test_main_records_exceptions_as_failures(capsys):
         m2_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
         gdp_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -356,7 +356,7 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
         fomc_main=fake_task,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -401,7 +401,7 @@ def test_refresh_macro_data_imports_fomc_when_calendar_csv_exists(tmp_path):
         fomc_document_main=lambda argv: 0,
         fomc_policy_tone_main=lambda argv: 0,
         fomc_minutes_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -440,7 +440,7 @@ def test_main_skip_flags_remove_tasks():
         m2_main=recorder("m2"),
         building_permits_main=lambda argv: 0,
         gdp_main=recorder("gdp"),
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -481,7 +481,7 @@ def test_main_runs_both_ism_surveys_in_order():
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
         ism_reports_main=recorder("ism_reports"),
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -521,7 +521,7 @@ def test_planned_tasks_includes_nfib_import_by_default():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=record("nfib"),
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -549,7 +549,7 @@ def test_skip_nfib_sbo_removes_nfib_task():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: (_ for _ in ()).throw(
             AssertionError("should not be called")
         ),
@@ -585,7 +585,7 @@ def test_planned_tasks_includes_nfib_regional_import_by_default():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=record("nfib"),
         nfib_regional_main=record("nfib_regional"),
         main=lambda argv: 0,
@@ -621,10 +621,10 @@ def test_planned_tasks_includes_unless_skipped():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
-        main=record(""),
+        main=record("commodities"),
         oil_main=lambda argv: 0,
         lumber_main=lambda argv: 0,
         dce_iron_ore_sina_main=lambda argv: 0,
@@ -632,7 +632,7 @@ def test_planned_tasks_includes_unless_skipped():
         economic_confirmation_main=lambda argv: 0,
     )
 
-    assert any(call[0] == "" for call in calls)
+    assert any(call[0] == "commodities" for call in calls)
 
 
 def test_skip_cyclical_commodities_removes_task():
@@ -649,7 +649,7 @@ def test_skip_cyclical_commodities_removes_task():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: (_ for _ in ()).throw(
@@ -677,7 +677,7 @@ def test_skip_nfib_sbo_regional_removes_nfib_regional_task():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: (_ for _ in ()).throw(
             AssertionError("should not be called")
@@ -711,7 +711,7 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         ism_reports_main=lambda argv: calls.append(argv) or 0,
         gdp_main=lambda argv: 0,
         fomc_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -771,7 +771,7 @@ def test_main_runs_all_fomc_tasks_in_order(tmp_path):
         fomc_document_main=documents_recorder,
         fomc_policy_tone_main=tone_recorder,
         fomc_minutes_main=minutes_recorder,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -816,7 +816,7 @@ def test_main_skips_all_fomc_tasks_when_skip_fomc_flag():
         fomc_minutes_main=lambda argv: (_ for _ in ()).throw(
             AssertionError("should not be called")
         ),
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -844,7 +844,7 @@ def test_skip_oil_removes_oil_task():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -858,7 +858,7 @@ def test_skip_oil_removes_oil_task():
     )
 
 
-def test_planned_tasks_includes_macro_fred_tasks_by_default():
+def test_planned_tasks_includes_macro_indicators_fred_tasks_by_default():
     calls = []
 
     def record(label):
@@ -878,7 +878,7 @@ def test_planned_tasks_includes_macro_fred_tasks_by_default():
             "--skip-fomc",
         ],
         m2_main=lambda argv: 0,
-        p4_macro_main=record("p4_macro"),
+        macro_indicators_main=record("macro_indicators"),
         building_permits_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
@@ -891,12 +891,12 @@ def test_planned_tasks_includes_macro_fred_tasks_by_default():
     )
 
     assert calls == [
-        ("p4_macro", ["--fetch-fred-csv"]),
-        ("p4_macro", ["--fred-csv-merge"]),
+        ("macro_indicators", ["--fetch-fred-csv"]),
+        ("macro_indicators", ["--fred-csv-merge"]),
     ]
 
 
-def test_skip_macro_removes_tasks():
+def test_skip_macro_indicators_removes_tasks():
     refresh_macro_data.run(
         [
             "--skip-yahoo",
@@ -906,13 +906,13 @@ def test_skip_macro_removes_tasks():
             "--skip-ism",
             "--skip-gdp",
             "--skip-fomc",
-            "--skip-p4-macro",
+            "--skip-macro-indicators",
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
-        p4_macro_main=lambda argv: (_ for _ in ()).throw(
+        macro_indicators_main=lambda argv: (_ for _ in ()).throw(
             AssertionError("should not be called")
         ),
         main=lambda argv: 0,
@@ -1041,7 +1041,7 @@ def test_refresh_registry_runs_economic_confirmation_by_default():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,
@@ -1070,7 +1070,7 @@ def test_skip_economic_confirmation_removes_task():
         ],
         consumer_main=lambda argv: 0,
         building_permits_main=lambda argv: 0,
-        p4_macro_main=lambda argv: 0,
+        macro_indicators_main=lambda argv: 0,
         nfib_main=lambda argv: 0,
         nfib_regional_main=lambda argv: 0,
         main=lambda argv: 0,

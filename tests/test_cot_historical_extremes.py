@@ -389,5 +389,5 @@ def test_invalid_report_date_is_rejected_strictly():
     rows = _weekly_history(net_fn=lambda index: 100000 + index)
     observation_date = _after_latest(rows, 3)
     rows.append(_observation("not-a-date", 50000, 40000))
-    with pytest.raises(ValueError, match=" cot report date is invalid"):
+    with pytest.raises(ValueError, match="commodities cot report date is invalid"):
         extremes.evaluate("crude_oil_wti", ACTIVE_ENTRY, rows, observation_date)

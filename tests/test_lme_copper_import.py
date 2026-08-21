@@ -39,7 +39,7 @@ def archived_row(date_value, value):
 
 
 def cad_series():
-    return lme_copper._LME_COPPER_SERIES
+    return lme_copper.LME_COPPER_SERIES
 
 
 def cad_row(date_value, value):
@@ -284,4 +284,4 @@ def test_import_cli_reports_errors_without_traceback(monkeypatch, capsys, tmp_pa
     captured = capsys.readouterr()
     assert exit_code == 1
     assert captured.out == ""
-    assert captured.err == " lme copper import error: sina unavailable\n"
+    assert captured.err == "commodities lme copper import error: sina unavailable\n"

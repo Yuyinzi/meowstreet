@@ -6,21 +6,21 @@ import pytest
 
 from app.tools import portfolio_volatility
 
-FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "p18_portfolio_volatility.json"
+FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "portfolio_volatility.json"
 
 
-def p18_fixture():
+def fixture():
     return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
 def report_fixture_result():
-    fixture = p18_fixture()
+    fixture_data = fixture()
     positions = [
         {"symbol": position["ticker"], "allocation": position["net_allocation"]}
-        for position in fixture["positions"]
+        for position in fixture_data["positions"]
     ]
-    return fixture, portfolio_volatility.portfolio_volatility_report(
-        positions, fixture["returns"]["series"]
+    return fixture_data, portfolio_volatility.portfolio_volatility_report(
+        positions, fixture_data["returns"]["series"]
     )
 
 
@@ -76,15 +76,15 @@ def test_covariance_matrix_requires_return_series():
 
 
 def test_signed_weights_match_workbook():
-    fixture = p18_fixture()
-    allocations = [position["net_allocation"] for position in fixture["positions"]]
+    fixture_data = fixture()
+    allocations = [position["net_allocation"] for position in fixture_data["positions"]]
 
     weights = portfolio_volatility.signed_weights(allocations)
 
     gross = sum(abs(allocation) for allocation in allocations)
     assert gross == pytest.approx(4 * 12500.0 + 6 * 8333.0)
     assert weights == pytest.approx(
-        [position["weight"] for position in fixture["positions"]], abs=1e-9
+        [position["weight"] for position in fixture_data["positions"]], abs=1e-9
     )
     assert sum(abs(weight) for weight in weights) == pytest.approx(1.0)
 

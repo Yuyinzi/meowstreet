@@ -50,9 +50,9 @@ def test_resource_path_rejects_unknown_id():
 def test_runtime_constants_use_application_resources():
     paths = [
         api.METHOD_PATH,
-        api._ATTRIBUTION_CATALOG_PATH,
-        api._NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH,
-        api._COT_HISTORICAL_EXTREME_ALLOWLIST_PATH,
+        api.ATTRIBUTION_CATALOG_PATH,
+        api.NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH,
+        api.COT_HISTORICAL_EXTREME_ALLOWLIST_PATH,
         market_setup_predicates.METHOD_CONTRACTS_PATH,
         market_setup_v2.REGISTRY_PATH,
     ]

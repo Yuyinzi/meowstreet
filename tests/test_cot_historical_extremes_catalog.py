@@ -118,7 +118,7 @@ def test_loader_rejects_duplicate_commodity_ids(tmp_path):
     payload["entries"].append({**payload["entries"][0], "contract_code": "999999"})
     dest = _write_payload(tmp_path, payload)
 
-    with pytest.raises(ValueError, match="duplicate  cot allowlist commodity"):
+    with pytest.raises(ValueError, match="duplicate commodities cot allowlist commodity"):
         catalog.load_cot_historical_extreme_allowlist(dest)
 
 
@@ -128,7 +128,7 @@ def test_loader_rejects_duplicate_identity_tuples(tmp_path):
     payload["entries"].append({**entry, "market_name": entry["market_name"]})
     dest = _write_payload(tmp_path, payload)
 
-    with pytest.raises(ValueError, match="duplicate  cot allowlist identity"):
+    with pytest.raises(ValueError, match="duplicate commodities cot allowlist identity"):
         catalog.load_cot_historical_extreme_allowlist(dest)
 
 
@@ -137,7 +137,7 @@ def test_loader_rejects_active_entry_without_contract_code(tmp_path):
     payload["entries"][0]["contract_code"] = None
     dest = _write_payload(tmp_path, payload)
 
-    with pytest.raises(ValueError, match=" cot allowlist contract code is required"):
+    with pytest.raises(ValueError, match="commodities cot allowlist contract code is required"):
         catalog.load_cot_historical_extreme_allowlist(dest)
 
 
@@ -147,7 +147,7 @@ def test_loader_rejects_malformed_contract_code(tmp_path):
     dest = _write_payload(tmp_path, payload)
 
     with pytest.raises(
-        ValueError, match=" cot allowlist contract code is malformed"
+        ValueError, match="commodities cot allowlist contract code is malformed"
     ):
         catalog.load_cot_historical_extreme_allowlist(dest)
 
@@ -157,7 +157,7 @@ def test_loader_rejects_unsupported_report_type(tmp_path):
     dest = _write_payload(tmp_path, payload)
 
     with pytest.raises(
-        ValueError, match=" cot allowlist report type is unsupported"
+        ValueError, match="commodities cot allowlist report type is unsupported"
     ):
         catalog.load_cot_historical_extreme_allowlist(dest)
 
@@ -167,7 +167,7 @@ def test_loader_rejects_unsupported_position_category(tmp_path):
     dest = _write_payload(tmp_path, payload)
 
     with pytest.raises(
-        ValueError, match=" cot allowlist position category is unsupported"
+        ValueError, match="commodities cot allowlist position category is unsupported"
     ):
         catalog.load_cot_historical_extreme_allowlist(dest)
 
@@ -177,7 +177,7 @@ def test_loader_rejects_catalog_source_name_code_mismatch(tmp_path):
     payload["entries"][0]["market_name"] = "GOLD - COMMODITY EXCHANGE INC."
     dest = _write_payload(tmp_path, payload)
 
-    with pytest.raises(ValueError, match=" cot allowlist market name mismatch"):
+    with pytest.raises(ValueError, match="commodities cot allowlist market name mismatch"):
         catalog.load_cot_historical_extreme_allowlist(dest)
 
 

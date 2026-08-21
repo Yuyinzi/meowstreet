@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.data_sources.lumber import (
-    _LUMBER_START_DATE,
+    LUMBER_START_DATE,
     fetch_lumber_series,
 )
 from app.db import macro_indicators
@@ -36,12 +36,12 @@ def main(argv=None):
         archived_rows = macro_indicators.load_macro_indicator_observations(
             con, lumber_import.ARCHIVED_LUMBER_SERIES_ID
         )
-        payload = fetch_lumber_series(_LUMBER_START_DATE, end_date)
+        payload = fetch_lumber_series(LUMBER_START_DATE, end_date)
         audit = lumber_import.audit_lumber_overlap(
             archived_rows, payload["observations"]
         )
     except ValueError as exc:
-        print(f" lumber overlap audit failed: {exc}", file=sys.stderr)
+        print(f"commodities lumber overlap audit failed: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()

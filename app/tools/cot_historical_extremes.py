@@ -39,7 +39,7 @@ def evaluate(commodity_id, catalog_entry, observations, observation_date):
             report_date = date.fromisoformat(str(row["report_date"]))
         except ValueError as exc:
             raise ValueError(
-                f" cot report date is invalid for {commodity_id}"
+                f"commodities cot report date is invalid for {commodity_id}"
             ) from exc
         parsed.append((report_date, row))
     parsed.sort(key=lambda item: item[0])

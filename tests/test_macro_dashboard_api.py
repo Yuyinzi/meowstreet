@@ -5057,7 +5057,7 @@ def test_market_setup_is_identical_across_inflation_distribution_states(monkeypa
             lambda con, series_ids, rows=rows: {
                 sid: list(rows)
                 for sid in series_ids
-                if sid in api._OBSERVATION_SERIES_IDS
+                if sid in api.OBSERVATION_SERIES_IDS
             },
         )
         responses.append(_market_setup_payload())
@@ -5302,9 +5302,9 @@ def _stub_eia_observations(monkeypatch):
                     {"date": "2026-07-24", "value": 64.89, "source_identifier": "RWTC"}
                 ]
                 for sid in series_ids
-                if sid in api._OIL_SERIES_IDS
+                if sid in api.OIL_SERIES_IDS
             }
-            if any(sid in api._OIL_SERIES_IDS for sid in series_ids)
+            if any(sid in api.OIL_SERIES_IDS for sid in series_ids)
             else {
                 sid: [
                     {
@@ -5610,9 +5610,9 @@ def test_oil_full_history_injects_distributions_and_market_setup_unchanged(
         lambda con, series_ids: {
             sid: (
                 oil_benchmark_rows
-                if sid in api._OIL_SERIES_IDS[:2]
+                if sid in api.OIL_SERIES_IDS[:2]
                 else [{"date": "2026-07-24", "value": 64.89, "source_identifier": sid}]
-                if sid in api._OIL_SERIES_IDS
+                if sid in api.OIL_SERIES_IDS
                 else [
                     {"date": "2026-07-20", "value": 120.0},
                     {"date": "2026-07-21", "value": 120.5},
@@ -5665,7 +5665,7 @@ def test_oil_full_history_injects_distributions_and_market_setup_unchanged(
             lambda con, series_ids: {
                 sid: (
                     [{"date": "2026-07-24", "value": oil_value}]
-                    if sid in api._OIL_SERIES_IDS
+                    if sid in api.OIL_SERIES_IDS
                     else [
                         {"date": "2026-07-20", "value": 120.0},
                         {"date": "2026-07-21", "value": 120.5},
@@ -6576,7 +6576,7 @@ def test_non_oil_ticker_workflow_output_has_no_field(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    assert "" not in json.dumps(payload)
+    assert "commodities" not in json.dumps(payload)
 
 
 def _economic_confirmation_payload(as_of_timestamp):

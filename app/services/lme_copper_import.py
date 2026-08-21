@@ -4,13 +4,13 @@ from datetime import date as date_type
 from datetime import timedelta
 
 from app.data_sources.lme_copper import (
-    _LME_COPPER_CUTOVER_DATE,
-    _LME_COPPER_SERIES_ID,
+    LME_COPPER_CUTOVER_DATE,
+    LME_COPPER_SERIES_ID,
     fetch_lme_copper_cad,
 )
 from app.db import macro_indicators
 
-_LME_COPPER_OVERLAP_TEST_VERSION = "lme_copper_cad_overlap_v1"
+LME_COPPER_OVERLAP_TEST_VERSION = "lme_copper_cad_overlap_v1"
 ARCHIVED_LME_SERIES_ID = "copper_lme"
 _OVERLAP_DAYS = 14
 
@@ -77,7 +77,7 @@ def audit_lme_copper_overlap(archived_rows, cad_rows):
         for day in shared_return_dates
     ]
     return {
-        "overlap_test_version": _LME_COPPER_OVERLAP_TEST_VERSION,
+        "overlap_test_version": LME_COPPER_OVERLAP_TEST_VERSION,
         "archived_count": len(archived_rows),
         "cad_count": len(cad_rows),
         "shared_date_count": len(shared_dates),
@@ -123,16 +123,16 @@ def _default_fetcher(start_date, end_date):
 def refresh_lme_copper(con, today_date=None, fetcher=None, initial=False):
     effective_today = today_date or date_type.today().isoformat()
     stored_rows = macro_indicators.load_macro_indicator_observations(
-        con, _LME_COPPER_SERIES_ID
+        con, LME_COPPER_SERIES_ID
     )
     if initial and stored_rows:
         raise ValueError("sina CAD initial migration is already recorded")
     if initial or not stored_rows:
-        start_date = _LME_COPPER_CUTOVER_DATE
+        start_date = LME_COPPER_CUTOVER_DATE
     else:
         latest_date = stored_rows[-1]["date"]
         start_date = max(
-            _LME_COPPER_CUTOVER_DATE,
+            LME_COPPER_CUTOVER_DATE,
             (
                 date_type.fromisoformat(latest_date) - timedelta(days=_OVERLAP_DAYS)
             ).isoformat(),
@@ -156,7 +156,7 @@ def refresh_lme_copper(con, today_date=None, fetcher=None, initial=False):
             )
             audit = audit_lme_copper_overlap(archived_rows, payload["observations"])
             macro_indicators.merge_vendor_series_overlap_audit(
-                con, _LME_COPPER_SERIES_ID, audit, commit=False
+                con, LME_COPPER_SERIES_ID, audit, commit=False
             )
         macro_indicators.merge_macro_indicator_observations(
             con, payload["series"], observations, commit=False

@@ -23,7 +23,7 @@ def main(argv=None):
             con
         )
     except ValueError as exc:
-        print(f" non-oil attribution import error: {exc}", file=sys.stderr)
+        print(f"commodities non-oil attribution import error: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()

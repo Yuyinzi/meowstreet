@@ -21,7 +21,7 @@ def valid_payload():
 
 def invalid_payload():
     return {
-        "series": sina._DCE_IRON_ORE_SINA_SERIES,
+        "series": sina.DCE_IRON_ORE_SINA_SERIES,
         "observations": [],
     }
 

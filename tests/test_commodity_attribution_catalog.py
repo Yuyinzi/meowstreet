@@ -333,13 +333,13 @@ def test_parse_commodity_attribution_text_rejects_duplicate_url():
     )
 
     with pytest.raises(
-        ValueError, match="duplicate  attribution url https://www.eia.gov/petroleum/"
+        ValueError, match="duplicate commodities attribution url https://www.eia.gov/petroleum/"
     ):
         parsed_records(text)
 
 
 def test_parse_commodity_attribution_text_raises_when_no_urls():
-    with pytest.raises(ValueError, match="no  attribution resources"):
+    with pytest.raises(ValueError, match="no commodities attribution resources"):
         parsed_records("Oil\n\nsome organization without any link\n")
 
 

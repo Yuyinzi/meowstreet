@@ -1088,8 +1088,8 @@ export function renderGrowthCycleDetailInPanel(body) {
           });
           return;
         }
-        if (payload.detail_id === "cyclical_commodities" && window.CyclicalCommoditiesUi && window.CyclicalCommoditiesUi.renderDetail) {
-          window.CyclicalCommoditiesUi.renderDetail(body, payload, {
+        if (payload.detail_id === "cyclical_commodities" && window.cyclicalCommoditiesUi && window.cyclicalCommoditiesUi.renderDetail) {
+          window.cyclicalCommoditiesUi.renderDetail(body, payload, {
             escapeHtml: escapeHtml,
             bilingualLabel: bilingualLabel,
             bilingualTitle: bilingualTitle,
@@ -1174,8 +1174,8 @@ export function rerenderGrowthCycleDetailBodyPreservingScroll() {
         bindGrowthCycleRangeControl: bindGrowthCycleRangeControl,
         attachRatesChartTooltips: attachRatesChartTooltips,
       });
-    } else if (payload.detail_id === "cyclical_commodities" && window.CyclicalCommoditiesUi && window.CyclicalCommoditiesUi.renderDetail) {
-      window.CyclicalCommoditiesUi.renderDetail(body, payload, {
+    } else if (payload.detail_id === "cyclical_commodities" && window.cyclicalCommoditiesUi && window.cyclicalCommoditiesUi.renderDetail) {
+      window.cyclicalCommoditiesUi.renderDetail(body, payload, {
         escapeHtml: escapeHtml,
         bilingualLabel: bilingualLabel,
         bilingualTitle: bilingualTitle,
@@ -2041,8 +2041,8 @@ export function renderHousingPermitsCard(card) {
 
 
 export function renderCyclicalCommoditiesCard(card) {
-    if (window.CyclicalCommoditiesUi && window.CyclicalCommoditiesUi.renderCard) {
-      return window.CyclicalCommoditiesUi.renderCard(card, {
+    if (window.cyclicalCommoditiesUi && window.cyclicalCommoditiesUi.renderCard) {
+      return window.cyclicalCommoditiesUi.renderCard(card, {
         escapeHtml: escapeHtml,
         bilingualLabel: bilingualLabel,
         bilingualTitle: bilingualTitle,

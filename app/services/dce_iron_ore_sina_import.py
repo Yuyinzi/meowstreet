@@ -4,8 +4,8 @@ from datetime import timedelta
 from app.data_sources.dce_iron_ore_sina import fetch_dce_iron_ore_sina
 from app.db import macro_indicators
 
-_DCE_IRON_ORE_SINA_SERIES_ID = "iron_ore_dce"
-_DCE_IRON_ORE_SINA_START_DATE = "2013-10-18"
+DCE_IRON_ORE_SINA_SERIES_ID = "iron_ore_dce"
+DCE_IRON_ORE_SINA_START_DATE = "2013-10-18"
 
 _OVERLAP_DAYS = 14
 
@@ -26,10 +26,10 @@ def _default_fetcher(start_date, end_date):
 def refresh_dce_iron_ore_sina(con, today_date=None, fetcher=None, initial=False):
     effective_today = today_date or date_type.today().isoformat()
     stored_rows = macro_indicators.load_macro_indicator_observations(
-        con, _DCE_IRON_ORE_SINA_SERIES_ID
+        con, DCE_IRON_ORE_SINA_SERIES_ID
     )
     if initial or not stored_rows:
-        start_date = _DCE_IRON_ORE_SINA_START_DATE
+        start_date = DCE_IRON_ORE_SINA_START_DATE
     else:
         start_date = _overlap_start(stored_rows)
     end_date = (

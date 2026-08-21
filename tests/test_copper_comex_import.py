@@ -59,7 +59,7 @@ def yahoo_observation(date_value, value):
 
 def yahoo_payload(observations):
     return {
-        "series": copper_comex._COPPER_COMEX_SERIES,
+        "series": copper_comex.COPPER_COMEX_SERIES,
         "observations": observations,
     }
 
@@ -177,7 +177,7 @@ def test_incremental_copper_import_uses_fourteen_calendar_day_overlap(tmp_path):
     con = macro_indicators.connect(tmp_path / "market.sqlite")
     macro_indicators.merge_macro_indicator_observations(
         con,
-        copper_comex._COPPER_COMEX_SERIES,
+        copper_comex.COPPER_COMEX_SERIES,
         [yahoo_observation("2026-07-29", 3.9)],
     )
     calls = []
@@ -349,7 +349,7 @@ def test_import_cli_reports_errors_without_traceback(monkeypatch, capsys, tmp_pa
     captured = capsys.readouterr()
     assert exit_code == 1
     assert captured.out == ""
-    assert captured.err == " copper comex import error: yahoo unavailable\n"
+    assert captured.err == "commodities copper comex import error: yahoo unavailable\n"
 
 
 def test_audit_cli_writes_json_export_and_no_db_rows(monkeypatch, tmp_path):

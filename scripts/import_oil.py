@@ -25,7 +25,7 @@ def main(argv=None):
     load_env(ROOT)
     api_key = os.getenv("EIA_KEY", "").strip()
     if not api_key:
-        print(" oil error: EIA_KEY is not set", file=sys.stderr)
+        print("commodities oil error: EIA_KEY is not set", file=sys.stderr)
         return 1
     con = macro_indicators.connect(args.db_path)
     try:
@@ -35,7 +35,7 @@ def main(argv=None):
         print(f"series: {result['series']}, observations: {result['observations']}")
         return 0
     except ValueError as exc:
-        print(f" oil error: {exc}", file=sys.stderr)
+        print(f"commodities oil error: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()

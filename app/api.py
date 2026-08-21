@@ -40,11 +40,11 @@ from app.resources import resource_path
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "static"
 METHOD_PATH = resource_path("workflow_method")
-_ATTRIBUTION_CATALOG_PATH = resource_path("commodity_attribution_catalog")
-_NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH = (
+ATTRIBUTION_CATALOG_PATH = resource_path("commodity_attribution_catalog")
+NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH = (
     resource_path("attribution_source_audit")
 )
-_COT_HISTORICAL_EXTREME_ALLOWLIST_PATH = (
+COT_HISTORICAL_EXTREME_ALLOWLIST_PATH = (
     resource_path("cot_extreme_allowlist")
 )
 
@@ -78,7 +78,7 @@ NFIB_SERIES_IDS = [
     "nfib_sbo_earnings_trends",
 ]
 
-_OBSERVATION_SERIES_IDS = [
+OBSERVATION_SERIES_IDS = [
     "usd_broad",
     "usd_afe",
     "usd_eme",
@@ -87,7 +87,7 @@ _OBSERVATION_SERIES_IDS = [
     "ppi_all_commodities",
 ]
 
-_OIL_SERIES_IDS = [
+OIL_SERIES_IDS = [
     "oil_wti_spot",
     "oil_brent_spot",
     "oil_commercial_crude_stocks",
@@ -110,21 +110,21 @@ method_COMMODITY_SERIES_IDS = [
 def _load_attribution_catalog():
     try:
         return commodity_attribution_catalog.load_commodity_attribution_catalog(
-            _ATTRIBUTION_CATALOG_PATH
+            ATTRIBUTION_CATALOG_PATH
         )
     except (ValueError, TypeError, RuntimeError, OSError):
-        logging.warning(" attribution catalog load failed", exc_info=True)
+        logging.warning("commodities attribution catalog load failed", exc_info=True)
         return None
 
 
 def _load_non_oil_attribution_source_audit():
     try:
         return non_oil_attribution_source_audit.load_non_oil_attribution_source_audit(
-            _NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH, _ATTRIBUTION_CATALOG_PATH
+            NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH, ATTRIBUTION_CATALOG_PATH
         )
     except (ValueError, TypeError, RuntimeError, OSError):
         logging.warning(
-            " non-oil attribution source audit load failed", exc_info=True
+            "commodities non-oil attribution source audit load failed", exc_info=True
         )
         return None
 
@@ -132,11 +132,11 @@ def _load_non_oil_attribution_source_audit():
 def _load_cot_historical_extreme_allowlist():
     try:
         return cot_historical_extremes_catalog.load_cot_historical_extreme_allowlist(
-            _COT_HISTORICAL_EXTREME_ALLOWLIST_PATH
+            COT_HISTORICAL_EXTREME_ALLOWLIST_PATH
         )
     except (ValueError, TypeError, RuntimeError, OSError):
         logging.warning(
-            " cot historical extreme allowlist load failed", exc_info=True
+            "commodities cot historical extreme allowlist load failed", exc_info=True
         )
         return None
 

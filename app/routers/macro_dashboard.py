@@ -268,19 +268,19 @@ def macro_dashboard_growth_cycle():
         usd_observations = (
             macro_indicators_db.load_macro_indicator_observations_for_series(
                 con,
-                api._OBSERVATION_SERIES_IDS,
+                api.OBSERVATION_SERIES_IDS,
             )
         )
         oil_observations = (
             macro_indicators_db.load_macro_indicator_observations_for_series(
                 con,
-                api._OIL_SERIES_IDS,
+                api.OIL_SERIES_IDS,
             )
         )
         oil_series_metadata = (
             macro_indicators_db.load_macro_indicator_series_for_ids(
                 con,
-                api._OIL_SERIES_IDS,
+                api.OIL_SERIES_IDS,
             )
         )
         method_observations = (
@@ -514,19 +514,19 @@ def macro_dashboard_growth_cycle_detail(detail_id):
             usd_observations = (
                 macro_indicators_db.load_macro_indicator_observations_for_series(
                     con,
-                    api._OBSERVATION_SERIES_IDS,
+                    api.OBSERVATION_SERIES_IDS,
                 )
             )
             oil_observations = (
                 macro_indicators_db.load_macro_indicator_observations_for_series(
                     con,
-                    api._OIL_SERIES_IDS,
+                    api.OIL_SERIES_IDS,
                 )
             )
             oil_series_metadata = (
                 macro_indicators_db.load_macro_indicator_series_for_ids(
                     con,
-                    api._OIL_SERIES_IDS,
+                    api.OIL_SERIES_IDS,
                 )
             )
             method_observations = (

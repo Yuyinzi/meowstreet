@@ -83,7 +83,7 @@ create table if not exists macro_indicator_regional_observation_metadata (
 """
 
 
-__COT_DDL = """
+_COT_DDL = """
 create table if not exists cot_observations (
     commodity_id text not null,
     report_date text not null,
@@ -113,7 +113,7 @@ create table if not exists vendor_series_overlap_audits (
 """
 
 
-__SHFE_CU_DDL = """
+_SHFE_CU_DDL = """
 create table if not exists shfe_cu_contract_daily (
     trade_date text not null,
     contract text not null,
@@ -165,7 +165,7 @@ create table if not exists shfe_cu_main_daily (
 """
 
 
-__NON_OIL_ATTRIBUTION_DDL = """
+_NON_OIL_ATTRIBUTION_DDL = """
 create table if not exists non_oil_attribution_facts (
     commodity_id text not null,
     source_url text not null,
@@ -197,9 +197,9 @@ create table if not exists non_oil_attribution_refresh_status (
 def init_macro_tables(con):
     con.executescript(_MACRO_TABLES_DDL)
     con.executescript(_REGIONAL_TABLES_DDL)
-    con.executescript(__COT_DDL)
-    con.executescript(__SHFE_CU_DDL)
-    con.executescript(__NON_OIL_ATTRIBUTION_DDL)
+    con.executescript(_COT_DDL)
+    con.executescript(_SHFE_CU_DDL)
+    con.executescript(_NON_OIL_ATTRIBUTION_DDL)
     for col in [
         "source_hash",
         "publication_date_basis",
@@ -717,7 +717,7 @@ def load_all_nfib_regional_observations(con):
     return [dict(row) for row in rows]
 
 
-__COT_REQUIRED_FIELDS = [
+_COT_REQUIRED_FIELDS = [
     "commodity_id",
     "report_date",
     "manager_longs",
@@ -725,41 +725,41 @@ __COT_REQUIRED_FIELDS = [
     "open_interest",
 ]
 
-__COT_REPORT_TYPE = "disaggregated_futures_only"
-__COT_POSITION_CATEGORY = "managed_money"
+_COT_REPORT_TYPE = "disaggregated_futures_only"
+_COT_POSITION_CATEGORY = "managed_money"
 
 
 def _cot_observation_fields(obs):
-    for field in __COT_REQUIRED_FIELDS:
+    for field in _COT_REQUIRED_FIELDS:
         if field not in obs:
-            raise ValueError(f" cot observation is missing required field: {field}")
+            raise ValueError(f"commodities cot observation is missing required field: {field}")
     commodity_id = str(obs["commodity_id"] or "").strip().lower()
     if not commodity_id:
-        raise ValueError(" cot commodity_id is required")
+        raise ValueError("commodities cot commodity_id is required")
     report_date = str(obs["report_date"] or "").strip()
     if not report_date:
-        raise ValueError(" cot report_date is required")
+        raise ValueError("commodities cot report_date is required")
     contract_code = str(obs.get("cftc_contract_market_code") or "").strip()
     if not contract_code:
-        raise ValueError(" cot contract market code is required")
+        raise ValueError("commodities cot contract market code is required")
     report_type = str(obs.get("report_type") or "").strip()
-    if report_type != __COT_REPORT_TYPE:
-        raise ValueError(" cot report type must be disaggregated_futures_only")
+    if report_type != _COT_REPORT_TYPE:
+        raise ValueError("commodities cot report type must be disaggregated_futures_only")
     position_category = str(obs.get("position_category") or "").strip()
-    if position_category != __COT_POSITION_CATEGORY:
-        raise ValueError(" cot position category must be managed_money")
+    if position_category != _COT_POSITION_CATEGORY:
+        raise ValueError("commodities cot position category must be managed_money")
     manager_longs = float(obs["manager_longs"])
     manager_shorts = float(obs["manager_shorts"])
     open_interest = float(obs["open_interest"])
     if manager_longs < 0 or manager_shorts < 0 or open_interest < 0:
-        raise ValueError(f" cot {commodity_id} has negative values on {report_date}")
+        raise ValueError(f"commodities cot {commodity_id} has negative values on {report_date}")
     if manager_longs > open_interest:
         raise ValueError(
-            f" cot {commodity_id} manager longs exceed open interest on {report_date}"
+            f"commodities cot {commodity_id} manager longs exceed open interest on {report_date}"
         )
     if manager_shorts > open_interest:
         raise ValueError(
-            f" cot {commodity_id} manager shorts exceed open interest on {report_date}"
+            f"commodities cot {commodity_id} manager shorts exceed open interest on {report_date}"
         )
     return {
         "commodity_id": commodity_id,
@@ -786,7 +786,7 @@ def _insert_cot_observation(con, obs):
         fields["contract_code"],
     ):
         raise ValueError(
-            f" cot {fields['commodity_id']} report date "
+            f"commodities cot {fields['commodity_id']} report date "
             f"{fields['report_date']} has a different contract market code"
         )
     con.execute(
@@ -841,7 +841,7 @@ def replace_cot_history(con, observations, scope_commodities, commit=True):
             {str(commodity).strip().lower() for commodity in scope_commodities}
         )
         if not normalized_scope:
-            raise ValueError(" cot replace history requires a nonempty scope")
+            raise ValueError("commodities cot replace history requires a nonempty scope")
         placeholders = ", ".join("?" for _ in normalized_scope)
         con.execute(
             f"delete from cot_observations where commodity_id in ({placeholders})",
@@ -857,7 +857,7 @@ def replace_cot_history(con, observations, scope_commodities, commit=True):
         raise
 
 
-__COT_COLS = """
+_COT_COLS = """
     commodity_id, report_date, manager_longs, manager_shorts, open_interest,
     publication_date, publication_date_basis, report_type, source_url, source_hash,
     cftc_contract_market_code, position_category
@@ -866,7 +866,7 @@ __COT_COLS = """
 
 def load_cot_observations(con):
     rows = con.execute(
-        f"select {__COT_COLS} from cot_observations order by commodity_id, report_date"
+        f"select {_COT_COLS} from cot_observations order by commodity_id, report_date"
     ).fetchall()
     return [dict(row) for row in rows]
 
@@ -903,7 +903,7 @@ def load_vendor_series_overlap_audit(con, series_id, overlap_test_version):
 
 
 def ensure_schema(con):
-    con.executescript(__COT_DDL)
+    con.executescript(_COT_DDL)
     con.execute(
         """insert or ignore into vendor_series_overlap_audits(
                series_id, overlap_test_version, audit_json
@@ -1127,7 +1127,7 @@ def load_shfe_cu_main_observations(con):
     return result
 
 
-__NON_OIL_ATTRIBUTION_REQUIRED_FIELDS = [
+_NON_OIL_ATTRIBUTION_REQUIRED_FIELDS = [
     "method_version",
     "commodity_id",
     "source_name",
@@ -1141,36 +1141,36 @@ __NON_OIL_ATTRIBUTION_REQUIRED_FIELDS = [
     "status",
 ]
 
-__NON_OIL_ATTRIBUTION_FACT_COLS = """
+_NON_OIL_ATTRIBUTION_FACT_COLS = """
     commodity_id, source_url, factor_category, metric_name, geography,
     observation_date, method_version, source_name, publication_date,
     value, units, status, source_hash, retrieved_at
 """
 
-__NON_OIL_ATTRIBUTION_KEY = (
+_NON_OIL_ATTRIBUTION_KEY = (
     "commodity_id, source_url, factor_category, metric_name, geography, "
     "observation_date"
 )
 
 
 def _non_oil_attribution_fact_value(fact):
-    for field in __NON_OIL_ATTRIBUTION_REQUIRED_FIELDS:
+    for field in _NON_OIL_ATTRIBUTION_REQUIRED_FIELDS:
         if fact.get(field) in (None, ""):
             raise ValueError(
-                " non-oil attribution fact has a required field missing"
+                "commodities non-oil attribution fact has a required field missing"
             )
     try:
         value = float(fact["value"])
     except (TypeError, ValueError) as exc:
-        raise ValueError(" non-oil attribution fact value is invalid") from exc
+        raise ValueError("commodities non-oil attribution fact value is invalid") from exc
     if not math.isfinite(value):
-        raise ValueError(" non-oil attribution fact value is invalid")
+        raise ValueError("commodities non-oil attribution fact value is invalid")
     return value
 
 
 def _non_oil_attribution_source_hash(fact):
     canonical = json.dumps(
-        {field: fact[field] for field in __NON_OIL_ATTRIBUTION_REQUIRED_FIELDS},
+        {field: fact[field] for field in _NON_OIL_ATTRIBUTION_REQUIRED_FIELDS},
         sort_keys=True,
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -1187,9 +1187,9 @@ def merge_non_oil_attribution_facts(con, facts, commit=True):
             value = _non_oil_attribution_fact_value(fact)
             con.execute(
                 f"""insert into non_oil_attribution_facts(
-                    {__NON_OIL_ATTRIBUTION_FACT_COLS}
+                    {_NON_OIL_ATTRIBUTION_FACT_COLS}
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                on conflict({__NON_OIL_ATTRIBUTION_KEY}) do update set
+                on conflict({_NON_OIL_ATTRIBUTION_KEY}) do update set
                     method_version = excluded.method_version,
                     source_name = excluded.source_name,
                     publication_date = excluded.publication_date,
@@ -1225,13 +1225,13 @@ def merge_non_oil_attribution_facts(con, facts, commit=True):
 def load_non_oil_attribution_facts(con, commodity_id=None):
     if commodity_id is None:
         rows = con.execute(
-            f"""select {__NON_OIL_ATTRIBUTION_FACT_COLS}
+            f"""select {_NON_OIL_ATTRIBUTION_FACT_COLS}
                 from non_oil_attribution_facts
                 order by geography, observation_date"""
         ).fetchall()
     else:
         rows = con.execute(
-            f"""select {__NON_OIL_ATTRIBUTION_FACT_COLS}
+            f"""select {_NON_OIL_ATTRIBUTION_FACT_COLS}
                 from non_oil_attribution_facts
                 where commodity_id = ?
                 order by geography, observation_date""",

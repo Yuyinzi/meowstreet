@@ -177,25 +177,25 @@ _SOURCE_DEFINITIONS = [
 
 def parse_commodity_attribution_text(text, source_path):
     if not text or not text.strip():
-        raise ValueError(f" attribution text is empty for {source_path}")
+        raise ValueError(f"commodities attribution text is empty for {source_path}")
     normalized = _join_url_line_wraps(text)
     records = _parse_records(normalized)
     if not records:
-        raise ValueError(f"no  attribution resources found in {source_path}")
+        raise ValueError(f"no commodities attribution resources found in {source_path}")
     return _validate_records(records)
 
 
 def parse_commodity_attribution_pdf(path):
     pdf_path = Path(path)
     if not pdf_path.exists():
-        raise ValueError(f" attribution pdf does not exist: {pdf_path}")
+        raise ValueError(f"commodities attribution pdf does not exist: {pdf_path}")
     try:
         reader = PdfReader(str(pdf_path))
         text = "\n".join((page.extract_text() or "") for page in reader.pages)
     except Exception as exc:
-        raise ValueError(f" attribution pdf could not be read: {pdf_path}") from exc
+        raise ValueError(f"commodities attribution pdf could not be read: {pdf_path}") from exc
     if not text.strip():
-        raise ValueError(f" attribution pdf contains no text: {pdf_path}")
+        raise ValueError(f"commodities attribution pdf contains no text: {pdf_path}")
     return parse_commodity_attribution_text(text, pdf_path)
 
 
@@ -269,7 +269,7 @@ def _definition_for(source_name):
     for definition in _SOURCE_DEFINITIONS:
         if definition["source_name"] == source_name:
             return definition
-    raise ValueError(f" attribution source {source_name} is not cataloged")
+    raise ValueError(f"commodities attribution source {source_name} is not cataloged")
 
 
 def _validate_records(records):
@@ -279,7 +279,7 @@ def _validate_records(records):
         key = (record["commodity_id"], record["source_url"])
         if key in seen:
             raise ValueError(
-                f"duplicate  attribution url {record['source_url']} for {record['commodity_id']}"
+                f"duplicate commodities attribution url {record['source_url']} for {record['commodity_id']}"
             )
         seen.add(key)
     return records
@@ -287,29 +287,29 @@ def _validate_records(records):
 
 def _validate_record(record):
     if not record["source_name"]:
-        raise ValueError(" attribution record has an empty source name")
+        raise ValueError("commodities attribution record has an empty source name")
     if not record["source_url"]:
-        raise ValueError(" attribution record has an empty source url")
+        raise ValueError("commodities attribution record has an empty source url")
     if record["commodity_id"] not in VALID_COMMODITY_IDS:
         raise ValueError(
-            f" attribution commodity {record['commodity_id']} is not a valid commodity"
+            f"commodities attribution commodity {record['commodity_id']} is not a valid commodity"
         )
     if record["source_type"] not in VALID_SOURCE_TYPES:
         raise ValueError(
-            f" attribution source type {record['source_type']} is not a valid source type"
+            f"commodities attribution source type {record['source_type']} is not a valid source type"
         )
     if not record["coverage"]:
         raise ValueError(
-            f" attribution coverage is empty for {record['source_name']}"
+            f"commodities attribution coverage is empty for {record['source_name']}"
         )
     unknown = [
         token for token in record["coverage"] if token not in COVERAGE_VOCABULARY
     ]
     if unknown:
         raise ValueError(
-            f" attribution coverage {unknown} is not in the method vocabulary"
+            f"commodities attribution coverage {unknown} is not in the method vocabulary"
         )
     if record["source_ref"] != SOURCE_REF:
-        raise ValueError(" attribution source_ref is not the method pdf path")
+        raise ValueError("commodities attribution source_ref is not the method pdf path")
     if record["status"] != STATUS_CATALOGED:
-        raise ValueError(f" attribution status {record['status']} is not cataloged")
+        raise ValueError(f"commodities attribution status {record['status']} is not cataloged")

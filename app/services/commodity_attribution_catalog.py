@@ -42,13 +42,13 @@ def load_commodity_attribution_catalog(path):
 def _validate_version(payload):
     if payload.get("version") != VERSION:
         raise ValueError(
-            f" attribution catalog version is invalid: {payload.get('version')}"
+            f"commodities attribution catalog version is invalid: {payload.get('version')}"
         )
 
 
 def _normalize_resources(records):
     if not records:
-        raise ValueError(" attribution catalog has no resources")
+        raise ValueError("commodities attribution catalog has no resources")
     seen = set()
     normalized = []
     for record in records:
@@ -56,7 +56,7 @@ def _normalize_resources(records):
         key = (entry["commodity_id"], entry["source_url"])
         if key in seen:
             raise ValueError(
-                f"duplicate  attribution resource {entry['source_url']} for {entry['commodity_id']}"
+                f"duplicate commodities attribution resource {entry['source_url']} for {entry['commodity_id']}"
             )
         seen.add(key)
         normalized.append(entry)
@@ -83,19 +83,19 @@ def _normalize_record(record):
 def _validate_record(record):
     if record["commodity_id"] not in catalog_source.VALID_COMMODITY_IDS:
         raise ValueError(
-            f" attribution commodity {record['commodity_id']} is not a valid commodity"
+            f"commodities attribution commodity {record['commodity_id']} is not a valid commodity"
         )
     if record["source_type"] not in catalog_source.VALID_SOURCE_TYPES:
         raise ValueError(
-            f" attribution source type {record['source_type']} is not a valid source type"
+            f"commodities attribution source type {record['source_type']} is not a valid source type"
         )
     if not record["source_name"]:
-        raise ValueError(" attribution record has an empty source name")
+        raise ValueError("commodities attribution record has an empty source name")
     if not record["source_url"]:
-        raise ValueError(" attribution record has an empty source url")
+        raise ValueError("commodities attribution record has an empty source url")
     if not record["coverage"]:
         raise ValueError(
-            f" attribution coverage is empty for {record['source_name']}"
+            f"commodities attribution coverage is empty for {record['source_name']}"
         )
     unknown = [
         token
@@ -104,5 +104,5 @@ def _validate_record(record):
     ]
     if unknown:
         raise ValueError(
-            f" attribution coverage {unknown} is not in the method vocabulary"
+            f"commodities attribution coverage {unknown} is not in the method vocabulary"
         )

@@ -3,8 +3,8 @@ import statistics
 from datetime import date, timedelta
 
 from app.data_sources.copper_comex import (
-    _COPPER_COMEX_SERIES_ID,
-    _COPPER_COMEX_START_DATE,
+    COPPER_COMEX_SERIES_ID,
+    COPPER_COMEX_START_DATE,
     fetch_copper_comex_series,
 )
 from app.db import macro_indicators
@@ -141,15 +141,15 @@ def refresh_copper_comex(con, today_date=None, fetcher=None, initial=False):
     effective_today = today_date or date.today().isoformat()
     try:
         stored_rows = macro_indicators.load_macro_indicator_observations(
-            con, _COPPER_COMEX_SERIES_ID
+            con, COPPER_COMEX_SERIES_ID
         )
         recorded_audit = macro_indicators.load_vendor_series_overlap_audit(
-            con, _COPPER_COMEX_SERIES_ID, COPPER_COMEX_OVERLAP_TEST_VERSION
+            con, COPPER_COMEX_SERIES_ID, COPPER_COMEX_OVERLAP_TEST_VERSION
         )
         if initial and (recorded_audit is not None or stored_rows):
             raise ValueError("copper comex initial migration is already recorded")
         if initial or not stored_rows:
-            start_date = _COPPER_COMEX_START_DATE
+            start_date = COPPER_COMEX_START_DATE
         else:
             latest_active_date = stored_rows[-1]["date"]
             start_date = (
@@ -159,13 +159,13 @@ def refresh_copper_comex(con, today_date=None, fetcher=None, initial=False):
         end_date = (date.fromisoformat(effective_today) + timedelta(days=1)).isoformat()
         payload = fetcher(start_date, end_date)
         observations = payload["observations"]
-        if start_date == _COPPER_COMEX_START_DATE:
+        if start_date == COPPER_COMEX_START_DATE:
             archived_rows = macro_indicators.load_macro_indicator_observations(
                 con, ARCHIVED_COPPER_COMEX_SERIES_ID
             )
             audit = audit_copper_comex_overlap(archived_rows, observations)
             macro_indicators.merge_vendor_series_overlap_audit(
-                con, _COPPER_COMEX_SERIES_ID, audit, commit=False
+                con, COPPER_COMEX_SERIES_ID, audit, commit=False
             )
         macro_indicators.merge_macro_indicator_observations(
             con, payload["series"], observations, commit=False

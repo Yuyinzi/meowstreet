@@ -500,7 +500,7 @@ def validate_non_oil_attribution_audits(records, catalog_resources):
     }
     if audited_keys != set(catalog_by_key):
         raise ValueError(
-            " non-oil attribution audit does not cover every catalog resource"
+            "commodities non-oil attribution audit does not cover every catalog resource"
         )
     return validated
 
@@ -511,13 +511,13 @@ def _validate_record(record, catalog_by_key, seen):
     key = (record["commodity_id"], record["source_url"])
     if key in seen:
         raise ValueError(
-            f"duplicate  non-oil attribution audit for {record['source_url']}"
+            f"duplicate commodities non-oil attribution audit for {record['source_url']}"
         )
     seen.add(key)
     catalog_resource = catalog_by_key.get(key)
     if catalog_resource is None:
         raise ValueError(
-            f" non-oil attribution audit for {record['source_url']} does not match a non-oil catalog resource"
+            f"commodities non-oil attribution audit for {record['source_url']} does not match a non-oil catalog resource"
         )
     _reject_catalog_mismatch(record, catalog_resource)
     _reject_invalid_audit_date(record["audited_at"])
@@ -525,7 +525,7 @@ def _validate_record(record, catalog_by_key, seen):
         _reject_candidate_missing_factual_metadata(record)
     if record["audit_status"] == "blocked" and record["access_method"] != "blocked":
         raise ValueError(
-            " non-oil attribution blocked record access method must be blocked"
+            "commodities non-oil attribution blocked record access method must be blocked"
         )
     return record
 
@@ -535,7 +535,7 @@ def _reject_record_shape(record):
     extra = sorted(set(record) - _REQUIRED_RECORD_KEYS)
     if missing or extra:
         raise ValueError(
-            f" non-oil attribution audit record keys are not the audit contract: missing {missing}, extra {extra}"
+            f"commodities non-oil attribution audit record keys are not the audit contract: missing {missing}, extra {extra}"
         )
 
 
@@ -559,7 +559,7 @@ def _reject_unknown_field_values(record):
 def _reject_unknown_value(label, value, valid_values):
     if value not in valid_values:
         raise ValueError(
-            f" non-oil attribution {label} {value} is not a valid {label}"
+            f"commodities non-oil attribution {label} {value} is not a valid {label}"
         )
 
 
@@ -569,7 +569,7 @@ def _reject_unknown_factor_categories(factor_categories):
     ]
     if unknown:
         raise ValueError(
-            f" non-oil attribution factor category {unknown} is not a valid factor category"
+            f"commodities non-oil attribution factor category {unknown} is not a valid factor category"
         )
 
 
@@ -577,68 +577,68 @@ def _reject_unknown_coverage_tokens(source_coverage):
     unknown = [token for token in source_coverage if token not in COVERAGE_VOCABULARY]
     if unknown:
         raise ValueError(
-            f" non-oil attribution method coverage {unknown} is not in the method vocabulary"
+            f"commodities non-oil attribution method coverage {unknown} is not in the method vocabulary"
         )
 
 
 def _reject_catalog_mismatch(record, catalog_resource):
     if record["source_name"] != catalog_resource["source_name"]:
         raise ValueError(
-            f" non-oil attribution source name does not match the catalog for {record['source_url']}"
+            f"commodities non-oil attribution source name does not match the catalog for {record['source_url']}"
         )
     if record["source_type"] != catalog_resource["source_type"]:
         raise ValueError(
-            f" non-oil attribution source type does not match the catalog for {record['source_url']}"
+            f"commodities non-oil attribution source type does not match the catalog for {record['source_url']}"
         )
     if record["source_coverage"] != catalog_resource["coverage"]:
         raise ValueError(
-            f" non-oil attribution method coverage does not match the catalog for {record['source_url']}"
+            f"commodities non-oil attribution method coverage does not match the catalog for {record['source_url']}"
         )
     if record["source_ref"] != catalog_resource["source_ref"]:
         raise ValueError(
-            f" non-oil attribution method reference does not match the catalog for {record['source_url']}"
+            f"commodities non-oil attribution method reference does not match the catalog for {record['source_url']}"
         )
 
 
 def _reject_invalid_audit_date(audited_at):
     if not isinstance(audited_at, str) or not _ISO_DATE_RE.match(audited_at):
         raise ValueError(
-            f" non-oil attribution audit date {audited_at} is not a valid iso date"
+            f"commodities non-oil attribution audit date {audited_at} is not a valid iso date"
         )
     try:
         date.fromisoformat(audited_at)
     except ValueError as exc:
         raise ValueError(
-            f" non-oil attribution audit date {audited_at} is not a valid iso date"
+            f"commodities non-oil attribution audit date {audited_at} is not a valid iso date"
         ) from exc
 
 
 def _reject_candidate_missing_factual_metadata(record):
     if not record["factor_categories"]:
         raise ValueError(
-            " non-oil attribution structured recurring candidate requires factor categories"
+            "commodities non-oil attribution structured recurring candidate requires factor categories"
         )
     if not record["geography"]:
         raise ValueError(
-            " non-oil attribution structured recurring candidate requires a geography"
+            "commodities non-oil attribution structured recurring candidate requires a geography"
         )
     if record["frequency"] == "not_published":
         raise ValueError(
-            " non-oil attribution structured recurring candidate requires a published frequency"
+            "commodities non-oil attribution structured recurring candidate requires a published frequency"
         )
     if record["unit_status"] != "published":
         raise ValueError(
-            " non-oil attribution structured recurring candidate requires published units"
+            "commodities non-oil attribution structured recurring candidate requires published units"
         )
     if record["publication_date_status"] != "published":
         raise ValueError(
-            " non-oil attribution structured recurring candidate requires a published publication date"
+            "commodities non-oil attribution structured recurring candidate requires a published publication date"
         )
     if record["access_method"] not in _CANDIDATE_ACCESS_METHODS:
         raise ValueError(
-            " non-oil attribution structured recurring candidate requires a machine-readable access method"
+            "commodities non-oil attribution structured recurring candidate requires a machine-readable access method"
         )
     if record["stability"] not in _CANDIDATE_STABILITIES:
         raise ValueError(
-            " non-oil attribution structured recurring candidate requires a stable or interactive publication"
+            "commodities non-oil attribution structured recurring candidate requires a stable or interactive publication"
         )

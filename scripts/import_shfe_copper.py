@@ -49,25 +49,25 @@ def main(argv=None):
     if args.start_date or args.end_date:
         if not (args.start_date and args.end_date):
             print(
-                " shfe copper error: both --start-date and --end-date are required",
+                "commodities shfe copper error: both --start-date and --end-date are required",
                 file=sys.stderr,
             )
             return 1
         if args.start_date > args.end_date:
             print(
-                " shfe copper error: start date is after end date",
+                "commodities shfe copper error: start date is after end date",
                 file=sys.stderr,
             )
             return 1
         if args.start_date > date.today().isoformat():
             print(
-                " shfe copper error: start date is in the future",
+                "commodities shfe copper error: start date is in the future",
                 file=sys.stderr,
             )
             return 1
         if args.incremental:
             print(
-                " shfe copper error: --incremental cannot be combined with explicit dates",
+                "commodities shfe copper error: --incremental cannot be combined with explicit dates",
                 file=sys.stderr,
             )
             return 1
@@ -99,7 +99,7 @@ def main(argv=None):
         )
         return 0
     except ValueError as exc:
-        print(f" shfe copper error: {exc}", file=sys.stderr)
+        print(f"commodities shfe copper error: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()

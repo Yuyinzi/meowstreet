@@ -351,13 +351,13 @@ def normalize_non_oil_attribution_fact(raw_fact):
         "units",
     )
     if any(raw_fact.get(key) in (None, "") for key in required):
-        raise ValueError(" non-oil attribution fact has a required field missing")
+        raise ValueError("commodities non-oil attribution fact has a required field missing")
     try:
         value = float(raw_fact["value"])
     except (TypeError, ValueError) as exc:
-        raise ValueError(" non-oil attribution fact value is invalid") from exc
+        raise ValueError("commodities non-oil attribution fact value is invalid") from exc
     if not math.isfinite(value):
-        raise ValueError(" non-oil attribution fact value is invalid")
+        raise ValueError("commodities non-oil attribution fact value is invalid")
     return {
         **raw_fact,
         "method_version": VERSION,

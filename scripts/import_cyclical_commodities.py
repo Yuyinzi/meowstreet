@@ -9,7 +9,7 @@ from app.db import macro_indicators
 from app.services import cyclical_commodities_import
 
 DEFAULT_DB_PATH = ROOT / "data" / "local_system" / "market_data.sqlite"
-DEFAULT_CACHE_DIR = ROOT / "data" / ""
+DEFAULT_CACHE_DIR = ROOT / "data" / "commodities"
 
 
 def main(argv=None):
@@ -69,7 +69,7 @@ def main(argv=None):
         if args.replace_cot_history:
             if not (args.start_year and args.end_year):
                 print(
-                    " error: --replace-cot-history requires --start-year and "
+                    "commodities error: --replace-cot-history requires --start-year and "
                     "--end-year",
                     file=sys.stderr,
                 )
@@ -88,11 +88,11 @@ def main(argv=None):
                 )
             return 0
 
-        result = cyclical_commodities_import.refresh_official_(
+        result = cyclical_commodities_import.refresh_official_commodities(
             con, cache_dir, years
         )
     except ValueError as exc:
-        print(f" error: {exc}", file=sys.stderr)
+        print(f"commodities error: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()

@@ -57,7 +57,7 @@ def main(argv=None, refresh=refresh_investing_rendered):
         )
     except ValueError as exc:
         print(
-            f" investing rendered refresh failed: {exc}\n{_REMEDIATION}",
+            f"commodities investing rendered refresh failed: {exc}\n{_REMEDIATION}",
             file=sys.stderr,
         )
         return 1

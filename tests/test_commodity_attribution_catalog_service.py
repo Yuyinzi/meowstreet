@@ -141,7 +141,7 @@ def test_build_rejects_duplicate_commodity_url_pair(monkeypatch):
     dup = dict(COPPER_RECORD)
     _stub_parser(monkeypatch, [COPPER_RECORD, dup])
 
-    with pytest.raises(ValueError, match="duplicate  attribution resource"):
+    with pytest.raises(ValueError, match="duplicate commodities attribution resource"):
         service.build_commodity_attribution_catalog("path.pdf")
 
 

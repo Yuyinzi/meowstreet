@@ -1,5 +1,5 @@
 (function () {
-  window.CyclicalCommoditiesUi = {
+  window.cyclicalCommoditiesUi = {
     renderCard: function (card, helpers) {
       var h = helpers;
       var status = card.status || "partial_official_evidence";

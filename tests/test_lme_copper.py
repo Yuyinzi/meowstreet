@@ -14,7 +14,7 @@ def valid_cad_frame():
 
 
 def test_cad_series_contract_is_lme_three_month_vendor_close():
-    series = lme_copper._LME_COPPER_SERIES
+    series = lme_copper.LME_COPPER_SERIES
     assert series["series_id"] == "copper_lme_sina_cad_v1"
     assert series["units"] == "USD/tonne"
     assert series["source"] == "sina_finance"

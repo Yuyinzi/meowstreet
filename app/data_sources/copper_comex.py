@@ -2,12 +2,12 @@ from datetime import UTC, datetime
 
 from app.tools import market_data
 
-_COPPER_COMEX_SERIES_ID = "copper_comex_hg_yahoo_v1"
-_COPPER_COMEX_SYMBOL = "HG=F"
-_COPPER_COMEX_START_DATE = "2000-08-30"
+COPPER_COMEX_SERIES_ID = "copper_comex_hg_yahoo_v1"
+COPPER_COMEX_SYMBOL = "HG=F"
+COPPER_COMEX_START_DATE = "2000-08-30"
 YAHOO_CHART_SOURCE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/HG%3DF"
 
-_COPPER_COMEX_SOURCE_CONTRACT = {
+COPPER_COMEX_SOURCE_CONTRACT = {
     "instrument": "COMEX High Grade Copper Futures",
     "product_code": "HG",
     "symbol": "HG=F",
@@ -21,15 +21,15 @@ _COPPER_COMEX_SOURCE_CONTRACT = {
     "distribution_window_start": "2000-08-30",
 }
 
-_COPPER_COMEX_SERIES = {
-    "series_id": _COPPER_COMEX_SERIES_ID,
+COPPER_COMEX_SERIES = {
+    "series_id": COPPER_COMEX_SERIES_ID,
     "title": "COMEX Copper (HG)",
     "units": "USD/lb",
     "source": "yahoo_finance",
     "source_class": "vendor_free_market_data",
     "source_url": YAHOO_CHART_SOURCE_URL,
-    "source_identifier": _COPPER_COMEX_SYMBOL,
-    "source_contract": _COPPER_COMEX_SOURCE_CONTRACT,
+    "source_identifier": COPPER_COMEX_SYMBOL,
+    "source_contract": COPPER_COMEX_SOURCE_CONTRACT,
 }
 
 
@@ -54,19 +54,19 @@ def _utc_date(timestamp):
 
 
 def normalize_copper_comex_chart(payload, retrieved_at):
-    result = _chart_result(payload, _COPPER_COMEX_SYMBOL)
+    result = _chart_result(payload, COPPER_COMEX_SYMBOL)
     timestamps = result.get("timestamp") or []
-    closes = _quote_closes(result, _COPPER_COMEX_SYMBOL) or []
+    closes = _quote_closes(result, COPPER_COMEX_SYMBOL) or []
     if len(timestamps) != len(closes):
         raise ValueError(
-            f"price dates and close lengths differ for {_COPPER_COMEX_SYMBOL}"
+            f"price dates and close lengths differ for {COPPER_COMEX_SYMBOL}"
         )
     observations = []
     for timestamp, close in zip(timestamps, closes):
         day = _utc_date(timestamp)
-        if day < _COPPER_COMEX_START_DATE:
+        if day < COPPER_COMEX_START_DATE:
             raise ValueError(
-                f"copper comex chart row for {day} is before {_COPPER_COMEX_START_DATE} for {_COPPER_COMEX_SYMBOL}"
+                f"copper comex chart row for {day} is before {COPPER_COMEX_START_DATE} for {COPPER_COMEX_SYMBOL}"
             )
         if close is None:
             continue
@@ -76,13 +76,13 @@ def normalize_copper_comex_chart(payload, retrieved_at):
                 "value": float(close),
                 "source": "yahoo_finance",
                 "source_url": YAHOO_CHART_SOURCE_URL,
-                "source_identifier": _COPPER_COMEX_SYMBOL,
+                "source_identifier": COPPER_COMEX_SYMBOL,
                 "source_class": "vendor_free_market_data",
                 "retrieved_at": retrieved_at,
             }
         )
     if not observations:
-        raise ValueError(f"close data is missing for {_COPPER_COMEX_SYMBOL}")
+        raise ValueError(f"close data is missing for {COPPER_COMEX_SYMBOL}")
     return observations
 
 
@@ -102,10 +102,10 @@ def fetch_copper_comex_series(
 ):
     chart_fetcher = fetch_chart or _default_copper_chart_fetcher
     payload = chart_fetcher(
-        _COPPER_COMEX_SYMBOL, start_date, end_date, "1d", http_client
+        COPPER_COMEX_SYMBOL, start_date, end_date, "1d", http_client
     )
     retrieved_at = datetime.now(UTC).isoformat()
     return {
-        "series": _COPPER_COMEX_SERIES,
+        "series": COPPER_COMEX_SERIES,
         "observations": normalize_copper_comex_chart(payload, retrieved_at),
     }

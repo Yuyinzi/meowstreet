@@ -71,14 +71,14 @@ def main(argv=None):
     if args.csv is not None:
         if not args.csv:
             print(
-                " method commodity error: --csv requires at least one market_id=path.csv entry",
+                "commodities method commodity error: --csv requires at least one market_id=path.csv entry",
                 file=sys.stderr,
             )
             return 1
         try:
             csv_paths_by_market = _parse_csv_arg(args.csv)
         except ValueError as exc:
-            print(f" method commodity csv error: {exc}", file=sys.stderr)
+            print(f"commodities method commodity csv error: {exc}", file=sys.stderr)
             return 1
         if args.dry_run:
             from app.data_sources.tracked_commodities import (
@@ -110,7 +110,7 @@ def main(argv=None):
             print(f"series: {result['series']}, observations: {result['observations']}")
             return 0
         except ValueError as exc:
-            print(f" method commodity csv error: {exc}", file=sys.stderr)
+            print(f"commodities method commodity csv error: {exc}", file=sys.stderr)
             return 1
         finally:
             con.close()
@@ -136,7 +136,7 @@ def main(argv=None):
         print(f"series: {result['series']}, observations: {result['observations']}")
         return 0
     except ValueError as exc:
-        print(f" method commodity rendered refresh error: {exc}", file=sys.stderr)
+        print(f"commodities method commodity rendered refresh error: {exc}", file=sys.stderr)
         return 1
     finally:
         con.close()

@@ -108,7 +108,7 @@ def test_main_defaults_to_interactive_chrome_port(tmp_path, capsys):
 @pytest.mark.parametrize(
     "message",
     [
-        " investing rendered refresh already running (lock held)",
+        "commodities investing rendered refresh already running (lock held)",
         "Chrome CDP endpoint at http://127.0.0.1:9222 did not become ready",
         "page did not render the Iron Ore 62% Fe CFR China index market title",
         "the Investing historical data table contained no rows",

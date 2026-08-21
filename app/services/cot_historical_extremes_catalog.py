@@ -136,24 +136,24 @@ def _normalize_entry(record):
 def _validate_payload(payload):
     if payload.get("version") != VERSION:
         raise ValueError(
-            f" cot historical extreme allowlist version is invalid: "
+            f"commodities cot historical extreme allowlist version is invalid: "
             f"{payload.get('version')}"
         )
     if payload.get("report_type") not in _VALID_REPORT_TYPES:
         raise ValueError(
-            f" cot allowlist report type is unsupported: {payload.get('report_type')}"
+            f"commodities cot allowlist report type is unsupported: {payload.get('report_type')}"
         )
     if payload.get("position_category") not in _VALID_POSITION_CATEGORIES:
         raise ValueError(
-            f" cot allowlist position category is unsupported: "
+            f"commodities cot allowlist position category is unsupported: "
             f"{payload.get('position_category')}"
         )
     entries = payload.get("entries")
     if not isinstance(entries, list) or not entries:
-        raise ValueError(" cot allowlist has no entries")
+        raise ValueError("commodities cot allowlist has no entries")
     for entry in entries:
         if not isinstance(entry, dict):
-            raise ValueError(" cot allowlist entry must be an object")
+            raise ValueError("commodities cot allowlist entry must be an object")
         _validate_entry(entry)
     _reject_duplicates(entries)
 
@@ -161,32 +161,32 @@ def _validate_payload(payload):
 def _validate_entry(entry):
     commodity_id = entry.get("commodity_id")
     if not commodity_id:
-        raise ValueError(" cot allowlist commodity id is required")
+        raise ValueError("commodities cot allowlist commodity id is required")
     if commodity_id not in COT_COMMODITY_REGISTRY.values():
         raise ValueError(
-            f" cot allowlist commodity {commodity_id} is not a registry commodity"
+            f"commodities cot allowlist commodity {commodity_id} is not a registry commodity"
         )
     market_name = entry.get("market_name")
     if not market_name:
-        raise ValueError(" cot allowlist market name is required")
+        raise ValueError("commodities cot allowlist market name is required")
     if COT_COMMODITY_REGISTRY.get(market_name) != commodity_id:
-        raise ValueError(f" cot allowlist market name mismatch for {commodity_id}")
+        raise ValueError(f"commodities cot allowlist market name mismatch for {commodity_id}")
     active = entry.get("active")
     if not isinstance(active, bool):
-        raise ValueError(" cot allowlist active flag must be a boolean")
+        raise ValueError("commodities cot allowlist active flag must be a boolean")
     contract_code = entry.get("contract_code")
     if active:
         if not contract_code:
             raise ValueError(
-                " cot allowlist contract code is required for active entries"
+                "commodities cot allowlist contract code is required for active entries"
             )
         if _CONTRACT_CODE_RE.fullmatch(str(contract_code)) is None:
-            raise ValueError(" cot allowlist contract code is malformed")
+            raise ValueError("commodities cot allowlist contract code is malformed")
         if entry.get("reason"):
-            raise ValueError(" cot allowlist active entry must not carry a reason")
+            raise ValueError("commodities cot allowlist active entry must not carry a reason")
     elif entry.get("reason") != _UNSUPPORTED_REASON:
         raise ValueError(
-            " cot allowlist inactive entry requires the unsupported_contract reason"
+            "commodities cot allowlist inactive entry requires the unsupported_contract reason"
         )
 
 
@@ -202,10 +202,10 @@ def _reject_duplicates(entries):
         )
         if identity in seen_identities:
             raise ValueError(
-                f"duplicate  cot allowlist identity {identity[0]}:{identity[1]}"
+                f"duplicate commodities cot allowlist identity {identity[0]}:{identity[1]}"
             )
         seen_identities.add(identity)
         commodity_id = entry.get("commodity_id")
         if commodity_id in seen_commodities:
-            raise ValueError(f"duplicate  cot allowlist commodity {commodity_id}")
+            raise ValueError(f"duplicate commodities cot allowlist commodity {commodity_id}")
         seen_commodities.add(commodity_id)

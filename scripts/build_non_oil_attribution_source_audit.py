@@ -16,7 +16,7 @@ DEFAULT_OUTPUT = resource_path("attribution_source_audit")
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(
-        description="Build the  non-oil attribution source audit artifact."
+        description="Build the commodities non-oil attribution source audit artifact."
     )
     parser.add_argument("--catalog-path", default=str(DEFAULT_CATALOG))
     parser.add_argument("--output-path", default=str(DEFAULT_OUTPUT))

@@ -117,7 +117,7 @@ def test_refresh_rolls_back_all_facts_when_merge_fails_partway(tmp_path):
     def invalid_faostat():
         return [{"commodity_id": "lumber"}]
 
-    with pytest.raises(ValueError, match=" non-oil attribution fact"):
+    with pytest.raises(ValueError, match="commodities non-oil attribution fact"):
         service.refresh_non_oil_attribution_evidence(
             con,
             iwcc_fetcher=lambda: [global_fact()],
@@ -158,5 +158,5 @@ def test_import_cli_reports_errors_without_traceback(monkeypatch, capsys, tmp_pa
     assert exit_code == 1
     assert captured.out == ""
     assert (
-        captured.err == " non-oil attribution import error: faostat fetch failed\n"
+        captured.err == "commodities non-oil attribution import error: faostat fetch failed\n"
     )

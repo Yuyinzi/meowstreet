@@ -43,7 +43,7 @@ def test_normalize_sina_i0_daily_emits_close_observations_with_vendor_provenance
             "retrieved_at": "2026-08-01T00:00:00+00:00",
         },
     ]
-    assert sina._DCE_IRON_ORE_SINA_SERIES["source_contract"]["roll_rule"] == (
+    assert sina.DCE_IRON_ORE_SINA_SERIES["source_contract"]["roll_rule"] == (
         "undocumented"
     )
 

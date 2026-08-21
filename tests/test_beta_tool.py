@@ -5,10 +5,10 @@ import pytest
 
 from app.tools import beta
 
-FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "p20_beta.json"
+FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "beta.json"
 
 
-def p20_fixture():
+def fixture():
     return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
@@ -21,7 +21,7 @@ def workbook_positions():
             "price": position["price"],
             "shares": position["shares"],
         }
-        for position in p20_fixture()["portfolio_beta"]["positions"]
+        for position in fixture()["portfolio_beta"]["positions"]
     ]
 
 
@@ -43,7 +43,7 @@ def sizing_positions():
     ("flr_returns", 261, "beta_5yr"),
 ])
 def test_slope_matches_workbook_beta(series_key, window, expected_key):
-    equity = p20_fixture()["equity_beta"]
+    equity = fixture()["equity_beta"]
     label = "safm" if series_key.startswith("safm") else "flr"
 
     result = beta.slope(equity[series_key][:window], equity["sp500_returns"][:window])
@@ -56,7 +56,7 @@ def test_slope_matches_workbook_beta(series_key, window, expected_key):
     ("flr_returns", "flr"),
 ])
 def test_beta_standard_error_matches_workbook(series_key, label):
-    equity = p20_fixture()["equity_beta"]
+    equity = fixture()["equity_beta"]
 
     result = beta.beta_standard_error(equity[series_key][:105], equity["sp500_returns"][:105])
 
@@ -84,7 +84,7 @@ def test_beta_standard_error_rejects_short_series():
 
 
 def test_beta_windows_match_workbook_with_labels():
-    equity = p20_fixture()["equity_beta"]
+    equity = fixture()["equity_beta"]
 
     result = beta.beta_windows(equity["safm_returns"], equity["sp500_returns"])
 
@@ -96,7 +96,7 @@ def test_beta_windows_match_workbook_with_labels():
 
 
 def test_beta_windows_flag_insufficient_data_per_window():
-    equity = p20_fixture()["equity_beta"]
+    equity = fixture()["equity_beta"]
     stock = equity["safm_returns"][:160]
     market = equity["sp500_returns"][:160]
 
@@ -117,7 +117,7 @@ def test_beta_windows_all_insufficient_when_series_short():
 
 
 def test_rolling_beta_uses_full_windows_only():
-    equity = p20_fixture()["equity_beta"]
+    equity = fixture()["equity_beta"]
 
     result = beta.rolling_beta(
         equity["dates"], equity["safm_returns"], equity["sp500_returns"], window=105
@@ -149,16 +149,16 @@ def test_rolling_beta_rejects_tiny_window():
 
 
 def test_portfolio_beta_matches_workbook():
-    fixture = p20_fixture()["portfolio_beta"]
+    fixture_data = fixture()["portfolio_beta"]
 
     result = beta.portfolio_beta(workbook_positions())
 
-    expected = fixture["expected"]
+    expected = fixture_data["expected"]
     assert result["portfolio_beta"] == pytest.approx(expected["portfolio_beta"], abs=1e-9)
     assert result["gross_exposure"] == pytest.approx(expected["gross_exposure"], abs=1e-9)
     assert result["net_exposure"] == pytest.approx(expected["net_exposure"], abs=1e-9)
     assert result["net_weight"] == pytest.approx(expected["net_weight"], abs=1e-9)
-    for detail, cached in zip(result["positions"], fixture["positions"]):
+    for detail, cached in zip(result["positions"], fixture_data["positions"]):
         assert detail["symbol"] == cached["ticker"]
         assert detail["net_exposure"] == pytest.approx(cached["net_exposure"], abs=1e-9)
         assert detail["gross_exposure"] == pytest.approx(cached["gross_exposure"], abs=1e-9)

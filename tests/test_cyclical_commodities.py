@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.data_sources.tracked_commodities import MARKET_SERIES
-from app.tools import cyclical_commodities as 
+from app.tools import cyclical_commodities as commodities
 from app.tools import oil_distribution
 
 COT_ROWS = [
@@ -78,7 +78,7 @@ USD_ROWS = {
 
 
 def test_normalized_manager_position_and_positive_flip_are_computed_from_adjacent_weeks():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
     wti = payload["cot"]["crude_oil_wti"]
@@ -88,7 +88,7 @@ def test_normalized_manager_position_and_positive_flip_are_computed_from_adjacen
 
 
 def test_never_exposes_extreme_or_distribution_conclusions():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
 
@@ -163,7 +163,7 @@ def test_cot_review_evidence_exposes_historical_high_and_provenance():
     as_of = (
         date.fromisoformat(rows[-1]["report_date"]) + timedelta(days=3)
     ).isoformat()
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         rows,
         USD_ROWS,
         None,
@@ -187,7 +187,7 @@ def test_cot_review_evidence_is_unavailable_without_allowlist():
     as_of = (
         date.fromisoformat(rows[-1]["report_date"]) + timedelta(days=3)
     ).isoformat()
-    payload = .build_cyclical_commodities_payload(rows, USD_ROWS, None, as_of)
+    payload = commodities.build_cyclical_commodities_payload(rows, USD_ROWS, None, as_of)
 
     extreme = payload["cot"]["crude_oil_wti"]["review_evidence"][
         "cot_historical_extreme"
@@ -201,14 +201,14 @@ def test_cot_review_evidence_detail_step_includes_extreme_object():
     as_of = (
         date.fromisoformat(rows[-1]["report_date"]) + timedelta(days=3)
     ).isoformat()
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         rows,
         USD_ROWS,
         None,
         as_of,
         cot_historical_extreme_allowlist=_wti_allowlist(),
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     cot_step = next(
         step for step in detail["steps"] if step["title"] == "CFTC COT Positioning"
@@ -230,7 +230,7 @@ def usd_distribution_rows():
 
 
 def test_usd_series_distribution_is_observation_available_with_full_history():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, {"usd_broad": usd_distribution_rows()}, None, "2017-01-06"
     )
     broad = payload["usd"]["usd_broad"]
@@ -251,7 +251,7 @@ def test_usd_series_distribution_is_observation_available_with_full_history():
 def test_usd_abnormal_final_daily_move_requires_review_with_exact_label():
     rows = usd_distribution_rows()
     rows[-1] = {"date": rows[-1]["date"], "value": rows[-2]["value"] * 1.5}
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, {"usd_broad": rows}, None, "2017-01-06"
     )
     broad = payload["usd"]["usd_broad"]
@@ -265,7 +265,7 @@ def test_usd_abnormal_final_daily_move_requires_review_with_exact_label():
 
 
 def test_usd_short_history_marks_review_unavailable_with_horizon_reasons():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, {"usd_broad": USD_ROWS["usd_broad"]}, None, "2026-07-25"
     )
     broad = payload["usd"]["usd_broad"]
@@ -280,7 +280,7 @@ def test_usd_short_history_marks_review_unavailable_with_horizon_reasons():
 
 
 def test_usd_short_history_still_exposes_raw_iso_week_return():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, {"usd_broad": USD_ROWS["usd_broad"]}, None, "2026-07-25"
     )
     broad = payload["usd"]["usd_broad"]
@@ -292,7 +292,7 @@ def test_usd_short_history_still_exposes_raw_iso_week_return():
 
 
 def test_usd_afe_only_input_leaves_broad_and_eme_unavailable():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, {"usd_afe": usd_distribution_rows()}, None, "2017-01-06"
     )
     afe = payload["usd"]["usd_afe"]
@@ -317,7 +317,7 @@ def test_usd_broad_mutation_leaves_afe_and_eme_payloads_identical():
         "value": broad_abnormal[-2]["value"] * 1.5,
     }
 
-    base = .build_cyclical_commodities_payload(
+    base = commodities.build_cyclical_commodities_payload(
         COT_ROWS,
         {
             "usd_broad": broad_normal,
@@ -327,7 +327,7 @@ def test_usd_broad_mutation_leaves_afe_and_eme_payloads_identical():
         None,
         "2017-01-06",
     )
-    mutated = .build_cyclical_commodities_payload(
+    mutated = commodities.build_cyclical_commodities_payload(
         COT_ROWS,
         {
             "usd_broad": broad_abnormal,
@@ -355,7 +355,7 @@ def _usd_rows_missing_friday_with_start_of_week_latest():
 
 def test_usd_weekly_return_matches_distribution_current_return_across_missing_days():
     rows = _usd_rows_missing_friday_with_start_of_week_latest()
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, {"usd_broad": rows}, None, "2017-01-03"
     )
     broad = payload["usd"]["usd_broad"]
@@ -367,7 +367,7 @@ def test_usd_weekly_return_matches_distribution_current_return_across_missing_da
 
 
 def test_commodity_attribution_is_unavailable():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
 
@@ -375,18 +375,18 @@ def test_commodity_attribution_is_unavailable():
 
 
 def test_card_is_always_present_even_without_data():
-    payload = .build_cyclical_commodities_payload([], {}, None, "2026-07-25")
-    card = .build_cyclical_commodities_headline(payload)
+    payload = commodities.build_cyclical_commodities_payload([], {}, None, "2026-07-25")
+    card = commodities.build_cyclical_commodities_headline(payload)
 
     assert card["id"] == "cyclical_commodities"
     assert card["status"] == "partial_official_evidence"
 
 
 def test_card_includes_freshness_metadata_with_available_evidence():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
-    card = .build_cyclical_commodities_headline(payload)
+    card = commodities.build_cyclical_commodities_headline(payload)
 
     assert "cftc_latest" in card["freshness"]
     assert "usd_latest" in card["freshness"]
@@ -394,10 +394,10 @@ def test_card_includes_freshness_metadata_with_available_evidence():
 
 
 def test_detail_has_five_steps_in_correct_order():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     assert detail["detail_id"] == "cyclical_commodities"
     assert len(detail["steps"]) == 7
@@ -411,7 +411,7 @@ def test_detail_has_five_steps_in_correct_order():
 
 
 def test_cot_display_names_include_exchange_and_cftc_code():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [
             {**row, "cftc_contract_market_code": "067411"}
             if row["commodity_id"] == "crude_oil_wti"
@@ -430,7 +430,7 @@ def test_cot_display_names_include_exchange_and_cftc_code():
 
 
 def test_cot_payload_excludes_legacy_natural_gas_and_uses_active_henry_hub():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [
             {
                 "commodity_id": "natural_gas",
@@ -481,7 +481,7 @@ def test_cot_payload_excludes_legacy_natural_gas_and_uses_active_henry_hub():
 
 
 def test_active_natural_gas_shows_henry_hub_without_ep_san_juan_note():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [
             {
                 "commodity_id": "us_natural_gas",
@@ -505,10 +505,10 @@ def test_active_natural_gas_shows_henry_hub_without_ep_san_juan_note():
 
 
 def test_available_cot_usd_inflation_drive_step_availability():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     assert detail["steps"][4]["status"] == "available"
     assert detail["steps"][5]["status"] == "available"
@@ -516,8 +516,8 @@ def test_available_cot_usd_inflation_drive_step_availability():
 
 
 def test_step_status_is_unavailable_when_cot_has_no_data():
-    payload = .build_cyclical_commodities_payload([], {}, None, "2026-07-25")
-    detail = .build_cyclical_commodities_detail(payload)
+    payload = commodities.build_cyclical_commodities_payload([], {}, None, "2026-07-25")
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     assert detail["steps"][4]["status"] == "unavailable"
     assert detail["steps"][5]["status"] == "unavailable"
@@ -525,10 +525,10 @@ def test_step_status_is_unavailable_when_cot_has_no_data():
 
 
 def test_detail_process_read_is_insufficient_without_commodity_observation_and_attribution():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     assert detail["process_read"] == {
         "status": "insufficient_for_commodity_narrative",
@@ -539,30 +539,30 @@ def test_detail_process_read_is_insufficient_without_commodity_observation_and_a
 
 
 def test_process_read_insufficient_when_only_attribution_missing():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
     payload["commodity_returns"] = {"status": "available"}
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     assert detail["process_read"]["status"] == "insufficient_for_commodity_narrative"
 
 
 def test_process_read_insufficient_when_only_returns_missing():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
     payload["commodity_attribution"] = {"status": "available"}
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     assert detail["process_read"]["status"] == "insufficient_for_commodity_narrative"
 
 
 def test_detail_corroboration_summarizes_raw_evidence_without_trade_bias():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     assert detail["corroboration"]["cot"]["available_contract_count"] == 2
     assert detail["corroboration"]["cot"]["positive_flip_count"] == 1
@@ -573,10 +573,10 @@ def test_detail_corroboration_summarizes_raw_evidence_without_trade_bias():
 
 
 def test_freshness_includes_per_source_latest_observation_date():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     f = detail["freshness"]
     assert f["cftc_latest_report_date"] == "2026-07-21"
@@ -616,7 +616,7 @@ _OIL_ROWS = {
 
 
 def test_oil_observation_reports_raw_daily_and_weekly_returns_without_distribution_label():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
     )
     wti = payload["oil_observation"]["benchmarks"]["oil_wti_spot"]
@@ -637,7 +637,7 @@ def test_process_read_requires_price_and_all_five_attribution_inputs():
         brent_weekly="normal",
         oil_rows=oil_rows,
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     read = detail["process_read"]
     assert read["status"] == "insufficient_for_commodity_narrative"
@@ -651,7 +651,7 @@ def test_process_read_is_pending_review_when_prices_and_inputs_are_present():
         brent_daily="normal",
         brent_weekly="normal",
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     read = detail["process_read"]
     assert read["status"] == "review_required"
@@ -675,7 +675,7 @@ def test_oil_attribution_exposes_change_from_previous_weekly_observation():
             {"date": "2026-07-17", "value": 3200.0},
         ],
     }
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, oil_rows, "2026-07-25"
     )
     metrics = {
@@ -695,7 +695,7 @@ def test_oil_payload_excludes_observations_after_as_of_date():
             {"date": "2026-07-26", "value": 66.0, "source_identifier": "RWTC"},
         ],
     }
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, oil_rows, "2026-07-24"
     )
     assert (
@@ -705,10 +705,10 @@ def test_oil_payload_excludes_observations_after_as_of_date():
 
 
 def test_attribution_data_never_creates_demand_or_supply_conclusion():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
     assert detail["commodity_attribution"]["status"] == "attribution_pending_review"
     assert "conclusion" not in detail["commodity_attribution"]
     assert "trade" not in detail["process_read"]["label"].lower()
@@ -721,7 +721,7 @@ def test_oil_state_contract_labels_raw_changes_without_trade_conclusion():
         brent_daily="abnormal_1sigma",
         brent_weekly="normal",
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
     review = detail["oil_attribution_review"]
 
     assert review["method_version"] == "oil_attribution_review_states_v1"
@@ -805,7 +805,7 @@ def test_oil_payload_marks_price_and_physical_changes_with_raw_states():
             "source": "eia",
         },
     }
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS,
         USD_ROWS,
         oil_rows,
@@ -825,7 +825,7 @@ def test_oil_payload_marks_price_and_physical_changes_with_raw_states():
 
 
 def test_oil_payload_marks_missing_prior_observation_unavailable():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
     )
     metric = next(
@@ -873,7 +873,7 @@ def test_oil_benchmark_daily_and_weekly_distribution_are_exposed():
         ],
     }
 
-    payload = .build_cyclical_commodities_payload([], {}, oil_rows, "2026-12-31")
+    payload = commodities.build_cyclical_commodities_payload([], {}, oil_rows, "2026-12-31")
     benchmark = payload["oil_observation"]["benchmarks"]["oil_wti_spot"]
 
     assert (
@@ -894,7 +894,7 @@ def test_oil_benchmark_daily_and_weekly_distribution_are_exposed():
 
 
 def test_oil_benchmark_distribution_is_unavailable_when_insufficient_history():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [], {}, _OIL_ROWS, "2026-07-25"
     )
     benchmark = payload["oil_observation"]["benchmarks"]["oil_wti_spot"]
@@ -902,7 +902,7 @@ def test_oil_benchmark_distribution_is_unavailable_when_insufficient_history():
     assert benchmark["daily_distribution"]["classification"] == "unavailable"
     assert benchmark["weekly_distribution"]["classification"] == "unavailable"
     assert benchmark["status"] == "available"
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
     assert detail["process_read"]["status"] == "insufficient_for_commodity_narrative"
     assert detail["process_read"]["next_action"] == (
         "load complete oil price history for WTI and Brent"
@@ -912,7 +912,7 @@ def test_oil_benchmark_distribution_is_unavailable_when_insufficient_history():
 def _payload_with_distribution_states(
     wti_daily, wti_weekly, brent_daily, brent_weekly, oil_rows=None
 ):
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, oil_rows or _OIL_ROWS, "2026-07-25"
     )
     benchmarks = payload["oil_observation"]["benchmarks"]
@@ -926,7 +926,7 @@ def _payload_with_distribution_states(
 
 
 def test_oil_distribution_summary_is_normal_only_when_all_four_horizons_are_normal():
-    detail = .build_cyclical_commodities_detail(
+    detail = commodities.build_cyclical_commodities_detail(
         _payload_with_distribution_states(
             wti_daily="normal",
             wti_weekly="normal",
@@ -945,7 +945,7 @@ def test_oil_distribution_summary_is_normal_only_when_all_four_horizons_are_norm
 
 
 def test_oil_distribution_summary_lists_only_abnormal_benchmark_horizons():
-    detail = .build_cyclical_commodities_detail(
+    detail = commodities.build_cyclical_commodities_detail(
         _payload_with_distribution_states(
             wti_daily="abnormal_2sigma",
             wti_weekly="normal",
@@ -965,7 +965,7 @@ def test_oil_distribution_summary_lists_only_abnormal_benchmark_horizons():
 
 
 def test_oil_distribution_summary_is_incomplete_when_any_horizon_is_unavailable():
-    detail = .build_cyclical_commodities_detail(
+    detail = commodities.build_cyclical_commodities_detail(
         _payload_with_distribution_states(
             wti_daily="normal",
             wti_weekly="unavailable",
@@ -993,8 +993,8 @@ def test_oil_distribution_summary_requires_attribution_review_only_for_abnormal_
         brent_weekly="normal",
     )
 
-    normal_detail = .build_cyclical_commodities_detail(normal_payload)
-    abnormal_detail = .build_cyclical_commodities_detail(abnormal_payload)
+    normal_detail = commodities.build_cyclical_commodities_detail(normal_payload)
+    abnormal_detail = commodities.build_cyclical_commodities_detail(abnormal_payload)
 
     assert normal_detail["process_read"]["status"] == "observation_available"
     assert normal_detail["oil_attribution_review"] is None
@@ -1059,7 +1059,7 @@ def i0_rows():
 
 
 def test_payload_presents_i0_as_raw_vendor_continuous_data():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         as_of_date="2026-07-31",
@@ -1073,7 +1073,7 @@ def test_payload_presents_i0_as_raw_vendor_continuous_data():
 
 
 def payload_with_lbr_and_archive():
-    return .build_cyclical_commodities_payload(
+    return commodities.build_cyclical_commodities_payload(
         COT_ROWS,
         USD_ROWS,
         _OIL_ROWS,
@@ -1107,14 +1107,14 @@ def payload_with_lbr_and_archive():
 
 
 def test_detail_builds_method_market_observation_without_attribution_conclusion():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS,
         USD_ROWS,
         _OIL_ROWS,
         "2026-07-25",
         commodity_observations=_method_ROWS,
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
     copper = detail["non_oil_observation"]["iron_ore_62_cfr_china"]
     assert copper["daily_return"] == pytest.approx(10420.0 / 10380.0 - 1)
     assert copper["source_class"] == "free_web"
@@ -1124,7 +1124,7 @@ def test_detail_builds_method_market_observation_without_attribution_conclusion(
 
 
 def test_detail_uses_active_yahoo_lbr_and_excludes_archived_lumber():
-    detail = .build_cyclical_commodities_detail(payload_with_lbr_and_archive())
+    detail = commodities.build_cyclical_commodities_detail(payload_with_lbr_and_archive())
     lumber = detail["non_oil_observation"]["lumber_cme_lbr_yahoo_v1"]
     assert lumber["display_name"] == "Lumber (CME LBR)"
     assert lumber["source_label"] == "Yahoo Finance LBR=F"
@@ -1133,7 +1133,7 @@ def test_detail_uses_active_yahoo_lbr_and_excludes_archived_lumber():
 
 
 def test_detail_uses_active_investing_comex_and_excludes_yahoo_archive():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS,
         USD_ROWS,
         _OIL_ROWS,
@@ -1146,7 +1146,7 @@ def test_detail_uses_active_investing_comex_and_excludes_yahoo_archive():
             ],
         },
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
     copper = detail["non_oil_observation"]["copper_comex"]
     assert copper["latest_date"] == "2026-07-24"
     assert copper["latest_value"] == 4.45
@@ -1168,7 +1168,7 @@ def _six_investing_lme_rows():
 
 
 def test_detail_uses_active_investing_lme_with_direct_returns():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         as_of_date="2026-07-31",
@@ -1176,7 +1176,7 @@ def test_detail_uses_active_investing_lme_with_direct_returns():
             "copper_lme": _six_investing_lme_rows(),
         },
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
     lme = detail["non_oil_observation"]["copper_lme"]
     assert lme["display_name"] == "Copper (LME)"
     assert lme["source_label"] == "Investing.com"
@@ -1262,7 +1262,7 @@ def _comex_abnormal_rows():
 
 
 def _comex_payload(rows):
-    return .build_cyclical_commodities_payload(
+    return commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1300,7 +1300,7 @@ def test_commodity_distribution_marks_normal_move_as_observation_available():
 
 
 def test_commodity_distribution_does_not_fall_back_across_copper_markets():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1417,7 +1417,7 @@ def _shfe_main_rows(include_roll_day=True):
 
 
 def _shfe_payload(main_rows):
-    return .build_cyclical_commodities_payload(
+    return commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1615,7 +1615,7 @@ def _copper_lumber_oil_catalog():
 
 
 def test_attribution_review_resources_expose_only_review_required_commodity():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1623,7 +1623,7 @@ def test_attribution_review_resources_expose_only_review_required_commodity():
         commodity_observations={"copper_comex": _comex_abnormal_rows()},
         attribution_review_catalog=_copper_lumber_oil_catalog(),
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     resources = detail["attribution_review_resources"]
     assert [r["source_name"] for r in resources] == ["International Copper Study Group"]
@@ -1632,7 +1632,7 @@ def test_attribution_review_resources_expose_only_review_required_commodity():
 
 
 def test_attribution_review_resources_empty_for_normal_or_unavailable_distributions():
-    normal = .build_cyclical_commodities_payload(
+    normal = commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1641,13 +1641,13 @@ def test_attribution_review_resources_empty_for_normal_or_unavailable_distributi
         attribution_review_catalog=_copper_lumber_oil_catalog(),
     )
     assert (
-        .build_cyclical_commodities_detail(normal)[
+        commodities.build_cyclical_commodities_detail(normal)[
             "attribution_review_resources"
         ]
         == []
     )
 
-    unavailable = .build_cyclical_commodities_payload(
+    unavailable = commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1655,7 +1655,7 @@ def test_attribution_review_resources_empty_for_normal_or_unavailable_distributi
         attribution_review_catalog=_copper_lumber_oil_catalog(),
     )
     assert (
-        .build_cyclical_commodities_detail(unavailable)[
+        commodities.build_cyclical_commodities_detail(unavailable)[
             "attribution_review_resources"
         ]
         == []
@@ -1663,7 +1663,7 @@ def test_attribution_review_resources_empty_for_normal_or_unavailable_distributi
 
 
 def test_attribution_review_resources_empty_when_catalog_absent():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1671,13 +1671,13 @@ def test_attribution_review_resources_empty_when_catalog_absent():
         commodity_observations={"copper_comex": _comex_abnormal_rows()},
         attribution_review_catalog=None,
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     assert detail["attribution_review_resources"] == []
 
 
 def test_attribution_review_resources_never_add_conclusion_fields():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1685,7 +1685,7 @@ def test_attribution_review_resources_never_add_conclusion_fields():
         commodity_observations={"copper_comex": _comex_abnormal_rows()},
         attribution_review_catalog=_copper_lumber_oil_catalog(),
     )
-    resources = .build_cyclical_commodities_detail(payload)[
+    resources = commodities.build_cyclical_commodities_detail(payload)[
         "attribution_review_resources"
     ]
 
@@ -1838,7 +1838,7 @@ def global_fact():
 def detail_for_review_required_iron(facts=None, audit=audit_payload()):
     if facts is None:
         facts = []
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1849,13 +1849,13 @@ def detail_for_review_required_iron(facts=None, audit=audit_payload()):
         non_oil_attribution_facts=facts,
         non_oil_attribution_source_audit=audit,
     )
-    return .build_cyclical_commodities_detail(payload)
+    return commodities.build_cyclical_commodities_detail(payload)
 
 
 def detail_for_review_required_copper(iwcc_facts=None):
     if iwcc_facts is None:
         iwcc_facts = []
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1864,13 +1864,13 @@ def detail_for_review_required_copper(iwcc_facts=None):
         non_oil_attribution_facts=iwcc_facts,
         non_oil_attribution_source_audit=None,
     )
-    return .build_cyclical_commodities_detail(payload)
+    return commodities.build_cyclical_commodities_detail(payload)
 
 
 def detail_for_review_required_copper_with_status(iwcc_facts=None, refresh_status=None):
     if iwcc_facts is None:
         iwcc_facts = []
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1880,13 +1880,13 @@ def detail_for_review_required_copper_with_status(iwcc_facts=None, refresh_statu
         non_oil_attribution_source_audit=None,
         non_oil_attribution_refresh_status=refresh_status,
     )
-    return .build_cyclical_commodities_detail(payload)
+    return commodities.build_cyclical_commodities_detail(payload)
 
 
 def detail_for_normal_copper(iwcc_facts=None):
     if iwcc_facts is None:
         iwcc_facts = [global_fact()]
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         [],
         {},
         None,
@@ -1895,7 +1895,7 @@ def detail_for_normal_copper(iwcc_facts=None):
         non_oil_attribution_facts=iwcc_facts,
         non_oil_attribution_source_audit=None,
     )
-    return .build_cyclical_commodities_detail(payload)
+    return commodities.build_cyclical_commodities_detail(payload)
 
 
 def test_review_required_iron_reports_usgs_unavailable_and_wa_manual_resources():
@@ -2019,7 +2019,7 @@ def test_review_required_iron_without_usgs_audit_row_still_emits_reason():
 
 
 def test_payload_attaches_cross_market_spreads_under_review_evidence():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
     )
 
@@ -2035,7 +2035,7 @@ def test_payload_attaches_cross_market_spreads_under_review_evidence():
 
 
 def test_cross_market_spreads_use_oil_observations_exactly():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
     )
 
@@ -2055,7 +2055,7 @@ _COPPER_OBSERVATIONS = {
 
 
 def test_lme_comex_differential_available_entry_preserves_limited_contract():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS,
         USD_ROWS,
         _OIL_ROWS,
@@ -2104,7 +2104,7 @@ def test_lme_comex_differential_available_entry_preserves_limited_contract():
 
 
 def test_lme_comex_differential_missing_lme_price_is_unavailable_with_leg_context():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS,
         USD_ROWS,
         _OIL_ROWS,
@@ -2128,14 +2128,14 @@ def test_lme_comex_differential_missing_lme_price_is_unavailable_with_leg_contex
 
 def test_lme_comex_differential_never_changes_headline():
     def headline_for(commodity_observations):
-        payload = .build_cyclical_commodities_payload(
+        payload = commodities.build_cyclical_commodities_payload(
             COT_ROWS,
             USD_ROWS,
             _OIL_ROWS,
             "2026-07-25",
             commodity_observations=commodity_observations,
         )
-        return .build_cyclical_commodities_headline(payload)
+        return commodities.build_cyclical_commodities_headline(payload)
 
     unavailable = {
         "copper_comex": list(_COPPER_OBSERVATIONS["copper_comex"]),
@@ -2155,7 +2155,7 @@ def test_copper_cross_market_metadata_exposes_frozen_source_contract():
         assert entry["price_basis"] == "vendor_continuous_series"
         assert entry["roll_rule_documented"] is False
 
-    forwarded = ._copper_cross_market_metadata()
+    forwarded = commodities._copper_cross_market_metadata()
     for series_id in ("copper_lme", "copper_comex"):
         assert forwarded[series_id] == MARKET_SERIES[series_id]
 
@@ -2163,7 +2163,7 @@ def test_copper_cross_market_metadata_exposes_frozen_source_contract():
 def test_cross_market_spreads_missing_leg_reasons_are_deterministic():
     oil_rows = dict(_OIL_ROWS)
     oil_rows["oil_brent_spot"] = []
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, oil_rows, "2026-07-25"
     )
 
@@ -2174,10 +2174,10 @@ def test_cross_market_spreads_missing_leg_reasons_are_deterministic():
 
 
 def test_detail_propagates_cross_market_spreads_review_evidence():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
     )
-    detail = .build_cyclical_commodities_detail(payload)
+    detail = commodities.build_cyclical_commodities_detail(payload)
 
     spreads = detail["review_evidence"]["cross_market_spreads"]
     assert spreads["method_version"] == "cross_market_spreads_v1"
@@ -2191,10 +2191,10 @@ def test_cross_market_spreads_never_change_headline():
     base_oil = dict(_OIL_ROWS)
 
     def headline_for(oil_rows):
-        payload = .build_cyclical_commodities_payload(
+        payload = commodities.build_cyclical_commodities_payload(
             COT_ROWS, USD_ROWS, oil_rows, "2026-07-25"
         )
-        return .build_cyclical_commodities_headline(payload)
+        return commodities.build_cyclical_commodities_headline(payload)
 
     positive = dict(base_oil)
     negative = dict(base_oil)
@@ -2211,11 +2211,11 @@ def test_cross_market_spreads_never_change_headline():
 
 
 def test_cross_market_spreads_do_not_appear_in_headline_output():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, _OIL_ROWS, "2026-07-25"
     )
 
-    headline = .build_cyclical_commodities_headline(payload)
+    headline = commodities.build_cyclical_commodities_headline(payload)
     assert "spread" not in str(headline)
     assert "review_evidence" not in headline
 
@@ -2243,7 +2243,7 @@ def _inflation_history_rows(
 
 
 def test_inflation_series_payload_includes_monthly_distribution_and_review_state():
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, USD_ROWS, None, "2026-07-25"
     )
 
@@ -2265,7 +2265,7 @@ def test_inflation_normal_monthly_move_is_neutral_observation_evidence():
     usd_rows = dict(USD_ROWS)
     usd_rows["cpi_all_items"] = rows
 
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, usd_rows, None, "2026-07-25"
     )
     inflation = payload["inflation"]["cpi_all_items"]
@@ -2282,7 +2282,7 @@ def test_inflation_abnormal_monthly_move_is_review_required_not_directional():
     usd_rows = dict(USD_ROWS)
     usd_rows["cpi_all_items"] = rows
 
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, usd_rows, None, "2026-07-25"
     )
     inflation = payload["inflation"]["cpi_all_items"]
@@ -2297,19 +2297,19 @@ def test_inflation_abnormal_monthly_move_is_review_required_not_directional():
 
 def test_inflation_monthly_distribution_does_not_change_headline():
     base_rows = dict(USD_ROWS)
-    normal = .build_cyclical_commodities_payload(
+    normal = commodities.build_cyclical_commodities_payload(
         COT_ROWS, base_rows, None, "2026-07-25"
     )
     abnormal_usd = dict(base_rows)
     abnormal_usd["cpi_all_items"] = _inflation_history_rows(
         values=[100.0 * (1.002**index) for index in range(119)] + [150.0]
     )
-    abnormal = .build_cyclical_commodities_payload(
+    abnormal = commodities.build_cyclical_commodities_payload(
         COT_ROWS, abnormal_usd, None, "2026-07-25"
     )
 
-    assert .build_cyclical_commodities_headline(normal) == (
-        .build_cyclical_commodities_headline(abnormal)
+    assert commodities.build_cyclical_commodities_headline(normal) == (
+        commodities.build_cyclical_commodities_headline(abnormal)
     )
 
 
@@ -2321,7 +2321,7 @@ def test_inflation_raw_fields_respect_as_of_date_no_look_ahead():
     usd_rows = dict(USD_ROWS)
     usd_rows["cpi_all_items"] = base_rows + future
 
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, usd_rows, None, "2026-08-03"
     )
     inflation = payload["inflation"]["cpi_all_items"]
@@ -2344,7 +2344,7 @@ def test_inflation_raw_fields_do_not_bridge_missing_calendar_months():
     usd_rows = dict(USD_ROWS)
     usd_rows["cpi_all_items"] = rows
 
-    payload = .build_cyclical_commodities_payload(
+    payload = commodities.build_cyclical_commodities_payload(
         COT_ROWS, usd_rows, None, "2016-06-01"
     )
     inflation = payload["inflation"]["cpi_all_items"]

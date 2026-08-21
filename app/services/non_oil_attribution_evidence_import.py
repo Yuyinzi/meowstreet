@@ -6,8 +6,8 @@ from app.data_sources.non_oil_attribution_evidence import (
 )
 from app.db import macro_indicators
 
-__NON_OIL_ATTRIBUTION_COMMODITIES = ["copper", "lumber"]
-__NON_OIL_ATTRIBUTION_SOURCES = (
+_NON_OIL_ATTRIBUTION_COMMODITIES = ["copper", "lumber"]
+_NON_OIL_ATTRIBUTION_SOURCES = (
     ("copper", IWCC_SOURCE_URL),
     ("lumber", FAOSTAT_SOURCE_URL),
 )
@@ -24,14 +24,14 @@ def refresh_non_oil_attribution_evidence(
     }
     fetched = {}
     failures = {}
-    for commodity_id, source_url in __NON_OIL_ATTRIBUTION_SOURCES:
+    for commodity_id, source_url in _NON_OIL_ATTRIBUTION_SOURCES:
         try:
             fetched[commodity_id] = fetchers[commodity_id]()
         except Exception as exc:
             failures[commodity_id] = exc
     if failures:
         con.rollback()
-        for commodity_id, source_url in __NON_OIL_ATTRIBUTION_SOURCES:
+        for commodity_id, source_url in _NON_OIL_ATTRIBUTION_SOURCES:
             exc = failures.get(commodity_id)
             if exc is not None:
                 error_message = str(exc)
@@ -52,18 +52,18 @@ def refresh_non_oil_attribution_evidence(
     facts = [fact for facts in fetched.values() for fact in facts]
     try:
         macro_indicators.merge_non_oil_attribution_facts(con, facts, commit=False)
-        for commodity_id, source_url in __NON_OIL_ATTRIBUTION_SOURCES:
+        for commodity_id, source_url in _NON_OIL_ATTRIBUTION_SOURCES:
             macro_indicators.merge_non_oil_attribution_refresh_status(
                 con, commodity_id, source_url, "available", None, commit=False
             )
         con.commit()
         return {
             "facts": len(facts),
-            "commodities": list(__NON_OIL_ATTRIBUTION_COMMODITIES),
+            "commodities": list(_NON_OIL_ATTRIBUTION_COMMODITIES),
         }
     except Exception:
         con.rollback()
-        for commodity_id, source_url in __NON_OIL_ATTRIBUTION_SOURCES:
+        for commodity_id, source_url in _NON_OIL_ATTRIBUTION_SOURCES:
             macro_indicators.merge_non_oil_attribution_refresh_status(
                 con,
                 commodity_id,

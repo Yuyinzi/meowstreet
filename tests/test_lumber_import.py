@@ -85,7 +85,7 @@ def changed_yahoo_rows():
 
 
 def yahoo_payload(observations):
-    return {"series": lumber._LUMBER_SERIES, "observations": observations}
+    return {"series": lumber.LUMBER_SERIES, "observations": observations}
 
 
 def fake_yahoo_fetcher(start_date, end_date):
@@ -126,7 +126,7 @@ def test_initial_lbr_import_backfills_from_contract_start_and_preserves_archive(
 def test_incremental_lbr_import_uses_fourteen_calendar_day_overlap(tmp_path):
     con = macro_indicators.connect(tmp_path / "market.sqlite")
     macro_indicators.merge_macro_indicator_observations(
-        con, lumber._LUMBER_SERIES, [yahoo_observation("2026-07-29", 634.0)]
+        con, lumber.LUMBER_SERIES, [yahoo_observation("2026-07-29", 634.0)]
     )
     calls = []
 
@@ -296,7 +296,7 @@ def test_initial_lbr_import_rejects_existing_active_rows_without_overlap_audit(
     con = macro_indicators.connect(tmp_path / "market.sqlite")
     macro_indicators.merge_macro_indicator_observations(
         con,
-        lumber._LUMBER_SERIES,
+        lumber.LUMBER_SERIES,
         [yahoo_observation("2026-07-30", 631.0)],
     )
 
@@ -382,7 +382,7 @@ def test_import_cli_reports_errors_without_traceback(monkeypatch, capsys, tmp_pa
     captured = capsys.readouterr()
     assert exit_code == 1
     assert captured.out == ""
-    assert captured.err == " lumber import error: yahoo unavailable\n"
+    assert captured.err == "commodities lumber import error: yahoo unavailable\n"
 
 
 def test_audit_cli_writes_no_audit_file_on_audit_failure(monkeypatch, capsys, tmp_path):

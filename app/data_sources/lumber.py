@@ -2,12 +2,12 @@ from datetime import UTC, datetime
 
 from app.tools import market_data
 
-_LUMBER_SERIES_ID = "lumber_cme_lbr_yahoo_v1"
-_LUMBER_SYMBOL = "LBR=F"
-_LUMBER_START_DATE = "2022-08-08"
+LUMBER_SERIES_ID = "lumber_cme_lbr_yahoo_v1"
+LUMBER_SYMBOL = "LBR=F"
+LUMBER_START_DATE = "2022-08-08"
 YAHOO_CHART_SOURCE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/LBR%3DF"
 
-_LUMBER_SOURCE_CONTRACT = {
+LUMBER_SOURCE_CONTRACT = {
     "instrument": "CME Lumber Futures",
     "product_code": "LBR",
     "symbol": "LBR=F",
@@ -21,15 +21,15 @@ _LUMBER_SOURCE_CONTRACT = {
     "distribution_window_start": "2022-08-08",
 }
 
-_LUMBER_SERIES = {
-    "series_id": _LUMBER_SERIES_ID,
+LUMBER_SERIES = {
+    "series_id": LUMBER_SERIES_ID,
     "title": "Lumber (CME LBR)",
     "units": "USD/1,000 board feet",
     "source": "yahoo_finance",
     "source_class": "vendor_free_market_data",
     "source_url": YAHOO_CHART_SOURCE_URL,
-    "source_identifier": _LUMBER_SYMBOL,
-    "source_contract": _LUMBER_SOURCE_CONTRACT,
+    "source_identifier": LUMBER_SYMBOL,
+    "source_contract": LUMBER_SOURCE_CONTRACT,
 }
 
 
@@ -54,19 +54,19 @@ def _utc_date(timestamp):
 
 
 def normalize_lumber_chart(payload, retrieved_at):
-    result = _chart_result(payload, _LUMBER_SYMBOL)
+    result = _chart_result(payload, LUMBER_SYMBOL)
     timestamps = result.get("timestamp") or []
-    closes = _quote_closes(result, _LUMBER_SYMBOL) or []
+    closes = _quote_closes(result, LUMBER_SYMBOL) or []
     if len(timestamps) != len(closes):
         raise ValueError(
-            f"price dates and close lengths differ for {_LUMBER_SYMBOL}"
+            f"price dates and close lengths differ for {LUMBER_SYMBOL}"
         )
     observations = []
     for timestamp, close in zip(timestamps, closes):
         day = _utc_date(timestamp)
-        if day < _LUMBER_START_DATE:
+        if day < LUMBER_START_DATE:
             raise ValueError(
-                f"lumber chart row for {day} is before {_LUMBER_START_DATE} for {_LUMBER_SYMBOL}"
+                f"lumber chart row for {day} is before {LUMBER_START_DATE} for {LUMBER_SYMBOL}"
             )
         if close is None:
             continue
@@ -76,13 +76,13 @@ def normalize_lumber_chart(payload, retrieved_at):
                 "value": float(close),
                 "source": "yahoo_finance",
                 "source_url": YAHOO_CHART_SOURCE_URL,
-                "source_identifier": _LUMBER_SYMBOL,
+                "source_identifier": LUMBER_SYMBOL,
                 "source_class": "vendor_free_market_data",
                 "retrieved_at": retrieved_at,
             }
         )
     if not observations:
-        raise ValueError(f"close data is missing for {_LUMBER_SYMBOL}")
+        raise ValueError(f"close data is missing for {LUMBER_SYMBOL}")
     return observations
 
 
@@ -99,9 +99,9 @@ def _default_lumber_chart_fetcher(symbol, start_date, end_date, interval, http_c
 
 def fetch_lumber_series(start_date, end_date, http_client=None, fetch_chart=None):
     chart_fetcher = fetch_chart or _default_lumber_chart_fetcher
-    payload = chart_fetcher(_LUMBER_SYMBOL, start_date, end_date, "1d", http_client)
+    payload = chart_fetcher(LUMBER_SYMBOL, start_date, end_date, "1d", http_client)
     retrieved_at = datetime.now(UTC).isoformat()
     return {
-        "series": _LUMBER_SERIES,
+        "series": LUMBER_SERIES,
         "observations": normalize_lumber_chart(payload, retrieved_at),
     }

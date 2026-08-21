@@ -571,7 +571,7 @@ def _build_current_state(con, as_of_date):
         cot_rows = macro_indicators_db.load_cot_observations(con)
         usd_observations = (
             macro_indicators_db.load_macro_indicator_observations_for_series(
-                con, api._OBSERVATION_SERIES_IDS
+                con, api.OBSERVATION_SERIES_IDS
             )
         )
         payload = tool.build_cyclical_commodities_payload(
@@ -583,7 +583,7 @@ def _build_current_state(con, as_of_date):
             observation = {"cyclical_commodities": payload}
     except Exception:
         logging.warning(
-            " load failed for market setup",
+            "commodities load failed for market setup",
             exc_info=True,
         )
     observation_only = {"equity_breadth": {"state": "unavailable"}}

@@ -40,7 +40,7 @@ def _as_finite_float(value):
     return parsed
 
 
-_DCE_IRON_ORE_SINA_SERIES = {
+DCE_IRON_ORE_SINA_SERIES = {
     "series_id": "iron_ore_dce",
     "title": "Iron Ore (DCE)",
     "units": "CNY/tonne",
@@ -103,6 +103,6 @@ def fetch_dce_iron_ore_sina(adapter=None):
     except Exception as exc:
         raise ValueError(f"sina I0 fetch failed: {exc}") from exc
     return {
-        "series": _DCE_IRON_ORE_SINA_SERIES,
+        "series": DCE_IRON_ORE_SINA_SERIES,
         "observations": normalize_dce_iron_ore_sina_daily(frame, _retrieved_at()),
     }

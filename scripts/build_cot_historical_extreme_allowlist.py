@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 from app.services import cot_historical_extremes_catalog as allowlist_service
 from app.resources import resource_path
 
-DEFAULT_CACHE_DIR = ROOT / "data" / ""
+DEFAULT_CACHE_DIR = ROOT / "data" / "commodities"
 DEFAULT_OUTPUT = resource_path("cot_extreme_allowlist")
 
 ALLOWLIST_RECORDS = [
@@ -80,7 +80,7 @@ ALLOWLIST_RECORDS = [
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(
-        description="Build the  cot historical extreme allowlist from cached CFTC archives."
+        description="Build the commodities cot historical extreme allowlist from cached CFTC archives."
     )
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--output-path", default=str(DEFAULT_OUTPUT))

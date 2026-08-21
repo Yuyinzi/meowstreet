@@ -92,7 +92,7 @@ def fetch_cot_zips(cache_dir, years):
         cftc_cot.fetch_historical_report(year, cache_dir)
 
 
-def import_cached_official_(con, cache_dir, years):
+def import_cached_official_commodities(con, cache_dir, years):
     cot_count = _import_cot_years(con, cache_dir, years)
     usd_count = _import_usd_observations(con, cache_dir)
     return {
@@ -119,7 +119,7 @@ def _validate_cot_rows_against_allowlist(rows, active_entries):
             continue
         if row.get("cftc_contract_market_code") != entry["contract_code"]:
             raise ValueError(
-                f" cot {row['commodity_id']} contract market code "
+                f"commodities cot {row['commodity_id']} contract market code "
                 f"does not match the allowlist"
             )
         persisted.append(row)
@@ -171,9 +171,9 @@ def replace_cot_history(con, cache_dir, years, allowlist_path=None):
     }
 
 
-def refresh_official_(con, cache_dir, years, fred_client_factory=None):
+def refresh_official_commodities(con, cache_dir, years, fred_client_factory=None):
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     fetch_cot_zips(cache_dir, years)
     _fetch_fred_csvs(cache_dir, fred_client_factory)
-    return import_cached_official_(con, cache_dir, years)
+    return import_cached_official_commodities(con, cache_dir, years)
