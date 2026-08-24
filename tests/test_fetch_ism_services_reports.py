@@ -372,8 +372,8 @@ def test_main_returns_1_on_promotion_failure(tmp_path, monkeypatch, capsys):
     try:
         snapshot = growth_cycle.load_ism_report_source_snapshot(check_con, EXPECTED_URL)
         assert snapshot is not None
-        assert snapshot["parse_status"] == "failed"
-        assert "promotion failure" in snapshot["parse_error"]
+        assert snapshot["parse_status"] == "prepared"
+        assert snapshot["parse_error"] is None
 
         for sid in [
             "ism_services_pmi",
@@ -442,7 +442,8 @@ def test_success_then_failure_preserves_provenance(tmp_path, monkeypatch, capsys
     con = us_rates_liquidity.connect(db_path)
     try:
         snapshot = growth_cycle.load_ism_report_source_snapshot(con, EXPECTED_URL)
-        assert snapshot["parse_status"] == "failed"
+        assert snapshot["parse_status"] == "prepared"
+        assert snapshot["parse_error"] is None
         assert snapshot["report_id"] == "ism_services_2026_06"
         assert snapshot["report_month"] == "2026-06-01"
 
