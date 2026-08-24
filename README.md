@@ -50,7 +50,11 @@ Dashboards initially show insufficient-data states until scheduled refresh jobs
 populate observations. Cron jobs own time-series and report ingestion; bootstrap
 does not run those jobs.
 
-Copy `.env.example` to `.env` to configure optional assistant features. `.env`
-is not needed for deterministic dashboards and is required only for assistant
-features. Keep API credentials and other sensitive settings in `.env`; Git
-ignores this file.
+Copy `.env.example` to `.env` to configure optional assistant and offline AI
+enrichment features. Deterministic dashboard imports, including core ISM fields,
+do not require `OPENAI_API_KEY`. When a key is configured, the macro refresh
+automatically enriches saved ISM reports; without one, those enrichment tasks are
+reported as skipped.
+
+Keep API credentials and other sensitive settings in `.env`; Git ignores this
+file.
