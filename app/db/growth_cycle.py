@@ -366,6 +366,21 @@ def load_ism_report_source_snapshot(con, source_url):
     return dict(row) if row else None
 
 
+def load_ism_report_source_snapshots(con, survey_type):
+    rows = con.execute(
+        """
+        select source_url, source_name, survey_type, source_hash, fetched_at, raw_html,
+               parse_status, parse_error, report_id, report_month
+        from ism_report_source_snapshots
+        where survey_type = ? and parse_status = 'ok'
+          and report_id is not null and report_month is not null
+        order by report_month, fetched_at, source_url
+        """,
+        (survey_type,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def _derive_coverage_from_flat_signals(flat_signals):
     from collections import OrderedDict
 

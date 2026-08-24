@@ -202,6 +202,64 @@ def _record_extraction_failure(con, target, message):
     con.commit()
 
 
+def enrich_snapshot(
+    db_path,
+    snapshot,
+    client,
+    model,
+    section_concurrency=3,
+    progress=None,
+):
+    prepared = prepare_report_for_ai(
+        snapshot["raw_html"],
+        snapshot["source_url"],
+        snapshot["fetched_at"],
+        snapshot["source_name"],
+    )
+    target = {
+        "report_id": snapshot["report_id"],
+        "report_month": snapshot["report_month"],
+    }
+    extraction, call_counts = asyncio.run(
+        extract_prepared_report(
+            db_path,
+            prepared,
+            client,
+            model,
+            section_concurrency,
+            progress=progress,
+        )
+    )
+    _validate_target_identity(target, extraction)
+    source = {
+        "report_id": snapshot["report_id"],
+        "report_month": snapshot["report_month"],
+        "source_url": snapshot["source_url"],
+        "source_hash": snapshot["source_hash"],
+        "model": model,
+        "updated_at": snapshot["fetched_at"],
+    }
+    if progress is not None:
+        progress(
+            f"services promotion started report_id={snapshot['report_id']}"
+        )
+    con = us_rates_liquidity.connect(db_path)
+    growth_cycle.init_db(con)
+    try:
+        promoted = promote_services_extraction(con, extraction, source)
+    finally:
+        con.close()
+    if progress is not None:
+        progress(
+            f"services promotion ok report_id={snapshot['report_id']} "
+            f"signals={promoted.get('industry_signals', 0)} "
+            f"coverage={promoted.get('signal_coverage', 0)} "
+            f"comments={promoted.get('comments', 0)} "
+            f"commodities={promoted.get('commodities', 0)}"
+        )
+    return _result_summary(extraction, call_counts)
+
+
 def import_report_url(
     db_path,
     target,
@@ -219,76 +277,73 @@ def import_report_url(
             f"{progress_prefix} fetched chars={len(html)} "
             f"{time.perf_counter() - started:.1f}s"
         )
+    source_hash = _source_hash(html)
     con = us_rates_liquidity.connect(db_path)
     growth_cycle.init_db(con)
     try:
         _save_source_snapshot(con, target, html, fetched_at)
+    finally:
+        con.close()
+
+    try:
         prepared = prepare_report_for_ai(
             html, target["url"], fetched_at, target["source_name"]
         )
-        if progress is not None:
-            progress(
-                f"{progress_prefix} prepared report_id={prepared['report_id']} "
-                f"chars={len(prepared['source_text'])}"
-            )
-        source = {
-            "report_id": prepared["report_id"],
-            "report_month": prepared["report_month"],
-            "source_url": target["url"],
-            "source_hash": _source_hash(html),
-            "model": model,
-            "updated_at": fetched_at,
-        }
-        growth_cycle.replace_ism_report_source_snapshot(
-            con,
+    except BaseException as exc:
+        con = us_rates_liquidity.connect(db_path)
+        try:
+            _record_extraction_failure(con, target, exc)
+        finally:
+            con.close()
+        raise
+    try:
+        _validate_target_identity(
+            target,
             {
-                "source_url": target["url"],
-                "source_name": target["source_name"],
-                "survey_type": "services",
-                "source_hash": _source_hash(html),
-                "fetched_at": fetched_at,
-                "raw_html": html,
-                "parse_status": "prepared",
-                "parse_error": None,
-                "report_id": prepared["report_id"],
-                "report_month": prepared["report_month"],
+                "report": {
+                    "report_id": prepared["report_id"],
+                    "report_month": prepared["report_month"],
+                }
             },
         )
-        try:
-            extraction, call_counts = asyncio.run(
-                extract_prepared_report(
-                    db_path,
-                    prepared,
-                    client,
-                    model,
-                    section_concurrency,
-                    progress=progress,
-                )
-            )
-        except BaseException as exc:
-            _record_extraction_failure(con, target, exc)
-            raise
-        _validate_target_identity(target, extraction)
-        if progress is not None:
-            progress(
-                f"{progress_prefix} promotion started "
-                f"report_id={prepared['report_id']}"
-            )
-        promoted = promote_services_extraction(con, extraction, source)
-        if progress is not None:
-            progress(
-                f"{progress_prefix} promotion ok report_id={prepared['report_id']} "
-                f"signals={promoted['industry_signals']} "
-                f"coverage={promoted['signal_coverage']} "
-                f"comments={promoted['comments']} "
-                f"commodities={promoted['commodities']}"
-            )
-        return _result_summary(extraction, call_counts)
     except BaseException as exc:
-        _record_extraction_failure(con, target, exc)
+        con = us_rates_liquidity.connect(db_path)
+        try:
+            _record_extraction_failure(con, target, exc)
+        finally:
+            con.close()
         raise
+
+    if progress is not None:
+        progress(
+            f"{progress_prefix} prepared report_id={prepared['report_id']} "
+            f"chars={len(prepared['source_text'])}"
+        )
+    snapshot = {
+        "source_url": target["url"],
+        "source_name": target["source_name"],
+        "survey_type": "services",
+        "source_hash": source_hash,
+        "fetched_at": fetched_at,
+        "raw_html": html,
+        "parse_status": "prepared",
+        "parse_error": None,
+        "report_id": prepared["report_id"],
+        "report_month": prepared["report_month"],
+    }
+    con = us_rates_liquidity.connect(db_path)
+    try:
+        growth_cycle.replace_ism_report_source_snapshot(con, snapshot)
     finally:
         con.close()
+    return enrich_snapshot(
+        db_path,
+        snapshot,
+        client,
+        model,
+        section_concurrency,
+        progress=progress,
+    )
 
 
 def import_target(
