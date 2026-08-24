@@ -226,6 +226,7 @@ def args_without_skips():
         skip_economic_confirmation=False,
         fomc_calendar_path=None,
         stop_on_error=False,
+        verbose=False,
     )
 
 
@@ -259,6 +260,53 @@ def fake_gdp_main(argv):
 
 def fake_lumber_main(argv):
     return 0
+
+
+def test_ism_plans_core_and_skipped_enrichment_without_key():
+    tasks = refresh_macro_data._planned_tasks(
+        args_without_skips(),
+        ism_reports_main=fake_ism_reports_main,
+        openai_config={"api_key": None},
+    )
+    ism_tasks = [task for task in tasks if task["name"].startswith("ism_")]
+
+    assert [
+        (task["name"], task["argv"], task["skip_reason"])
+        for task in ism_tasks
+    ] == [
+        (
+            "ism_manufacturing_official",
+            ["--survey", "manufacturing", "--latest-only", "--core-only"],
+            None,
+        ),
+        (
+            "ism_manufacturing_ai_enrichment",
+            ["--survey", "manufacturing", "--latest-only", "--enrichment-only"],
+            "OPENAI_API_KEY is not configured",
+        ),
+        (
+            "ism_services_official",
+            ["--survey", "services", "--latest-only", "--core-only"],
+            None,
+        ),
+        (
+            "ism_services_ai_enrichment",
+            ["--survey", "services", "--latest-only", "--enrichment-only"],
+            "OPENAI_API_KEY is not configured",
+        ),
+    ]
+
+
+def test_ism_enrichment_is_runnable_when_key_exists():
+    tasks = refresh_macro_data._planned_tasks(
+        args_without_skips(),
+        ism_reports_main=fake_ism_reports_main,
+        openai_config={"api_key": "configured"},
+    )
+
+    enrichment = [task for task in tasks if task["name"].endswith("ai_enrichment")]
+    assert len(enrichment) == 2
+    assert all(task["skip_reason"] is None for task in enrichment)
 
 
 def test_main_refreshes_official_building_permits_when_enabled():
@@ -435,6 +483,7 @@ def test_main_continues_after_provider_failure(capsys):
         dce_iron_ore_sina_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
         economic_confirmation_main=lambda argv: 0,
+        openai_config={"api_key": None},
     )
 
     assert exit_code == 1
@@ -448,7 +497,7 @@ def test_main_continues_after_provider_failure(capsys):
     ]
     captured = capsys.readouterr()
     assert "benchmark_yahoo: failed - exit code 1" in captured.err
-    assert "macro data refresh completed: ok=19 skipped=0 failed=1" in captured.out
+    assert "macro data refresh completed: ok=19 skipped=2 failed=1" in captured.out
 
 
 def test_main_can_stop_after_first_failure():
@@ -692,12 +741,19 @@ def test_main_runs_both_ism_surveys_in_order():
         dce_iron_ore_sina_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
         economic_confirmation_main=lambda argv: 0,
+        openai_config={"api_key": None},
     )
 
     assert result == 0
     assert calls == [
-        ("ism_reports", ["--survey", "manufacturing", "--latest-only"]),
-        ("ism_reports", ["--survey", "services", "--latest-only"]),
+        (
+            "ism_reports",
+            ["--survey", "manufacturing", "--latest-only", "--core-only"],
+        ),
+        (
+            "ism_reports",
+            ["--survey", "services", "--latest-only", "--core-only"],
+        ),
     ]
 
 
@@ -922,13 +978,36 @@ def test_refresh_macro_data_runs_official_ism_fetch_when_enabled():
         dce_iron_ore_sina_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
         economic_confirmation_main=lambda argv: 0,
+        openai_config={"api_key": None},
     )
 
     assert exit_code == 0
     assert calls == [
-        ["--survey", "manufacturing", "--latest-only"],
-        ["--survey", "services", "--latest-only"],
+        ["--survey", "manufacturing", "--latest-only", "--core-only"],
+        ["--survey", "services", "--latest-only", "--core-only"],
     ]
+
+
+def test_verbose_is_forwarded_to_fomc_generators(tmp_path):
+    csv_path = tmp_path / "fomc.csv"
+    csv_path.write_text(
+        "start_date,end_date,title,has_sep,url\n"
+        "2026-07-28,2026-07-29,FOMC Meeting,0,https://example.test/fomc\n",
+        encoding="utf-8",
+    )
+    calls = []
+
+    refresh_macro_data.run(
+        ["--verbose", "--skip-ism", "--fomc-calendar-path", str(csv_path)],
+        fomc_main=lambda argv: 0,
+        fomc_document_main=lambda argv: 0,
+        fomc_policy_tone_main=lambda argv: calls.append(("tone", argv)) or 0,
+        fomc_minutes_main=lambda argv: calls.append(("minutes", argv)) or 0,
+        openai_config={"api_key": None},
+    )
+
+    assert ("tone", ["--all", "--verbose"]) in calls
+    assert ("minutes", ["--all", "--verbose"]) in calls
 
 
 def test_main_runs_all_fomc_tasks_in_order(tmp_path):

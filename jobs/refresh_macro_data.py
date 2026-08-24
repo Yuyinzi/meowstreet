@@ -32,6 +32,8 @@ from scripts import import_us_macro_indicators
 from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
 
+from app import llm
+
 
 def _timestamp():
     return datetime.now().replace(microsecond=0).isoformat()
@@ -44,6 +46,12 @@ def _task(name, func, argv, skip_reason=None):
         "argv": list(argv),
         "skip_reason": skip_reason,
     }
+
+
+def _openai_enrichment_skip_reason(config):
+    if config.get("api_key"):
+        return None
+    return "OPENAI_API_KEY is not configured"
 
 
 def _run_task(task):
@@ -143,6 +151,7 @@ def _planned_tasks(
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
     economic_confirmation_main=None,
+    openai_config=None,
 ):
     tasks = []
     if benchmark_main is not None and not args.skip_yahoo:
@@ -181,16 +190,48 @@ def _planned_tasks(
     if building_permits_main is not None and not args.skip_building_permits:
         tasks.append(_task("building_permits_census", building_permits_main, []))
     if ism_reports_main is not None and not args.skip_ism:
-        tasks.append(_task(
-            "ism_manufacturing_official",
-            ism_reports_main,
-            ["--survey", "manufacturing", "--latest-only"],
-        ))
-        tasks.append(_task(
-            "ism_services_official",
-            ism_reports_main,
-            ["--survey", "services", "--latest-only"],
-        ))
+        enrichment_skip_reason = _openai_enrichment_skip_reason(openai_config or {})
+        tasks.extend(
+            [
+                _task(
+                    "ism_manufacturing_official",
+                    ism_reports_main,
+                    [
+                        "--survey",
+                        "manufacturing",
+                        "--latest-only",
+                        "--core-only",
+                    ],
+                ),
+                _task(
+                    "ism_manufacturing_ai_enrichment",
+                    ism_reports_main,
+                    [
+                        "--survey",
+                        "manufacturing",
+                        "--latest-only",
+                        "--enrichment-only",
+                    ],
+                    enrichment_skip_reason,
+                ),
+                _task(
+                    "ism_services_official",
+                    ism_reports_main,
+                    ["--survey", "services", "--latest-only", "--core-only"],
+                ),
+                _task(
+                    "ism_services_ai_enrichment",
+                    ism_reports_main,
+                    [
+                        "--survey",
+                        "services",
+                        "--latest-only",
+                        "--enrichment-only",
+                    ],
+                    enrichment_skip_reason,
+                ),
+            ]
+        )
     if gdp_main is not None and not args.skip_gdp:
         tasks.append(_task("gdp_fred_fetch", gdp_main, ["--fetch-fred-csv"]))
         tasks.append(_task("gdp_fred_merge", gdp_main, ["--us-csv-merge"]))
@@ -205,8 +246,18 @@ def _planned_tasks(
                         ["--calendar-path", str(calendar_path)],
                     ),
                     _task("fomc_documents", fomc_document_main, ["--document-type", "all"]),
-                    _task("fomc_policy_tone", fomc_policy_tone_main, ["--all"]),
-                    _task("fomc_minutes_structure", fomc_minutes_main, ["--all"]),
+                    _task(
+                        "fomc_policy_tone",
+                        fomc_policy_tone_main,
+                        ["--all"]
+                        + (["--verbose"] if getattr(args, "verbose", False) else []),
+                    ),
+                    _task(
+                        "fomc_minutes_structure",
+                        fomc_minutes_main,
+                        ["--all"]
+                        + (["--verbose"] if getattr(args, "verbose", False) else []),
+                    ),
                 ]
             )
     if nfib_main is not None and not args.skip_nfib_sbo:
@@ -286,6 +337,7 @@ def run(
     dce_iron_ore_sina_main=None,
     economic_confirmation_main=None,
     progress_factory=tqdm,
+    openai_config=None,
 ):
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
@@ -314,6 +366,8 @@ def run(
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
+    if openai_config is None:
+        openai_config = llm.load_openai_config(args, root=ROOT)
     print(f"macro data refresh started: {_timestamp()}")
     tasks = _planned_tasks(
         args,
@@ -338,6 +392,7 @@ def run(
         shfe_copper_main,
         dce_iron_ore_sina_main,
         economic_confirmation_main,
+        openai_config,
     )
     results = []
     with progress_factory(
