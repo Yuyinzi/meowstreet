@@ -1444,3 +1444,66 @@ def test_planned_tasks_skips_economic_confirmation_when_flag_set():
     assert not any(
         task["name"] == "economic_confirmation_official" for task in tasks
     )
+
+
+def test_planned_tasks_uses_separate_fred_provider_seam():
+    args = args_without_skips()
+    args.skip_yahoo = True
+    args.skip_consumer_sentiment = True
+    args.skip_building_permits = True
+    args.skip_ism = True
+    args.skip_fomc = True
+    args.skip_nfib_sbo = True
+    args.skip_nfib_sbo_regional = True
+    args.skip_tracked_commodities = True
+    args.skip_cyclical_commodities = True
+    args.skip_oil = True
+    args.skip_lumber = True
+    args.skip_shfe_copper = True
+    args.skip_dce_iron_ore_sina = True
+    args.skip_economic_confirmation = True
+    providers = {
+        "rates": lambda argv: 0,
+        "credit": lambda argv: 0,
+        "m2": lambda argv: 0,
+        "macro_indicators": lambda argv: 0,
+        "gdp": lambda argv: 0,
+    }
+
+    tasks = refresh_macro_data._planned_tasks(
+        args,
+        rates_main=providers["rates"],
+        m2_main=providers["m2"],
+        macro_indicators_main=providers["macro_indicators"],
+        gdp_main=providers["gdp"],
+        credit_main=providers["credit"],
+        openai_config={"api_key": None},
+    )
+
+    assert [task["name"] for task in tasks] == [
+        "rates_fred_fetch",
+        "m2_fred_fetch",
+        "macro_indicators_fred_fetch",
+        "gdp_fred_fetch",
+        "rates_fred_import",
+        "m2_fred_import",
+        "macro_indicators_fred_import",
+        "gdp_fred_import",
+        "credit_fred_fetch",
+        "credit_fred_import",
+    ]
+
+
+def test_main_wires_separate_fred_importers_instead_of_combined_refresh(monkeypatch):
+    captured = {}
+
+    def fake_run(argv, **kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(refresh_macro_data, "run", fake_run)
+
+    assert refresh_macro_data.main([]) == 0
+    assert captured["rates_main"] is refresh_macro_data.import_us_rates_liquidity.main
+    assert captured["credit_main"] is refresh_macro_data.import_us_corporate_credit.main
+    assert captured["rates_main"] is not refresh_macro_data.refresh_us_rates_liquidity.main

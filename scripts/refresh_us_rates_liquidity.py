@@ -12,6 +12,16 @@ from scripts import import_us_macro_indicators
 from scripts import import_us_rates_liquidity
 
 
+RATES_FRED_SERIES = tuple(sorted(import_us_rates_liquidity.FRED_RATE_SERIES_CONFIG))
+MACRO_FRED_SERIES = tuple(sorted(import_us_macro_indicators.FRED_MACRO_SERIES_CONFIG))
+CREDIT_FRED_SERIES = tuple(sorted(import_us_corporate_credit.FRED_SERIES_MAP))
+FRED_SERIES_GROUPS = {
+    "rates": RATES_FRED_SERIES,
+    "macro": MACRO_FRED_SERIES,
+    "credit": CREDIT_FRED_SERIES,
+}
+
+
 def _print_fetched(label, fetched):
     if fetched is None:
         print(f"{label} fetch skipped")
@@ -32,6 +42,38 @@ def _print_imported(label, inserted):
 
 def _generate_credit_interpretation(db_path):
     return generate_credit_ai_interpretation.main(["--db-path", str(db_path)])
+
+
+def _fetch_rates_grouped():
+    return import_us_rates_liquidity.fetch_fred_csvs(
+        fred_series_ids=RATES_FRED_SERIES
+    )
+
+
+def _fetch_macro_grouped():
+    return import_us_macro_indicators.fetch_fred_csvs(
+        fred_series_ids=MACRO_FRED_SERIES
+    )
+
+
+def _fetch_credit_grouped():
+    return import_us_corporate_credit.fetch_fred_csvs(
+        fred_series_ids=CREDIT_FRED_SERIES
+    )
+
+
+def _import_rates_grouped(con):
+    return import_us_rates_liquidity.import_fred_csvs(
+        con,
+        fred_series_ids=RATES_FRED_SERIES,
+    )
+
+
+def _import_credit_grouped(con):
+    return import_us_corporate_credit.import_fred_csvs(
+        con,
+        fred_series_ids=CREDIT_FRED_SERIES,
+    )
 
 
 def refresh(
@@ -68,12 +110,12 @@ def refresh(
 def main(
     argv=None,
     connect=us_rates_liquidity.connect,
-    fetch_rates=import_us_rates_liquidity.fetch_fred_csvs,
-    fetch_macro=import_us_macro_indicators.fetch_fred_csvs,
-    fetch_credit=import_us_corporate_credit.fetch_fred_csvs,
-    import_rates=import_us_rates_liquidity.import_fred_csvs,
+    fetch_rates=_fetch_rates_grouped,
+    fetch_macro=_fetch_macro_grouped,
+    fetch_credit=_fetch_credit_grouped,
+    import_rates=_import_rates_grouped,
     import_macro=import_us_macro_indicators.import_fred_macro_csvs,
-    import_credit_fred=import_us_corporate_credit.import_fred_csvs,
+    import_credit_fred=_import_credit_grouped,
     generate_credit_interpretation=_generate_credit_interpretation,
 ):
     parser = argparse.ArgumentParser(

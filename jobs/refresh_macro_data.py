@@ -28,11 +28,15 @@ from scripts import import_lumber
 from scripts import import_oil
 from scripts import import_shfe_copper
 from scripts import import_us_building_permits
+from scripts import import_us_corporate_credit
 from scripts import import_us_macro_indicators
+from scripts import import_us_rates_liquidity
 from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
 
 from app import llm
+from app.services.macro_refresh_registry import build_refresh_tasks
+from app.services.macro_refresh_resources import ArtifactStore
 
 
 def _timestamp():
@@ -152,8 +156,28 @@ def _planned_tasks(
     dce_iron_ore_sina_main=None,
     economic_confirmation_main=None,
     openai_config=None,
+    credit_main=None,
+    artifact_store=None,
 ):
     tasks = []
+    if credit_main is not None:
+        fred_tasks = build_refresh_tasks(
+            args,
+            {
+                "rates": rates_main,
+                "credit": credit_main,
+                "m2": m2_main,
+                "macro_indicators": macro_indicators_main,
+                "gdp": gdp_main,
+            },
+            openai_config=openai_config,
+            artifact_store=artifact_store or ArtifactStore(),
+        )
+        tasks.extend(fred_tasks)
+        rates_main = None
+        m2_main = None
+        macro_indicators_main = None
+        gdp_main = None
     if benchmark_main is not None and not args.skip_yahoo:
         tasks.append(_task(
             "benchmark_yahoo",
@@ -338,6 +362,8 @@ def run(
     economic_confirmation_main=None,
     progress_factory=tqdm,
     openai_config=None,
+    credit_main=None,
+    artifact_store=None,
 ):
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
@@ -393,6 +419,8 @@ def run(
         dce_iron_ore_sina_main,
         economic_confirmation_main,
         openai_config,
+        credit_main,
+        artifact_store,
     )
     results = []
     with progress_factory(
@@ -423,7 +451,8 @@ def main(argv=None):
     return run(
         argv,
         benchmark_main=refresh_benchmark_market_data.main,
-        rates_main=refresh_us_rates_liquidity.main,
+        rates_main=import_us_rates_liquidity.main,
+        credit_main=import_us_corporate_credit.main,
         consumer_main=import_consumer_sentiment.main,
         m2_main=import_m2_money_supply.main,
         building_permits_main=import_us_building_permits.main,
