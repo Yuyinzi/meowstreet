@@ -136,22 +136,20 @@ def persist_building_permits(db_path, artifacts, *, release_date=None):
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "permits_cust.xlsx"
         path.write_bytes(_bytes(value))
-        payload = census_nrc.parse_permits_workbook(path, release_date=release_date)
-    con = macro_indicators.connect(db_path)
-    try:
-        result = macro_indicators.merge_macro_indicator_observations_batch(
-            con,
-            [
-                {
-                    **observation,
-                    "series_id": payload["series"]["series_id"],
-                }
-                for observation in payload["observations"]
-            ],
-        )
-    finally:
-        con.close()
-    return {"status": "ok", "artifact_key": "census.building_permits", **result}
+        from app.services import housing_permits_import
+
+        con = macro_indicators.connect(db_path)
+        try:
+            count = housing_permits_import.import_cached_official_workbook(
+                con, path, release_date=release_date
+            )
+        finally:
+            con.close()
+    return {
+        "status": "ok",
+        "artifact_key": "census.building_permits",
+        "observations": count,
+    }
 
 
 def fetch_nfib(artifacts, *, fetcher=None, source_url=None, cache_path=None, reference_date=None, http_client=None):
