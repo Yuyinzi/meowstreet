@@ -46,31 +46,61 @@ def should_skip_existing_extraction(existing, source_hash, force):
     )
 
 
-def pending_events(events, minutes_docs, statement_tones, load_existing, force):
-    pending = []
-    for event in target_events(events, minutes_docs, statement_tones):
-        minutes_document = minutes_docs[event["event_id"]]
-        existing = load_existing(
-            event["event_id"],
-            "minutes",
-            minutes_document["source_hash"],
-        )
+def classify_events(events, minutes_docs, statement_tones, load_existing, force):
+    classified = {"pending": [], "reused": [], "unavailable": []}
+    for event in events:
+        event_id = event["event_id"]
+        minutes_document = minutes_docs.get(event_id)
+        if not minutes_document:
+            classified["unavailable"].append(
+                (event, {"reason": "no minutes document"})
+            )
+            continue
+        statement_tone = statement_tones.get(event_id)
+        if not statement_tone:
+            classified["unavailable"].append(
+                (event, {"reason": "no approved statement tone"})
+            )
+            continue
+        existing = load_existing(event_id, "minutes", minutes_document["source_hash"])
         if should_skip_existing_extraction(
             existing,
             minutes_document["source_hash"],
             force,
         ):
-            print("fomc minutes structure skipped:")
-            print(f"  event: {event['event_id']}")
-            print(f"  source_hash: {minutes_document['source_hash']}")
-            if existing.get("generated_at"):
-                print(f"  existing_generated_at: {existing['generated_at']}")
-            print(
-                "  reason: existing extraction for this minutes hash; use --force to regenerate"
+            classified["reused"].append(
+                (
+                    event,
+                    {"minutes_document": minutes_document, "existing": existing},
+                )
             )
             continue
-        pending.append((event, minutes_document, statement_tones[event["event_id"]]))
-    return pending
+        classified["pending"].append((event, minutes_document, statement_tone))
+    return classified
+
+
+def _print_event_classification(event, status, detail):
+    print(f"fomc minutes structure {status}:")
+    print(f"  event: {event['event_id']}")
+    if status == "reused":
+        minutes_document = detail["minutes_document"]
+        existing = detail["existing"]
+        print(f"  source_hash: {minutes_document['source_hash']}")
+        if existing.get("generated_at"):
+            print(f"  existing_generated_at: {existing['generated_at']}")
+        print(
+            "  reason: existing extraction for this minutes hash; use --force to regenerate"
+        )
+        return
+    print(f"  reason: {detail.get('reason', 'unknown')}")
+
+
+def _summary(generated, classified, failed):
+    return (
+        f"fomc_minutes_structure: generated={generated} "
+        f"reused={len(classified['reused'])} "
+        f"unavailable={len(classified['unavailable'])} failed={failed}"
+    )
 
 
 async def call_json(client, model, prompt):
@@ -93,6 +123,7 @@ async def generate_event_minutes_structure(
     client,
     models,
     max_rounds,
+    verbose=False,
 ):
     feedback = []
     reviewer_feedback = []
@@ -164,12 +195,13 @@ async def generate_event_minutes_structure(
         final_feedback,
     )
     us_rates_liquidity.replace_macro_event_tone_extraction(con, row)
-    print("fomc minutes structure saved:")
-    print(f"  event: {event['event_id']}")
-    print(f"  risk_focus: {extraction['risk_focus']}")
-    print(f"  policy_conviction: {extraction['policy_conviction']}")
-    print(f"  minutes_confirmation: {extraction['minutes_confirmation']}")
-    print(f"  extraction_status: {extraction_status}")
+    if verbose:
+        print("fomc minutes structure saved:")
+        print(f"  event: {event['event_id']}")
+        print(f"  risk_focus: {extraction['risk_focus']}")
+        print(f"  policy_conviction: {extraction['policy_conviction']}")
+        print(f"  minutes_confirmation: {extraction['minutes_confirmation']}")
+        print(f"  extraction_status: {extraction_status}")
     return 1
 
 
@@ -185,6 +217,7 @@ def parse_args(argv=None):
     target_group.add_argument("--all", action="store_true")
     parser.add_argument("--max-rounds", type=int, default=3)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--extractor-model", default="")
     parser.add_argument("--reviewer-model", default="")
     parser.add_argument("--openai-api-key", default="")
@@ -230,7 +263,7 @@ async def async_main(argv=None):
             if not events:
                 raise ValueError(f"fomc event is unknown: {args.event_id}")
         minutes_docs, statement_tones = load_event_maps(con, events)
-        pending = pending_events(
+        classified = classify_events(
             events,
             minutes_docs,
             statement_tones,
@@ -244,8 +277,14 @@ async def async_main(argv=None):
             ),
             args.force,
         )
+        if args.verbose:
+            for item in classified["reused"]:
+                _print_event_classification(item[0], "reused", item[1])
+            for event, detail in classified["unavailable"]:
+                _print_event_classification(event, "unavailable", detail)
+        pending = classified["pending"]
         if not pending:
-            print("fomc_minutes_structure: 0")
+            print(_summary(0, classified, 0))
             return 0
         llm_bundle = llm.build_async_client_bundle(
             args,
@@ -269,6 +308,7 @@ async def async_main(argv=None):
                     client,
                     models,
                     args.max_rounds,
+                    verbose=args.verbose,
                 )
             except Exception as exc:
                 failed += 1
@@ -278,7 +318,7 @@ async def async_main(argv=None):
                 if not args.all:
                     return 1
                 continue
-        print(f"fomc_minutes_structure: {generated}")
+        print(_summary(generated, classified, failed))
         return 1 if failed else 0
     except Exception as exc:
         print(str(exc), file=sys.stderr)
