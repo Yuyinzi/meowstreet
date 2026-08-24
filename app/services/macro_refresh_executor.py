@@ -1,12 +1,13 @@
-from contextlib import ExitStack, contextmanager, nullcontext, redirect_stderr, redirect_stdout
+from contextlib import ExitStack, contextmanager, nullcontext
 from datetime import datetime
 import io
-from queue import Queue
+from queue import Empty, Queue
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import time
 
 from app.http_client import use_request_coordinator
+from app.services.macro_refresh_output import install_output_routers
 from app.services.macro_refresh_plan import group_tasks_by_lane
 from app.services.macro_refresh_plan import make_blocked_result
 from app.services.macro_refresh_plan import validate_tasks
@@ -45,36 +46,44 @@ def execute_tasks(
         )
         watcher.start()
 
+    router_context = (
+        install_output_routers(stdout=stdout_router, stderr=stderr_router)
+        if stdout_router is None or stderr_router is None
+        else nullcontext({"stdout": stdout_router, "stderr": stderr_router})
+    )
     try:
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = [
-                pool.submit(
-                    worker_func,
-                    rows,
-                    state=state,
-                    stop_on_error=stop_on_error,
-                    request_coordinator=request_coordinator,
-                    writer_gate=writer_gate,
-                    writer_timeout=writer_timeout,
-                    stdout_router=stdout_router,
-                    stderr_router=stderr_router,
-                )
-                for rows in worker_rows
-            ]
-            try:
-                _consume_events_until_complete(
-                    event_queue,
-                    expected_finished=len(planned),
-                    on_event=on_event,
-                    state=state,
-                    futures=futures,
-                )
-            except KeyboardInterrupt:
-                state.interrupt()
-                raise
-            for future in futures:
-                future.result()
-        return state.ordered_results()
+        with router_context as streams:
+            stdout_router = streams["stdout"]
+            stderr_router = streams["stderr"]
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = [
+                    pool.submit(
+                        worker_func,
+                        rows,
+                        state=state,
+                        stop_on_error=stop_on_error,
+                        request_coordinator=request_coordinator,
+                        writer_gate=writer_gate,
+                        writer_timeout=writer_timeout,
+                        stdout_router=stdout_router,
+                        stderr_router=stderr_router,
+                    )
+                    for rows in worker_rows
+                ]
+                try:
+                    _consume_events_until_complete(
+                        event_queue,
+                        expected_finished=len(planned),
+                        on_event=on_event,
+                        state=state,
+                        futures=futures,
+                    )
+                except KeyboardInterrupt:
+                    state.interrupt()
+                    raise
+                for future in futures:
+                    future.result()
+            return state.ordered_results()
     finally:
         watcher_done.set()
         if watcher is not None:
@@ -90,25 +99,38 @@ class _ExecutionState:
         self._condition = threading.Condition()
         self._results = {}
         self._started = set()
+        self._ordering_dependencies = {}
+        for lane_tasks in group_tasks_by_lane(tasks).values():
+            for predecessor, task in zip(lane_tasks, lane_tasks[1:]):
+                self._ordering_dependencies[task["name"]] = predecessor["name"]
+
+    def dependency_status(self, task):
+        dependencies = list(task["dependencies"])
+        predecessor = self._ordering_dependencies.get(task["name"])
+        if predecessor is not None and predecessor not in dependencies:
+            dependencies.append(predecessor)
+        unresolved = [name for name in dependencies if name not in self._results]
+        if unresolved:
+            return False, (), unresolved
+        accepted = set(task["accepted_dependency_statuses"])
+        rejected = [
+            name
+            for name in task["dependencies"]
+            if self._results[name]["status"] not in accepted
+        ]
+        if rejected:
+            return False, rejected, []
+        return True, (), []
 
     def wait_for_dependencies(self, task):
         with self._condition:
             while True:
                 if self._cancel_event.is_set():
                     return False, (), "refresh interrupted"
-                dependencies = task["dependencies"]
-                unresolved = [
-                    name for name in dependencies if name not in self._results
-                ]
+                ready, rejected, unresolved = self.dependency_status(task)
                 if unresolved:
                     self._condition.wait()
                     continue
-                accepted = set(task["accepted_dependency_statuses"])
-                rejected = [
-                    name
-                    for name in dependencies
-                    if self._results[name]["status"] not in accepted
-                ]
                 if rejected:
                     return False, rejected, "required dependency failed"
                 return True, (), ""
@@ -184,22 +206,45 @@ def _run_lane(tasks, **kwargs):
 
 
 def _run_serial_plan(tasks, **kwargs):
+    pending = list(tasks)
     failed_lanes = set()
     failed_names = {}
-    for task in tasks:
-        lane = task["lane"]
+    while pending:
+        state = kwargs["state"]
+        if state._cancel_event.is_set():
+            state.block_remaining(pending, "refresh interrupted")
+            return
+        selected = None
+        for task in pending:
+            lane = task["lane"]
+            ready, rejected, unresolved = _dependency_status(state, task)
+            if lane in failed_lanes:
+                if not unresolved:
+                    selected = task
+                    break
+            elif ready or rejected:
+                selected = task
+                break
+        if selected is None:
+            state.block_remaining(
+                pending,
+                "required dependency could not be scheduled",
+            )
+            return
+        pending.remove(selected)
+        lane = selected["lane"]
         if kwargs["stop_on_error"] and lane in failed_lanes:
             result = make_blocked_result(
-                task,
+                selected,
                 (),
                 f"refresh stopped after task failure: {failed_names[lane]}",
             )
-            kwargs["state"].record(result, task)
+            state.record(result, selected)
             continue
-        result = _run_one_task(task, **kwargs)
+        result = _run_one_task(selected, **kwargs)
         if result["status"] == "failed":
             failed_lanes.add(lane)
-            failed_names[lane] = task["name"]
+            failed_names[lane] = selected["name"]
 
 
 def _run_one_task(
@@ -247,12 +292,8 @@ def _execute_task(
     stderr_buffer = io.StringIO()
     try:
         with ExitStack() as stack:
-            stdout_buffer = stack.enter_context(
-                _capture_stream(stdout_router, stdout_buffer, stdout=True)
-            )
-            stderr_buffer = stack.enter_context(
-                _capture_stream(stderr_router, stderr_buffer, stdout=False)
-            )
+            stdout_buffer = stack.enter_context(_capture_stream(stdout_router))
+            stderr_buffer = stack.enter_context(_capture_stream(stderr_router))
             stack.enter_context(_coordinator_context(request_coordinator))
             if "sqlite_writer" in task["resources"] and writer_gate is not None:
                 stack.enter_context(writer_gate.acquire(timeout=writer_timeout))
@@ -264,7 +305,9 @@ def _execute_task(
                 exit_code = int(task["func"](task["argv"]) or 0)
                 status = "ok" if exit_code == 0 else "failed"
                 error = "" if status == "ok" else f"exit code {exit_code}"
-    except Exception as exc:
+    except KeyboardInterrupt:
+        raise
+    except BaseException as exc:
         status = "failed"
         exit_code = 1
         error = str(exc)
@@ -284,14 +327,9 @@ def _execute_task(
 
 
 @contextmanager
-def _capture_stream(router, fallback, *, stdout):
-    if router is not None:
-        with router.capture() as buffer:
-            yield buffer
-        return
-    redirect = redirect_stdout if stdout else redirect_stderr
-    with redirect(fallback):
-        yield fallback
+def _capture_stream(router):
+    with router.capture() as buffer:
+        yield buffer
 
 
 @contextmanager
@@ -315,9 +353,13 @@ def _consume_events_until_complete(
     while finished < expected_finished:
         try:
             event = event_queue.get(timeout=0.1)
-        except Exception as exc:
-            if exc.__class__.__name__ != "Empty":
-                raise
+        except Empty:
+            for future in futures:
+                if future.done():
+                    exception = future.exception()
+                    if isinstance(exception, KeyboardInterrupt):
+                        state.interrupt()
+                        raise exception
             if all(future.done() for future in futures) and state.terminal_count() < expected_finished:
                 raise RuntimeError(
                     "macro refresh executor stopped before all tasks completed"
@@ -329,6 +371,11 @@ def _consume_events_until_complete(
                 state.compact(event["name"])
         if event["type"] == "task_finished":
             finished += 1
+
+
+def _dependency_status(state, task):
+    with state._condition:
+        return state.dependency_status(task)
 
 
 def _watch_cancellation(cancel_event, done_event, state):

@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from threading import Barrier, Event, Lock, Thread
+import sys
 import time
 
 import pytest
@@ -279,7 +280,13 @@ def test_cancel_event_blocks_tasks_that_have_not_started():
     tasks = [
         _task("first", "lane", first, plan_index=0),
         _task("second", "lane", lambda argv: calls.append("second") or 0, plan_index=1),
-        _task("other", "other", lambda argv: calls.append("other") or 0, plan_index=2),
+        _task(
+            "other",
+            "other",
+            lambda argv: calls.append("other") or 0,
+            dependencies=["first"],
+            plan_index=2,
+        ),
     ]
 
     def cancel_after_start():
@@ -354,3 +361,107 @@ def test_serial_mode_preserves_result_and_lane_failure_semantics():
 
     assert calls == ["a1", "b1"]
     assert [result["status"] for result in results] == ["failed", "ok", "blocked"]
+
+
+def test_serial_mode_runs_later_cross_lane_dependency_before_dependent_task():
+    calls = []
+    tasks = [
+        _task(
+            "dependent",
+            "dependent_lane",
+            lambda argv: calls.append("dependent") or 0,
+            dependencies=["prerequisite"],
+            plan_index=0,
+        ),
+        _task(
+            "prerequisite",
+            "prerequisite_lane",
+            lambda argv: calls.append("prerequisite") or 0,
+            plan_index=1,
+        ),
+    ]
+
+    results = execute_tasks(tasks, serial=True)
+
+    assert calls == ["prerequisite", "dependent"]
+    assert [result["name"] for result in results] == ["dependent", "prerequisite"]
+    assert all(result["status"] == "ok" for result in results)
+
+
+def test_default_output_capture_isolated_and_restored_for_concurrent_tasks(monkeypatch):
+    barrier = Barrier(2)
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    from app.services import macro_refresh_executor
+
+    install_calls = []
+    original_install = macro_refresh_executor.install_output_routers
+
+    def track_install(*args, **kwargs):
+        install_calls.append((args, kwargs))
+        return original_install(*args, **kwargs)
+
+    monkeypatch.setattr(macro_refresh_executor, "install_output_routers", track_install)
+
+    def write(argv):
+        print(f"{argv[0]}-before")
+        print(f"{argv[0]}-error", file=sys.stderr)
+        barrier.wait(timeout=1)
+        print(f"{argv[0]}-after")
+        print(f"{argv[0]}-error-after", file=sys.stderr)
+        return 0
+
+    results = execute_tasks(
+        [
+            _task("first", "first_lane", write, argv=["first"], plan_index=0),
+            _task("second", "second_lane", write, argv=["second"], plan_index=1),
+        ]
+    )
+
+    by_name = {result["name"]: result for result in results}
+    assert by_name["first"]["stdout"] == "first-before\nfirst-after\n"
+    assert by_name["second"]["stdout"] == "second-before\nsecond-after\n"
+    assert by_name["first"]["stderr"] == "first-error\nfirst-error-after\n"
+    assert by_name["second"]["stderr"] == "second-error\nsecond-error-after\n"
+    assert len(install_calls) == 1
+    assert sys.stdout is original_stdout
+    assert sys.stderr is original_stderr
+
+
+def test_system_exit_is_failed_task_with_terminal_event():
+    events = []
+
+    def stop(argv):
+        raise SystemExit("terminated")
+
+    results = execute_tasks(
+        [_task("stop", "lane", stop)],
+        on_event=events.append,
+    )
+
+    assert results[0]["status"] == "failed"
+    assert results[0]["exit_code"] == 1
+    assert results[0]["error"] == "terminated"
+    finished = [event for event in events if event["type"] == "task_finished"]
+    assert len(finished) == 1
+    assert finished[0]["result"]["status"] == "failed"
+
+
+def test_worker_keyboard_interrupt_cancels_other_lanes_and_propagates():
+    cancelled = Event()
+
+    def interrupt(argv):
+        raise KeyboardInterrupt
+
+    def wait_for_interrupt(argv):
+        assert cancelled.wait(1)
+        return 0
+
+    with pytest.raises(KeyboardInterrupt):
+        execute_tasks(
+            [
+                _task("interrupt", "interrupt_lane", interrupt, plan_index=0),
+                _task("wait", "wait_lane", wait_for_interrupt, plan_index=1),
+            ],
+            cancel_event=cancelled,
+        )
