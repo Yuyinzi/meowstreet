@@ -1,4 +1,5 @@
 import csv
+import tempfile
 from bisect import bisect_right
 from datetime import date
 from datetime import datetime
@@ -32,18 +33,44 @@ class FredClient:
         return f"{FRED_CSV_BASE_URL}{normalized}"
 
     def fetch_csv(self, series_id):
-        path = self.csv_path(series_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        client = self._http_client or HttpClient()
-        response = client.request("GET", self.csv_url(series_id), timeout=30)
-        path.write_bytes(response.content)
-        return path
+        client = self._http_client
+        if client is None:
+            with HttpClient() as client:
+                return self._fetch_csv(series_id, client)
+        return self._fetch_csv(series_id, client)
 
     def fetch_csvs(self, series_ids):
-        return {series_id: self.fetch_csv(series_id) for series_id in series_ids}
+        if self._http_client is not None:
+            return {series_id: self._fetch_csv(series_id, self._http_client) for series_id in series_ids}
+        with HttpClient() as client:
+            return {series_id: self._fetch_csv(series_id, client) for series_id in series_ids}
 
     def parse_csv(self, series_id):
         return parse_fred_csv(self.csv_path(series_id), series_id)
+
+    def _fetch_csv(self, series_id, client):
+        path = self.csv_path(series_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        response = client.request("GET", self.csv_url(series_id), timeout=30)
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+        replaced = False
+        try:
+            temp_path.write_bytes(response.content)
+            if not parse_fred_csv(temp_path, series_id):
+                raise ValueError(f"fred csv is empty: {series_id}")
+            temp_path.replace(path)
+            replaced = True
+            return path
+        finally:
+            if not replaced:
+                temp_path.unlink(missing_ok=True)
 
 
 def float_or_none(value):

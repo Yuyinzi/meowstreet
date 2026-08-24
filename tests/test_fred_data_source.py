@@ -111,3 +111,72 @@ def test_fetch_csv_with_injected_client(tmp_path):
 
     assert result == tmp_path / "DGS10.csv"
     assert result.read_bytes() == csv_content
+
+
+def test_fetch_csv_atomically_replaces_validated_cache(tmp_path):
+    path = tmp_path / "DGS10.csv"
+    path.write_bytes(b"observation_date,DGS10\n2020-12-30,0.92\n")
+    csv_content = b"observation_date,DGS10\n2020-12-31,0.93\n"
+
+    client = FredClient(
+        tmp_path,
+        http_client=HttpClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, content=csv_content)
+            )
+        ),
+    )
+
+    assert client.fetch_csv("DGS10") == path
+    assert path.read_bytes() == csv_content
+    assert list(tmp_path.glob("DGS10.csv.*.tmp")) == []
+
+
+def test_fetch_csv_preserves_old_cache_when_response_read_fails(tmp_path):
+    path = tmp_path / "DGS10.csv"
+    old_content = b"observation_date,DGS10\n2020-12-30,0.92\n"
+    path.write_bytes(old_content)
+
+    class BrokenResponse:
+        @property
+        def content(self):
+            raise RuntimeError("response body failed")
+
+    class BrokenClient:
+        def request(self, *args, **kwargs):
+            return BrokenResponse()
+
+    client = FredClient(tmp_path, http_client=BrokenClient())
+
+    with pytest.raises(RuntimeError, match="response body failed"):
+        client.fetch_csv("DGS10")
+
+    assert path.read_bytes() == old_content
+    assert list(tmp_path.glob("DGS10.csv.*.tmp")) == []
+
+
+def test_fetch_csvs_reuses_one_managed_client_for_batch(tmp_path, monkeypatch):
+    clients = []
+
+    class RecordingClient:
+        def __enter__(self):
+            clients.append(self)
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def request(self, method, url, **kwargs):
+            series_id = url.rsplit("=", 1)[-1]
+            return httpx.Response(
+                200,
+                content=f"observation_date,{series_id}\n2020-12-31,0.93\n".encode(),
+            )
+
+    monkeypatch.setattr("app.data_sources.fred.HttpClient", RecordingClient)
+    client = FredClient(tmp_path)
+
+    result = client.fetch_csvs(["DGS10", "M2SL"])
+
+    assert list(result) == ["DGS10", "M2SL"]
+    assert len(clients) == 1

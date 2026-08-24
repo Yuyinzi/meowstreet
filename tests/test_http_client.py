@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from app.http_client import DEFAULT_USER_AGENT, HttpClient
+from app.http_client import use_request_coordinator
 
 
 def test_request_adds_user_agent_and_forwards_params():
@@ -70,6 +71,7 @@ def test_retries_read_timeout_then_succeeds():
     client = HttpClient(
         transport=httpx.MockTransport(handler_success),
         sleep=fake_sleep,
+        jitter=lambda lower, upper: 0.0,
         max_attempts=3,
     )
     response = client.request("GET", "https://example.test/items")
@@ -128,6 +130,7 @@ def test_retries_503_then_succeeds():
     client = HttpClient(
         transport=httpx.MockTransport(handler),
         sleep=fake_sleep,
+        jitter=lambda lower, upper: 0.0,
         max_attempts=3,
     )
     response = client.request("GET", "https://example.test/items")
@@ -161,6 +164,7 @@ def test_final_503_raises_after_three_attempts():
     client = HttpClient(
         transport=httpx.MockTransport(handler),
         sleep=fake_sleep,
+        jitter=lambda lower, upper: 0.0,
         max_attempts=3,
     )
     with pytest.raises(httpx.HTTPStatusError):
@@ -213,6 +217,7 @@ def test_default_delays_are_one_then_two_seconds():
     client = HttpClient(
         transport=httpx.MockTransport(handler),
         sleep=fake_sleep,
+        jitter=lambda lower, upper: 0.0,
         max_attempts=3,
     )
     client.request("GET", "https://example.test/items")
@@ -305,6 +310,115 @@ def test_transport_error_after_exhaustion_raises_original_exception():
     with pytest.raises(httpx.ReadTimeout, match="Connection timed out"):
         client.request("GET", "https://example.test/items")
     assert handler_called == 3
+
+
+def test_request_coordinator_runs_before_each_retry_attempt():
+    attempts = []
+    sleeps = []
+
+    class RecordingCoordinator:
+        def __init__(self):
+            self.urls = []
+
+        def before_request(self, method, url):
+            self.urls.append((method, url))
+
+    coordinator = RecordingCoordinator()
+
+    def handler(request):
+        attempts.append(request.url)
+        if len(attempts) == 1:
+            return httpx.Response(429, headers={"Retry-After": "3"}, content=b"busy")
+        return httpx.Response(200, content=b"ok")
+
+    client = HttpClient(
+        transport=httpx.MockTransport(handler),
+        sleep=sleeps.append,
+        jitter=lambda lower, upper: 0.25,
+        max_attempts=2,
+    )
+    url = "https://fred.stlouisfed.org/example"
+    with use_request_coordinator(coordinator):
+        response = client.request("GET", url)
+
+    assert coordinator.urls == [("GET", url), ("GET", url)]
+    assert sleeps == [3.0]
+    assert response.status_code == 200
+
+
+def test_exponential_retry_delay_uses_injected_jitter():
+    sleeps = []
+    attempts = 0
+
+    def handler(request):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ReadTimeout("timed out", request=request)
+        return httpx.Response(200, content=b"ok")
+
+    client = HttpClient(
+        transport=httpx.MockTransport(handler),
+        sleep=sleeps.append,
+        jitter=lambda lower, upper: 0.25,
+        max_attempts=2,
+    )
+
+    client.request("GET", "https://example.test/items")
+
+    assert sleeps == [1.25]
+
+
+def test_context_managed_client_reuses_underlying_client(monkeypatch):
+    constructed = []
+
+    class RecordingClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.calls = []
+            self.closed = False
+            constructed.append(self)
+
+        def request(self, method, url, **kwargs):
+            self.calls.append((method, url))
+            return httpx.Response(200, content=b"ok")
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr("app.http_client.httpx.Client", RecordingClient)
+    with HttpClient() as client:
+        client.request("GET", "https://example.test/one")
+        client.request("GET", "https://example.test/two")
+
+    assert len(constructed) == 1
+    assert constructed[0].calls == [
+        ("GET", "https://example.test/one"),
+        ("GET", "https://example.test/two"),
+    ]
+    assert constructed[0].closed is True
+
+
+def test_one_shot_client_closes_underlying_client(monkeypatch):
+    constructed = []
+
+    class RecordingClient:
+        def __init__(self, **kwargs):
+            self.closed = False
+            constructed.append(self)
+
+        def request(self, method, url, **kwargs):
+            return httpx.Response(200, content=b"ok")
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr("app.http_client.httpx.Client", RecordingClient)
+    response = HttpClient().request("GET", "https://example.test/one")
+
+    assert response.content == b"ok"
+    assert len(constructed) == 1
+    assert constructed[0].closed is True
 
 
 MIGRATED_FILES = [
