@@ -10,6 +10,24 @@ from app.db import macro_indicators
 from app.services import nfib_sbet_regional_import
 
 
+def fetch_nfib_regional(artifacts, start_year=2021, end_year=None, *, fetcher=None):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.fetch_nfib_regional(
+        artifacts, start_year, end_year, fetcher=fetcher
+    )
+
+
+def persist_nfib_regional(db_path, artifacts):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.persist_nfib_regional(db_path, artifacts)
+
+
+fetch_nfib_sbet_regional = fetch_nfib_regional
+persist_nfib_sbet_regional = persist_nfib_regional
+
+
 def main(argv=None):
     current_year = date.today().year
     parser = argparse.ArgumentParser(

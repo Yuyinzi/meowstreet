@@ -119,6 +119,7 @@ async def generate_event_tone(
     models,
     max_rounds,
     verbose=False,
+    persist=True,
 ):
     previous_event, previous_document = previous_event_and_document(
         all_events,
@@ -170,10 +171,34 @@ async def generate_event_tone(
         generated_at=generated_at_now(),
         final_reviewer_feedback=result["final_reviewer_feedback"],
     )
-    us_rates_liquidity.replace_macro_event_tone_extraction(con, row)
+    if persist:
+        us_rates_liquidity.replace_macro_event_tone_extraction(con, row)
     if verbose:
         log_generation_result(row)
     return row
+
+
+def prepare_fomc_policy_tone(
+    db_path, event_id, client, extractor_model, reviewer_model, max_rounds=3
+):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.prepare_fomc_policy_tone(
+        db_path,
+        event_id,
+        client,
+        extractor_model,
+        reviewer_model,
+        max_rounds=max_rounds,
+    )
+
+
+def persist_fomc_policy_tone(db_path, prepared_extraction):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.persist_fomc_policy_tone(
+        db_path, prepared_extraction
+    )
 
 
 async def run_extract_review_loop(

@@ -60,6 +60,38 @@ _FRONT_PAGE_SERIES = [
 ]
 
 
+def fetch_michigan_csvs(artifacts, *, fetcher=None, http_client=None):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.fetch_consumer_michigan(
+        artifacts, fetcher=fetcher, http_client=http_client
+    )
+
+
+def persist_michigan_csvs(db_path, artifacts):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.persist_consumer_michigan(db_path, artifacts)
+
+
+def fetch_fred_csvs(artifacts, *, fetcher=None, http_client=None):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.fetch_consumer_fred(
+        artifacts, fetcher=fetcher, http_client=http_client
+    )
+
+
+def persist_fred_csvs(db_path, artifacts):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.persist_consumer_fred(db_path, artifacts)
+
+
+fetch_consumer_sentiment = fetch_michigan_csvs
+persist_consumer_sentiment = persist_michigan_csvs
+
+
 def _michigan_series_payload(series_id, title, units):
     return {
         "series_id": series_id,

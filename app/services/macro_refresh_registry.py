@@ -190,4 +190,201 @@ def build_refresh_tasks(args, providers, *, openai_config=None, artifact_store):
         add_ism("manufacturing")
         add_ism("services")
 
+    def provider(*keys):
+        for key in keys:
+            value = providers.get(key)
+            if value is not None:
+                return value
+        return None
+
+    def add_official_pair(
+        lane,
+        fetch_name,
+        import_name,
+        fetch_provider,
+        import_provider,
+        *,
+        fetch_resources=(),
+        skip=False,
+        dependencies=(),
+    ):
+        nonlocal plan_index
+        if fetch_provider is None or import_provider is None or skip:
+            return
+        tasks.extend(
+            [
+                make_task(
+                    fetch_name,
+                    lane,
+                    "fetch",
+                    fetch_provider,
+                    resources=fetch_resources,
+                    dependencies=dependencies,
+                    plan_index=plan_index,
+                ),
+                make_task(
+                    import_name,
+                    lane,
+                    "persist",
+                    import_provider,
+                    dependencies=[fetch_name],
+                    resources=["sqlite_writer"],
+                    plan_index=plan_index + 1,
+                ),
+            ]
+        )
+        plan_index += 2
+
+    if not getattr(args, "skip_consumer_sentiment", False):
+        add_official_pair(
+            "consumer",
+            "consumer.michigan_fetch",
+            "consumer.michigan_import",
+            provider("consumer_michigan_fetch", "michigan_consumer_fetch"),
+            provider("consumer_michigan_import", "michigan_consumer_import"),
+        )
+        add_official_pair(
+            "consumer",
+            "consumer.fred_fetch",
+            "consumer.fred_import",
+            provider("consumer_fred_fetch", "consumer_capacity_fred_fetch"),
+            provider("consumer_fred_import", "consumer_capacity_fred_import"),
+            fetch_resources=["fred"],
+        )
+
+    if not getattr(args, "skip_building_permits", False):
+        add_official_pair(
+            "census",
+            "census.building_permits_fetch",
+            "census.building_permits_import",
+            provider("building_permits_fetch", "census_building_permits_fetch"),
+            provider("building_permits_import", "census_building_permits_import"),
+        )
+
+    if not getattr(args, "skip_nfib_sbo", False):
+        add_official_pair(
+            "nfib",
+            "nfib.national_fetch",
+            "nfib.national_import",
+            provider("nfib_fetch", "nfib_national_fetch"),
+            provider("nfib_import", "nfib_national_import"),
+        )
+    if not getattr(args, "skip_nfib_sbo_regional", False):
+        add_official_pair(
+            "nfib",
+            "nfib.regional_fetch",
+            "nfib.regional_import",
+            provider("nfib_regional_fetch"),
+            provider("nfib_regional_import"),
+        )
+
+    if not getattr(args, "skip_fomc", False):
+        calendar_provider = provider(
+            "fomc_calendar_import", "fomc_calendar", "fomc_main"
+        )
+        documents_fetch_provider = provider(
+            "fomc_documents_fetch", "fomc_document_fetch"
+        )
+        documents_import_provider = provider(
+            "fomc_documents_import", "fomc_document_import"
+        )
+        tone_extract_provider = provider(
+            "fomc_policy_tone_extract", "fomc_policy_tone_enrich"
+        )
+        tone_import_provider = provider(
+            "fomc_policy_tone_import", "fomc_policy_tone_enrichment_import"
+        )
+        minutes_extract_provider = provider(
+            "fomc_minutes_extract", "fomc_minutes_enrich"
+        )
+        minutes_import_provider = provider(
+            "fomc_minutes_import", "fomc_minutes_enrichment_import"
+        )
+        fomc_providers = (
+            calendar_provider,
+            documents_fetch_provider,
+            documents_import_provider,
+            tone_extract_provider,
+            tone_import_provider,
+            minutes_extract_provider,
+            minutes_import_provider,
+        )
+        if all(provider_value is not None for provider_value in fomc_providers):
+            tasks.extend(
+                [
+                    make_task(
+                        "fomc.calendar_import",
+                        "fomc",
+                        "persist",
+                        calendar_provider,
+                        resources=["sqlite_writer"],
+                        plan_index=plan_index,
+                    ),
+                    make_task(
+                        "fomc.documents_fetch",
+                        "fomc",
+                        "fetch",
+                        documents_fetch_provider,
+                        dependencies=["fomc.calendar_import"],
+                        plan_index=plan_index + 1,
+                    ),
+                    make_task(
+                        "fomc.documents_import",
+                        "fomc",
+                        "persist",
+                        documents_import_provider,
+                        dependencies=["fomc.documents_fetch"],
+                        resources=["sqlite_writer"],
+                        plan_index=plan_index + 2,
+                    ),
+                ]
+            )
+            enrichment_skip_reason = None if (openai_config or {}).get("api_key") else "OPENAI_API_KEY is not configured"
+            tasks.extend(
+                [
+                    make_task(
+                        "fomc.policy_tone_extract",
+                        "fomc",
+                        "enrich",
+                        tone_extract_provider,
+                        dependencies=["fomc.documents_import"],
+                        skip_reason=enrichment_skip_reason,
+                        plan_index=plan_index + 3,
+                    ),
+                    make_task(
+                        "fomc.policy_tone_import",
+                        "fomc",
+                        "persist",
+                        tone_import_provider,
+                        dependencies=["fomc.policy_tone_extract"],
+                        accepted_dependency_statuses=["ok", "skipped"],
+                        resources=["sqlite_writer"],
+                        skip_reason=enrichment_skip_reason,
+                        plan_index=plan_index + 4,
+                    ),
+                    make_task(
+                        "fomc.minutes_extract",
+                        "fomc",
+                        "enrich",
+                        minutes_extract_provider,
+                        dependencies=["fomc.documents_import"],
+                        accepted_dependency_statuses=["ok", "skipped"],
+                        skip_reason=enrichment_skip_reason,
+                        plan_index=plan_index + 5,
+                    ),
+                    make_task(
+                        "fomc.minutes_import",
+                        "fomc",
+                        "persist",
+                        minutes_import_provider,
+                        dependencies=["fomc.minutes_extract"],
+                        accepted_dependency_statuses=["ok", "skipped"],
+                        resources=["sqlite_writer"],
+                        skip_reason=enrichment_skip_reason,
+                        plan_index=plan_index + 6,
+                    ),
+                ]
+            )
+            plan_index += 7
+
     return tasks

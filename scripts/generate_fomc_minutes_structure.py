@@ -116,6 +116,7 @@ async def generate_event_minutes_structure(
     models,
     max_rounds,
     verbose=False,
+    persist=True,
 ):
     feedback = []
     reviewer_feedback = []
@@ -186,7 +187,8 @@ async def generate_event_minutes_structure(
         datetime.now(UTC).isoformat(),
         final_feedback,
     )
-    us_rates_liquidity.replace_macro_event_tone_extraction(con, row)
+    if persist:
+        us_rates_liquidity.replace_macro_event_tone_extraction(con, row)
     if verbose:
         print("fomc minutes structure saved:")
         print(f"  event: {event['event_id']}")
@@ -195,6 +197,29 @@ async def generate_event_minutes_structure(
         print(f"  minutes_confirmation: {extraction['minutes_confirmation']}")
         print(f"  extraction_status: {extraction_status}")
     return 1
+
+
+def prepare_fomc_minutes_structure(
+    db_path, event_id, client, extractor_model, reviewer_model, max_rounds=3
+):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.prepare_fomc_minutes_structure(
+        db_path,
+        event_id,
+        client,
+        extractor_model,
+        reviewer_model,
+        max_rounds=max_rounds,
+    )
+
+
+def persist_fomc_minutes_structure(db_path, prepared_extraction):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.persist_fomc_minutes_structure(
+        db_path, prepared_extraction
+    )
 
 
 def parse_args(argv=None):

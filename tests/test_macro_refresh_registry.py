@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 from app.services.macro_refresh_registry import build_refresh_tasks
@@ -189,3 +190,56 @@ def test_ism_enrichment_runs_when_openai_key_exists():
         for task in tasks
         if task["stage"] == "enrich"
     )
+
+
+def test_official_registry_stages_consumer_census_nfib_and_fomc():
+    providers = {
+        "consumer_michigan_fetch": lambda argv: 0,
+        "consumer_michigan_import": lambda argv: 0,
+        "consumer_fred_fetch": lambda argv: 0,
+        "consumer_fred_import": lambda argv: 0,
+        "building_permits_fetch": lambda argv: 0,
+        "building_permits_import": lambda argv: 0,
+        "nfib_fetch": lambda argv: 0,
+        "nfib_import": lambda argv: 0,
+        "nfib_regional_fetch": lambda argv: 0,
+        "nfib_regional_import": lambda argv: 0,
+        "fomc_calendar_import": lambda argv: 0,
+        "fomc_documents_fetch": lambda argv: 0,
+        "fomc_documents_import": lambda argv: 0,
+        "fomc_policy_tone_extract": lambda argv: 0,
+        "fomc_policy_tone_import": lambda argv: 0,
+        "fomc_minutes_extract": lambda argv: 0,
+        "fomc_minutes_import": lambda argv: 0,
+    }
+    tasks = build_refresh_tasks(
+        fred_registry_args(
+            skip_consumer_sentiment=False,
+            skip_building_permits=False,
+            skip_fomc=False,
+            skip_nfib_sbo=False,
+            skip_nfib_sbo_regional=False,
+            fomc_calendar_path=Path("calendar.json"),
+        ),
+        providers,
+        openai_config={"api_key": "configured"},
+        artifact_store={},
+    )
+
+    selected = {task["name"]: task for task in tasks}
+    assert selected["consumer.michigan_fetch"]["resources"] == []
+    assert selected["consumer.fred_fetch"]["resources"] == ["fred"]
+    assert selected["consumer.fred_import"]["resources"] == ["sqlite_writer"]
+    assert selected["census.building_permits_import"]["resources"] == [
+        "sqlite_writer"
+    ]
+    assert selected["nfib.national_import"]["resources"] == ["sqlite_writer"]
+    assert selected["nfib.regional_import"]["resources"] == ["sqlite_writer"]
+    assert selected["fomc.documents_fetch"]["dependencies"] == [
+        "fomc.calendar_import"
+    ]
+    assert selected["fomc.policy_tone_extract"]["dependencies"] == [
+        "fomc.documents_import"
+    ]
+    assert selected["fomc.policy_tone_extract"]["resources"] == []
+    assert selected["fomc.policy_tone_import"]["resources"] == ["sqlite_writer"]

@@ -9,6 +9,31 @@ from app.db import macro_indicators
 from app.services import nfib_sbet_import
 
 
+def fetch_nfib(artifacts, *, fetcher=None, source_url=None, cache_path=None, reference_date=None, http_client=None):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.fetch_nfib(
+        artifacts,
+        fetcher=fetcher,
+        source_url=source_url,
+        cache_path=cache_path,
+        reference_date=reference_date,
+        http_client=http_client,
+    )
+
+
+def persist_nfib(db_path, artifacts, *, release_date=None):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.persist_nfib(
+        db_path, artifacts, release_date=release_date
+    )
+
+
+fetch_nfib_sbet = fetch_nfib
+persist_nfib_sbet = persist_nfib
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Import official NFIB SBET PDF data")
     parser.add_argument(

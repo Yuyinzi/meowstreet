@@ -249,6 +249,26 @@ def fetch_minutes_document(event, fetch=fetch_text, now=fetched_at_now):
     return document_row(event, "minutes", url, text, now())
 
 
+def fetch_documents(artifacts, events, document_type, *, fetcher=None):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.fetch_fomc_documents(
+        artifacts, events, document_type, fetcher=fetcher
+    )
+
+
+def persist_documents(db_path, artifacts, document_type):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.persist_fomc_documents(
+        db_path, artifacts, document_type
+    )
+
+
+fetch_fomc_documents = fetch_documents
+persist_fomc_documents = persist_documents
+
+
 def _normalized_today(today):
     if today is None:
         return date.today()
@@ -315,7 +335,8 @@ def fetch_document_type(
             result["fetched"] += 1
         except DocumentUnavailableError as exc:
             result["unavailable"] += 1
-            print(f"  SKIP {event['event_id']} {document_type}: {exc}")
+            if backfill:
+                print(f"  SKIP {event['event_id']} {document_type}: {exc}")
             continue
         except Exception as exc:
             result["failed"] += 1
