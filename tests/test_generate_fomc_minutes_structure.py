@@ -271,6 +271,49 @@ def test_generation_failure_is_visible_without_verbose(tmp_path, monkeypatch, ca
     )
 
 
+def test_event_id_generation_failure_prints_aggregate_summary(tmp_path, monkeypatch, capsys):
+    event = {"event_id": "bad-event"}
+    monkeypatch.setattr(
+        generate_fomc_minutes_structure.us_rates_liquidity,
+        "load_macro_events",
+        lambda con, event_type: [event],
+    )
+    monkeypatch.setattr(
+        generate_fomc_minutes_structure,
+        "load_event_maps",
+        lambda con, events: ({}, {}),
+    )
+    monkeypatch.setattr(
+        generate_fomc_minutes_structure,
+        "classify_events",
+        lambda events, minutes_docs, statement_tones, load_existing, force: {
+            "pending": [(event, {"source_hash": "bad-hash"}, {"marker_tone": "neutral"})],
+            "reused": [],
+            "unavailable": [],
+        },
+    )
+    monkeypatch.setattr(
+        generate_fomc_minutes_structure,
+        "generate_event_minutes_structure",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("bad extraction")),
+    )
+    monkeypatch.setattr(
+        generate_fomc_minutes_structure.llm,
+        "build_async_client_bundle",
+        lambda *args, **kwargs: {"client": object(), "models": {}},
+    )
+
+    exit_code = generate_fomc_minutes_structure.main(
+        ["--event-id", "bad-event", "--db-path", str(tmp_path / "market.sqlite")]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out.endswith(
+        "fomc_minutes_structure: generated=0 reused=0 unavailable=0 failed=1\n"
+    )
+
+
 def test_generate_event_minutes_structure_retries_after_schema_error(
     tmp_path, monkeypatch, capsys
 ):

@@ -162,6 +162,18 @@ def _enrich_services_snapshot(db_path, snapshot, client, model):
     )
 
 
+def _print_enrichment_failures(survey_type, failures):
+    for failure in failures:
+        print(
+            f"{survey_type} ai_enrichment snapshot failed: "
+            f"survey={failure.get('survey_type') or survey_type} "
+            f"report_id={failure.get('report_id') or 'unknown'} "
+            f"source_url={failure.get('source_url') or 'unknown'} "
+            f"error={failure['error']}",
+            file=sys.stderr,
+        )
+
+
 def _run_enrichment(args, survey_type, ai_client_factory, client_state):
     snapshots = _select_enrichment_snapshots(args, survey_type)
     if not snapshots:
@@ -194,13 +206,15 @@ def _run_enrichment(args, survey_type, ai_client_factory, client_state):
         if survey_type == "manufacturing"
         else _enrich_services_snapshot
     )
-    results, failed = ism_ai_enrichment.enrich_snapshots(
+    results, failures = ism_ai_enrichment.enrich_snapshots(
         snapshots,
         lambda snapshot: enrich_one(str(args.db_path), snapshot, client, model),
         report_concurrency=args.report_concurrency,
     )
     _print_results(results)
+    failed = len(failures)
     if failed:
+        _print_enrichment_failures(survey_type, failures)
         print(
             f"{survey_type} ai_enrichment: failed - {failed} snapshot(s)",
             file=sys.stderr,

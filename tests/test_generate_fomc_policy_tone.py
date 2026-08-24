@@ -161,6 +161,46 @@ def test_generation_failure_is_visible_without_verbose(
     )
 
 
+def test_event_id_generation_failure_prints_aggregate_summary(
+    tmp_path, monkeypatch, capsys
+):
+    event = {"event_id": "bad-event"}
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.us_rates_liquidity,
+        "load_macro_events",
+        lambda con, event_type: [event],
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone,
+        "classify_events",
+        lambda con, events, force: {
+            "pending": [(event, {"source_hash": "bad-hash"})],
+            "reused": [],
+            "unavailable": [],
+        },
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone,
+        "generate_event_tone",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("bad extraction")),
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.llm,
+        "build_async_client_bundle",
+        lambda *args, **kwargs: {"client": object(), "models": {}},
+    )
+
+    exit_code = generate_fomc_policy_tone.main(
+        ["--event-id", "bad-event", "--db-path", str(tmp_path / "market.sqlite")]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out.endswith(
+        "fomc_policy_tone: generated=0 reused=0 unavailable=0 failed=1\n"
+    )
+
+
 def _patch_successful_event_generation(monkeypatch):
     extraction = {
         "statement_tone": "neutral",

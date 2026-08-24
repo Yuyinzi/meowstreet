@@ -63,21 +63,30 @@ def select_snapshots(
     ]
 
 
+def _failure(row, exc):
+    return {
+        "survey_type": row.get("survey_type"),
+        "report_id": row.get("report_id"),
+        "source_url": row.get("source_url"),
+        "error": str(exc) or exc.__class__.__name__,
+    }
+
+
 def enrich_snapshots(snapshots, enrich_one, report_concurrency=1):
     rows = list(snapshots)
     if report_concurrency <= 1:
         results = []
-        failed = 0
+        failures = []
         for row in rows:
             try:
                 results.append(enrich_one(row))
-            except Exception:
+            except Exception as exc:
                 results.append(None)
-                failed += 1
-        return results, failed
+                failures.append(_failure(row, exc))
+        return results, failures
 
     results = [None] * len(rows)
-    failed = 0
+    failures_by_index = {}
     with ThreadPoolExecutor(max_workers=report_concurrency) as executor:
         futures = {
             executor.submit(enrich_one, row): index
@@ -87,6 +96,6 @@ def enrich_snapshots(snapshots, enrich_one, report_concurrency=1):
             index = futures[future]
             try:
                 results[index] = future.result()
-            except Exception:
-                failed += 1
-    return results, failed
+            except Exception as exc:
+                failures_by_index[index] = _failure(rows[index], exc)
+    return results, [failures_by_index[index] for index in sorted(failures_by_index)]

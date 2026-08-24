@@ -309,6 +309,19 @@ def test_ism_enrichment_is_runnable_when_key_exists():
     assert all(task["skip_reason"] is None for task in enrichment)
 
 
+def test_skip_ism_removes_all_four_ism_tasks():
+    args = args_without_skips()
+    args.skip_ism = True
+
+    tasks = refresh_macro_data._planned_tasks(
+        args,
+        ism_reports_main=fake_ism_reports_main,
+        openai_config={"api_key": "configured"},
+    )
+
+    assert not [task for task in tasks if task["name"].startswith("ism_")]
+
+
 def test_main_refreshes_official_building_permits_when_enabled():
     calls = []
 
@@ -1008,6 +1021,30 @@ def test_verbose_is_forwarded_to_fomc_generators(tmp_path):
 
     assert ("tone", ["--all", "--verbose"]) in calls
     assert ("minutes", ["--all", "--verbose"]) in calls
+
+
+def test_fomc_registry_omits_verbose_from_all_task_argv_when_not_requested(tmp_path):
+    csv_path = tmp_path / "fomc.csv"
+    csv_path.write_text(
+        "start_date,end_date,title,has_sep,url\n"
+        "2026-07-28,2026-07-29,FOMC Meeting,0,https://example.test/fomc\n",
+        encoding="utf-8",
+    )
+    args = args_without_skips()
+    args.skip_fomc = False
+    args.fomc_calendar_path = csv_path
+
+    tasks = refresh_macro_data._planned_tasks(
+        args,
+        fomc_main=lambda argv: 0,
+        fomc_document_main=lambda argv: 0,
+        fomc_policy_tone_main=lambda argv: 0,
+        fomc_minutes_main=lambda argv: 0,
+    )
+
+    fomc_tasks = [task for task in tasks if task["name"].startswith("fomc_")]
+    assert fomc_tasks
+    assert all("--verbose" not in task["argv"] for task in fomc_tasks)
 
 
 def test_main_runs_all_fomc_tasks_in_order(tmp_path):

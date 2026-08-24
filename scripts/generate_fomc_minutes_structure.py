@@ -29,14 +29,6 @@ MINUTES_MODEL_SPECS = [
 ]
 
 
-def target_events(events, minutes_docs, statement_tones):
-    return [
-        event
-        for event in events
-        if event["event_id"] in minutes_docs and event["event_id"] in statement_tones
-    ]
-
-
 def should_skip_existing_extraction(existing, source_hash, force):
     return bool(
         existing
@@ -316,6 +308,7 @@ async def async_main(argv=None):
                 print(f"  event: {event['event_id']}", file=sys.stderr)
                 print(f"  reason: {exc}", file=sys.stderr)
                 if not args.all:
+                    print(_summary(generated, classified, failed))
                     return 1
                 continue
         print(_summary(generated, classified, failed))

@@ -115,7 +115,7 @@ def test_source_url_and_period_selection_returns_union_in_core_order():
     ]
 
 
-def test_enrich_snapshots_returns_input_order_and_counts_failures():
+def test_enrich_snapshots_returns_ordered_structured_failures():
     rows = [
         snapshot("https://example.test/first", "services", "2026-06-01"),
         snapshot("https://example.test/second", "services", "2026-07-01"),
@@ -126,10 +126,17 @@ def test_enrich_snapshots_returns_input_order_and_counts_failures():
             raise RuntimeError("enrichment failed")
         return {"report_id": row["report_id"]}
 
-    results, failed = ism_ai_enrichment.enrich_snapshots(rows, enrich_one)
+    results, failures = ism_ai_enrichment.enrich_snapshots(rows, enrich_one)
 
     assert results == [{"report_id": rows[0]["report_id"]}, None]
-    assert failed == 1
+    assert failures == [
+        {
+            "survey_type": "services",
+            "report_id": "ism_services_2026_07",
+            "source_url": "https://example.test/second",
+            "error": "enrichment failed",
+        }
+    ]
 
 
 def test_enrich_snapshots_parallel_runner_keeps_input_order():
@@ -138,11 +145,43 @@ def test_enrich_snapshots_parallel_runner_keeps_input_order():
         snapshot("https://example.test/second", "services", "2026-07-01"),
     ]
 
-    results, failed = ism_ai_enrichment.enrich_snapshots(
+    results, failures = ism_ai_enrichment.enrich_snapshots(
         rows,
         lambda row: row["source_url"],
         report_concurrency=2,
     )
 
     assert results == [row["source_url"] for row in rows]
-    assert failed == 0
+    assert failures == []
+
+
+def test_enrich_snapshots_parallel_runner_orders_failures_by_snapshot_input():
+    rows = [
+        snapshot("https://example.test/first", "services", "2026-06-01"),
+        snapshot("https://example.test/second", "services", "2026-07-01"),
+    ]
+
+    def enrich_one(row):
+        raise RuntimeError(f"failed {row['report_month']}")
+
+    results, failures = ism_ai_enrichment.enrich_snapshots(
+        rows,
+        enrich_one,
+        report_concurrency=2,
+    )
+
+    assert results == [None, None]
+    assert failures == [
+        {
+            "survey_type": "services",
+            "report_id": "ism_services_2026_06",
+            "source_url": "https://example.test/first",
+            "error": "failed 2026-06-01",
+        },
+        {
+            "survey_type": "services",
+            "report_id": "ism_services_2026_07",
+            "source_url": "https://example.test/second",
+            "error": "failed 2026-07-01",
+        },
+    ]

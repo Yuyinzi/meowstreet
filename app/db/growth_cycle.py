@@ -224,8 +224,12 @@ def load_latest_ism_industry_rankings(con, survey_type="manufacturing"):
     return [{k: v for k, v in row.items() if k != "survey_type"} for row in rows]
 
 
-def replace_ism_report_snapshot(con, report, comments, survey_type="manufacturing"):
-    return ism_surveys.replace_report_snapshot(con, survey_type, report, comments)
+def replace_ism_report_snapshot(
+    con, report, comments, survey_type="manufacturing", commit=True
+):
+    return ism_surveys.replace_report_snapshot(
+        con, survey_type, report, comments, commit=commit
+    )
 
 
 def load_existing_ism_report_months(con, survey_type="manufacturing"):
@@ -413,7 +417,7 @@ def _derive_coverage_from_flat_signals(flat_signals):
     return coverage
 
 
-def replace_ism_ai_extraction(con, extraction):
+def replace_ism_ai_extraction(con, extraction, commit=True):
     import json
 
     from app.tools.ism_ai_extraction import (
@@ -513,7 +517,8 @@ def replace_ism_ai_extraction(con, extraction):
                 extraction["source_hash"],
             ),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return {
         "ai_extractions": 1,
         "industry_signals": len(payload.get("industry_signals", [])),
@@ -787,7 +792,7 @@ def load_ism_report_ai_summary(con, report_id):
     return dict(row) if row else None
 
 
-def replace_ism_ai_report_outputs(con, payload, source):
+def replace_ism_ai_report_outputs(con, payload, source, commit=True):
     from app.tools.ism_ai_extraction import validate_extraction
     from app.tools.ism_ai_extraction import validate_factual_extraction
 
@@ -812,6 +817,7 @@ def replace_ism_ai_report_outputs(con, payload, source):
             "validation_error": None,
             "extraction_json": payload,
         },
+        commit=False,
     )
     summary_saved = (
         replace_ism_ai_summary(con, payload, source)
@@ -820,7 +826,8 @@ def replace_ism_ai_report_outputs(con, payload, source):
     )
     commodity_saved = replace_ism_report_commodities(con, payload, source)
     narrative_saved = replace_ism_report_narrative_facts(con, payload, source)
-    con.commit()
+    if commit:
+        con.commit()
     return {
         **extraction_saved,
         **summary_saved,

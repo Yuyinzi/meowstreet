@@ -355,6 +355,7 @@ async def async_main(argv=None):
                 print(f"  current: {_event_label(event)}", file=sys.stderr)
                 print(f"  reason: {exc}", file=sys.stderr)
                 if not args.all:
+                    print(_summary(generated, classified, failed))
                     return 1
                 continue
             generated += 1

@@ -327,6 +327,59 @@ def test_configured_enrichment_failure_returns_nonzero_after_core_commit(
     assert rows == 11
 
 
+@pytest.mark.parametrize("report_concurrency", [1, 2])
+def test_enrichment_replays_identified_snapshot_failures(
+    tmp_path, monkeypatch, capsys, report_concurrency
+):
+    snapshots = [
+        {
+            "survey_type": "manufacturing",
+            "report_id": "ism_manufacturing_2026_06",
+            "source_url": "https://example.test/june",
+        },
+        {
+            "survey_type": "manufacturing",
+            "report_id": "ism_manufacturing_2026_07",
+            "source_url": "https://example.test/july",
+        },
+    ]
+    monkeypatch.setattr(
+        fetch_ism_reports,
+        "_select_enrichment_snapshots",
+        lambda args, survey_type: snapshots,
+    )
+    monkeypatch.setattr(
+        fetch_ism_reports,
+        "_enrich_manufacturing_snapshot",
+        lambda db_path, snapshot, client, model: (
+            {"report_id": snapshot["report_id"]}
+            if snapshot["report_id"].endswith("06")
+            else (_ for _ in ()).throw(RuntimeError("provider unavailable"))
+        ),
+    )
+    args = argparse.Namespace(
+        db_path=tmp_path / "market.sqlite",
+        report_concurrency=report_concurrency,
+    )
+    state = {"initialized": False, "client": None, "model": None}
+
+    failed = fetch_ism_reports._run_enrichment(
+        args,
+        "manufacturing",
+        lambda config: "client",
+        state,
+    )
+
+    captured = capsys.readouterr()
+    assert failed == 1
+    assert (
+        "manufacturing ai_enrichment snapshot failed: "
+        "survey=manufacturing report_id=ism_manufacturing_2026_07 "
+        "source_url=https://example.test/july error=provider unavailable"
+    ) in captured.err
+    assert "manufacturing ai_enrichment: failed - 1 snapshot(s)" in captured.err
+
+
 def test_manufacturing_enrichment_only_reuses_section_checkpoints(tmp_path):
     from app.tools import ism_ai_extraction
     from tests.test_ism_ai_extraction import valid_extraction, valid_report_text
