@@ -94,6 +94,46 @@ def _validate_section(section_name, payload, source_text):
     return validate_section_payload(section_name, payload, source_text)
 
 
+async def extract_sections_without_db(prepared, client, model):
+    import json
+
+    build_prompt = _make_prompt_builder(
+        prepared["source_text"],
+        prepared["source_url"],
+        prepared["source_name"],
+    )
+    section_payloads = []
+    call_counts = {}
+    for section_name in FACTUAL_SECTION_NAMES:
+        prompt = build_prompt(section_name, prepared["source_text"])
+        if hasattr(client, "complete_json_async"):
+            response = await client.complete_json_async(prompt)
+        else:
+            response = await asyncio.to_thread(client.complete_json, prompt)
+        payload = json.loads(response) if isinstance(response, str) else response
+        try:
+            validated = _validate_section(
+                section_name, payload, prepared["source_text"]
+            )
+        except (ValueError, json.JSONDecodeError) as exc:
+            repair_prompt = (
+                f"Return corrected JSON for {section_name}.\n"
+                f"Validation error: {exc}\nPrevious response: {response}\n"
+                f"Original instructions: {prompt}"
+            )
+            if hasattr(client, "complete_json_async"):
+                response = await client.complete_json_async(repair_prompt)
+            else:
+                response = await asyncio.to_thread(client.complete_json, repair_prompt)
+            payload = json.loads(response) if isinstance(response, str) else response
+            validated = _validate_section(
+                section_name, payload, prepared["source_text"]
+            )
+        section_payloads.append({"section_name": section_name, "payload": validated})
+        call_counts[section_name] = 1
+    return assemble_factual_extraction(section_payloads), call_counts
+
+
 def _source_hash(html):
     return hashlib.sha256(html.encode("utf-8")).hexdigest()
 

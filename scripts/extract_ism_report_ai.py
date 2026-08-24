@@ -117,6 +117,32 @@ def extract_one_section(report_text, client, section_name):
     )
 
 
+def prepare_ism_enrichment(snapshot, *, client, model, survey_type="manufacturing"):
+    if survey_type != "manufacturing":
+        raise ValueError(f"ism survey type is unsupported: {survey_type}")
+    report_text = ism_official_report.extract_report_text(
+        snapshot["raw_html"], snapshot.get("source_name", "ismworld")
+    )
+    section_payloads = []
+    call_counts = {}
+    for section_name in ism_ai_extraction.FACTUAL_SECTION_NAMES:
+        payload = extract_one_section(report_text, client, section_name)
+        section_payloads.append(
+            {"section_name": section_name, "payload_json": payload}
+        )
+        call_counts[section_name] = 1
+    factual_payload = ism_ai_extraction.assemble_factual_payload_from_sections(
+        section_payloads
+    )
+    _check_report_id(
+        factual_payload["report"]["report_id"], snapshot["report_id"], snapshot["source_url"]
+    )
+    _check_report_month(
+        factual_payload["report"]["report_month"], snapshot["report_month"], snapshot["source_url"]
+    )
+    return factual_payload, call_counts
+
+
 def should_run_section(existing, force_sections, retry_failed):
     if existing is None:
         return True
