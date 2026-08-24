@@ -118,7 +118,7 @@ Historical import:
 
 ### Source Routing
 
-Latest reports route to ISM World. Historical months route to PR Newswire. A missing historical archive result is skipped rather than sent to a yearless ISM World URL.
+For the latest released month, the importer first discovers the matching PR Newswire archive item and uses it when available; if no matching archive item is found, it falls back to the ISM World monthly URL. Historical months use matching PR Newswire archive items, and a missing historical archive result is skipped rather than sent to a yearless ISM World URL.
 
 ### AI Configuration
 
