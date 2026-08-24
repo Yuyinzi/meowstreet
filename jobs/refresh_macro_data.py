@@ -1,7 +1,11 @@
 import argparse
+import io
 import sys
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from pathlib import Path
+
+from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -33,19 +37,51 @@ def _timestamp():
     return datetime.now().replace(microsecond=0).isoformat()
 
 
-def _run_task(name, func, argv):
-    try:
-        exit_code = func(argv)
-    except Exception as exc:
-        return {"name": name, "status": "failed", "exit_code": 1, "error": str(exc)}
-    if exit_code:
+def _task(name, func, argv, skip_reason=None):
+    return {
+        "name": name,
+        "func": func,
+        "argv": list(argv),
+        "skip_reason": skip_reason,
+    }
+
+
+def _run_task(task):
+    if task["skip_reason"]:
         return {
-            "name": name,
-            "status": "failed",
-            "exit_code": int(exit_code),
-            "error": f"exit code {exit_code}",
+            "name": task["name"],
+            "status": "skipped",
+            "exit_code": 0,
+            "error": task["skip_reason"],
+            "stdout": "",
+            "stderr": "",
         }
-    return {"name": name, "status": "ok", "exit_code": 0, "error": ""}
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    try:
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            exit_code = task["func"](task["argv"])
+    except Exception as exc:
+        exit_code = 1
+        error = str(exc)
+    else:
+        error = "" if not exit_code else f"exit code {exit_code}"
+    return {
+        "name": task["name"],
+        "status": "ok" if not exit_code else "failed",
+        "exit_code": int(exit_code or 0),
+        "error": error,
+        "stdout": stdout.getvalue(),
+        "stderr": stderr.getvalue(),
+    }
+
+
+def _result_counts(results):
+    return {
+        "ok": sum(result["status"] == "ok" for result in results),
+        "skipped": sum(result["status"] == "skipped" for result in results),
+        "failed": sum(result["status"] == "failed" for result in results),
+    }
 
 
 def _fomc_calendar_path(args):
@@ -110,101 +146,120 @@ def _planned_tasks(
 ):
     tasks = []
     if benchmark_main is not None and not args.skip_yahoo:
-        tasks.append(
-            (
-                "benchmark_yahoo",
-                benchmark_main,
-                [
-                    "--benchmark-id",
-                    "us_sp500",
-                    "--benchmark-id",
-                    "us_nasdaq_100",
-                    "--benchmark-id",
-                    "us_nasdaq_composite",
-                    "--benchmark-id",
-                    "us_djia",
-                ],
-            )
-        )
+        tasks.append(_task(
+            "benchmark_yahoo",
+            benchmark_main,
+            [
+                "--benchmark-id",
+                "us_sp500",
+                "--benchmark-id",
+                "us_nasdaq_100",
+                "--benchmark-id",
+                "us_nasdaq_composite",
+                "--benchmark-id",
+                "us_djia",
+            ],
+        ))
     if rates_main is not None and not args.skip_rates:
-        tasks.append(("rates_fred", rates_main, []))
+        tasks.append(_task("rates_fred", rates_main, []))
     if consumer_main is not None and not args.skip_consumer_sentiment:
         cache_dir = _consumer_cache_dir()
         consumer_db_path = ROOT / "data" / "local_system" / "market_data.sqlite"
-        tasks.append(
-            (
-                "consumer_sentiment",
-                lambda argv: _combined_consumer_refresh(
-                    consumer_main, cache_dir, consumer_db_path
-                ),
-                [],
-            )
-        )
+        tasks.append(_task(
+            "consumer_sentiment",
+            lambda argv: _combined_consumer_refresh(
+                consumer_main, cache_dir, consumer_db_path
+            ),
+            [],
+        ))
     if m2_main is not None and not args.skip_m2:
-        tasks.append(("m2_fred_fetch", m2_main, ["--fetch-fred-csv"]))
-        tasks.append(("m2_fred_merge", m2_main, ["--fred-csv-merge"]))
+        tasks.append(_task("m2_fred_fetch", m2_main, ["--fetch-fred-csv"]))
+        tasks.append(_task("m2_fred_merge", m2_main, ["--fred-csv-merge"]))
     if macro_indicators_main is not None and not args.skip_macro_indicators:
-        tasks.append(("macro_indicators_fred_fetch", macro_indicators_main, ["--fetch-fred-csv"]))
-        tasks.append(("macro_indicators_fred_merge", macro_indicators_main, ["--fred-csv-merge"]))
+        tasks.append(_task("macro_indicators_fred_fetch", macro_indicators_main, ["--fetch-fred-csv"]))
+        tasks.append(_task("macro_indicators_fred_merge", macro_indicators_main, ["--fred-csv-merge"]))
     if building_permits_main is not None and not args.skip_building_permits:
-        tasks.append(("building_permits_census", building_permits_main, []))
+        tasks.append(_task("building_permits_census", building_permits_main, []))
     if ism_reports_main is not None and not args.skip_ism:
-        tasks.append(
-            (
-                "ism_manufacturing_official",
-                ism_reports_main,
-                ["--survey", "manufacturing", "--latest-only"],
-            )
-        )
-        tasks.append(
-            (
-                "ism_services_official",
-                ism_reports_main,
-                ["--survey", "services", "--latest-only"],
-            )
-        )
+        tasks.append(_task(
+            "ism_manufacturing_official",
+            ism_reports_main,
+            ["--survey", "manufacturing", "--latest-only"],
+        ))
+        tasks.append(_task(
+            "ism_services_official",
+            ism_reports_main,
+            ["--survey", "services", "--latest-only"],
+        ))
     if gdp_main is not None and not args.skip_gdp:
-        tasks.append(("gdp_fred_fetch", gdp_main, ["--fetch-fred-csv"]))
-        tasks.append(("gdp_fred_merge", gdp_main, ["--us-csv-merge"]))
+        tasks.append(_task("gdp_fred_fetch", gdp_main, ["--fetch-fred-csv"]))
+        tasks.append(_task("gdp_fred_merge", gdp_main, ["--us-csv-merge"]))
     if fomc_main is not None and not args.skip_fomc:
         calendar_path = _fomc_calendar_path(args)
         if calendar_path:
             tasks.extend(
                 [
-                    (
+                    _task(
                         "fomc_calendar",
                         fomc_main,
                         ["--calendar-path", str(calendar_path)],
                     ),
-                    ("fomc_documents", fomc_document_main, ["--document-type", "all"]),
-                    ("fomc_policy_tone", fomc_policy_tone_main, ["--all"]),
-                    ("fomc_minutes_structure", fomc_minutes_main, ["--all"]),
+                    _task("fomc_documents", fomc_document_main, ["--document-type", "all"]),
+                    _task("fomc_policy_tone", fomc_policy_tone_main, ["--all"]),
+                    _task("fomc_minutes_structure", fomc_minutes_main, ["--all"]),
                 ]
             )
     if nfib_main is not None and not args.skip_nfib_sbo:
-        tasks.append(("nfib_sbo_official", nfib_main, []))
+        tasks.append(_task("nfib_sbo_official", nfib_main, []))
     if nfib_regional_main is not None and not args.skip_nfib_sbo_regional:
-        tasks.append(("nfib_sbo_regional_official", nfib_regional_main, []))
+        tasks.append(_task("nfib_sbo_regional_official", nfib_regional_main, []))
     if main is not None and not args.skip_cyclical_commodities:
-        tasks.append(("cyclical_commodities_official", main, []))
+        tasks.append(_task("cyclical_commodities_official", main, []))
     if oil_main is not None and not args.skip_oil:
-        tasks.append(("oil_official", oil_main, []))
+        tasks.append(_task("oil_official", oil_main, []))
     if lumber_main is not None and not args.skip_lumber:
-        tasks.append(("lumber_yahoo", lumber_main, []))
-    if shfe_copper_main is not None and not args.skip_shfe_copper:
-        tasks.append(("shfe_copper", shfe_copper_main, ["--incremental"]))
+        tasks.append(_task("lumber_yahoo", lumber_main, []))
+    if shfe_copper_main is not None and not getattr(args, "skip_shfe_copper", False):
+        tasks.append(_task("shfe_copper", shfe_copper_main, ["--incremental"]))
     if dce_iron_ore_sina_main is not None and not args.skip_dce_iron_ore_sina:
-        tasks.append(("dce_iron_ore_sina", dce_iron_ore_sina_main, []))
+        tasks.append(_task("dce_iron_ore_sina", dce_iron_ore_sina_main, []))
     if economic_confirmation_main is not None and not args.skip_economic_confirmation:
-        tasks.append(("economic_confirmation_official", economic_confirmation_main, []))
+        tasks.append(_task("economic_confirmation_official", economic_confirmation_main, []))
     return tasks
 
 
-def _print_result(result):
-    if result["status"] == "ok":
-        print(f"{result['name']}: ok")
+def _write_report_text(text, *, file, progress):
+    if not text:
+        return
+    if getattr(progress, "disable", False):
+        print(text, end="", file=file)
+        return
+    for line in text.splitlines():
+        progress.write(line, file=file)
+
+
+def _write_report_line(message, *, file, progress):
+    if getattr(progress, "disable", False):
+        print(message, file=file)
     else:
-        print(f"{result['name']}: failed - {result['error']}", file=sys.stderr)
+        progress.write(message, file=file)
+
+
+def _report_result(result, *, verbose, progress):
+    replay_output = verbose or result["status"] == "failed"
+    if replay_output:
+        _write_report_text(result["stdout"], file=sys.stdout, progress=progress)
+        _write_report_text(result["stderr"], file=sys.stderr, progress=progress)
+    if result["status"] == "ok":
+        message = f"{result['name']}: ok"
+        file = sys.stdout
+    elif result["status"] == "skipped":
+        message = f"{result['name']}: skipped - {result['error']}"
+        file = sys.stdout
+    else:
+        message = f"{result['name']}: failed - {result['error']}"
+        file = sys.stderr
+    _write_report_line(message, file=file, progress=progress)
 
 
 def run(
@@ -230,6 +285,7 @@ def run(
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
     economic_confirmation_main=None,
+    progress_factory=tqdm,
 ):
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
@@ -256,10 +312,10 @@ def run(
         action="store_true",
         help="stop running remaining refresh tasks after the first failure",
     )
+    parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
     print(f"macro data refresh started: {_timestamp()}")
-    results = []
-    for name, func, task_argv in _planned_tasks(
+    tasks = _planned_tasks(
         args,
         benchmark_main,
         rates_main,
@@ -282,16 +338,30 @@ def run(
         shfe_copper_main,
         dce_iron_ore_sina_main,
         economic_confirmation_main,
-    ):
-        result = _run_task(name, func, task_argv)
-        results.append(result)
-        _print_result(result)
-        if result["status"] != "ok" and args.stop_on_error:
-            break
-    failed = [result for result in results if result["status"] != "ok"]
-    status = "failed" if failed else "ok"
-    print(f"macro data refresh completed: {status}")
-    return 1 if failed else 0
+    )
+    results = []
+    with progress_factory(
+        total=len(tasks),
+        disable=not sys.stderr.isatty(),
+        file=sys.stderr,
+    ) as progress:
+        for task in tasks:
+            progress.set_description_str(task["name"])
+            result = _run_task(task)
+            _report_result(result, verbose=args.verbose, progress=progress)
+            result["stdout"] = ""
+            result["stderr"] = ""
+            results.append(result)
+            progress.set_postfix(_result_counts(results), refresh=False)
+            progress.update(1)
+            if result["status"] == "failed" and args.stop_on_error:
+                break
+    counts = _result_counts(results)
+    print(
+        "macro data refresh completed: "
+        f"ok={counts['ok']} skipped={counts['skipped']} failed={counts['failed']}"
+    )
+    return 1 if counts["failed"] else 0
 
 
 def main(argv=None):

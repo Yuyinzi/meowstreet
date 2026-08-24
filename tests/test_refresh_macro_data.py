@@ -1,6 +1,208 @@
 from argparse import Namespace
+import sys
 
 from jobs import refresh_macro_data
+
+
+class FakeProgress:
+    def __init__(self, *, total, disable, file):
+        self.total = total
+        self.disable = disable
+        self.file = file
+        self.updated = 0
+        self.descriptions = []
+        self.postfixes = []
+        self.writes = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def set_description_str(self, value):
+        self.descriptions.append(value)
+
+    def set_postfix(self, value, refresh=False):
+        self.postfixes.append(dict(value))
+
+    def update(self, amount):
+        self.updated += amount
+
+    def write(self, message, file):
+        self.writes.append((message, file))
+        print(message, file=file)
+
+
+def test_run_task_captures_success_output():
+    def noisy(argv):
+        print("provider stdout")
+        print("provider stderr", file=refresh_macro_data.sys.stderr)
+        return 0
+
+    result = refresh_macro_data._run_task(
+        refresh_macro_data._task("provider", noisy, [])
+    )
+
+    assert result == {
+        "name": "provider",
+        "status": "ok",
+        "exit_code": 0,
+        "error": "",
+        "stdout": "provider stdout\n",
+        "stderr": "provider stderr\n",
+    }
+
+
+def test_run_task_returns_skip_without_calling_function():
+    task = refresh_macro_data._task(
+        "optional",
+        lambda argv: (_ for _ in ()).throw(AssertionError("must not run")),
+        [],
+        skip_reason="OPENAI_API_KEY is not configured",
+    )
+
+    result = refresh_macro_data._run_task(task)
+
+    assert result["status"] == "skipped"
+    assert result["error"] == "OPENAI_API_KEY is not configured"
+    assert result["exit_code"] == 0
+    assert result["stdout"] == ""
+    assert result["stderr"] == ""
+
+
+def test_run_task_captures_output_before_exception():
+    def raising(argv):
+        print("before failure")
+        print("diagnostic", file=refresh_macro_data.sys.stderr)
+        raise ValueError("provider unavailable")
+
+    result = refresh_macro_data._run_task(
+        refresh_macro_data._task("provider", raising, [])
+    )
+
+    assert result["status"] == "failed"
+    assert result["exit_code"] == 1
+    assert result["error"] == "provider unavailable"
+    assert result["stdout"] == "before failure\n"
+    assert result["stderr"] == "diagnostic\n"
+
+
+def test_result_counts_separate_success_skips_and_failures():
+    results = [
+        {"status": "ok"},
+        {"status": "skipped"},
+        {"status": "failed"},
+        {"status": "ok"},
+    ]
+
+    assert refresh_macro_data._result_counts(results) == {
+        "ok": 2,
+        "skipped": 1,
+        "failed": 1,
+    }
+
+
+def test_progress_advances_for_ok_skipped_and_failed(monkeypatch, capsys):
+    progress_instances = []
+
+    def progress_factory(**kwargs):
+        instance = FakeProgress(**kwargs)
+        progress_instances.append(instance)
+        return instance
+
+    tasks = [
+        refresh_macro_data._task("ok", lambda argv: 0, []),
+        refresh_macro_data._task("skip", lambda argv: 0, [], "not configured"),
+        refresh_macro_data._task("fail", lambda argv: 1, []),
+    ]
+    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", lambda *args: tasks)
+    monkeypatch.setattr(refresh_macro_data.sys.stderr, "isatty", lambda: True)
+
+    exit_code = refresh_macro_data.run([], progress_factory=progress_factory)
+
+    captured = capsys.readouterr()
+    progress = progress_instances[0]
+    assert exit_code == 1
+    assert progress.total == 3
+    assert progress.updated == 3
+    assert progress.postfixes[-1] == {"ok": 1, "skipped": 1, "failed": 1}
+    assert "macro data refresh completed: ok=1 skipped=1 failed=1" in captured.out
+
+
+def test_report_hides_success_output_by_default_but_replays_failure_output(capsys):
+    result = {
+        "name": "provider",
+        "status": "failed",
+        "exit_code": 1,
+        "error": "exit code 1",
+        "stdout": "provider stdout\n",
+        "stderr": "provider stderr\n",
+    }
+
+    refresh_macro_data._report_result(result, verbose=False, progress=FakeProgress(total=1, disable=True, file=sys.stderr))
+
+    captured = capsys.readouterr()
+    assert "provider stdout" in captured.out
+    assert "provider stderr" in captured.err
+    assert "provider: failed - exit code 1" in captured.err
+
+
+def test_verbose_replays_success_output_and_captured_strings_are_cleared(monkeypatch, capsys):
+    tasks = [refresh_macro_data._task("provider", lambda argv: print("details") or 0, [])]
+    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", lambda *args: tasks)
+    monkeypatch.setattr(refresh_macro_data.sys.stderr, "isatty", lambda: False)
+
+    exit_code = refresh_macro_data.run(["--verbose"], progress_factory=FakeProgress)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "details" in captured.out
+    assert "provider: ok" in captured.out
+
+
+def test_success_output_is_hidden_without_verbose(monkeypatch, capsys):
+    tasks = [refresh_macro_data._task("provider", lambda argv: print("details") or 0, [])]
+    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", lambda *args: tasks)
+    monkeypatch.setattr(refresh_macro_data.sys.stderr, "isatty", lambda: False)
+
+    exit_code = refresh_macro_data.run([], progress_factory=FakeProgress)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "details" not in captured.out
+    assert "provider: ok" in captured.out
+
+
+def test_skip_does_not_trigger_stop_on_error_but_failure_does(monkeypatch):
+    calls = []
+    tasks = [
+        refresh_macro_data._task("skip", lambda argv: calls.append("skip"), [], "optional"),
+        refresh_macro_data._task("fail", lambda argv: calls.append("fail") or 1, []),
+        refresh_macro_data._task("after", lambda argv: calls.append("after") or 0, []),
+    ]
+    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", lambda *args: tasks)
+    monkeypatch.setattr(refresh_macro_data.sys.stderr, "isatty", lambda: False)
+
+    exit_code = refresh_macro_data.run(["--stop-on-error"], progress_factory=FakeProgress)
+
+    assert exit_code == 1
+    assert calls == ["fail"]
+
+
+def test_progress_is_disabled_when_stderr_is_not_a_tty(monkeypatch):
+    progress_instances = []
+
+    def progress_factory(**kwargs):
+        instance = FakeProgress(**kwargs)
+        progress_instances.append(instance)
+        return instance
+
+    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", lambda *args: [])
+    monkeypatch.setattr(refresh_macro_data.sys.stderr, "isatty", lambda: False)
+
+    assert refresh_macro_data.run([], progress_factory=progress_factory) == 0
+    assert progress_instances[0].disable is True
 
 
 def args_without_skips():
@@ -161,7 +363,7 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
     out = capsys.readouterr().out
     assert "macro data refresh started" in out
     assert "benchmark_yahoo: ok" in out
-    assert "macro data refresh completed: ok" in out
+    assert "macro data refresh completed: ok=" in out
 
 
 def test_main_does_not_generate_ai_interpretations():
@@ -246,7 +448,7 @@ def test_main_continues_after_provider_failure(capsys):
     ]
     captured = capsys.readouterr()
     assert "benchmark_yahoo: failed - exit code 1" in captured.err
-    assert "macro data refresh completed: failed" in captured.out
+    assert "macro data refresh completed: ok=19 skipped=0 failed=1" in captured.out
 
 
 def test_main_can_stop_after_first_failure():
@@ -936,8 +1138,13 @@ def test_macro_refresh_registers_lumber_yahoo_without_chrome_import(monkeypatch)
         fake_gdp_main,
         lumber_main=fake_lumber_main,
     )
-    assert ("lumber_yahoo", fake_lumber_main, []) in tasks
-    assert not any(name == "tracked_commodities" for name, _, _ in tasks)
+    assert any(
+        task["name"] == "lumber_yahoo"
+        and task["func"] is fake_lumber_main
+        and task["argv"] == []
+        for task in tasks
+    )
+    assert not any(task["name"] == "tracked_commodities" for task in tasks)
 
 
 def test_macro_refresh_skip_lumber_omits_only_lumber_task():
@@ -954,7 +1161,7 @@ def test_macro_refresh_skip_lumber_omits_only_lumber_task():
         fake_gdp_main,
         lumber_main=fake_lumber_main,
     )
-    assert not any(name == "lumber_yahoo" for name, _, _ in tasks)
+    assert not any(task["name"] == "lumber_yahoo" for task in tasks)
 
 
 def test_macro_refresh_does_not_schedule_vendor_copper_tasks():
@@ -968,7 +1175,7 @@ def test_macro_refresh_does_not_schedule_vendor_copper_tasks():
         fake_ism_reports_main,
         fake_gdp_main,
     )
-    names = [name for name, _, _ in tasks]
+    names = [task["name"] for task in tasks]
     assert "copper_comex_yahoo" not in names
     assert "lme_copper_sina" not in names
 
@@ -986,7 +1193,7 @@ def test_refresh_registry_runs_sina_dce_iron_ore_unless_skipped():
         dce_iron_ore_sina_main=fake_lumber_main,
     )
 
-    assert any(name == "dce_iron_ore_sina" for name, _, _ in tasks)
+    assert any(task["name"] == "dce_iron_ore_sina" for task in tasks)
 
 
 def test_macro_refresh_skip_dce_iron_ore_sina_omits_the_task():
@@ -1004,7 +1211,7 @@ def test_macro_refresh_skip_dce_iron_ore_sina_omits_the_task():
         dce_iron_ore_sina_main=fake_lumber_main,
     )
 
-    assert not any(name == "dce_iron_ore_sina" for name, _, _ in tasks)
+    assert not any(task["name"] == "dce_iron_ore_sina" for task in tasks)
 
 
 def test_macro_refresh_does_not_register_vendor_lme_copper_by_default():
@@ -1018,7 +1225,7 @@ def test_macro_refresh_does_not_register_vendor_lme_copper_by_default():
         fake_ism_reports_main,
         fake_gdp_main,
     )
-    names = [name for name, _, _ in tasks]
+    names = [task["name"] for task in tasks]
     assert "lme_copper_sina" not in names
 
 
@@ -1096,7 +1303,12 @@ def test_planned_tasks_includes_economic_confirmation_by_default():
         fake_gdp_main,
         economic_confirmation_main=fake_consumer_main,
     )
-    assert ("economic_confirmation_official", fake_consumer_main, []) in tasks
+    assert any(
+        task["name"] == "economic_confirmation_official"
+        and task["func"] is fake_consumer_main
+        and task["argv"] == []
+        for task in tasks
+    )
 
 
 def test_planned_tasks_skips_economic_confirmation_when_flag_set():
@@ -1113,4 +1325,6 @@ def test_planned_tasks_skips_economic_confirmation_when_flag_set():
         fake_gdp_main,
         economic_confirmation_main=fake_consumer_main,
     )
-    assert not any(name == "economic_confirmation_official" for name, _, _ in tasks)
+    assert not any(
+        task["name"] == "economic_confirmation_official" for task in tasks
+    )

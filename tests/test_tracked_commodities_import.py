@@ -485,7 +485,7 @@ def test_macro_refresh_does_not_register_http_commodity_task_by_default():
         oil_main=lambda argv: 0,
         tracked_commodities_main=lambda argv: 0,
     )
-    task_names = [t[0] for t in tasks]
+    task_names = [task["name"] for task in tasks]
     assert "tracked_commodities" not in task_names
 
 
