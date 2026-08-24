@@ -27,12 +27,16 @@ def select_snapshots(
     source_urls=None,
 ):
     rows = list(snapshots)
+    requested_rows = []
+    requested_urls = set(source_urls or [])
     if source_urls:
-        requested = {url: index for index, url in enumerate(source_urls)}
-        return sorted(
-            [row for row in rows if row["source_url"] in requested],
-            key=lambda row: requested[row["source_url"]],
-        )
+        rows_by_url = {row["source_url"]: row for row in rows}
+        selected_urls = set()
+        for source_url in source_urls:
+            row = rows_by_url.get(source_url)
+            if row is not None and source_url not in selected_urls:
+                requested_rows.append(row)
+                selected_urls.add(source_url)
     if report_month:
         rows = [row for row in rows if row["report_month"] == report_month]
     elif latest_month:
@@ -49,7 +53,14 @@ def select_snapshots(
             for row in rows
             if row["report_month"] >= f"{backfill_since}-01-01"
         ]
-    return _latest_snapshot_per_month(rows)
+    period_rows = _latest_snapshot_per_month(rows)
+    if not source_urls:
+        return period_rows
+    if not (report_month or latest_month or current_year or backfill_since):
+        return requested_rows
+    return requested_rows + [
+        row for row in period_rows if row["source_url"] not in requested_urls
+    ]
 
 
 def enrich_snapshots(snapshots, enrich_one, report_concurrency=1):

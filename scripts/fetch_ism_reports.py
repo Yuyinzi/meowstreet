@@ -82,7 +82,7 @@ def _select_enrichment_snapshots(args, survey_type):
         else None
     )
     latest_month = None
-    if args.latest_only or (
+    if (args.latest_only and not args.url) or args.force or (
         not report_month
         and not args.current_year
         and not args.backfill_since

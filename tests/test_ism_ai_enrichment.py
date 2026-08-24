@@ -95,6 +95,26 @@ def test_source_url_selection_preserves_requested_url_order_without_deduplicatio
     ]
 
 
+def test_source_url_and_period_selection_returns_union_in_core_order():
+    rows = [
+        snapshot("https://example.test/repair", "services", "2026-06-01"),
+        snapshot("https://example.test/july", "services", "2026-07-01"),
+        snapshot("https://example.test/august", "services", "2026-08-01"),
+    ]
+
+    selected = ism_ai_enrichment.select_snapshots(
+        rows,
+        current_year=2026,
+        source_urls=["https://example.test/repair"],
+    )
+
+    assert [row["source_url"] for row in selected] == [
+        "https://example.test/repair",
+        "https://example.test/july",
+        "https://example.test/august",
+    ]
+
+
 def test_enrich_snapshots_returns_input_order_and_counts_failures():
     rows = [
         snapshot("https://example.test/first", "services", "2026-06-01"),
