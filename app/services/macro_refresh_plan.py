@@ -1,3 +1,7 @@
+import re
+
+
+LANE_RE = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*\Z")
 VALID_STAGES = {"fetch", "parse", "persist", "enrich"}
 VALID_DEPENDENCY_STATUSES = {"ok", "skipped"}
 VALID_RESOURCES = {"fred", "sqlite_writer"}
@@ -110,6 +114,9 @@ def _copy_task(task):
 
 def _validate_task(task, tasks_by_name):
     name = task["name"]
+    lane = task["lane"]
+    if not isinstance(lane, str) or LANE_RE.fullmatch(lane) is None:
+        raise ValueError(f"macro refresh task {name} has invalid lane {lane}")
     if task["stage"] not in VALID_STAGES:
         raise ValueError(f"macro refresh task {name} has invalid stage {task['stage']}")
 

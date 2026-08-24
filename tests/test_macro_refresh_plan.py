@@ -61,6 +61,14 @@ def test_validate_tasks_sorts_without_mutating_tasks():
     assert validated[0]["dependencies"] is not second["dependencies"]
 
 
+@pytest.mark.parametrize("lane", ["", " ", "Fred_macro", "fred-macro", "fred__macro", "2fred"])
+def test_validate_tasks_rejects_malformed_lane_identifier(lane):
+    tasks = [macro_refresh_plan.make_task("task", lane, "fetch", noop)]
+
+    with pytest.raises(ValueError, match="macro refresh task task has invalid lane"):
+        macro_refresh_plan.validate_tasks(tasks)
+
+
 @pytest.mark.parametrize(
     ("tasks", "message"),
     [
