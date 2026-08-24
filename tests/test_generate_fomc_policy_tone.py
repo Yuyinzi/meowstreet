@@ -161,6 +161,95 @@ def test_generation_failure_is_visible_without_verbose(
     )
 
 
+def _patch_successful_event_generation(monkeypatch):
+    extraction = {
+        "statement_tone": "neutral",
+        "minutes_tone": "unknown",
+        "marker_tone": "neutral",
+        "tone_score": 0,
+        "tone_change": "unchanged",
+        "confidence": "medium",
+        "facts": [],
+        "comparison": {},
+        "reason": "test extraction",
+    }
+    async def fake_run_extract_review_loop(*args, **kwargs):
+        return {
+            "extraction": extraction,
+            "reviewer_feedback": [],
+            "final_reviewer_feedback": [],
+            "extraction_status": "approved",
+            "review_rounds": 1,
+        }
+
+    monkeypatch.setattr(
+        generate_fomc_policy_tone,
+        "run_extract_review_loop",
+        fake_run_extract_review_loop,
+    )
+    row = {
+        "policy_action": "hold",
+        "guidance_bias": "neutral",
+        "language_tone": "neutral",
+        "overall_bias": "neutral",
+        "statement_tone": "neutral",
+        "marker_tone": "neutral",
+        "tone_change": "unchanged",
+        "confidence": "medium",
+        "extraction_status": "approved",
+        "review_rounds": 1,
+    }
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.fomc_policy_tone,
+        "tone_extraction_row",
+        lambda **kwargs: row,
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.us_rates_liquidity,
+        "replace_macro_event_tone_extraction",
+        lambda con, row: None,
+    )
+
+
+def test_successful_generation_is_compact_by_default(monkeypatch, capsys):
+    _patch_successful_event_generation(monkeypatch)
+
+    generate_fomc_policy_tone.asyncio.run(
+        generate_fomc_policy_tone.generate_event_tone(
+            None,
+            [{"event_id": "fomc_2026_07_28", "start_date": "2026-07-28"}],
+            {"event_id": "fomc_2026_07_28", "start_date": "2026-07-28"},
+            {"source_hash": "current-hash", "url": "https://example.test"},
+            object(),
+            {"extractor_model": "extractor", "reviewer_model": "reviewer"},
+            1,
+        )
+    )
+
+    assert capsys.readouterr().out == ""
+
+
+def test_verbose_successful_generation_retains_details(monkeypatch, capsys):
+    _patch_successful_event_generation(monkeypatch)
+
+    generate_fomc_policy_tone.asyncio.run(
+        generate_fomc_policy_tone.generate_event_tone(
+            None,
+            [{"event_id": "fomc_2026_07_28", "start_date": "2026-07-28"}],
+            {"event_id": "fomc_2026_07_28", "start_date": "2026-07-28"},
+            {"source_hash": "current-hash", "url": "https://example.test"},
+            object(),
+            {"extractor_model": "extractor", "reviewer_model": "reviewer"},
+            1,
+            verbose=True,
+        )
+    )
+
+    output = capsys.readouterr().out
+    assert "fomc policy tone generation:" in output
+    assert "fomc policy tone saved:" in output
+
+
 def test_run_extract_review_loop_revises_until_approved():
     calls = []
 

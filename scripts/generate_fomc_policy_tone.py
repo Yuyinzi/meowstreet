@@ -118,6 +118,7 @@ async def generate_event_tone(
     client,
     models,
     max_rounds,
+    verbose=False,
 ):
     previous_event, previous_document = previous_event_and_document(
         all_events,
@@ -128,13 +129,14 @@ async def generate_event_tone(
             "statement",
         ),
     )
-    log_generation_context(
-        event,
-        current_document,
-        previous_event,
-        previous_document,
-        models,
-    )
+    if verbose:
+        log_generation_context(
+            event,
+            current_document,
+            previous_event,
+            previous_document,
+            models,
+        )
     result = await run_extract_review_loop(
         event,
         current_document,
@@ -169,7 +171,8 @@ async def generate_event_tone(
         final_reviewer_feedback=result["final_reviewer_feedback"],
     )
     us_rates_liquidity.replace_macro_event_tone_extraction(con, row)
-    log_generation_result(row)
+    if verbose:
+        log_generation_result(row)
     return row
 
 
@@ -344,6 +347,7 @@ async def async_main(argv=None):
                     client,
                     models,
                     args.max_rounds,
+                    verbose=args.verbose,
                 )
             except Exception as exc:
                 failed += 1
