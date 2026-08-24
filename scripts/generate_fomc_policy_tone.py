@@ -244,33 +244,53 @@ async def _call_json(client, model, prompt, parser):
     return parser(response.choices[0].message.content)
 
 
-def _check_skip(con, event, force):
-    current_document = us_rates_liquidity.load_macro_event_document(
-        con,
-        event["event_id"],
-        "statement",
-    )
-    if not current_document:
-        print("fomc policy tone skipped:")
-        print(f"  current: {_event_label(event)}")
-        print("  reason: no statement document")
-        return True
-    existing = us_rates_liquidity.load_macro_event_tone_extraction(
-        con,
-        event["event_id"],
-        "statement",
-        current_document["source_hash"],
-    )
-    if should_skip_existing_extraction(existing, force):
-        print("fomc policy tone skipped:")
-        print(f"  current: {_event_label(event)}")
-        print(f"  source_hash: {_short_hash(current_document)}")
-        print(f"  existing_generated_at: {existing['generated_at']}")
+def classify_events(con, events, force):
+    classified = {"pending": [], "reused": [], "unavailable": []}
+    for event in events:
+        current_document = us_rates_liquidity.load_macro_event_document(
+            con,
+            event["event_id"],
+            "statement",
+        )
+        if not current_document:
+            classified["unavailable"].append(
+                (event, {"reason": "no statement document"})
+            )
+            continue
+        existing = us_rates_liquidity.load_macro_event_tone_extraction(
+            con,
+            event["event_id"],
+            "statement",
+            current_document["source_hash"],
+        )
+        if should_skip_existing_extraction(existing, force):
+            classified["reused"].append((event, existing))
+            continue
+        classified["pending"].append((event, current_document))
+    return classified
+
+
+def _print_event_classification(event, status, detail):
+    print(f"fomc policy tone {status}:")
+    print(f"  event: {event['event_id']}")
+    print(f"  current: {_event_label(event)}")
+    if status == "reused":
+        print(f"  source_hash: {_short_hash(detail)}")
+        if detail.get("generated_at"):
+            print(f"  existing_generated_at: {detail['generated_at']}")
         print(
             "  reason: existing extraction for this statement hash; use --force to regenerate"
         )
-        return True
-    return False
+        return
+    print(f"  reason: {detail.get('reason', 'unknown')}")
+
+
+def _summary(generated, classified, failed):
+    return (
+        f"fomc_policy_tone: generated={generated} "
+        f"reused={len(classified['reused'])} "
+        f"unavailable={len(classified['unavailable'])} failed={failed}"
+    )
 
 
 async def async_main(argv=None):
@@ -283,6 +303,7 @@ async def async_main(argv=None):
     target_group.add_argument("--all", action="store_true")
     parser.add_argument("--max-rounds", type=int, default=3)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--extractor-model", default="")
     parser.add_argument("--reviewer-model", default="")
     parser.add_argument("--openai-api-key", default="")
@@ -292,18 +313,14 @@ async def async_main(argv=None):
     try:
         all_events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
         events = target_events(all_events, args.event_id, args.all)
-        pending = []
-        for event in events:
-            if _check_skip(con, event, args.force):
-                continue
-            current_document = us_rates_liquidity.load_macro_event_document(
-                con,
-                event["event_id"],
-                "statement",
-            )
-            pending.append((event, current_document))
+        classified = classify_events(con, events, args.force)
+        if args.verbose:
+            for status in ("reused", "unavailable"):
+                for event, detail in classified[status]:
+                    _print_event_classification(event, status, detail)
+        pending = classified["pending"]
         if not pending:
-            print("fomc_policy_tone: 0")
+            print(_summary(0, classified, 0))
             return 0
         llm_bundle = llm.build_async_client_bundle(
             args,
@@ -337,7 +354,7 @@ async def async_main(argv=None):
                     return 1
                 continue
             generated += 1
-        print(f"fomc_policy_tone: {generated}")
+        print(_summary(generated, classified, failed))
         return 1 if failed else 0
     except Exception as exc:
         print(str(exc), file=sys.stderr)

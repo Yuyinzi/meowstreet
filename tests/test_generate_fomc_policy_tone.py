@@ -1,6 +1,166 @@
 from scripts import generate_fomc_policy_tone
 
 
+def test_classify_events_counts_pending_reused_and_unavailable(monkeypatch):
+    events = [
+        {"event_id": "pending", "start_date": "2026-01-01"},
+        {"event_id": "reused", "start_date": "2026-02-01"},
+        {"event_id": "unavailable", "start_date": "2026-03-01"},
+    ]
+    documents = {
+        "pending": {"source_hash": "pending-hash"},
+        "reused": {"source_hash": "reused-hash"},
+    }
+    existing = {"extraction_status": "approved", "generated_at": "2026-02-02Z"}
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.us_rates_liquidity,
+        "load_macro_event_document",
+        lambda con, event_id, document_type: documents.get(event_id),
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.us_rates_liquidity,
+        "load_macro_event_tone_extraction",
+        lambda con, event_id, document_type, source_hash: existing
+        if event_id == "reused"
+        else None,
+    )
+
+    classified = generate_fomc_policy_tone.classify_events(None, events, False)
+
+    assert [item[0]["event_id"] for item in classified["pending"]] == ["pending"]
+    assert [item[0]["event_id"] for item in classified["reused"]] == ["reused"]
+    assert [item[0]["event_id"] for item in classified["unavailable"]] == [
+        "unavailable"
+    ]
+
+
+def test_classify_events_force_marks_approved_matching_extraction_pending(monkeypatch):
+    event = {"event_id": "reused", "start_date": "2026-02-01"}
+    document = {"source_hash": "reused-hash"}
+    existing = {"extraction_status": "approved"}
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.us_rates_liquidity,
+        "load_macro_event_document",
+        lambda con, event_id, document_type: document,
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.us_rates_liquidity,
+        "load_macro_event_tone_extraction",
+        lambda con, event_id, document_type, source_hash: existing,
+    )
+
+    classified = generate_fomc_policy_tone.classify_events(None, [event], True)
+
+    assert classified["pending"] == [(event, document)]
+    assert classified["reused"] == []
+
+
+def test_no_pending_events_prints_one_summary_without_constructing_client(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.llm,
+        "build_async_client_bundle",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("client must not be constructed")
+        ),
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone,
+        "classify_events",
+        lambda con, events, force: {
+            "pending": [],
+            "reused": [({"event_id": "cached"}, {})],
+            "unavailable": [({"event_id": "missing"}, {})],
+        },
+    )
+
+    exit_code = generate_fomc_policy_tone.main(
+        ["--all", "--db-path", str(tmp_path / "market.sqlite")]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert output == "fomc_policy_tone: generated=0 reused=1 unavailable=1 failed=0\n"
+
+
+def test_verbose_prints_reused_and_unavailable_details(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        generate_fomc_policy_tone,
+        "classify_events",
+        lambda con, events, force: {
+            "pending": [],
+            "reused": [
+                (
+                    {"event_id": "cached"},
+                    {"source_hash": "cached-hash", "generated_at": "2026-02-02Z"},
+                )
+            ],
+            "unavailable": [
+                ({"event_id": "missing"}, {"reason": "no statement document"})
+            ],
+        },
+    )
+
+    exit_code = generate_fomc_policy_tone.main(
+        [
+            "--all",
+            "--verbose",
+            "--db-path",
+            str(tmp_path / "market.sqlite"),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "event: cached" in output
+    assert "source_hash: cached-hash" in output
+    assert "event: missing" in output
+    assert "reason: no statement document" in output
+    assert output.endswith(
+        "fomc_policy_tone: generated=0 reused=1 unavailable=1 failed=0\n"
+    )
+
+
+def test_generation_failure_is_visible_without_verbose(
+    tmp_path, monkeypatch, capsys
+):
+    event = {"event_id": "bad-event"}
+    monkeypatch.setattr(
+        generate_fomc_policy_tone,
+        "classify_events",
+        lambda con, events, force: {
+            "pending": [(event, {"source_hash": "bad-hash"})],
+            "reused": [],
+            "unavailable": [],
+        },
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone,
+        "generate_event_tone",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            ValueError("bad extraction")
+        ),
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.llm,
+        "build_async_client_bundle",
+        lambda *args, **kwargs: {"client": object(), "models": {}},
+    )
+
+    exit_code = generate_fomc_policy_tone.main(
+        ["--all", "--db-path", str(tmp_path / "market.sqlite")]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "bad-event" in captured.err
+    assert "bad extraction" in captured.err
+    assert captured.out.endswith(
+        "fomc_policy_tone: generated=0 reused=0 unavailable=0 failed=1\n"
+    )
+
+
 def test_run_extract_review_loop_revises_until_approved():
     calls = []
 
