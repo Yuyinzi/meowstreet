@@ -1635,3 +1635,129 @@ def test_task9_keyboard_interrupt_reports_and_returns_130(capsys):
 
     assert result == 130
     assert "macro data refresh interrupted" in capsys.readouterr().err
+
+
+def test_task9_legacy_provider_seam_is_adapted_to_registry_tasks(monkeypatch):
+    planned = []
+
+    def fail_flat_loop(*args, **kwargs):
+        raise AssertionError("legacy flat task loop must not run")
+
+    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", fail_flat_loop)
+
+    def recorder(argv):
+        planned.append(list(argv))
+        return 0
+
+    result = refresh_macro_data.run(
+        _task9_skip_args("--serial"),
+        rates_main=recorder,
+        openai_config={"api_key": None},
+        progress_factory=FakeProgress,
+    )
+
+    assert result == 0
+    assert planned == [["--fetch-fred-csv"], ["--fred-csv-merge"]]
+
+
+def test_task9_default_provider_pair_requires_fetched_artifact(monkeypatch):
+    store = refresh_macro_data.ArtifactStore()
+    calls = []
+
+    def fetch(argv):
+        calls.append(("fetch", list(argv)))
+        store.put("rates", {"fetched": True})
+        return 0
+
+    def persist(argv):
+        calls.append(("persist", list(argv)))
+        store.get("rates")
+        return 0
+
+    providers = refresh_macro_data._build_task_providers(
+        {"rates_main": fetch},
+        artifact_store=store,
+        provider_overrides={"rates_fetch": fetch, "rates_import": persist},
+    )
+
+    assert providers["rates_fetch"] is fetch
+    assert providers["rates_import"] is persist
+    assert calls == []
+
+
+def test_task9_production_registry_executes_staged_override_handoff():
+    store = refresh_macro_data.ArtifactStore()
+    calls = []
+
+    def fetch(argv):
+        assert argv == ["--fetch-fred-csv"]
+        store.put("staged.rates", {"payload": "fetched"})
+        calls.append("fetch")
+        return 0
+
+    def persist(argv):
+        assert argv == ["--fred-csv-merge"]
+        assert store.get("staged.rates")["payload"] == "fetched"
+        calls.append("persist")
+        return 0
+
+    result = refresh_macro_data.run(
+        _task9_skip_args("--serial"),
+        task_providers={"rates_fetch": fetch, "rates_import": persist},
+        artifact_store=store,
+        openai_config={"api_key": None},
+        progress_factory=FakeProgress,
+    )
+
+    assert result == 0
+    assert calls == ["fetch", "persist"]
+
+
+def test_task9_lifecycle_and_failure_output_share_ordered_stream(monkeypatch):
+    import io
+
+    stream = io.StringIO()
+    monkeypatch.setattr(refresh_macro_data.sys, "stdout", stream)
+    monkeypatch.setattr(refresh_macro_data.sys, "stderr", stream)
+
+    result = refresh_macro_data.run(
+        _task9_skip_args(),
+        task_providers={"rates": lambda argv: 1},
+        openai_config={"api_key": None},
+        progress_factory=FakeProgress,
+    )
+
+    output = stream.getvalue()
+    assert result == 1
+    assert output.index("macro data refresh started") < output.index("failed")
+    assert output.index("failed") < output.index("macro data refresh completed")
+
+
+def test_task9_legacy_combined_seam_runs_once_across_registry_nodes():
+    calls = []
+    store = refresh_macro_data.ArtifactStore()
+    providers = refresh_macro_data._build_task_providers(
+        {"economic_confirmation_main": lambda argv: calls.append(list(argv)) or 0},
+        artifact_store=store,
+    )
+
+    for key in ("dol_fetch", "bls_fetch", "federal_reserve_fetch"):
+        assert providers[key]([]) == 0
+    for key in ("dol_import", "bls_import", "federal_reserve_import"):
+        assert providers[key]([]) == 0
+
+    assert calls == [[]]
+
+
+def test_task9_legacy_ism_seam_adapts_all_registry_stages():
+    store = refresh_macro_data.ArtifactStore()
+    providers = refresh_macro_data._build_task_providers(
+        {"ism_reports_main": lambda argv: 0},
+        artifact_store=store,
+    )
+
+    for survey in ("manufacturing", "services"):
+        assert {
+            f"ism_{survey}_{stage}"
+            for stage in ("fetch", "import", "enrichment", "enrichment_import")
+        } <= providers.keys()

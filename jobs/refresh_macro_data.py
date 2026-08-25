@@ -43,6 +43,7 @@ from app.services.macro_refresh_resources import ArtifactStore
 from app.services.macro_refresh_resources import FredRateLimiter
 from app.services.macro_refresh_resources import RequestCoordinator
 from app.services.macro_refresh_resources import SQLiteWriterGate
+from app.services.macro_refresh_runtime import build_runtime_providers
 
 
 def _timestamp():
@@ -319,7 +320,7 @@ def _write_report_text(text, *, file, progress):
     if not text:
         return
     if getattr(progress, "disable", False):
-        print(text, end="", file=file)
+        print(text, end="", file=file, flush=True)
         return
     for line in text.splitlines():
         progress.write(line, file=file)
@@ -327,7 +328,7 @@ def _write_report_text(text, *, file, progress):
 
 def _write_report_line(message, *, file, progress):
     if getattr(progress, "disable", False):
-        print(message, file=file)
+        print(message, file=file, flush=True)
     else:
         progress.write(message, file=file)
 
@@ -447,60 +448,144 @@ def _task_label(result):
     return name if name.startswith(f"{lane}.") else f"{lane}.{name}"
 
 
-def _build_task_providers(values):
-    mapping = {
-        "benchmarks_fetch": values.get("benchmark_main"),
-        "benchmarks_import": values.get("benchmark_main"),
-        "rates": values.get("rates_main"),
-        "credit": values.get("credit_main"),
-        "consumer_michigan_fetch": values.get("consumer_main"),
-        "consumer_michigan_import": values.get("consumer_main"),
-        "consumer_fred_fetch": values.get("consumer_main"),
-        "consumer_fred_import": values.get("consumer_main"),
-        "m2": values.get("m2_main"),
-        "building_permits_fetch": values.get("building_permits_main"),
-        "building_permits_import": values.get("building_permits_main"),
-        "macro_indicators": values.get("macro_indicators_main"),
-        "gdp": values.get("gdp_main"),
-        "ism_manufacturing_fetch": values.get("ism_reports_main"),
-        "ism_manufacturing_import": values.get("ism_reports_main"),
-        "ism_manufacturing_enrichment": values.get("ism_reports_main"),
-        "ism_manufacturing_enrichment_import": values.get("ism_reports_main"),
-        "ism_services_fetch": values.get("ism_reports_main"),
-        "ism_services_import": values.get("ism_reports_main"),
-        "ism_services_enrichment": values.get("ism_reports_main"),
-        "ism_services_enrichment_import": values.get("ism_reports_main"),
-        "fomc_calendar_import": values.get("fomc_main"),
-        "fomc_documents_fetch": values.get("fomc_document_main"),
-        "fomc_documents_import": values.get("fomc_document_main"),
-        "fomc_policy_tone_extract": values.get("fomc_policy_tone_main"),
-        "fomc_policy_tone_import": values.get("fomc_policy_tone_main"),
-        "fomc_minutes_extract": values.get("fomc_minutes_main"),
-        "fomc_minutes_import": values.get("fomc_minutes_main"),
-        "nfib_fetch": values.get("nfib_main"),
-        "nfib_import": values.get("nfib_main"),
-        "nfib_regional_fetch": values.get("nfib_regional_main"),
-        "nfib_regional_import": values.get("nfib_regional_main"),
-        "tracked_commodities_fetch": values.get("tracked_commodities_main"),
-        "tracked_commodities_import": values.get("tracked_commodities_main"),
-        "cyclical_cot_fetch": values.get("main"),
-        "cyclical_cot_import": values.get("main"),
-        "oil_fetch": values.get("oil_main"),
-        "oil_import": values.get("oil_main"),
-        "lumber_fetch": values.get("lumber_main"),
-        "lumber_import": values.get("lumber_main"),
-        "shfe_copper_fetch": values.get("shfe_copper_main"),
-        "shfe_copper_import": values.get("shfe_copper_main"),
-        "dce_iron_ore_sina_fetch": values.get("dce_iron_ore_sina_main"),
-        "dce_iron_ore_sina_import": values.get("dce_iron_ore_sina_main"),
-        "dol_fetch": values.get("economic_confirmation_main"),
-        "dol_import": values.get("economic_confirmation_main"),
-        "bls_fetch": values.get("economic_confirmation_main"),
-        "bls_import": values.get("economic_confirmation_main"),
-        "federal_reserve_fetch": values.get("economic_confirmation_main"),
-        "federal_reserve_import": values.get("economic_confirmation_main"),
+def _build_task_providers(
+    values,
+    *,
+    artifact_store=None,
+    provider_overrides=None,
+    openai_config=None,
+    fomc_calendar_path=None,
+    verbose=False,
+    use_runtime_defaults=False,
+):
+    store = artifact_store if artifact_store is not None else ArtifactStore()
+    provider_overrides = provider_overrides or {}
+    legacy_value_names = {
+        "benchmark": "benchmark_main",
+        "benchmarks": "benchmark_main",
+        "rates": "rates_main",
+        "credit": "credit_main",
+        "consumer": "consumer_main",
+        "m2": "m2_main",
+        "building_permits": "building_permits_main",
+        "ism_reports": "ism_reports_main",
+        "gdp": "gdp_main",
+        "macro_indicators": "macro_indicators_main",
+        "fomc": "fomc_main",
+        "fomc_documents": "fomc_document_main",
+        "fomc_policy_tone": "fomc_policy_tone_main",
+        "fomc_minutes": "fomc_minutes_main",
+        "nfib": "nfib_main",
+        "nfib_regional": "nfib_regional_main",
+        "main": "main",
+        "oil": "oil_main",
+        "tracked_commodities": "tracked_commodities_main",
+        "lumber": "lumber_main",
+        "shfe_copper": "shfe_copper_main",
+        "dce_iron_ore_sina": "dce_iron_ore_sina_main",
+        "economic_confirmation": "economic_confirmation_main",
     }
-    return {key: value for key, value in mapping.items() if value is not None}
+    legacy_values = {
+        legacy_value_names[key]: value
+        for key, value in provider_overrides.items()
+        if key in legacy_value_names
+    }
+    staged_overrides = {
+        key: value
+        for key, value in provider_overrides.items()
+        if key not in legacy_value_names
+    }
+    runtime_values = legacy_values or (
+        values if not staged_overrides else {}
+    )
+    providers = build_runtime_providers(
+        store,
+        values=runtime_values,
+        overrides=staged_overrides,
+        openai_config=openai_config,
+        fomc_calendar_path=fomc_calendar_path,
+        verbose=verbose,
+    )
+    enabled_groups = {
+        "rates_main": {"rates_fetch", "rates_import"},
+        "credit_main": {"credit_fetch", "credit_import"},
+        "m2_main": {"m2_fetch", "m2_import"},
+        "macro_indicators_main": {
+            "macro_indicators_fetch",
+            "macro_indicators_import",
+        },
+        "gdp_main": {"gdp_fetch", "gdp_import"},
+        "benchmark_main": {"benchmarks_fetch", "benchmarks_import"},
+        "lumber_main": {"lumber_fetch", "lumber_import"},
+        "consumer_main": {
+            "consumer_michigan_fetch",
+            "consumer_michigan_import",
+            "consumer_fred_fetch",
+            "consumer_fred_import",
+        },
+        "building_permits_main": {
+            "building_permits_fetch",
+            "building_permits_import",
+        },
+        "nfib_main": {"nfib_fetch", "nfib_import"},
+        "nfib_regional_main": {"nfib_regional_fetch", "nfib_regional_import"},
+        "tracked_commodities_main": {
+            "tracked_commodities_fetch",
+            "tracked_commodities_import",
+        },
+        "main": {
+            "cyclical_cot_fetch",
+            "cyclical_cot_import",
+            "cyclical_fred_fetch",
+            "cyclical_fred_import",
+        },
+        "oil_main": {"oil_fetch", "oil_import"},
+        "shfe_copper_main": {"shfe_copper_fetch", "shfe_copper_import"},
+        "dce_iron_ore_sina_main": {
+            "dce_iron_ore_sina_fetch",
+            "dce_iron_ore_sina_import",
+        },
+        "economic_confirmation_main": {
+            "dol_fetch",
+            "dol_import",
+            "bls_fetch",
+            "bls_import",
+            "federal_reserve_fetch",
+            "federal_reserve_import",
+        },
+        "fomc_main": {"fomc_calendar_import"},
+        "fomc_document_main": {"fomc_documents_fetch", "fomc_documents_import"},
+        "fomc_policy_tone_main": {
+            "fomc_policy_tone_extract",
+            "fomc_policy_tone_import",
+        },
+        "fomc_minutes_main": {"fomc_minutes_extract", "fomc_minutes_import"},
+        "ism_reports_main": {
+            key
+            for survey in ("manufacturing", "services")
+            for key in (
+                f"ism_{survey}_fetch",
+                f"ism_{survey}_import",
+                f"ism_{survey}_enrichment",
+                f"ism_{survey}_enrichment_import",
+            )
+        },
+    }
+    if use_runtime_defaults:
+        providers.update(staged_overrides)
+        return providers
+    if any(runtime_values.values()):
+        enabled = {
+            key
+            for value_key, keys in enabled_groups.items()
+            if runtime_values.get(value_key) is not None
+            for key in keys
+        }
+        providers = {key: value for key, value in providers.items() if key in enabled}
+    else:
+        providers = {}
+    providers.update(staged_overrides)
+    return providers
 
 
 def run(
@@ -533,6 +618,7 @@ def run(
     dce_iron_ore_sina_main=None,
     economic_confirmation_main=None,
     credit_main=None,
+    use_runtime_defaults=False,
 ):
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
@@ -567,65 +653,45 @@ def run(
         openai_config = llm.load_openai_config(args, root=ROOT)
     real_stdout = sys.stdout
     real_stderr = sys.stderr
-    print(f"macro data refresh started: {_timestamp()}", file=real_stdout)
-
-    if task_providers is None:
-        tasks = _planned_tasks(
-            args,
-            benchmark_main,
-            rates_main,
-            consumer_main,
-            m2_main,
-            building_permits_main,
-            ism_reports_main,
-            gdp_main,
-            macro_indicators_main,
-            fomc_main,
-            fomc_document_main,
-            fomc_policy_tone_main,
-            fomc_minutes_main,
-            nfib_main,
-            nfib_regional_main,
-            main,
-            oil_main,
-            tracked_commodities_main,
-            lumber_main,
-            shfe_copper_main,
-            dce_iron_ore_sina_main,
-            economic_confirmation_main,
-            openai_config,
-            credit_main,
-            artifact_store,
-        )
-        results = []
-        with progress_factory(
-            total=len(tasks),
-            disable=not real_stderr.isatty(),
-            file=real_stderr,
-        ) as progress:
-            for task in tasks:
-                progress.set_description_str(task["name"])
-                result = _run_task(task)
-                _report_result(result, verbose=args.verbose, progress=progress)
-                result["stdout"] = ""
-                result["stderr"] = ""
-                results.append(result)
-                progress.set_postfix(_result_counts(results), refresh=False)
-                progress.update(1)
-                if result["status"] == "failed" and args.stop_on_error:
-                    break
-        counts = _result_counts(results)
-        print(
-            "macro data refresh completed: "
-            f"ok={counts['ok']} skipped={counts['skipped']} failed={counts['failed']}",
-            file=real_stdout,
-        )
-        return 1 if counts["failed"] else 0
+    print(f"macro data refresh started: {_timestamp()}", file=real_stdout, flush=True)
 
     store = artifact_store if artifact_store is not None else ArtifactStore()
+    values = {
+        "benchmark_main": benchmark_main,
+        "rates_main": rates_main,
+        "credit_main": credit_main,
+        "consumer_main": consumer_main,
+        "m2_main": m2_main,
+        "building_permits_main": building_permits_main,
+        "ism_reports_main": ism_reports_main,
+        "gdp_main": gdp_main,
+        "macro_indicators_main": macro_indicators_main,
+        "fomc_main": fomc_main,
+        "fomc_document_main": fomc_document_main,
+        "fomc_policy_tone_main": fomc_policy_tone_main,
+        "fomc_minutes_main": fomc_minutes_main,
+        "nfib_main": nfib_main,
+        "nfib_regional_main": nfib_regional_main,
+        "main": main,
+        "oil_main": oil_main,
+        "tracked_commodities_main": tracked_commodities_main,
+        "lumber_main": lumber_main,
+        "shfe_copper_main": shfe_copper_main,
+        "dce_iron_ore_sina_main": dce_iron_ore_sina_main,
+        "economic_confirmation_main": economic_confirmation_main,
+    }
+    providers = _build_task_providers(
+        values,
+        artifact_store=store,
+        provider_overrides=task_providers,
+        openai_config=openai_config,
+        fomc_calendar_path=args.fomc_calendar_path,
+        verbose=args.verbose,
+        use_runtime_defaults=use_runtime_defaults,
+    )
     tasks = build_refresh_tasks(
         args,
-        task_providers,
+        providers,
         openai_config=openai_config,
         artifact_store=store,
     )
@@ -663,7 +729,7 @@ def run(
         except KeyboardInterrupt:
             cancel_event.set()
             reporter.report_final(reporter.results)
-            print("macro data refresh interrupted", file=real_stderr)
+            print("macro data refresh interrupted", file=real_stderr, flush=True)
             return 130
         reporter.report_final(results)
     counts = _result_counts_with_blocked(results)
@@ -672,6 +738,7 @@ def run(
         f"ok={counts['ok']} skipped={counts['skipped']} "
         f"failed={counts['failed']} blocked={counts['blocked']}",
         file=real_stdout,
+        flush=True,
     )
     return 1 if counts["failed"] or counts["blocked"] else 0
 
@@ -679,54 +746,7 @@ def run(
 def main(argv=None):
     return run(
         argv,
-        task_providers=_build_task_providers(
-            {
-                "benchmark_main": refresh_benchmark_market_data.main,
-                "rates_main": import_us_rates_liquidity.main,
-                "credit_main": import_us_corporate_credit.main,
-                "consumer_main": import_consumer_sentiment.main,
-                "m2_main": import_m2_money_supply.main,
-                "building_permits_main": import_us_building_permits.main,
-                "ism_reports_main": fetch_ism_reports.main,
-                "gdp_main": import_gdp_market_relationships.main,
-                "macro_indicators_main": import_us_macro_indicators.main,
-                "fomc_main": import_fomc_calendar.main,
-                "fomc_document_main": fetch_fomc_documents.main,
-                "fomc_policy_tone_main": generate_fomc_policy_tone.main,
-                "fomc_minutes_main": generate_fomc_minutes_structure.main,
-                "nfib_main": import_nfib_sbet.main,
-                "nfib_regional_main": import_nfib_sbet_regional.main,
-                "main": import_cyclical_commodities.main,
-                "oil_main": import_oil.main,
-                "tracked_commodities_main": import_tracked_commodities.main,
-                "lumber_main": import_lumber.main,
-                "shfe_copper_main": import_shfe_copper.main,
-                "dce_iron_ore_sina_main": import_dce_iron_ore_sina.main,
-                "economic_confirmation_main": import_economic_confirmation.main,
-            }
-        ),
-        benchmark_main=refresh_benchmark_market_data.main,
-        rates_main=import_us_rates_liquidity.main,
-        credit_main=import_us_corporate_credit.main,
-        consumer_main=import_consumer_sentiment.main,
-        m2_main=import_m2_money_supply.main,
-        building_permits_main=import_us_building_permits.main,
-        ism_reports_main=fetch_ism_reports.main,
-        gdp_main=import_gdp_market_relationships.main,
-        macro_indicators_main=import_us_macro_indicators.main,
-        fomc_main=import_fomc_calendar.main,
-        fomc_document_main=fetch_fomc_documents.main,
-        fomc_policy_tone_main=generate_fomc_policy_tone.main,
-        fomc_minutes_main=generate_fomc_minutes_structure.main,
-        nfib_main=import_nfib_sbet.main,
-        nfib_regional_main=import_nfib_sbet_regional.main,
-        main=import_cyclical_commodities.main,
-        oil_main=import_oil.main,
-        tracked_commodities_main=import_tracked_commodities.main,
-        lumber_main=import_lumber.main,
-        shfe_copper_main=import_shfe_copper.main,
-        dce_iron_ore_sina_main=import_dce_iron_ore_sina.main,
-        economic_confirmation_main=import_economic_confirmation.main,
+        use_runtime_defaults=True,
     )
 
 

@@ -14,8 +14,11 @@ def build_refresh_tasks(args, providers, *, openai_config=None, artifact_store):
     tasks = []
     plan_index = 0
 
+    def stage_provider(key, stage):
+        return providers.get(f"{key}_{stage}") or providers.get(key)
+
     for fetch_key, import_key, task_prefix, import_flag in _FRED_MACRO_SPECS:
-        provider = providers.get(fetch_key)
+        provider = stage_provider(fetch_key, "fetch")
         skip_key = "cyclical_commodities" if fetch_key == "cyclical_fred_fetch" else fetch_key
         if provider is None or getattr(args, f"skip_{skip_key}", False):
             continue
@@ -33,7 +36,7 @@ def build_refresh_tasks(args, providers, *, openai_config=None, artifact_store):
         plan_index += 1
 
     for fetch_key, import_key, task_prefix, import_flag in _FRED_MACRO_SPECS:
-        provider = providers.get(import_key)
+        provider = stage_provider(import_key, "import")
         skip_key = "cyclical_commodities" if fetch_key == "cyclical_fred_fetch" else fetch_key
         if provider is None or getattr(args, f"skip_{skip_key}", False):
             continue
@@ -52,15 +55,16 @@ def build_refresh_tasks(args, providers, *, openai_config=None, artifact_store):
         )
         plan_index += 1
 
-    credit_provider = providers.get("credit")
-    if credit_provider is not None:
+    credit_fetch_provider = stage_provider("credit", "fetch")
+    credit_import_provider = stage_provider("credit", "import")
+    if credit_fetch_provider is not None and credit_import_provider is not None:
         tasks.extend(
             [
                 make_task(
                     "credit_fred_fetch",
                     "credit",
                     "fetch",
-                    credit_provider,
+                    credit_fetch_provider,
                     ["--fetch-fred-csv"],
                     resources=["fred"],
                     plan_index=plan_index,
@@ -69,7 +73,7 @@ def build_refresh_tasks(args, providers, *, openai_config=None, artifact_store):
                     "credit_fred_import",
                     "credit",
                     "persist",
-                    credit_provider,
+                    credit_import_provider,
                     ["--fred-csv-merge"],
                     dependencies=["credit_fred_fetch"],
                     resources=["sqlite_writer"],
@@ -77,6 +81,7 @@ def build_refresh_tasks(args, providers, *, openai_config=None, artifact_store):
                 ),
             ]
         )
+        plan_index += 2
 
     def add_pair(lane, fetch_name, import_name, fetch_provider, import_provider, *, skip=False):
         nonlocal plan_index

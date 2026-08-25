@@ -129,6 +129,29 @@ def test_fred_skip_flags_remove_only_their_fetch_import_pairs():
     assert len(all_tasks) == 10
 
 
+def test_credit_stage_provider_pair_is_registered_as_its_own_lane():
+    tasks = build_refresh_tasks(
+        fred_registry_args(
+            skip_rates=True,
+            skip_m2=True,
+            skip_macro_indicators=True,
+            skip_gdp=True,
+        ),
+        {
+            "credit_fetch": lambda argv: 0,
+            "credit_import": lambda argv: 0,
+        },
+        openai_config={"api_key": None},
+        artifact_store=ArtifactStore(),
+    )
+
+    assert [task["name"] for task in tasks] == [
+        "credit_fred_fetch",
+        "credit_fred_import",
+    ]
+    assert tasks[1]["dependencies"] == ["credit_fred_fetch"]
+
+
 def test_yahoo_and_ism_stage_resources_and_missing_key_skips_enrichment():
     providers = fred_provider_stubs()
     providers.update(
