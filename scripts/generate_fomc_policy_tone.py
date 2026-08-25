@@ -358,14 +358,18 @@ async def async_main(argv=None):
     if not pending:
         print(_summary(0, classified, 0))
         return 0
-    llm_bundle = llm.build_async_client_bundle(
-        args,
-        root=ROOT,
-        model_specs=FOMC_TONE_MODEL_SPECS,
-        max_retries=0,
-        timeout=120,
-        error_context="FOMC tone extraction",
-    )
+    try:
+        llm_bundle = llm.build_async_client_bundle(
+            args,
+            root=ROOT,
+            model_specs=FOMC_TONE_MODEL_SPECS,
+            max_retries=0,
+            timeout=120,
+            error_context="FOMC tone extraction",
+        )
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     client = llm_bundle["client"]
     models = llm_bundle["models"]
     generated = 0
