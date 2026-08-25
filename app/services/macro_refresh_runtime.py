@@ -444,9 +444,10 @@ def _ism_providers(artifacts, openai_config):
 
         def persist(argv, survey_type=survey_type, key=key):
             prepared = artifacts.get(key)
-            macro_refresh_ism.persist_ism_reports(
+            results = macro_refresh_ism.persist_ism_reports(
                 us_rates_liquidity.DEFAULT_DB_PATH, prepared
             )
+            _raise_for_failed_outcomes(results, f"ism {survey_type}")
             return 0
 
         def enrich(argv, survey_type=survey_type, key=key):
@@ -460,24 +461,24 @@ def _ism_providers(artifacts, openai_config):
             if snapshot is None:
                 artifacts.put(f"{key}.enrichment", None)
                 return 0
-            artifacts.put(
-                f"{key}.enrichment",
-                macro_refresh_ism.prepare_ism_enrichment(
-                    snapshot,
-                    client=_build_ism_client(openai_config),
-                    model=openai_config.get("model"),
-                    survey_type=survey_type,
-                ),
+            staged = macro_refresh_ism.prepare_ism_enrichment(
+                snapshot,
+                client=_build_ism_client(openai_config),
+                model=openai_config.get("model"),
+                survey_type=survey_type,
             )
+            artifacts.put(f"{key}.enrichment", staged)
+            _raise_for_failed_outcomes(staged, f"ism {survey_type}")
             return 0
 
         def enrich_import(argv, key=key):
             staged = artifacts.get(f"{key}.enrichment")
             if staged is None:
                 return 0
-            macro_refresh_ism.persist_ism_enrichment(
+            result = macro_refresh_ism.persist_ism_enrichment(
                 us_rates_liquidity.DEFAULT_DB_PATH, staged
             )
+            _raise_for_failed_outcomes(result, f"ism {key.rsplit('.', 1)[-1]}")
             return 0
 
         providers.update(
@@ -497,6 +498,46 @@ def _build_ism_client(config):
     return extract_ism_report_ai.build_client(config)
 
 
+def _raise_for_failed_outcomes(value, prefix):
+    outcomes = value if isinstance(value, list) else [value]
+    failed = next(
+        (
+            outcome
+            for outcome in outcomes
+            if isinstance(outcome, dict) and outcome.get("status") == "failed"
+        ),
+        None,
+    )
+    if failed is None:
+        return
+    identity = " ".join(
+        str(failed[key])
+        for key in ("event_id", "report_id", "report_month")
+        if failed.get(key)
+    )
+    error = failed.get("error") or "staged refresh outcome failed"
+    if identity:
+        raise ValueError(f"{prefix} {identity}: {error}")
+    raise ValueError(f"{prefix}: {error}")
+
+
+def _raise_for_failed_document_fetches(outcomes):
+    failure = next(
+        (
+            item
+            for outcome in outcomes
+            for item in outcome.get("failures", [])
+        ),
+        None,
+    )
+    if failure is None:
+        return
+    event_id = failure.get("event_id") or "unknown event"
+    document_type = failure.get("document_type") or "document"
+    reason = failure.get("reason") or "FOMC document fetch failed"
+    raise ValueError(f"fomc {event_id} {document_type}: {reason}")
+
+
 def _fomc_providers(artifacts, openai_config, calendar_path):
     def calendar_import(argv):
         return int(import_fomc_calendar.main(
@@ -512,18 +553,22 @@ def _fomc_providers(artifacts, openai_config, calendar_path):
             events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
         finally:
             con.close()
-        for document_type in ("statement", "minutes"):
+        outcomes = [
             macro_refresh_official.fetch_fomc_documents(
                 artifacts, events, document_type
             )
+            for document_type in ("statement", "minutes")
+        ]
+        _raise_for_failed_document_fetches(outcomes)
         return 0
 
     def documents_import(argv):
         for document_type in ("statement", "minutes"):
             artifacts.get(f"fomc.documents.{document_type}")
-            macro_refresh_official.persist_fomc_documents(
+            result = macro_refresh_official.persist_fomc_documents(
                 us_rates_liquidity.DEFAULT_DB_PATH, artifacts, document_type
             )
+            _raise_for_failed_outcomes(result, "fomc documents")
         return 0
 
     def prepare_policy_tone(argv):
@@ -583,25 +628,25 @@ def _prepare_fomc_enrichment(artifacts, key, config, prepare):
     finally:
         con.close()
     model = config.get("model")
-    artifacts.put(
-        key,
-        [
-            prepare(
-                us_rates_liquidity.DEFAULT_DB_PATH,
-                event["event_id"],
-                client,
-                model,
-                model,
-            )
-            for event in events
-        ],
-    )
+    prepared = [
+        prepare(
+            us_rates_liquidity.DEFAULT_DB_PATH,
+            event["event_id"],
+            client,
+            model,
+            model,
+        )
+        for event in events
+    ]
+    artifacts.put(key, prepared)
+    _raise_for_failed_outcomes(prepared, "fomc")
     return 0
 
 
 def _persist_fomc_enrichment(artifacts, key, persist):
     for prepared in artifacts.get(key):
-        persist(us_rates_liquidity.DEFAULT_DB_PATH, prepared)
+        result = persist(us_rates_liquidity.DEFAULT_DB_PATH, prepared)
+        _raise_for_failed_outcomes(result, "fomc")
     return 0
 
 

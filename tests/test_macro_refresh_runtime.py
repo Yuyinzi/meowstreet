@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from app.services import macro_refresh_runtime
 from app.services.macro_refresh_registry import build_refresh_tasks
 from app.services.macro_refresh_resources import ArtifactStore
@@ -194,3 +196,124 @@ def test_runtime_provider_registry_exposes_callable_adapters_for_every_node():
 
     assert tasks
     assert all(callable(task["func"]) and isinstance(task["argv"], list) for task in tasks)
+
+
+def test_runtime_ism_persist_fails_for_failed_report_row(monkeypatch):
+    artifacts = ArtifactStore()
+    artifacts.put("ism.manufacturing", [{"status": "failed"}])
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_ism,
+        "persist_ism_reports",
+        lambda db_path, prepared: [
+            {
+                "status": "failed",
+                "report_id": "mfg-2026-08",
+                "report_month": "2026-08",
+                "error": "report identity mismatch",
+            }
+        ],
+    )
+    providers = macro_refresh_runtime.build_runtime_providers(artifacts)
+
+    with pytest.raises(
+        ValueError,
+        match="ism manufacturing mfg-2026-08 2026-08: report identity mismatch",
+    ):
+        providers["ism_manufacturing_import"]([])
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "prepare_name", "artifact_key", "error"),
+    [
+        (
+            "fomc_policy_tone_extract",
+            "prepare_fomc_policy_tone",
+            "fomc.policy_tone",
+            "FOMC statement document is unavailable",
+        ),
+        (
+            "fomc_minutes_extract",
+            "prepare_fomc_minutes_structure",
+            "fomc.minutes",
+            "approved FOMC policy tone is unavailable",
+        ),
+    ],
+)
+def test_runtime_fomc_prepare_fails_with_event_identity(
+    monkeypatch, provider_name, prepare_name, artifact_key, error
+):
+    artifacts = ArtifactStore()
+
+    class Connection:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        macro_refresh_runtime.llm,
+        "build_async_client",
+        lambda config, **kwargs: object(),
+    )
+    monkeypatch.setattr(macro_refresh_runtime.us_rates_liquidity, "connect", Connection)
+    monkeypatch.setattr(
+        macro_refresh_runtime.us_rates_liquidity,
+        "load_macro_events",
+        lambda con, event_type: [{"event_id": "meeting-1"}],
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_official,
+        prepare_name,
+        lambda *args: {"status": "failed", "event_id": "meeting-1", "error": error},
+    )
+    providers = macro_refresh_runtime.build_runtime_providers(
+        artifacts,
+        openai_config={"api_key": "configured", "model": "test-model"},
+    )
+
+    with pytest.raises(ValueError, match=f"fomc meeting-1: {error}"):
+        providers[provider_name]([])
+
+    assert artifacts.get(artifact_key) == [
+        {"status": "failed", "event_id": "meeting-1", "error": error}
+    ]
+
+
+def test_runtime_fomc_persist_fails_for_failed_staged_result(monkeypatch):
+    artifacts = ArtifactStore()
+    artifacts.put(
+        "fomc.policy_tone",
+        [
+            {
+                "status": "failed",
+                "event_id": "meeting-1",
+                "error": "FOMC statement document is unavailable",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_official,
+        "persist_fomc_policy_tone",
+        lambda db_path, prepared: prepared,
+    )
+    providers = macro_refresh_runtime.build_runtime_providers(artifacts)
+
+    with pytest.raises(
+        ValueError,
+        match="fomc meeting-1: FOMC statement document is unavailable",
+    ):
+        providers["fomc_policy_tone_import"]([])
+
+
+def test_runtime_staged_skipped_result_is_success(monkeypatch):
+    artifacts = ArtifactStore()
+    artifacts.put(
+        "fomc.policy_tone",
+        [{"status": "skipped", "event_id": "meeting-1", "error": "already current"}],
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_official,
+        "persist_fomc_policy_tone",
+        lambda db_path, prepared: prepared,
+    )
+    providers = macro_refresh_runtime.build_runtime_providers(artifacts)
+
+    assert providers["fomc_policy_tone_import"]([]) == 0
