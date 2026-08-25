@@ -3,8 +3,9 @@ from types import SimpleNamespace
 import pytest
 
 from app.services import macro_refresh_runtime
+from app.services.macro_refresh_executor import execute_tasks
 from app.services.macro_refresh_registry import build_refresh_tasks
-from app.services.macro_refresh_resources import ArtifactStore
+from app.services.macro_refresh_resources import ArtifactStore, SQLiteWriterGate
 
 
 def test_runtime_oil_fetch_uses_configured_eia_key(monkeypatch):
@@ -23,6 +24,114 @@ def test_runtime_oil_fetch_uses_configured_eia_key(monkeypatch):
 
     assert providers["oil_fetch"]([]) == 0
     assert calls == ["configured-eia-key"]
+
+
+def test_runtime_yahoo_fetch_stages_rows_and_defers_saves_to_writer_gated_import(
+    monkeypatch,
+):
+    artifacts = ArtifactStore()
+    requests = []
+    writer_states = []
+
+    class Connection:
+        def close(self):
+            return None
+
+    class TrackingLock:
+        def __init__(self):
+            self.acquired = False
+
+        def acquire(self, timeout):
+            self.acquired = True
+            return True
+
+        def release(self):
+            self.acquired = False
+
+    chart = {
+        "chart": {
+            "result": [
+                {
+                    "timestamp": [1786752000],
+                    "indicators": {
+                        "adjclose": [{"adjclose": [10.5]}],
+                        "quote": [
+                            {
+                                "open": [10.0],
+                                "high": [11.0],
+                                "low": [9.0],
+                                "close": [10.5],
+                                "volume": [1],
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+    }
+    lock = TrackingLock()
+    monkeypatch.setattr(macro_refresh_runtime.benchmark_market_data, "connect", lambda: Connection())
+    monkeypatch.setattr(
+        macro_refresh_runtime.benchmark_market_data,
+        "latest_price_date",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.market_data_tool,
+        "fetch_market_data",
+        lambda *_args, **_kwargs: pytest.fail("fetch stage must not save market rows"),
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.market_data_tool,
+        "fetch_yahoo_chart_json_for_dates",
+        lambda symbol, **_kwargs: requests.append(symbol) or chart,
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_yahoo,
+        "persist_benchmarks",
+        lambda *_args, **_kwargs: writer_states.append(lock.acquired) or [],
+    )
+    providers = {
+        key: value
+        for key, value in macro_refresh_runtime.build_runtime_providers(
+            artifacts
+        ).items()
+        if key in {"benchmarks_fetch", "benchmarks_import"}
+    }
+    args = SimpleNamespace(
+        skip_yahoo=False,
+        skip_lumber=True,
+        skip_rates=True,
+        skip_consumer_sentiment=True,
+        skip_m2=True,
+        skip_macro_indicators=True,
+        skip_building_permits=True,
+        skip_ism=True,
+        skip_gdp=True,
+        skip_fomc=True,
+        skip_nfib_sbo=True,
+        skip_nfib_sbo_regional=True,
+        skip_tracked_commodities=True,
+        skip_cyclical_commodities=True,
+        skip_oil=True,
+        skip_shfe_copper=True,
+        skip_dce_iron_ore_sina=True,
+        skip_economic_confirmation=True,
+    )
+
+    results = execute_tasks(
+        build_refresh_tasks(
+            args,
+            providers,
+            openai_config={"api_key": None},
+            artifact_store=artifacts,
+        ),
+        writer_gate=SQLiteWriterGate(lock=lock),
+    )
+
+    assert [result["status"] for result in results] == ["ok", "ok"]
+    assert requests == ["^GSPC", "^NDX", "^IXIC", "^DJI"]
+    assert writer_states == [True]
 
 
 def test_runtime_ism_enrichment_builds_client_and_stages_result(monkeypatch):
@@ -44,6 +153,11 @@ def test_runtime_ism_enrichment_builds_client_and_stages_result(monkeypatch):
         "prepare_ism_enrichment",
         lambda snapshot, **kwargs: calls.append((snapshot, kwargs)) or {"status": "ok"},
     )
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_ism,
+        "load_ism_enrichment_checkpoints",
+        lambda *_args: [],
+    )
 
     providers = macro_refresh_runtime.build_runtime_providers(
         artifacts,
@@ -55,7 +169,12 @@ def test_runtime_ism_enrichment_builds_client_and_stages_result(monkeypatch):
     assert calls == [
         (
             {"report_id": "mfg-1"},
-            {"client": client, "model": "test-model", "survey_type": "manufacturing"},
+            {
+                "client": client,
+                "model": "test-model",
+                "survey_type": "manufacturing",
+                "checkpoints": [],
+            },
         )
     ]
 
@@ -65,28 +184,31 @@ def test_runtime_fomc_enrichment_builds_client_and_stages_rows(monkeypatch):
     client = object()
     calls = []
 
-    class Connection:
-        def close(self):
-            return None
-
+    monkeypatch.setattr(
+        macro_refresh_runtime,
+        "_pending_fomc_enrichment_events",
+        lambda _key: [{"event_id": "meeting-1"}],
+    )
     monkeypatch.setattr(
         macro_refresh_runtime.llm,
-        "build_async_client",
-        lambda config, **kwargs: client,
+        "build_async_client_bundle",
+        lambda *args, **kwargs: {
+            "client": client,
+            "models": {"extractor_model": "test-model", "reviewer_model": "test-model"},
+        },
     )
-    monkeypatch.setattr(macro_refresh_runtime.us_rates_liquidity, "connect", Connection)
-    monkeypatch.setattr(
-        macro_refresh_runtime.us_rates_liquidity,
-        "load_macro_events",
-        lambda con, event_type: [{"event_id": "meeting-1"}],
-    )
+
+    async def prepare_batch(_db_path, event_ids, prepared_client, extractor_model, reviewer_model):
+        return [
+            calls.append((event_id, prepared_client, extractor_model, reviewer_model))
+            or {"status": "ok", "event_id": event_id}
+            for event_id in event_ids
+        ]
+
     monkeypatch.setattr(
         macro_refresh_runtime.macro_refresh_official,
-        "prepare_fomc_policy_tone",
-        lambda db_path, event_id, prepared_client, extractor_model, reviewer_model: calls.append(
-            (event_id, prepared_client, extractor_model, reviewer_model)
-        )
-        or {"status": "ok", "event_id": event_id},
+        "prepare_fomc_policy_tone_batch",
+        prepare_batch,
     )
 
     providers = macro_refresh_runtime.build_runtime_providers(
@@ -99,6 +221,97 @@ def test_runtime_fomc_enrichment_builds_client_and_stages_rows(monkeypatch):
         {"status": "ok", "event_id": "meeting-1"}
     ]
     assert calls == [("meeting-1", client, "test-model", "test-model")]
+
+
+def test_runtime_fomc_stages_only_latest_missing_documents_and_pending_hashes(
+    monkeypatch,
+):
+    from scripts import fetch_fomc_documents
+    from scripts import generate_fomc_policy_tone
+
+    artifacts = ArtifactStore()
+    history = {"event_id": "history", "start_date": "2026-01-01"}
+    approved = {"event_id": "approved", "start_date": "2026-06-01"}
+    new = {"event_id": "new", "start_date": "2026-08-01"}
+    future = {"event_id": "future", "start_date": "2026-12-01"}
+    events = [history, approved, new, future]
+    network_events = []
+    model_events = []
+    bundles = []
+    classified_events = []
+
+    class Connection:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(macro_refresh_runtime.us_rates_liquidity, "connect", Connection)
+    monkeypatch.setattr(
+        macro_refresh_runtime.us_rates_liquidity,
+        "load_macro_events",
+        lambda *_args: events,
+    )
+    monkeypatch.setattr(
+        fetch_fomc_documents,
+        "_document_events_to_fetch",
+        lambda _con, _document_type, _today, _backfill: [new],
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_official,
+        "fetch_fomc_documents",
+        lambda store, selected, document_type: network_events.extend(
+            (document_type, event["event_id"]) for event in selected
+        )
+        or store.put(f"fomc.documents.{document_type}", [])
+        or {"failures": []},
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone,
+        "classify_events",
+        lambda _con, selected, _force: classified_events.append(
+            [event["event_id"] for event in selected]
+        )
+        or {
+            "pending": [(new, {"source_hash": "new-hash"})],
+            "reused": [(approved, {"source_hash": "approved-hash"})],
+            "unavailable": [(history, {"reason": "no document"}), (future, {"reason": "future"})],
+        },
+    )
+    client = object()
+    monkeypatch.setattr(
+        macro_refresh_runtime.llm,
+        "build_async_client_bundle",
+        lambda *args, **kwargs: bundles.append(kwargs["model_specs"]) or {
+            "client": client,
+            "models": {"extractor_model": "extractor", "reviewer_model": "reviewer"},
+        },
+    )
+    async def prepare_batch(_db_path, event_ids, prepared_client, *_models):
+        return [
+            model_events.append((event_id, prepared_client))
+            or {"status": "ok", "event_id": event_id}
+            for event_id in event_ids
+        ]
+
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_official,
+        "prepare_fomc_policy_tone_batch",
+        prepare_batch,
+    )
+
+    providers = macro_refresh_runtime.build_runtime_providers(
+        artifacts,
+        openai_config={"api_key": "configured", "model": "fallback-model"},
+    )
+
+    assert providers["fomc_documents_fetch"]([]) == 0
+    assert providers["fomc_policy_tone_extract"]([]) == 0
+    assert network_events == [
+        ("statement", "new"),
+        ("minutes", "new"),
+    ]
+    assert model_events == [("new", client)]
+    assert len(bundles) == 1
+    assert classified_events == [["history", "approved", "new"]]
 
 
 def test_legacy_combined_provider_runs_only_in_persist_stage():
@@ -223,46 +436,47 @@ def test_runtime_ism_persist_fails_for_failed_report_row(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("provider_name", "prepare_name", "artifact_key", "error"),
+    ("provider_name", "batch_name", "artifact_key", "error"),
     [
         (
             "fomc_policy_tone_extract",
-            "prepare_fomc_policy_tone",
+            "prepare_fomc_policy_tone_batch",
             "fomc.policy_tone",
             "FOMC statement document is unavailable",
         ),
         (
             "fomc_minutes_extract",
-            "prepare_fomc_minutes_structure",
+            "prepare_fomc_minutes_structure_batch",
             "fomc.minutes",
             "approved FOMC policy tone is unavailable",
         ),
     ],
 )
 def test_runtime_fomc_prepare_fails_with_event_identity(
-    monkeypatch, provider_name, prepare_name, artifact_key, error
+    monkeypatch, provider_name, batch_name, artifact_key, error
 ):
     artifacts = ArtifactStore()
-
-    class Connection:
-        def close(self):
-            return None
-
+    monkeypatch.setattr(
+        macro_refresh_runtime,
+        "_pending_fomc_enrichment_events",
+        lambda _key: [{"event_id": "meeting-1"}],
+    )
     monkeypatch.setattr(
         macro_refresh_runtime.llm,
-        "build_async_client",
-        lambda config, **kwargs: object(),
+        "build_async_client_bundle",
+        lambda *args, **kwargs: {
+            "client": object(),
+            "models": {"extractor_model": "test-model", "reviewer_model": "test-model"},
+        },
     )
-    monkeypatch.setattr(macro_refresh_runtime.us_rates_liquidity, "connect", Connection)
-    monkeypatch.setattr(
-        macro_refresh_runtime.us_rates_liquidity,
-        "load_macro_events",
-        lambda con, event_type: [{"event_id": "meeting-1"}],
-    )
+
+    async def fail_batch(*_args):
+        return [{"status": "failed", "event_id": "meeting-1", "error": error}]
+
     monkeypatch.setattr(
         macro_refresh_runtime.macro_refresh_official,
-        prepare_name,
-        lambda *args: {"status": "failed", "event_id": "meeting-1", "error": error},
+        batch_name,
+        fail_batch,
     )
     providers = macro_refresh_runtime.build_runtime_providers(
         artifacts,

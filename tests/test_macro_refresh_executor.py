@@ -9,6 +9,8 @@ from app.services.macro_refresh_executor import execute_tasks
 from app.services.macro_refresh_plan import make_task
 from app.services.macro_refresh_output import install_output_routers
 from app.services.macro_refresh_resources import SQLiteWriterGate
+from app.services.macro_refresh_resources import FredRateLimiter
+from app.services.macro_refresh_resources import RefreshInterruptedError
 
 
 def _task(name, lane, func, *, stage="fetch", argv=(), dependencies=(), resources=(), skip_reason=None, plan_index=0, accepted=("ok",)):
@@ -462,21 +464,35 @@ def test_system_exit_is_failed_task_with_terminal_event():
     assert finished[0]["result"]["status"] == "failed"
 
 
-def test_worker_keyboard_interrupt_cancels_other_lanes_and_propagates():
+def test_worker_keyboard_interrupt_returns_one_terminal_interrupted_result_per_task():
     cancelled = Event()
 
     def interrupt(argv):
         raise KeyboardInterrupt
 
-    def wait_for_interrupt(argv):
-        assert cancelled.wait(1)
-        return 0
+    results = execute_tasks(
+        [
+            _task("interrupt", "interrupt_lane", interrupt, plan_index=0),
+            _task(
+                "wait",
+                "wait_lane",
+                lambda argv: pytest.fail("interrupted dependency must not run"),
+                dependencies=["interrupt"],
+                plan_index=1,
+            ),
+        ],
+        cancel_event=cancelled,
+    )
 
-    with pytest.raises(KeyboardInterrupt):
-        execute_tasks(
-            [
-                _task("interrupt", "interrupt_lane", interrupt, plan_index=0),
-                _task("wait", "wait_lane", wait_for_interrupt, plan_index=1),
-            ],
-            cancel_event=cancelled,
-        )
+    assert [result["name"] for result in results] == ["interrupt", "wait"]
+    assert [result["status"] for result in results] == ["blocked", "blocked"]
+    assert all(result["error"] == "refresh interrupted" for result in results)
+
+
+def test_cancelled_fred_limiter_rejects_request_before_it_starts():
+    cancelled = Event()
+    limiter = FredRateLimiter(min_interval_seconds=0.6, cancel_event=cancelled)
+    cancelled.set()
+
+    with pytest.raises(RefreshInterruptedError, match="refresh interrupted"):
+        limiter.wait()

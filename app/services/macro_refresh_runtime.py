@@ -1,6 +1,8 @@
+import asyncio
 import os
 from pathlib import Path
 from threading import Lock
+from types import SimpleNamespace
 
 from app import llm
 from app.services import macro_refresh_commodities
@@ -16,6 +18,9 @@ from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from app.tools import market_data as market_data_tool
 from scripts import import_economic_confirmation
+from scripts import fetch_fomc_documents
+from scripts import generate_fomc_minutes_structure
+from scripts import generate_fomc_policy_tone
 from scripts import import_fomc_calendar
 from scripts import import_gdp_market_relationships
 from scripts import import_m2_money_supply
@@ -355,7 +360,6 @@ def _yahoo_providers(artifacts):
             "us_djia",
         ]
         benchmark_con = benchmark_market_data.connect()
-        market_con = market_data.connect()
         try:
             latest = {
                 benchmark_id: benchmark_market_data.latest_price_date(
@@ -365,16 +369,12 @@ def _yahoo_providers(artifacts):
             }
             prepared = macro_refresh_yahoo.prepare_benchmarks(
                 ids,
-                fetch_market_data=lambda symbol, **kwargs: market_data_tool.fetch_market_data(
-                    symbol, db_path=market_data.DEFAULT_DB_PATH, **kwargs
-                ),
-                load_market_rows=lambda symbol, interval, start_date=None: market_data.load_price_rows(
-                    market_con, symbol, interval, start_date=start_date
-                ),
+                fetch_market_data=None,
+                load_market_rows=None,
+                fetch_yahoo_chart_json=market_data_tool.fetch_yahoo_chart_json_for_dates,
                 latest_dates=latest,
             )
         finally:
-            market_con.close()
             benchmark_con.close()
         artifacts.put("yahoo.benchmarks", prepared)
         return 0
@@ -461,14 +461,19 @@ def _ism_providers(artifacts, openai_config):
             if snapshot is None:
                 artifacts.put(f"{key}.enrichment", None)
                 return 0
+            checkpoints = macro_refresh_ism.load_ism_enrichment_checkpoints(
+                us_rates_liquidity.DEFAULT_DB_PATH,
+                snapshot,
+                survey_type,
+            )
             staged = macro_refresh_ism.prepare_ism_enrichment(
                 snapshot,
                 client=_build_ism_client(openai_config),
                 model=openai_config.get("model"),
                 survey_type=survey_type,
+                checkpoints=checkpoints,
             )
             artifacts.put(f"{key}.enrichment", staged)
-            _raise_for_failed_outcomes(staged, f"ism {survey_type}")
             return 0
 
         def enrich_import(argv, key=key):
@@ -550,12 +555,20 @@ def _fomc_providers(artifacts, openai_config, calendar_path):
     def documents_fetch(argv):
         con = us_rates_liquidity.connect()
         try:
-            events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
+            events_by_type = {
+                document_type: fetch_fomc_documents._document_events_to_fetch(
+                    con,
+                    document_type,
+                    fetch_fomc_documents._normalized_today(None),
+                    False,
+                )
+                for document_type in ("statement", "minutes")
+            }
         finally:
             con.close()
         outcomes = [
             macro_refresh_official.fetch_fomc_documents(
-                artifacts, events, document_type
+                artifacts, events_by_type[document_type], document_type
             )
             for document_type in ("statement", "minutes")
         ]
@@ -576,7 +589,6 @@ def _fomc_providers(artifacts, openai_config, calendar_path):
             artifacts,
             "fomc.policy_tone",
             openai_config,
-            macro_refresh_official.prepare_fomc_policy_tone,
         )
 
     def persist_policy_tone(argv):
@@ -591,7 +603,6 @@ def _fomc_providers(artifacts, openai_config, calendar_path):
             artifacts,
             "fomc.minutes",
             openai_config,
-            macro_refresh_official.prepare_fomc_minutes_structure,
         )
 
     def persist_minutes(argv):
@@ -612,35 +623,96 @@ def _fomc_providers(artifacts, openai_config, calendar_path):
     }
 
 
-def _prepare_fomc_enrichment(artifacts, key, config, prepare):
+def _prepare_fomc_enrichment(artifacts, key, config):
     if not config.get("api_key"):
         artifacts.put(key, [])
         return 0
-    client = llm.build_async_client(
-        config,
-        max_retries=0,
-        timeout=120,
-        error_context="FOMC refresh enrichment",
+    pending = _pending_fomc_enrichment_events(key)
+    if not pending:
+        artifacts.put(key, [])
+        return 0
+    model_specs = (
+        generate_fomc_policy_tone.FOMC_TONE_MODEL_SPECS
+        if key == "fomc.policy_tone"
+        else generate_fomc_minutes_structure.MINUTES_MODEL_SPECS
     )
-    con = us_rates_liquidity.connect()
-    try:
-        events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
-    finally:
-        con.close()
-    model = config.get("model")
-    prepared = [
-        prepare(
+    bundle = _fomc_model_bundle(
+        config,
+        model_specs,
+        "FOMC refresh enrichment",
+    )
+    batch_prepare = (
+        macro_refresh_official.prepare_fomc_policy_tone_batch
+        if key == "fomc.policy_tone"
+        else macro_refresh_official.prepare_fomc_minutes_structure_batch
+    )
+    prepared = asyncio.run(
+        batch_prepare(
             us_rates_liquidity.DEFAULT_DB_PATH,
-            event["event_id"],
-            client,
-            model,
-            model,
+            [event["event_id"] for event in pending],
+            bundle["client"],
+            bundle["models"]["extractor_model"],
+            bundle["models"]["reviewer_model"],
         )
-        for event in events
-    ]
+    )
     artifacts.put(key, prepared)
     _raise_for_failed_outcomes(prepared, "fomc")
     return 0
+
+
+def _pending_fomc_enrichment_events(key):
+    con = us_rates_liquidity.connect()
+    try:
+        events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
+        completed_events = [
+            event
+            for event in events
+            if fetch_fomc_documents._event_completion_date(event)
+            <= fetch_fomc_documents._normalized_today(None)
+        ]
+        if key == "fomc.policy_tone":
+            classified = generate_fomc_policy_tone.classify_events(
+                con, completed_events, False
+            )
+        else:
+            minutes_docs, statement_tones = (
+                generate_fomc_minutes_structure.load_event_maps(
+                    con, completed_events
+                )
+            )
+            classified = generate_fomc_minutes_structure.classify_events(
+                completed_events,
+                minutes_docs,
+                statement_tones,
+                lambda event_id, document_type, source_hash: (
+                    us_rates_liquidity.load_macro_event_tone_extraction(
+                        con,
+                        event_id,
+                        document_type,
+                        source_hash,
+                    )
+                ),
+                False,
+            )
+    finally:
+        con.close()
+    return [item[0] for item in classified["pending"]]
+
+
+def _fomc_model_bundle(config, model_specs, error_context):
+    args = SimpleNamespace(
+        openai_api_key=config.get("api_key"),
+        openai_base_url=config.get("base_url"),
+        extractor_model=config.get("extractor_model") or config.get("model"),
+        reviewer_model=config.get("reviewer_model") or config.get("model"),
+    )
+    return llm.build_async_client_bundle(
+        args,
+        model_specs=model_specs,
+        max_retries=0,
+        timeout=120,
+        error_context=error_context,
+    )
 
 
 def _persist_fomc_enrichment(artifacts, key, persist):

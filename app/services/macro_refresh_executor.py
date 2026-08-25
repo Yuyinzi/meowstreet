@@ -11,6 +11,7 @@ from app.services.macro_refresh_output import install_output_routers
 from app.services.macro_refresh_plan import group_tasks_by_lane
 from app.services.macro_refresh_plan import make_blocked_result
 from app.services.macro_refresh_plan import validate_tasks
+from app.services.macro_refresh_resources import RefreshInterruptedError
 
 
 def execute_tasks(
@@ -80,7 +81,13 @@ def execute_tasks(
                     )
                 except KeyboardInterrupt:
                     state.interrupt()
-                    raise
+                    _consume_events_until_complete(
+                        event_queue,
+                        expected_finished=len(planned),
+                        on_event=on_event,
+                        state=state,
+                        futures=futures,
+                    )
                 for future in futures:
                     future.result()
             return state.ordered_results()
@@ -137,6 +144,8 @@ class _ExecutionState:
 
     def mark_started(self, task):
         with self._condition:
+            if task["name"] in self._results:
+                return False
             self._started.add(task["name"])
             self._event_queue.put(
                 {
@@ -146,9 +155,12 @@ class _ExecutionState:
                     "task": task,
                 }
             )
+            return True
 
     def record(self, result, task):
         with self._condition:
+            if result["name"] in self._results:
+                return
             self._results[result["name"]] = result
             self._event_queue.put(
                 {
@@ -171,7 +183,25 @@ class _ExecutionState:
     def interrupt(self):
         self._cancel_event.set()
         with self._condition:
+            for task in self._ordered_tasks:
+                if task["name"] in self._results or task["name"] in self._started:
+                    continue
+                result = make_blocked_result(task, (), "refresh interrupted")
+                self._results[task["name"]] = result
+                self._event_queue.put(
+                    {
+                        "type": "task_finished",
+                        "name": task["name"],
+                        "lane": task["lane"],
+                        "task": task,
+                        "result": result,
+                    }
+                )
             self._condition.notify_all()
+
+    def result_for(self, name):
+        with self._condition:
+            return self._results.get(name)
 
     def compact(self, name):
         with self._condition:
@@ -258,21 +288,29 @@ def _run_one_task(
     stdout_router,
     stderr_router,
 ):
+    existing = state.result_for(task["name"])
+    if existing is not None:
+        return existing
     ready, dependency_names, blocked_reason = state.wait_for_dependencies(task)
     if not ready:
         result = make_blocked_result(task, dependency_names, blocked_reason)
         state.record(result, task)
         return result
 
-    state.mark_started(task)
-    result = _execute_task(
-        task,
-        request_coordinator=request_coordinator,
-        writer_gate=writer_gate,
-        writer_timeout=writer_timeout,
-        stdout_router=stdout_router,
-        stderr_router=stderr_router,
-    )
+    if not state.mark_started(task):
+        return state.result_for(task["name"])
+    try:
+        result = _execute_task(
+            task,
+            request_coordinator=request_coordinator,
+            writer_gate=writer_gate,
+            writer_timeout=writer_timeout,
+            stdout_router=stdout_router,
+            stderr_router=stderr_router,
+        )
+    except KeyboardInterrupt:
+        state.interrupt()
+        result = make_blocked_result(task, (), "refresh interrupted")
     state.record(result, task)
     return result
 
@@ -307,6 +345,10 @@ def _execute_task(
                 error = "" if status == "ok" else f"exit code {exit_code}"
     except KeyboardInterrupt:
         raise
+    except RefreshInterruptedError:
+        status = "blocked"
+        exit_code = 130
+        error = "refresh interrupted"
     except BaseException as exc:
         status = "failed"
         exit_code = 1
@@ -359,7 +401,6 @@ def _consume_events_until_complete(
                     exception = future.exception()
                     if isinstance(exception, KeyboardInterrupt):
                         state.interrupt()
-                        raise exception
             if all(future.done() for future in futures) and state.terminal_count() < expected_finished:
                 raise RuntimeError(
                     "macro refresh executor stopped before all tasks completed"
@@ -367,8 +408,6 @@ def _consume_events_until_complete(
             continue
         if on_event is not None:
             on_event(event)
-            if event["type"] == "task_finished":
-                state.compact(event["name"])
         if event["type"] == "task_finished":
             finished += 1
 

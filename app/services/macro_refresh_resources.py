@@ -4,8 +4,18 @@ import time
 from urllib.parse import urlparse
 
 
+class RefreshInterruptedError(RuntimeError):
+    pass
+
+
 class FredRateLimiter:
-    def __init__(self, min_interval_seconds=0.6, monotonic=None, sleep=None):
+    def __init__(
+        self,
+        min_interval_seconds=0.6,
+        monotonic=None,
+        sleep=None,
+        cancel_event=None,
+    ):
         if min_interval_seconds < 0:
             raise ValueError("fred limiter interval must not be negative")
         if monotonic is None:
@@ -15,17 +25,27 @@ class FredRateLimiter:
         self._min_interval_seconds = float(min_interval_seconds)
         self._monotonic = monotonic
         self._sleep = sleep
+        self._cancel_event = cancel_event
         self._lock = threading.Lock()
         self._last_start = None
 
     def wait(self):
         with self._lock:
+            self._raise_if_interrupted()
             now = self._monotonic()
             if self._last_start is not None:
                 delay = self._last_start + self._min_interval_seconds - now
                 if delay > 0:
-                    self._sleep(delay)
+                    if self._cancel_event is None:
+                        self._sleep(delay)
+                    elif self._cancel_event.wait(delay):
+                        raise RefreshInterruptedError("refresh interrupted")
+            self._raise_if_interrupted()
             self._last_start = self._monotonic()
+
+    def _raise_if_interrupted(self):
+        if self._cancel_event is not None and self._cancel_event.is_set():
+            raise RefreshInterruptedError("refresh interrupted")
 
 
 class RequestCoordinator:

@@ -95,6 +95,30 @@ def _validate_section(section_name, payload, source_text):
 
 
 async def extract_sections_without_db(prepared, client, model):
+    staged = await stage_sections_without_db(
+        prepared,
+        client,
+        model,
+        source_hash=_source_hash(prepared["source_text"]),
+        updated_at=_fetched_at_now(),
+    )
+    if staged["error"]:
+        raise ValueError(staged["error"])
+    return (
+        assemble_factual_extraction(staged["section_payloads"]),
+        staged["call_counts"],
+    )
+
+
+async def stage_sections_without_db(
+    prepared,
+    client,
+    model,
+    *,
+    source_hash,
+    updated_at,
+    checkpoints=None,
+):
     import json
 
     build_prompt = _make_prompt_builder(
@@ -104,34 +128,101 @@ async def extract_sections_without_db(prepared, client, model):
     )
     section_payloads = []
     call_counts = {}
+    staged_checkpoints = []
+    errors = []
+    existing_by_section = {
+        checkpoint["section_name"]: checkpoint
+        for checkpoint in checkpoints or []
+        if checkpoint.get("report_id") == prepared["report_id"]
+        and checkpoint.get("source_url") == prepared["source_url"]
+        and checkpoint.get("source_hash") == source_hash
+        and checkpoint.get("prompt_version")
+        == SECTION_PROMPT_VERSIONS.get(checkpoint.get("section_name"))
+    }
     for section_name in FACTUAL_SECTION_NAMES:
+        existing = existing_by_section.get(section_name)
+        if existing is not None:
+            checkpoint = dict(existing)
+            staged_checkpoints.append(checkpoint)
+            call_counts[section_name] = 0
+            if checkpoint["status"] != "ok":
+                errors.append(
+                    f"{section_name} ({checkpoint.get('error') or 'unknown error'})"
+                )
+                continue
+            try:
+                validated = _validate_section(
+                    section_name,
+                    checkpoint["payload_json"],
+                    prepared["source_text"],
+                )
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                checkpoint["status"] = "failed"
+                checkpoint["payload_json"] = {}
+                checkpoint["error"] = str(exc)
+                staged_checkpoints[-1] = checkpoint
+                errors.append(f"{section_name} ({exc})")
+                continue
+            section_payloads.append({"section_name": section_name, "payload": validated})
+            continue
         prompt = build_prompt(section_name, prepared["source_text"])
-        if hasattr(client, "complete_json_async"):
-            response = await client.complete_json_async(prompt)
-        else:
-            response = await asyncio.to_thread(client.complete_json, prompt)
-        payload = json.loads(response) if isinstance(response, str) else response
+        attempt_count = (existing["attempt_count"] if existing else 0) + 1
+        validated = None
+        error = None
         try:
-            validated = _validate_section(
-                section_name, payload, prepared["source_text"]
-            )
-        except (ValueError, json.JSONDecodeError) as exc:
-            repair_prompt = (
-                f"Return corrected JSON for {section_name}.\n"
-                f"Validation error: {exc}\nPrevious response: {response}\n"
-                f"Original instructions: {prompt}"
-            )
             if hasattr(client, "complete_json_async"):
-                response = await client.complete_json_async(repair_prompt)
+                response = await client.complete_json_async(prompt)
             else:
-                response = await asyncio.to_thread(client.complete_json, repair_prompt)
+                response = await asyncio.to_thread(client.complete_json, prompt)
             payload = json.loads(response) if isinstance(response, str) else response
-            validated = _validate_section(
-                section_name, payload, prepared["source_text"]
-            )
-        section_payloads.append({"section_name": section_name, "payload": validated})
+            try:
+                validated = _validate_section(
+                    section_name, payload, prepared["source_text"]
+                )
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                repair_prompt = (
+                    f"Return corrected JSON for {section_name}.\n"
+                    f"Validation error: {exc}\nPrevious response: {response}\n"
+                    f"Original instructions: {prompt}"
+                )
+                if hasattr(client, "complete_json_async"):
+                    response = await client.complete_json_async(repair_prompt)
+                else:
+                    response = await asyncio.to_thread(client.complete_json, repair_prompt)
+                payload = json.loads(response) if isinstance(response, str) else response
+                validated = _validate_section(
+                    section_name, payload, prepared["source_text"]
+                )
+        except Exception as exc:
+            error = str(exc)
+        checkpoint = {
+            "report_id": prepared["report_id"],
+            "source_url": prepared["source_url"],
+            "report_month": prepared["report_month"],
+            "source_hash": source_hash,
+            "section_name": section_name,
+            "status": "ok" if error is None else "failed",
+            "payload_json": validated if validated is not None else {},
+            "error": error,
+            "attempt_count": attempt_count,
+            "model": model,
+            "prompt_version": SECTION_PROMPT_VERSIONS[section_name],
+            "updated_at": updated_at,
+        }
+        staged_checkpoints.append(checkpoint)
         call_counts[section_name] = 1
-    return assemble_factual_extraction(section_payloads), call_counts
+        if error is not None:
+            errors.append(f"{section_name} ({error})")
+            continue
+        section_payloads.append({"section_name": section_name, "payload": validated})
+    return {
+        "section_payloads": section_payloads,
+        "call_counts": call_counts,
+        "checkpoints": staged_checkpoints,
+        "error": (
+            f"ism factual sections failed: {', '.join(errors)}" if errors else None
+        ),
+    }
 
 
 def _source_hash(html):

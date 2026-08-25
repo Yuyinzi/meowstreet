@@ -381,21 +381,24 @@ class _ProgressReporter:
         self._active.discard(name)
         result = event["result"]
         self._results[name] = result
-        self._replay_output(result)
+        if not self._progress.disable:
+            self._replay_output(result)
         self._progress.update(1)
         self._progress.set_postfix(
             _result_counts_with_blocked(self.results), refresh=False
         )
         self._refresh_description()
-        result["stdout"] = ""
-        result["stderr"] = ""
+        if not self._progress.disable:
+            result["stdout"] = ""
+            result["stderr"] = ""
 
     def report_final(self, results):
         for result in sorted(results, key=self._plan_key):
             if result["name"] not in self._results:
-                self._replay_output(result)
                 self._progress.update(1)
                 self._results[result["name"]] = result
+            if self._progress.disable:
+                self._replay_output(result)
             self._write_summary(result)
             result["stdout"] = ""
             result["stderr"] = ""
@@ -649,6 +652,11 @@ def run(
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
+    calendar_path = _fomc_calendar_path(args)
+    if calendar_path is None:
+        args.skip_fomc = True
+    else:
+        args.fomc_calendar_path = calendar_path
     if openai_config is None:
         openai_config = llm.load_openai_config(args, root=ROOT)
     real_stdout = sys.stdout
@@ -696,7 +704,7 @@ def run(
         artifact_store=store,
     )
     cancel_event = Event()
-    coordinator = RequestCoordinator(FredRateLimiter())
+    coordinator = RequestCoordinator(FredRateLimiter(cancel_event=cancel_event))
     writer_gate = SQLiteWriterGate()
     with progress_factory(
         total=len(tasks),
@@ -732,6 +740,9 @@ def run(
             print("macro data refresh interrupted", file=real_stderr, flush=True)
             return 130
         reporter.report_final(results)
+        if cancel_event.is_set():
+            print("macro data refresh interrupted", file=real_stderr, flush=True)
+            return 130
     counts = _result_counts_with_blocked(results)
     print(
         "macro data refresh completed: "

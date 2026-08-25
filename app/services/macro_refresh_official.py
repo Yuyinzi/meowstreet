@@ -335,29 +335,62 @@ def _load_fomc_context(db_path, event_id, document_type):
         con.close()
 
 
-def prepare_fomc_policy_tone(db_path, event_id, client, extractor_model, reviewer_model, max_rounds=3):
+def prepare_fomc_policy_tone(
+    db_path, event_id, client, extractor_model, reviewer_model, max_rounds=3
+):
+    return asyncio.run(
+        _prepare_fomc_policy_tone(
+            db_path,
+            event_id,
+            client,
+            extractor_model,
+            reviewer_model,
+            max_rounds,
+        )
+    )
+
+
+async def prepare_fomc_policy_tone_batch(
+    db_path, event_ids, client, extractor_model, reviewer_model, max_rounds=3
+):
+    return [
+        await _prepare_fomc_policy_tone(
+            db_path,
+            event_id,
+            client,
+            extractor_model,
+            reviewer_model,
+            max_rounds,
+        )
+        for event_id in event_ids
+    ]
+
+
+async def _prepare_fomc_policy_tone(
+    db_path, event_id, client, extractor_model, reviewer_model, max_rounds
+):
     if client is None:
         return {"status": "skipped", "event_id": event_id, "error": "OPENAI_API_KEY is not configured"}
-    context = _load_fomc_context(db_path, event_id, "statement")
+    context = await asyncio.to_thread(
+        _load_fomc_context, db_path, event_id, "statement"
+    )
     if not context or not context[0] or not context[1]:
         return {"status": "failed", "event_id": event_id, "error": "FOMC statement document is unavailable"}
     event, document, previous_event, previous_document = context
     from scripts import generate_fomc_policy_tone as script
 
-    result = asyncio.run(
-        script.run_extract_review_loop(
-            event,
-            document,
-            previous_event,
-            previous_document,
-            extract=lambda prompt: script._call_json(
-                client, extractor_model, prompt, fomc_policy_tone.parse_extractor_response
-            ),
-            review=lambda prompt: script._call_json(
-                client, reviewer_model, prompt, fomc_policy_tone.parse_reviewer_response
-            ),
-            max_rounds=max_rounds,
-        )
+    result = await script.run_extract_review_loop(
+        event,
+        document,
+        previous_event,
+        previous_document,
+        extract=lambda prompt: script._call_json(
+            client, extractor_model, prompt, fomc_policy_tone.parse_extractor_response
+        ),
+        review=lambda prompt: script._call_json(
+            client, reviewer_model, prompt, fomc_policy_tone.parse_reviewer_response
+        ),
+        max_rounds=max_rounds,
     )
     row = fomc_policy_tone.tone_extraction_row(
         event_id=event_id,
@@ -387,23 +420,51 @@ def persist_fomc_policy_tone(db_path, prepared_extraction):
     return {"status": "ok", "event_id": prepared_extraction["event_id"]}
 
 
-def prepare_fomc_minutes_structure(db_path, event_id, client, extractor_model, reviewer_model, max_rounds=3):
+def prepare_fomc_minutes_structure(
+    db_path, event_id, client, extractor_model, reviewer_model, max_rounds=3
+):
+    return asyncio.run(
+        _prepare_fomc_minutes_structure(
+            db_path,
+            event_id,
+            client,
+            extractor_model,
+            reviewer_model,
+            max_rounds,
+        )
+    )
+
+
+async def prepare_fomc_minutes_structure_batch(
+    db_path, event_ids, client, extractor_model, reviewer_model, max_rounds=3
+):
+    return [
+        await _prepare_fomc_minutes_structure(
+            db_path,
+            event_id,
+            client,
+            extractor_model,
+            reviewer_model,
+            max_rounds,
+        )
+        for event_id in event_ids
+    ]
+
+
+async def _prepare_fomc_minutes_structure(
+    db_path, event_id, client, extractor_model, reviewer_model, max_rounds
+):
     if client is None:
         return {"status": "skipped", "event_id": event_id, "error": "OPENAI_API_KEY is not configured"}
-    context = _load_fomc_context(db_path, event_id, "minutes")
+    context = await asyncio.to_thread(
+        _load_fomc_context, db_path, event_id, "minutes"
+    )
     if not context or not context[0] or not context[1]:
         return {"status": "failed", "event_id": event_id, "error": "FOMC minutes document is unavailable"}
     event, document, _, _ = context
-    statement_context = _load_fomc_context(db_path, event_id, "statement")
-    statement_tone = None
-    if statement_context and statement_context[1]:
-        con = us_rates_liquidity.connect(db_path)
-        try:
-            statement_tone = us_rates_liquidity.load_macro_event_tone_extraction(
-                con, event_id, "statement", statement_context[1]["source_hash"]
-            )
-        finally:
-            con.close()
+    statement_tone = await asyncio.to_thread(
+        _load_fomc_statement_tone, db_path, event_id
+    )
     if not statement_tone or statement_tone.get("extraction_status") != "approved":
         return {"status": "failed", "event_id": event_id, "error": "approved FOMC policy tone is unavailable"}
     from scripts import generate_fomc_minutes_structure as script
@@ -414,14 +475,12 @@ def prepare_fomc_minutes_structure(db_path, event_id, client, extractor_model, r
     final_feedback = []
     extraction_status = "rejected"
     for round_index in range(max_rounds):
-        content = asyncio.run(
-            script.call_json(
-                client,
-                extractor_model,
-                fomc_minutes_structure.build_extractor_prompt(
-                    event, statement_tone, document["text"], feedback
-                ),
-            )
+        content = await script.call_json(
+            client,
+            extractor_model,
+            fomc_minutes_structure.build_extractor_prompt(
+                event, statement_tone, document["text"], feedback
+            ),
         )
         try:
             extraction = fomc_minutes_structure.parse_extractor_response(content)
@@ -429,14 +488,12 @@ def prepare_fomc_minutes_structure(db_path, event_id, client, extractor_model, r
             feedback = ["Extractor output failed schema validation.", str(exc)]
             continue
         review = fomc_minutes_structure.parse_reviewer_response(
-            asyncio.run(
-                script.call_json(
-                    client,
-                    reviewer_model,
-                    fomc_minutes_structure.build_reviewer_prompt(
-                        event, statement_tone, document["text"], extraction
-                    ),
-                )
+            await script.call_json(
+                client,
+                reviewer_model,
+                fomc_minutes_structure.build_reviewer_prompt(
+                    event, statement_tone, document["text"], extraction
+                ),
             )
         )
         reviewer_feedback.extend(review["feedback"])
@@ -453,6 +510,19 @@ def prepare_fomc_minutes_structure(db_path, event_id, client, extractor_model, r
         reviewer_model, script.datetime.now(script.UTC).isoformat(), final_feedback,
     )
     return {"status": "ok", "event_id": event_id, "row": row}
+
+
+def _load_fomc_statement_tone(db_path, event_id):
+    context = _load_fomc_context(db_path, event_id, "statement")
+    if not context or not context[1]:
+        return None
+    con = us_rates_liquidity.connect(db_path)
+    try:
+        return us_rates_liquidity.load_macro_event_tone_extraction(
+            con, event_id, "statement", context[1]["source_hash"]
+        )
+    finally:
+        con.close()
 
 
 def persist_fomc_minutes_structure(db_path, prepared_extraction):

@@ -3,6 +3,9 @@ import pytest
 from app.db import growth_cycle
 from app.db import us_rates_liquidity
 from app.services import macro_refresh_ism
+from app.services import macro_refresh_runtime
+from app.services.macro_refresh_resources import ArtifactStore
+from app.tools.ism_services_ai_extraction import SECTION_PROMPT_VERSIONS
 
 
 def test_prepare_ism_reports_fetches_and_parses_without_opening_sqlite(monkeypatch):
@@ -256,6 +259,151 @@ def test_failed_enrichment_is_promoted_without_model_calls(tmp_path, monkeypatch
         con.close()
     assert saved["parse_status"] == "ok"
     assert saved["parse_error"] == "model unavailable"
+
+
+def test_failed_ism_section_checkpoints_persist_and_are_reused_without_model_calls(
+    tmp_path,
+):
+    snapshot = {
+        "source_url": "https://example.test/services",
+        "source_name": "ismworld",
+        "survey_type": "services",
+        "source_hash": "hash",
+        "fetched_at": "2026-08-24T00:00:00Z",
+        "raw_html": "fixture",
+        "parse_status": "ok",
+        "parse_error": None,
+        "report_id": "ism_services_2026_07",
+        "report_month": "2026-07-01",
+    }
+    checkpoints = [
+        {
+            "report_id": snapshot["report_id"],
+            "source_url": snapshot["source_url"],
+            "report_month": snapshot["report_month"],
+            "source_hash": snapshot["source_hash"],
+            "section_name": "report",
+            "status": "ok",
+            "payload_json": {"report_id": snapshot["report_id"]},
+            "error": None,
+            "attempt_count": 1,
+            "model": "test-model",
+            "prompt_version": SECTION_PROMPT_VERSIONS["report"],
+            "updated_at": snapshot["fetched_at"],
+        },
+        {
+            "report_id": snapshot["report_id"],
+            "source_url": snapshot["source_url"],
+            "report_month": snapshot["report_month"],
+            "source_hash": snapshot["source_hash"],
+            "section_name": "narrative_facts",
+            "status": "failed",
+            "payload_json": {},
+            "error": "model unavailable",
+            "attempt_count": 1,
+            "model": "test-model",
+            "prompt_version": SECTION_PROMPT_VERSIONS["narrative_facts"],
+            "updated_at": snapshot["fetched_at"],
+        },
+    ]
+    prepared = {
+        "status": "failed",
+        "survey_type": "services",
+        "snapshot": snapshot,
+        "source_url": snapshot["source_url"],
+        "report_id": snapshot["report_id"],
+        "report_month": snapshot["report_month"],
+        "error": "ism factual sections failed: narrative_facts (model unavailable)",
+        "model": "test-model",
+        "extraction": None,
+        "checkpoints": checkpoints,
+    }
+
+    macro_refresh_ism.persist_ism_enrichment(tmp_path / "ism.sqlite", prepared)
+
+    con = us_rates_liquidity.connect(tmp_path / "ism.sqlite")
+    try:
+        saved = []
+        for checkpoint in checkpoints:
+            saved.extend(
+                growth_cycle.load_ism_ai_section_extractions(
+                    con,
+                    snapshot["report_id"],
+                    snapshot["source_url"],
+                    checkpoint["prompt_version"],
+                )
+            )
+    finally:
+        con.close()
+
+    class NoModelCalls:
+        def complete_json(self, _prompt):
+            pytest.fail("retry should reuse staged section checkpoints")
+
+    retry = macro_refresh_ism.prepare_ism_enrichment(
+        snapshot,
+        client=NoModelCalls(),
+        model="test-model",
+        survey_type="services",
+        checkpoints=saved,
+    )
+
+    assert [checkpoint["status"] for checkpoint in saved] == ["ok", "failed"]
+    assert retry["status"] == "failed"
+    assert "narrative_facts (model unavailable)" in retry["error"]
+    assert retry["checkpoints"] == saved
+
+
+def test_runtime_ism_failure_is_persisted_before_the_enrichment_task_fails(monkeypatch):
+    artifacts = ArtifactStore()
+    snapshot = {
+        "source_url": "https://example.test/services",
+        "source_name": "ismworld",
+        "survey_type": "services",
+        "source_hash": "hash",
+        "fetched_at": "2026-08-24T00:00:00Z",
+        "raw_html": "fixture",
+        "parse_status": "ok",
+        "parse_error": None,
+        "report_id": "ism_services_2026_07",
+        "report_month": "2026-07-01",
+    }
+    artifacts.put("ism.services", [{"status": "ok", "snapshot": snapshot}])
+    persisted = []
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_ism,
+        "prepare_ism_enrichment",
+        lambda *_args, **_kwargs: {
+            "status": "failed",
+            "snapshot": snapshot,
+            "survey_type": "services",
+            "source_url": snapshot["source_url"],
+            "report_id": snapshot["report_id"],
+            "report_month": snapshot["report_month"],
+            "error": "one section failed",
+            "checkpoints": [
+                {"section_name": "report", "status": "ok"},
+                {"section_name": "narrative", "status": "failed"},
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_ism,
+        "persist_ism_enrichment",
+        lambda _db_path, prepared: persisted.append(prepared) or prepared,
+    )
+    providers = macro_refresh_runtime.build_runtime_providers(
+        artifacts,
+        openai_config={"api_key": "configured", "model": "test-model"},
+    )
+
+    assert providers["ism_services_enrichment"]([]) == 0
+    with pytest.raises(ValueError, match="one section failed"):
+        providers["ism_services_enrichment_import"]([])
+    assert persisted[0]["checkpoints"] == [
+        {"section_name": "report", "status": "ok"},
+        {"section_name": "narrative", "status": "failed"},
+    ]
 
 
 def test_ism_report_promotions_remain_per_report_atomic(monkeypatch, tmp_path):

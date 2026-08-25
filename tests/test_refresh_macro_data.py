@@ -1,6 +1,7 @@
 from argparse import Namespace
 from threading import Event
 import sys
+from io import StringIO
 
 from jobs import refresh_macro_data
 
@@ -223,6 +224,51 @@ def test_progress_is_disabled_when_stderr_is_not_a_tty(monkeypatch):
         progress_factory=progress_factory,
     ) == 0
     assert progress_instances[0].disable is True
+
+
+def test_non_tty_verbose_output_replays_in_plan_order_regardless_of_completion_order():
+    tasks = [
+        {"name": "first", "lane": "a", "plan_index": 0},
+        {"name": "second", "lane": "b", "plan_index": 1},
+    ]
+    results = {
+        "first": {
+            "name": "first",
+            "lane": "a",
+            "status": "ok",
+            "error": "",
+            "stdout": "first details\n",
+            "stderr": "",
+        },
+        "second": {
+            "name": "second",
+            "lane": "b",
+            "status": "failed",
+            "error": "second failed",
+            "stdout": "second details\n",
+            "stderr": "second diagnostic\n",
+        },
+    }
+
+    def replay(order):
+        stdout = StringIO()
+        stderr = StringIO()
+        reporter = refresh_macro_data._ProgressReporter(
+            tasks,
+            progress=FakeProgress(total=2, disable=True, file=stderr),
+            verbose=True,
+            stdout=stdout,
+            stderr=stderr,
+        )
+        for name in order:
+            task = tasks[0 if name == "first" else 1]
+            reporter.handle_event(
+                {"type": "task_finished", "task": task, "result": dict(results[name])}
+            )
+        reporter.report_final([dict(results["first"]), dict(results["second"])])
+        return stdout.getvalue(), stderr.getvalue()
+
+    assert replay(["first", "second"]) == replay(["second", "first"])
 
 
 def args_without_skips():
@@ -646,6 +692,57 @@ def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
         dce_iron_ore_sina_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
         economic_confirmation_main=lambda argv: 0,
+    )
+
+    assert exit_code == 0
+    assert calls == []
+
+
+def test_production_runtime_omits_fomc_graph_when_default_calendar_is_missing(
+    tmp_path, monkeypatch
+):
+    calls = []
+    missing_path = tmp_path / "missing-fomc-calendar.csv"
+    monkeypatch.setattr(
+        refresh_macro_data.import_fomc_calendar,
+        "DEFAULT_CALENDAR_PATH",
+        missing_path,
+    )
+
+    exit_code = refresh_macro_data.run(
+        [
+            "--skip-yahoo",
+            "--skip-rates",
+            "--skip-m2",
+            "--skip-macro-indicators",
+            "--skip-consumer-sentiment",
+            "--skip-building-permits",
+            "--skip-ism",
+            "--skip-gdp",
+            "--skip-nfib-sbo",
+            "--skip-nfib-sbo-regional",
+            "--skip-tracked-commodities",
+            "--skip-cyclical-commodities",
+            "--skip-oil",
+            "--skip-lumber",
+            "--skip-shfe-copper",
+            "--skip-dce-iron-ore-sina",
+            "--skip-economic-confirmation",
+        ],
+        task_providers={
+            "credit_fetch": lambda argv: 0,
+            "credit_import": lambda argv: 0,
+            "fomc_calendar_import": lambda argv: calls.append("calendar") or 0,
+            "fomc_documents_fetch": lambda argv: calls.append("documents") or 0,
+            "fomc_documents_import": lambda argv: calls.append("documents_import") or 0,
+            "fomc_policy_tone_extract": lambda argv: calls.append("tone") or 0,
+            "fomc_policy_tone_import": lambda argv: calls.append("tone_import") or 0,
+            "fomc_minutes_extract": lambda argv: calls.append("minutes") or 0,
+            "fomc_minutes_import": lambda argv: calls.append("minutes_import") or 0,
+        },
+        openai_config={"api_key": None},
+        progress_factory=FakeProgress,
+        use_runtime_defaults=True,
     )
 
     assert exit_code == 0
