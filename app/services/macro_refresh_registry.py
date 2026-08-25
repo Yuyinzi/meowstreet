@@ -2,10 +2,11 @@ from app.services.macro_refresh_plan import make_task
 
 
 _FRED_MACRO_SPECS = (
-    ("rates", "rates_fred", "--fred-csv-merge"),
-    ("m2", "m2_fred", "--fred-csv-merge"),
-    ("macro_indicators", "macro_indicators_fred", "--fred-csv-merge"),
-    ("gdp", "gdp_fred", "--us-csv-merge"),
+    ("rates", "rates", "rates_fred", "--fred-csv-merge"),
+    ("m2", "m2", "m2_fred", "--fred-csv-merge"),
+    ("macro_indicators", "macro_indicators", "macro_indicators_fred", "--fred-csv-merge"),
+    ("gdp", "gdp", "gdp_fred", "--us-csv-merge"),
+    ("cyclical_fred_fetch", "cyclical_fred_import", "cyclical_fred", "--import-usd"),
 )
 
 
@@ -13,9 +14,10 @@ def build_refresh_tasks(args, providers, *, openai_config=None, artifact_store):
     tasks = []
     plan_index = 0
 
-    for provider_key, task_prefix, import_flag in _FRED_MACRO_SPECS:
-        provider = providers.get(provider_key)
-        if provider is None or getattr(args, f"skip_{provider_key}", False):
+    for fetch_key, import_key, task_prefix, import_flag in _FRED_MACRO_SPECS:
+        provider = providers.get(fetch_key)
+        skip_key = "cyclical_commodities" if fetch_key == "cyclical_fred_fetch" else fetch_key
+        if provider is None or getattr(args, f"skip_{skip_key}", False):
             continue
         tasks.append(
             make_task(
@@ -30,9 +32,10 @@ def build_refresh_tasks(args, providers, *, openai_config=None, artifact_store):
         )
         plan_index += 1
 
-    for provider_key, task_prefix, import_flag in _FRED_MACRO_SPECS:
-        provider = providers.get(provider_key)
-        if provider is None or getattr(args, f"skip_{provider_key}", False):
+    for fetch_key, import_key, task_prefix, import_flag in _FRED_MACRO_SPECS:
+        provider = providers.get(import_key)
+        skip_key = "cyclical_commodities" if fetch_key == "cyclical_fred_fetch" else fetch_key
+        if provider is None or getattr(args, f"skip_{skip_key}", False):
             continue
         fetch_name = f"{task_prefix}_fetch"
         tasks.append(
@@ -386,5 +389,106 @@ def build_refresh_tasks(args, providers, *, openai_config=None, artifact_store):
                 ]
             )
             plan_index += 7
+
+    def add_commodity_pair(
+        lane,
+        fetch_name,
+        import_name,
+        fetch_provider,
+        import_provider,
+        *,
+        skip=False,
+        fetch_resources=(),
+    ):
+        nonlocal plan_index
+        if fetch_provider is None or import_provider is None or skip:
+            return
+        tasks.extend(
+            [
+                make_task(
+                    fetch_name,
+                    lane,
+                    "fetch",
+                    fetch_provider,
+                    resources=fetch_resources,
+                    plan_index=plan_index,
+                ),
+                make_task(
+                    import_name,
+                    lane,
+                    "persist",
+                    import_provider,
+                    dependencies=[fetch_name],
+                    resources=["sqlite_writer"],
+                    plan_index=plan_index + 1,
+                ),
+            ]
+        )
+        plan_index += 2
+
+    add_commodity_pair(
+        "tracked_commodities",
+        "tracked_commodities_fetch",
+        "tracked_commodities_import",
+        provider("tracked_commodities_fetch", "tracked_fetch"),
+        provider("tracked_commodities_import", "tracked_import"),
+        skip=getattr(args, "skip_tracked_commodities", False),
+    )
+    add_commodity_pair(
+        "cftc",
+        "cyclical_cot_fetch",
+        "cyclical_cot_import",
+        provider("cyclical_cot_fetch", "cftc_fetch"),
+        provider("cyclical_cot_import", "cftc_import"),
+        skip=getattr(args, "skip_cyclical_commodities", False),
+    )
+    add_commodity_pair(
+        "eia",
+        "oil_fetch",
+        "oil_import",
+        provider("oil_fetch", "eia_fetch"),
+        provider("oil_import", "eia_import"),
+        skip=getattr(args, "skip_oil", False),
+    )
+    add_commodity_pair(
+        "shfe",
+        "shfe_copper_fetch",
+        "shfe_copper_import",
+        provider("shfe_copper_fetch", "shfe_fetch"),
+        provider("shfe_copper_import", "shfe_import"),
+        skip=getattr(args, "skip_shfe_copper", False),
+    )
+    add_commodity_pair(
+        "dce_sina",
+        "dce_iron_ore_sina_fetch",
+        "dce_iron_ore_sina_import",
+        provider("dce_iron_ore_sina_fetch", "dce_fetch"),
+        provider("dce_iron_ore_sina_import", "dce_import"),
+        skip=getattr(args, "skip_dce_iron_ore_sina", False),
+    )
+    add_commodity_pair(
+        "dol",
+        "dol_fetch",
+        "dol_import",
+        provider("dol_fetch", "economic_confirmation_dol_fetch"),
+        provider("dol_import", "economic_confirmation_dol_import"),
+        skip=getattr(args, "skip_economic_confirmation", False),
+    )
+    add_commodity_pair(
+        "bls",
+        "bls_fetch",
+        "bls_import",
+        provider("bls_fetch", "economic_confirmation_bls_fetch"),
+        provider("bls_import", "economic_confirmation_bls_import"),
+        skip=getattr(args, "skip_economic_confirmation", False),
+    )
+    add_commodity_pair(
+        "federal_reserve",
+        "federal_reserve_fetch",
+        "federal_reserve_import",
+        provider("federal_reserve_fetch", "g17_fetch", "economic_confirmation_g17_fetch"),
+        provider("federal_reserve_import", "g17_import", "economic_confirmation_g17_import"),
+        skip=getattr(args, "skip_economic_confirmation", False),
+    )
 
     return tasks

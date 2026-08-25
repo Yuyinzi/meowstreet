@@ -177,3 +177,12 @@ def refresh_official_commodities(con, cache_dir, years, fred_client_factory=None
     fetch_cot_zips(cache_dir, years)
     _fetch_fred_csvs(cache_dir, fred_client_factory)
     return import_cached_official_commodities(con, cache_dir, years)
+
+
+def fetch_cot_archives(cache_dir, years):
+    fetch_cot_zips(cache_dir, years)
+    return [Path(cache_dir) / f"cftc-disaggregated-futures-only-{year}.zip" for year in years]
+
+
+def fetch_usd_and_inflation_csvs(cache_dir, fred_client_factory=None):
+    return _fetch_fred_csvs(cache_dir, fred_client_factory)

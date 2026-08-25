@@ -1,5 +1,6 @@
 import httpx
 
+from app.services.macro_refresh_resources import ArtifactStore
 from scripts import import_economic_confirmation
 
 OVERVIEW_URL = "https://www.bls.gov/news.release/empsit.htm"
@@ -130,6 +131,11 @@ def patch_other_import_sources(monkeypatch, html_by_url=None, g17_observations=N
         import_economic_confirmation.dol_ui_claims,
         "fetch_claims_release",
         lambda *args: [],
+    )
+    monkeypatch.setattr(
+        import_economic_confirmation.federal_reserve_g17,
+        "fetch_g17_release",
+        lambda *args: {"observations": [g17_observation()], "csv": b"g17 csv"},
     )
     monkeypatch.setattr(
         import_economic_confirmation.federal_reserve_g17,
@@ -329,3 +335,41 @@ def test_main_replaces_legacy_claims_history_after_national_fetch(
         == 0
     )
     assert replacements == [[initial_claim(), continuing_claim()]]
+
+
+def test_staged_economic_sources_persist_independently(monkeypatch, tmp_path):
+    artifacts = ArtifactStore()
+    monkeypatch.setattr(
+        import_economic_confirmation.dol_ui_claims,
+        "fetch_national_claims_history",
+        lambda *args: [initial_claim(), continuing_claim()],
+    )
+    monkeypatch.setattr(
+        import_economic_confirmation.dol_ui_claims,
+        "fetch_claims_release",
+        lambda *args: [],
+    )
+    monkeypatch.setattr(
+        import_economic_confirmation.federal_reserve_g17,
+        "fetch_g17_release",
+        lambda *args: {"observations": [g17_observation()], "csv": b"g17 csv"},
+    )
+    import_economic_confirmation.fetch_dol(
+        artifacts, client=_FakeHttpClient({})
+    )
+    import_economic_confirmation.fetch_bls(
+        artifacts,
+        client=_FakeHttpClient(_bls_html_by_url()),
+    )
+    import_economic_confirmation.fetch_federal_reserve(
+        artifacts,
+        client=_FakeHttpClient({}),
+    )
+
+    db_path = tmp_path / "market.sqlite"
+    assert import_economic_confirmation.persist_dol(db_path, artifacts)["status"] == "ok"
+    assert import_economic_confirmation.persist_bls(db_path, artifacts)["status"] == "ok"
+    assert (
+        import_economic_confirmation.persist_federal_reserve(db_path, artifacts)["status"]
+        == "ok"
+    )

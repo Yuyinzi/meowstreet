@@ -54,3 +54,18 @@ def refresh_dce_iron_ore_sina(con, today_date=None, fetcher=None, initial=False)
         "start_date": start_date,
         "end_date": end_date,
     }
+
+
+def persist_dce_payload(con, payload):
+    try:
+        macro_indicators.merge_macro_indicator_observations(
+            con, payload["series"], payload["observations"], commit=False
+        )
+        con.commit()
+    except BaseException:
+        con.rollback()
+        raise
+    return {
+        "series": payload["series"]["series_id"],
+        "observations": len(payload["observations"]),
+    }

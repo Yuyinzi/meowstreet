@@ -2,15 +2,15 @@ import calendar
 from datetime import date as date_type
 from datetime import timedelta
 
-from app.data_sources import shfe_copper
+from app.data_sources import shfe_copper as shfe_copper_source
 from app.db import macro_indicators
-from app.tools import shfe_copper
+from app.tools import shfe_copper as shfe_copper_tools
 
 _REBUILD_LOOKBACK_DAYS = 14
 
 
 def _default_fetcher(progress_callback=None):
-    return lambda start_date, end_date: shfe_copper.fetch_shfe_copper_contract_rows(
+    return lambda start_date, end_date: shfe_copper_source.fetch_shfe_copper_contract_rows(
         start_date, end_date, progress_callback=progress_callback
     )
 
@@ -108,7 +108,7 @@ def import_shfe_cu_dates(
             rebuild_rows = macro_indicators.load_shfe_cu_contract_observations(
                 con, start_date=rebuild_start, end_date=requested_end
             )
-            main_rows = shfe_copper.build_shfe_cu_main_series(
+            main_rows = shfe_copper_tools.build_shfe_cu_main_series(
                 rebuild_rows,
                 initial_selected_contract=initial_contract,
                 initial_close=initial_close,
@@ -130,7 +130,7 @@ def import_shfe_cu_dates(
             for row in fetched_rows
             if rebuild_start <= row["trade_date"] <= requested_end
         ]
-        main_rows = shfe_copper.build_shfe_cu_main_series(
+        main_rows = shfe_copper_tools.build_shfe_cu_main_series(
             rebuild_rows,
             initial_selected_contract=initial_contract,
             initial_close=initial_close,

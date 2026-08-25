@@ -2,6 +2,7 @@ from datetime import date as date_type
 
 import pytest
 
+from app.data_sources import shfe_copper as shfe_copper_source
 from app.db import macro_indicators
 from app.services import shfe_copper_import
 
@@ -40,6 +41,19 @@ def fake_fetcher(rows_by_range):
         return normalized
 
     return fetcher
+
+
+def test_default_fetcher_uses_shfe_copper_data_source(monkeypatch):
+    expected = [_raw_row("2026-08-21", "CU2610", 80500.0, 220000.0)]
+    monkeypatch.setattr(
+        shfe_copper_source,
+        "fetch_shfe_copper_contract_rows",
+        lambda start_date, end_date, progress_callback=None: expected,
+    )
+
+    result = shfe_copper_import._default_fetcher()("2026-08-01", "2026-08-31")
+
+    assert result == expected
 
 
 def test_import_shfe_cu_dates_writes_raw_and_derived_only_after_success(tmp_path):
