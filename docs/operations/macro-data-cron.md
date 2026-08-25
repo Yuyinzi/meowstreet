@@ -8,6 +8,16 @@ mkdir -p logs
 .venv/bin/python jobs/refresh_macro_data.py
 ```
 
+The refresh uses source-lane concurrency by default. The enabled plan creates
+one serial queue per fixed source lane, so independent providers can overlap
+without reordering tasks inside a lane. The number of workers is derived from
+the enabled lanes; there is no worker-count option. Use `--serial` for recovery
+or diagnostics when an issue needs a deterministic, single-worker run.
+
+The current lanes are `fred_macro`, `credit`, `yahoo`, `ism_manufacturing`,
+`ism_services`, `consumer`, `census`, `nfib`, `fomc`, `tracked_commodities`,
+`cftc`, `eia`, `shfe`, `dce_sina`, `dol`, `bls`, and `federal_reserve`.
+
 The scheduled refresh updates implemented official market and macro sources:
 
 - Yahoo benchmark indices: S&P 500 (`us_sp500`), Nasdaq 100 (`us_nasdaq_100`), Nasdaq Composite (`us_nasdaq_composite`), and DJIA (`us_djia`). To refresh all configured benchmarks manually, run `.venv/bin/python scripts/refresh_benchmark_market_data.py --all`.
@@ -23,6 +33,10 @@ The scheduled refresh updates implemented official market and macro sources:
 ISM official report imports have a deterministic core phase and an optional AI
 enrichment phase. Raw source snapshots and per-section AI extraction
 checkpoints survive failures without replacing previously promoted data.
+
+ISM enrichment is planned as `skipped` when `OPENAI_API_KEY` is missing. A
+configured key enables enrichment automatically. A configured-but-failing AI
+extraction is `failed`; the deterministic core import remains committed.
 
 Consumer sentiment refreshes download the complete official Michigan monthly history from the UM Time Series Data form and replace all stored rows. The website is the sole UMCSI source. No workbook (UMCSI.xlsx) or FRED UMCSENT series is imported. Capacity series use the FRED CSV client and are fully replaced on each refresh.
 
@@ -175,7 +189,14 @@ has one of these statuses:
 
 - `ok`: the provider completed successfully or had no new data to import.
 - `skipped`: the task was intentionally not run, such as optional ISM enrichment without `OPENAI_API_KEY`.
-- `failed`: the task ran but returned an error; other tasks continue unless `--stop-on-error` is set.
+- `failed`: the task ran but returned an error.
+- `blocked`: a required dependency failed or was blocked; the task is not run.
+
+By default a failed task does not stop unrelated lanes. `--stop-on-error` stops
+admission of later work in the failed lane only; other lanes continue. A
+failure or blocked task makes the overall command exit non-zero. Ctrl+C stops
+new task admission at a safe boundary, leaves active network/database work to
+finish safely, and exits with status 130.
 
 Use verbose mode when investigating a successful run:
 
@@ -183,11 +204,16 @@ Use verbose mode when investigating a successful run:
 .venv/bin/python jobs/refresh_macro_data.py --verbose
 ```
 
-`jobs/refresh_macro_data.py --verbose` replays successful provider and FOMC detail output. The overall progress bar appears only on an interactive stderr terminal; redirected cron logs receive plain summaries with no progress control characters. The final line has deterministic aggregate counts, for example:
+`jobs/refresh_macro_data.py --verbose` replays successful provider and FOMC detail output. The refresh owns one aggregate progress surface: an interactive TTY shows live lane activity and aggregate counts, while redirected cron logs receive stable plain-text summaries in plan order with no cursor movement or ANSI controls. Failed and blocked diagnostics are always reported. The final line has deterministic aggregate counts, for example:
 
 ```text
-macro data refresh completed: ok=18 skipped=2 failed=0
+macro data refresh completed: ok=18 skipped=2 failed=0 blocked=0
 ```
+
+All FRED consumers share one in-process limiter that waits at least 600 ms
+between request starts, including retries and the separate `credit` lane.
+SQLite write stages use one shared writer gate and wait no longer than 60
+seconds. Fetch and AI work never holds that gate.
 
 ## Manual Run
 
@@ -302,4 +328,6 @@ logs/macro_refresh.log
 logs/investing-rendered.log
 ```
 
-The command prints each task with its `ok`, `skipped`, or `failed` status. It continues after provider failures by default but exits with code `1` if any task failed.
+The command prints each task with its `ok`, `skipped`, `failed`, or `blocked`
+status. It continues after provider failures by default but exits with code `1`
+if any task failed or is blocked.

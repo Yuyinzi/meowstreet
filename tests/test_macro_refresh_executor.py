@@ -79,13 +79,11 @@ def test_independent_lanes_overlap_but_each_lane_stays_serial():
     assert calls.index("fred:end") < calls.index("fred:import")
 
 
-def test_four_independent_lanes_reach_barrier_before_release():
-    barrier = Barrier(5)
+def test_four_source_fetches_reach_barrier_before_any_can_finish():
     release = Event()
-    reached = []
+    barrier = Barrier(4, action=release.set)
 
     def run(argv):
-        reached.append(argv[0])
         barrier.wait(timeout=1)
         assert release.wait(1)
         return 0
@@ -95,16 +93,33 @@ def test_four_independent_lanes_reach_barrier_before_release():
         for i in range(4)
     ]
 
-    def open_gate():
-        barrier.wait(timeout=1)
-        release.set()
-
-    gate = Thread(target=open_gate)
-    gate.start()
     results = execute_tasks(tasks)
-    gate.join()
 
-    assert len(reached) == 4
+    assert all(result["status"] == "ok" for result in results)
+
+
+def test_serial_mode_limits_four_source_fetches_to_one_active_task():
+    active = 0
+    maximum = 0
+    lock = Lock()
+
+    def run(argv):
+        nonlocal active, maximum
+        with lock:
+            active += 1
+            maximum = max(maximum, active)
+        with lock:
+            active -= 1
+        return 0
+
+    tasks = [
+        _task(f"fetch_{i}", f"lane_{i}", run, argv=[f"lane_{i}"], plan_index=i)
+        for i in range(4)
+    ]
+
+    results = execute_tasks(tasks, serial=True)
+
+    assert maximum == 1
     assert all(result["status"] == "ok" for result in results)
 
 

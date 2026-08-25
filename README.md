@@ -50,6 +50,31 @@ Dashboards initially show insufficient-data states until scheduled refresh jobs
 populate observations. Cron jobs own time-series and report ingestion; bootstrap
 does not run those jobs.
 
+## Scheduled macro refresh
+
+`jobs/refresh_macro_data.py` runs the enabled source lanes concurrently by
+default. The current registry uses fixed lanes for `fred_macro`, `credit`,
+`yahoo`, ISM Manufacturing and Services, `consumer`, `census`, `nfib`, `fomc`,
+`tracked_commodities`, `cftc`, `eia`, `shfe`, `dce_sina`, `dol`, `bls`, and
+`federal_reserve`. Each enabled lane has one serial queue; independent lanes
+overlap, and the number of lane workers is derived from the enabled plan. There
+is no worker-count flag. Use `--serial` as the recovery and diagnostic mode
+when reproducing a provider issue.
+
+Every FRED consumer, including the separate credit lane, shares one global
+request-start limiter of 600 ms. SQLite writes are serialized through one
+writer gate with a 60-second wait timeout. A fetch or enrichment failure blocks
+only dependent work; `blocked` means its dependency did not complete with an
+accepted status. `--stop-on-error` stops admission in the failed lane while
+unrelated lanes continue. Missing `OPENAI_API_KEY` is an intentional skipped
+ISM enrichment; when a key is available, enrichment is enabled automatically.
+
+The refresh owns one aggregate progress surface. TTY runs show live lane
+activity; cron and redirected output are stable plain text in plan order. The
+final line reports `ok`, `skipped`, `failed`, and `blocked` counts. Failures and
+blocked tasks produce a non-zero exit status. Ctrl+C stops admission at a safe
+boundary and exits 130.
+
 Copy `.env.example` to `.env` to configure optional assistant and offline AI
 enrichment features. Deterministic dashboard imports, including core ISM fields,
 do not require `OPENAI_API_KEY`. When a key is configured, the macro refresh
