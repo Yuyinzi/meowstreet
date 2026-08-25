@@ -2721,7 +2721,6 @@ def test_growth_cycle_api_ism_detail_includes_industry_analysis(monkeypatch):
 
 def test_services_detail_returns_signal_trend(monkeypatch):
     from app import api
-    from app.db import ism_surveys
     from app.services import ism_services_dashboard
     from tests.test_macro_dashboard_api import client
 
@@ -2732,10 +2731,45 @@ def test_services_detail_returns_signal_trend(monkeypatch):
         "source_url": "https://example.com/services/june",
         "source_hash": "abc123",
     }
+    points = {
+        series_id: [{"date": "2026-06-01", "value": 52.0, "source": "test"}]
+        for series_id in [
+            "ism_services_pmi",
+            "ism_services_business_activity",
+            "ism_services_new_orders",
+            "ism_services_order_backlog",
+        ]
+    }
+    rankings = [
+        {
+            "date": "2026-06-01",
+            "industry": "Construction",
+            "direction": "growth",
+            "rank": 1,
+        }
+    ]
+    monkeypatch.setattr(
+        api.us_rates_liquidity_db, "connect", lambda: _FakeConStubs()
+    )
+    monkeypatch.setattr(
+        api.macro_indicators_db,
+        "load_macro_indicator_points_for_series",
+        lambda con, series_ids: points,
+    )
     monkeypatch.setattr(
         ism_services_dashboard.ism_surveys,
         "load_latest_report_snapshot",
         lambda con, survey_type: report,
+    )
+    monkeypatch.setattr(
+        ism_services_dashboard.ism_surveys,
+        "load_industry_rankings",
+        lambda con, survey_type, limit_months=None, max_date=None: rankings,
+    )
+    monkeypatch.setattr(
+        ism_services_dashboard.ism_surveys,
+        "load_industry_comments",
+        lambda con, survey_type, report_month=None: [],
     )
     monkeypatch.setattr(
         api.growth_cycle,
@@ -2787,9 +2821,8 @@ def test_services_detail_returns_signal_trend(monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     analysis = data.get("industry_analysis", {})
-    if analysis.get("industries"):
-        ind = analysis["industries"][0]
-        assert "signal_trend" in ind
+    assert analysis["industries"]
+    assert "signal_trend" in analysis["industries"][0]
 
 
 def _default_signals():
