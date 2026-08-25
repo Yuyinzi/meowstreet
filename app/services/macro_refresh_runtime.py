@@ -212,32 +212,36 @@ def _official_providers(artifacts):
             macro_indicators.DEFAULT_DB_PATH,
         ),
         "dol_fetch": _official_fetch(
-            artifacts, import_economic_confirmation.fetch_dol, "economic.dol"
+            artifacts,
+            import_economic_confirmation.fetch_dol,
+            import_economic_confirmation.DOL_ARTIFACT,
         ),
         "dol_import": _official_import(
             artifacts,
             import_economic_confirmation.persist_dol,
-            "economic.dol",
+            import_economic_confirmation.DOL_ARTIFACT,
             import_economic_confirmation.DEFAULT_DB_PATH,
         ),
         "bls_fetch": _official_fetch(
-            artifacts, import_economic_confirmation.fetch_bls, "economic.bls"
+            artifacts,
+            import_economic_confirmation.fetch_bls,
+            import_economic_confirmation.BLS_ARTIFACT,
         ),
         "bls_import": _official_import(
             artifacts,
             import_economic_confirmation.persist_bls,
-            "economic.bls",
+            import_economic_confirmation.BLS_ARTIFACT,
             import_economic_confirmation.DEFAULT_DB_PATH,
         ),
         "federal_reserve_fetch": _official_fetch(
             artifacts,
             import_economic_confirmation.fetch_federal_reserve,
-            "economic.federal_reserve",
+            import_economic_confirmation.FEDERAL_RESERVE_ARTIFACT,
         ),
         "federal_reserve_import": _official_import(
             artifacts,
             import_economic_confirmation.persist_federal_reserve,
-            "economic.federal_reserve",
+            import_economic_confirmation.FEDERAL_RESERVE_ARTIFACT,
             import_economic_confirmation.DEFAULT_DB_PATH,
         ),
     }
@@ -443,7 +447,7 @@ def _ism_providers(artifacts, openai_config):
                 survey_type,
                 latest_only=True,
                 existing_months=existing,
-                fetch=lambda url: "",
+                fetch=None,
             )
             prepared = macro_refresh_ism.prepare_ism_reports(
                 targets,

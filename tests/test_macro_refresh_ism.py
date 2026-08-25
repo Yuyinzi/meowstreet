@@ -5,6 +5,7 @@ from app.db import us_rates_liquidity
 from app.services import macro_refresh_ism
 from app.services import macro_refresh_runtime
 from app.services.macro_refresh_resources import ArtifactStore
+from app.tools import ism_ai_extraction
 from app.tools.ism_services_ai_extraction import SECTION_PROMPT_VERSIONS
 
 
@@ -259,6 +260,49 @@ def test_failed_enrichment_is_promoted_without_model_calls(tmp_path, monkeypatch
         con.close()
     assert saved["parse_status"] == "ok"
     assert saved["parse_error"] == "model unavailable"
+
+
+def test_manufacturing_enrichment_persists_its_prompt_version(monkeypatch):
+    captured = []
+
+    class Connection:
+        def close(self):
+            return None
+
+    snapshot = {
+        "source_url": "https://example.test/manufacturing",
+        "source_hash": "hash",
+        "fetched_at": "2026-08-25T00:00:00Z",
+    }
+    prepared = {
+        "status": "ok",
+        "survey_type": "manufacturing",
+        "snapshot": snapshot,
+        "extraction": {
+            "report": {
+                "report_id": "ism_manufacturing_2026_07",
+                "report_month": "2026-07-01",
+            }
+        },
+        "model": "test-model",
+        "checkpoints": [],
+    }
+    monkeypatch.setattr(
+        macro_refresh_ism.us_rates_liquidity,
+        "connect",
+        lambda _db_path: Connection(),
+    )
+    monkeypatch.setattr(macro_refresh_ism.growth_cycle, "init_db", lambda con: None)
+    monkeypatch.setattr(
+        "scripts.extract_ism_report_ai._promote_factual_dashboard_outputs",
+        lambda con, extraction, source_snapshot, source: captured.append(source)
+        or {"report_id": extraction["report"]["report_id"]},
+    )
+
+    result = macro_refresh_ism.persist_ism_enrichment("ignored.sqlite", prepared)
+
+    assert result["status"] == "ok"
+    assert captured[0]["prompt_version"] == ism_ai_extraction.PROMPT_VERSION
 
 
 def test_failed_ism_section_checkpoints_persist_and_are_reused_without_model_calls(

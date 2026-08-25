@@ -565,6 +565,98 @@ def test_runtime_provider_registry_exposes_callable_adapters_for_every_node():
     assert all(callable(task["func"]) and isinstance(task["argv"], list) for task in tasks)
 
 
+@pytest.mark.parametrize(
+    ("provider_fetch", "provider_import", "fetch_name", "import_name", "artifact_key"),
+    [
+        (
+            "dol_fetch",
+            "dol_import",
+            "fetch_dol",
+            "persist_dol",
+            "economic_confirmation.dol",
+        ),
+        (
+            "bls_fetch",
+            "bls_import",
+            "fetch_bls",
+            "persist_bls",
+            "economic_confirmation.bls",
+        ),
+        (
+            "federal_reserve_fetch",
+            "federal_reserve_import",
+            "fetch_federal_reserve",
+            "persist_federal_reserve",
+            "economic_confirmation.federal_reserve",
+        ),
+    ],
+)
+def test_runtime_economic_import_consumes_the_fetchers_artifact_key(
+    monkeypatch,
+    provider_fetch,
+    provider_import,
+    fetch_name,
+    import_name,
+    artifact_key,
+):
+    artifacts = ArtifactStore()
+    persisted = []
+
+    def fetch(store):
+        store.put(artifact_key, {"source": fetch_name})
+
+    def persist(_db_path, store):
+        persisted.append(store.get(artifact_key))
+
+    monkeypatch.setattr(
+        macro_refresh_runtime.import_economic_confirmation, fetch_name, fetch
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.import_economic_confirmation, import_name, persist
+    )
+
+    providers = macro_refresh_runtime.build_runtime_providers(artifacts)
+
+    assert providers[provider_fetch]([]) == 0
+    assert providers[provider_import]([]) == 0
+    assert persisted == [{"source": fetch_name}]
+
+
+def test_runtime_ism_target_selection_uses_prnewswire_discovery(monkeypatch):
+    artifacts = ArtifactStore()
+    seen = {}
+
+    class Connection:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        macro_refresh_runtime.us_rates_liquidity,
+        "connect",
+        lambda: Connection(),
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.growth_cycle,
+        "load_existing_ism_report_months",
+        lambda con, survey_type: set(),
+    )
+
+    def build_targets(survey_type, **kwargs):
+        seen.update(kwargs)
+        return []
+
+    monkeypatch.setattr(
+        macro_refresh_runtime.ism_report_ingestion,
+        "build_targets",
+        build_targets,
+    )
+    providers = macro_refresh_runtime.build_runtime_providers(artifacts)
+
+    assert providers["ism_services_fetch"]([]) == 0
+    assert seen["fetch"] is None
+    assert artifacts.get("ism.services") == []
+
+
 def test_runtime_ism_persist_fails_for_failed_report_row(monkeypatch):
     artifacts = ArtifactStore()
     artifacts.put("ism.manufacturing", [{"status": "failed"}])

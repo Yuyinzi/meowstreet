@@ -437,6 +437,10 @@ def persist_ism_enrichment(db_path, prepared_extraction):
             "model": prepared_extraction["model"],
             "updated_at": snapshot["fetched_at"],
         }
+        if survey_type == "manufacturing":
+            from app.tools.ism_ai_extraction import PROMPT_VERSION
+
+            source["prompt_version"] = PROMPT_VERSION
         if survey_type == "services":
             from app.db.ism_services_ai import promote_services_extraction
 
