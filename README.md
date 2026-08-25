@@ -12,9 +12,12 @@ Meowstreet is a local-first trade workflow console for assessing market context,
 
 ![Meowstreet dashboard](static/dashboard.png)
 ![Meowstreet dashboard](static/ISM.png)
-## Run locally
+
+## Getting started
 
 Prerequisites: Python 3.13 and Node.js 20.11 or newer.
+
+### Quick setup
 
 The fastest path is the one-command setup script. It creates the virtual
 environment, installs Python and frontend dependencies, copies `.env.example`
@@ -28,7 +31,11 @@ database, runs the macro data refresh, and starts the server:
 Use `./start.sh --skip-refresh` to skip the macro data refresh, or
 `./start.sh --setup-only` to stop before starting the server.
 
-To run the steps manually instead, create a virtual environment, install
+Open `http://127.0.0.1:8797` in your browser.
+
+### Manual setup
+
+To run the steps individually instead, create a virtual environment, install
 dependencies, build the dashboard assets, bootstrap the stable reference data,
 and start the server:
 
@@ -41,9 +48,7 @@ npm run build
 .venv/bin/uvicorn app.api:app --reload --port 8797 --workers 2
 ```
 
-Open `http://127.0.0.1:8797` in your browser.
-
-## Investing.com browser session (CDP)
+### Investing.com browser session (CDP)
 
 The tracked commodities lane (COMEX Copper, LME 3M Copper, Iron Ore 62% CFR
 China) fetches from Investing.com through a real Chrome window driven over the
@@ -65,7 +70,7 @@ reports a session or re-verification error. `./start.sh` detects a missing CDP
 endpoint before the refresh and launches this Chrome window for you. See
 `docs/operations/macro-data-cron.md` for the dedicated incremental cron job.
 
-## Test
+## Testing
 
 Run the test suite:
 
@@ -74,7 +79,9 @@ npm run build
 .venv/bin/pytest -q
 ```
 
-## Local data
+## Data and refresh jobs
+
+### Local data
 
 Meowstreet keeps application data on your machine. The bootstrap command imports
 stable GICS reference rows only. It imports no time series or reports and makes
@@ -85,7 +92,7 @@ Dashboards initially show insufficient-data states until scheduled refresh jobs
 populate observations. Cron jobs own time-series and report ingestion; bootstrap
 does not run those jobs.
 
-## Scheduled macro refresh
+### Scheduled macro refresh
 
 `jobs/refresh_macro_data.py` runs the enabled source lanes concurrently by
 default. The current registry uses fixed lanes for `fred_macro`, `credit`,
