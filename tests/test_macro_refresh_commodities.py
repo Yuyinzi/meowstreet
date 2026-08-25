@@ -117,3 +117,120 @@ def test_fetch_adapter_can_run_while_writer_gate_is_held(tmp_path):
         )
 
     assert result["series"]
+
+
+def _shfe_row(trade_date):
+    return {
+        "trade_date": trade_date,
+        "product": "CU",
+        "contract": "CU2610",
+        "open": 80500.0,
+        "high": 80500.0,
+        "low": 80500.0,
+        "close": 80500.0,
+        "previous_settlement": 80400.0,
+        "settlement": 80500.0,
+        "volume": 100.0,
+        "open_interest": 220000.0,
+        "open_interest_change": 100.0,
+        "turnover": 10000.0,
+        "source": "shfe",
+        "source_class": "official_exchange",
+        "access_adapter": "akshare",
+        "access_adapter_version": "1.18.81",
+        "source_identifier": "SHFE:CU",
+        "source_url": "https://www.shfe.com.cn/reports/tradedata/dailyandweeklydata/",
+        "retrieved_at": "2026-07-31T00:00:00+00:00",
+    }
+
+
+def test_persist_shfe_commits_each_staged_date_before_later_failure(monkeypatch, tmp_path):
+    artifacts = ArtifactStore()
+    artifacts.put(
+        "commodities.shfe",
+        {
+            "trade_dates": ["2026-07-28", "2026-07-29"],
+            "rows": [_shfe_row("2026-07-28"), _shfe_row("2026-07-29")],
+        },
+    )
+    from app.db import macro_indicators
+    from app.services import shfe_copper_import
+
+    real_import = shfe_copper_import.import_shfe_cu_dates
+    calls = []
+
+    def fail_second(con, trade_dates, **kwargs):
+        calls.append(trade_dates)
+        if len(calls) == 2:
+            raise RuntimeError("second SHFE date failed")
+        return real_import(con, trade_dates, **kwargs)
+
+    monkeypatch.setattr(shfe_copper_import, "import_shfe_cu_dates", fail_second)
+
+    with pytest.raises(RuntimeError, match="second SHFE date failed"):
+        macro_refresh_commodities.persist_shfe_copper(tmp_path / "market.sqlite", artifacts)
+
+    con = macro_indicators.connect(tmp_path / "market.sqlite")
+    try:
+        rows = macro_indicators.load_shfe_cu_contract_observations(con)
+    finally:
+        con.close()
+    assert calls == [["2026-07-28"], ["2026-07-29"]]
+    assert [row["trade_date"] for row in rows] == ["2026-07-28"]
+
+
+def test_fetch_dce_uses_fourteen_day_overlap_after_latest_observation(tmp_path):
+    from app.db import macro_indicators
+
+    db_path = tmp_path / "market.sqlite"
+    con = macro_indicators.connect(db_path)
+    macro_indicators.merge_macro_indicator_observations(
+        con,
+        {
+            "series_id": "iron_ore_dce",
+            "title": "Sina I0",
+            "units": "CNY/tonne",
+            "source": "sina",
+        },
+        [{"date": "2026-08-10", "value": 700.0, "source": "sina"}],
+    )
+    con.close()
+
+    calls = []
+
+    def fetcher(start_date, end_date):
+        calls.append((start_date, end_date))
+        return {
+            "series": {"series_id": "iron_ore_dce"},
+            "observations": [{"date": "2026-08-20", "value": 701.0, "source": "sina"}],
+        }
+
+    macro_refresh_commodities.fetch_dce_iron_ore_sina(
+        ArtifactStore(),
+        db_path=db_path,
+        today_date="2026-08-20",
+        fetcher=fetcher,
+    )
+
+    assert calls == [("2026-07-27", "2026-08-21")]
+
+
+def test_fetch_dce_initial_uses_full_history_window(tmp_path):
+    calls = []
+
+    def fetcher(start_date, end_date):
+        calls.append((start_date, end_date))
+        return {
+            "series": {"series_id": "iron_ore_dce"},
+            "observations": [{"date": "2013-10-18", "value": 700.0, "source": "sina"}],
+        }
+
+    macro_refresh_commodities.fetch_dce_iron_ore_sina(
+        ArtifactStore(),
+        db_path=tmp_path / "market.sqlite",
+        today_date="2026-08-20",
+        initial=True,
+        fetcher=fetcher,
+    )
+
+    assert calls == [("2013-10-18", "2026-08-21")]

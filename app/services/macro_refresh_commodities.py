@@ -230,23 +230,37 @@ def fetch_shfe_copper(
 def persist_shfe_copper(db_path, artifacts, *, progress_callback=None):
     staged = _get(artifacts, SHFE_ARTIFACT)
     rows = staged["rows"]
-    by_month = {}
+    rows_by_date = {}
     for row in rows:
-        month = row["trade_date"][:7]
-        by_month.setdefault(month, []).append(row)
-
-    def staged_fetcher(start_date, end_date):
-        month = start_date[:7]
-        return by_month.get(month, [])
+        rows_by_date.setdefault(row["trade_date"], []).append(row)
 
     con = macro_indicators.connect(db_path)
     try:
-        result = shfe_copper_import.import_shfe_cu_dates(
-            con,
-            staged["trade_dates"],
-            fetcher=staged_fetcher,
-            progress_callback=progress_callback,
-        )
+        result = {
+            "raw_dates_requested": len(staged["trade_dates"]),
+            "raw_dates_published": 0,
+            "raw_observations": 0,
+            "derived_observations": 0,
+            "rebuild_start_date": staged["trade_dates"][0],
+            "rebuild_end_date": staged["trade_dates"][-1],
+        }
+        for trade_date in staged["trade_dates"]:
+            date_rows = rows_by_date.get(trade_date)
+            if not date_rows:
+                continue
+
+            def staged_fetcher(start_date, end_date, date_rows=date_rows):
+                return date_rows
+
+            date_result = shfe_copper_import.import_shfe_cu_dates(
+                con,
+                [trade_date],
+                fetcher=staged_fetcher,
+                progress_callback=progress_callback,
+            )
+            result["raw_dates_published"] += date_result["raw_dates_published"]
+            result["raw_observations"] += date_result["raw_observations"]
+            result["derived_observations"] += date_result["derived_observations"]
     finally:
         con.close()
     return {"status": "ok", "artifact_key": SHFE_ARTIFACT, **result}
@@ -255,12 +269,28 @@ def persist_shfe_copper(db_path, artifacts, *, progress_callback=None):
 def fetch_dce_iron_ore_sina(
     artifacts,
     *,
+    db_path=None,
+    con=None,
     today_date=None,
     initial=False,
     fetcher=None,
 ):
     effective_today = today_date or date.today().isoformat()
-    start_date = dce_iron_ore_sina_import.DCE_IRON_ORE_SINA_START_DATE
+    stored_rows = []
+    if not initial and (db_path is not None or con is not None):
+        owns_connection = con is None
+        read_con = con or macro_indicators.connect(db_path)
+        try:
+            stored_rows = macro_indicators.load_macro_indicator_observations(
+                read_con, dce_iron_ore_sina_import.DCE_IRON_ORE_SINA_SERIES_ID
+            )
+        finally:
+            if owns_connection:
+                read_con.close()
+    if initial or not stored_rows:
+        start_date = dce_iron_ore_sina_import.DCE_IRON_ORE_SINA_START_DATE
+    else:
+        start_date = dce_iron_ore_sina_import._overlap_start(stored_rows)
     end_date = (date.fromisoformat(effective_today) + timedelta(days=1)).isoformat()
     fetch = fetcher or dce_iron_ore_sina_import._default_fetcher
     payload = fetch(start_date, end_date)
