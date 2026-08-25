@@ -179,6 +179,23 @@ def test_persist_shfe_commits_each_staged_date_before_later_failure(monkeypatch,
     assert [row["trade_date"] for row in rows] == ["2026-07-28"]
 
 
+def test_persist_shfe_reports_unique_final_derived_dates(tmp_path):
+    artifacts = ArtifactStore()
+    artifacts.put(
+        "commodities.shfe",
+        {
+            "trade_dates": ["2026-07-28", "2026-07-29"],
+            "rows": [_shfe_row("2026-07-28"), _shfe_row("2026-07-29")],
+        },
+    )
+
+    result = macro_refresh_commodities.persist_shfe_copper(
+        tmp_path / "market.sqlite", artifacts
+    )
+
+    assert result["derived_observations"] == 2
+
+
 def test_fetch_dce_uses_fourteen_day_overlap_after_latest_observation(tmp_path):
     from app.db import macro_indicators
 

@@ -46,6 +46,7 @@ The new staged-adapter suite initially failed during collection because `app.ser
 - Added independent `fetch_dol`/`persist_dol`, `fetch_bls`/`persist_bls`, and `fetch_federal_reserve`/`persist_federal_reserve` seams to the economic-confirmation script. Existing combined CLI behavior remains unchanged.
 - Preserved the explicit `EIA_KEY is not set` failure and SHFE alias-routing behavior.
 - SHFE persistence now commits each staged trading date through the existing importer before proceeding to the next; staged DCE fetch now reads the latest observation before network work and applies the 14-day overlap unless `initial=True`.
+- SHFE aggregate results now count unique final derived dates from the persisted main series, avoiding overlap double-counting across checkpoint rebuilds.
 
 ## Verification
 
@@ -53,6 +54,7 @@ The new staged-adapter suite initially failed during collection because `app.ser
 - Refresh plan/executor/resource regressions: `93 passed`.
 - Full suite: `4317 passed, 2 failed, 7 warnings`.
 - Review-fix affected suite: `167 passed`.
+- Aggregate-count follow-up suite: `168 passed`.
 - Python syntax checks and `git diff --check` passed.
 - Baseline SHFE test run remains the exact preflight failure:
   `tests/test_shfe_copper.py::test_trading_days_clamps_end_to_today`.

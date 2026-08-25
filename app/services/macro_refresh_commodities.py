@@ -260,7 +260,11 @@ def persist_shfe_copper(db_path, artifacts, *, progress_callback=None):
             )
             result["raw_dates_published"] += date_result["raw_dates_published"]
             result["raw_observations"] += date_result["raw_observations"]
-            result["derived_observations"] += date_result["derived_observations"]
+        final_main_rows = macro_indicators.load_shfe_cu_main_observations(con)
+        requested_dates = set(staged["trade_dates"])
+        result["derived_observations"] = len(
+            {row["date"] for row in final_main_rows if row["date"] in requested_dates}
+        )
     finally:
         con.close()
     return {"status": "ok", "artifact_key": SHFE_ARTIFACT, **result}
