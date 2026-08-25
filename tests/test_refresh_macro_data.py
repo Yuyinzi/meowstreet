@@ -168,7 +168,7 @@ def test_verbose_replays_success_output_and_captured_strings_are_cleared(monkeyp
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "details" in captured.out
-    assert "fred_macro.rates_fred_fetch: ok" in captured.out
+    assert "fred_macro.rates_fred_fetch: ok" not in captured.out
 
 
 def test_success_output_is_hidden_without_verbose(monkeypatch, capsys):
@@ -187,7 +187,67 @@ def test_success_output_is_hidden_without_verbose(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "details" not in captured.out
-    assert "fred_macro.rates_fred_fetch: ok" in captured.out
+    assert "fred_macro.rates_fred_fetch: ok" not in captured.out
+
+
+def test_final_report_only_itemizes_failed_and_blocked_results():
+    tasks = [
+        {"name": "lane.ok", "lane": "lane", "plan_index": 0},
+        {"name": "lane.skipped", "lane": "lane", "plan_index": 1},
+        {"name": "lane.failed", "lane": "lane", "plan_index": 2},
+        {"name": "lane.blocked", "lane": "lane", "plan_index": 3},
+    ]
+    results = [
+        {
+            "name": "lane.ok",
+            "lane": "lane",
+            "status": "ok",
+            "error": "",
+            "stdout": "",
+            "stderr": "",
+        },
+        {
+            "name": "lane.skipped",
+            "lane": "lane",
+            "status": "skipped",
+            "error": "not configured",
+            "stdout": "",
+            "stderr": "",
+        },
+        {
+            "name": "lane.failed",
+            "lane": "lane",
+            "status": "failed",
+            "error": "fetch failed",
+            "stdout": "",
+            "stderr": "",
+        },
+        {
+            "name": "lane.blocked",
+            "lane": "lane",
+            "status": "blocked",
+            "error": "dependency failed",
+            "stdout": "",
+            "stderr": "",
+        },
+    ]
+    stdout = StringIO()
+    stderr = StringIO()
+    reporter = refresh_macro_data._ProgressReporter(
+        tasks,
+        progress=FakeProgress(total=4, disable=True, file=stderr),
+        verbose=False,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    reporter.report_final(results)
+
+    assert stdout.getvalue() == ""
+    assert stderr.getvalue().splitlines() == [
+        "lane.failed: failed - fetch failed",
+        "lane.blocked: blocked - dependency failed",
+    ]
 
 
 def test_stop_on_error_blocks_only_the_failed_registry_lane(monkeypatch):
@@ -488,7 +548,8 @@ def test_main_runs_market_and_fred_refreshes_through_staged_registry(capsys):
     assert ("consumer", ["--fetch-michigan-csv", "data/local_system/consumer_cache"]) in calls
     out = capsys.readouterr().out
     assert "macro data refresh started" in out
-    assert "yahoo.benchmarks_import: ok" in out
+    assert "yahoo.benchmarks_import: ok" not in out
+    assert "macro data refresh completed: ok=46 skipped=0 failed=0 blocked=0" in out
     assert "macro data refresh completed: ok=" in out
 
 

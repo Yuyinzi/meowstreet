@@ -426,16 +426,10 @@ class _ProgressReporter:
     def _write_summary(self, result):
         prefix = _task_label(result)
         status = result["status"]
-        if status == "ok":
-            message = f"{prefix}: ok"
-            target = self._stdout
-        elif status == "skipped":
-            message = f"{prefix}: skipped - {result['error']}"
-            target = self._stdout
-        else:
-            message = f"{prefix}: {status} - {result['error']}"
-            target = self._stderr
-        _write_report_line(message, file=target, progress=self._progress)
+        if status not in {"failed", "blocked"}:
+            return
+        message = f"{prefix}: {status} - {result['error']}"
+        _write_report_line(message, file=self._stderr, progress=self._progress)
 
 
 def _write_prefixed_text(text, prefix, file, progress):
