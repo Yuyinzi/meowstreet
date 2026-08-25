@@ -126,6 +126,10 @@ def fetch_building_permits(artifacts, *, fetcher=None, destination=None, http_cl
                 Path(directory) / "permits_cust.xlsx", http_client=http_client
             )
             value = path.read_bytes()
+    if destination is not None:
+        destination = Path(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(value)
     result = {"artifact_key": "census.building_permits", "bytes": value}
     _put(artifacts, result["artifact_key"], value)
     return result
@@ -163,7 +167,12 @@ def fetch_nfib(artifacts, *, fetcher=None, source_url=None, cache_path=None, ref
         report_year, report_month = nfib_sbet.report_month_from_url(resolved_url)
         directory = Path(cache_path or tempfile.mkdtemp())
         directory.mkdir(parents=True, exist_ok=True)
-        path = directory / f"nfib-sbet-{report_year:04d}-{report_month:02d}.pdf"
+        filename = (
+            "nfib-sbet-current.pdf"
+            if cache_path is not None and source_url is not None
+            else f"nfib-sbet-{report_year:04d}-{report_month:02d}.pdf"
+        )
+        path = directory / filename
         nfib_sbet.fetch_sbet_report(str(path), resolved_url, http_client=http_client)
         value = path.read_bytes()
     result = {
@@ -243,22 +252,38 @@ def fetch_fomc_documents(artifacts, events, document_type, *, fetcher=None):
             "minutes": fetch_minutes_document,
         }[document_type]
     rows = []
+    unavailable = 0
+    failed = 0
+    from scripts.fetch_fomc_documents import DocumentUnavailableError
+
     for event in events:
-        if fetcher is None:
-            rows.append(fetch_document(event))
-        else:
-            try:
-                rows.append(fetch_document(event, document_type))
-            except TypeError as exc:
+        try:
+            if fetcher is None:
+                rows.append(fetch_document(event))
+            else:
                 try:
-                    rows.append(fetch_document(event))
-                except TypeError:
+                    rows.append(fetch_document(event, document_type))
+                except TypeError as exc:
                     try:
-                        rows.append(fetch_document(event.get("url", "")))
+                        rows.append(fetch_document(event))
                     except TypeError:
-                        raise exc
+                        try:
+                            rows.append(fetch_document(event.get("url", "")))
+                        except TypeError:
+                            raise exc
+        except DocumentUnavailableError:
+            unavailable += 1
+        except Exception:
+            failed += 1
     artifact_key = f"fomc.documents.{document_type}"
-    result = {"artifact_key": artifact_key, "rows": rows, "document_type": document_type}
+    result = {
+        "artifact_key": artifact_key,
+        "rows": rows,
+        "document_type": document_type,
+        "fetched": len(rows),
+        "unavailable": unavailable,
+        "failed": failed,
+    }
     _put(artifacts, artifact_key, rows)
     return result
 

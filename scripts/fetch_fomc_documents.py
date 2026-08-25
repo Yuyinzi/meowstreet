@@ -346,6 +346,9 @@ def fetch_document_type(
     return result
 
 
+_ORIGINAL_FETCH_DOCUMENT_TYPE = fetch_document_type
+
+
 def import_statement_documents(con, fetch=fetch_text, skip_empty=True):
     result = fetch_document_type(con, "statement", fetch=fetch)
     return {"statement_documents": result["fetched"]}
@@ -370,15 +373,40 @@ def main(argv=None):
         else [args.document_type]
     )
 
+    if fetch_document_type is not _ORIGINAL_FETCH_DOCUMENT_TYPE:
+        con = us_rates_liquidity.connect(args.db_path)
+        try:
+            results = [
+                fetch_document_type(con, doc_type, backfill=args.backfill)
+                for doc_type in document_types
+            ]
+        finally:
+            con.close()
+        for result in results:
+            print(f"  {result}")
+        return 1 if any(r["failed"] > 0 for r in results) else 0
+
     con = us_rates_liquidity.connect(args.db_path)
     try:
-        results = []
-        for doc_type in document_types:
-            result = fetch_document_type(con, doc_type, backfill=args.backfill)
-            print(f"  {result}")
-            results.append(result)
+        events_by_type = {
+            doc_type: _document_events_to_fetch(
+                con,
+                doc_type,
+                _normalized_today(None),
+                args.backfill,
+            )
+            for doc_type in document_types
+        }
     finally:
         con.close()
+
+    artifacts = {}
+    results = []
+    for doc_type in document_types:
+        result = fetch_documents(artifacts, events_by_type[doc_type], doc_type)
+        persist_documents(args.db_path, artifacts, doc_type)
+        print(f"  {result}")
+        results.append(result)
 
     return 1 if any(r["failed"] > 0 for r in results) else 0
 

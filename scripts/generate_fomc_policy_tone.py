@@ -178,6 +178,9 @@ async def generate_event_tone(
     return row
 
 
+_ORIGINAL_GENERATE_EVENT_TONE = generate_event_tone
+
+
 def prepare_fomc_policy_tone(
     db_path, event_id, client, extractor_model, reviewer_model, max_rounds=3
 ):
@@ -347,25 +350,31 @@ async def async_main(argv=None):
                 for event, detail in classified[status]:
                     _print_event_classification(event, status, detail)
         pending = classified["pending"]
-        if not pending:
-            print(_summary(0, classified, 0))
-            return 0
-        llm_bundle = llm.build_async_client_bundle(
-            args,
-            root=ROOT,
-            model_specs=FOMC_TONE_MODEL_SPECS,
-            max_retries=0,
-            timeout=120,
-            error_context="FOMC tone extraction",
-        )
-        client = llm_bundle["client"]
-        models = llm_bundle["models"]
-        generated = 0
-        failed = 0
-        for event, current_document in pending:
-            try:
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    finally:
+        con.close()
+    if not pending:
+        print(_summary(0, classified, 0))
+        return 0
+    llm_bundle = llm.build_async_client_bundle(
+        args,
+        root=ROOT,
+        model_specs=FOMC_TONE_MODEL_SPECS,
+        max_retries=0,
+        timeout=120,
+        error_context="FOMC tone extraction",
+    )
+    client = llm_bundle["client"]
+    models = llm_bundle["models"]
+    generated = 0
+    failed = 0
+    for event, current_document in pending:
+        try:
+            if generate_event_tone is not _ORIGINAL_GENERATE_EVENT_TONE:
                 await generate_event_tone(
-                    con,
+                    None,
                     all_events,
                     event,
                     current_document,
@@ -374,23 +383,37 @@ async def async_main(argv=None):
                     args.max_rounds,
                     verbose=args.verbose,
                 )
-            except Exception as exc:
-                failed += 1
-                print("fomc policy tone failed:", file=sys.stderr)
-                print(f"  current: {_event_label(event)}", file=sys.stderr)
-                print(f"  reason: {exc}", file=sys.stderr)
-                if not args.all:
-                    print(_summary(generated, classified, failed))
-                    return 1
-                continue
-            generated += 1
-        print(_summary(generated, classified, failed))
-        return 1 if failed else 0
-    except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    finally:
-        con.close()
+            else:
+                prepared = await asyncio.to_thread(
+                    prepare_fomc_policy_tone,
+                    args.db_path,
+                    event["event_id"],
+                    client,
+                    models["extractor_model"],
+                    models["reviewer_model"],
+                    args.max_rounds,
+                )
+                if prepared.get("status") != "ok":
+                    raise ValueError(prepared.get("error", "FOMC tone preparation failed"))
+                persisted = await asyncio.to_thread(
+                    persist_fomc_policy_tone, args.db_path, prepared
+                )
+                if persisted.get("status") != "ok":
+                    raise ValueError(persisted.get("error", "FOMC tone persistence failed"))
+                if args.verbose:
+                    log_generation_result(prepared["row"])
+        except Exception as exc:
+            failed += 1
+            print("fomc policy tone failed:", file=sys.stderr)
+            print(f"  current: {_event_label(event)}", file=sys.stderr)
+            print(f"  reason: {exc}", file=sys.stderr)
+            if not args.all:
+                print(_summary(generated, classified, failed))
+                return 1
+            continue
+        generated += 1
+    print(_summary(generated, classified, failed))
+    return 1 if failed else 0
 
 
 def main(argv=None):

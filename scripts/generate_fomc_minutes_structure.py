@@ -199,6 +199,9 @@ async def generate_event_minutes_structure(
     return 1
 
 
+_ORIGINAL_GENERATE_EVENT_MINUTES_STRUCTURE = generate_event_minutes_structure
+
+
 def prepare_fomc_minutes_structure(
     db_path, event_id, client, extractor_model, reviewer_model, max_rounds=3
 ):
@@ -300,25 +303,31 @@ async def async_main(argv=None):
             for event, detail in classified["unavailable"]:
                 _print_event_classification(event, "unavailable", detail)
         pending = classified["pending"]
-        if not pending:
-            print(_summary(0, classified, 0))
-            return 0
-        llm_bundle = llm.build_async_client_bundle(
-            args,
-            root=ROOT,
-            model_specs=MINUTES_MODEL_SPECS,
-            max_retries=0,
-            timeout=120,
-            error_context="FOMC minutes structure extraction",
-        )
-        client = llm_bundle["client"]
-        models = llm_bundle["models"]
-        generated = 0
-        failed = 0
-        for event, minutes_document, statement_tone in pending:
-            try:
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        con.close()
+        return 1
+    con.close()
+    if not pending:
+        print(_summary(0, classified, 0))
+        return 0
+    llm_bundle = llm.build_async_client_bundle(
+        args,
+        root=ROOT,
+        model_specs=MINUTES_MODEL_SPECS,
+        max_retries=0,
+        timeout=120,
+        error_context="FOMC minutes structure extraction",
+    )
+    client = llm_bundle["client"]
+    models = llm_bundle["models"]
+    generated = 0
+    failed = 0
+    for event, minutes_document, statement_tone in pending:
+        try:
+            if generate_event_minutes_structure is not _ORIGINAL_GENERATE_EVENT_MINUTES_STRUCTURE:
                 generated += await generate_event_minutes_structure(
-                    con,
+                    None,
                     event,
                     minutes_document,
                     statement_tone,
@@ -327,22 +336,36 @@ async def async_main(argv=None):
                     args.max_rounds,
                     verbose=args.verbose,
                 )
-            except Exception as exc:
-                failed += 1
-                print("fomc minutes structure failed:", file=sys.stderr)
-                print(f"  event: {event['event_id']}", file=sys.stderr)
-                print(f"  reason: {exc}", file=sys.stderr)
-                if not args.all:
-                    print(_summary(generated, classified, failed))
-                    return 1
-                continue
-        print(_summary(generated, classified, failed))
-        return 1 if failed else 0
-    except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    finally:
-        con.close()
+            else:
+                prepared = await asyncio.to_thread(
+                    prepare_fomc_minutes_structure,
+                    args.db_path,
+                    event["event_id"],
+                    client,
+                    models["extractor_model"],
+                    models["reviewer_model"],
+                    args.max_rounds,
+                )
+                if prepared.get("status") != "ok":
+                    raise ValueError(prepared.get("error", "FOMC minutes preparation failed"))
+                persisted = await asyncio.to_thread(
+                    persist_fomc_minutes_structure, args.db_path, prepared
+                )
+                if persisted.get("status") != "ok":
+                    raise ValueError(persisted.get("error", "FOMC minutes persistence failed"))
+        except Exception as exc:
+            failed += 1
+            print("fomc minutes structure failed:", file=sys.stderr)
+            print(f"  event: {event['event_id']}", file=sys.stderr)
+            print(f"  reason: {exc}", file=sys.stderr)
+            if not args.all:
+                print(_summary(generated, classified, failed))
+                return 1
+            continue
+        if generate_event_minutes_structure is _ORIGINAL_GENERATE_EVENT_MINUTES_STRUCTURE:
+            generated += 1
+    print(_summary(generated, classified, failed))
+    return 1 if failed else 0
 
 
 def main(argv=None):

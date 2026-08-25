@@ -49,31 +49,48 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     cache_path = Path(args.cache_path)
-    con = macro_indicators.connect(args.db_path)
-    try:
-        if args.import_pdf:
-            source_url = args.source_url or nfib_sbet_import.DEFAULT_NFIB_SOURCE_URL
-            count = nfib_sbet_import.import_cached_official_sbet(
-                con, str(args.import_pdf), source_url, args.release_date
-            )
-            print(f"imported {count} nfib observations from {args.import_pdf}")
-        elif args.source_url:
-            cache_path.mkdir(parents=True, exist_ok=True)
-            pdf_path = cache_path / "nfib-sbet-current.pdf"
-            nfib_sbet_import.nfib_sbet.fetch_sbet_report(
-                str(pdf_path), args.source_url
-            )
-            count = nfib_sbet_import.import_cached_official_sbet(
-                con, str(pdf_path), args.source_url, args.release_date
-            )
-            print(f"imported {count} nfib observations from {pdf_path}")
-        else:
-            count = nfib_sbet_import.import_latest_official_sbet(
-                con, cache_path, args.release_date
-            )
-            print(f"imported {count} nfib observations from latest discovered report")
-    finally:
-        con.close()
+    artifacts = {}
+    if args.import_pdf:
+        source_url = args.source_url or nfib_sbet_import.DEFAULT_NFIB_SOURCE_URL
+        fetch_nfib(
+            artifacts,
+            fetcher=lambda _source_url: Path(args.import_pdf).read_bytes(),
+            source_url=source_url,
+        )
+        result = persist_nfib(
+            args.db_path, artifacts, release_date=args.release_date
+        )
+        print(
+            f"imported {result['observations']} nfib observations from {args.import_pdf}"
+        )
+    elif args.source_url:
+        fetch_nfib(
+            artifacts,
+            source_url=args.source_url,
+            cache_path=cache_path,
+        )
+        result = persist_nfib(
+            args.db_path,
+            artifacts,
+            release_date=args.release_date,
+        )
+        print(
+            f"imported {result['observations']} nfib observations from "
+            f"{cache_path / 'nfib-sbet-current.pdf'}"
+        )
+    elif args.fetch_pdf:
+        fetch_nfib(artifacts, cache_path=cache_path)
+        print(f"fetched latest nfib report to {cache_path}")
+    else:
+        fetch_nfib(artifacts, cache_path=cache_path)
+        result = persist_nfib(
+            args.db_path,
+            artifacts,
+            release_date=args.release_date,
+        )
+        print(
+            f"imported {result['observations']} nfib observations from latest discovered report"
+        )
 
     return 0
 

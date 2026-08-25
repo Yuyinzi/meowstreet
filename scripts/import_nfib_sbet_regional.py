@@ -40,15 +40,11 @@ def main(argv=None):
     parser.add_argument("--end-year", type=int, default=current_year)
     args = parser.parse_args(argv)
 
-    con = macro_indicators.connect(args.db_path)
-    try:
-        count = nfib_sbet_regional_import.import_official_regional_sbet(
-            con, args.start_year, args.end_year
-        )
-    finally:
-        con.close()
+    artifacts = {}
+    fetch_nfib_regional(artifacts, args.start_year, args.end_year)
+    result = persist_nfib_regional(args.db_path, artifacts)
 
-    print(f"imported {count} nfib regional observations")
+    print(f"imported {result['observations']} nfib regional observations")
     return 0
 
 
