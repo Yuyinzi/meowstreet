@@ -27,11 +27,65 @@ MONTHS = [
     "December",
 ]
 
+_METRIC_SPAN = r"(?:(?!percent\b)[^;%])*?"
+_METRIC_FILLER = r"(?:(?!percent\b)[^;%0-9])*?"
+_METRIC_VALUE = r"(\d+(?:\.\d+)?)"
+_METRIC_REGISTERED = r"(?:registered|registering)\b"
+_METRIC_OTHER_VERBS = r"(?:reached|hit|at|to)\b"
+
 METRIC_PATTERNS = {
-    "ism_services_pmi": r"Services PMI(?:®)?(?:\s+Report)?\s+(?:registered|at)\s+(\d+(?:\.\d+)?)\s+percent",
-    "ism_services_business_activity": r"Business Activity Index(?:\s+at|.*?to)\s+(\d+(?:\.\d+)?)\s+percent",
-    "ism_services_new_orders": r"New Orders Index(?:\s+registered|.*?to)\s+(\d+(?:\.\d+)?)\s+percent",
-    "ism_services_order_backlog": r"Backlog of Orders Index(?:\s+registered|.*?to)\s+(\d+(?:\.\d+)?)\s+percent",
+    "ism_services_pmi": [
+        r"Services PMI(?:\s*®)?(?:\s+Report)?\s+(?:registered|at)\b"
+        + _METRIC_FILLER
+        + _METRIC_VALUE
+        + r"\s+percent\b",
+        r"Services PMI(?:\s*®)?\s+at\s+" + _METRIC_VALUE + r"%",
+    ],
+    "ism_services_business_activity": [
+        r"Business Activity Index"
+        + _METRIC_SPAN
+        + _METRIC_REGISTERED
+        + _METRIC_FILLER
+        + _METRIC_VALUE
+        + r"\s+percent\b",
+        r"Business Activity Index\s+at\s+" + _METRIC_VALUE + r"%",
+        r"Business Activity Index"
+        + _METRIC_SPAN
+        + _METRIC_OTHER_VERBS
+        + _METRIC_FILLER
+        + _METRIC_VALUE
+        + r"\s+percent\b",
+    ],
+    "ism_services_new_orders": [
+        r"New Orders Index"
+        + _METRIC_SPAN
+        + _METRIC_REGISTERED
+        + _METRIC_FILLER
+        + _METRIC_VALUE
+        + r"\s+percent\b",
+        r"New Orders Index\s+at\s+" + _METRIC_VALUE + r"%",
+        r"New Orders Index"
+        + _METRIC_SPAN
+        + _METRIC_OTHER_VERBS
+        + _METRIC_FILLER
+        + _METRIC_VALUE
+        + r"\s+percent\b",
+    ],
+    "ism_services_order_backlog": [
+        r"Backlog of Orders Index"
+        + _METRIC_SPAN
+        + _METRIC_REGISTERED
+        + _METRIC_FILLER
+        + _METRIC_VALUE
+        + r"\s+percent\b",
+        r"Backlog of Orders Index\s+at\s+" + _METRIC_VALUE + r"%",
+        r"Backlog of Orders Index"
+        + _METRIC_SPAN
+        + _METRIC_OTHER_VERBS
+        + _METRIC_FILLER
+        + _METRIC_VALUE
+        + r"\s+percent\b",
+    ],
 }
 
 _REQUIRED_METRICS = {
@@ -122,8 +176,11 @@ def clean_title(month_name, year):
 
 def parse_metrics(text):
     metrics = {}
-    for series_id, pattern in METRIC_PATTERNS.items():
-        match = re.search(pattern, text)
+    for series_id, patterns in METRIC_PATTERNS.items():
+        match = next(
+            (found for pattern in patterns if (found := re.search(pattern, text))),
+            None,
+        )
         if match:
             metrics[series_id] = float(match.group(1))
     missing = [s for s in _REQUIRED_METRICS if s not in metrics]

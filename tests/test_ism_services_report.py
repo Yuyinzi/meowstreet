@@ -150,6 +150,68 @@ def test_parse_report_accepts_all_caps_marker():
     assert parsed["report"]["report_id"] == "ism_services_2026_06"
 
 
+def test_parse_report_handles_prnewswire_split_trademark_and_headline_summary():
+    html = """
+    <html><body>
+    <article>
+    <h1>Services PMI<sup>®</sup> at 54.1%; July 2026 ISM<sup>®</sup> Services PMI<sup>®</sup> Report</h1>
+    <p>Services PMI<sup>®</sup> at 54.1%; Business Activity Index at 59.1%; New Orders Index at 57.2%; Employment Index at 47.4%; Supplier Deliveries Index at 52.8%</p>
+    <p>In July, the Services PMI<sup>®</sup> registered 54.1 percent, an increase of 0.1 percentage point compared to June's figure of 54 percent. The Business Activity Index remained in expansion territory in July, increasing 3.7 percentage points to 59.1 percent from June's reading of 55.4 percent. The New Orders Index registered 57.2 percent, 2.1 percentage points above June's figure of 55.1 percent.</p>
+    <p>The Backlog of Orders Index remained in expansion territory for a sixth straight month, decreasing 4 percentage points to 50.9 percent in July from June's reading of 54.9 percent.</p>
+    <p>The 13 services industries reporting growth in July are: Construction; and Retail Trade.</p>
+    <p>The 4 services industries reporting contraction in July are: Educational Services.</p>
+    </article>
+    </body></html>
+    """
+    parsed = ism_services_report.parse_report(
+        html,
+        "https://example.test/services-pmi-july.html",
+        "2026-08-05T14:00:00Z",
+        "prnewswire",
+    )
+
+    assert parsed["report"]["report_id"] == "ism_services_2026_07"
+    assert parsed["metrics"] == {
+        "ism_services_pmi": 54.1,
+        "ism_services_business_activity": 59.1,
+        "ism_services_new_orders": 57.2,
+        "ism_services_order_backlog": 50.9,
+    }
+
+
+def test_parse_metrics_ignores_prior_month_comparison_figures():
+    text = (
+        "The Backlog of Orders Index grew in February for the 14th consecutive month. "
+        "Compared to the January reading of 57.4 percent, the Backlog of Orders Index "
+        "registered 64.2 percent, a 6.8-percentage point increase. "
+        "Services PMI registered 56.5 percent. "
+        "Business Activity Index registered 59.8 percent. "
+        "New Orders Index registered 56.1 percent."
+    )
+
+    metrics = ism_services_report.parse_metrics(text)
+
+    assert metrics["ism_services_order_backlog"] == 64.2
+
+
+def test_parse_metrics_handles_all_time_high_filler():
+    text = (
+        "Services PMI ® registered an all-time high of 63.7 percent, "
+        "8.4 percentage points higher than the February reading of 55.3 percent. "
+        "The previous high was in October 2018, when the Services PMI ® registered "
+        "60.9 percent. "
+        "Business Activity Index registered an all-time high of 69.4 percent in March. "
+        "New Orders Index registered an all-time high of 67.2 percent. "
+        "Backlog of Orders Index registered 55.0 percent."
+    )
+
+    metrics = ism_services_report.parse_metrics(text)
+
+    assert metrics["ism_services_pmi"] == 63.7
+    assert metrics["ism_services_business_activity"] == 69.4
+    assert metrics["ism_services_new_orders"] == 67.2
+
+
 def test_prepare_report_for_ai_ismworld_fixture():
     html = (FIXTURE_DIR / "ism_services_report.html").read_text()
     prepared = ism_services_report.prepare_report_for_ai(
