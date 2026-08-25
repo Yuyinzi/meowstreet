@@ -15,7 +15,30 @@ Meowstreet is a local-first trade workflow console for assessing market context,
 
 ## Getting started
 
-Prerequisites: Python 3.13 and Node.js 20.11 or newer.
+### Prerequisites
+
+- Python 3.13 and Node.js 20.11 or newer.
+- For the tracked commodities refresh lane (COMEX Copper, LME 3M Copper,
+  Iron Ore 62% CFR China), a verified Investing.com browser session. These
+  series fetch through a real Chrome window driven over the Chrome DevTools
+  Protocol; headless automation is not supported — Investing.com blocks it —
+  so a one-time manual verification is required:
+
+  ```bash
+  .venv/bin/python scripts/start_investing_chrome.py
+  ```
+
+  1. In the Chrome window that opens, sign in to Investing.com and complete
+     any CAPTCHA/anti-bot verification.
+  2. Confirm a price historical-data page renders with the Date/Price table.
+  3. Keep that Chrome process open while refresh jobs run.
+
+  The profile persists at `data/private/investing_chrome_profile/`, so
+  verification usually survives restarts; repeat the steps above when a
+  refresh reports a session or re-verification error. `./start.sh` detects a
+  missing session before the refresh and launches this Chrome window for you.
+  See `docs/operations/macro-data-cron.md` for the dedicated incremental cron
+  job.
 
 ### Quick setup
 
@@ -48,28 +71,6 @@ npm run build
 .venv/bin/uvicorn app.api:app --reload --port 8797 --workers 2
 ```
 
-### Investing.com browser session (CDP)
-
-The tracked commodities lane (COMEX Copper, LME 3M Copper, Iron Ore 62% CFR
-China) fetches from Investing.com through a real Chrome window driven over the
-Chrome DevTools Protocol on port 9222. Headless automation is not supported —
-Investing.com blocks it — so a one-time manual verification is required:
-
-```bash
-.venv/bin/python scripts/start_investing_chrome.py
-```
-
-1. In the Chrome window that opens, sign in to Investing.com and complete any
-   CAPTCHA/anti-bot verification.
-2. Confirm a price historical-data page renders with the Date/Price table.
-3. Keep that Chrome process open while refresh jobs run.
-
-The profile persists at `data/private/investing_chrome_profile/`, so
-verification usually survives restarts; repeat the steps above when a refresh
-reports a session or re-verification error. `./start.sh` detects a missing CDP
-endpoint before the refresh and launches this Chrome window for you. See
-`docs/operations/macro-data-cron.md` for the dedicated incremental cron job.
-
 ## Testing
 
 Run the test suite:
@@ -79,9 +80,7 @@ npm run build
 .venv/bin/pytest -q
 ```
 
-## Data and refresh jobs
-
-### Local data
+## Local data
 
 Meowstreet keeps application data on your machine. The bootstrap command imports
 stable GICS reference rows only. It imports no time series or reports and makes
@@ -92,7 +91,7 @@ Dashboards initially show insufficient-data states until scheduled refresh jobs
 populate observations. Cron jobs own time-series and report ingestion; bootstrap
 does not run those jobs.
 
-### Scheduled macro refresh
+## Scheduled macro refresh
 
 `jobs/refresh_macro_data.py` runs the enabled source lanes concurrently by
 default. The current registry uses fixed lanes for `fred_macro`, `credit`,
