@@ -276,3 +276,136 @@ def test_fomc_minutes_main_uses_prepare_then_persist(monkeypatch, tmp_path):
     ) == 0
     assert [call[0] for call in calls] == ["prepare", "persist"]
     assert calls[1][1][1] is prepared
+
+
+def test_fomc_document_cli_prints_only_compact_summary(monkeypatch, tmp_path, capsys):
+    from scripts import fetch_fomc_documents
+
+    event = {
+        "event_id": "event",
+        "start_date": "2026-07-28",
+        "end_date": "2026-07-29",
+    }
+    monkeypatch.setattr(
+        fetch_fomc_documents.us_rates_liquidity,
+        "load_macro_events",
+        lambda con, event_type: [event],
+    )
+    monkeypatch.setattr(
+        fetch_fomc_documents.us_rates_liquidity,
+        "load_macro_event_document",
+        lambda *args: None,
+    )
+    monkeypatch.setattr(
+        fetch_fomc_documents,
+        "fetch_documents",
+        lambda artifacts, events, document_type: {
+            "artifact_key": "fomc.documents.statement",
+            "rows": [
+                {
+                    "event_id": "event",
+                    "document_type": "statement",
+                    "text": "RAW DOCUMENT BODY MUST NOT PRINT",
+                }
+            ],
+            "document_type": "statement",
+            "fetched": 1,
+            "unavailable": 0,
+            "failed": 0,
+        },
+    )
+    monkeypatch.setattr(
+        fetch_fomc_documents,
+        "persist_documents",
+        lambda *args: {"status": "ok"},
+    )
+
+    assert fetch_fomc_documents.main(
+        ["--db-path", str(tmp_path / "market.sqlite")]
+    ) == 0
+    output = capsys.readouterr().out
+    assert output == "  {'document_type': 'statement', 'fetched': 1, 'unavailable': 0, 'failed': 0}\n"
+    assert "RAW DOCUMENT BODY" not in output
+    assert "rows" not in output
+
+
+def test_staged_fomc_fetch_retains_structured_failure_details():
+    from app.services import macro_refresh_official
+
+    event = {
+        "event_id": "event",
+        "start_date": "2026-07-28",
+        "end_date": "2026-07-29",
+    }
+    result = macro_refresh_official.fetch_fomc_documents(
+        {},
+        [event],
+        "statement",
+        fetcher=lambda current_event, document_type: (_ for _ in ()).throw(
+            ValueError("source unavailable")
+        ),
+    )
+
+    assert result["failed"] == 1
+    assert result["failures"] == [
+        {
+            "event_id": "event",
+            "document_type": "statement",
+            "reason": "source unavailable",
+        }
+    ]
+
+
+def test_fomc_document_cli_prints_structured_failures_without_skip_spam(
+    monkeypatch, tmp_path, capsys
+):
+    from scripts import fetch_fomc_documents
+
+    event = {
+        "event_id": "event",
+        "start_date": "2026-07-28",
+        "end_date": "2026-07-29",
+    }
+    monkeypatch.setattr(
+        fetch_fomc_documents.us_rates_liquidity,
+        "load_macro_events",
+        lambda con, event_type: [event],
+    )
+    monkeypatch.setattr(
+        fetch_fomc_documents.us_rates_liquidity,
+        "load_macro_event_document",
+        lambda *args: None,
+    )
+    monkeypatch.setattr(
+        fetch_fomc_documents,
+        "fetch_documents",
+        lambda *args: {
+            "document_type": "statement",
+            "fetched": 0,
+            "unavailable": 1,
+            "failed": 1,
+            "failures": [
+                {
+                    "event_id": "event",
+                    "document_type": "statement",
+                    "reason": "invalid published document",
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        fetch_fomc_documents,
+        "persist_documents",
+        lambda *args: {"status": "ok"},
+    )
+
+    assert fetch_fomc_documents.main(
+        ["--db-path", str(tmp_path / "market.sqlite")]
+    ) == 1
+    captured = capsys.readouterr()
+    assert "FAIL event statement: invalid published document" in captured.err
+    assert "SKIP" not in captured.out
+    assert captured.out == (
+        "  {'document_type': 'statement', 'fetched': 0, "
+        "'unavailable': 1, 'failed': 1}\n"
+    )

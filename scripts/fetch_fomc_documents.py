@@ -405,10 +405,22 @@ def main(argv=None):
     for doc_type in document_types:
         result = fetch_documents(artifacts, events_by_type[doc_type], doc_type)
         persist_documents(args.db_path, artifacts, doc_type)
-        print(f"  {result}")
+        for failure in result.get("failures", []):
+            print(
+                f"FAIL {failure['event_id']} {failure['document_type']}: "
+                f"{failure['reason']}",
+                file=sys.stderr,
+            )
+        summary = {
+            "document_type": result.get("document_type", doc_type),
+            "fetched": result.get("fetched", 0),
+            "unavailable": result.get("unavailable", 0),
+            "failed": result.get("failed", 0),
+        }
+        print(f"  {summary}")
         results.append(result)
 
-    return 1 if any(r["failed"] > 0 for r in results) else 0
+    return 1 if any(r.get("failed", 0) > 0 for r in results) else 0
 
 
 if __name__ == "__main__":

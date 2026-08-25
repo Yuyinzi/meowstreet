@@ -254,6 +254,7 @@ def fetch_fomc_documents(artifacts, events, document_type, *, fetcher=None):
     rows = []
     unavailable = 0
     failed = 0
+    failures = []
     from scripts.fetch_fomc_documents import DocumentUnavailableError
 
     for event in events:
@@ -273,8 +274,15 @@ def fetch_fomc_documents(artifacts, events, document_type, *, fetcher=None):
                             raise exc
         except DocumentUnavailableError:
             unavailable += 1
-        except Exception:
+        except Exception as exc:
             failed += 1
+            failures.append(
+                {
+                    "event_id": event["event_id"],
+                    "document_type": document_type,
+                    "reason": str(exc),
+                }
+            )
     artifact_key = f"fomc.documents.{document_type}"
     result = {
         "artifact_key": artifact_key,
@@ -283,6 +291,7 @@ def fetch_fomc_documents(artifacts, events, document_type, *, fetcher=None):
         "fetched": len(rows),
         "unavailable": unavailable,
         "failed": failed,
+        "failures": failures,
     }
     _put(artifacts, artifact_key, rows)
     return result

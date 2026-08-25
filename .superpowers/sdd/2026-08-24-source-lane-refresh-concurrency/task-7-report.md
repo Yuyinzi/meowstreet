@@ -54,3 +54,10 @@ Additional compatibility follow-up:
 - `c0519309` — `fix: preserve FOMC CLI failure exits`
 - FOMC generation and staged CLI regression subset: `42 passed`.
 - Client-construction failures now retain the prior concise stderr and exit-code behavior after the read connection has closed.
+
+FOMC document output follow-up:
+
+- Staged document outcomes now retain structured failure records containing event id, document type, and reason.
+- The direct document CLI prints only `document_type`, `fetched`, `unavailable`, and `failed` aggregate fields; raw staged rows and document bodies are never printed.
+- Failed documents print `FAIL <event> <type>: <reason>` to stderr; routine unavailable documents remain aggregate-only without per-event skip spam.
+- Final Task 7/FOMC CLI verification: `113 passed`.
