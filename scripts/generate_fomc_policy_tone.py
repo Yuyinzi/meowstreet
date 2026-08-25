@@ -58,9 +58,14 @@ def _event_label(event):
     return f"{event['event_id']} ({event.get('start_date')} to {end_date})"
 
 
-def should_skip_existing_extraction(existing, force):
+def should_skip_existing_extraction(existing, force, source_hash=None):
     return (
-        bool(existing and existing.get("extraction_status") == "approved") and not force
+        bool(
+            existing
+            and existing.get("extraction_status") == "approved"
+            and (source_hash is None or existing.get("source_hash") == source_hash)
+        )
+        and not force
     )
 
 
@@ -294,7 +299,9 @@ def classify_events(con, events, force):
             "statement",
             current_document["source_hash"],
         )
-        if should_skip_existing_extraction(existing, force):
+        if should_skip_existing_extraction(
+            existing, force, current_document["source_hash"]
+        ):
             classified["reused"].append((event, existing))
             continue
         classified["pending"].append((event, current_document))

@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.db import market_data
 from app.services import macro_refresh_runtime
 from app.services.macro_refresh_executor import execute_tasks
 from app.services.macro_refresh_registry import build_refresh_tasks
@@ -70,7 +71,11 @@ def test_runtime_yahoo_fetch_stages_rows_and_defers_saves_to_writer_gated_import
         }
     }
     lock = TrackingLock()
-    monkeypatch.setattr(macro_refresh_runtime.benchmark_market_data, "connect", lambda: Connection())
+    monkeypatch.setattr(
+        macro_refresh_runtime.benchmark_market_data,
+        "connect_read_only",
+        lambda *_args: Connection(),
+    )
     monkeypatch.setattr(
         macro_refresh_runtime.benchmark_market_data,
         "latest_price_date",
@@ -132,6 +137,150 @@ def test_runtime_yahoo_fetch_stages_rows_and_defers_saves_to_writer_gated_import
     assert [result["status"] for result in results] == ["ok", "ok"]
     assert requests == ["^GSPC", "^NDX", "^IXIC", "^DJI"]
     assert writer_states == [True]
+
+
+def test_runtime_yahoo_reuses_fresh_market_cache_and_stages_only_stale_symbol(
+    monkeypatch, tmp_path
+):
+    artifacts = ArtifactStore()
+    market_db_path = tmp_path / "market.sqlite"
+    benchmark_db_path = tmp_path / "benchmark.sqlite"
+    cached_dates = {
+        "^GSPC": "2026-08-25",
+        "^NDX": "2026-08-22",
+        "^IXIC": "2026-08-25",
+        "^DJI": "2026-08-25",
+    }
+    market_con = market_data.connect(market_db_path)
+    try:
+        for symbol, date_value in cached_dates.items():
+            market_data.save_price_rows(
+                market_con,
+                symbol,
+                "1d",
+                [
+                    {
+                        "date": date_value,
+                        "open": 10.0,
+                        "high": 11.0,
+                        "low": 9.0,
+                        "close": 10.5,
+                        "adjusted_close": 10.5,
+                        "volume": 1,
+                    }
+                ],
+            )
+    finally:
+        market_con.close()
+    requests = []
+    writer_states = []
+
+    class TrackingLock:
+        def __init__(self):
+            self.acquired = False
+
+        def acquire(self, timeout):
+            self.acquired = True
+            return True
+
+        def release(self):
+            self.acquired = False
+
+    chart = {
+        "chart": {
+            "result": [
+                {
+                    "timestamp": [1787616000],
+                    "indicators": {
+                        "adjclose": [{"adjclose": [11.5]}],
+                        "quote": [
+                            {
+                                "open": [11.0],
+                                "high": [12.0],
+                                "low": [10.0],
+                                "close": [11.5],
+                                "volume": [2],
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+    }
+    lock = TrackingLock()
+    original_save = market_data.save_price_rows
+    monkeypatch.setattr(
+        macro_refresh_runtime.market_data,
+        "DEFAULT_DB_PATH",
+        market_db_path,
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.benchmark_market_data,
+        "DEFAULT_DB_PATH",
+        benchmark_db_path,
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.market_data_tool,
+        "_today_iso",
+        lambda: "2026-08-25",
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.market_data_tool,
+        "fetch_yahoo_chart_json_for_dates",
+        lambda symbol, **_kwargs: requests.append(symbol) or chart,
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.market_data,
+        "save_price_rows",
+        lambda *args, **kwargs: writer_states.append(lock.acquired)
+        or original_save(*args, **kwargs),
+    )
+    providers = {
+        name: provider
+        for name, provider in macro_refresh_runtime.build_runtime_providers(
+            artifacts
+        ).items()
+        if name in {"benchmarks_fetch", "benchmarks_import"}
+    }
+    args = SimpleNamespace(
+        skip_yahoo=False,
+        skip_lumber=True,
+        skip_rates=True,
+        skip_consumer_sentiment=True,
+        skip_m2=True,
+        skip_macro_indicators=True,
+        skip_building_permits=True,
+        skip_ism=True,
+        skip_gdp=True,
+        skip_fomc=True,
+        skip_nfib_sbo=True,
+        skip_nfib_sbo_regional=True,
+        skip_tracked_commodities=True,
+        skip_cyclical_commodities=True,
+        skip_oil=True,
+        skip_shfe_copper=True,
+        skip_dce_iron_ore_sina=True,
+        skip_economic_confirmation=True,
+    )
+
+    results = execute_tasks(
+        build_refresh_tasks(
+            args,
+            providers,
+            openai_config={"api_key": None},
+            artifact_store=artifacts,
+        ),
+        writer_gate=SQLiteWriterGate(lock=lock),
+    )
+
+    assert [result["status"] for result in results] == ["ok", "ok"]
+    assert requests == ["^NDX"]
+    assert writer_states == [True]
+    market_con = market_data.connect(market_db_path)
+    try:
+        assert market_data.latest_price_date(market_con, "^NDX", "1d") == "2026-08-25"
+    finally:
+        market_con.close()
 
 
 def test_runtime_ism_enrichment_builds_client_and_stages_result(monkeypatch):
@@ -436,24 +585,34 @@ def test_runtime_ism_persist_fails_for_failed_report_row(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("provider_name", "batch_name", "artifact_key", "error"),
+    ("provider_name", "import_name", "batch_name", "persist_name", "artifact_key", "error"),
     [
         (
             "fomc_policy_tone_extract",
+            "fomc_policy_tone_import",
             "prepare_fomc_policy_tone_batch",
+            "persist_fomc_policy_tone",
             "fomc.policy_tone",
             "FOMC statement document is unavailable",
         ),
         (
             "fomc_minutes_extract",
+            "fomc_minutes_import",
             "prepare_fomc_minutes_structure_batch",
+            "persist_fomc_minutes_structure",
             "fomc.minutes",
             "approved FOMC policy tone is unavailable",
         ),
     ],
 )
 def test_runtime_fomc_prepare_fails_with_event_identity(
-    monkeypatch, provider_name, batch_name, artifact_key, error
+    monkeypatch,
+    provider_name,
+    import_name,
+    batch_name,
+    persist_name,
+    artifact_key,
+    error,
 ):
     artifacts = ArtifactStore()
     monkeypatch.setattr(
@@ -478,17 +637,23 @@ def test_runtime_fomc_prepare_fails_with_event_identity(
         batch_name,
         fail_batch,
     )
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_official,
+        persist_name,
+        lambda _db_path, prepared: prepared,
+    )
     providers = macro_refresh_runtime.build_runtime_providers(
         artifacts,
         openai_config={"api_key": "configured", "model": "test-model"},
     )
 
-    with pytest.raises(ValueError, match=f"fomc meeting-1: {error}"):
-        providers[provider_name]([])
+    assert providers[provider_name]([]) == 0
 
     assert artifacts.get(artifact_key) == [
         {"status": "failed", "event_id": "meeting-1", "error": error}
     ]
+    with pytest.raises(ValueError, match=f"fomc meeting-1: {error}"):
+        providers[import_name]([])
 
 
 def test_runtime_fomc_persist_fails_for_failed_staged_result(monkeypatch):
@@ -515,6 +680,177 @@ def test_runtime_fomc_persist_fails_for_failed_staged_result(monkeypatch):
         match="fomc meeting-1: FOMC statement document is unavailable",
     ):
         providers["fomc_policy_tone_import"]([])
+
+
+@pytest.mark.parametrize(
+    "staged",
+    [
+        [
+            {"status": "failed", "event_id": "failed-event", "error": "model unavailable"},
+            {"status": "ok", "event_id": "success-event", "row": {}},
+        ],
+        [
+            {"status": "ok", "event_id": "success-event", "row": {}},
+            {"status": "failed", "event_id": "failed-event", "error": "model unavailable"},
+        ],
+    ],
+)
+def test_runtime_fomc_persists_every_partial_batch_before_raising(
+    monkeypatch, staged
+):
+    artifacts = ArtifactStore()
+    persisted = []
+    monkeypatch.setattr(
+        macro_refresh_runtime,
+        "_pending_fomc_enrichment_events",
+        lambda _key: [
+            {"event_id": "failed-event"},
+            {"event_id": "success-event"},
+        ],
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.llm,
+        "build_async_client_bundle",
+        lambda *args, **kwargs: {
+            "client": object(),
+            "models": {"extractor_model": "extractor", "reviewer_model": "reviewer"},
+        },
+    )
+
+    async def prepare_batch(*_args):
+        return staged
+
+    def persist(_db_path, prepared):
+        persisted.append(prepared["event_id"])
+        return prepared
+
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_official,
+        "prepare_fomc_policy_tone_batch",
+        prepare_batch,
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_official,
+        "persist_fomc_policy_tone",
+        persist,
+    )
+    providers = macro_refresh_runtime.build_runtime_providers(
+        artifacts,
+        openai_config={"api_key": "configured", "model": "test-model"},
+    )
+
+    assert providers["fomc_policy_tone_extract"]([]) == 0
+    with pytest.raises(ValueError, match="failed-event: model unavailable"):
+        providers["fomc_policy_tone_import"]([])
+
+    assert persisted == [item["event_id"] for item in staged]
+    assert artifacts.get("fomc.policy_tone.persistence") == staged
+
+
+def test_runtime_fomc_selector_skips_approved_hash_and_keeps_failed_hash(
+    monkeypatch,
+):
+    from scripts import generate_fomc_policy_tone
+
+    events = [
+        {"event_id": "approved-event", "start_date": "2026-08-01"},
+        {"event_id": "failed-event", "start_date": "2026-08-02"},
+    ]
+
+    class Connection:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(macro_refresh_runtime.us_rates_liquidity, "connect", Connection)
+    monkeypatch.setattr(
+        macro_refresh_runtime.us_rates_liquidity,
+        "load_macro_events",
+        lambda *_args: events,
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.us_rates_liquidity,
+        "load_macro_event_document",
+        lambda _con, event_id, _document_type: {
+            "source_hash": f"{event_id}-hash"
+        },
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.us_rates_liquidity,
+        "load_macro_event_tone_extraction",
+        lambda _con, event_id, _document_type, source_hash: {
+            "source_hash": source_hash,
+            "extraction_status": "approved",
+        }
+        if event_id == "approved-event"
+        else None,
+    )
+
+    pending = macro_refresh_runtime._pending_fomc_enrichment_events(
+        "fomc.policy_tone"
+    )
+
+    assert pending == [events[1]]
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "batch_name", "extractor_env", "reviewer_env", "expected"),
+    [
+        (
+            "fomc_policy_tone_extract",
+            "prepare_fomc_policy_tone_batch",
+            "FOMC_TONE_EXTRACTOR_MODEL",
+            "FOMC_TONE_REVIEWER_MODEL",
+            ("tone-extractor", "tone-reviewer"),
+        ),
+        (
+            "fomc_minutes_extract",
+            "prepare_fomc_minutes_structure_batch",
+            "FOMC_MINUTES_EXTRACTOR_MODEL",
+            "FOMC_MINUTES_REVIEWER_MODEL",
+            ("minutes-extractor", "minutes-reviewer"),
+        ),
+    ],
+)
+def test_runtime_fomc_batches_use_dedicated_role_model_environment(
+    monkeypatch,
+    provider_name,
+    batch_name,
+    extractor_env,
+    reviewer_env,
+    expected,
+):
+    artifacts = ArtifactStore()
+    received_models = []
+    monkeypatch.setenv("OPENAI_MODEL", "shared-model")
+    monkeypatch.setenv(extractor_env, expected[0])
+    monkeypatch.setenv(reviewer_env, expected[1])
+    monkeypatch.setattr(
+        macro_refresh_runtime,
+        "_pending_fomc_enrichment_events",
+        lambda _key: [{"event_id": "meeting-1"}],
+    )
+    monkeypatch.setattr(
+        macro_refresh_runtime.llm,
+        "build_async_client",
+        lambda *_args, **_kwargs: object(),
+    )
+
+    async def prepare_batch(_db_path, _event_ids, _client, extractor_model, reviewer_model):
+        received_models.append((extractor_model, reviewer_model))
+        return [{"status": "ok", "event_id": "meeting-1", "row": {}}]
+
+    monkeypatch.setattr(
+        macro_refresh_runtime.macro_refresh_official,
+        batch_name,
+        prepare_batch,
+    )
+    providers = macro_refresh_runtime.build_runtime_providers(
+        artifacts,
+        openai_config={"api_key": "configured", "model": "generic-config-model"},
+    )
+
+    assert providers[provider_name]([]) == 0
+    assert received_models == [expected]
 
 
 def test_runtime_staged_skipped_result_is_success(monkeypatch):

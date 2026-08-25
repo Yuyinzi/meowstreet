@@ -359,23 +359,35 @@ def _yahoo_providers(artifacts):
             "us_nasdaq_composite",
             "us_djia",
         ]
-        benchmark_con = benchmark_market_data.connect()
+        benchmark_con = benchmark_market_data.connect_read_only(
+            benchmark_market_data.DEFAULT_DB_PATH
+        )
+        market_con = market_data.connect_read_only(market_data.DEFAULT_DB_PATH)
         try:
-            latest = {
-                benchmark_id: benchmark_market_data.latest_price_date(
-                    benchmark_con, benchmark_id
-                )
-                for benchmark_id in ids
-            }
+            latest = (
+                {
+                    benchmark_id: benchmark_market_data.latest_price_date(
+                        benchmark_con, benchmark_id
+                    )
+                    for benchmark_id in ids
+                }
+                if benchmark_con is not None
+                else {}
+            )
+            market_cache = macro_refresh_yahoo.load_market_cache(market_con, ids)
             prepared = macro_refresh_yahoo.prepare_benchmarks(
                 ids,
                 fetch_market_data=None,
                 load_market_rows=None,
                 fetch_yahoo_chart_json=market_data_tool.fetch_yahoo_chart_json_for_dates,
                 latest_dates=latest,
+                market_cache=market_cache,
             )
         finally:
-            benchmark_con.close()
+            if market_con is not None:
+                market_con.close()
+            if benchmark_con is not None:
+                benchmark_con.close()
         artifacts.put("yahoo.benchmarks", prepared)
         return 0
 
@@ -505,25 +517,25 @@ def _build_ism_client(config):
 
 def _raise_for_failed_outcomes(value, prefix):
     outcomes = value if isinstance(value, list) else [value]
-    failed = next(
-        (
-            outcome
-            for outcome in outcomes
-            if isinstance(outcome, dict) and outcome.get("status") == "failed"
-        ),
-        None,
-    )
-    if failed is None:
+    failed = [
+        outcome
+        for outcome in outcomes
+        if isinstance(outcome, dict) and outcome.get("status") == "failed"
+    ]
+    if not failed:
         return
-    identity = " ".join(
-        str(failed[key])
-        for key in ("event_id", "report_id", "report_month")
-        if failed.get(key)
-    )
-    error = failed.get("error") or "staged refresh outcome failed"
-    if identity:
-        raise ValueError(f"{prefix} {identity}: {error}")
-    raise ValueError(f"{prefix}: {error}")
+    details = []
+    for outcome in failed:
+        identity = " ".join(
+            str(outcome[key])
+            for key in ("event_id", "report_id", "report_month")
+            if outcome.get(key)
+        )
+        error = outcome.get("error") or "staged refresh outcome failed"
+        details.append(f"{identity}: {error}" if identity else error)
+    if len(details) == 1:
+        raise ValueError(f"{prefix} {details[0]}")
+    raise ValueError(f"{prefix} failures: {'; '.join(details)}")
 
 
 def _raise_for_failed_document_fetches(outcomes):
@@ -656,7 +668,6 @@ def _prepare_fomc_enrichment(artifacts, key, config):
         )
     )
     artifacts.put(key, prepared)
-    _raise_for_failed_outcomes(prepared, "fomc")
     return 0
 
 
@@ -703,8 +714,8 @@ def _fomc_model_bundle(config, model_specs, error_context):
     args = SimpleNamespace(
         openai_api_key=config.get("api_key"),
         openai_base_url=config.get("base_url"),
-        extractor_model=config.get("extractor_model") or config.get("model"),
-        reviewer_model=config.get("reviewer_model") or config.get("model"),
+        extractor_model=config.get("extractor_model"),
+        reviewer_model=config.get("reviewer_model"),
     )
     return llm.build_async_client_bundle(
         args,
@@ -716,9 +727,19 @@ def _fomc_model_bundle(config, model_specs, error_context):
 
 
 def _persist_fomc_enrichment(artifacts, key, persist):
+    results = []
     for prepared in artifacts.get(key):
-        result = persist(us_rates_liquidity.DEFAULT_DB_PATH, prepared)
-        _raise_for_failed_outcomes(result, "fomc")
+        try:
+            result = persist(us_rates_liquidity.DEFAULT_DB_PATH, prepared)
+        except Exception as exc:
+            result = {
+                "status": "failed",
+                "event_id": prepared.get("event_id"),
+                "error": str(exc),
+            }
+        results.append(result)
+    artifacts.put(f"{key}.persistence", results)
+    _raise_for_failed_outcomes(results, "fomc")
     return 0
 
 

@@ -4,6 +4,21 @@ from app.tools import benchmark_market_data as benchmark_tool
 from app.tools import market_data as market_data_tool
 
 
+def load_market_cache(con, benchmark_ids):
+    if con is None:
+        return {}
+    cache = {}
+    for benchmark_id in benchmark_ids:
+        config = benchmark_tool.benchmark_config(benchmark_id)
+        symbol = config["symbol"]
+        interval = config["interval"]
+        cache[symbol] = {
+            "latest_date": market_data.latest_price_date(con, symbol, interval),
+            "rows": market_data.load_price_rows(con, symbol, interval),
+        }
+    return cache
+
+
 def prepare_benchmarks(
     benchmark_ids,
     *,
@@ -12,16 +27,22 @@ def prepare_benchmarks(
     fetch_yahoo_chart_json=None,
     today_date=None,
     latest_dates=None,
+    market_cache=None,
     refresh_days=1,
     overlap_days=5,
 ):
     latest_dates = latest_dates or {}
+    market_cache = market_cache or {}
     prepared = []
     for benchmark_id in benchmark_ids:
         config = benchmark_tool.benchmark_config(benchmark_id)
         latest_date = latest_dates.get(config["benchmark_id"])
+        cached = market_cache.get(config["symbol"], {})
+        cached_latest_date = cached.get("latest_date")
+        cached_rows = cached.get("rows", [])
+        fetched_market_rows = False
         start_date = market_data.fetch_start_date(
-            latest_date,
+            cached_latest_date or latest_date,
             today_date or market_data_tool._today_iso(),
             overlap_days=overlap_days,
         )
@@ -38,17 +59,24 @@ def prepare_benchmarks(
                 config["symbol"], config["interval"], start_date=start_date
             )
         else:
-            payload = fetch_yahoo_chart_json(
-                config["symbol"],
-                start_date=start_date,
-                end_date=market_data_tool._tomorrow_iso(
-                    today_date or market_data_tool._today_iso()
-                ),
-                interval=config["interval"],
-            )
-            rows = market_data_tool.chart_payload_to_price_rows(
-                payload, config["symbol"]
-            )
+            effective_today = today_date or market_data_tool._today_iso()
+            if cached_rows and not market_data.should_refresh_prices(
+                cached_latest_date,
+                effective_today,
+                refresh_days=refresh_days,
+            ):
+                rows = cached_rows
+            else:
+                fetched_market_rows = True
+                payload = fetch_yahoo_chart_json(
+                    config["symbol"],
+                    start_date=start_date,
+                    end_date=market_data_tool._tomorrow_iso(effective_today),
+                    interval=config["interval"],
+                )
+                rows = market_data_tool.chart_payload_to_price_rows(
+                    payload, config["symbol"]
+                )
         benchmark_rows = benchmark_tool.yahoo_rows_to_benchmark_rows(rows)
         item = {
             "benchmark_id": config["benchmark_id"],
@@ -57,7 +85,7 @@ def prepare_benchmarks(
             "latest_date": benchmark_rows[-1]["date"] if benchmark_rows else latest_date,
             "source": f"yahoo_finance:{config['symbol']}",
         }
-        if fetch_yahoo_chart_json is not None:
+        if fetched_market_rows:
             item["market_rows"] = rows
             item["interval"] = config["interval"]
         prepared.append(item)
@@ -72,7 +100,7 @@ def persist_benchmarks(payloads, *, benchmark_db_path, market_db_path):
     try:
         results = []
         for payload in payloads:
-            if market_con is not None:
+            if market_con is not None and "market_rows" in payload:
                 market_data.save_price_rows(
                     market_con,
                     payload["symbol"],

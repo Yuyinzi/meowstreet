@@ -1,4 +1,7 @@
+import asyncio
 from pathlib import Path
+
+import pytest
 
 from app.services import macro_refresh_official
 
@@ -79,3 +82,40 @@ def test_fomc_preparation_does_not_open_sqlite(monkeypatch):
 
     assert prepared["status"] == "failed"
     assert "document" in prepared["error"]
+
+
+@pytest.mark.parametrize(
+    ("batch_name", "prepare_name"),
+    [
+        ("prepare_fomc_policy_tone_batch", "_prepare_fomc_policy_tone"),
+        ("prepare_fomc_minutes_structure_batch", "_prepare_fomc_minutes_structure"),
+    ],
+)
+def test_fomc_batch_converts_one_event_exception_and_completes_the_batch(
+    monkeypatch, batch_name, prepare_name
+):
+    async def prepare(_db_path, event_id, *_args):
+        if event_id == "failed-event":
+            raise ValueError("model unavailable")
+        return {"status": "ok", "event_id": event_id, "row": {}}
+
+    monkeypatch.setattr(macro_refresh_official, prepare_name, prepare)
+
+    outcomes = asyncio.run(
+        getattr(macro_refresh_official, batch_name)(
+            "market.sqlite",
+            ["failed-event", "success-event"],
+            object(),
+            "extractor",
+            "reviewer",
+        )
+    )
+
+    assert outcomes == [
+        {
+            "status": "failed",
+            "event_id": "failed-event",
+            "error": "model unavailable",
+        },
+        {"status": "ok", "event_id": "success-event", "row": {}},
+    ]

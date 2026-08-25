@@ -353,17 +353,25 @@ def prepare_fomc_policy_tone(
 async def prepare_fomc_policy_tone_batch(
     db_path, event_ids, client, extractor_model, reviewer_model, max_rounds=3
 ):
-    return [
-        await _prepare_fomc_policy_tone(
-            db_path,
-            event_id,
-            client,
-            extractor_model,
-            reviewer_model,
-            max_rounds,
-        )
-        for event_id in event_ids
-    ]
+    outcomes = []
+    for event_id in event_ids:
+        try:
+            outcome = await _prepare_fomc_policy_tone(
+                db_path,
+                event_id,
+                client,
+                extractor_model,
+                reviewer_model,
+                max_rounds,
+            )
+        except Exception as exc:
+            outcome = {
+                "status": "failed",
+                "event_id": event_id,
+                "error": str(exc),
+            }
+        outcomes.append(outcome)
+    return outcomes
 
 
 async def _prepare_fomc_policy_tone(
@@ -438,17 +446,25 @@ def prepare_fomc_minutes_structure(
 async def prepare_fomc_minutes_structure_batch(
     db_path, event_ids, client, extractor_model, reviewer_model, max_rounds=3
 ):
-    return [
-        await _prepare_fomc_minutes_structure(
-            db_path,
-            event_id,
-            client,
-            extractor_model,
-            reviewer_model,
-            max_rounds,
-        )
-        for event_id in event_ids
-    ]
+    outcomes = []
+    for event_id in event_ids:
+        try:
+            outcome = await _prepare_fomc_minutes_structure(
+                db_path,
+                event_id,
+                client,
+                extractor_model,
+                reviewer_model,
+                max_rounds,
+            )
+        except Exception as exc:
+            outcome = {
+                "status": "failed",
+                "event_id": event_id,
+                "error": str(exc),
+            }
+        outcomes.append(outcome)
+    return outcomes
 
 
 async def _prepare_fomc_minutes_structure(

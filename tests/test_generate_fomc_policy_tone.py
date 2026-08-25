@@ -11,7 +11,11 @@ def test_classify_events_counts_pending_reused_and_unavailable(monkeypatch):
         "pending": {"source_hash": "pending-hash"},
         "reused": {"source_hash": "reused-hash"},
     }
-    existing = {"extraction_status": "approved", "generated_at": "2026-02-02Z"}
+    existing = {
+        "source_hash": "reused-hash",
+        "extraction_status": "approved",
+        "generated_at": "2026-02-02Z",
+    }
     monkeypatch.setattr(
         generate_fomc_policy_tone.us_rates_liquidity,
         "load_macro_event_document",
@@ -53,6 +57,28 @@ def test_classify_events_force_marks_approved_matching_extraction_pending(monkey
 
     assert classified["pending"] == [(event, document)]
     assert classified["reused"] == []
+
+
+def test_classify_events_keeps_changed_hash_pending_after_prior_approval(monkeypatch):
+    event = {"event_id": "changed", "start_date": "2026-08-01"}
+    document = {"source_hash": "current-hash"}
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.us_rates_liquidity,
+        "load_macro_event_document",
+        lambda *_args: document,
+    )
+    monkeypatch.setattr(
+        generate_fomc_policy_tone.us_rates_liquidity,
+        "load_macro_event_tone_extraction",
+        lambda *_args: {
+            "source_hash": "prior-hash",
+            "extraction_status": "approved",
+        },
+    )
+
+    classified = generate_fomc_policy_tone.classify_events(None, [event], False)
+
+    assert classified["pending"] == [(event, document)]
 
 
 def test_no_pending_events_prints_one_summary_without_constructing_client(
