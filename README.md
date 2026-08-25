@@ -64,9 +64,9 @@ when reproducing a provider issue.
 Every FRED consumer, including the separate credit lane, shares one global
 request-start limiter of 600 ms. SQLite writes are serialized through one
 writer gate with a 60-second wait timeout. A fetch or enrichment failure blocks
-only dependent work; `blocked` means its dependency did not complete with an
-accepted status. `--stop-on-error` stops admission in the failed lane while
-unrelated lanes continue. Missing `OPENAI_API_KEY` is an intentional skipped
+only dependent work; `blocked` also covers work whose lane stopped admitting
+tasks after `--stop-on-error`, or work cancelled/interrupted before it started.
+Unrelated lanes continue. Missing `OPENAI_API_KEY` is an intentional skipped
 ISM enrichment; when a key is available, enrichment is enabled automatically.
 
 The refresh owns one aggregate progress surface. TTY runs show live lane

@@ -190,13 +190,16 @@ has one of these statuses:
 - `ok`: the provider completed successfully or had no new data to import.
 - `skipped`: the task was intentionally not run, such as optional ISM enrichment without `OPENAI_API_KEY`.
 - `failed`: the task ran but returned an error.
-- `blocked`: a required dependency failed or was blocked; the task is not run.
+- `blocked`: the task could not start because a required dependency failed or
+  was blocked, its lane stopped admitting work after `--stop-on-error`, or the
+  refresh was interrupted/cancelled before the task started.
 
 By default a failed task does not stop unrelated lanes. `--stop-on-error` stops
 admission of later work in the failed lane only; other lanes continue. A
 failure or blocked task makes the overall command exit non-zero. Ctrl+C stops
 new task admission at a safe boundary, leaves active network/database work to
-finish safely, and exits with status 130.
+finish safely, marks work that never started as interrupted/blocked, and exits
+with status 130.
 
 Use verbose mode when investigating a successful run:
 
