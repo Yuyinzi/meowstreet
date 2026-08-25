@@ -116,6 +116,8 @@ For the local GDP relationship workbook kept outside the repository:
 
 ### Setup
 
+`./start.sh` is the one-command setup: it creates `.venv`, installs Python and frontend dependencies, copies `.env.example` to `.env` when missing, builds dashboard assets, bootstraps the local database, launches the dedicated Investing.com Chrome (CDP port 9222) when no session is up, runs the macro data refresh, and starts the server. Flags: `--skip-refresh`, `--setup-only`. The manual steps:
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
