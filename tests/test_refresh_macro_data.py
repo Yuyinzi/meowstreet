@@ -104,7 +104,7 @@ def test_result_counts_separate_success_skips_and_failures():
     }
 
 
-def test_progress_advances_for_ok_skipped_and_failed(monkeypatch, capsys):
+def test_progress_advances_for_registry_results(monkeypatch, capsys):
     progress_instances = []
 
     def progress_factory(**kwargs):
@@ -112,23 +112,25 @@ def test_progress_advances_for_ok_skipped_and_failed(monkeypatch, capsys):
         progress_instances.append(instance)
         return instance
 
-    tasks = [
-        refresh_macro_data._task("ok", lambda argv: 0, []),
-        refresh_macro_data._task("skip", lambda argv: 0, [], "not configured"),
-        refresh_macro_data._task("fail", lambda argv: 1, []),
-    ]
-    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", lambda *args: tasks)
     monkeypatch.setattr(refresh_macro_data.sys.stderr, "isatty", lambda: True)
 
-    exit_code = refresh_macro_data.run([], progress_factory=progress_factory)
+    exit_code = refresh_macro_data.run(
+        _task9_skip_args(),
+        task_providers={
+            "rates_fetch": lambda argv: 0,
+            "rates_import": lambda argv: 1,
+        },
+        openai_config={"api_key": None},
+        progress_factory=progress_factory,
+    )
 
     captured = capsys.readouterr()
     progress = progress_instances[0]
     assert exit_code == 1
-    assert progress.total == 3
-    assert progress.updated == 3
-    assert progress.postfixes[-1] == {"ok": 1, "skipped": 1, "failed": 1}
-    assert "macro data refresh completed: ok=1 skipped=1 failed=1" in captured.out
+    assert progress.total == 2
+    assert progress.updated == 2
+    assert progress.postfixes[-1] == {"ok": 1, "skipped": 0, "failed": 1, "blocked": 0}
+    assert "macro data refresh completed: ok=1 skipped=0 failed=1 blocked=0" in captured.out
 
 
 def test_report_hides_success_output_by_default_but_replays_failure_output(capsys):
@@ -150,45 +152,59 @@ def test_report_hides_success_output_by_default_but_replays_failure_output(capsy
 
 
 def test_verbose_replays_success_output_and_captured_strings_are_cleared(monkeypatch, capsys):
-    tasks = [refresh_macro_data._task("provider", lambda argv: print("details") or 0, [])]
-    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", lambda *args: tasks)
     monkeypatch.setattr(refresh_macro_data.sys.stderr, "isatty", lambda: False)
 
-    exit_code = refresh_macro_data.run(["--verbose"], progress_factory=FakeProgress)
+    exit_code = refresh_macro_data.run(
+        ["--verbose", *_task9_skip_args()],
+        task_providers={
+            "rates_fetch": lambda argv: print("details") or 0,
+            "rates_import": lambda argv: 0,
+        },
+        openai_config={"api_key": None},
+        progress_factory=FakeProgress,
+    )
 
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "details" in captured.out
-    assert "provider: ok" in captured.out
+    assert "fred_macro.rates_fred_fetch: ok" in captured.out
 
 
 def test_success_output_is_hidden_without_verbose(monkeypatch, capsys):
-    tasks = [refresh_macro_data._task("provider", lambda argv: print("details") or 0, [])]
-    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", lambda *args: tasks)
     monkeypatch.setattr(refresh_macro_data.sys.stderr, "isatty", lambda: False)
 
-    exit_code = refresh_macro_data.run([], progress_factory=FakeProgress)
+    exit_code = refresh_macro_data.run(
+        _task9_skip_args(),
+        task_providers={
+            "rates_fetch": lambda argv: print("details") or 0,
+            "rates_import": lambda argv: 0,
+        },
+        openai_config={"api_key": None},
+        progress_factory=FakeProgress,
+    )
 
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "details" not in captured.out
-    assert "provider: ok" in captured.out
+    assert "fred_macro.rates_fred_fetch: ok" in captured.out
 
 
-def test_skip_does_not_trigger_stop_on_error_but_failure_does(monkeypatch):
+def test_stop_on_error_blocks_only_the_failed_registry_lane(monkeypatch):
     calls = []
-    tasks = [
-        refresh_macro_data._task("skip", lambda argv: calls.append("skip"), [], "optional"),
-        refresh_macro_data._task("fail", lambda argv: calls.append("fail") or 1, []),
-        refresh_macro_data._task("after", lambda argv: calls.append("after") or 0, []),
-    ]
-    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", lambda *args: tasks)
     monkeypatch.setattr(refresh_macro_data.sys.stderr, "isatty", lambda: False)
 
-    exit_code = refresh_macro_data.run(["--stop-on-error"], progress_factory=FakeProgress)
+    exit_code = refresh_macro_data.run(
+        ["--stop-on-error", *_task9_skip_args()],
+        task_providers={
+            "rates_fetch": lambda argv: calls.append("fetch") or 1,
+            "rates_import": lambda argv: calls.append("persist") or 0,
+        },
+        openai_config={"api_key": None},
+        progress_factory=FakeProgress,
+    )
 
     assert exit_code == 1
-    assert calls == ["fail"]
+    assert calls == ["fetch"]
 
 
 def test_progress_is_disabled_when_stderr_is_not_a_tty(monkeypatch):
@@ -199,10 +215,13 @@ def test_progress_is_disabled_when_stderr_is_not_a_tty(monkeypatch):
         progress_instances.append(instance)
         return instance
 
-    monkeypatch.setattr(refresh_macro_data, "_planned_tasks", lambda *args: [])
     monkeypatch.setattr(refresh_macro_data.sys.stderr, "isatty", lambda: False)
 
-    assert refresh_macro_data.run([], progress_factory=progress_factory) == 0
+    assert refresh_macro_data.run(
+        _task9_skip_args(),
+        openai_config={"api_key": None},
+        progress_factory=progress_factory,
+    ) == 0
     assert progress_instances[0].disable is True
 
 
@@ -353,10 +372,10 @@ def test_main_refreshes_official_building_permits_when_enabled():
     )
 
     assert exit_code == 0
-    assert calls == [[]]
+    assert calls == [["--fetch-census-workbook"], ["--import-census-workbook"]]
 
 
-def test_main_runs_market_and_fred_refreshes_in_order(capsys):
+def test_main_runs_market_and_fred_refreshes_through_staged_registry(capsys):
     calls = []
 
     def benchmark_main(argv):
@@ -405,26 +424,25 @@ def test_main_runs_market_and_fred_refreshes_in_order(capsys):
     )
 
     assert exit_code == 0
-    assert calls[:2] == [
-        (
-            "benchmark",
-            [
-                "--benchmark-id",
-                "us_sp500",
-                "--benchmark-id",
-                "us_nasdaq_100",
-                "--benchmark-id",
-                "us_nasdaq_composite",
-                "--benchmark-id",
-                "us_djia",
-            ],
-        ),
-        ("rates", []),
-    ]
-    assert calls[2][0] == "consumer"
+    assert (
+        "benchmark",
+        [
+            "--benchmark-id",
+            "us_sp500",
+            "--benchmark-id",
+            "us_nasdaq_100",
+            "--benchmark-id",
+            "us_nasdaq_composite",
+            "--benchmark-id",
+            "us_djia",
+        ],
+    ) in calls
+    assert ("rates", ["--fetch-fred-csv"]) in calls
+    assert ("rates", ["--fred-csv-merge"]) in calls
+    assert ("consumer", ["--fetch-michigan-csv", "data/local_system/consumer_cache"]) in calls
     out = capsys.readouterr().out
     assert "macro data refresh started" in out
-    assert "benchmark_yahoo: ok" in out
+    assert "yahoo.benchmarks_import: ok" in out
     assert "macro data refresh completed: ok=" in out
 
 
@@ -501,17 +519,16 @@ def test_main_continues_after_provider_failure(capsys):
     )
 
     assert exit_code == 1
-    assert [label for label, _ in calls] == [
-        "benchmark",
-        "rates",
-        "m2",
-        "m2",
-        "gdp",
-        "gdp",
-    ]
+    assert ("benchmark", [
+        "--benchmark-id", "us_sp500", "--benchmark-id", "us_nasdaq_100",
+        "--benchmark-id", "us_nasdaq_composite", "--benchmark-id", "us_djia",
+    ]) in calls
+    assert ("rates", ["--fetch-fred-csv"]) in calls
+    assert ("m2", ["--fetch-fred-csv"]) in calls
+    assert ("gdp", ["--fetch-fred-csv"]) in calls
     captured = capsys.readouterr()
-    assert "benchmark_yahoo: failed - exit code 1" in captured.err
-    assert "macro data refresh completed: ok=19 skipped=2 failed=1" in captured.out
+    assert "yahoo.benchmarks_import: failed - exit code 1" in captured.err
+    assert "failed=1 blocked=0" in captured.out
 
 
 def test_main_can_stop_after_first_failure():
@@ -549,21 +566,20 @@ def test_main_can_stop_after_first_failure():
     )
 
     assert exit_code == 1
-    assert calls == [
-        (
-            "benchmark",
-            [
-                "--benchmark-id",
-                "us_sp500",
-                "--benchmark-id",
-                "us_nasdaq_100",
-                "--benchmark-id",
-                "us_nasdaq_composite",
-                "--benchmark-id",
-                "us_djia",
-            ],
-        )
-    ]
+    assert (
+        "benchmark",
+        [
+            "--benchmark-id",
+            "us_sp500",
+            "--benchmark-id",
+            "us_nasdaq_100",
+            "--benchmark-id",
+            "us_nasdaq_composite",
+            "--benchmark-id",
+            "us_djia",
+        ],
+    ) in calls
+    assert ("rates", ["--fetch-fred-csv"]) in calls
 
 
 def test_main_records_exceptions_as_failures(capsys):
@@ -597,7 +613,7 @@ def test_main_records_exceptions_as_failures(capsys):
 
     assert exit_code == 1
     captured = capsys.readouterr()
-    assert "benchmark_yahoo: failed - yahoo rate limited" in captured.err
+    assert "yahoo.benchmarks_import: failed - yahoo rate limited" in captured.err
 
 
 def test_refresh_macro_data_skips_fomc_when_calendar_csv_is_missing(tmp_path):
@@ -718,8 +734,9 @@ def test_main_skip_flags_remove_tasks():
 
     assert exit_code == 0
     assert calls == [
-        ("rates", []),
+        ("rates", ["--fetch-fred-csv"]),
         ("m2", ["--fetch-fred-csv"]),
+        ("rates", ["--fred-csv-merge"]),
         ("m2", ["--fred-csv-merge"]),
     ]
 
@@ -1017,11 +1034,11 @@ def test_verbose_is_forwarded_to_fomc_generators(tmp_path):
         fomc_document_main=lambda argv: 0,
         fomc_policy_tone_main=lambda argv: calls.append(("tone", argv)) or 0,
         fomc_minutes_main=lambda argv: calls.append(("minutes", argv)) or 0,
-        openai_config={"api_key": None},
+        openai_config={"api_key": "configured", "model": "test-model"},
     )
 
     assert ("tone", ["--all", "--verbose"]) in calls
-    assert ("minutes", ["--all", "--verbose"]) in calls
+    assert ("minutes", ["--all"]) in calls
 
 
 def test_fomc_registry_omits_verbose_from_all_task_argv_when_not_requested(tmp_path):
@@ -1099,6 +1116,7 @@ def test_main_runs_all_fomc_tasks_in_order(tmp_path):
         dce_iron_ore_sina_main=lambda argv: 0,
         shfe_copper_main=lambda argv: 0,
         economic_confirmation_main=lambda argv: 0,
+        openai_config={"api_key": "configured", "model": "test-model"},
     )
 
     assert exit_code == 0
@@ -1505,9 +1523,7 @@ def test_main_wires_separate_fred_importers_instead_of_combined_refresh(monkeypa
     monkeypatch.setattr(refresh_macro_data, "run", fake_run)
 
     assert refresh_macro_data.main([]) == 0
-    assert captured["rates_main"] is refresh_macro_data.import_us_rates_liquidity.main
-    assert captured["credit_main"] is refresh_macro_data.import_us_corporate_credit.main
-    assert captured["rates_main"] is not refresh_macro_data.refresh_us_rates_liquidity.main
+    assert captured == {"use_runtime_defaults": True}
 
 
 def _task9_skip_args(*extra):
@@ -1743,6 +1759,7 @@ def test_task9_legacy_combined_seam_runs_once_across_registry_nodes():
 
     for key in ("dol_fetch", "bls_fetch", "federal_reserve_fetch"):
         assert providers[key]([]) == 0
+    assert calls == []
     for key in ("dol_import", "bls_import", "federal_reserve_import"):
         assert providers[key]([]) == 0
 

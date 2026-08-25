@@ -1,6 +1,8 @@
+import os
 from pathlib import Path
 from threading import Lock
 
+from app import llm
 from app.services import macro_refresh_commodities
 from app.services import macro_refresh_official
 from app.services import macro_refresh_yahoo
@@ -35,7 +37,7 @@ def build_runtime_providers(
     providers = {
         **_fred_providers(artifacts),
         **_official_providers(artifacts),
-        **_commodity_providers(artifacts),
+        **_commodity_providers(artifacts, _eia_api_key()),
         **_yahoo_providers(artifacts),
         **_ism_providers(artifacts, openai_config or {}),
         **_fomc_providers(artifacts, openai_config or {}, fomc_calendar_path),
@@ -50,6 +52,11 @@ def build_runtime_providers(
     )
     providers.update(overrides or {})
     return providers
+
+
+def _eia_api_key():
+    llm.load_env()
+    return os.getenv("EIA_KEY")
 
 
 def _fred_providers(artifacts):
@@ -248,7 +255,7 @@ def _official_import(artifacts, importer, key, db_path):
     return persist
 
 
-def _commodity_providers(artifacts):
+def _commodity_providers(artifacts, eia_api_key):
     return {
         "cyclical_fred_fetch": lambda argv: _run_fetch(
             artifacts, "commodities.cyclical_fred", macro_refresh_commodities.fetch_cyclical_fred
@@ -282,7 +289,7 @@ def _commodity_providers(artifacts):
         "oil_fetch": lambda argv: _run_fetch(
             artifacts,
             "commodities.oil",
-            lambda target: macro_refresh_commodities.fetch_oil(target, ""),
+            lambda target: macro_refresh_commodities.fetch_oil(target, eia_api_key),
         ),
         "oil_import": lambda argv: _run_import(
             artifacts,
@@ -445,15 +452,19 @@ def _ism_providers(artifacts, openai_config):
         def enrich(argv, survey_type=survey_type, key=key):
             prepared = artifacts.get(key)
             snapshot = next(
-                item["snapshot"] for item in prepared if item.get("status") == "ok"
+                (item["snapshot"] for item in prepared if item.get("status") == "ok"),
+                None,
             )
             if not openai_config.get("api_key"):
+                return 0
+            if snapshot is None:
+                artifacts.put(f"{key}.enrichment", None)
                 return 0
             artifacts.put(
                 f"{key}.enrichment",
                 macro_refresh_ism.prepare_ism_enrichment(
                     snapshot,
-                    client=None,
+                    client=_build_ism_client(openai_config),
                     model=openai_config.get("model"),
                     survey_type=survey_type,
                 ),
@@ -462,6 +473,8 @@ def _ism_providers(artifacts, openai_config):
 
         def enrich_import(argv, key=key):
             staged = artifacts.get(f"{key}.enrichment")
+            if staged is None:
+                return 0
             macro_refresh_ism.persist_ism_enrichment(
                 us_rates_liquidity.DEFAULT_DB_PATH, staged
             )
@@ -478,15 +491,20 @@ def _ism_providers(artifacts, openai_config):
     return providers
 
 
+def _build_ism_client(config):
+    from scripts import extract_ism_report_ai
+
+    return extract_ism_report_ai.build_client(config)
+
+
 def _fomc_providers(artifacts, openai_config, calendar_path):
     def calendar_import(argv):
-        import_fomc_calendar.main(
+        return int(import_fomc_calendar.main(
             [
                 "--calendar-path",
                 str(calendar_path or import_fomc_calendar.DEFAULT_CALENDAR_PATH),
             ]
-        )
-        return 0
+        ) or 0)
 
     def documents_fetch(argv):
         con = us_rates_liquidity.connect()
@@ -508,23 +526,83 @@ def _fomc_providers(artifacts, openai_config, calendar_path):
             )
         return 0
 
-    def skipped_enrichment(argv):
-        if not openai_config.get("api_key"):
-            return 0
-        raise ValueError("FOMC staged enrichment requires an approved client adapter")
+    def prepare_policy_tone(argv):
+        return _prepare_fomc_enrichment(
+            artifacts,
+            "fomc.policy_tone",
+            openai_config,
+            macro_refresh_official.prepare_fomc_policy_tone,
+        )
 
-    def skipped_import(argv):
-        return 0
+    def persist_policy_tone(argv):
+        return _persist_fomc_enrichment(
+            artifacts,
+            "fomc.policy_tone",
+            macro_refresh_official.persist_fomc_policy_tone,
+        )
+
+    def prepare_minutes(argv):
+        return _prepare_fomc_enrichment(
+            artifacts,
+            "fomc.minutes",
+            openai_config,
+            macro_refresh_official.prepare_fomc_minutes_structure,
+        )
+
+    def persist_minutes(argv):
+        return _persist_fomc_enrichment(
+            artifacts,
+            "fomc.minutes",
+            macro_refresh_official.persist_fomc_minutes_structure,
+        )
 
     return {
         "fomc_calendar_import": calendar_import,
         "fomc_documents_fetch": documents_fetch,
         "fomc_documents_import": documents_import,
-        "fomc_policy_tone_extract": skipped_enrichment,
-        "fomc_policy_tone_import": skipped_import,
-        "fomc_minutes_extract": skipped_enrichment,
-        "fomc_minutes_import": skipped_import,
+        "fomc_policy_tone_extract": prepare_policy_tone,
+        "fomc_policy_tone_import": persist_policy_tone,
+        "fomc_minutes_extract": prepare_minutes,
+        "fomc_minutes_import": persist_minutes,
     }
+
+
+def _prepare_fomc_enrichment(artifacts, key, config, prepare):
+    if not config.get("api_key"):
+        artifacts.put(key, [])
+        return 0
+    client = llm.build_async_client(
+        config,
+        max_retries=0,
+        timeout=120,
+        error_context="FOMC refresh enrichment",
+    )
+    con = us_rates_liquidity.connect()
+    try:
+        events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
+    finally:
+        con.close()
+    model = config.get("model")
+    artifacts.put(
+        key,
+        [
+            prepare(
+                us_rates_liquidity.DEFAULT_DB_PATH,
+                event["event_id"],
+                client,
+                model,
+                model,
+            )
+            for event in events
+        ],
+    )
+    return 0
+
+
+def _persist_fomc_enrichment(artifacts, key, persist):
+    for prepared in artifacts.get(key):
+        persist(us_rates_liquidity.DEFAULT_DB_PATH, prepared)
+    return 0
 
 
 def _injected_cli_overrides(
@@ -630,7 +708,6 @@ def _injected_cli_overrides(
                     [],
                     f"ism.{survey}.core",
                     artifacts,
-                    persist=False,
                     fetch_key=f"{prefix}_fetch",
                     import_key=f"{prefix}_import",
                 )
@@ -642,7 +719,6 @@ def _injected_cli_overrides(
                     [],
                     f"ism.{survey}.enrichment",
                     artifacts,
-                    persist=False,
                     fetch_key=f"{prefix}_enrichment",
                     import_key=f"{prefix}_enrichment_import",
                 )
@@ -675,14 +751,14 @@ def _injected_cli_overrides(
         ("shfe_copper_main", ["--incremental"], [], "shfe_copper_fetch", "shfe_copper_import"),
     ):
         if values.get(value_key) is not None:
+            pair_builder = _script_pair if value_key == "nfib_main" else _one_shot_pair
             providers.update(
-                _one_shot_pair(
+                pair_builder(
                     values[value_key],
                     fetch_args,
                     import_args,
                     f"legacy.{value_key}",
                     artifacts,
-                    persist=value_key == "nfib_main",
                     fetch_key=fetch_key,
                     import_key=import_key,
                 )
@@ -700,23 +776,27 @@ def _injected_cli_overrides(
             )
         )
     if values.get("economic_confirmation_main") is not None:
-        combined = _one_shot_provider(values["economic_confirmation_main"], artifacts, "legacy.economic_confirmation")
+        artifact_key = "legacy.economic_confirmation"
+        combined = _one_shot_provider(
+            values["economic_confirmation_main"], artifacts, artifact_key
+        )
         for fetch_key, import_key in (
             ("dol_fetch", "dol_import"),
             ("bls_fetch", "bls_import"),
             ("federal_reserve_fetch", "federal_reserve_import"),
         ):
-            providers[fetch_key] = combined
-            providers[import_key] = _artifact_only(artifacts, "legacy.economic_confirmation")
+            providers[fetch_key] = _artifact_stage(artifacts, artifact_key)
+            providers[import_key] = _persist_one_shot(
+                combined, artifacts, artifact_key
+            )
     if values.get("main") is not None:
         providers.update(
-            _one_shot_pair(
+            _script_pair(
                 values["main"],
                 ["--fetch-cot"],
                 ["--import-cot"],
                 "commodities.cftc",
                 artifacts,
-                persist=True,
                 fetch_key="cyclical_cot_fetch",
                 import_key="cyclical_cot_import",
             )
@@ -802,28 +882,36 @@ def _artifact_only(artifacts, artifact_key):
     return persist
 
 
+def _artifact_stage(artifacts, artifact_key):
+    def fetch(argv):
+        artifacts.put(artifact_key, {"status": "pending"})
+        return 0
+
+    return fetch
+
+
+def _persist_one_shot(provider, artifacts, artifact_key):
+    def persist(argv):
+        artifacts.get(artifact_key)
+        return provider(argv)
+
+    return persist
+
+
 def _one_shot_pair(
     provider,
     fetch_args,
     import_args,
     artifact_key,
     artifacts,
-    *,
-    persist=False,
     fetch_key,
     import_key,
 ):
-    fetch = _one_shot_provider(provider, artifacts, artifact_key, fetch_args)
-    persist_stage = _artifact_only(artifacts, artifact_key)
-    if persist:
-        persist_stage = _script_stage(
-            provider,
-            import_args,
-            artifact_key,
-            artifacts,
-            is_fetch=False,
-        )
-    return {fetch_key: fetch, import_key: persist_stage}
+    combined = _one_shot_provider(provider, artifacts, artifact_key, fetch_args)
+    return {
+        fetch_key: _artifact_stage(artifacts, artifact_key),
+        import_key: _persist_one_shot(combined, artifacts, artifact_key),
+    }
 
 
 def _script_pair(
@@ -832,7 +920,6 @@ def _script_pair(
     import_args,
     artifact_key,
     artifacts,
-    *,
     fetch_key,
     import_key,
 ):
