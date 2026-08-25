@@ -1,4 +1,5 @@
 from argparse import Namespace
+from threading import Event
 import sys
 
 from jobs import refresh_macro_data
@@ -1507,3 +1508,130 @@ def test_main_wires_separate_fred_importers_instead_of_combined_refresh(monkeypa
     assert captured["rates_main"] is refresh_macro_data.import_us_rates_liquidity.main
     assert captured["credit_main"] is refresh_macro_data.import_us_corporate_credit.main
     assert captured["rates_main"] is not refresh_macro_data.refresh_us_rates_liquidity.main
+
+
+def _task9_skip_args(*extra):
+    return [
+        "--skip-yahoo",
+        "--skip-consumer-sentiment",
+        "--skip-building-permits",
+        "--skip-ism",
+        "--skip-fomc",
+        "--skip-nfib-sbo",
+        "--skip-nfib-sbo-regional",
+        "--skip-cyclical-commodities",
+        "--skip-oil",
+        "--skip-lumber",
+        "--skip-shfe-copper",
+        "--skip-dce-iron-ore-sina",
+        "--skip-economic-confirmation",
+        *extra,
+    ]
+
+
+def test_task9_serial_flag_executes_registry_graph_in_stable_order():
+    calls = []
+
+    def recorder(name):
+        def run(argv):
+            calls.append((name, list(argv)))
+            return 0
+
+        return run
+
+    result = refresh_macro_data.run(
+        _task9_skip_args("--serial"),
+        task_providers={
+            "rates": recorder("rates"),
+            "credit": recorder("credit"),
+            "m2": recorder("m2"),
+            "macro_indicators": recorder("macro"),
+            "gdp": recorder("gdp"),
+        },
+        openai_config={"api_key": None},
+        progress_factory=FakeProgress,
+    )
+
+    assert result == 0
+    assert calls == [
+        ("rates", ["--fetch-fred-csv"]),
+        ("m2", ["--fetch-fred-csv"]),
+        ("macro", ["--fetch-fred-csv"]),
+        ("gdp", ["--fetch-fred-csv"]),
+        ("rates", ["--fred-csv-merge"]),
+        ("m2", ["--fred-csv-merge"]),
+        ("macro", ["--fred-csv-merge"]),
+        ("gdp", ["--us-csv-merge"]),
+        ("credit", ["--fetch-fred-csv"]),
+        ("credit", ["--fred-csv-merge"]),
+    ]
+
+
+def test_task9_default_mode_starts_independent_lanes_before_release():
+    started = {"fred": Event(), "yahoo": Event()}
+    release = Event()
+
+    def wait_for(label, other):
+        def run(argv):
+            started[label].set()
+            if started["fred"].is_set() and started["yahoo"].is_set():
+                release.set()
+            assert started[other].wait(1)
+            assert release.wait(1)
+            return 0
+
+        return run
+
+    def executor(tasks, **kwargs):
+        try:
+            return refresh_macro_data.execute_tasks(tasks, **kwargs)
+        finally:
+            release.set()
+
+    result = refresh_macro_data.run(
+        [flag for flag in _task9_skip_args() if flag != "--skip-yahoo"],
+        task_providers={
+            "rates": wait_for("fred", "yahoo"),
+            "benchmarks_fetch": wait_for("yahoo", "fred"),
+            "benchmarks_import": lambda argv: 0,
+        },
+        openai_config={"api_key": None},
+        executor=executor,
+        progress_factory=FakeProgress,
+    )
+
+    assert result == 0
+
+
+def test_task9_summary_includes_blocked_tasks(capsys):
+    def failing(argv):
+        return 1
+
+    result = refresh_macro_data.run(
+        _task9_skip_args("--stop-on-error"),
+        task_providers={"rates": failing},
+        openai_config={"api_key": None},
+        progress_factory=FakeProgress,
+    )
+
+    assert result == 1
+    assert "ok=0 skipped=0 failed=1 blocked=1" in capsys.readouterr().out
+
+
+def test_task9_keyboard_interrupt_reports_and_returns_130(capsys):
+    cancel_event = Event()
+
+    def interrupting_executor(tasks, **kwargs):
+        cancel_event.set()
+        raise KeyboardInterrupt
+
+    result = refresh_macro_data.run(
+        _task9_skip_args(),
+        task_providers={"rates": lambda argv: 0},
+        openai_config={"api_key": None},
+        executor=interrupting_executor,
+        progress_factory=FakeProgress,
+    )
+
+    assert result == 130
+    assert "macro data refresh interrupted" in capsys.readouterr().err

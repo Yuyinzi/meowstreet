@@ -4,6 +4,7 @@ import sys
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from pathlib import Path
+from threading import Event
 
 from tqdm import tqdm
 
@@ -36,7 +37,12 @@ from scripts import refresh_us_rates_liquidity
 
 from app import llm
 from app.services.macro_refresh_registry import build_refresh_tasks
+from app.services.macro_refresh_executor import execute_tasks
+from app.services.macro_refresh_output import install_output_routers
 from app.services.macro_refresh_resources import ArtifactStore
+from app.services.macro_refresh_resources import FredRateLimiter
+from app.services.macro_refresh_resources import RequestCoordinator
+from app.services.macro_refresh_resources import SQLiteWriterGate
 
 
 def _timestamp():
@@ -94,6 +100,12 @@ def _result_counts(results):
         "skipped": sum(result["status"] == "skipped" for result in results),
         "failed": sum(result["status"] == "failed" for result in results),
     }
+
+
+def _result_counts_with_blocked(results):
+    counts = _result_counts(results)
+    counts["blocked"] = sum(result["status"] == "blocked" for result in results)
+    return counts
 
 
 def _fomc_calendar_path(args):
@@ -337,8 +349,168 @@ def _report_result(result, *, verbose, progress):
     _write_report_line(message, file=file, progress=progress)
 
 
+class _ProgressReporter:
+    def __init__(self, tasks, *, progress, verbose, stdout, stderr):
+        self._tasks = {task["name"]: task for task in tasks}
+        self._lane_order = []
+        for task in tasks:
+            if task["lane"] not in self._lane_order:
+                self._lane_order.append(task["lane"])
+        self._progress = progress
+        self._verbose = verbose
+        self._stdout = stdout
+        self._stderr = stderr
+        self._active = set()
+        self._results = {}
+
+    @property
+    def results(self):
+        return list(self._results.values())
+
+    def handle_event(self, event):
+        event_type = event["type"]
+        task = event["task"]
+        name = task["name"]
+        if event_type == "task_started":
+            self._active.add(name)
+            self._refresh_description()
+            return
+        if event_type != "task_finished":
+            return
+        self._active.discard(name)
+        result = event["result"]
+        self._results[name] = result
+        self._replay_output(result)
+        self._progress.update(1)
+        self._progress.set_postfix(
+            _result_counts_with_blocked(self.results), refresh=False
+        )
+        self._refresh_description()
+        result["stdout"] = ""
+        result["stderr"] = ""
+
+    def report_final(self, results):
+        for result in sorted(results, key=self._plan_key):
+            if result["name"] not in self._results:
+                self._replay_output(result)
+                self._progress.update(1)
+                self._results[result["name"]] = result
+            self._write_summary(result)
+            result["stdout"] = ""
+            result["stderr"] = ""
+
+    def _plan_key(self, result):
+        task = self._tasks.get(result["name"], {})
+        return (task.get("plan_index", 0), result["name"])
+
+    def _refresh_description(self):
+        active_lanes = [
+            lane
+            for lane in self._lane_order
+            if any(self._tasks[name]["lane"] == lane for name in self._active)
+        ]
+        description = "active lanes: " + ", ".join(active_lanes)
+        self._progress.set_description_str(description)
+
+    def _replay_output(self, result):
+        if not (self._verbose or result["status"] in {"failed", "blocked"}):
+            return
+        prefix = _task_label(result)
+        _write_prefixed_text(result.get("stdout", ""), prefix, self._stdout, self._progress)
+        _write_prefixed_text(result.get("stderr", ""), prefix, self._stderr, self._progress)
+
+    def _write_summary(self, result):
+        prefix = _task_label(result)
+        status = result["status"]
+        if status == "ok":
+            message = f"{prefix}: ok"
+            target = self._stdout
+        elif status == "skipped":
+            message = f"{prefix}: skipped - {result['error']}"
+            target = self._stdout
+        else:
+            message = f"{prefix}: {status} - {result['error']}"
+            target = self._stderr
+        _write_report_line(message, file=target, progress=self._progress)
+
+
+def _write_prefixed_text(text, prefix, file, progress):
+    if not text:
+        return
+    for line in text.splitlines():
+        _write_report_line(f"{prefix}: {line}", file=file, progress=progress)
+
+
+def _task_label(result):
+    lane = result["lane"]
+    name = result["name"]
+    return name if name.startswith(f"{lane}.") else f"{lane}.{name}"
+
+
+def _build_task_providers(values):
+    mapping = {
+        "benchmarks_fetch": values.get("benchmark_main"),
+        "benchmarks_import": values.get("benchmark_main"),
+        "rates": values.get("rates_main"),
+        "credit": values.get("credit_main"),
+        "consumer_michigan_fetch": values.get("consumer_main"),
+        "consumer_michigan_import": values.get("consumer_main"),
+        "consumer_fred_fetch": values.get("consumer_main"),
+        "consumer_fred_import": values.get("consumer_main"),
+        "m2": values.get("m2_main"),
+        "building_permits_fetch": values.get("building_permits_main"),
+        "building_permits_import": values.get("building_permits_main"),
+        "macro_indicators": values.get("macro_indicators_main"),
+        "gdp": values.get("gdp_main"),
+        "ism_manufacturing_fetch": values.get("ism_reports_main"),
+        "ism_manufacturing_import": values.get("ism_reports_main"),
+        "ism_manufacturing_enrichment": values.get("ism_reports_main"),
+        "ism_manufacturing_enrichment_import": values.get("ism_reports_main"),
+        "ism_services_fetch": values.get("ism_reports_main"),
+        "ism_services_import": values.get("ism_reports_main"),
+        "ism_services_enrichment": values.get("ism_reports_main"),
+        "ism_services_enrichment_import": values.get("ism_reports_main"),
+        "fomc_calendar_import": values.get("fomc_main"),
+        "fomc_documents_fetch": values.get("fomc_document_main"),
+        "fomc_documents_import": values.get("fomc_document_main"),
+        "fomc_policy_tone_extract": values.get("fomc_policy_tone_main"),
+        "fomc_policy_tone_import": values.get("fomc_policy_tone_main"),
+        "fomc_minutes_extract": values.get("fomc_minutes_main"),
+        "fomc_minutes_import": values.get("fomc_minutes_main"),
+        "nfib_fetch": values.get("nfib_main"),
+        "nfib_import": values.get("nfib_main"),
+        "nfib_regional_fetch": values.get("nfib_regional_main"),
+        "nfib_regional_import": values.get("nfib_regional_main"),
+        "tracked_commodities_fetch": values.get("tracked_commodities_main"),
+        "tracked_commodities_import": values.get("tracked_commodities_main"),
+        "cyclical_cot_fetch": values.get("main"),
+        "cyclical_cot_import": values.get("main"),
+        "oil_fetch": values.get("oil_main"),
+        "oil_import": values.get("oil_main"),
+        "lumber_fetch": values.get("lumber_main"),
+        "lumber_import": values.get("lumber_main"),
+        "shfe_copper_fetch": values.get("shfe_copper_main"),
+        "shfe_copper_import": values.get("shfe_copper_main"),
+        "dce_iron_ore_sina_fetch": values.get("dce_iron_ore_sina_main"),
+        "dce_iron_ore_sina_import": values.get("dce_iron_ore_sina_main"),
+        "dol_fetch": values.get("economic_confirmation_main"),
+        "dol_import": values.get("economic_confirmation_main"),
+        "bls_fetch": values.get("economic_confirmation_main"),
+        "bls_import": values.get("economic_confirmation_main"),
+        "federal_reserve_fetch": values.get("economic_confirmation_main"),
+        "federal_reserve_import": values.get("economic_confirmation_main"),
+    }
+    return {key: value for key, value in mapping.items() if value is not None}
+
+
 def run(
     argv=None,
+    *,
+    task_providers=None,
+    artifact_store=None,
+    executor=execute_tasks,
+    progress_factory=tqdm,
+    openai_config=None,
     benchmark_main=None,
     rates_main=None,
     consumer_main=None,
@@ -360,10 +532,7 @@ def run(
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
     economic_confirmation_main=None,
-    progress_factory=tqdm,
-    openai_config=None,
     credit_main=None,
-    artifact_store=None,
 ):
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
@@ -385,6 +554,8 @@ def run(
     parser.add_argument("--skip-dce-iron-ore-sina", action="store_true")
     parser.add_argument("--skip-economic-confirmation", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
+    parser.add_argument("--initial", action="store_true")
+    parser.add_argument("--serial", action="store_true", help="run refresh lanes serially")
     parser.add_argument(
         "--stop-on-error",
         action="store_true",
@@ -394,62 +565,146 @@ def run(
     args = parser.parse_args(argv)
     if openai_config is None:
         openai_config = llm.load_openai_config(args, root=ROOT)
-    print(f"macro data refresh started: {_timestamp()}")
-    tasks = _planned_tasks(
+    real_stdout = sys.stdout
+    real_stderr = sys.stderr
+    print(f"macro data refresh started: {_timestamp()}", file=real_stdout)
+
+    if task_providers is None:
+        tasks = _planned_tasks(
+            args,
+            benchmark_main,
+            rates_main,
+            consumer_main,
+            m2_main,
+            building_permits_main,
+            ism_reports_main,
+            gdp_main,
+            macro_indicators_main,
+            fomc_main,
+            fomc_document_main,
+            fomc_policy_tone_main,
+            fomc_minutes_main,
+            nfib_main,
+            nfib_regional_main,
+            main,
+            oil_main,
+            tracked_commodities_main,
+            lumber_main,
+            shfe_copper_main,
+            dce_iron_ore_sina_main,
+            economic_confirmation_main,
+            openai_config,
+            credit_main,
+            artifact_store,
+        )
+        results = []
+        with progress_factory(
+            total=len(tasks),
+            disable=not real_stderr.isatty(),
+            file=real_stderr,
+        ) as progress:
+            for task in tasks:
+                progress.set_description_str(task["name"])
+                result = _run_task(task)
+                _report_result(result, verbose=args.verbose, progress=progress)
+                result["stdout"] = ""
+                result["stderr"] = ""
+                results.append(result)
+                progress.set_postfix(_result_counts(results), refresh=False)
+                progress.update(1)
+                if result["status"] == "failed" and args.stop_on_error:
+                    break
+        counts = _result_counts(results)
+        print(
+            "macro data refresh completed: "
+            f"ok={counts['ok']} skipped={counts['skipped']} failed={counts['failed']}",
+            file=real_stdout,
+        )
+        return 1 if counts["failed"] else 0
+
+    store = artifact_store if artifact_store is not None else ArtifactStore()
+    tasks = build_refresh_tasks(
         args,
-        benchmark_main,
-        rates_main,
-        consumer_main,
-        m2_main,
-        building_permits_main,
-        ism_reports_main,
-        gdp_main,
-        macro_indicators_main,
-        fomc_main,
-        fomc_document_main,
-        fomc_policy_tone_main,
-        fomc_minutes_main,
-        nfib_main,
-        nfib_regional_main,
-        main,
-        oil_main,
-        tracked_commodities_main,
-        lumber_main,
-        shfe_copper_main,
-        dce_iron_ore_sina_main,
-        economic_confirmation_main,
-        openai_config,
-        credit_main,
-        artifact_store,
+        task_providers,
+        openai_config=openai_config,
+        artifact_store=store,
     )
-    results = []
+    cancel_event = Event()
+    coordinator = RequestCoordinator(FredRateLimiter())
+    writer_gate = SQLiteWriterGate()
     with progress_factory(
         total=len(tasks),
-        disable=not sys.stderr.isatty(),
-        file=sys.stderr,
+        disable=not real_stderr.isatty(),
+        file=real_stderr,
     ) as progress:
-        for task in tasks:
-            progress.set_description_str(task["name"])
-            result = _run_task(task)
-            _report_result(result, verbose=args.verbose, progress=progress)
-            result["stdout"] = ""
-            result["stderr"] = ""
-            results.append(result)
-            progress.set_postfix(_result_counts(results), refresh=False)
-            progress.update(1)
-            if result["status"] == "failed" and args.stop_on_error:
-                break
-    counts = _result_counts(results)
+        reporter = _ProgressReporter(
+            tasks,
+            progress=progress,
+            verbose=args.verbose,
+            stdout=real_stdout,
+            stderr=real_stderr,
+        )
+        try:
+            with install_output_routers(
+                stdout=real_stdout,
+                stderr=real_stderr,
+            ) as streams:
+                results = executor(
+                    tasks,
+                    serial=args.serial,
+                    stop_on_error=args.stop_on_error,
+                    request_coordinator=coordinator,
+                    writer_gate=writer_gate,
+                    on_event=reporter.handle_event,
+                    cancel_event=cancel_event,
+                    stdout_router=streams["stdout"],
+                    stderr_router=streams["stderr"],
+                )
+        except KeyboardInterrupt:
+            cancel_event.set()
+            reporter.report_final(reporter.results)
+            print("macro data refresh interrupted", file=real_stderr)
+            return 130
+        reporter.report_final(results)
+    counts = _result_counts_with_blocked(results)
     print(
         "macro data refresh completed: "
-        f"ok={counts['ok']} skipped={counts['skipped']} failed={counts['failed']}"
+        f"ok={counts['ok']} skipped={counts['skipped']} "
+        f"failed={counts['failed']} blocked={counts['blocked']}",
+        file=real_stdout,
     )
-    return 1 if counts["failed"] else 0
+    return 1 if counts["failed"] or counts["blocked"] else 0
 
 
 def main(argv=None):
     return run(
         argv,
+        task_providers=_build_task_providers(
+            {
+                "benchmark_main": refresh_benchmark_market_data.main,
+                "rates_main": import_us_rates_liquidity.main,
+                "credit_main": import_us_corporate_credit.main,
+                "consumer_main": import_consumer_sentiment.main,
+                "m2_main": import_m2_money_supply.main,
+                "building_permits_main": import_us_building_permits.main,
+                "ism_reports_main": fetch_ism_reports.main,
+                "gdp_main": import_gdp_market_relationships.main,
+                "macro_indicators_main": import_us_macro_indicators.main,
+                "fomc_main": import_fomc_calendar.main,
+                "fomc_document_main": fetch_fomc_documents.main,
+                "fomc_policy_tone_main": generate_fomc_policy_tone.main,
+                "fomc_minutes_main": generate_fomc_minutes_structure.main,
+                "nfib_main": import_nfib_sbet.main,
+                "nfib_regional_main": import_nfib_sbet_regional.main,
+                "main": import_cyclical_commodities.main,
+                "oil_main": import_oil.main,
+                "tracked_commodities_main": import_tracked_commodities.main,
+                "lumber_main": import_lumber.main,
+                "shfe_copper_main": import_shfe_copper.main,
+                "dce_iron_ore_sina_main": import_dce_iron_ore_sina.main,
+                "economic_confirmation_main": import_economic_confirmation.main,
+            }
+        ),
         benchmark_main=refresh_benchmark_market_data.main,
         rates_main=import_us_rates_liquidity.main,
         credit_main=import_us_corporate_credit.main,
