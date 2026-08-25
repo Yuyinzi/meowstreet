@@ -48,3 +48,9 @@ Follow-up verification:
 - Task 7 plus CLI regression suite: `110 passed`
 - FOMC document and CLI lifetime/order subset: `32 passed`
 - Python syntax and `git diff --check` passed.
+
+Additional compatibility follow-up:
+
+- `c0519309` — `fix: preserve FOMC CLI failure exits`
+- FOMC generation and staged CLI regression subset: `42 passed`.
+- Client-construction failures now retain the prior concise stderr and exit-code behavior after the read connection has closed.
