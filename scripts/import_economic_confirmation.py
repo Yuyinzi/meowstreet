@@ -27,6 +27,10 @@ G17_DATA_URL = (
     "&label=include&layout=seriesrow&type=package"
 )
 
+DOL_ARTIFACT = "economic_confirmation.dol"
+BLS_ARTIFACT = "economic_confirmation.bls"
+FEDERAL_RESERVE_ARTIFACT = "economic_confirmation.federal_reserve"
+
 CLAIMS_SOURCE_CONTRACTS = {
     "initial_claims_sa": {
         "metric_id": "initial_claims_trend",
@@ -90,6 +94,123 @@ def _import_source(name, fetch, store):
     except ValueError as exc:
         print(f"{name}: failed - {exc}", file=sys.stderr)
         return None
+
+
+def _put_artifact(artifacts, key, value):
+    if hasattr(artifacts, "put"):
+        artifacts.put(key, value)
+    else:
+        artifacts[key] = value
+
+
+def _get_artifact(artifacts, key):
+    if hasattr(artifacts, "get"):
+        return artifacts.get(key)
+    if key not in artifacts:
+        raise ValueError(f"macro refresh artifact is missing: {key}")
+    return artifacts[key]
+
+
+def fetch_dol(
+    artifacts,
+    *,
+    client=None,
+    national_url=DOL_NATIONAL_CLAIMS_URL,
+    release_url=DOL_RELEASE_URL,
+):
+    http_client = client or HttpClient()
+    result = {
+        "claims_history": dol_ui_claims.fetch_national_claims_history(
+            http_client, national_url
+        ),
+        "claims_release": dol_ui_claims.fetch_claims_release(
+            http_client, release_url
+        ),
+    }
+    _put_artifact(artifacts, DOL_ARTIFACT, result)
+    return {"artifact_key": DOL_ARTIFACT, **result}
+
+
+def persist_dol(db_path, artifacts):
+    staged = _get_artifact(artifacts, DOL_ARTIFACT)
+    con = economic_confirmation.connect(db_path)
+    try:
+        history_count = economic_confirmation.replace_national_claims_history_batch(
+            con, staged["claims_history"]
+        )
+        release_count = economic_confirmation.record_vintage_batch(
+            con, staged["claims_release"]
+        )
+        _record_claims_contracts(con)
+    finally:
+        con.close()
+    return {
+        "status": "ok",
+        "artifact_key": DOL_ARTIFACT,
+        "claims_history": history_count,
+        "claims_release": release_count,
+    }
+
+
+def fetch_bls(
+    artifacts,
+    *,
+    client=None,
+    overview_url=BLS_ESR_OVERVIEW_URL,
+    household_url=BLS_ESR_HOUSEHOLD_URL,
+    establishment_url=BLS_ESR_ESTABLISHMENT_URL,
+    cache_dir=None,
+):
+    http_client = client or HttpClient()
+    result = _fetch_esr(
+        http_client,
+        overview_url,
+        household_url,
+        establishment_url,
+        cache_dir,
+    )
+    _put_artifact(artifacts, BLS_ARTIFACT, result)
+    return {"artifact_key": BLS_ARTIFACT, **result}
+
+
+def persist_bls(db_path, artifacts):
+    result = _get_artifact(artifacts, BLS_ARTIFACT)
+    con = economic_confirmation.connect(db_path)
+    try:
+        count = _record_esr(con, result)
+    finally:
+        con.close()
+    return {"status": "ok", "artifact_key": BLS_ARTIFACT, "observations": count}
+
+
+def fetch_federal_reserve(
+    artifacts,
+    *,
+    client=None,
+    page_url=G17_PAGE_URL,
+    data_url=G17_DATA_URL,
+    cache_dir=None,
+):
+    http_client = client or HttpClient()
+    result = federal_reserve_g17.fetch_g17_release(http_client, page_url, data_url)
+    if cache_dir is not None:
+        _save_cache(cache_dir, "g17_ip.csv", result["csv"])
+    _put_artifact(artifacts, FEDERAL_RESERVE_ARTIFACT, result)
+    return {"artifact_key": FEDERAL_RESERVE_ARTIFACT, **result}
+
+
+def persist_federal_reserve(db_path, artifacts):
+    result = _get_artifact(artifacts, FEDERAL_RESERVE_ARTIFACT)
+    con = economic_confirmation.connect(db_path)
+    try:
+        count = economic_confirmation.record_vintage_batch(con, result["observations"])
+    finally:
+        con.close()
+    return {
+        "status": "ok",
+        "artifact_key": FEDERAL_RESERVE_ARTIFACT,
+        "observations": count,
+    }
 
 
 def main(argv=None):

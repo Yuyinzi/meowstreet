@@ -273,3 +273,42 @@ def test_main_can_generate_credit_interpretation_after_refresh(capsys):
         "generate_credit_interpretation",
         refresh_us_rates_liquidity.us_rates_liquidity.DEFAULT_DB_PATH,
     )
+
+
+def test_default_provider_wrappers_use_explicit_fred_series_groups(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        refresh_us_rates_liquidity.import_us_rates_liquidity,
+        "fetch_fred_csvs",
+        lambda **kwargs: calls.append(("rates_fetch", kwargs)) or {},
+    )
+    monkeypatch.setattr(
+        refresh_us_rates_liquidity.import_us_macro_indicators,
+        "fetch_fred_csvs",
+        lambda **kwargs: calls.append(("macro_fetch", kwargs)) or {},
+    )
+    monkeypatch.setattr(
+        refresh_us_rates_liquidity.import_us_corporate_credit,
+        "fetch_fred_csvs",
+        lambda **kwargs: calls.append(("credit_fetch", kwargs)) or {},
+    )
+
+    refresh_us_rates_liquidity._fetch_rates_grouped()
+    refresh_us_rates_liquidity._fetch_macro_grouped()
+    refresh_us_rates_liquidity._fetch_credit_grouped()
+
+    assert calls == [
+        (
+            "rates_fetch",
+            {"fred_series_ids": refresh_us_rates_liquidity.RATES_FRED_SERIES},
+        ),
+        (
+            "macro_fetch",
+            {"fred_series_ids": refresh_us_rates_liquidity.MACRO_FRED_SERIES},
+        ),
+        (
+            "credit_fetch",
+            {"fred_series_ids": refresh_us_rates_liquidity.CREDIT_FRED_SERIES},
+        ),
+    ]

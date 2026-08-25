@@ -105,7 +105,12 @@ def test_fetch_text_retries_transient_http_failure():
         return httpx.Response(200, content=HTML.encode("utf-8"))
 
     transport = httpx.MockTransport(handler)
-    client = HttpClient(transport=transport, sleep=delays.append, max_attempts=4)
+    client = HttpClient(
+        transport=transport,
+        sleep=delays.append,
+        jitter=lambda lower, upper: 0.0,
+        max_attempts=4,
+    )
 
     result = fetch_ism_official_reports.fetch_text(
         "https://example.com/report", http_client=client

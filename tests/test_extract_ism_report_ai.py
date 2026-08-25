@@ -285,6 +285,118 @@ def test_extract_snapshot_facts_only_saves_dashboard_metrics(tmp_path, monkeypat
     assert len(rows) == 11
 
 
+def test_facts_only_promotion_rolls_back_core_values_and_provenance_on_late_failure(
+    tmp_path, monkeypatch
+):
+    con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
+    growth_cycle.init_db(con)
+    source_url = "https://example.com/report.html"
+    report_id = "ism_manufacturing_2026_06"
+    growth_cycle.replace_ism_report_source_snapshot(
+        con,
+        {
+            "source_url": source_url,
+            "source_name": "prnewswire",
+            "source_hash": "new-hash",
+            "fetched_at": "2026-07-15T10:00:00Z",
+            "raw_html": report_html(),
+            "parse_status": "prepared",
+            "parse_error": None,
+            "report_id": report_id,
+            "report_month": "2026-06-01",
+        },
+    )
+    macro_indicators.merge_macro_indicator_points(
+        con,
+        {
+            "series_id": "ism_manufacturing_pmi",
+            "title": "Manufacturing PMI",
+            "units": "index",
+            "source": "prior core source",
+        },
+        [
+            {
+                "date": "2026-06-01",
+                "value": 47.0,
+                "source": "prior core source",
+            }
+        ],
+    )
+    old_report = {
+        "report_id": report_id,
+        "report_month": "2026-06-01",
+        "title": "Prior core report",
+        "source_url": "https://example.com/prior",
+        "source_hash": "prior-hash",
+        "fetched_at": "2026-07-01T10:00:00Z",
+        "parse_status": "ok",
+        "next_report_period": None,
+        "next_release_at": None,
+        "next_release_label": "",
+    }
+    growth_cycle.replace_ism_report_snapshot(con, old_report, [])
+    growth_cycle.replace_ism_at_a_glance_rows(
+        con,
+        [
+            {
+                "report_id": report_id,
+                "report_month": "2026-06-01",
+                "series_id": "ism_manufacturing_pmi",
+                "label": "Manufacturing PMI",
+                "current_value": 47.0,
+                "previous_value": 46.0,
+                "point_change": 1.0,
+                "direction": "Growing",
+                "rate_of_change": "Faster",
+                "trend_months": 1,
+                "source_url": "https://example.com/prior",
+                "source_hash": "prior-hash",
+            }
+        ],
+    )
+    factual = {
+        key: value
+        for key, value in ism_ai_extraction_test_payload().items()
+        if key != "ai_summary"
+    }
+
+    async def fake_extract(*args, **kwargs):
+        return factual
+
+    monkeypatch.setattr(
+        extract_ism_report_ai,
+        "extract_or_load_factual_sections_async",
+        fake_extract,
+    )
+    monkeypatch.setattr(
+        extract_ism_report_ai.growth_cycle,
+        "replace_ism_ai_report_outputs",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("late failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="late failure"):
+        extract_ism_report_ai.extract_snapshot(
+            con,
+            source_url,
+            object(),
+            model="fake-model",
+            facts_only=True,
+        )
+
+    point = macro_indicators.load_macro_indicator_points(
+        con,
+        "ism_manufacturing_pmi",
+    )[-1]
+    report = growth_cycle.load_latest_ism_report_snapshot(con)
+    row = growth_cycle.load_ism_at_a_glance_rows(con, report_id)[0]
+    assert point["value"] == 47.0
+    assert point["source"] == "prior core source"
+    assert report["source_url"] == "https://example.com/prior"
+    assert report["source_hash"] == "prior-hash"
+    assert row["current_value"] == 47.0
+    assert row["source_hash"] == "prior-hash"
+
+
 def test_extract_snapshot_rejects_llm_report_month_mismatch(tmp_path):
     con = us_rates_liquidity.connect(tmp_path / "market_data.sqlite")
     growth_cycle.init_db(con)

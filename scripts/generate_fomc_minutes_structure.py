@@ -29,14 +29,6 @@ MINUTES_MODEL_SPECS = [
 ]
 
 
-def target_events(events, minutes_docs, statement_tones):
-    return [
-        event
-        for event in events
-        if event["event_id"] in minutes_docs and event["event_id"] in statement_tones
-    ]
-
-
 def should_skip_existing_extraction(existing, source_hash, force):
     return bool(
         existing
@@ -46,31 +38,61 @@ def should_skip_existing_extraction(existing, source_hash, force):
     )
 
 
-def pending_events(events, minutes_docs, statement_tones, load_existing, force):
-    pending = []
-    for event in target_events(events, minutes_docs, statement_tones):
-        minutes_document = minutes_docs[event["event_id"]]
-        existing = load_existing(
-            event["event_id"],
-            "minutes",
-            minutes_document["source_hash"],
-        )
+def classify_events(events, minutes_docs, statement_tones, load_existing, force):
+    classified = {"pending": [], "reused": [], "unavailable": []}
+    for event in events:
+        event_id = event["event_id"]
+        minutes_document = minutes_docs.get(event_id)
+        if not minutes_document:
+            classified["unavailable"].append(
+                (event, {"reason": "no minutes document"})
+            )
+            continue
+        statement_tone = statement_tones.get(event_id)
+        if not statement_tone:
+            classified["unavailable"].append(
+                (event, {"reason": "no approved statement tone"})
+            )
+            continue
+        existing = load_existing(event_id, "minutes", minutes_document["source_hash"])
         if should_skip_existing_extraction(
             existing,
             minutes_document["source_hash"],
             force,
         ):
-            print("fomc minutes structure skipped:")
-            print(f"  event: {event['event_id']}")
-            print(f"  source_hash: {minutes_document['source_hash']}")
-            if existing.get("generated_at"):
-                print(f"  existing_generated_at: {existing['generated_at']}")
-            print(
-                "  reason: existing extraction for this minutes hash; use --force to regenerate"
+            classified["reused"].append(
+                (
+                    event,
+                    {"minutes_document": minutes_document, "existing": existing},
+                )
             )
             continue
-        pending.append((event, minutes_document, statement_tones[event["event_id"]]))
-    return pending
+        classified["pending"].append((event, minutes_document, statement_tone))
+    return classified
+
+
+def _print_event_classification(event, status, detail):
+    print(f"fomc minutes structure {status}:")
+    print(f"  event: {event['event_id']}")
+    if status == "reused":
+        minutes_document = detail["minutes_document"]
+        existing = detail["existing"]
+        print(f"  source_hash: {minutes_document['source_hash']}")
+        if existing.get("generated_at"):
+            print(f"  existing_generated_at: {existing['generated_at']}")
+        print(
+            "  reason: existing extraction for this minutes hash; use --force to regenerate"
+        )
+        return
+    print(f"  reason: {detail.get('reason', 'unknown')}")
+
+
+def _summary(generated, classified, failed):
+    return (
+        f"fomc_minutes_structure: generated={generated} "
+        f"reused={len(classified['reused'])} "
+        f"unavailable={len(classified['unavailable'])} failed={failed}"
+    )
 
 
 async def call_json(client, model, prompt):
@@ -93,6 +115,8 @@ async def generate_event_minutes_structure(
     client,
     models,
     max_rounds,
+    verbose=False,
+    persist=True,
 ):
     feedback = []
     reviewer_feedback = []
@@ -163,14 +187,42 @@ async def generate_event_minutes_structure(
         datetime.now(UTC).isoformat(),
         final_feedback,
     )
-    us_rates_liquidity.replace_macro_event_tone_extraction(con, row)
-    print("fomc minutes structure saved:")
-    print(f"  event: {event['event_id']}")
-    print(f"  risk_focus: {extraction['risk_focus']}")
-    print(f"  policy_conviction: {extraction['policy_conviction']}")
-    print(f"  minutes_confirmation: {extraction['minutes_confirmation']}")
-    print(f"  extraction_status: {extraction_status}")
+    if persist:
+        us_rates_liquidity.replace_macro_event_tone_extraction(con, row)
+    if verbose:
+        print("fomc minutes structure saved:")
+        print(f"  event: {event['event_id']}")
+        print(f"  risk_focus: {extraction['risk_focus']}")
+        print(f"  policy_conviction: {extraction['policy_conviction']}")
+        print(f"  minutes_confirmation: {extraction['minutes_confirmation']}")
+        print(f"  extraction_status: {extraction_status}")
     return 1
+
+
+_ORIGINAL_GENERATE_EVENT_MINUTES_STRUCTURE = generate_event_minutes_structure
+
+
+def prepare_fomc_minutes_structure(
+    db_path, event_id, client, extractor_model, reviewer_model, max_rounds=3
+):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.prepare_fomc_minutes_structure(
+        db_path,
+        event_id,
+        client,
+        extractor_model,
+        reviewer_model,
+        max_rounds=max_rounds,
+    )
+
+
+def persist_fomc_minutes_structure(db_path, prepared_extraction):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.persist_fomc_minutes_structure(
+        db_path, prepared_extraction
+    )
 
 
 def parse_args(argv=None):
@@ -185,6 +237,7 @@ def parse_args(argv=None):
     target_group.add_argument("--all", action="store_true")
     parser.add_argument("--max-rounds", type=int, default=3)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--extractor-model", default="")
     parser.add_argument("--reviewer-model", default="")
     parser.add_argument("--openai-api-key", default="")
@@ -230,7 +283,7 @@ async def async_main(argv=None):
             if not events:
                 raise ValueError(f"fomc event is unknown: {args.event_id}")
         minutes_docs, statement_tones = load_event_maps(con, events)
-        pending = pending_events(
+        classified = classify_events(
             events,
             minutes_docs,
             statement_tones,
@@ -244,9 +297,21 @@ async def async_main(argv=None):
             ),
             args.force,
         )
-        if not pending:
-            print("fomc_minutes_structure: 0")
-            return 0
+        if args.verbose:
+            for item in classified["reused"]:
+                _print_event_classification(item[0], "reused", item[1])
+            for event, detail in classified["unavailable"]:
+                _print_event_classification(event, "unavailable", detail)
+        pending = classified["pending"]
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        con.close()
+        return 1
+    con.close()
+    if not pending:
+        print(_summary(0, classified, 0))
+        return 0
+    try:
         llm_bundle = llm.build_async_client_bundle(
             args,
             root=ROOT,
@@ -255,36 +320,56 @@ async def async_main(argv=None):
             timeout=120,
             error_context="FOMC minutes structure extraction",
         )
-        client = llm_bundle["client"]
-        models = llm_bundle["models"]
-        generated = 0
-        failed = 0
-        for event, minutes_document, statement_tone in pending:
-            try:
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    client = llm_bundle["client"]
+    models = llm_bundle["models"]
+    generated = 0
+    failed = 0
+    for event, minutes_document, statement_tone in pending:
+        try:
+            if generate_event_minutes_structure is not _ORIGINAL_GENERATE_EVENT_MINUTES_STRUCTURE:
                 generated += await generate_event_minutes_structure(
-                    con,
+                    None,
                     event,
                     minutes_document,
                     statement_tone,
                     client,
                     models,
                     args.max_rounds,
+                    verbose=args.verbose,
                 )
-            except Exception as exc:
-                failed += 1
-                print("fomc minutes structure failed:", file=sys.stderr)
-                print(f"  event: {event['event_id']}", file=sys.stderr)
-                print(f"  reason: {exc}", file=sys.stderr)
-                if not args.all:
-                    return 1
-                continue
-        print(f"fomc_minutes_structure: {generated}")
-        return 1 if failed else 0
-    except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    finally:
-        con.close()
+            else:
+                prepared = await asyncio.to_thread(
+                    prepare_fomc_minutes_structure,
+                    args.db_path,
+                    event["event_id"],
+                    client,
+                    models["extractor_model"],
+                    models["reviewer_model"],
+                    args.max_rounds,
+                )
+                if prepared.get("status") != "ok":
+                    raise ValueError(prepared.get("error", "FOMC minutes preparation failed"))
+                persisted = await asyncio.to_thread(
+                    persist_fomc_minutes_structure, args.db_path, prepared
+                )
+                if persisted.get("status") != "ok":
+                    raise ValueError(persisted.get("error", "FOMC minutes persistence failed"))
+        except Exception as exc:
+            failed += 1
+            print("fomc minutes structure failed:", file=sys.stderr)
+            print(f"  event: {event['event_id']}", file=sys.stderr)
+            print(f"  reason: {exc}", file=sys.stderr)
+            if not args.all:
+                print(_summary(generated, classified, failed))
+                return 1
+            continue
+        if generate_event_minutes_structure is _ORIGINAL_GENERATE_EVENT_MINUTES_STRUCTURE:
+            generated += 1
+    print(_summary(generated, classified, failed))
+    return 1 if failed else 0
 
 
 def main(argv=None):

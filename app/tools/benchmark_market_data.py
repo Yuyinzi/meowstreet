@@ -137,46 +137,29 @@ class YahooBenchmarkFetcher:
                 benchmark_con,
                 config["benchmark_id"],
             )
-            start_date = market_data_db.fetch_start_date(
-                latest_date,
-                self.today_date or market_data._today_iso(),
-                overlap_days=self.overlap_days,
-            )
-            self.fetch_market_data(
-                config["symbol"],
-                period="max",
-                interval=config["interval"],
-                db_path=self.market_db_path,
+            from app.services import macro_refresh_yahoo
+
+            prepared = macro_refresh_yahoo.prepare_benchmarks(
+                [benchmark_id],
+                fetch_market_data=lambda symbol, **kwargs: self.fetch_market_data(
+                    symbol, db_path=self.market_db_path, **kwargs
+                ),
+                load_market_rows=lambda symbol, interval, start_date=None: self.load_market_rows(
+                    market_con, symbol, interval, start_date=start_date
+                ),
                 today_date=self.today_date,
+                latest_dates={config["benchmark_id"]: latest_date},
                 refresh_days=self.refresh_days,
                 overlap_days=self.overlap_days,
-            )
-            yahoo_rows = self.load_market_rows(
-                market_con,
-                config["symbol"],
-                config["interval"],
-                start_date=start_date,
-            )
-            benchmark_rows = yahoo_rows_to_benchmark_rows(yahoo_rows)
-            source = f"yahoo_finance:{config['symbol']}"
-            rows_upserted = benchmark_market_data.upsert_benchmark_prices(
-                benchmark_con,
-                config["benchmark_id"],
-                benchmark_rows,
-                source=source,
             )
         finally:
             market_con.close()
             benchmark_con.close()
-        return {
-            "benchmark_id": config["benchmark_id"],
-            "symbol": config["symbol"],
-            "rows_upserted": rows_upserted,
-            "latest_date": benchmark_rows[-1]["date"]
-            if benchmark_rows
-            else latest_date,
-            "source": source,
-        }
+        return macro_refresh_yahoo.persist_benchmarks(
+            prepared,
+            benchmark_db_path=self.benchmark_db_path,
+            market_db_path=self.market_db_path,
+        )[0]
 
 
 def refresh_benchmarks(

@@ -32,6 +32,15 @@ def connect(db_path=DEFAULT_DB_PATH):
     return con
 
 
+def connect_read_only(db_path=DEFAULT_DB_PATH):
+    path = Path(db_path)
+    if not path.exists():
+        return None
+    con = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    con.row_factory = sqlite3.Row
+    return con
+
+
 def normalize_benchmark_id(benchmark_id):
     normalized = str(benchmark_id or "").strip().lower()
     if not normalized:

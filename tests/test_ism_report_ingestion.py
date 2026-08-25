@@ -95,7 +95,18 @@ class TestBuildTargetsMissingOnlyRetry:
 
 
 class TestBuildTargetsLatestOnly:
-    def test_default_returns_one_prnewswire_target(self):
+    def test_default_returns_one_prnewswire_target(self, monkeypatch):
+        monkeypatch.setattr(
+            ingestion,
+            "discover_prnewswire_reports",
+            lambda *args, **kwargs: [
+                {
+                    "url": "https://www.prnewswire.com/manufacturing.html",
+                    "report_month": ingestion.latest_released_report_month(),
+                    "report_id": "ism_manufacturing_2026_07",
+                }
+            ],
+        )
         targets = ingestion.build_targets("manufacturing")
         assert len(targets) == 1
         assert targets[0]["source_name"] == "prnewswire"
@@ -104,7 +115,18 @@ class TestBuildTargetsLatestOnly:
         assert targets[0]["report_id"].startswith("ism_manufacturing")
         assert targets[0]["url"].startswith("https://www.prnewswire.com/")
 
-    def test_default_returns_services_prnewswire_target(self):
+    def test_default_returns_services_prnewswire_target(self, monkeypatch):
+        monkeypatch.setattr(
+            ingestion,
+            "discover_prnewswire_reports",
+            lambda *args, **kwargs: [
+                {
+                    "url": "https://www.prnewswire.com/services.html",
+                    "report_month": ingestion.latest_released_report_month(),
+                    "report_id": "ism_services_2026_07",
+                }
+            ],
+        )
         targets = ingestion.build_targets("services")
         assert len(targets) == 1
         assert targets[0]["source_name"] == "prnewswire"
@@ -112,8 +134,19 @@ class TestBuildTargetsLatestOnly:
         assert targets[0]["report_id"].startswith("ism_services")
         assert targets[0]["url"].startswith("https://www.prnewswire.com/")
 
-    def test_missing_only_with_existing_month_suppresses_latest(self):
+    def test_missing_only_with_existing_month_suppresses_latest(self, monkeypatch):
         latest = ingestion.latest_released_report_month()
+        monkeypatch.setattr(
+            ingestion,
+            "discover_prnewswire_reports",
+            lambda *args, **kwargs: [
+                {
+                    "url": "https://www.prnewswire.com/manufacturing.html",
+                    "report_month": latest,
+                    "report_id": "ism_manufacturing_2026_07",
+                }
+            ],
+        )
         targets = ingestion.build_targets(
             "manufacturing",
             force_latest=True,
@@ -122,8 +155,19 @@ class TestBuildTargetsLatestOnly:
         )
         assert len(targets) == 0
 
-    def test_missing_only_without_existing_month_includes_latest(self):
+    def test_missing_only_without_existing_month_includes_latest(self, monkeypatch):
         latest = ingestion.latest_released_report_month()
+        monkeypatch.setattr(
+            ingestion,
+            "discover_prnewswire_reports",
+            lambda *args, **kwargs: [
+                {
+                    "url": "https://www.prnewswire.com/manufacturing.html",
+                    "report_month": latest,
+                    "report_id": "ism_manufacturing_2026_07",
+                }
+            ],
+        )
         targets = ingestion.build_targets(
             "manufacturing",
             force_latest=True,
@@ -148,8 +192,19 @@ class TestBuildTargetsSpecificMonth:
         targets = ingestion.build_targets("manufacturing", report_month="2026-06")
         assert any(t["report_month"] == "2026-06-01" for t in targets)
 
-    def test_report_month_uses_prnewswire_for_latest(self):
+    def test_report_month_uses_prnewswire_for_latest(self, monkeypatch):
         latest = ingestion.latest_released_report_month()
+        monkeypatch.setattr(
+            ingestion,
+            "discover_prnewswire_reports",
+            lambda *args, **kwargs: [
+                {
+                    "url": "https://www.prnewswire.com/services.html",
+                    "report_month": latest,
+                    "report_id": "ism_services_2026_07",
+                }
+            ],
+        )
         targets = ingestion.build_targets("services", report_month=latest[:7])
         matching = [t for t in targets if t["report_month"] == latest]
         assert len(matching) >= 1

@@ -1,7 +1,12 @@
 import argparse
+import io
 import sys
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from pathlib import Path
+from threading import Event
+
+from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -24,28 +29,84 @@ from scripts import import_lumber
 from scripts import import_oil
 from scripts import import_shfe_copper
 from scripts import import_us_building_permits
+from scripts import import_us_corporate_credit
 from scripts import import_us_macro_indicators
+from scripts import import_us_rates_liquidity
 from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
+
+from app import llm
+from app.services.macro_refresh_registry import build_refresh_tasks
+from app.services.macro_refresh_executor import execute_tasks
+from app.services.macro_refresh_output import install_output_routers
+from app.services.macro_refresh_resources import ArtifactStore
+from app.services.macro_refresh_resources import FredRateLimiter
+from app.services.macro_refresh_resources import RequestCoordinator
+from app.services.macro_refresh_resources import SQLiteWriterGate
+from app.services.macro_refresh_runtime import build_runtime_providers
 
 
 def _timestamp():
     return datetime.now().replace(microsecond=0).isoformat()
 
 
-def _run_task(name, func, argv):
-    try:
-        exit_code = func(argv)
-    except Exception as exc:
-        return {"name": name, "status": "failed", "exit_code": 1, "error": str(exc)}
-    if exit_code:
+def _task(name, func, argv, skip_reason=None):
+    return {
+        "name": name,
+        "func": func,
+        "argv": list(argv),
+        "skip_reason": skip_reason,
+    }
+
+
+def _openai_enrichment_skip_reason(config):
+    if config.get("api_key"):
+        return None
+    return "OPENAI_API_KEY is not configured"
+
+
+def _run_task(task):
+    if task["skip_reason"]:
         return {
-            "name": name,
-            "status": "failed",
-            "exit_code": int(exit_code),
-            "error": f"exit code {exit_code}",
+            "name": task["name"],
+            "status": "skipped",
+            "exit_code": 0,
+            "error": task["skip_reason"],
+            "stdout": "",
+            "stderr": "",
         }
-    return {"name": name, "status": "ok", "exit_code": 0, "error": ""}
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    try:
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            exit_code = task["func"](task["argv"])
+    except Exception as exc:
+        exit_code = 1
+        error = str(exc)
+    else:
+        error = "" if not exit_code else f"exit code {exit_code}"
+    return {
+        "name": task["name"],
+        "status": "ok" if not exit_code else "failed",
+        "exit_code": int(exit_code or 0),
+        "error": error,
+        "stdout": stdout.getvalue(),
+        "stderr": stderr.getvalue(),
+    }
+
+
+def _result_counts(results):
+    return {
+        "ok": sum(result["status"] == "ok" for result in results),
+        "skipped": sum(result["status"] == "skipped" for result in results),
+        "failed": sum(result["status"] == "failed" for result in results),
+    }
+
+
+def _result_counts_with_blocked(results):
+    counts = _result_counts(results)
+    counts["blocked"] = sum(result["status"] == "blocked" for result in results)
+    return counts
 
 
 def _fomc_calendar_path(args):
@@ -107,108 +168,437 @@ def _planned_tasks(
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
     economic_confirmation_main=None,
+    openai_config=None,
+    credit_main=None,
+    artifact_store=None,
 ):
     tasks = []
-    if benchmark_main is not None and not args.skip_yahoo:
-        tasks.append(
-            (
-                "benchmark_yahoo",
-                benchmark_main,
-                [
-                    "--benchmark-id",
-                    "us_sp500",
-                    "--benchmark-id",
-                    "us_nasdaq_100",
-                    "--benchmark-id",
-                    "us_nasdaq_composite",
-                    "--benchmark-id",
-                    "us_djia",
-                ],
-            )
+    if credit_main is not None:
+        fred_tasks = build_refresh_tasks(
+            args,
+            {
+                "rates": rates_main,
+                "credit": credit_main,
+                "m2": m2_main,
+                "macro_indicators": macro_indicators_main,
+                "gdp": gdp_main,
+            },
+            openai_config=openai_config,
+            artifact_store=artifact_store or ArtifactStore(),
         )
+        tasks.extend(fred_tasks)
+        rates_main = None
+        m2_main = None
+        macro_indicators_main = None
+        gdp_main = None
+    if benchmark_main is not None and not args.skip_yahoo:
+        tasks.append(_task(
+            "benchmark_yahoo",
+            benchmark_main,
+            [
+                "--benchmark-id",
+                "us_sp500",
+                "--benchmark-id",
+                "us_nasdaq_100",
+                "--benchmark-id",
+                "us_nasdaq_composite",
+                "--benchmark-id",
+                "us_djia",
+            ],
+        ))
     if rates_main is not None and not args.skip_rates:
-        tasks.append(("rates_fred", rates_main, []))
+        tasks.append(_task("rates_fred", rates_main, []))
     if consumer_main is not None and not args.skip_consumer_sentiment:
         cache_dir = _consumer_cache_dir()
         consumer_db_path = ROOT / "data" / "local_system" / "market_data.sqlite"
-        tasks.append(
-            (
-                "consumer_sentiment",
-                lambda argv: _combined_consumer_refresh(
-                    consumer_main, cache_dir, consumer_db_path
-                ),
-                [],
-            )
-        )
+        tasks.append(_task(
+            "consumer_sentiment",
+            lambda argv: _combined_consumer_refresh(
+                consumer_main, cache_dir, consumer_db_path
+            ),
+            [],
+        ))
     if m2_main is not None and not args.skip_m2:
-        tasks.append(("m2_fred_fetch", m2_main, ["--fetch-fred-csv"]))
-        tasks.append(("m2_fred_merge", m2_main, ["--fred-csv-merge"]))
+        tasks.append(_task("m2_fred_fetch", m2_main, ["--fetch-fred-csv"]))
+        tasks.append(_task("m2_fred_merge", m2_main, ["--fred-csv-merge"]))
     if macro_indicators_main is not None and not args.skip_macro_indicators:
-        tasks.append(("macro_indicators_fred_fetch", macro_indicators_main, ["--fetch-fred-csv"]))
-        tasks.append(("macro_indicators_fred_merge", macro_indicators_main, ["--fred-csv-merge"]))
+        tasks.append(_task("macro_indicators_fred_fetch", macro_indicators_main, ["--fetch-fred-csv"]))
+        tasks.append(_task("macro_indicators_fred_merge", macro_indicators_main, ["--fred-csv-merge"]))
     if building_permits_main is not None and not args.skip_building_permits:
-        tasks.append(("building_permits_census", building_permits_main, []))
+        tasks.append(_task("building_permits_census", building_permits_main, []))
     if ism_reports_main is not None and not args.skip_ism:
-        tasks.append(
-            (
-                "ism_manufacturing_official",
-                ism_reports_main,
-                ["--survey", "manufacturing", "--latest-only"],
-            )
-        )
-        tasks.append(
-            (
-                "ism_services_official",
-                ism_reports_main,
-                ["--survey", "services", "--latest-only"],
-            )
+        enrichment_skip_reason = _openai_enrichment_skip_reason(openai_config or {})
+        tasks.extend(
+            [
+                _task(
+                    "ism_manufacturing_official",
+                    ism_reports_main,
+                    [
+                        "--survey",
+                        "manufacturing",
+                        "--latest-only",
+                        "--core-only",
+                    ],
+                ),
+                _task(
+                    "ism_manufacturing_ai_enrichment",
+                    ism_reports_main,
+                    [
+                        "--survey",
+                        "manufacturing",
+                        "--latest-only",
+                        "--enrichment-only",
+                    ],
+                    enrichment_skip_reason,
+                ),
+                _task(
+                    "ism_services_official",
+                    ism_reports_main,
+                    ["--survey", "services", "--latest-only", "--core-only"],
+                ),
+                _task(
+                    "ism_services_ai_enrichment",
+                    ism_reports_main,
+                    [
+                        "--survey",
+                        "services",
+                        "--latest-only",
+                        "--enrichment-only",
+                    ],
+                    enrichment_skip_reason,
+                ),
+            ]
         )
     if gdp_main is not None and not args.skip_gdp:
-        tasks.append(("gdp_fred_fetch", gdp_main, ["--fetch-fred-csv"]))
-        tasks.append(("gdp_fred_merge", gdp_main, ["--us-csv-merge"]))
+        tasks.append(_task("gdp_fred_fetch", gdp_main, ["--fetch-fred-csv"]))
+        tasks.append(_task("gdp_fred_merge", gdp_main, ["--us-csv-merge"]))
     if fomc_main is not None and not args.skip_fomc:
         calendar_path = _fomc_calendar_path(args)
         if calendar_path:
             tasks.extend(
                 [
-                    (
+                    _task(
                         "fomc_calendar",
                         fomc_main,
                         ["--calendar-path", str(calendar_path)],
                     ),
-                    ("fomc_documents", fomc_document_main, ["--document-type", "all"]),
-                    ("fomc_policy_tone", fomc_policy_tone_main, ["--all"]),
-                    ("fomc_minutes_structure", fomc_minutes_main, ["--all"]),
+                    _task("fomc_documents", fomc_document_main, ["--document-type", "all"]),
+                    _task(
+                        "fomc_policy_tone",
+                        fomc_policy_tone_main,
+                        ["--all"]
+                        + (["--verbose"] if getattr(args, "verbose", False) else []),
+                    ),
+                    _task(
+                        "fomc_minutes_structure",
+                        fomc_minutes_main,
+                        ["--all"]
+                        + (["--verbose"] if getattr(args, "verbose", False) else []),
+                    ),
                 ]
             )
     if nfib_main is not None and not args.skip_nfib_sbo:
-        tasks.append(("nfib_sbo_official", nfib_main, []))
+        tasks.append(_task("nfib_sbo_official", nfib_main, []))
     if nfib_regional_main is not None and not args.skip_nfib_sbo_regional:
-        tasks.append(("nfib_sbo_regional_official", nfib_regional_main, []))
+        tasks.append(_task("nfib_sbo_regional_official", nfib_regional_main, []))
     if main is not None and not args.skip_cyclical_commodities:
-        tasks.append(("cyclical_commodities_official", main, []))
+        tasks.append(_task("cyclical_commodities_official", main, []))
     if oil_main is not None and not args.skip_oil:
-        tasks.append(("oil_official", oil_main, []))
+        tasks.append(_task("oil_official", oil_main, []))
     if lumber_main is not None and not args.skip_lumber:
-        tasks.append(("lumber_yahoo", lumber_main, []))
-    if shfe_copper_main is not None and not args.skip_shfe_copper:
-        tasks.append(("shfe_copper", shfe_copper_main, ["--incremental"]))
+        tasks.append(_task("lumber_yahoo", lumber_main, []))
+    if shfe_copper_main is not None and not getattr(args, "skip_shfe_copper", False):
+        tasks.append(_task("shfe_copper", shfe_copper_main, ["--incremental"]))
     if dce_iron_ore_sina_main is not None and not args.skip_dce_iron_ore_sina:
-        tasks.append(("dce_iron_ore_sina", dce_iron_ore_sina_main, []))
+        tasks.append(_task("dce_iron_ore_sina", dce_iron_ore_sina_main, []))
     if economic_confirmation_main is not None and not args.skip_economic_confirmation:
-        tasks.append(("economic_confirmation_official", economic_confirmation_main, []))
+        tasks.append(_task("economic_confirmation_official", economic_confirmation_main, []))
     return tasks
 
 
-def _print_result(result):
-    if result["status"] == "ok":
-        print(f"{result['name']}: ok")
+def _write_report_text(text, *, file, progress):
+    if not text:
+        return
+    if getattr(progress, "disable", False):
+        print(text, end="", file=file, flush=True)
+        return
+    for line in text.splitlines():
+        progress.write(line, file=file)
+
+
+def _write_report_line(message, *, file, progress):
+    if getattr(progress, "disable", False):
+        print(message, file=file, flush=True)
     else:
-        print(f"{result['name']}: failed - {result['error']}", file=sys.stderr)
+        progress.write(message, file=file)
+
+
+def _report_result(result, *, verbose, progress):
+    replay_output = verbose or result["status"] == "failed"
+    if replay_output:
+        _write_report_text(result["stdout"], file=sys.stdout, progress=progress)
+        _write_report_text(result["stderr"], file=sys.stderr, progress=progress)
+    if result["status"] == "ok":
+        message = f"{result['name']}: ok"
+        file = sys.stdout
+    elif result["status"] == "skipped":
+        message = f"{result['name']}: skipped - {result['error']}"
+        file = sys.stdout
+    else:
+        message = f"{result['name']}: failed - {result['error']}"
+        file = sys.stderr
+    _write_report_line(message, file=file, progress=progress)
+
+
+class _ProgressReporter:
+    def __init__(self, tasks, *, progress, verbose, stdout, stderr):
+        self._tasks = {task["name"]: task for task in tasks}
+        self._lane_order = []
+        for task in tasks:
+            if task["lane"] not in self._lane_order:
+                self._lane_order.append(task["lane"])
+        self._progress = progress
+        self._verbose = verbose
+        self._stdout = stdout
+        self._stderr = stderr
+        self._active = set()
+        self._results = {}
+
+    @property
+    def results(self):
+        return list(self._results.values())
+
+    def handle_event(self, event):
+        event_type = event["type"]
+        task = event["task"]
+        name = task["name"]
+        if event_type == "task_started":
+            self._active.add(name)
+            self._refresh_description()
+            return
+        if event_type != "task_finished":
+            return
+        self._active.discard(name)
+        result = event["result"]
+        self._results[name] = result
+        if not self._progress.disable:
+            self._replay_output(result)
+        self._progress.update(1)
+        self._progress.set_postfix(
+            _result_counts_with_blocked(self.results), refresh=False
+        )
+        self._refresh_description()
+        if not self._progress.disable:
+            result["stdout"] = ""
+            result["stderr"] = ""
+
+    def report_final(self, results):
+        for result in sorted(results, key=self._plan_key):
+            if result["name"] not in self._results:
+                self._progress.update(1)
+                self._results[result["name"]] = result
+            if self._progress.disable:
+                self._replay_output(result)
+            self._write_summary(result)
+            result["stdout"] = ""
+            result["stderr"] = ""
+
+    def _plan_key(self, result):
+        task = self._tasks.get(result["name"], {})
+        return (task.get("plan_index", 0), result["name"])
+
+    def _refresh_description(self):
+        active_lanes = [
+            lane
+            for lane in self._lane_order
+            if any(self._tasks[name]["lane"] == lane for name in self._active)
+        ]
+        description = "active lanes: " + ", ".join(active_lanes)
+        self._progress.set_description_str(description)
+
+    def _replay_output(self, result):
+        if not (self._verbose or result["status"] in {"failed", "blocked"}):
+            return
+        prefix = _task_label(result)
+        _write_prefixed_text(result.get("stdout", ""), prefix, self._stdout, self._progress)
+        _write_prefixed_text(result.get("stderr", ""), prefix, self._stderr, self._progress)
+
+    def _write_summary(self, result):
+        prefix = _task_label(result)
+        status = result["status"]
+        if status == "ok":
+            message = f"{prefix}: ok"
+            target = self._stdout
+        elif status == "skipped":
+            message = f"{prefix}: skipped - {result['error']}"
+            target = self._stdout
+        else:
+            message = f"{prefix}: {status} - {result['error']}"
+            target = self._stderr
+        _write_report_line(message, file=target, progress=self._progress)
+
+
+def _write_prefixed_text(text, prefix, file, progress):
+    if not text:
+        return
+    for line in text.splitlines():
+        _write_report_line(f"{prefix}: {line}", file=file, progress=progress)
+
+
+def _task_label(result):
+    lane = result["lane"]
+    name = result["name"]
+    return name if name.startswith(f"{lane}.") else f"{lane}.{name}"
+
+
+def _build_task_providers(
+    values,
+    *,
+    artifact_store=None,
+    provider_overrides=None,
+    openai_config=None,
+    fomc_calendar_path=None,
+    verbose=False,
+    use_runtime_defaults=False,
+):
+    store = artifact_store if artifact_store is not None else ArtifactStore()
+    provider_overrides = provider_overrides or {}
+    legacy_value_names = {
+        "benchmark": "benchmark_main",
+        "benchmarks": "benchmark_main",
+        "rates": "rates_main",
+        "credit": "credit_main",
+        "consumer": "consumer_main",
+        "m2": "m2_main",
+        "building_permits": "building_permits_main",
+        "ism_reports": "ism_reports_main",
+        "gdp": "gdp_main",
+        "macro_indicators": "macro_indicators_main",
+        "fomc": "fomc_main",
+        "fomc_documents": "fomc_document_main",
+        "fomc_policy_tone": "fomc_policy_tone_main",
+        "fomc_minutes": "fomc_minutes_main",
+        "nfib": "nfib_main",
+        "nfib_regional": "nfib_regional_main",
+        "main": "main",
+        "oil": "oil_main",
+        "tracked_commodities": "tracked_commodities_main",
+        "lumber": "lumber_main",
+        "shfe_copper": "shfe_copper_main",
+        "dce_iron_ore_sina": "dce_iron_ore_sina_main",
+        "economic_confirmation": "economic_confirmation_main",
+    }
+    legacy_values = {
+        legacy_value_names[key]: value
+        for key, value in provider_overrides.items()
+        if key in legacy_value_names
+    }
+    staged_overrides = {
+        key: value
+        for key, value in provider_overrides.items()
+        if key not in legacy_value_names
+    }
+    runtime_values = legacy_values or (
+        values if not staged_overrides else {}
+    )
+    providers = build_runtime_providers(
+        store,
+        values=runtime_values,
+        overrides=staged_overrides,
+        openai_config=openai_config,
+        fomc_calendar_path=fomc_calendar_path,
+        verbose=verbose,
+    )
+    enabled_groups = {
+        "rates_main": {"rates_fetch", "rates_import"},
+        "credit_main": {"credit_fetch", "credit_import"},
+        "m2_main": {"m2_fetch", "m2_import"},
+        "macro_indicators_main": {
+            "macro_indicators_fetch",
+            "macro_indicators_import",
+        },
+        "gdp_main": {"gdp_fetch", "gdp_import"},
+        "benchmark_main": {"benchmarks_fetch", "benchmarks_import"},
+        "lumber_main": {"lumber_fetch", "lumber_import"},
+        "consumer_main": {
+            "consumer_michigan_fetch",
+            "consumer_michigan_import",
+            "consumer_fred_fetch",
+            "consumer_fred_import",
+        },
+        "building_permits_main": {
+            "building_permits_fetch",
+            "building_permits_import",
+        },
+        "nfib_main": {"nfib_fetch", "nfib_import"},
+        "nfib_regional_main": {"nfib_regional_fetch", "nfib_regional_import"},
+        "tracked_commodities_main": {
+            "tracked_commodities_fetch",
+            "tracked_commodities_import",
+        },
+        "main": {
+            "cyclical_cot_fetch",
+            "cyclical_cot_import",
+            "cyclical_fred_fetch",
+            "cyclical_fred_import",
+        },
+        "oil_main": {"oil_fetch", "oil_import"},
+        "shfe_copper_main": {"shfe_copper_fetch", "shfe_copper_import"},
+        "dce_iron_ore_sina_main": {
+            "dce_iron_ore_sina_fetch",
+            "dce_iron_ore_sina_import",
+        },
+        "economic_confirmation_main": {
+            "dol_fetch",
+            "dol_import",
+            "bls_fetch",
+            "bls_import",
+            "federal_reserve_fetch",
+            "federal_reserve_import",
+        },
+        "fomc_main": {"fomc_calendar_import"},
+        "fomc_document_main": {"fomc_documents_fetch", "fomc_documents_import"},
+        "fomc_policy_tone_main": {
+            "fomc_policy_tone_extract",
+            "fomc_policy_tone_import",
+        },
+        "fomc_minutes_main": {"fomc_minutes_extract", "fomc_minutes_import"},
+        "ism_reports_main": {
+            key
+            for survey in ("manufacturing", "services")
+            for key in (
+                f"ism_{survey}_fetch",
+                f"ism_{survey}_import",
+                f"ism_{survey}_enrichment",
+                f"ism_{survey}_enrichment_import",
+            )
+        },
+    }
+    if use_runtime_defaults:
+        providers.update(staged_overrides)
+        return providers
+    if any(runtime_values.values()):
+        enabled = {
+            key
+            for value_key, keys in enabled_groups.items()
+            if runtime_values.get(value_key) is not None
+            for key in keys
+        }
+        providers = {key: value for key, value in providers.items() if key in enabled}
+    else:
+        providers = {}
+    providers.update(staged_overrides)
+    return providers
 
 
 def run(
     argv=None,
+    *,
+    task_providers=None,
+    artifact_store=None,
+    executor=execute_tasks,
+    progress_factory=tqdm,
+    openai_config=None,
     benchmark_main=None,
     rates_main=None,
     consumer_main=None,
@@ -230,6 +620,8 @@ def run(
     shfe_copper_main=None,
     dce_iron_ore_sina_main=None,
     economic_confirmation_main=None,
+    credit_main=None,
+    use_runtime_defaults=False,
 ):
     parser = argparse.ArgumentParser(description="Refresh macro dashboard market data")
     parser.add_argument("--skip-yahoo", action="store_true")
@@ -251,73 +643,121 @@ def run(
     parser.add_argument("--skip-dce-iron-ore-sina", action="store_true")
     parser.add_argument("--skip-economic-confirmation", action="store_true")
     parser.add_argument("--fomc-calendar-path", type=Path)
+    parser.add_argument("--initial", action="store_true")
+    parser.add_argument("--serial", action="store_true", help="run refresh lanes serially")
     parser.add_argument(
         "--stop-on-error",
         action="store_true",
         help="stop running remaining refresh tasks after the first failure",
     )
+    parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
-    print(f"macro data refresh started: {_timestamp()}")
-    results = []
-    for name, func, task_argv in _planned_tasks(
+    calendar_path = _fomc_calendar_path(args)
+    if calendar_path is None:
+        args.skip_fomc = True
+    else:
+        args.fomc_calendar_path = calendar_path
+    if openai_config is None:
+        openai_config = llm.load_openai_config(args, root=ROOT)
+    real_stdout = sys.stdout
+    real_stderr = sys.stderr
+    print(f"macro data refresh started: {_timestamp()}", file=real_stdout, flush=True)
+
+    store = artifact_store if artifact_store is not None else ArtifactStore()
+    values = {
+        "benchmark_main": benchmark_main,
+        "rates_main": rates_main,
+        "credit_main": credit_main,
+        "consumer_main": consumer_main,
+        "m2_main": m2_main,
+        "building_permits_main": building_permits_main,
+        "ism_reports_main": ism_reports_main,
+        "gdp_main": gdp_main,
+        "macro_indicators_main": macro_indicators_main,
+        "fomc_main": fomc_main,
+        "fomc_document_main": fomc_document_main,
+        "fomc_policy_tone_main": fomc_policy_tone_main,
+        "fomc_minutes_main": fomc_minutes_main,
+        "nfib_main": nfib_main,
+        "nfib_regional_main": nfib_regional_main,
+        "main": main,
+        "oil_main": oil_main,
+        "tracked_commodities_main": tracked_commodities_main,
+        "lumber_main": lumber_main,
+        "shfe_copper_main": shfe_copper_main,
+        "dce_iron_ore_sina_main": dce_iron_ore_sina_main,
+        "economic_confirmation_main": economic_confirmation_main,
+    }
+    providers = _build_task_providers(
+        values,
+        artifact_store=store,
+        provider_overrides=task_providers,
+        openai_config=openai_config,
+        fomc_calendar_path=args.fomc_calendar_path,
+        verbose=args.verbose,
+        use_runtime_defaults=use_runtime_defaults,
+    )
+    tasks = build_refresh_tasks(
         args,
-        benchmark_main,
-        rates_main,
-        consumer_main,
-        m2_main,
-        building_permits_main,
-        ism_reports_main,
-        gdp_main,
-        macro_indicators_main,
-        fomc_main,
-        fomc_document_main,
-        fomc_policy_tone_main,
-        fomc_minutes_main,
-        nfib_main,
-        nfib_regional_main,
-        main,
-        oil_main,
-        tracked_commodities_main,
-        lumber_main,
-        shfe_copper_main,
-        dce_iron_ore_sina_main,
-        economic_confirmation_main,
-    ):
-        result = _run_task(name, func, task_argv)
-        results.append(result)
-        _print_result(result)
-        if result["status"] != "ok" and args.stop_on_error:
-            break
-    failed = [result for result in results if result["status"] != "ok"]
-    status = "failed" if failed else "ok"
-    print(f"macro data refresh completed: {status}")
-    return 1 if failed else 0
+        providers,
+        openai_config=openai_config,
+        artifact_store=store,
+    )
+    cancel_event = Event()
+    coordinator = RequestCoordinator(FredRateLimiter(cancel_event=cancel_event))
+    writer_gate = SQLiteWriterGate()
+    with progress_factory(
+        total=len(tasks),
+        disable=not real_stderr.isatty(),
+        file=real_stderr,
+    ) as progress:
+        reporter = _ProgressReporter(
+            tasks,
+            progress=progress,
+            verbose=args.verbose,
+            stdout=real_stdout,
+            stderr=real_stderr,
+        )
+        try:
+            with install_output_routers(
+                stdout=real_stdout,
+                stderr=real_stderr,
+            ) as streams:
+                results = executor(
+                    tasks,
+                    serial=args.serial,
+                    stop_on_error=args.stop_on_error,
+                    request_coordinator=coordinator,
+                    writer_gate=writer_gate,
+                    on_event=reporter.handle_event,
+                    cancel_event=cancel_event,
+                    stdout_router=streams["stdout"],
+                    stderr_router=streams["stderr"],
+                )
+        except KeyboardInterrupt:
+            cancel_event.set()
+            reporter.report_final(reporter.results)
+            print("macro data refresh interrupted", file=real_stderr, flush=True)
+            return 130
+        reporter.report_final(results)
+        if cancel_event.is_set():
+            print("macro data refresh interrupted", file=real_stderr, flush=True)
+            return 130
+    counts = _result_counts_with_blocked(results)
+    print(
+        "macro data refresh completed: "
+        f"ok={counts['ok']} skipped={counts['skipped']} "
+        f"failed={counts['failed']} blocked={counts['blocked']}",
+        file=real_stdout,
+        flush=True,
+    )
+    return 1 if counts["failed"] or counts["blocked"] else 0
 
 
 def main(argv=None):
     return run(
         argv,
-        benchmark_main=refresh_benchmark_market_data.main,
-        rates_main=refresh_us_rates_liquidity.main,
-        consumer_main=import_consumer_sentiment.main,
-        m2_main=import_m2_money_supply.main,
-        building_permits_main=import_us_building_permits.main,
-        ism_reports_main=fetch_ism_reports.main,
-        gdp_main=import_gdp_market_relationships.main,
-        macro_indicators_main=import_us_macro_indicators.main,
-        fomc_main=import_fomc_calendar.main,
-        fomc_document_main=fetch_fomc_documents.main,
-        fomc_policy_tone_main=generate_fomc_policy_tone.main,
-        fomc_minutes_main=generate_fomc_minutes_structure.main,
-        nfib_main=import_nfib_sbet.main,
-        nfib_regional_main=import_nfib_sbet_regional.main,
-        main=import_cyclical_commodities.main,
-        oil_main=import_oil.main,
-        tracked_commodities_main=import_tracked_commodities.main,
-        lumber_main=import_lumber.main,
-        shfe_copper_main=import_shfe_copper.main,
-        dce_iron_ore_sina_main=import_dce_iron_ore_sina.main,
-        economic_confirmation_main=import_economic_confirmation.main,
+        use_runtime_defaults=True,
     )
 
 

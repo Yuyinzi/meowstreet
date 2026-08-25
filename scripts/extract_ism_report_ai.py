@@ -117,6 +117,32 @@ def extract_one_section(report_text, client, section_name):
     )
 
 
+def prepare_ism_enrichment(snapshot, *, client, model, survey_type="manufacturing"):
+    if survey_type != "manufacturing":
+        raise ValueError(f"ism survey type is unsupported: {survey_type}")
+    report_text = ism_official_report.extract_report_text(
+        snapshot["raw_html"], snapshot.get("source_name", "ismworld")
+    )
+    section_payloads = []
+    call_counts = {}
+    for section_name in ism_ai_extraction.FACTUAL_SECTION_NAMES:
+        payload = extract_one_section(report_text, client, section_name)
+        section_payloads.append(
+            {"section_name": section_name, "payload_json": payload}
+        )
+        call_counts[section_name] = 1
+    factual_payload = ism_ai_extraction.assemble_factual_payload_from_sections(
+        section_payloads
+    )
+    _check_report_id(
+        factual_payload["report"]["report_id"], snapshot["report_id"], snapshot["source_url"]
+    )
+    _check_report_month(
+        factual_payload["report"]["report_month"], snapshot["report_month"], snapshot["source_url"]
+    )
+    return factual_payload, call_counts
+
+
 def should_run_section(existing, force_sections, retry_failed):
     if existing is None:
         return True
@@ -365,7 +391,7 @@ def _write_rejected_summary_run(con, factual_payload, source, reason):
     )
 
 
-def _save_factual_dashboard_outputs(con, payload, snapshot):
+def _save_factual_dashboard_outputs(con, payload, snapshot, commit=True):
     from scripts.fetch_ism_official_reports import (
         ai_at_a_glance_rows,
         ai_comments,
@@ -373,10 +399,11 @@ def _save_factual_dashboard_outputs(con, payload, snapshot):
         merge_ai_metrics,
     )
 
-    merge_ai_metrics(con, payload)
+    merge_ai_metrics(con, payload, commit=commit)
     growth_cycle.replace_ism_at_a_glance_rows(
-        con,
-        ai_at_a_glance_rows(payload, snapshot["source_url"], snapshot["source_hash"]),
+        con, ai_at_a_glance_rows(
+            payload, snapshot["source_url"], snapshot["source_hash"]
+        ), commit=commit
     )
     growth_cycle.replace_ism_report_snapshot(
         con,
@@ -387,7 +414,25 @@ def _save_factual_dashboard_outputs(con, payload, snapshot):
             snapshot["fetched_at"],
         ),
         ai_comments(payload, snapshot["source_url"], snapshot["source_hash"]),
+        commit=commit,
     )
+
+
+def _promote_factual_dashboard_outputs(con, payload, snapshot, source):
+    con.execute("begin")
+    try:
+        _save_factual_dashboard_outputs(con, payload, snapshot, commit=False)
+        saved = growth_cycle.replace_ism_ai_report_outputs(
+            con,
+            payload,
+            source,
+            commit=False,
+        )
+        con.commit()
+        return saved
+    except BaseException:
+        con.rollback()
+        raise
 
 
 def extract_snapshot(
@@ -476,10 +521,10 @@ def extract_snapshot(
         _check_report_month(
             payload["report"]["report_month"], expected_report_month, source_url
         )
-        _save_factual_dashboard_outputs(con, payload, snapshot)
-        saved = growth_cycle.replace_ism_ai_report_outputs(
+        saved = _promote_factual_dashboard_outputs(
             con,
             payload,
+            snapshot,
             {
                 "source_url": snapshot["source_url"],
                 "source_hash": snapshot["source_hash"],
@@ -510,10 +555,10 @@ def extract_snapshot(
     _check_report_month(
         payload["report"]["report_month"], expected_report_month, source_url
     )
-    _save_factual_dashboard_outputs(con, payload, snapshot)
-    saved = growth_cycle.replace_ism_ai_report_outputs(
+    saved = _promote_factual_dashboard_outputs(
         con,
         payload,
+        snapshot,
         {
             "source_url": snapshot["source_url"],
             "source_hash": snapshot["source_hash"],

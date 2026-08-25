@@ -58,9 +58,14 @@ def _event_label(event):
     return f"{event['event_id']} ({event.get('start_date')} to {end_date})"
 
 
-def should_skip_existing_extraction(existing, force):
+def should_skip_existing_extraction(existing, force, source_hash=None):
     return (
-        bool(existing and existing.get("extraction_status") == "approved") and not force
+        bool(
+            existing
+            and existing.get("extraction_status") == "approved"
+            and (source_hash is None or existing.get("source_hash") == source_hash)
+        )
+        and not force
     )
 
 
@@ -118,6 +123,8 @@ async def generate_event_tone(
     client,
     models,
     max_rounds,
+    verbose=False,
+    persist=True,
 ):
     previous_event, previous_document = previous_event_and_document(
         all_events,
@@ -128,13 +135,14 @@ async def generate_event_tone(
             "statement",
         ),
     )
-    log_generation_context(
-        event,
-        current_document,
-        previous_event,
-        previous_document,
-        models,
-    )
+    if verbose:
+        log_generation_context(
+            event,
+            current_document,
+            previous_event,
+            previous_document,
+            models,
+        )
     result = await run_extract_review_loop(
         event,
         current_document,
@@ -168,9 +176,37 @@ async def generate_event_tone(
         generated_at=generated_at_now(),
         final_reviewer_feedback=result["final_reviewer_feedback"],
     )
-    us_rates_liquidity.replace_macro_event_tone_extraction(con, row)
-    log_generation_result(row)
+    if persist:
+        us_rates_liquidity.replace_macro_event_tone_extraction(con, row)
+    if verbose:
+        log_generation_result(row)
     return row
+
+
+_ORIGINAL_GENERATE_EVENT_TONE = generate_event_tone
+
+
+def prepare_fomc_policy_tone(
+    db_path, event_id, client, extractor_model, reviewer_model, max_rounds=3
+):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.prepare_fomc_policy_tone(
+        db_path,
+        event_id,
+        client,
+        extractor_model,
+        reviewer_model,
+        max_rounds=max_rounds,
+    )
+
+
+def persist_fomc_policy_tone(db_path, prepared_extraction):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.persist_fomc_policy_tone(
+        db_path, prepared_extraction
+    )
 
 
 async def run_extract_review_loop(
@@ -244,33 +280,55 @@ async def _call_json(client, model, prompt, parser):
     return parser(response.choices[0].message.content)
 
 
-def _check_skip(con, event, force):
-    current_document = us_rates_liquidity.load_macro_event_document(
-        con,
-        event["event_id"],
-        "statement",
-    )
-    if not current_document:
-        print("fomc policy tone skipped:")
-        print(f"  current: {_event_label(event)}")
-        print("  reason: no statement document")
-        return True
-    existing = us_rates_liquidity.load_macro_event_tone_extraction(
-        con,
-        event["event_id"],
-        "statement",
-        current_document["source_hash"],
-    )
-    if should_skip_existing_extraction(existing, force):
-        print("fomc policy tone skipped:")
-        print(f"  current: {_event_label(event)}")
-        print(f"  source_hash: {_short_hash(current_document)}")
-        print(f"  existing_generated_at: {existing['generated_at']}")
+def classify_events(con, events, force):
+    classified = {"pending": [], "reused": [], "unavailable": []}
+    for event in events:
+        current_document = us_rates_liquidity.load_macro_event_document(
+            con,
+            event["event_id"],
+            "statement",
+        )
+        if not current_document:
+            classified["unavailable"].append(
+                (event, {"reason": "no statement document"})
+            )
+            continue
+        existing = us_rates_liquidity.load_macro_event_tone_extraction(
+            con,
+            event["event_id"],
+            "statement",
+            current_document["source_hash"],
+        )
+        if should_skip_existing_extraction(
+            existing, force, current_document["source_hash"]
+        ):
+            classified["reused"].append((event, existing))
+            continue
+        classified["pending"].append((event, current_document))
+    return classified
+
+
+def _print_event_classification(event, status, detail):
+    print(f"fomc policy tone {status}:")
+    print(f"  event: {event['event_id']}")
+    print(f"  current: {_event_label(event)}")
+    if status == "reused":
+        print(f"  source_hash: {_short_hash(detail)}")
+        if detail.get("generated_at"):
+            print(f"  existing_generated_at: {detail['generated_at']}")
         print(
             "  reason: existing extraction for this statement hash; use --force to regenerate"
         )
-        return True
-    return False
+        return
+    print(f"  reason: {detail.get('reason', 'unknown')}")
+
+
+def _summary(generated, classified, failed):
+    return (
+        f"fomc_policy_tone: generated={generated} "
+        f"reused={len(classified['reused'])} "
+        f"unavailable={len(classified['unavailable'])} failed={failed}"
+    )
 
 
 async def async_main(argv=None):
@@ -283,6 +341,7 @@ async def async_main(argv=None):
     target_group.add_argument("--all", action="store_true")
     parser.add_argument("--max-rounds", type=int, default=3)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--extractor-model", default="")
     parser.add_argument("--reviewer-model", default="")
     parser.add_argument("--openai-api-key", default="")
@@ -292,19 +351,21 @@ async def async_main(argv=None):
     try:
         all_events = us_rates_liquidity.load_macro_events(con, "fomc_meeting")
         events = target_events(all_events, args.event_id, args.all)
-        pending = []
-        for event in events:
-            if _check_skip(con, event, args.force):
-                continue
-            current_document = us_rates_liquidity.load_macro_event_document(
-                con,
-                event["event_id"],
-                "statement",
-            )
-            pending.append((event, current_document))
-        if not pending:
-            print("fomc_policy_tone: 0")
-            return 0
+        classified = classify_events(con, events, args.force)
+        if args.verbose:
+            for status in ("reused", "unavailable"):
+                for event, detail in classified[status]:
+                    _print_event_classification(event, status, detail)
+        pending = classified["pending"]
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    finally:
+        con.close()
+    if not pending:
+        print(_summary(0, classified, 0))
+        return 0
+    try:
         llm_bundle = llm.build_async_client_bundle(
             args,
             root=ROOT,
@@ -313,37 +374,57 @@ async def async_main(argv=None):
             timeout=120,
             error_context="FOMC tone extraction",
         )
-        client = llm_bundle["client"]
-        models = llm_bundle["models"]
-        generated = 0
-        failed = 0
-        for event, current_document in pending:
-            try:
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    client = llm_bundle["client"]
+    models = llm_bundle["models"]
+    generated = 0
+    failed = 0
+    for event, current_document in pending:
+        try:
+            if generate_event_tone is not _ORIGINAL_GENERATE_EVENT_TONE:
                 await generate_event_tone(
-                    con,
+                    None,
                     all_events,
                     event,
                     current_document,
                     client,
                     models,
                     args.max_rounds,
+                    verbose=args.verbose,
                 )
-            except Exception as exc:
-                failed += 1
-                print("fomc policy tone failed:", file=sys.stderr)
-                print(f"  current: {_event_label(event)}", file=sys.stderr)
-                print(f"  reason: {exc}", file=sys.stderr)
-                if not args.all:
-                    return 1
-                continue
-            generated += 1
-        print(f"fomc_policy_tone: {generated}")
-        return 1 if failed else 0
-    except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    finally:
-        con.close()
+            else:
+                prepared = await asyncio.to_thread(
+                    prepare_fomc_policy_tone,
+                    args.db_path,
+                    event["event_id"],
+                    client,
+                    models["extractor_model"],
+                    models["reviewer_model"],
+                    args.max_rounds,
+                )
+                if prepared.get("status") != "ok":
+                    raise ValueError(prepared.get("error", "FOMC tone preparation failed"))
+                persisted = await asyncio.to_thread(
+                    persist_fomc_policy_tone, args.db_path, prepared
+                )
+                if persisted.get("status") != "ok":
+                    raise ValueError(persisted.get("error", "FOMC tone persistence failed"))
+                if args.verbose:
+                    log_generation_result(prepared["row"])
+        except Exception as exc:
+            failed += 1
+            print("fomc policy tone failed:", file=sys.stderr)
+            print(f"  current: {_event_label(event)}", file=sys.stderr)
+            print(f"  reason: {exc}", file=sys.stderr)
+            if not args.all:
+                print(_summary(generated, classified, failed))
+                return 1
+            continue
+        generated += 1
+    print(_summary(generated, classified, failed))
+    return 1 if failed else 0
 
 
 def main(argv=None):

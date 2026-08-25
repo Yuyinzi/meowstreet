@@ -182,3 +182,19 @@ def import_commodity_csv_files(con, csv_paths_by_market):
     except Exception:
         con.rollback()
         raise
+
+
+def persist_tracked_payload(con, payload):
+    try:
+        result = {"series": 0, "observations": 0}
+        for item in payload.values():
+            macro_indicators.merge_macro_indicator_observations(
+                con, item["series"], item["observations"], commit=False
+            )
+            result["series"] += 1
+            result["observations"] += len(item["observations"])
+        con.commit()
+        return result
+    except BaseException:
+        con.rollback()
+        raise

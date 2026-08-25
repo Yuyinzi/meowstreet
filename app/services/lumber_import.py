@@ -92,47 +92,81 @@ def refresh_lumber(
     fetcher=None,
     initial=False,
 ):
+    prepared = prepare_lumber(
+        con,
+        today_date=today_date,
+        initial=initial,
+        fetcher=fetcher,
+    )
+    return persist_lumber(con, prepared)
+
+
+def prepare_lumber(
+    con,
+    *,
+    today_date=None,
+    initial=False,
+    fetcher=None,
+):
     if fetcher is None:
         fetcher = _default_fetcher
     effective_today = today_date or date.today().isoformat()
+    stored_rows = macro_indicators.load_macro_indicator_observations(
+        con, LUMBER_SERIES_ID
+    )
+    recorded_audit = macro_indicators.load_vendor_series_overlap_audit(
+        con, LUMBER_SERIES_ID, LUMBER_OVERLAP_TEST_VERSION
+    )
+    if initial and (recorded_audit is not None or stored_rows):
+        raise ValueError("lumber initial migration is already recorded")
+    if initial or not stored_rows:
+        start_date = LUMBER_START_DATE
+    else:
+        latest_active_date = stored_rows[-1]["date"]
+        start_date = (
+            date.fromisoformat(latest_active_date)
+            - timedelta(days=_OVERLAP_WINDOW_DAYS)
+        ).isoformat()
+    end_date = (date.fromisoformat(effective_today) + timedelta(days=1)).isoformat()
+    payload = fetcher(start_date, end_date)
+    observations = payload["observations"]
+    audit = None
+    if start_date == LUMBER_START_DATE:
+        archived_rows = macro_indicators.load_macro_indicator_observations(
+            con, ARCHIVED_LUMBER_SERIES_ID
+        )
+        audit = audit_lumber_overlap(archived_rows, observations)
+    return {
+        "payload": payload,
+        "audit": audit,
+        "start_date": start_date,
+        "end_date": end_date,
+        "initial": initial,
+    }
+
+
+def persist_lumber(con, prepared):
+    payload = prepared["payload"]
+    observations = payload["observations"]
     try:
-        stored_rows = macro_indicators.load_macro_indicator_observations(
-            con, LUMBER_SERIES_ID
-        )
-        recorded_audit = macro_indicators.load_vendor_series_overlap_audit(
-            con, LUMBER_SERIES_ID, LUMBER_OVERLAP_TEST_VERSION
-        )
-        if initial and (recorded_audit is not None or stored_rows):
-            raise ValueError("lumber initial migration is already recorded")
-        if initial or not stored_rows:
-            start_date = LUMBER_START_DATE
-        else:
-            latest_active_date = stored_rows[-1]["date"]
-            start_date = (
-                date.fromisoformat(latest_active_date)
-                - timedelta(days=_OVERLAP_WINDOW_DAYS)
-            ).isoformat()
-        end_date = (date.fromisoformat(effective_today) + timedelta(days=1)).isoformat()
-        payload = fetcher(start_date, end_date)
-        observations = payload["observations"]
-        if start_date == LUMBER_START_DATE:
-            archived_rows = macro_indicators.load_macro_indicator_observations(
-                con, ARCHIVED_LUMBER_SERIES_ID
-            )
-            audit = audit_lumber_overlap(archived_rows, observations)
+        con.execute("begin")
+        if prepared.get("audit") is not None:
             macro_indicators.merge_vendor_series_overlap_audit(
-                con, LUMBER_SERIES_ID, audit, commit=False
+                con,
+                LUMBER_SERIES_ID,
+                prepared["audit"],
+                commit=False,
             )
         macro_indicators.merge_macro_indicator_observations(
             con, payload["series"], observations, commit=False
         )
         con.commit()
-        return {
-            "series": payload["series"]["series_id"],
-            "observations": len(observations),
-            "start_date": start_date,
-            "end_date": end_date,
-        }
-    except Exception:
+    except BaseException:
         con.rollback()
         raise
+    return {
+        "series": payload["series"]["series_id"],
+        "observations": len(observations),
+        "start_date": prepared["start_date"],
+        "end_date": prepared["end_date"],
+    }

@@ -227,7 +227,7 @@ def metric_points(parsed):
     }
 
 
-def merge_metrics(con, parsed):
+def merge_metrics(con, parsed, commit=True):
     count = 0
     for series_id, points in metric_points(parsed).items():
         series = {
@@ -236,7 +236,9 @@ def merge_metrics(con, parsed):
             "units": "index",
             "source": "ISM official report",
         }
-        saved = macro_indicators.merge_macro_indicator_points(con, series, points)
+        saved = macro_indicators.merge_macro_indicator_points(
+            con, series, points, commit=commit
+        )
         count += saved["points"]
     return count
 
@@ -255,7 +257,7 @@ def ai_metric_points(payload):
     }
 
 
-def merge_ai_metrics(con, payload):
+def merge_ai_metrics(con, payload, commit=True):
     count = 0
     for row in payload["at_a_glance_rows"]:
         series = {
@@ -268,6 +270,7 @@ def merge_ai_metrics(con, payload):
             con,
             series,
             ai_metric_points(payload)[row["series_id"]],
+            commit=commit,
         )
         count += saved["points"]
     return count

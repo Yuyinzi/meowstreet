@@ -176,6 +176,108 @@ class TestBudgetEnforcement:
         assert prepared["source_name"] in report_prompt
 
 
+def test_enrich_snapshot_uses_saved_html_without_fetching(tmp_path, monkeypatch):
+    from app.services import ism_services_ai_ingestion
+
+    db_path = tmp_path / "market.sqlite"
+    html = (FIXTURE_DIR / "ism_services_report.html").read_text(encoding="utf-8")
+    snapshot_row = {
+        "source_url": "https://example.test/services/",
+        "source_name": "ismworld",
+        "survey_type": "services",
+        "source_hash": "saved-hash",
+        "fetched_at": "2026-07-03T14:00:00Z",
+        "raw_html": html,
+        "parse_status": "ok",
+        "parse_error": None,
+        "report_id": "ism_services_2026_06",
+        "report_month": "2026-06-01",
+    }
+
+    async def fake_extract(*args, **kwargs):
+        return _valid_extraction(), {"report": 0}
+
+    monkeypatch.setattr(
+        ism_services_ai_ingestion,
+        "extract_prepared_report",
+        fake_extract,
+    )
+    monkeypatch.setattr(
+        ism_services_ai_ingestion,
+        "promote_services_extraction",
+        lambda con, extraction, source: {
+            "industry_signals": 1,
+            "signal_coverage": 1,
+            "comments": 1,
+            "commodities": 1,
+        },
+    )
+    monkeypatch.setattr(
+        ism_services_ai_ingestion,
+        "_fetch_report",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("saved snapshot enrichment must not fetch")
+        ),
+    )
+
+    result = ism_services_ai_ingestion.enrich_snapshot(
+        db_path,
+        snapshot_row,
+        FakeAiClient(),
+        "test-model",
+    )
+
+    assert result["report_id"] == "ism_services_2026_06"
+
+
+def test_enrichment_failure_does_not_rewrite_core_snapshot_status(tmp_path, monkeypatch):
+    from app.services import ism_services_ai_ingestion
+
+    db_path = tmp_path / "market.sqlite"
+    snapshot_row = {
+        "source_url": "https://example.test/services/",
+        "source_name": "ismworld",
+        "survey_type": "services",
+        "source_hash": "saved-hash",
+        "fetched_at": "2026-07-03T14:00:00Z",
+        "raw_html": (FIXTURE_DIR / "ism_services_report.html").read_text(
+            encoding="utf-8"
+        ),
+        "parse_status": "ok",
+        "parse_error": None,
+        "report_id": "ism_services_2026_06",
+        "report_month": "2026-06-01",
+    }
+    con = us_rates_liquidity.connect(db_path)
+    growth_cycle.init_db(con)
+    growth_cycle.replace_ism_report_source_snapshot(con, snapshot_row)
+    con.close()
+
+    async def failed_extract(*args, **kwargs):
+        raise RuntimeError("AI unavailable")
+
+    monkeypatch.setattr(
+        ism_services_ai_ingestion,
+        "extract_prepared_report",
+        failed_extract,
+    )
+
+    with pytest.raises(RuntimeError, match="AI unavailable"):
+        ism_services_ai_ingestion.enrich_snapshot(
+            db_path,
+            snapshot_row,
+            FakeAiClient(),
+            "test-model",
+        )
+
+    con = us_rates_liquidity.connect(db_path)
+    saved = growth_cycle.load_ism_report_source_snapshot(
+        con, snapshot_row["source_url"]
+    )
+    con.close()
+    assert saved["parse_status"] == "ok"
+
+
 class TestRankingReplacement:
     def test_rankings_replaced_per_month(self, tmp_path):
         from app.db.ism_services_ai import promote_services_extraction

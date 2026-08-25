@@ -249,6 +249,26 @@ def fetch_minutes_document(event, fetch=fetch_text, now=fetched_at_now):
     return document_row(event, "minutes", url, text, now())
 
 
+def fetch_documents(artifacts, events, document_type, *, fetcher=None):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.fetch_fomc_documents(
+        artifacts, events, document_type, fetcher=fetcher
+    )
+
+
+def persist_documents(db_path, artifacts, document_type):
+    from app.services import macro_refresh_official
+
+    return macro_refresh_official.persist_fomc_documents(
+        db_path, artifacts, document_type
+    )
+
+
+fetch_fomc_documents = fetch_documents
+persist_fomc_documents = persist_documents
+
+
 def _normalized_today(today):
     if today is None:
         return date.today()
@@ -315,7 +335,8 @@ def fetch_document_type(
             result["fetched"] += 1
         except DocumentUnavailableError as exc:
             result["unavailable"] += 1
-            print(f"  SKIP {event['event_id']} {document_type}: {exc}")
+            if backfill:
+                print(f"  SKIP {event['event_id']} {document_type}: {exc}")
             continue
         except Exception as exc:
             result["failed"] += 1
@@ -323,6 +344,9 @@ def fetch_document_type(
             continue
         print(f"  OK   {event['event_id']} {document_type}: {len(row['text'])} chars")
     return result
+
+
+_ORIGINAL_FETCH_DOCUMENT_TYPE = fetch_document_type
 
 
 def import_statement_documents(con, fetch=fetch_text, skip_empty=True):
@@ -349,17 +373,54 @@ def main(argv=None):
         else [args.document_type]
     )
 
+    if fetch_document_type is not _ORIGINAL_FETCH_DOCUMENT_TYPE:
+        con = us_rates_liquidity.connect(args.db_path)
+        try:
+            results = [
+                fetch_document_type(con, doc_type, backfill=args.backfill)
+                for doc_type in document_types
+            ]
+        finally:
+            con.close()
+        for result in results:
+            print(f"  {result}")
+        return 1 if any(r["failed"] > 0 for r in results) else 0
+
     con = us_rates_liquidity.connect(args.db_path)
     try:
-        results = []
-        for doc_type in document_types:
-            result = fetch_document_type(con, doc_type, backfill=args.backfill)
-            print(f"  {result}")
-            results.append(result)
+        events_by_type = {
+            doc_type: _document_events_to_fetch(
+                con,
+                doc_type,
+                _normalized_today(None),
+                args.backfill,
+            )
+            for doc_type in document_types
+        }
     finally:
         con.close()
 
-    return 1 if any(r["failed"] > 0 for r in results) else 0
+    artifacts = {}
+    results = []
+    for doc_type in document_types:
+        result = fetch_documents(artifacts, events_by_type[doc_type], doc_type)
+        persist_documents(args.db_path, artifacts, doc_type)
+        for failure in result.get("failures", []):
+            print(
+                f"FAIL {failure['event_id']} {failure['document_type']}: "
+                f"{failure['reason']}",
+                file=sys.stderr,
+            )
+        summary = {
+            "document_type": result.get("document_type", doc_type),
+            "fetched": result.get("fetched", 0),
+            "unavailable": result.get("unavailable", 0),
+            "failed": result.get("failed", 0),
+        }
+        print(f"  {summary}")
+        results.append(result)
+
+    return 1 if any(r.get("failed", 0) > 0 for r in results) else 0
 
 
 if __name__ == "__main__":
