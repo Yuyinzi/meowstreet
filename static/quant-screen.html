@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meowstreet — Quant Screen</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/quant-screen.css?v=5" />
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/" class="nav-brand">Meowstreet</a>
+    <a href="/ticker-context.html" class="nav-link">Ticker Context</a>
+    <a href="/macro-dashboard.html" class="nav-link">Macro Dashboard</a>
+    <a href="/portfolio.html" class="nav-link">Portfolio</a>
+    <a href="/quant-screen.html" class="nav-link active">Quant Screen</a>
+  </nav>
+
+  <main class="workflow-shell">
+    <section class="graph-hero">
+      <div class="hero-head">
+        <h1>Quant Screen</h1>
+        <div class="hero-meta">Sector earnings-growth scanner</div>
+      </div>
+
+      <div class="command-card">
+        <div class="card-title">Auto fetch by industry</div>
+        <form id="autoForm" class="screen-form">
+          <label class="field">
+            <span>Industry</span>
+            <select name="industry" disabled>
+              <option value="">Loading…</option>
+            </select>
+          </label>
+          <div class="format-note">
+            Data comes from stockanalysis.com. Fetching estimates may take tens of seconds. Results use the same calculations as a pasted screener table.
+          </div>
+          <button type="submit" class="primary-button" id="autoSubmit" disabled>Run auto screen</button>
+        </form>
+        <div id="autoLog" class="fetch-log" hidden></div>
+        <div id="autoRegion" class="result-region" aria-live="polite"></div>
+      </div>
+
+      <div class="command-card">
+        <div class="card-title">Paste screener table</div>
+        <form id="screenForm" class="screen-form">
+          <label class="table-field">
+            <span>Screener data</span>
+            <textarea name="tableText" rows="10" placeholder="Ticker&#9;Price&#9;Market Cap&#9;EPS FY0&#9;EPS FY1&#9;EPS FY2&#10;AAPL&#9;180&#9;3000000000000&#9;5.5&#9;6.2&#9;7.0&#10;DELL&#9;112.3&#9;85914892596&#9;8.0&#9;9.24&#9;9.33" required></textarea>
+          </label>
+          <div class="format-note">
+            Required columns: <strong>Ticker, Price, Market Cap, EPS FY0, EPS FY1, EPS FY2</strong>. Optional: EPS FY3. Comma or tab separated.
+          </div>
+          <button type="submit" class="primary-button">Run screen</button>
+        </form>
+        <div id="screenRegion" class="result-region" aria-live="polite"></div>
+      </div>
+
+      <p class="provenance-note">
+        EG cases and filters are method-derived head checks (P22–P29), not trade signals.
+      </p>
+    </section>
+  </main>
+
+  <script src="/quant-screen.js?v=5"></script>
+</body>
+</html>

@@ -126,3 +126,21 @@ def fetch_start_date(latest_date, today_date, overlap_days=5, days_back=420):
         return "1920-01-01"
     start = _parse_date(latest_date) - timedelta(days=overlap_days)
     return start.isoformat()
+
+
+def load_recent_daily_volumes(con, symbol, limit=30):
+    normalized_symbol = normalize_symbol(symbol)
+    try:
+        rows = con.execute(
+            """
+            select volume
+            from prices
+            where symbol = ? and interval = '1d' and volume is not null
+            order by date desc
+            limit ?
+            """,
+            (normalized_symbol, limit),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [row["volume"] for row in rows]

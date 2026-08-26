@@ -16,6 +16,35 @@ _OVERVIEW_FIELD_RE = re.compile(
     r"\s*<h3[^>]*>(?P<label>Sector|Industry)</h3>"
 )
 
+_FUNDAMENTAL_KEYS = [
+    ("forwardPE", "forward_pe"),
+    ("forwardEps", "forward_eps"),
+    ("trailingEps", "trailing_eps"),
+    ("marketCap", "market_cap"),
+    ("sharesShort", "shares_short"),
+    ("shortRatio", "short_ratio"),
+    ("shortPercentOfFloat", "short_percent_of_float"),
+    ("dividendYield", "dividend_yield"),
+    ("debtToEquity", "debt_to_equity"),
+    ("currentRatio", "current_ratio"),
+    ("quickRatio", "quick_ratio"),
+    ("returnOnEquity", "return_on_equity"),
+    ("returnOnAssets", "return_on_assets"),
+    ("bookValue", "book_value"),
+    ("totalDebt", "total_debt"),
+    ("totalCash", "total_cash"),
+    ("freeCashflow", "free_cashflow"),
+    ("enterpriseValue", "enterprise_value"),
+    ("ebitda", "ebitda"),
+]
+
+_FUNDAMENTAL_RAW_RE = {
+    key: re.compile(
+        r'\\?"' + re.escape(key) + r'\\?"\s*:\s*\\?\{\s*\\?"raw\\?"\s*:\s*(-?[\d.eE+]+)'
+    )
+    for key, _ in _FUNDAMENTAL_KEYS
+}
+
 
 def _normalize_symbol(symbol):
     normalized = str(symbol or "").strip().upper()
@@ -67,3 +96,30 @@ def fetch_asset_profile(symbol, http_client=None):
     normalized = _normalize_symbol(symbol)
     html = _fetch_quote_page_html(normalized, http_client=http_client)
     return parse_quote_page_html(html, normalized)
+
+
+def _extract_raw_float(html, regex):
+    match = regex.search(html)
+    if match is None:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
+
+
+def parse_quote_fundamentals(html):
+    fundamentals = {"provider": "yahoo"}
+    for key, field_name in _FUNDAMENTAL_KEYS:
+        fundamentals[field_name] = _extract_raw_float(html, _FUNDAMENTAL_RAW_RE[key])
+    return fundamentals
+
+
+def fetch_quote_fundamentals(symbol, http_client=None):
+    normalized = _normalize_symbol(symbol)
+    html = _fetch_quote_page_html(normalized, http_client=http_client)
+    fundamentals = parse_quote_fundamentals(html)
+    values = [value for key, value in fundamentals.items() if key != "provider"]
+    if all(value is None for value in values):
+        raise ValueError(f"quote fundamentals unavailable for {normalized}")
+    return fundamentals

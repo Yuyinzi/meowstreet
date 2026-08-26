@@ -50,6 +50,23 @@ def portfolio_js():
     )
 
 
+@router.get("/quant-screen.html")
+def quant_screen_html():
+    return FileResponse(api.STATIC_DIR / "quant-screen.html")
+
+
+@router.get("/quant-screen.css")
+def quant_screen_css():
+    return FileResponse(api.STATIC_DIR / "quant-screen.css", media_type="text/css")
+
+
+@router.get("/quant-screen.js")
+def quant_screen_js():
+    return FileResponse(
+        api.STATIC_DIR / "quant-screen.js", media_type="application/javascript"
+    )
+
+
 @router.get("/consumer-sentiment.js")
 def consumer_sentiment_js():
     return FileResponse(

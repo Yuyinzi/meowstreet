@@ -16,8 +16,10 @@ from app.routers import (
     market_assistant as market_assistant_router,
     pair_analysis as pair_analysis_router,
     portfolio_analysis as portfolio_analysis_router,
+    quant_screen as quant_screen_router,
     static_files as static_files_router,
     ticker_context as ticker_context_router,
+    ticker_quant as ticker_quant_router,
     ticker_workflow as ticker_workflow_router,
 )
 from app.services import consumer_sentiment_dashboard
@@ -232,3 +234,5 @@ app.include_router(market_assistant_router.router)
 app.include_router(ticker_context_router.router)
 app.include_router(pair_analysis_router.router)
 app.include_router(portfolio_analysis_router.router)
+app.include_router(quant_screen_router.router)
+app.include_router(ticker_quant_router.router)

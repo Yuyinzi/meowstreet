@@ -40,6 +40,30 @@ def connect(db_path=DEFAULT_DB_PATH):
             provider_industry text,
             fetched_at text not null
         );
+        create table if not exists ticker_fundamentals (
+            symbol text not null primary key,
+            forward_pe real,
+            forward_eps real,
+            trailing_eps real,
+            market_cap real,
+            shares_short real,
+            short_ratio real,
+            short_percent_of_float real,
+            dividend_yield real,
+            debt_to_equity real,
+            current_ratio real,
+            quick_ratio real,
+            return_on_equity real,
+            return_on_assets real,
+            book_value real,
+            total_debt real,
+            total_cash real,
+            free_cashflow real,
+            enterprise_value real,
+            ebitda real,
+            provider text not null,
+            fetched_at text not null
+        );
         """
     )
     return con
@@ -50,6 +74,21 @@ def normalize_symbol(symbol):
     if not normalized:
         raise ValueError("symbol is required")
     return normalized
+
+
+def fundamentals_fresh(row, max_age_seconds=72000):
+    if row is None:
+        return False
+    fetched_at = row.get("fetched_at")
+    if not fetched_at:
+        return False
+    try:
+        fetched = datetime.fromisoformat(fetched_at)
+    except (ValueError, TypeError):
+        return False
+    if fetched.tzinfo is None:
+        fetched = fetched.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - fetched).total_seconds() <= max_age_seconds
 
 
 def save_ticker_profile(con, profile):
@@ -85,6 +124,63 @@ def load_ticker_profile(con, symbol):
         """
         select symbol, company_name, provider, provider_sector, provider_industry, fetched_at
         from ticker_profiles
+        where symbol = ?
+        """,
+        (normalized,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+_FUNDAMENTAL_COLUMNS = [
+    "forward_pe",
+    "forward_eps",
+    "trailing_eps",
+    "market_cap",
+    "shares_short",
+    "short_ratio",
+    "short_percent_of_float",
+    "dividend_yield",
+    "debt_to_equity",
+    "current_ratio",
+    "quick_ratio",
+    "return_on_equity",
+    "return_on_assets",
+    "book_value",
+    "total_debt",
+    "total_cash",
+    "free_cashflow",
+    "enterprise_value",
+    "ebitda",
+]
+
+
+def save_ticker_fundamentals(con, fundamentals):
+    symbol = normalize_symbol(fundamentals.get("symbol"))
+    provider = str(fundamentals.get("provider") or "").strip()
+    if not provider:
+        raise ValueError(f"provider is required for {symbol}")
+    fetched_at = fundamentals.get("fetched_at") or datetime.now(UTC).isoformat()
+    column_names = ", ".join(_FUNDAMENTAL_COLUMNS)
+    placeholders = ", ".join(["?"] * len(_FUNDAMENTAL_COLUMNS))
+    values = [fundamentals.get(column) for column in _FUNDAMENTAL_COLUMNS]
+    con.execute(
+        f"""
+        insert or replace into ticker_fundamentals(
+            symbol, {column_names}, provider, fetched_at
+        ) values (?, {placeholders}, ?, ?)
+        """,
+        (symbol, *values, provider, fetched_at),
+    )
+    con.commit()
+
+
+def load_ticker_fundamentals(con, symbol):
+    normalized = normalize_symbol(symbol)
+    column_names = ", ".join(_FUNDAMENTAL_COLUMNS)
+    row = con.execute(
+        f"""
+        select symbol, {column_names}, provider, fetched_at
+        from ticker_fundamentals
         where symbol = ?
         """,
         (normalized,),

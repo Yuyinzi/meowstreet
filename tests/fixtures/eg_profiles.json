@@ -1,0 +1,289 @@
+{
+  "source": {
+    "longs_workbook": "data/source_material/Video 25/EG_Profiles_Longs.xlsx",
+    "shorts_workbook": "data/source_material/Video 26/EG_Profiles_Shorts.xlsx",
+    "workbook_creator": "Anton Kreil",
+    "note": "v1/v2 are EG1%/EG2% for EG profile sheets, PE1/PE2 for the PE Ideal sheet. Shorts case numbering differs from longs; shorts annotations reference the canonical longs cases."
+  },
+  "longs": {
+    "1": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": 0.23,
+        "v2": 0.47
+      },
+      "annotations": []
+    },
+    "2": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": 0.23,
+        "v2": 0.23
+      },
+      "annotations": []
+    },
+    "3": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": 0.23,
+        "v2": 0.19
+      },
+      "annotations": []
+    },
+    "4": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": 0.12,
+        "v2": 0.17
+      },
+      "annotations": []
+    },
+    "5": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": 0.08,
+        "v2": 0.21
+      },
+      "annotations": []
+    },
+    "6": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": 0.08,
+        "v2": 0.12
+      },
+      "annotations": []
+    },
+    "7": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": -0.11,
+        "v2": 0.09
+      },
+      "annotations": [
+        "*EPS is positive but Earnings Growth in Year 1 falls then recovers below Sector Average",
+        "Turnaround Story or Value Trap?"
+      ]
+    },
+    "8": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": -0.32,
+        "v2": 0.16
+      },
+      "annotations": [
+        "*EPS is positive but Growth falls in Year 1 vs Year 0, then recovers to Sector Average. "
+      ]
+    },
+    "9": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": -0.25,
+        "v2": 1
+      },
+      "annotations": [
+        "*Same profile as case 8 but with Negative EPS in Year 1 going Positive in Year 2",
+        "*the Stock has recovered 100% of its EPS losses and is now making a profit"
+      ]
+    },
+    "10": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": -0.44,
+        "v2": -0.09
+      },
+      "annotations": [
+        "*Losing Money in Year 1 and losing even more in Year 2"
+      ]
+    },
+    "PE Ideal": {
+      "metric": "PE1",
+      "sector": {
+        "v1": 24,
+        "v2": 21
+      },
+      "stock": {
+        "v1": 39,
+        "v2": 27
+      },
+      "annotations": []
+    }
+  },
+  "shorts": {
+    "1": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.05,
+        "v2": 0.09
+      },
+      "stock": {
+        "v1": -0.07,
+        "v2": -0.24
+      },
+      "annotations": []
+    },
+    "2": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.05,
+        "v2": 0.09
+      },
+      "stock": {
+        "v1": -0.14,
+        "v2": -0.08
+      },
+      "annotations": []
+    },
+    "3": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.05,
+        "v2": 0.09
+      },
+      "stock": {
+        "v1": 0.01,
+        "v2": -0.29
+      },
+      "annotations": []
+    },
+    "4": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.14,
+        "v2": 0.18
+      },
+      "stock": {
+        "v1": 0.08,
+        "v2": -0.03
+      },
+      "annotations": []
+    },
+    "5": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.05,
+        "v2": 0.11
+      },
+      "stock": {
+        "v1": -0.12,
+        "v2": 0.06
+      },
+      "annotations": [
+        "*EPS is positive but Earnings Growth in Year 1 falls then recovers to below or at Sector Average",
+        "This is cases 7 and 8 in EG_Profiles_Longs ",
+        "Turnaround Story or Value Trap? "
+      ]
+    },
+    "6": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.09,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": 0.04,
+        "v2": 0.1
+      },
+      "annotations": [
+        "Hedging- We want better than this "
+      ]
+    },
+    "7": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.09,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": 0.08,
+        "v2": 0.16
+      },
+      "annotations": [
+        "Hedging- We want better than this "
+      ]
+    },
+    "8": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": -0.25,
+        "v2": 1
+      },
+      "annotations": [
+        "As a short this can be both opportunistic and dangerous! ",
+        "Same profile as case 9 in EG_Profiles_Longs but with Negative EPS in Year 1 going Positive in Year 2",
+        "the Stock is forecasted to recover 100% of its EPS losses and is now making a profit"
+      ]
+    },
+    "9": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": 0.12,
+        "v2": 0.16
+      },
+      "stock": {
+        "v1": -0.44,
+        "v2": -0.09
+      },
+      "annotations": [
+        "As a Short this can be both Opportunistic and Dangerous",
+        "This is case 10 in Long Ideas Profiles. Losing Money in Year 1 and losing even more in Year 2"
+      ]
+    },
+    "10": {
+      "metric": "EG1%",
+      "sector": {
+        "v1": -0.04,
+        "v2": -0.09
+      },
+      "stock": {
+        "v1": -0.11,
+        "v2": -0.22
+      },
+      "annotations": []
+    }
+  }
+}
