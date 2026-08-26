@@ -8,24 +8,7 @@ router = APIRouter(tags=["static"])
 
 @router.get("/")
 def index():
-    return FileResponse(api.STATIC_DIR / "ticker-workflow.html")
-
-
-@router.get("/ticker-workflow.html")
-def ticker_workflow_html():
-    return FileResponse(api.STATIC_DIR / "ticker-workflow.html")
-
-
-@router.get("/ticker-workflow.css")
-def ticker_workflow_css():
-    return FileResponse(api.STATIC_DIR / "ticker-workflow.css", media_type="text/css")
-
-
-@router.get("/ticker-workflow.js")
-def ticker_workflow_js():
-    return FileResponse(
-        api.STATIC_DIR / "ticker-workflow.js", media_type="application/javascript"
-    )
+    return FileResponse(api.STATIC_DIR / "macro-dashboard.html")
 
 
 @router.get("/macro-dashboard.html")
