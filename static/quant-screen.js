@@ -198,7 +198,7 @@
     );
   }
 
-  function rowHtml(row) {
+  function rowHtml(row, contributions) {
     return (
       "<tr>" +
       "<td>" + escapeHtml(row.symbol) + "</td>" +
@@ -211,6 +211,7 @@
       '<td class="num">' + fmtPct(row.eg2) + "</td>" +
       '<td class="num">' + fmtNum(row.pe1) + "</td>" +
       '<td class="num">' + fmtNum(row.pe2) + "</td>" +
+      '<td class="num">' + fmtNum(contributions[row.symbol], 4) + "</td>" +
       '<td class="num">' + fmtNum(row.peg1) + "</td>" +
       '<td class="num">' + fmtNum(row.peg2) + "</td>" +
       "<td>" + egCaseBadge(row.eg_case) + "</td>" +
@@ -221,7 +222,7 @@
     );
   }
 
-  function rowsHtml(rows) {
+  function rowsHtml(rows, contributions) {
     var head =
       "<tr>" +
       "<th>Symbol</th>" +
@@ -234,6 +235,7 @@
       '<th class="num">EG2</th>' +
       '<th class="num">PE1</th>' +
       '<th class="num">PE2</th>' +
+      '<th class="num" title="Leave-one-out stress test: how much the sector mean PE1 moves when this stock is removed">PE1 Contr.</th>' +
       '<th class="num">PEG1</th>' +
       '<th class="num">PEG2</th>' +
       "<th>EG Case</th>" +
@@ -241,30 +243,19 @@
       "<th>Short filter</th>" +
       "<th>Flags</th>" +
       "</tr>";
-    var body = rows.map(rowHtml).join("");
+    var body = rows.map(function (row) { return rowHtml(row, contributions); }).join("");
     return (
       '<div class="table-wrap"><table class="data-table"><thead>' +
       head + "</thead><tbody>" + body + "</tbody></table></div>"
     );
   }
 
-  function leaveOneOutHtml(leaveOneOut) {
-    if (!leaveOneOut || !leaveOneOut.length) {
-      return "<p class=\"section-note\">No leave-one-out contributions available.</p>";
-    }
-    var rows = leaveOneOut
-      .map(function (item) {
-        return (
-          "<tr><td>" + escapeHtml(item.symbol) + "</td>" +
-          '<td class="num">' + fmtNum(item.contribution, 4) + "</td></tr>"
-        );
-      })
-      .join("");
-    return (
-      '<table class="data-table"><thead><tr>' +
-      "<th>Symbol</th><th class=\"num\">PE1 contribution</th>" +
-      "</tr></thead><tbody>" + rows + "</tbody></table>"
-    );
+  function leaveOneOutMap(leaveOneOut) {
+    var map = {};
+    (leaveOneOut || []).forEach(function (item) {
+      map[item.symbol] = item.contribution;
+    });
+    return map;
   }
 
   function rowErrorsHtml(rowErrors) {
@@ -273,24 +264,56 @@
     }
     var items = rowErrors
       .map(function (error) {
-        return "<li>Line " + escapeHtml(error.line) + ": " + escapeHtml(error.reason) + "</li>";
+        var label = error.symbol ? escapeHtml(error.symbol) : "Line " + escapeHtml(error.line);
+        return "<li>" + label + ": " + escapeHtml(error.reason) + "</li>";
       })
       .join("");
     return (
-      '<div class="section-block"><div class="section-title">Row errors</div>' +
+      '<div class="section-block"><div class="section-title">Row errors (' +
+      rowErrors.length + ')</div>' +
       '<ul class="error-list">' + items + "</ul></div>"
     );
   }
 
   function detailsHtml(payload) {
+    if (!payload.row_errors || !payload.row_errors.length) {
+      return "";
+    }
     return (
       '<details class="details-panel">' +
-      '<summary>Diagnostics: leave-one-out stress test & row errors</summary>' +
-      '<div class="section-block"><div class="section-title">Leave-one-out PE1 contribution</div>' +
-      leaveOneOutHtml(payload.sector && payload.sector.leave_one_out) +
-      "</div>" +
+      '<summary>Diagnostics: row errors</summary>' +
       rowErrorsHtml(payload.row_errors) +
       "</details>"
+    );
+  }
+
+  function candidateChipsHtml(rows, side) {
+    var key = side === "long" ? "long_filter" : "short_filter";
+    var tone = side === "long" ? "chip-positive" : "chip-negative";
+    var passing = rows.filter(function (row) {
+      return row[key] && row[key].passes === true;
+    });
+    var chips = passing.map(function (row) {
+      return '<a class="tag-chip candidate-link ' + tone + '" href="/ticker-context.html?symbol=' +
+        encodeURIComponent(row.symbol) + '" title="Passed all ' + side +
+        ' head-checks — open in Ticker Context">' + escapeHtml(row.symbol) + "</a>";
+    }).join("");
+    return (
+      '<div class="candidate-group">' +
+      '<span class="candidate-label">' + (side === "long" ? "Long" : "Short") +
+      " (" + passing.length + ")</span>" +
+      (chips || '<span class="section-note">None — no stock passed all ' + side + " head-checks.</span>") +
+      "</div>"
+    );
+  }
+
+  function candidatesHtml(rows) {
+    return (
+      '<div class="section-block"><div class="section-title">Candidates</div>' +
+      candidateChipsHtml(rows, "long") +
+      candidateChipsHtml(rows, "short") +
+      '<div class="section-note">A candidate passed every head-check on its side. This narrows research focus — it is not a trade signal.</div>' +
+      "</div>"
     );
   }
 
@@ -329,7 +352,7 @@
     state.page = clamped;
     var slice = rows.slice(clamped * PAGE_SIZE, clamped * PAGE_SIZE + PAGE_SIZE);
     host.innerHTML =
-      rowsHtml(slice) +
+      rowsHtml(slice, state.contributions) +
       pagerHtml(clamped, totalPages, rows.length) +
       '<div class="section-note">Each chip is one head-check: ✓ passed · ✗ failed · — no data. Hover a chip for the rule and the actual numbers.</div>';
   }
@@ -345,14 +368,19 @@
       '<div class="disclaimer">' + escapeHtml(payload.disclaimer) + "</div>" +
       '<div class="result-company">Sector averages</div>' +
       sectorMeansHtml(payload.sector) +
-      '<div class="section-block"><div class="section-title">Results (' +
-      escapeHtml(payload.row_count) + " rows)</div>" +
+      candidatesHtml(payload.rows || []) +
+      '<details class="details-panel results-panel">' +
+      '<summary>Full results (' + escapeHtml(payload.row_count) + " rows)</summary>" +
       '<div class="results-host"></div>' +
-      "</div>" +
+      "</details>" +
       detailsHtml(payload) +
       "</div>";
     var host = targetRegion.querySelector(".results-host");
-    pageStates.set(host, { payload: payload, page: 0 });
+    pageStates.set(host, {
+      payload: payload,
+      page: 0,
+      contributions: leaveOneOutMap(payload.sector && payload.sector.leave_one_out),
+    });
     renderResultsPage(host, 0);
   }
 

@@ -119,6 +119,27 @@ def test_list_industries_fetches_and_caches_universe(tmp_path):
     assert industries_again == industries
 
 
+def test_list_industries_sorted_alphabetically(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    stocks = [
+        {"symbol": "AAA", "name": "A", "market_cap": 1e9, "price": 10.0, "industry": "Zinc Mining"},
+        {"symbol": "BBB", "name": "B", "market_cap": 1e9, "price": 10.0, "industry": "Auto Parts"},
+        {"symbol": "CCC", "name": "C", "market_cap": 1e9, "price": 10.0, "industry": "Banks"},
+        {"symbol": "DDD", "name": "D", "market_cap": 1e9, "price": 10.0, "industry": "Auto Parts"},
+    ]
+    handler, _ = _handler_for_universe_and_forecasts(stocks)
+
+    industries = quant_screen_service.list_industries(
+        db_path=db_path, http_client=_mock_client(handler)
+    )
+
+    assert industries == [
+        {"industry": "Auto Parts", "stock_count": 2},
+        {"industry": "Banks", "stock_count": 1},
+        {"industry": "Zinc Mining", "stock_count": 1},
+    ]
+
+
 def test_run_industry_screen_builds_payload(tmp_path):
     db_path = tmp_path / "market_data.sqlite"
     stocks = _three_semiconductor_stocks()

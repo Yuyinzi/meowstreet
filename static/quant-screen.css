@@ -106,6 +106,15 @@ button {
   margin-bottom: 12px;
 }
 
+.paste-card summary.card-title {
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+.paste-card[open] summary.card-title {
+  margin-bottom: 12px;
+}
+
 .screen-form {
   display: grid;
   gap: 12px;
@@ -470,6 +479,33 @@ button {
   white-space: pre-line;
   pointer-events: none;
   box-shadow: 0 4px 16px rgba(59, 53, 48, 0.28);
+}
+
+.candidate-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.candidate-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #5C534A;
+  min-width: 72px;
+}
+
+.candidate-link {
+  text-decoration: none;
+}
+
+.candidate-link:hover {
+  text-decoration: underline;
+}
+
+.results-panel .results-host {
+  margin-top: 12px;
 }
 
 .step-chip-passed {

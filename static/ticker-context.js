@@ -628,4 +628,10 @@
       lookupPair(symbol, shortSymbol);
     }
   });
+
+  var initialSymbol = new URLSearchParams(window.location.search).get("symbol");
+  if (initialSymbol) {
+    form.elements.symbol.value = initialSymbol.trim().toUpperCase();
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+  }
 })();

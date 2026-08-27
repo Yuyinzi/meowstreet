@@ -176,7 +176,7 @@ def list_industries(con):
         from screener_universe
         where industry is not null and trim(industry) != ''
         group by industry
-        order by stock_count desc, industry collate nocase
+        order by industry collate nocase
         """
     ).fetchall()
     return [dict(row) for row in rows]
