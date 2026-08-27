@@ -1047,7 +1047,7 @@
     const seedText = options && options.seedText ? String(options.seedText).trim() : "";
     const question = options && options.question ? String(options.question).trim() : "";
     if (!seedText && !question) return;
-    if (!startNewConversation()) return;
+    if (state.busy) return;
     if (seedText) {
       pushAssistantMessage({ text: seedText, context: true });
     }
@@ -1088,6 +1088,7 @@
       closeWindow,
       toggleWindow,
       startNewConversation,
+      openWithContext,
       handleSubmit,
       sendQuestion,
       state,

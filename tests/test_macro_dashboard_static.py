@@ -413,6 +413,78 @@ def test_market_assistant_new_conversation_is_ignored_while_busy():
     }
 
 
+def test_market_assistant_open_with_context_continues_conversation():
+    payload = _run_market_assistant_harness(
+        """
+        hooks.state.conversationId = "conv_existing";
+        hooks.state.messages = [
+          { role: "user", text: "earlier question" },
+          { role: "assistant", text: "earlier answer" },
+        ];
+
+        hooks.openWithContext({ seedText: "page facts", question: "解读一下" });
+        const afterFirst = {
+          conversationId: hooks.state.conversationId,
+          messages: hooks.state.messages.map((message) => ({
+            role: message.role,
+            text: message.text,
+            context: Boolean(message.context),
+          })),
+        };
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        hooks.openWithContext({ seedText: "ticker facts", question: "再看看这个" });
+
+        console.log(JSON.stringify({
+          afterFirst,
+          conversationId: hooks.state.conversationId,
+          messageCount: hooks.state.messages.length,
+          firstTwoPreserved:
+            hooks.state.messages[0].text === "earlier question" &&
+            hooks.state.messages[1].text === "earlier answer",
+          secondSeed: hooks.state.messages[4].text,
+          windowOpen: hooks.state.isOpen,
+        }));
+        """
+    )
+
+    assert payload == {
+        "afterFirst": {
+            "conversationId": "conv_existing",
+            "messages": [
+                {"role": "user", "text": "earlier question", "context": False},
+                {"role": "assistant", "text": "earlier answer", "context": False},
+                {"role": "assistant", "text": "page facts", "context": True},
+                {"role": "user", "text": "解读一下", "context": False},
+            ],
+        },
+        "conversationId": "conv_existing",
+        "messageCount": 6,
+        "firstTwoPreserved": True,
+        "secondSeed": "ticker facts",
+        "windowOpen": True,
+    }
+
+
+def test_market_assistant_open_with_context_is_ignored_while_busy():
+    payload = _run_market_assistant_harness(
+        """
+        hooks.state.conversationId = "conv_busy";
+        hooks.state.messages = [{ role: "user", text: "in flight" }];
+        hooks.state.busy = true;
+
+        hooks.openWithContext({ seedText: "page facts", question: "解读一下" });
+
+        console.log(JSON.stringify({
+          conversationId: hooks.state.conversationId,
+          messageCount: hooks.state.messages.length,
+        }));
+        """
+    )
+
+    assert payload == {"conversationId": "conv_busy", "messageCount": 1}
+
+
 def test_market_assistant_disables_new_conversation_during_stream():
     payload = _run_market_assistant_harness(
         """
