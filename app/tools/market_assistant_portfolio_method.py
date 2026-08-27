@@ -17,6 +17,7 @@ OPERATION_IDS = (
     "portfolio_analysis",
     "pair_analysis",
     "ticker_industry_context",
+    "ticker_quant_context",
 )
 
 
@@ -93,11 +94,19 @@ class _TickerContextParams(BaseModel):
     symbol: str = Field(min_length=1)
 
 
+class _TickerQuantContextParams(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    symbol: str = Field(min_length=1)
+    peer: str | None = Field(default=None, min_length=1)
+
+
 _OPERATION_PARAM_MODELS = {
     "ticker_risk_profile": _TickerRiskParams,
     "portfolio_analysis": _PortfolioAnalysisParams,
     "pair_analysis": _PairAnalysisParams,
     "ticker_industry_context": _TickerContextParams,
+    "ticker_quant_context": _TickerQuantContextParams,
 }
 
 

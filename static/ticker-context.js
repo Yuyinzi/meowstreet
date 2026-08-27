@@ -564,6 +564,52 @@
       '<div class="quant-card"><div class="status-error">' + escapeHtml(message) + "</div></div>";
   }
 
+  function quantContextText(payload) {
+    var valuation = payload.valuation || {};
+    var shortChecks = payload.short_checks || {};
+    var days = shortChecks.days_to_cover || {};
+    var dividend = shortChecks.dividend || {};
+    var lines = [
+      "The user is viewing a ticker quant context result on the Meowstreet ticker context page. Explain the deterministic data without making a trade decision:",
+      "Symbol: " + payload.symbol,
+      "Valuation: forward PE " + fmtNum(valuation.forward_pe) +
+        ", forward EPS " + fmtNum(valuation.forward_eps) +
+        ", trailing EPS " + fmtNum(valuation.trailing_eps) +
+        ", market cap " + fmtDollarsCompact(valuation.market_cap),
+      "Short checks: short % of float " + fmtPct(shortChecks.short_percent_of_float) +
+        ", days to cover " + fmtNum(days.value) + " (" + (days.status || "insufficient_data") +
+        "), dividend yield " + fmtPct(dividend.yield),
+    ];
+    if (payload.peer) {
+      lines.push("Peer: " + (payload.peer.symbol || "unknown") +
+        ", forward PE " + fmtNum(payload.peer.forward_pe) +
+        ", PE differential " + (payload.peer.pe_differential == null ? "—" : fmtNum(payload.peer.pe_differential) + "×"));
+    }
+    lines.push("Backward ratios:");
+    (payload.backward_ratios && payload.backward_ratios.ratios || []).forEach(function (ratio) {
+      lines.push("- " + quantRatioLabel(ratio.key) + ": " +
+        (ratio.value == null ? "—" : fmtNum(ratio.value)) +
+        " (" + (ratio.status || "insufficient_data") + ")");
+    });
+    var missing = payload.backward_ratios && payload.backward_ratios.missing_inputs || [];
+    if (missing.length) {
+      lines.push("Missing inputs: " + missing.join(", "));
+    }
+    return lines.join("\n");
+  }
+
+  function askAssistant(payload) {
+    if (
+      window.marketAssistant &&
+      typeof window.marketAssistant.openWithContext === "function"
+    ) {
+      window.marketAssistant.openWithContext({
+        seedText: quantContextText(payload),
+        question: "解读一下 " + payload.symbol + " 的量化体检结果",
+      });
+    }
+  }
+
   function lookupQuant(symbol, peer) {
     quantRegion.innerHTML = '<div class="lookup-loading">Loading quant context for ' + escapeHtml(symbol) + "…</div>";
     var url = "/api/ticker-quant/" + encodeURIComponent(symbol);
@@ -582,6 +628,7 @@
           return;
         }
         renderQuant(result.body);
+        askAssistant(result.body);
       })
       .catch(function () {
         renderQuantError("Quant context request failed.");

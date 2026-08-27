@@ -1261,6 +1261,7 @@ def portfolio_method_record():
                 "portfolio_analysis",
                 "pair_analysis",
                 "ticker_industry_context",
+                "ticker_quant_context",
             )
         ],
         "interpretation_guide": "guide",
@@ -1322,6 +1323,36 @@ async def test_get_portfolio_method_returns_knowledge_record_artifact():
     assert artifact["payload"]["record_id"] == "portfolio_method"
     assert artifact["object_index"][0]["object_type"] == "portfolio_method"
     assert record["progress_label"] == "reading the portfolio method knowledge"
+
+
+@pytest.mark.asyncio
+async def test_knowledge_artifact_id_changes_with_content_at_same_version():
+    async def acquire(dependencies):
+        record = await execute_tool_call(
+            {
+                "call_id": "call_method",
+                "tool_name": "get_portfolio_method",
+                "arguments": {},
+            },
+            request={"external_search_requested": False},
+            resolution=resolved_context("ctx_current"),
+            dependencies=dependencies,
+            created_at="2026-08-13T00:00:00Z",
+        )
+        return record["artifact"]["artifact_id"]
+
+    first_id = await acquire(portfolio_dependencies())
+
+    changed = portfolio_method_record()
+    changed["interpretation_guide"] = "revised guide"
+    changed_dependencies = portfolio_dependencies()
+    changed_dependencies.load_portfolio_method_knowledge = lambda: changed
+    second_id = await acquire(changed_dependencies)
+
+    assert first_id != second_id
+    assert first_id.startswith("portfolio_method_portfolio_method_knowledge_v1_")
+    assert second_id.startswith("portfolio_method_portfolio_method_knowledge_v1_")
+    assert await acquire(portfolio_dependencies()) == first_id
 
 
 @pytest.mark.asyncio
@@ -1415,6 +1446,67 @@ async def test_portfolio_query_portfolio_analysis_happy_path():
     ]
     assert payload["result"]["volatility"]["status"] == "insufficient_data"
     assert "matrix" not in payload["result"]["correlation"]
+
+
+@pytest.mark.asyncio
+async def test_portfolio_query_ticker_quant_context_dispatches_symbol_and_peer():
+    captured = {}
+
+    def fake_ticker_quant_context(symbol, peer=None):
+        captured["args"] = (symbol, peer)
+        return {
+            "symbol": symbol,
+            "fetched_at": "2026-08-13T00:00:00Z",
+            "cache": "hit",
+            "provider": "yahoo",
+            "valuation": {
+                "forward_pe": 16.34,
+                "forward_eps": 13.04,
+                "trailing_eps": 12.0,
+                "market_cap": 3_000_000_000_000,
+            },
+            "peer": {
+                "symbol": peer,
+                "forward_pe": 30.94,
+                "pe_differential": 0.5284,
+            },
+            "short_checks": {
+                "short_percent_of_float": 0.01,
+                "days_to_cover": {"value": 2.37, "status": "within"},
+                "dividend": {"yield": 0.001, "review_questions": []},
+            },
+            "backward_ratios": {
+                "ratios": [{"key": "current_ratio", "value": 2.0, "status": "within"}],
+                "missing_inputs": [],
+            },
+        }
+
+    dependencies = portfolio_dependencies()
+    dependencies.get_ticker_quant_context = fake_ticker_quant_context
+    record = await execute_tool_call(
+        {
+            "call_id": "call_quant",
+            "tool_name": "portfolio_query",
+            "arguments": {
+                "operation": "ticker_quant_context",
+                "params": {"symbol": "NVDA", "peer": "AMD"},
+            },
+        },
+        request={"external_search_requested": False},
+        resolution=resolved_context("ctx_current"),
+        dependencies=dependencies,
+        created_at="2026-08-13T00:00:00Z",
+    )
+
+    assert captured["args"] == ("NVDA", "AMD")
+    payload = record["artifact"]["payload"]
+    assert payload["status"] == "ok"
+    assert payload["operation"] == "ticker_quant_context"
+    assert payload["result"]["valuation"]["forward_pe"] == 16.34
+    assert payload["result"]["peer"]["symbol"] == "AMD"
+    assert record["artifact"]["object_index"][0]["object_type"] == (
+        "portfolio_ticker_quant_context"
+    )
 
 
 @pytest.mark.asyncio

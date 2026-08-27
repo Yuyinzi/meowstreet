@@ -337,5 +337,16 @@ def test_compact_portfolio_result_dispatches_per_operation():
     assert compact_portfolio_result(
         "ticker_industry_context", context_payload("AMD")
     )["symbol"] == "AMD"
+    quant_payload = {
+        "symbol": "NVDA",
+        "fetched_at": "2026-08-13T00:00:00Z",
+        "cache": "hit",
+        "provider": "yahoo",
+        "valuation": {"forward_pe": 16.34},
+        "peer": None,
+        "short_checks": {"days_to_cover": {"value": 2.37}},
+        "backward_ratios": {"ratios": [], "missing_inputs": []},
+    }
+    assert compact_portfolio_result("ticker_quant_context", quant_payload) == quant_payload
     with pytest.raises(ValueError, match="unknown portfolio operation"):
         compact_portfolio_result("unknown_op", {})

@@ -26,6 +26,8 @@ def compact_portfolio_result(operation, payload):
         return compact_pair_analysis(payload)
     if operation == "ticker_industry_context":
         return compact_ticker_context(payload)
+    if operation == "ticker_quant_context":
+        return compact_ticker_quant(payload)
     raise ValueError(f"unknown portfolio operation: {operation}")
 
 
@@ -171,3 +173,16 @@ def _series_summary(values):
 
 def compact_ticker_context(payload):
     return {key: payload.get(key) for key in _CONTEXT_KEYS}
+
+
+def compact_ticker_quant(payload):
+    return {
+        "symbol": payload["symbol"],
+        "fetched_at": payload.get("fetched_at"),
+        "cache": payload.get("cache"),
+        "provider": payload.get("provider"),
+        "valuation": payload.get("valuation", {}),
+        "peer": payload.get("peer"),
+        "short_checks": payload.get("short_checks", {}),
+        "backward_ratios": payload.get("backward_ratios", {}),
+    }

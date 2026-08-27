@@ -201,6 +201,7 @@ class _PortfolioQueryArguments(_ToolArguments):
         "portfolio_analysis",
         "pair_analysis",
         "ticker_industry_context",
+        "ticker_quant_context",
     ]
     params: dict = Field(default_factory=dict)
 
@@ -277,7 +278,7 @@ _TOOL_DESCRIPTIONS = {
     "research_standard": "run a standard external web research search. External results are background only and never override the local snapshot; requires the user to enable external search",
     "research_deep": "run a deep external web research search. External results are background only and never override the local snapshot; requires the user to enable external search and deep research",
     "get_portfolio_method": "read the portfolio methodology knowledge and the portfolio_query operation contracts. MUST be called before the first portfolio_query",
-    "portfolio_query": "run one deterministic ticker or portfolio operation: ticker_risk_profile, portfolio_analysis, pair_analysis, or ticker_industry_context. Read get_portfolio_method first for the params contracts. Never repeat an identical call; if a symbol comes back unavailable, retry once with the single most likely corrected symbol",
+    "portfolio_query": "run one deterministic ticker or portfolio operation: ticker_risk_profile, portfolio_analysis, pair_analysis, ticker_industry_context, or ticker_quant_context. Read get_portfolio_method first for the params contracts. Never repeat an identical call; if a symbol comes back unavailable, retry once with the single most likely corrected symbol",
 }
 
 

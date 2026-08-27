@@ -15,6 +15,7 @@ from app.services.pair_analysis import get_pair_analysis
 from app.services.portfolio_analysis import get_portfolio_analysis
 from app.services.portfolio_analysis import get_ticker_risk_profile
 from app.services.ticker_industry_context import get_ticker_industry_context
+from app.services.ticker_quant_context import get_ticker_quant_context
 from app.tools.market_assistant_artifacts import build_object_index
 from app.tools.market_assistant_artifacts import validate_artifact
 from app.tools.market_assistant_evidence_detail_registry import evidence_detail_record
@@ -137,6 +138,7 @@ _DEPENDENCY_DEFAULTS = {
     "get_portfolio_analysis": get_portfolio_analysis,
     "get_pair_analysis": get_pair_analysis,
     "get_ticker_industry_context": get_ticker_industry_context,
+    "get_ticker_quant_context": get_ticker_quant_context,
 }
 
 _PROGRESS_LABELS = {
@@ -527,6 +529,11 @@ def _hash_excluding(payload, excluded_key):
     return hashlib.sha256(canonical_json(projection)).hexdigest()
 
 
+def _knowledge_artifact_id(record):
+    content_hash = hashlib.sha256(canonical_json(record)).hexdigest()[:12]
+    return f"{record['record_id']}_{record['version']}_{content_hash}"
+
+
 def _knowledge_artifact(parameters, object_type, dependencies):
     indicator_id = parameters["indicator_id"]
     catalog = _dependency(dependencies, "load_knowledge_catalog")()
@@ -534,7 +541,7 @@ def _knowledge_artifact(parameters, object_type, dependencies):
     if record is None:
         return None
     envelope = {
-        "artifact_id": f"{record['record_id']}_{record['version']}",
+        "artifact_id": _knowledge_artifact_id(record),
         "artifact_kind": "knowledge_record",
         "schema_version": ARTIFACT_SCHEMA_VERSION,
         "primary_authority": "method_knowledge",
@@ -643,13 +650,14 @@ _PORTFOLIO_OPERATION_DEPENDENCY = {
     "portfolio_analysis": "get_portfolio_analysis",
     "pair_analysis": "get_pair_analysis",
     "ticker_industry_context": "get_ticker_industry_context",
+    "ticker_quant_context": "get_ticker_quant_context",
 }
 
 
 def _portfolio_method_artifact(dependencies):
     record = _dependency(dependencies, "load_portfolio_method_knowledge")()
     envelope = {
-        "artifact_id": f"{record['record_id']}_{record['version']}",
+        "artifact_id": _knowledge_artifact_id(record),
         "artifact_kind": "knowledge_record",
         "schema_version": ARTIFACT_SCHEMA_VERSION,
         "primary_authority": "method_knowledge",
@@ -696,6 +704,8 @@ def _run_portfolio_operation(operation_name, params, service):
         if "sessions" in params:
             kwargs["sessions"] = params["sessions"]
         return service(params["long_symbol"], params["short_symbol"], **kwargs)
+    if operation_name == "ticker_quant_context":
+        return service(params["symbol"], peer=params.get("peer"))
     return service(params["symbol"])
 
 

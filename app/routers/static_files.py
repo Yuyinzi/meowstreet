@@ -67,6 +67,14 @@ def quant_screen_js():
     )
 
 
+@router.get("/quant-screen-ticker-panel.js")
+def quant_screen_ticker_panel_js():
+    return FileResponse(
+        api.STATIC_DIR / "quant-screen-ticker-panel.js",
+        media_type="application/javascript",
+    )
+
+
 @router.get("/consumer-sentiment.js")
 def consumer_sentiment_js():
     return FileResponse(

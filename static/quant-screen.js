@@ -201,7 +201,8 @@
   function rowHtml(row, contributions) {
     return (
       "<tr>" +
-      "<td>" + escapeHtml(row.symbol) + "</td>" +
+      '<td><button type="button" class="symbol-link" data-symbol="' + escapeHtml(row.symbol) + '">' +
+      escapeHtml(row.symbol) + "</button></td>" +
       '<td class="num">' + fmtNum(row.price) + "</td>" +
       '<td class="num">' + fmtDollarsCompact(row.market_cap) + " " + tierBadge(row.market_cap_tier) + "</td>" +
       '<td class="num">' + fmtNum(row.eps_fy0) + "</td>" +
@@ -294,9 +295,9 @@
       return row[key] && row[key].passes === true;
     });
     var chips = passing.map(function (row) {
-      return '<a class="tag-chip candidate-link ' + tone + '" href="/ticker-context.html?symbol=' +
-        encodeURIComponent(row.symbol) + '" title="Passed all ' + side +
-        ' head-checks — open in Ticker Context">' + escapeHtml(row.symbol) + "</a>";
+      return '<button type="button" class="tag-chip candidate-link ' + tone +
+        '" data-symbol="' + escapeHtml(row.symbol) + '" title="Passed all ' + side +
+        ' head-checks — open detail panel">' + escapeHtml(row.symbol) + "</button>";
     }).join("");
     return (
       '<div class="candidate-group">' +
@@ -386,6 +387,46 @@
 
   function renderError(targetRegion, message) {
     targetRegion.innerHTML = '<div class="result-card"><div class="status-error">' + escapeHtml(message) + "</div></div>";
+  }
+
+  function autoScreenContextText(payload, industry) {
+    var source = payload.source || {};
+    var sector = payload.sector || {};
+    var rows = payload.rows || [];
+    var longCandidates = rows.filter(function (row) {
+      return row.long_filter && row.long_filter.passes === true;
+    }).map(function (row) {
+      return row.symbol;
+    });
+    var shortCandidates = rows.filter(function (row) {
+      return row.short_filter && row.short_filter.passes === true;
+    }).map(function (row) {
+      return row.symbol;
+    });
+    return [
+      "The user is viewing an automatic Quant Screen result for an industry. Explain the deterministic scan output without making a trade decision:",
+      "Industry: " + industry,
+      "Stock count: " + (source.stock_count || payload.row_count || rows.length),
+      "Long candidates: " + (longCandidates.length ? longCandidates.join(", ") : "none"),
+      "Short candidates: " + (shortCandidates.length ? shortCandidates.join(", ") : "none"),
+      "Sector means: PE1 " + fmtNum(sector.mean_pe1) +
+        ", PE2 " + fmtNum(sector.mean_pe2) +
+        ", EG1 " + fmtPct(sector.mean_eg1) +
+        ", EG2 " + fmtPct(sector.mean_eg2),
+    ].join("\n");
+  }
+
+  function askAssistant(seedText, question) {
+    if (
+      seedText &&
+      window.marketAssistant &&
+      typeof window.marketAssistant.openWithContext === "function"
+    ) {
+      window.marketAssistant.openWithContext({
+        seedText: seedText,
+        question: question,
+      });
+    }
   }
 
   function runScreen() {
@@ -529,6 +570,10 @@
           (failures ? ", " + failures + " estimates unavailable" : "")
         );
         renderScreen(autoRegion, result.body);
+        askAssistant(
+          autoScreenContextText(result.body, industry),
+          "结合行业均值，解读一下 " + industry + " 这次扫描的多空候选"
+        );
       })
       .catch(function () {
         setAutoLoading(false);
@@ -548,6 +593,16 @@
   });
 
   document.addEventListener("click", function (event) {
+    var symbolButton = event.target.closest("[data-symbol]");
+    if (symbolButton) {
+      if (
+        window.QuantScreenTickerPanel &&
+        typeof window.QuantScreenTickerPanel.open === "function"
+      ) {
+        window.QuantScreenTickerPanel.open(symbolButton.getAttribute("data-symbol"));
+      }
+      return;
+    }
     var button = event.target.closest("[data-page-dir]");
     if (!button || button.disabled) {
       return;

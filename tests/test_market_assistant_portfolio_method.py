@@ -75,6 +75,12 @@ def test_validate_ticker_context_params():
     ) == {"symbol": "AAPL"}
 
 
+def test_validate_ticker_quant_context_params_keeps_optional_peer():
+    assert validate_operation_params(
+        "ticker_quant_context", {"symbol": "NVDA", "peer": "AMD"}
+    ) == {"symbol": "NVDA", "peer": "AMD"}
+
+
 def test_validate_portfolio_analysis_params_drops_unset_optionals():
     validated = validate_operation_params(
         "portfolio_analysis",
@@ -157,6 +163,8 @@ def test_validate_portfolio_analysis_params_keeps_optionals():
             },
         ),
         ("ticker_industry_context", {"symbol": "NVDA", "industry_override": "x"}),
+        ("ticker_quant_context", {"symbol": "NVDA", "unexpected": "x"}),
+        ("ticker_quant_context", {"peer": "AMD"}),
     ],
 )
 def test_validate_operation_params_rejects_bad_contracts(operation, params):

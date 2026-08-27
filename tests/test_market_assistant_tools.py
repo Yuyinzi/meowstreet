@@ -61,6 +61,19 @@ def test_valid_snapshot_tool_call_returns_plain_dict():
     assert validate_tool_call(call) == call
 
 
+def test_portfolio_query_accepts_ticker_quant_context_operation():
+    call = {
+        "call_id": "call_quant",
+        "tool_name": "portfolio_query",
+        "arguments": {
+            "operation": "ticker_quant_context",
+            "params": {"symbol": "NVDA", "peer": "AMD"},
+        },
+    }
+
+    assert validate_tool_call(call) == call
+
+
 def test_registered_tool_is_accepted_without_allow_list():
     call = {
         "call_id": "call_4",
