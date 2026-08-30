@@ -38,6 +38,21 @@ def test_shipped_knowledge_file_loads_and_validates():
     assert record["interaction_rules"].strip()
 
 
+def test_shipped_interpretation_guide_pins_metric_wording():
+    guide = load_portfolio_method_knowledge()["interpretation_guide"]
+
+    for phrase in (
+        "a high forward PE sets a high bar for future earnings delivery",
+        "EBITDA is an earnings metric, not operating cash flow",
+        "not a mechanical rule that a 1% market move means a 2% stock move",
+        "Realized volatility measures the stock's own total choppiness",
+        "mean above midpoint is a positive skew",
+        "Revision trend is built from accumulated local snapshots",
+        "say it is still accumulating instead of implying a trend",
+    ):
+        assert phrase in guide
+
+
 @pytest.mark.parametrize(
     "mutate",
     [

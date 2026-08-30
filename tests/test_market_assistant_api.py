@@ -532,6 +532,32 @@ def test_narration_instructions_contain_beginner_prompt_boundaries():
         assert phrase.lower() in lower_instructions
 
 
+def test_narration_instructions_contain_ticker_synthesis_contract():
+    lower_instructions = market_assistant_router._narration_instructions().lower()
+
+    for phrase in (
+        "four-sentence synthesis",
+        "the business reality now",
+        "what expectation the current price already reflects",
+        "the biggest risk",
+        "the core open question",
+        "never as a bet the user should take",
+        "a high bar for delivery with little room for error",
+        "rank the detail by relevance to the identified investment case",
+        "checks that merely rule out an acute problem get one line",
+        "close with what to watch next",
+        "restricted to metrics the system actually tracks",
+        "never invent company-specific business details",
+        "say the data is insufficient",
+        "never compute or present ratios, target prices, or metrics",
+        "clearly labeled hypothetical illustration",
+        "never as analysis of this ticker",
+        "an earnings miss plus valuation-multiple compression",
+        "volatility as an amplifier of the path, not the thesis risk",
+    ):
+        assert phrase.lower() in lower_instructions
+
+
 def test_narration_input_items_exclude_snapshot_and_schema_bulk():
     items = market_assistant_router._narration_input_items(
         "现在市场怎么样？",
