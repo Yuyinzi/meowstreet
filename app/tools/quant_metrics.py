@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from statistics import mean
 
 
@@ -121,3 +122,86 @@ def backward_ratios_payload(fundamentals):
         ratios.append(_ratio_item("ev_to_ebitda", None, "info"))
 
     return {"ratios": ratios, "missing_inputs": missing_inputs}
+
+
+_ESTIMATE_REVISION_WINDOW_DAYS = 30
+
+
+def estimate_consensus_payload(consensus):
+    if consensus is None:
+        return {"status": "insufficient_data"}
+    avg = consensus.get("avg")
+    low = consensus.get("low")
+    high = consensus.get("high")
+    if avg is None or low is None or high is None:
+        return {"status": "insufficient_data"}
+    midpoint = (low + high) / 2
+    if avg > midpoint:
+        skew = "positive"
+    elif avg < midpoint:
+        skew = "negative"
+    else:
+        skew = "neutral"
+    return {
+        "status": "ok",
+        "fiscal_year_end": consensus.get("fiscal_year_end"),
+        "analyst_count": consensus.get("analyst_count"),
+        "avg": avg,
+        "low": low,
+        "high": high,
+        "midpoint": midpoint,
+        "skew": skew,
+    }
+
+
+def _snapshot_avg(snapshot):
+    if isinstance(snapshot, dict):
+        return snapshot.get("avg")
+    return dict(snapshot).get("avg")
+
+
+def _snapshot_captured_at(snapshot):
+    if isinstance(snapshot, dict):
+        return snapshot.get("captured_at")
+    return dict(snapshot).get("captured_at")
+
+
+def estimate_revision_trend(snapshots, now):
+    window_start = now - timedelta(days=_ESTIMATE_REVISION_WINDOW_DAYS)
+    recent = [
+        snapshot for snapshot in snapshots
+        if datetime.fromisoformat(_snapshot_captured_at(snapshot)).replace(tzinfo=UTC) >= window_start
+    ]
+    recent.sort(key=lambda snapshot: _snapshot_captured_at(snapshot))
+    n = len(recent)
+    if n < 2:
+        return {"status": "accumulating", "sample_snapshots": n}
+    increases = 0
+    decreases = 0
+    for i in range(1, n):
+        previous = _snapshot_avg(recent[i - 1])
+        current = _snapshot_avg(recent[i])
+        if current is None or previous is None:
+            continue
+        if current > previous:
+            increases += 1
+        elif current < previous:
+            decreases += 1
+    if increases > 0 and decreases == 0:
+        direction = "up"
+    elif decreases > 0 and increases == 0:
+        direction = "down"
+    elif increases == 0 and decreases == 0:
+        direction = "flat"
+    else:
+        direction = "mixed"
+    return {
+        "status": "ok",
+        "window_days": _ESTIMATE_REVISION_WINDOW_DAYS,
+        "sample_snapshots": n,
+        "avg_first": _snapshot_avg(recent[0]),
+        "avg_latest": _snapshot_avg(recent[-1]),
+        "increases": increases,
+        "decreases": decreases,
+        "direction": direction,
+    }

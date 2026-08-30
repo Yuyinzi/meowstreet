@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 
 from app.tools import quant_metrics
@@ -196,3 +198,124 @@ class TestBackwardRatiosPayload:
         ]
         for ratio in payload["ratios"]:
             assert ratio["value"] is None
+
+
+class TestEstimateConsensusPayload:
+    def test_positive_skew_when_avg_above_midpoint(self):
+        payload = quant_metrics.estimate_consensus_payload(
+            {"fiscal_year_end": "2026-12-31", "analyst_count": 38, "avg": 1.51, "low": 1.12, "high": 1.69}
+        )
+
+        assert payload["status"] == "ok"
+        assert payload["midpoint"] == pytest.approx(1.405)
+        assert payload["skew"] == "positive"
+
+    def test_negative_skew_when_avg_below_midpoint(self):
+        payload = quant_metrics.estimate_consensus_payload(
+            {"fiscal_year_end": "2026-12-31", "analyst_count": 10, "avg": 1.3, "low": 1.2, "high": 1.6}
+        )
+
+        assert payload["skew"] == "negative"
+
+    def test_neutral_skew_when_avg_equals_midpoint(self):
+        payload = quant_metrics.estimate_consensus_payload(
+            {"fiscal_year_end": "2026-12-31", "analyst_count": 10, "avg": 1.5, "low": 1.0, "high": 2.0}
+        )
+
+        assert payload["skew"] == "neutral"
+
+    def test_missing_consensus_returns_insufficient_data(self):
+        assert quant_metrics.estimate_consensus_payload(None) == {"status": "insufficient_data"}
+
+    def test_missing_fields_return_insufficient_data(self):
+        for consensus in (
+            {"avg": 1.5, "low": 1.0},
+            {"avg": 1.5, "low": 1.0, "high": None},
+            {"avg": None, "low": 1.0, "high": 2.0},
+        ):
+            assert quant_metrics.estimate_consensus_payload(consensus) == {"status": "insufficient_data"}
+
+
+class TestEstimateRevisionTrend:
+    def test_accumulating_when_fewer_than_two_snapshots(self):
+        now = datetime.fromisoformat("2026-08-28T12:00:00+00:00")
+        snapshots = [
+            {"avg": 1.5, "captured_at": "2026-08-27T12:00:00+00:00"},
+        ]
+
+        result = quant_metrics.estimate_revision_trend(snapshots, now)
+
+        assert result["status"] == "accumulating"
+        assert result["sample_snapshots"] == 1
+
+    def test_filters_outside_30_day_window(self):
+        now = datetime.fromisoformat("2026-08-28T12:00:00+00:00")
+        snapshots = [
+            {"avg": 1.0, "captured_at": "2026-07-01T12:00:00+00:00"},
+            {"avg": 1.5, "captured_at": "2026-08-27T12:00:00+00:00"},
+            {"avg": 1.6, "captured_at": "2026-08-28T12:00:00+00:00"},
+        ]
+
+        result = quant_metrics.estimate_revision_trend(snapshots, now)
+
+        assert result["status"] == "ok"
+        assert result["sample_snapshots"] == 2
+        assert result["direction"] == "up"
+        assert result["avg_first"] == 1.5
+        assert result["avg_latest"] == 1.6
+
+    def test_up_when_only_increases(self):
+        now = datetime.fromisoformat("2026-08-28T12:00:00+00:00")
+        snapshots = [
+            {"avg": 1.0, "captured_at": "2026-08-26T12:00:00+00:00"},
+            {"avg": 1.1, "captured_at": "2026-08-27T12:00:00+00:00"},
+            {"avg": 1.2, "captured_at": "2026-08-28T12:00:00+00:00"},
+        ]
+
+        result = quant_metrics.estimate_revision_trend(snapshots, now)
+
+        assert result["direction"] == "up"
+        assert result["increases"] == 2
+        assert result["decreases"] == 0
+
+    def test_down_when_only_decreases(self):
+        now = datetime.fromisoformat("2026-08-28T12:00:00+00:00")
+        snapshots = [
+            {"avg": 1.2, "captured_at": "2026-08-26T12:00:00+00:00"},
+            {"avg": 1.1, "captured_at": "2026-08-27T12:00:00+00:00"},
+            {"avg": 1.0, "captured_at": "2026-08-28T12:00:00+00:00"},
+        ]
+
+        result = quant_metrics.estimate_revision_trend(snapshots, now)
+
+        assert result["direction"] == "down"
+        assert result["increases"] == 0
+        assert result["decreases"] == 2
+
+    def test_mixed_when_both_increases_and_decreases(self):
+        now = datetime.fromisoformat("2026-08-28T12:00:00+00:00")
+        snapshots = [
+            {"avg": 1.0, "captured_at": "2026-08-25T12:00:00+00:00"},
+            {"avg": 1.1, "captured_at": "2026-08-26T12:00:00+00:00"},
+            {"avg": 1.05, "captured_at": "2026-08-27T12:00:00+00:00"},
+        ]
+
+        result = quant_metrics.estimate_revision_trend(snapshots, now)
+
+        assert result["direction"] == "mixed"
+        assert result["increases"] == 1
+        assert result["decreases"] == 1
+
+    def test_flat_when_no_changes(self):
+        now = datetime.fromisoformat("2026-08-28T12:00:00+00:00")
+        snapshots = [
+            {"avg": 1.0, "captured_at": "2026-08-26T12:00:00+00:00"},
+            {"avg": 1.0, "captured_at": "2026-08-27T12:00:00+00:00"},
+            {"avg": 1.0, "captured_at": "2026-08-28T12:00:00+00:00"},
+        ]
+
+        result = quant_metrics.estimate_revision_trend(snapshots, now)
+
+        assert result["direction"] == "flat"
+        assert result["increases"] == 0
+        assert result["decreases"] == 0

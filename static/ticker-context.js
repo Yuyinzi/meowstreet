@@ -404,7 +404,59 @@
     return '<span class="quant-chip quant-chip-' + escapeHtml(tone) + '">' + escapeHtml(tone.replace(/_/g, " ")) + "</span>";
   }
 
-  function quantValuationHtml(valuation) {
+  function fiscalYearLabel(fiscalYearEnd) {
+    if (!fiscalYearEnd) {
+      return "";
+    }
+    return "FY" + String(fiscalYearEnd).split("-")[0];
+  }
+
+  function _estimateConsensusText(consensus) {
+    if (!consensus || consensus.status !== "ok") {
+      return "insufficient data";
+    }
+    return fiscalYearLabel(consensus.fiscal_year_end) + ", " + consensus.analyst_count +
+      " analysts, avg " + fmtNum(consensus.avg) + ", range " + fmtNum(consensus.low) +
+      "–" + fmtNum(consensus.high) + ", " + consensus.skew + " skew";
+  }
+
+  function _estimateRevisionText(trend) {
+    if (!trend) {
+      return "accumulating";
+    }
+    if (trend.status === "accumulating") {
+      return "accumulating (" + trend.sample_snapshots + " snapshots)";
+    }
+    if (trend.status === "ok") {
+      return trend.increases + " up / " + trend.decreases + " down (" + trend.window_days + "d)";
+    }
+    return "unavailable";
+  }
+
+  function estimateConsensusLineHtml(payload) {
+    var consensus = payload.estimate_consensus || {};
+    if (consensus.status !== "ok") {
+      return "";
+    }
+    var trend = payload.estimate_revision_trend || {};
+    var trendNote = "";
+    if (trend.status === "accumulating") {
+      trendNote = ' <span class="section-note">· revision trend accumulating</span>';
+    } else if (trend.status === "ok") {
+      trendNote = ' <span class="section-note">· revisions: ' +
+        escapeHtml(trend.increases) + " up / " + escapeHtml(trend.decreases) +
+        " down (" + escapeHtml(trend.window_days) + "d)</span>";
+    }
+    return (
+      '<div class="quant-line">Consensus (' + escapeHtml(fiscalYearLabel(consensus.fiscal_year_end)) +
+      "): " + escapeHtml(consensus.analyst_count) + " analysts · avg " +
+      fmtNum(consensus.avg) + " · range " + fmtNum(consensus.low) + "–" + fmtNum(consensus.high) +
+      " · " + escapeHtml(consensus.skew) + " skew" + trendNote + "</div>"
+    );
+  }
+
+  function quantValuationHtml(payload) {
+    var valuation = payload.valuation || {};
     return (
       '<div class="quant-grid">' +
       '<div class="quant-stat"><div class="quant-stat-value">' + fmtNum(valuation.forward_pe) +
@@ -415,7 +467,8 @@
       '</div><div class="quant-stat-label">Trailing EPS</div></div>' +
       '<div class="quant-stat"><div class="quant-stat-value">' + fmtDollarsCompact(valuation.market_cap) +
       '</div><div class="quant-stat-label">Market Cap</div></div>' +
-      "</div>"
+      "</div>" +
+      estimateConsensusLineHtml(payload)
     );
   }
 
@@ -545,7 +598,7 @@
       '<div class="quant-head">Quant Context — ' + escapeHtml(payload.symbol) + "</div>" +
       cacheLine +
       '<div class="quant-section"><div class="quant-section-title">Valuation</div>' +
-      quantValuationHtml(payload.valuation) +
+      quantValuationHtml(payload) +
       quantPeerInputHtml(payload.symbol) +
       quantPeerHtml(payload.peer) +
       "</div>" +
@@ -576,6 +629,8 @@
         ", forward EPS " + fmtNum(valuation.forward_eps) +
         ", trailing EPS " + fmtNum(valuation.trailing_eps) +
         ", market cap " + fmtDollarsCompact(valuation.market_cap),
+      "Estimate consensus: " + _estimateConsensusText(payload.estimate_consensus) +
+        "; revision trend: " + _estimateRevisionText(payload.estimate_revision_trend),
       "Short checks: short % of float " + fmtPct(shortChecks.short_percent_of_float) +
         ", days to cover " + fmtNum(days.value) + " (" + (days.status || "insufficient_data") +
         "), dividend yield " + fmtPct(dividend.yield),

@@ -59,6 +59,8 @@ def test_quant_screen_wires_panel_clicks_and_auto_interpretation():
     assert "window.QuantScreenTickerPanel" in panel_source
     assert "/api/ticker-context/" in panel_source
     assert "/api/ticker-quant/" in panel_source
+    assert "estimateConsensusLine" in panel_source
+    assert "Consensus (" in panel_source
 
 
 def test_ticker_context_auto_interprets_quant_result():

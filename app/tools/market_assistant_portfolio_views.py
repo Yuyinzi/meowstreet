@@ -185,4 +185,6 @@ def compact_ticker_quant(payload):
         "peer": payload.get("peer"),
         "short_checks": payload.get("short_checks", {}),
         "backward_ratios": payload.get("backward_ratios", {}),
+        "estimate_consensus": payload.get("estimate_consensus", {}),
+        "estimate_revision_trend": payload.get("estimate_revision_trend", {}),
     }

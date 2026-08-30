@@ -1,5 +1,6 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+from app.data_sources import stockanalysis_screener
 from app.data_sources import yahoo_asset_profile
 from app.db import market_data as market_data_db
 from app.db import ticker_context as ticker_context_db
@@ -33,12 +34,30 @@ def _load_peer_fundamentals(con, symbol, http_client):
         return {"symbol": symbol, "error": str(exc)}
 
 
+def _load_estimate_consensus(con, symbol, http_client):
+    latest = ticker_context_db.load_latest_estimate_consensus(con, symbol)
+    if latest is not None and ticker_context_db.estimate_consensus_fresh(latest, max_age_seconds=_FRESHNESS_SECONDS):
+        return dict(latest), True
+    try:
+        fetched = stockanalysis_screener.fetch_estimate_consensus(symbol, http_client=http_client)
+    except ValueError:
+        if latest is not None:
+            return dict(latest), False
+        return None, False
+    fetched["captured_at"] = datetime.now(UTC).isoformat()
+    ticker_context_db.save_estimate_consensus_snapshot(con, symbol, fetched)
+    return fetched, False
+
+
 def get_ticker_quant_context(symbol, peer=None, db_path=None, http_client=None):
     normalized = ticker_context_db.normalize_symbol(symbol)
     con = ticker_context_db.connect(db_path or ticker_context_db.DEFAULT_DB_PATH)
     try:
         fundamentals, cache_state = _load_fundamentals(con, normalized, http_client)
         volumes = market_data_db.load_recent_daily_volumes(con, normalized, limit=30)
+        consensus_row, _ = _load_estimate_consensus(con, normalized, http_client)
+        since = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+        history = ticker_context_db.load_estimate_consensus_history(con, normalized, since)
         payload = {
             "symbol": normalized,
             "fetched_at": fundamentals.get("fetched_at"),
@@ -53,6 +72,8 @@ def get_ticker_quant_context(symbol, peer=None, db_path=None, http_client=None):
             "peer": None,
             "short_checks": quant_metrics.short_check_payload(fundamentals, volumes),
             "backward_ratios": quant_metrics.backward_ratios_payload(fundamentals),
+            "estimate_consensus": quant_metrics.estimate_consensus_payload(consensus_row),
+            "estimate_revision_trend": quant_metrics.estimate_revision_trend(history, datetime.now(UTC)),
         }
 
         if peer is not None:

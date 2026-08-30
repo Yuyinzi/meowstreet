@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from app.db import ticker_context
@@ -170,3 +172,80 @@ def test_replace_industry_reference_data_is_atomic(tmp_path):
     assert ticker_context.load_industry_alias(
         con, "yahoo", "Advertising Agencies"
     )["gics_industry"] == "Media"
+
+
+def _consensus(symbol="NVDA", fiscal_year_end="2026-12-31", avg=1.5, captured_at=None):
+    return {
+        "symbol": symbol,
+        "fiscal_year_end": fiscal_year_end,
+        "avg": avg,
+        "low": 1.0,
+        "high": 2.0,
+        "analyst_count": 25,
+        "captured_at": captured_at or "2026-08-28T12:00:00+00:00",
+    }
+
+
+def test_save_estimate_consensus_snapshot_accumulates_only_on_change(tmp_path):
+    con = ticker_context.connect(tmp_path / "market_data.sqlite")
+
+    ticker_context.save_estimate_consensus_snapshot(con, "NVDA", _consensus(avg=1.5))
+    ticker_context.save_estimate_consensus_snapshot(con, "NVDA", _consensus(avg=1.5))
+
+    rows = con.execute(
+        "select count(*) as n from estimate_consensus_snapshots where symbol = ?",
+        ("NVDA",),
+    ).fetchone()
+    assert rows["n"] == 1
+
+    ticker_context.save_estimate_consensus_snapshot(con, "NVDA", _consensus(avg=1.6))
+
+    rows = con.execute(
+        "select count(*) as n from estimate_consensus_snapshots where symbol = ?",
+        ("NVDA",),
+    ).fetchone()
+    assert rows["n"] == 2
+
+
+def test_load_latest_estimate_consensus_returns_latest_row(tmp_path):
+    con = ticker_context.connect(tmp_path / "market_data.sqlite")
+
+    ticker_context.save_estimate_consensus_snapshot(con, "NVDA", _consensus(avg=1.5, captured_at="2026-08-26T12:00:00+00:00"))
+    ticker_context.save_estimate_consensus_snapshot(con, "NVDA", _consensus(avg=1.6, captured_at="2026-08-28T12:00:00+00:00"))
+
+    latest = ticker_context.load_latest_estimate_consensus(con, "NVDA")
+
+    assert latest["avg"] == pytest.approx(1.6)
+
+
+def test_load_estimate_consensus_history_filters_by_since(tmp_path):
+    con = ticker_context.connect(tmp_path / "market_data.sqlite")
+
+    ticker_context.save_estimate_consensus_snapshot(con, "NVDA", _consensus(avg=1.3, captured_at="2026-07-01T12:00:00+00:00"))
+    ticker_context.save_estimate_consensus_snapshot(con, "NVDA", _consensus(avg=1.4, captured_at="2026-08-27T12:00:00+00:00"))
+    ticker_context.save_estimate_consensus_snapshot(con, "NVDA", _consensus(avg=1.5, captured_at="2026-08-28T12:00:00+00:00"))
+
+    history = ticker_context.load_estimate_consensus_history(con, "NVDA", "2026-08-26T12:00:00+00:00")
+
+    assert len(history) == 2
+    assert history[0]["captured_at"] == "2026-08-27T12:00:00+00:00"
+
+
+def test_estimate_consensus_fresh_honors_max_age(tmp_path):
+    con = ticker_context.connect(tmp_path / "market_data.sqlite")
+    stale = {
+        "symbol": "NVDA",
+        "fiscal_year_end": "2026-12-31",
+        "avg": 1.5,
+        "low": 1.0,
+        "high": 2.0,
+        "analyst_count": 25,
+        "captured_at": (datetime.now(UTC) - timedelta(seconds=80000)).isoformat(),
+    }
+
+    assert ticker_context.estimate_consensus_fresh(stale, max_age_seconds=72000) is False
+    assert ticker_context.estimate_consensus_fresh(stale, max_age_seconds=90000) is True
+
+
+def test_estimate_consensus_fresh_treats_none_as_stale():
+    assert ticker_context.estimate_consensus_fresh(None) is False

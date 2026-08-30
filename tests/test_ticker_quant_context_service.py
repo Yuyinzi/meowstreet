@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+import json
 
 import httpx
 import pytest
@@ -59,12 +60,42 @@ def _seed_prices(con, symbol, days=30, volume=1000000):
     market_data_db.save_price_rows(con, symbol, "1d", rows)
 
 
+def _forecast_data_json():
+    flat_array = [
+        {"estimates": 1, "estimatesCharts": 2, "estimatesSource": 3},
+        {"stats": 4, "table": 5},
+        {"eps": 6, "revenue": 7},
+        {"name": "source"},
+        {"annual": 8},
+        [],
+        {"2026-12-31": 9, "2027-12-31": 10, "2028-12-31": 10},
+        {"2026-12-31": 11},
+        {"epsNext": 12},
+        {"no": 13, "avg": 14, "low": 15, "high": 16},
+        "[PRO]",
+        {"no": 17, "avg": 18, "low": 19, "high": 20},
+        None,
+        38,
+        1.5129,
+        1.12,
+        1.69,
+        25,
+        1.8,
+        1.4,
+        2.1,
+    ]
+    return json.dumps({"type": "data", "nodes": [{"type": "data", "data": flat_array}]})
+
+
 class TestCacheBehavior:
     def test_cache_hit_avoids_second_request(self, tmp_path):
         requests = []
 
         def handler(request):
             requests.append(str(request.url))
+            url = str(request.url)
+            if "/forecast/__data.json" in url:
+                return httpx.Response(200, text=_forecast_data_json())
             return httpx.Response(200, text=_fundamentals_html("NVDA"))
 
         db_path = tmp_path / "market_data.sqlite"
@@ -73,14 +104,14 @@ class TestCacheBehavior:
         )
 
         assert payload["cache"] == "refreshed"
-        assert len(requests) == 1
+        assert len(requests) == 2
 
         payload2 = ticker_quant_context_service.get_ticker_quant_context(
             "NVDA", db_path=db_path, http_client=_mock_client(handler)
         )
 
         assert payload2["cache"] == "hit"
-        assert len(requests) == 1
+        assert len(requests) == 2
 
     def test_stale_cache_refreshes(self, tmp_path):
         db_path = tmp_path / "market_data.sqlite"
@@ -97,6 +128,9 @@ class TestCacheBehavior:
             con.close()
 
         def handler(request):
+            url = str(request.url)
+            if "/forecast/__data.json" in url:
+                return httpx.Response(200, text=_forecast_data_json())
             return httpx.Response(200, text=_fundamentals_html("NVDA"))
 
         payload = ticker_quant_context_service.get_ticker_quant_context(
@@ -110,6 +144,9 @@ class TestCacheBehavior:
 class TestDaysToCover:
     def test_days_to_cover_insufficient_when_prices_table_empty(self, tmp_path):
         def handler(request):
+            url = str(request.url)
+            if "/forecast/__data.json" in url:
+                return httpx.Response(200, text=_forecast_data_json())
             return httpx.Response(200, text=_fundamentals_html("NVDA"))
 
         db_path = tmp_path / "market_data.sqlite"
@@ -128,6 +165,9 @@ class TestDaysToCover:
             con.close()
 
         def handler(request):
+            url = str(request.url)
+            if "/forecast/__data.json" in url:
+                return httpx.Response(200, text=_forecast_data_json())
             return httpx.Response(200, text=_fundamentals_html("NVDA"))
 
         payload = ticker_quant_context_service.get_ticker_quant_context(
@@ -143,7 +183,10 @@ class TestPeer:
         db_path = tmp_path / "market_data.sqlite"
 
         def handler(request):
-            symbol = str(request.url).split("/quote/")[-1].rstrip("/")
+            url = str(request.url)
+            if "/forecast/__data.json" in url:
+                return httpx.Response(200, text=_forecast_data_json())
+            symbol = url.split("/quote/")[-1].rstrip("/")
             if symbol == "NVDA":
                 return httpx.Response(200, text=_fundamentals_html("NVDA", forward_pe=16.34))
             return httpx.Response(200, text=_fundamentals_html("AMD", forward_pe=20.0))
@@ -160,7 +203,10 @@ class TestPeer:
         db_path = tmp_path / "market_data.sqlite"
 
         def handler(request):
-            symbol = str(request.url).split("/quote/")[-1].rstrip("/")
+            url = str(request.url)
+            if "/forecast/__data.json" in url:
+                return httpx.Response(200, text=_forecast_data_json())
+            symbol = url.split("/quote/")[-1].rstrip("/")
             if symbol == "NVDA":
                 return httpx.Response(200, text=_fundamentals_html("NVDA"))
             return httpx.Response(404, text="Not Found")
@@ -185,3 +231,68 @@ class TestSymbolErrors:
             ticker_quant_context_service.get_ticker_quant_context(
                 "NOPE", db_path=db_path, http_client=_mock_client(handler)
             )
+
+
+class TestEstimateConsensus:
+    def _dispatching_handler(self, forecast_status=200, fundamentals_forward_pe=16.34):
+        def handler(request):
+            url = str(request.url)
+            if "/forecast/__data.json" in url:
+                if forecast_status == 200:
+                    return httpx.Response(200, text=_forecast_data_json())
+                return httpx.Response(forecast_status, text="Not Found")
+            return httpx.Response(200, text=_fundamentals_html("NVDA", forward_pe=fundamentals_forward_pe))
+        return handler
+
+    def test_payload_includes_estimate_consensus_and_revision_trend(self, tmp_path):
+        db_path = tmp_path / "market_data.sqlite"
+
+        payload = ticker_quant_context_service.get_ticker_quant_context(
+            "NVDA", db_path=db_path, http_client=_mock_client(self._dispatching_handler())
+        )
+
+        consensus = payload["estimate_consensus"]
+        assert consensus["status"] == "ok"
+        assert consensus["fiscal_year_end"] == "2026-12-31"
+        assert consensus["analyst_count"] == 38
+        assert consensus["avg"] == pytest.approx(1.5129)
+        assert consensus["skew"] == "positive"
+        trend = payload["estimate_revision_trend"]
+        assert trend["status"] == "accumulating"
+
+    def test_fetch_failure_with_no_snapshot_returns_insufficient_data(self, tmp_path):
+        db_path = tmp_path / "market_data.sqlite"
+
+        payload = ticker_quant_context_service.get_ticker_quant_context(
+            "NVDA", db_path=db_path, http_client=_mock_client(self._dispatching_handler(forecast_status=404))
+        )
+
+        assert payload["symbol"] == "NVDA"
+        assert payload["estimate_consensus"] == {"status": "insufficient_data"}
+        assert payload["estimate_revision_trend"]["status"] == "accumulating"
+
+    def test_fetch_failure_with_stale_snapshot_uses_stale_snapshot(self, tmp_path):
+        db_path = tmp_path / "market_data.sqlite"
+        con = ticker_context_db.connect(db_path)
+        try:
+            stale = {
+                "symbol": "NVDA",
+                "fiscal_year_end": "2026-12-31",
+                "avg": 0.95,
+                "low": 0.5,
+                "high": 1.5,
+                "analyst_count": 12,
+                "captured_at": (datetime.now(UTC) - timedelta(seconds=80000)).isoformat(),
+            }
+            ticker_context_db.save_estimate_consensus_snapshot(con, "NVDA", stale)
+        finally:
+            con.close()
+
+        payload = ticker_quant_context_service.get_ticker_quant_context(
+            "NVDA", db_path=db_path, http_client=_mock_client(self._dispatching_handler(forecast_status=404))
+        )
+
+        consensus = payload["estimate_consensus"]
+        assert consensus["status"] == "ok"
+        assert consensus["avg"] == pytest.approx(0.95)
+        assert consensus["analyst_count"] == 12

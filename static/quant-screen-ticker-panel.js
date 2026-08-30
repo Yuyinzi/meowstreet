@@ -125,6 +125,57 @@
     );
   }
 
+  function fiscalYearLabel(fiscalYearEnd) {
+    if (!fiscalYearEnd) {
+      return "";
+    }
+    return "FY" + String(fiscalYearEnd).split("-")[0];
+  }
+
+  function _estimateConsensusText(consensus) {
+    if (!consensus || consensus.status !== "ok") {
+      return "insufficient data";
+    }
+    return fiscalYearLabel(consensus.fiscal_year_end) + ", " + consensus.analyst_count +
+      " analysts, avg " + fmtNum(consensus.avg) + ", range " + fmtNum(consensus.low) +
+      "–" + fmtNum(consensus.high) + ", " + consensus.skew + " skew";
+  }
+
+  function _estimateRevisionText(trend) {
+    if (!trend) {
+      return "accumulating";
+    }
+    if (trend.status === "accumulating") {
+      return "accumulating (" + trend.sample_snapshots + " snapshots)";
+    }
+    if (trend.status === "ok") {
+      return trend.increases + " up / " + trend.decreases + " down (" + trend.window_days + "d)";
+    }
+    return "unavailable";
+  }
+
+  function estimateConsensusLine(payload) {
+    var consensus = payload.estimate_consensus || {};
+    if (consensus.status !== "ok") {
+      return "";
+    }
+    var trend = payload.estimate_revision_trend || {};
+    var trendNote = "";
+    if (trend.status === "accumulating") {
+      trendNote = ' <span class="ticker-detail-meta">· revision trend accumulating</span>';
+    } else if (trend.status === "ok") {
+      trendNote = ' <span class="ticker-detail-meta">· revisions: ' +
+        escapeHtml(trend.increases) + " up / " + escapeHtml(trend.decreases) +
+        " down (" + escapeHtml(trend.window_days) + "d)</span>";
+    }
+    return (
+      '<div class="ticker-detail-meta">Consensus (' + escapeHtml(fiscalYearLabel(consensus.fiscal_year_end)) +
+      "): " + escapeHtml(consensus.analyst_count) + " analysts · avg " +
+      fmtNum(consensus.avg) + " · range " + fmtNum(consensus.low) + "–" + fmtNum(consensus.high) +
+      " · " + escapeHtml(consensus.skew) + " skew" + trendNote + "</div>"
+    );
+  }
+
   function valuationSection(payload) {
     var valuation = payload.valuation || {};
     return (
@@ -136,6 +187,7 @@
       stat("Trailing EPS", fmtNum(valuation.trailing_eps)) +
       stat("Market Cap", fmtDollarsCompact(valuation.market_cap)) +
       "</div>" +
+      estimateConsensusLine(payload) +
       peerForm() +
       peerLine(payload.peer) +
       "</section>"
@@ -254,6 +306,8 @@
         ", forward EPS " + fmtNum(valuation.forward_eps) +
         ", trailing EPS " + fmtNum(valuation.trailing_eps) +
         ", market cap " + fmtDollarsCompact(valuation.market_cap),
+      "Estimate consensus: " + _estimateConsensusText(payload.estimate_consensus) +
+        "; revision trend: " + _estimateRevisionText(payload.estimate_revision_trend),
       "Short checks: short % of float " + fmtPct(shortChecks.short_percent_of_float) +
         ", days to cover " + fmtNum(days.value) + " (" + (days.status || "insufficient_data") +
         "), dividend yield " + fmtPct(dividend.yield),

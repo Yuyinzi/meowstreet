@@ -32,6 +32,8 @@ def resolved_payload():
             },
         },
         "backward_ratios": {"ratios": [], "missing_inputs": []},
+        "estimate_consensus": {"status": "insufficient_data"},
+        "estimate_revision_trend": {"status": "accumulating", "sample_snapshots": 0},
     }
 
 

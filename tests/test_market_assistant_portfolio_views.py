@@ -346,7 +346,12 @@ def test_compact_portfolio_result_dispatches_per_operation():
         "peer": None,
         "short_checks": {"days_to_cover": {"value": 2.37}},
         "backward_ratios": {"ratios": [], "missing_inputs": []},
+        "estimate_consensus": {"status": "ok", "skew": "positive"},
+        "estimate_revision_trend": {"status": "accumulating", "sample_snapshots": 1},
     }
-    assert compact_portfolio_result("ticker_quant_context", quant_payload) == quant_payload
+    compacted = compact_portfolio_result("ticker_quant_context", quant_payload)
+    assert compacted == quant_payload
+    assert compacted["estimate_consensus"]["status"] == "ok"
+    assert compacted["estimate_revision_trend"]["status"] == "accumulating"
     with pytest.raises(ValueError, match="unknown portfolio operation"):
         compact_portfolio_result("unknown_op", {})

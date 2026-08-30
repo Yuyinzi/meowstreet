@@ -235,3 +235,118 @@ def test_fetch_forecast_eps_raises_on_404():
 def test_fetch_forecast_eps_requires_symbol():
     with pytest.raises(ValueError, match="symbol is required"):
         stockanalysis_screener.fetch_forecast_eps("   ")
+
+
+def _forecast_data_json():
+    flat_array = [
+        {"estimates": 1, "estimatesCharts": 2, "estimatesSource": 3},
+        {"stats": 4, "table": 5},
+        {"eps": 6, "revenue": 7},
+        {"name": "source"},
+        {"annual": 8},
+        [],
+        {"2026-12-31": 9, "2027-12-31": 10, "2028-12-31": 11},
+        {"2026-12-31": 11},
+        {"epsNext": 12},
+        {"no": 13, "avg": 14, "low": 15, "high": 16},
+        "[PRO]",
+        {"no": 17, "avg": 18, "low": 19, "high": 20},
+        None,
+        38,
+        1.5129,
+        1.12,
+        1.69,
+        25,
+        1.8,
+        1.4,
+        2.1,
+    ]
+    return json.dumps({"type": "data", "nodes": [{"type": "data", "data": flat_array}]})
+
+
+def test_parse_forecast_data_extracts_nearest_future_fiscal_year():
+    result = stockanalysis_screener.parse_forecast_data(_forecast_data_json(), "INTC", today="2026-08-28")
+
+    assert result == {
+        "fiscal_year_end": "2026-12-31",
+        "analyst_count": 38,
+        "avg": 1.5129,
+        "low": 1.12,
+        "high": 1.69,
+    }
+
+
+def test_parse_forecast_data_skips_pro_entries():
+    result = stockanalysis_screener.parse_forecast_data(_forecast_data_json(), "INTC", today="2027-01-01")
+
+    assert result["fiscal_year_end"] == "2028-12-31"
+    assert result["analyst_count"] == 25
+
+
+def test_parse_forecast_data_raises_when_all_eps_pro():
+    flat_array = [
+        {"estimates": 1, "estimatesCharts": 2},
+        {"stats": 3},
+        {"eps": 4},
+        {"annual": 5},
+        {"2026-12-31": 6, "2027-12-31": 6},
+        "[PRO]",
+    ]
+    payload = json.dumps({"type": "data", "nodes": [{"type": "data", "data": flat_array}]})
+
+    with pytest.raises(ValueError, match="estimate consensus unavailable for INTC"):
+        stockanalysis_screener.parse_forecast_data(payload, "INTC")
+
+
+def test_parse_forecast_data_raises_when_estimates_charts_missing():
+    payload = json.dumps({"type": "data", "nodes": [{"type": "data", "data": []}]})
+
+    with pytest.raises(ValueError, match="estimate consensus unavailable for INTC"):
+        stockanalysis_screener.parse_forecast_data(payload, "INTC")
+
+
+def test_parse_forecast_data_tolerates_out_of_range_indexes():
+    flat_array = [
+        {"estimates": 1, "estimatesCharts": 2},
+        {"stats": 3},
+        {"eps": 4},
+        {"annual": 5},
+        {"2026-12-31": 5},
+        None,
+    ]
+    payload = json.dumps({"type": "data", "nodes": [{"type": "data", "data": flat_array}]})
+
+    with pytest.raises(ValueError, match="estimate consensus unavailable for INTC"):
+        stockanalysis_screener.parse_forecast_data(payload, "INTC")
+
+
+def test_fetch_estimate_consensus_requests_data_json_without_brotli():
+    seen = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        seen["accept"] = request.headers.get("accept", "")
+        seen["accept_encoding"] = request.headers.get("accept-encoding", "")
+        return httpx.Response(200, text=_forecast_data_json())
+
+    result = stockanalysis_screener.fetch_estimate_consensus(
+        " INTC ", http_client=_mock_client(handler)
+    )
+
+    assert seen["url"] == "https://stockanalysis.com/stocks/intc/forecast/__data.json"
+    assert "json" in seen["accept"]
+    assert "br" not in seen["accept_encoding"]
+    assert result["fiscal_year_end"] == "2026-12-31"
+
+
+def test_fetch_estimate_consensus_raises_on_404():
+    def handler(request):
+        return httpx.Response(404, text="Not Found")
+
+    with pytest.raises(ValueError, match="estimate consensus fetch failed for INTC: HTTP 404"):
+        stockanalysis_screener.fetch_estimate_consensus("INTC", http_client=_mock_client(handler))
+
+
+def test_fetch_estimate_consensus_requires_symbol():
+    with pytest.raises(ValueError, match="symbol is required"):
+        stockanalysis_screener.fetch_estimate_consensus("   ")

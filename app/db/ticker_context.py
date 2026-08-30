@@ -64,6 +64,15 @@ def connect(db_path=DEFAULT_DB_PATH):
             provider text not null,
             fetched_at text not null
         );
+        create table if not exists estimate_consensus_snapshots (
+            symbol text not null,
+            fiscal_year_end text not null,
+            avg real,
+            low real,
+            high real,
+            analyst_count integer,
+            captured_at text not null
+        );
         """
     )
     return con
@@ -89,6 +98,85 @@ def fundamentals_fresh(row, max_age_seconds=72000):
     if fetched.tzinfo is None:
         fetched = fetched.replace(tzinfo=UTC)
     return (datetime.now(UTC) - fetched).total_seconds() <= max_age_seconds
+
+
+def estimate_consensus_fresh(row, max_age_seconds=72000):
+    if row is None:
+        return False
+    captured_at = row.get("captured_at")
+    if not captured_at:
+        return False
+    try:
+        captured = datetime.fromisoformat(captured_at)
+    except (ValueError, TypeError):
+        return False
+    if captured.tzinfo is None:
+        captured = captured.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - captured).total_seconds() <= max_age_seconds
+
+
+def save_estimate_consensus_snapshot(con, symbol, consensus):
+    normalized = normalize_symbol(symbol)
+    fiscal_year_end = str(consensus.get("fiscal_year_end") or "").strip()
+    if not fiscal_year_end:
+        raise ValueError(f"fiscal year end is required for {normalized}")
+    avg = consensus.get("avg")
+    low = consensus.get("low")
+    high = consensus.get("high")
+    analyst_count = consensus.get("analyst_count")
+    latest = con.execute(
+        """
+        select avg, low, high, analyst_count
+        from estimate_consensus_snapshots
+        where symbol = ? and fiscal_year_end = ?
+        order by captured_at desc
+        limit 1
+        """,
+        (normalized, fiscal_year_end),
+    ).fetchone()
+    if latest is not None:
+        latest_values = (latest["avg"], latest["low"], latest["high"], latest["analyst_count"])
+        if latest_values == (avg, low, high, analyst_count):
+            return
+    captured_at = consensus.get("captured_at") or datetime.now(UTC).isoformat()
+    con.execute(
+        """
+        insert into estimate_consensus_snapshots(
+            symbol, fiscal_year_end, avg, low, high, analyst_count, captured_at
+        ) values (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (normalized, fiscal_year_end, avg, low, high, analyst_count, captured_at),
+    )
+    con.commit()
+
+
+def load_latest_estimate_consensus(con, symbol):
+    normalized = normalize_symbol(symbol)
+    row = con.execute(
+        """
+        select symbol, fiscal_year_end, avg, low, high, analyst_count, captured_at
+        from estimate_consensus_snapshots
+        where symbol = ?
+        order by captured_at desc
+        limit 1
+        """,
+        (normalized,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def load_estimate_consensus_history(con, symbol, since_iso):
+    normalized = normalize_symbol(symbol)
+    rows = con.execute(
+        """
+        select symbol, fiscal_year_end, avg, low, high, analyst_count, captured_at
+        from estimate_consensus_snapshots
+        where symbol = ? and captured_at >= ?
+        order by captured_at
+        """,
+        (normalized, since_iso),
+    ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def save_ticker_profile(con, profile):
