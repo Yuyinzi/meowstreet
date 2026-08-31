@@ -1,16 +1,60 @@
+import sqlite3
+
 from app.data_sources import stockanalysis_screener
+from app.db import macro_indicators as macro_indicators_db
 from app.db import quant_screen as quant_screen_db
+from app.tools import market_data
+from app.tools import portfolio_volatility as volatility_tool
 from app.tools import quant_screen as quant_screen_tool
 
 
 _MAX_INDUSTRY_STOCKS = 250
 
 
-def run_quant_screen(table_text):
+def run_quant_screen(table_text, db_path=None, http_client=None):
     if not isinstance(table_text, str):
         raise ValueError("table_text must be a string")
     rows, row_errors = quant_screen_tool.parse_screener_table(table_text)
+    resolved_db_path = db_path or quant_screen_db.DEFAULT_DB_PATH
+    con = quant_screen_db.connect(resolved_db_path)
+    try:
+        if rows:
+            _attach_volatility_filters(rows, con, resolved_db_path, http_client)
+    finally:
+        con.close()
     return quant_screen_tool.build_screen_payload(rows, row_errors)
+
+
+def _load_vix_level(con):
+    try:
+        points = macro_indicators_db.load_latest_macro_indicator_points(con)
+    except sqlite3.OperationalError:
+        return None
+    vix_point = next((point for point in points if point["series_id"] == "vix"), None)
+    return vix_point["value"] if vix_point is not None else None
+
+
+def _annualized_volatility(symbol, db_path, http_client):
+    try:
+        payload = market_data.fetch_market_data(
+            symbol, interval="1d", db_path=db_path, http_client=http_client
+        )
+        returns = volatility_tool.simple_returns(payload["prices"]["adjusted_close"])
+        report = volatility_tool.realized_volatility(
+            returns, volatility_tool.TRADING_DAYS_PER_YEAR
+        )
+        return report["annualized"]
+    except ValueError:
+        return None
+
+
+def _attach_volatility_filters(rows, con, db_path, http_client):
+    vix_level = _load_vix_level(con)
+    for row in rows:
+        stock_volatility = _annualized_volatility(row["symbol"], db_path, http_client)
+        row["volatility_filter"] = quant_screen_tool.volatility_filter_check(
+            stock_volatility, vix_level
+        )
 
 
 def _ensure_universe(con, http_client=None):
@@ -38,14 +82,15 @@ def run_industry_screen(industry, db_path=None, http_client=None):
     industry_input = str(industry or "").strip()
     if not industry_input:
         raise ValueError("industry is required")
-    con = quant_screen_db.connect(db_path or quant_screen_db.DEFAULT_DB_PATH)
+    resolved_db_path = db_path or quant_screen_db.DEFAULT_DB_PATH
+    con = quant_screen_db.connect(resolved_db_path)
     try:
-        return _run_industry_screen(con, industry_input, http_client)
+        return _run_industry_screen(con, industry_input, resolved_db_path, http_client)
     finally:
         con.close()
 
 
-def _run_industry_screen(con, industry_input, http_client):
+def _run_industry_screen(con, industry_input, db_path, http_client):
     universe = _ensure_universe(con, http_client=http_client)
     matching = [
         row for row in universe
@@ -94,6 +139,7 @@ def _run_industry_screen(con, industry_input, http_client):
         })
     if not rows:
         raise ValueError(f"no estimates available for industry {canonical_industry}")
+    _attach_volatility_filters(rows, con, db_path, http_client)
     payload = quant_screen_tool.build_screen_payload(rows, row_errors)
     payload["source"] = {
         "mode": "auto",

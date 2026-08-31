@@ -172,6 +172,35 @@
     chipTooltip.style.top = top + "px";
   }
 
+  function volChip(volFilter) {
+    if (!volFilter) {
+      return "";
+    }
+    var tone =
+      volFilter.passes === true ? "step-chip-passed" : volFilter.passes === false ? "step-chip-failed" : "step-chip-null";
+    var marker = volFilter.passes === true ? "✓ " : volFilter.passes === false ? "✗ " : "— ";
+    var lines = [
+      "Volatility check: annualized volatility at least 1.5 × VIX (applies to both long and short)",
+      "",
+    ];
+    if (volFilter.stock_volatility != null) {
+      lines.push("Stock annualized volatility (daily closes): " + fmtPct(volFilter.stock_volatility));
+    } else {
+      lines.push("Stock annualized volatility: no data");
+    }
+    if (volFilter.vix != null) {
+      lines.push("VIX: " + fmtNum(volFilter.vix) + " → required at least " + fmtPct(volFilter.required_volatility));
+    } else {
+      lines.push("VIX: no data");
+    }
+    if (volFilter.ratio != null) {
+      lines.push("Ratio: " + fmtNum(volFilter.ratio) + "× VIX");
+    }
+    lines.push("Result: " + (volFilter.passes === true ? "passed" : volFilter.passes === false ? "failed" : "no data"));
+    return '<span class="gate-chip ' + tone + '" data-tip="' + escapeHtml(lines.join("\n")) + '">' +
+      marker + "vol ≥ 1.5×VIX</span>";
+  }
+
   function flagsBadges(flags) {
     if (!flags || !flags.length) {
       return "";
@@ -218,6 +247,7 @@
       "<td>" + egCaseBadge(row.eg_case) + "</td>" +
       "<td>" + stepChips(row.long_filter) + "</td>" +
       "<td>" + stepChips(row.short_filter) + "</td>" +
+      "<td>" + volChip(row.volatility_filter) + "</td>" +
       "<td>" + flagsBadges(row.flags) + "</td>" +
       "</tr>"
     );
@@ -242,6 +272,7 @@
       "<th>EG Case</th>" +
       "<th>Long filter</th>" +
       "<th>Short filter</th>" +
+      '<th title="Head-check: stock annualized volatility should be at least 1.5 × VIX">Vol vs VIX</th>' +
       "<th>Flags</th>" +
       "</tr>";
     var body = rows.map(function (row) { return rowHtml(row, contributions); }).join("");

@@ -31,6 +31,8 @@ _HEADER_SYNONYMS = {
 
 _MISSING_TOKENS = {"", "null", "nan", "na", "n/a", "none"}
 
+VOLATILITY_VIX_MULTIPLIER = 1.5
+
 _MARKET_CAP_TIERS = [
     (1e9, "micro"),
     (3e9, "small"),
@@ -102,6 +104,26 @@ def build_screen_payload(rows, row_errors=None):
         },
         "rows": [_present_row(row) for row in sorted_rows],
         "row_errors": row_errors if row_errors is not None else [],
+    }
+
+
+def volatility_filter_check(annualized_volatility, vix_level):
+    if annualized_volatility is None or vix_level is None or vix_level <= 0:
+        return {
+            "stock_volatility": annualized_volatility,
+            "vix": vix_level,
+            "required_volatility": None,
+            "ratio": None,
+            "passes": None,
+        }
+    vix_decimal = vix_level / 100
+    required = VOLATILITY_VIX_MULTIPLIER * vix_decimal
+    return {
+        "stock_volatility": annualized_volatility,
+        "vix": vix_level,
+        "required_volatility": required,
+        "ratio": annualized_volatility / vix_decimal,
+        "passes": annualized_volatility >= required,
     }
 
 
@@ -332,6 +354,7 @@ def _present_row(row):
         "eg_case_reason": row["eg_case_reason"],
         "long_filter": row["long_filter"],
         "short_filter": row["short_filter"],
+        "volatility_filter": row.get("volatility_filter"),
     }
 
 

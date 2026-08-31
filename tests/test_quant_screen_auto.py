@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 import httpx
@@ -7,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.data_sources import stockanalysis_screener
+from app.db import macro_indicators as macro_indicators_db
 from app.db import quant_screen as quant_screen_db
 from app.http_client import HttpClient
 from app.routers import quant_screen as quant_screen_router
@@ -158,6 +160,7 @@ def test_run_industry_screen_builds_payload(tmp_path):
             "eps_fy0": 4.77,
             "eps_fy1": 9.02,
             "eps_fy2": 13.04,
+            "volatility_filter": quant_screen_tool.volatility_filter_check(None, None),
         }
         for stock in stocks
     ]
@@ -340,3 +343,168 @@ def test_api_post_auto_converts_value_error_to_400(monkeypatch):
 
     assert response.status_code == 400
     assert "BioTech" in response.json()["detail"]
+
+
+def _seed_vix(db_path, value):
+    con = macro_indicators_db.connect(db_path)
+    try:
+        con.execute(
+            "insert into macro_indicator_series (series_id, title, units, source) values (?, ?, ?, ?)",
+            ("vix", "CBOE Volatility Index", "percent", "fred"),
+        )
+        con.execute(
+            "insert into macro_indicator_points (series_id, date, value, source) values (?, ?, ?, ?)",
+            ("vix", "2026-08-26", value, "fred"),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def _yahoo_chart_json(symbol, closes):
+    now = int(time.time())
+    timestamps = [now - 86400 * (len(closes) - index) for index in range(len(closes))]
+    return json.dumps({
+        "chart": {
+            "result": [
+                {
+                    "meta": {"symbol": symbol},
+                    "timestamp": timestamps,
+                    "indicators": {"adjclose": [{"adjclose": closes}]},
+                }
+            ],
+            "error": None,
+        }
+    })
+
+
+def _volatile_closes():
+    return [100.0 if index % 2 == 0 else 103.0 for index in range(30)]
+
+
+def _calm_closes():
+    return [100.0 + 0.01 * index for index in range(30)]
+
+
+def _handler_for_yahoo(closes_by_symbol, request_counts=None):
+    def handler(request):
+        url = str(request.url)
+        if url.startswith("https://query1.finance.yahoo.com/v8/finance/chart/"):
+            symbol = url.rsplit("/", 1)[-1].split("?")[0]
+            if request_counts is not None:
+                request_counts[symbol] = request_counts.get(symbol, 0) + 1
+            closes = closes_by_symbol.get(symbol)
+            if closes is not None:
+                return httpx.Response(200, text=_yahoo_chart_json(symbol, closes))
+        return httpx.Response(404, text="Not Found")
+
+    return handler
+
+
+_PASTE_TABLE = (
+    "Ticker\tPrice\tMarket Cap\teps0\teps1\teps2\n"
+    "ABC\t103\t5000000000\t1.0\t1.2\t1.5"
+)
+
+
+def test_run_quant_screen_volatility_filter_passes_above_threshold(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    _seed_vix(db_path, 20.0)
+    http_client = _mock_client(_handler_for_yahoo({"ABC": _volatile_closes()}))
+
+    payload = quant_screen_service.run_quant_screen(
+        _PASTE_TABLE, db_path=db_path, http_client=http_client
+    )
+
+    vol_filter = payload["rows"][0]["volatility_filter"]
+    assert vol_filter["vix"] == 20.0
+    assert vol_filter["required_volatility"] == pytest.approx(0.30)
+    assert vol_filter["stock_volatility"] > 0.30
+    assert vol_filter["ratio"] == pytest.approx(vol_filter["stock_volatility"] / 0.20)
+    assert vol_filter["passes"] is True
+
+
+def test_run_quant_screen_volatility_filter_fails_below_threshold(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    _seed_vix(db_path, 20.0)
+    http_client = _mock_client(_handler_for_yahoo({"ABC": _calm_closes()}))
+
+    payload = quant_screen_service.run_quant_screen(
+        _PASTE_TABLE, db_path=db_path, http_client=http_client
+    )
+
+    vol_filter = payload["rows"][0]["volatility_filter"]
+    assert vol_filter["passes"] is False
+    assert vol_filter["stock_volatility"] < 0.30
+
+
+def test_run_quant_screen_volatility_filter_null_without_vix(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    http_client = _mock_client(_handler_for_yahoo({"ABC": _volatile_closes()}))
+
+    payload = quant_screen_service.run_quant_screen(
+        _PASTE_TABLE, db_path=db_path, http_client=http_client
+    )
+
+    vol_filter = payload["rows"][0]["volatility_filter"]
+    assert vol_filter["vix"] is None
+    assert vol_filter["stock_volatility"] is not None
+    assert vol_filter["passes"] is None
+
+
+def test_run_quant_screen_volatility_filter_null_without_prices(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    _seed_vix(db_path, 20.0)
+    http_client = _mock_client(_handler_for_yahoo({}))
+
+    payload = quant_screen_service.run_quant_screen(
+        _PASTE_TABLE, db_path=db_path, http_client=http_client
+    )
+
+    vol_filter = payload["rows"][0]["volatility_filter"]
+    assert vol_filter["vix"] == 20.0
+    assert vol_filter["stock_volatility"] is None
+    assert vol_filter["passes"] is None
+
+
+def test_run_quant_screen_caches_price_history(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    _seed_vix(db_path, 20.0)
+    request_counts = {}
+    http_client = _mock_client(
+        _handler_for_yahoo({"ABC": _volatile_closes()}, request_counts=request_counts)
+    )
+
+    quant_screen_service.run_quant_screen(
+        _PASTE_TABLE, db_path=db_path, http_client=http_client
+    )
+    quant_screen_service.run_quant_screen(
+        _PASTE_TABLE, db_path=db_path, http_client=http_client
+    )
+
+    assert request_counts["ABC"] == 1
+
+
+def test_run_industry_screen_attaches_volatility_filter(tmp_path):
+    db_path = tmp_path / "market_data.sqlite"
+    _seed_vix(db_path, 20.0)
+    stocks = _three_semiconductor_stocks()
+    base_handler, _ = _handler_for_universe_and_forecasts(stocks)
+    yahoo_handler = _handler_for_yahoo({stock["symbol"]: _volatile_closes() for stock in stocks})
+
+    def handler(request):
+        url = str(request.url)
+        if url.startswith("https://query1.finance.yahoo.com/"):
+            return yahoo_handler(request)
+        return base_handler(request)
+
+    payload = quant_screen_service.run_industry_screen(
+        "semiconductors", db_path=db_path, http_client=_mock_client(handler)
+    )
+
+    assert len(payload["rows"]) == 3
+    for row in payload["rows"]:
+        vol_filter = row["volatility_filter"]
+        assert vol_filter["vix"] == 20.0
+        assert vol_filter["stock_volatility"] > 0.30
+        assert vol_filter["passes"] is True

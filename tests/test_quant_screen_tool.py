@@ -394,3 +394,73 @@ def test_filter_steps_report_null_when_inputs_missing():
     assert short_passed == [None, None, None]
     assert result["long_filter"]["first_failed"] == "pe_premium_both_periods"
     assert result["long_filter"]["passes"] is False
+
+
+def test_volatility_filter_check_passes_at_or_above_one_and_half_vix():
+    result = quant_screen.volatility_filter_check(0.45, 20.0)
+
+    assert result["passes"] is True
+    assert result["stock_volatility"] == 0.45
+    assert result["vix"] == 20.0
+    assert result["required_volatility"] == pytest.approx(0.30)
+    assert result["ratio"] == pytest.approx(2.25)
+
+
+def test_volatility_filter_check_fails_below_threshold():
+    result = quant_screen.volatility_filter_check(0.25, 20.0)
+
+    assert result["passes"] is False
+    assert result["required_volatility"] == pytest.approx(0.30)
+    assert result["ratio"] == pytest.approx(1.25)
+
+
+@pytest.mark.parametrize(
+    ("annualized_volatility", "vix_level"),
+    [
+        (None, 20.0),
+        (0.45, None),
+        (None, None),
+        (0.45, 0.0),
+        (0.45, -5.0),
+    ],
+)
+def test_volatility_filter_check_null_when_inputs_missing_or_invalid(
+    annualized_volatility, vix_level
+):
+    result = quant_screen.volatility_filter_check(annualized_volatility, vix_level)
+
+    assert result["passes"] is None
+    assert result["required_volatility"] is None
+    assert result["ratio"] is None
+    assert result["stock_volatility"] == annualized_volatility
+    assert result["vix"] == vix_level
+
+
+def test_build_screen_payload_passes_through_volatility_filter():
+    row = {
+        "symbol": "A",
+        "price": 10.0,
+        "market_cap": 5e9,
+        "eps_fy0": 1.0,
+        "eps_fy1": 1.2,
+        "eps_fy2": 1.5,
+        "volatility_filter": quant_screen.volatility_filter_check(0.45, 20.0),
+    }
+    result = quant_screen.build_screen_payload([row])["rows"][0]
+
+    assert result["volatility_filter"]["passes"] is True
+    assert result["volatility_filter"]["ratio"] == pytest.approx(2.25)
+
+
+def test_build_screen_payload_volatility_filter_defaults_to_none():
+    row = {
+        "symbol": "A",
+        "price": 10.0,
+        "market_cap": 5e9,
+        "eps_fy0": 1.0,
+        "eps_fy1": 1.2,
+        "eps_fy2": 1.5,
+    }
+    result = quant_screen.build_screen_payload([row])["rows"][0]
+
+    assert result["volatility_filter"] is None
