@@ -42,6 +42,19 @@
     },
   };
 
+  var EG_CASE_META = {
+    1: "Above sector growth in both years, and accelerating (EG2 > EG1) — the strongest momentum profile.",
+    2: "Above sector growth in both years, holding steady (EG2 = EG1).",
+    3: "Above sector growth in both years, but slowing (EG2 < EG1).",
+    4: "In line with the sector in year 1, above sector in year 2.",
+    5: "Below sector in year 1, above sector in year 2 — improving versus the sector.",
+    6: "Positive growth in both years, but below the sector average.",
+    7: "Negative growth in year 1, then a weak recovery that stays below the sector.",
+    8: "Negative growth in year 1, then a recovery back to the sector average.",
+    9: "Loss-making in FY1, turning profitable in FY2 — a turnaround profile.",
+    10: "Loss-making in both years, with losses still widening.",
+  };
+
   function escapeHtml(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -93,7 +106,10 @@
     if (egCase == null || egCase === "unclassified") {
       return '<span class="tag-chip chip-muted">unclassified</span>';
     }
-    return '<span class="tag-chip chip-positive">case ' + escapeHtml(egCase) + "</span>";
+    var tip = EG_CASE_META[egCase]
+      ? "Case " + egCase + ": " + EG_CASE_META[egCase] + "\nEG1 = growth FY0→FY1, EG2 = growth FY1→FY2."
+      : "";
+    return '<span class="tag-chip chip-positive" data-tip="' + escapeHtml(tip) + '">case ' + escapeHtml(egCase) + "</span>";
   }
 
   function stepDetailLines(step) {
@@ -201,12 +217,22 @@
       marker + "vol ≥ 1.5×VIX</span>";
   }
 
+  var FLAG_META = {
+    sign_change_override:
+      "Earnings crossed zero (loss to profit or profit to loss), which makes a percentage growth number meaningless. " +
+      "The EG value was rewritten to a ±100% placeholder — do not read it as a real growth rate.",
+    small_base_review:
+      "Growth above 200% in absolute terms usually means the EPS base is tiny, not that the business multiplied. " +
+      "Treat this row's growth percentage with caution.",
+  };
+
   function flagsBadges(flags) {
     if (!flags || !flags.length) {
       return "";
     }
     var chips = flags.map(function (flag) {
-      return '<span class="tag-chip chip-warning">' + escapeHtml(flag.replace(/_/g, " ")) + "</span>";
+      var tip = FLAG_META[flag] || "";
+      return '<span class="tag-chip chip-warning" data-tip="' + escapeHtml(tip) + '">' + escapeHtml(flag.replace(/_/g, " ")) + "</span>";
     });
     return '<div class="gate-chips">' + chips.join("") + "</div>";
   }
@@ -647,7 +673,7 @@
   });
 
   document.addEventListener("mouseover", function (event) {
-    var chip = event.target.closest(".gate-chip");
+    var chip = event.target.closest("[data-tip]");
     if (chip && chip.getAttribute("data-tip")) {
       showChipTooltip(chip);
     } else {
