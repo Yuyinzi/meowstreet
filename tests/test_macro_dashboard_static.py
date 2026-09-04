@@ -466,6 +466,50 @@ def test_market_assistant_open_with_context_continues_conversation():
     }
 
 
+def test_market_assistant_open_with_context_sends_snapshot_to_existing_conversation():
+    payload = _run_market_assistant_harness(
+        """
+        let requestBody;
+        global.fetch = async (url, options) => {
+          requestBody = JSON.parse(options.body);
+          return {
+            ok: true,
+            status: 200,
+            body: streamedBody([
+              '{"type":"complete","resolution":{"mode":"current"},"generation_status":"validated_first_pass","answer_trace_id":"trace_1","citations":[]}\\n',
+            ]),
+          };
+        };
+        hooks.state.conversationId = "conv_existing";
+        hooks.state.serverHistoryReady = true;
+        hooks.state.lastContextId = "ctx_old";
+
+        hooks.openWithContext({
+          seedText: "AEHR Forward P/E: 58.00",
+          question: "解读一下 AEHR 的量化体检结果",
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        console.log(JSON.stringify({
+          conversationId: requestBody.conversation_id,
+          previousContextId: requestBody.previous_context_id,
+          attachedContext: requestBody.attached_context,
+          hasBootstrap: Object.prototype.hasOwnProperty.call(
+            requestBody,
+            "conversation_bootstrap"
+          ),
+        }));
+        """
+    )
+
+    assert payload == {
+        "conversationId": "conv_existing",
+        "previousContextId": "ctx_old",
+        "attachedContext": "AEHR Forward P/E: 58.00",
+        "hasBootstrap": False,
+    }
+
+
 def test_market_assistant_open_with_context_is_ignored_while_busy():
     payload = _run_market_assistant_harness(
         """
@@ -9699,6 +9743,53 @@ def test_market_assistant_retry_button_resends_without_duplicate_user_bubble():
         "userBubbleCount": 1,
         "finalText": "回答内容",
         "logChildren": 2,
+    }
+
+
+def test_market_assistant_retry_resends_attached_page_snapshot():
+    payload = _run_market_assistant_harness(
+        """
+        const requestBodies = [];
+        global.fetch = async (url, options) => {
+          requestBodies.push(JSON.parse(options.body));
+          if (requestBodies.length === 1) {
+            return { ok: true, status: 200, body: streamedBody([
+              '{"type":"answer_failed"}\\n',
+              '{"type":"complete","resolution":{"mode":"current"},'
+              + '"generation_status":"answer_unavailable","answer_trace_id":"t1","citations":[]}\\n',
+            ]) };
+          }
+          return { ok: true, status: 200, body: streamedBody([
+            '{"type":"answer_delta","delta":"更新后的解读"}\\n',
+            '{"type":"complete","resolution":{"mode":"current"},'
+            + '"generation_status":"narration_validated","answer_trace_id":"t2","citations":[]}\\n',
+          ]) };
+        };
+
+        hooks.openWithContext({
+          seedText: "AEHR Forward P/E: 58.00",
+          question: "重新解读 AEHR",
+        });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const failed = elements.marketAssistantLog.children.at(-1);
+        const retry = failed.children[0].children.find(
+          (child) => child.tagName === "button"
+        );
+        retry.listeners.click();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        console.log(JSON.stringify({
+          fetchCalls: requestBodies.length,
+          firstContext: requestBodies[0].attached_context,
+          retryContext: requestBodies[1].attached_context,
+        }));
+        """
+    )
+
+    assert payload == {
+        "fetchCalls": 2,
+        "firstContext": "AEHR Forward P/E: 58.00",
+        "retryContext": "AEHR Forward P/E: 58.00",
     }
 
 

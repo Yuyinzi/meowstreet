@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import logging
 import secrets
 from copy import deepcopy
 from datetime import datetime
@@ -19,6 +18,7 @@ from app.services.market_assistant_exploration import EXPLORATION_SCHEMA_VERSION
 from app.services.market_assistant_react import run_hybrid_narration
 from app.services.market_assistant_tool_runtime import ARTIFACT_SCHEMA_VERSION
 from app.services.market_setup_current import resolve_current_explanation
+from app.runtime_logging import get_runtime_logger
 from app.tools.market_assistant_claim_audit import AuditValidationError
 from app.tools.market_assistant_claim_audit import build_audit_validation_report
 from app.tools.market_assistant_claim_audit import validate_claim_audit
@@ -35,8 +35,7 @@ ARTIFACT_SCHEMA_VERSION = "market_assistant_artifact_v1"
 LLM_ATTEMPT_TIMEOUT_SECONDS = 900.0
 AUDIT_TIMEOUT_SECONDS = 120.0
 
-LOGGER = logging.getLogger(__name__)
-STREAM_LOGGER = logging.getLogger("uvicorn.error")
+LOGGER = get_runtime_logger(__name__)
 
 TOOL_SCHEMA_VERSIONS = {
     "artifact_envelope": ARTIFACT_SCHEMA_VERSION,
@@ -369,7 +368,7 @@ class _StageRecorder:
         if stage in self._recorded:
             return
         self._recorded.add(stage)
-        STREAM_LOGGER.info(
+        LOGGER.info(
             "market assistant stage stage=%s request_id=%s elapsed_seconds=%.2f",
             stage,
             self._request_id,
@@ -758,7 +757,7 @@ async def _stream_worker(request, dependencies, sink):
     except asyncio.CancelledError:
         raise
     except Exception:
-        LOGGER.warning("market assistant stream failed", exc_info=True)
+        LOGGER.error("market assistant stream failed", exc_info=True)
         await sink.send(
             {"type": "error", "message": "market assistant service is unavailable"}
         )
@@ -823,7 +822,7 @@ def _consume_llm_task(task):
     except asyncio.CancelledError:
         return
     except Exception:
-        LOGGER.warning("market assistant timed-out LLM task failed", exc_info=True)
+        LOGGER.warning("market assistant timed-out llm task failed", exc_info=True)
 
 
 def _persist_bundle(deps, db_path, artifacts, trace):

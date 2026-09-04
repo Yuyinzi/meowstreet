@@ -239,6 +239,27 @@ except ValueError as exc:
     raise HTTPException(status_code=400, detail=str(exc)) from exc
 ```
 
+### Runtime Logging
+
+FastAPI runtime modules use the standard library logger returned by
+`app.runtime_logging.get_runtime_logger(__name__)`:
+
+```python
+from app.runtime_logging import get_runtime_logger
+
+LOGGER = get_runtime_logger(__name__)
+```
+
+- Use the module-level `LOGGER`; do not call root `logging.*` functions or create a separate `uvicorn.error` logger
+- Write a short lowercase event phrase followed by parameterized `key=value` context
+- Use `LOGGER.info()` for lifecycle and timing events
+- Use `LOGGER.warning()` for handled degradation, fallback, or partial availability
+- Use `LOGGER.error()` when the requested runtime operation cannot continue
+- Include `exc_info=True` when a caught unexpected exception needs a stack trace
+- Never log secrets, credentials, prompts, raw request or response payloads, or other sensitive content
+- Do not configure handlers, formatters, or log levels inside feature modules; the runtime logger hierarchy integrates with Uvicorn's server logging
+- This contract applies to FastAPI runtime logging only. CLI output, refresh-job progress, stdout JSON, and stderr error summaries in `scripts/` and `jobs/` continue to use their existing output contracts
+
 ### Data Modeling
 
 Runtime payloads, API responses, DB rows, and workflow-method artifacts remain plain nested dicts with string keys. Observation payloads use dotted-path keys (e.g., `"signals.trend"`, `"metrics.price"`). Access dict paths with a custom `_get_path()` resolver (see `workflow_engine.py`). Dataclasses may be used for configuration and internal value objects, but not as the public API payload format. Do not introduce ORM models for stored rows unless the project explicitly adopts one later.

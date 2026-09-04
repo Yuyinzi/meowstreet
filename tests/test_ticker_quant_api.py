@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.routers import ticker_quant as ticker_quant_router
+from app.services import catalyst_activity as catalyst_activity_service
 from app.services import ticker_quant_context as ticker_quant_context_service
 
 
@@ -40,9 +41,12 @@ def resolved_payload():
 def test_lookup_returns_service_payload(monkeypatch):
     seen = {}
 
-    def fake_context(symbol, peer=None, db_path=None, http_client=None):
+    def fake_context(symbol, peer=None, db_path=None, http_client=None, force_refresh=False,
+                     include_catalyst=True):
         seen["symbol"] = symbol
         seen["peer"] = peer
+        seen["force_refresh"] = force_refresh
+        seen["include_catalyst"] = include_catalyst
         return resolved_payload()
 
     monkeypatch.setattr(
@@ -53,13 +57,14 @@ def test_lookup_returns_service_payload(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == resolved_payload()
-    assert seen == {"symbol": "nvda", "peer": None}
+    assert seen == {"symbol": "nvda", "peer": None, "force_refresh": False, "include_catalyst": False}
 
 
 def test_lookup_passes_peer_override(monkeypatch):
     seen = {}
 
-    def fake_context(symbol, peer=None, db_path=None, http_client=None):
+    def fake_context(symbol, peer=None, db_path=None, http_client=None, force_refresh=False,
+                     include_catalyst=True):
         seen["peer"] = peer
         return resolved_payload()
 
@@ -73,8 +78,27 @@ def test_lookup_passes_peer_override(monkeypatch):
     assert seen["peer"] == "AMD"
 
 
+def test_lookup_passes_force_refresh(monkeypatch):
+    seen = {}
+
+    def fake_context(symbol, peer=None, db_path=None, http_client=None, force_refresh=False,
+                     include_catalyst=True):
+        seen["force_refresh"] = force_refresh
+        return resolved_payload()
+
+    monkeypatch.setattr(
+        ticker_quant_context_service, "get_ticker_quant_context", fake_context
+    )
+
+    response = client.get("/api/ticker-quant/AEHR", params={"refresh": "true"})
+
+    assert response.status_code == 200
+    assert seen["force_refresh"] is True
+
+
 def test_lookup_converts_value_error_to_400(monkeypatch):
-    def fake_context(symbol, peer=None, db_path=None, http_client=None):
+    def fake_context(symbol, peer=None, db_path=None, http_client=None, force_refresh=False,
+                     include_catalyst=True):
         raise ValueError("symbol is required")
 
     monkeypatch.setattr(
@@ -82,6 +106,38 @@ def test_lookup_converts_value_error_to_400(monkeypatch):
     )
 
     response = client.get("/api/ticker-quant/%20%20")
+
+    assert response.status_code == 400
+    assert "symbol is required" in response.json()["detail"]
+
+
+def test_catalyst_route_returns_service_payload(monkeypatch):
+    seen = {}
+
+    def fake_catalyst(symbol, db_path=None, http_client=None, today=None):
+        seen["symbol"] = symbol
+        return {"status": "ok", "source": "sec_edgar"}
+
+    monkeypatch.setattr(
+        catalyst_activity_service, "get_catalyst_activity", fake_catalyst
+    )
+
+    response = client.get("/api/ticker-quant/NVDA/catalyst")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "source": "sec_edgar"}
+    assert seen == {"symbol": "NVDA"}
+
+
+def test_catalyst_route_converts_value_error_to_400(monkeypatch):
+    def fake_catalyst(symbol, db_path=None, http_client=None, today=None):
+        raise ValueError("symbol is required")
+
+    monkeypatch.setattr(
+        catalyst_activity_service, "get_catalyst_activity", fake_catalyst
+    )
+
+    response = client.get("/api/ticker-quant/%20%20/catalyst")
 
     assert response.status_code == 400
     assert "symbol is required" in response.json()["detail"]

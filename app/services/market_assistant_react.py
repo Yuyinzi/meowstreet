@@ -344,6 +344,7 @@ async def run_hybrid_narration(
         request["question"],
         view,
         history_items,
+        attached_context=request.get("attached_context"),
         answer_language=request.get("answer_language")
         or _question_language(request["question"]),
         available_tool_ids=tool_ids,
@@ -622,6 +623,7 @@ def _initial_input_items(
     question,
     view,
     history_items=None,
+    attached_context=None,
     answer_language=None,
     available_tool_ids=(),
     budget=None,
@@ -629,18 +631,33 @@ def _initial_input_items(
     items = list(history_items or [])
     content = [
         {"type": "input_text", "text": question},
-        {"type": "input_text", "text": _view_text(view)},
-        {
-            "type": "input_text",
-            "text": "Answer language: "
-            + ("Chinese" if answer_language == "zh" else "English"),
-        },
-        {
-            "type": "input_text",
-            "text": "Pre-fetched evidence is shown above. You may call any "
-            "of the available tools if you need more evidence.",
-        },
     ]
+    if attached_context:
+        content.append(
+            {
+                "type": "input_text",
+                "text": (
+                    "Latest page snapshot attached for this request. "
+                    "When it conflicts with older conversation data, use this snapshot: "
+                    + attached_context
+                ),
+            }
+        )
+    content.extend(
+        [
+            {"type": "input_text", "text": _view_text(view)},
+            {
+                "type": "input_text",
+                "text": "Answer language: "
+                + ("Chinese" if answer_language == "zh" else "English"),
+            },
+            {
+                "type": "input_text",
+                "text": "Pre-fetched evidence is shown above. You may call any "
+                "of the available tools if you need more evidence.",
+            },
+        ]
+    )
     if budget:
         content.append(
             {"type": "input_text", "text": _budget_state_text(0, 0, budget)}

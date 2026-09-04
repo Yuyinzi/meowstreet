@@ -1,5 +1,4 @@
 import json
-import logging
 from datetime import date
 from pathlib import Path
 
@@ -38,8 +37,10 @@ from app.tools import (
 )
 from app.routers.macro_dashboard import macro_dashboard_market_setup
 from app.resources import resource_path
+from app.runtime_logging import get_runtime_logger
 
 ROOT = Path(__file__).resolve().parents[1]
+LOGGER = get_runtime_logger(__name__)
 STATIC_DIR = ROOT / "static"
 METHOD_PATH = resource_path("workflow_method")
 ATTRIBUTION_CATALOG_PATH = resource_path("commodity_attribution_catalog")
@@ -115,7 +116,7 @@ def _load_attribution_catalog():
             ATTRIBUTION_CATALOG_PATH
         )
     except (ValueError, TypeError, RuntimeError, OSError):
-        logging.warning("commodities attribution catalog load failed", exc_info=True)
+        LOGGER.warning("commodities attribution catalog load failed", exc_info=True)
         return None
 
 
@@ -125,7 +126,7 @@ def _load_non_oil_attribution_source_audit():
             NON_OIL_ATTRIBUTION_SOURCE_AUDIT_PATH, ATTRIBUTION_CATALOG_PATH
         )
     except (ValueError, TypeError, RuntimeError, OSError):
-        logging.warning(
+        LOGGER.warning(
             "commodities non-oil attribution source audit load failed", exc_info=True
         )
         return None
@@ -137,7 +138,7 @@ def _load_cot_historical_extreme_allowlist():
             COT_HISTORICAL_EXTREME_ALLOWLIST_PATH
         )
     except (ValueError, TypeError, RuntimeError, OSError):
-        logging.warning(
+        LOGGER.warning(
             "commodities cot historical extreme allowlist load failed", exc_info=True
         )
         return None

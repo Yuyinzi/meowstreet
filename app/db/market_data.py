@@ -144,3 +144,21 @@ def load_recent_daily_volumes(con, symbol, limit=30):
     except sqlite3.OperationalError:
         return []
     return [row["volume"] for row in rows]
+
+
+def load_latest_daily_close(con, symbol):
+    normalized_symbol = normalize_symbol(symbol)
+    try:
+        row = con.execute(
+            """
+            select close
+            from prices
+            where symbol = ? and interval = '1d' and close is not null
+            order by date desc
+            limit 1
+            """,
+            (normalized_symbol,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return row["close"] if row else None

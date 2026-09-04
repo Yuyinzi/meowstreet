@@ -103,12 +103,34 @@ def test_build_payload_resolved_includes_tag_and_provenance():
     assert payload["cycle_tag"] == "cyclical"
     assert payload["provider_industry"] == "Semiconductors"
     assert payload["regime_bias"] == "unknown"
+    assert payload["regime_source"] is None
     assert payload["side_support"] == "unknown"
-    assert "GDP growth forecast" in payload["regime_note"]
+    assert "GDP growth direction" in payload["regime_note"]
     assert payload["tag_provenance"] == {
         "tag_source": "method_workbook",
         "source_vintage": "2021-gics",
     }
+
+
+def test_build_payload_activates_side_support_with_regime():
+    source = {
+        "method_version": "regime_bias_v1",
+        "source_method": "ism_survey_synthesis_v1",
+        "source_period": "2026-08",
+    }
+
+    payload = context_tool.build_industry_context_payload(
+        profile(),
+        tag_row(),
+        {"status": "resolved", "resolution": "provider"},
+        regime_bias="expansion",
+        regime_source=source,
+    )
+
+    assert payload["regime_bias"] == "expansion"
+    assert payload["side_support"] == "supports_long"
+    assert payload["regime_note"] is None
+    assert payload["regime_source"] == source
 
 
 def test_build_payload_unmapped_keeps_provider_fields_only():

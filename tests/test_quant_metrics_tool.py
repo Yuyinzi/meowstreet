@@ -84,19 +84,29 @@ class TestShortCheckPayload:
         assert payload["short_percent_of_float"] == pytest.approx(0.0126)
         assert payload["days_to_cover"]["value"] == pytest.approx(15.0)
         assert payload["dividend"]["yield"] == pytest.approx(0.0048)
-        assert len(payload["dividend"]["review_questions"]) == 3
 
     def test_tolerates_missing_fundamentals(self):
         payload = quant_metrics.short_check_payload(None, [1.0] * 30)
         assert payload["short_percent_of_float"] is None
         assert payload["days_to_cover"]["value"] is None
         assert payload["dividend"]["yield"] is None
+        assert payload["dividend"]["note"] == "dividend yield not reported by yahoo"
 
     def test_tolerates_partial_fields(self):
-        payload = quant_metrics.short_check_payload({}, [1.0] * 30)
+        payload = quant_metrics.short_check_payload(
+            {"provider": "yahoo"}, [1.0] * 30
+        )
         assert payload["short_percent_of_float"] is None
         assert payload["days_to_cover"]["status"] == "insufficient_data"
         assert payload["dividend"]["yield"] is None
+        assert payload["dividend"]["note"] == "dividend yield not reported by yahoo"
+
+    def test_zero_dividend_yield_has_no_missing_note(self):
+        payload = quant_metrics.short_check_payload(
+            {"provider": "yahoo", "dividend_yield": 0.0}, [1.0] * 30
+        )
+
+        assert payload["dividend"] == {"yield": 0.0}
 
 
 class TestBackwardRatiosPayload:
@@ -198,6 +208,94 @@ class TestBackwardRatiosPayload:
         ]
         for ratio in payload["ratios"]:
             assert ratio["value"] is None
+
+
+class TestStatementRatios:
+    def _facts(self, ebit_quarters=None, interest_quarters=None, ebit_annual=None,
+               assets_current=100.0, liabilities_current=40.0, assets=200.0):
+        facts = {}
+        if ebit_quarters is not None or ebit_annual is not None:
+            facts["ebit"] = {
+                "tag": "OperatingIncomeLoss",
+                "quarterly": [{"end": end, "val": val} for end, val in (ebit_quarters or [])],
+                "annual": [{"end": end, "val": val} for end, val in (ebit_annual or [])],
+                "instant": [],
+            }
+        if interest_quarters is not None:
+            facts["interest_expense"] = {
+                "tag": "InterestExpense",
+                "quarterly": [{"end": end, "val": val} for end, val in interest_quarters],
+                "annual": [],
+                "instant": [],
+            }
+        if assets_current is not None:
+            facts["assets_current"] = {"tag": "AssetsCurrent", "quarterly": [], "annual": [], "instant": [{"end": "2026-07-31", "val": assets_current}]}
+        if liabilities_current is not None:
+            facts["liabilities_current"] = {"tag": "LiabilitiesCurrent", "quarterly": [], "annual": [], "instant": [{"end": "2026-07-31", "val": liabilities_current}]}
+        if assets is not None:
+            facts["assets"] = {"tag": "Assets", "quarterly": [], "annual": [], "instant": [{"end": "2026-07-31", "val": assets}]}
+        return facts
+
+    def _four_quarters(self, val):
+        return [
+            ("2026-07-31", val),
+            ("2026-04-30", val),
+            ("2026-01-31", val),
+            ("2025-10-31", val),
+        ]
+
+    def test_computes_three_ratios_from_facts(self):
+        facts = self._facts(ebit_quarters=self._four_quarters(10.0), interest_quarters=self._four_quarters(4.0))
+        payload = quant_metrics.backward_ratios_payload({"enterprise_value": 800.0}, facts)
+
+        by_key = {ratio["key"]: ratio for ratio in payload["ratios"]}
+        assert by_key["interest_coverage"]["value"] == pytest.approx(2.5)
+        assert by_key["working_capital_to_total_assets"]["value"] == pytest.approx(0.3)
+        assert by_key["ev_to_ebit"]["value"] == pytest.approx(20.0)
+        assert payload["missing_inputs"] == []
+
+    def test_ttm_falls_back_to_latest_annual(self):
+        facts = self._facts(
+            ebit_quarters=[("2026-07-31", 30.0)],
+            ebit_annual=[("2026-01-31", 100.0)],
+            interest_quarters=None,
+        )
+        facts["interest_expense"] = {
+            "tag": "InterestExpense",
+            "quarterly": [],
+            "annual": [{"end": "2026-01-31", "val": 25.0}],
+            "instant": [],
+        }
+        payload = quant_metrics.backward_ratios_payload({}, facts)
+
+        ratio = next(r for r in payload["ratios"] if r["key"] == "interest_coverage")
+        assert ratio["value"] == pytest.approx(4.0)
+
+    def test_zero_interest_is_not_missing(self):
+        facts = self._facts(ebit_quarters=self._four_quarters(10.0), interest_quarters=self._four_quarters(0.0))
+        payload = quant_metrics.backward_ratios_payload({"enterprise_value": 800.0}, facts)
+
+        by_key = {ratio["key"]: ratio for ratio in payload["ratios"]}
+        assert by_key["interest_coverage"]["value"] is None
+        assert "no interest expense" in by_key["interest_coverage"]["note"]
+        assert payload["missing_inputs"] == []
+
+    def test_negative_ebit_blocks_ev_to_ebit_but_not_missing(self):
+        facts = self._facts(ebit_quarters=self._four_quarters(-5.0), interest_quarters=self._four_quarters(2.0))
+        payload = quant_metrics.backward_ratios_payload({"enterprise_value": 800.0}, facts)
+
+        by_key = {ratio["key"]: ratio for ratio in payload["ratios"]}
+        assert by_key["interest_coverage"]["value"] == pytest.approx(-2.5)
+        assert by_key["ev_to_ebit"]["value"] is None
+        assert "zero or negative" in by_key["ev_to_ebit"]["note"]
+        assert payload["missing_inputs"] == []
+
+    def test_partial_facts_mark_only_uncomputable_missing(self):
+        facts = self._facts(ebit_quarters=self._four_quarters(10.0), interest_quarters=self._four_quarters(4.0),
+                            assets_current=None)
+        payload = quant_metrics.backward_ratios_payload({"enterprise_value": 800.0}, facts)
+
+        assert payload["missing_inputs"] == ["working_capital_to_total_assets"]
 
 
 class TestEstimateConsensusPayload:
@@ -319,3 +417,92 @@ class TestEstimateRevisionTrend:
         assert result["direction"] == "flat"
         assert result["increases"] == 0
         assert result["decreases"] == 0
+
+
+def _ratings_snapshot(**overrides):
+    snapshot = {
+        "consensus": "Strong Buy",
+        "analyst_count": 60,
+        "strong_buy": 48,
+        "buy": 9,
+        "hold": 2,
+        "sell": 0,
+        "strong_sell": 1,
+        "pt_avg": 325.99,
+        "pt_median": 315.0,
+        "pt_low": 180.0,
+        "pt_high": 515.0,
+        "pt_count": 57,
+        "monthly_history": [
+            {"date": "2026-07-31", "strong_buy": 48, "buy": 10, "hold": 2, "sell": 0, "strong_sell": 1, "total": 61, "consensus": "Strong Buy"},
+            {"date": "2026-08-31", "strong_buy": 48, "buy": 9, "hold": 2, "sell": 0, "strong_sell": 1, "total": 60, "consensus": "Strong Buy"},
+        ],
+    }
+    snapshot.update(overrides)
+    return snapshot
+
+
+class TestAnalystRatingsPayload:
+    def test_none_snapshot_insufficient_data(self):
+        assert quant_metrics.analyst_ratings_payload(None, 220.0) == {"status": "insufficient_data"}
+
+    def test_missing_distribution_value_insufficient_data(self):
+        snapshot = _ratings_snapshot(strong_buy=None)
+        assert quant_metrics.analyst_ratings_payload(snapshot, 220.0) == {"status": "insufficient_data"}
+
+    def test_distribution_totals_and_rooms(self):
+        payload = quant_metrics.analyst_ratings_payload(_ratings_snapshot(), 220.0)
+        assert payload["status"] == "ok"
+        assert payload["buy_total"] == 57
+        assert payload["sell_total"] == 1
+        assert payload["upgrade_room"] == "available"
+        assert payload["downgrade_room"] == "available"
+        assert payload["price_target"]["avg"] == pytest.approx(325.99)
+
+    def test_all_buy_leaves_no_upgrade_room(self):
+        snapshot = _ratings_snapshot(hold=0, sell=0, strong_sell=0)
+        payload = quant_metrics.analyst_ratings_payload(snapshot, 220.0)
+        assert payload["upgrade_room"] == "none"
+        assert payload["downgrade_room"] == "available"
+
+    def test_all_sell_leaves_no_downgrade_room(self):
+        snapshot = _ratings_snapshot(strong_buy=0, buy=0, hold=0, sell=40, strong_sell=20)
+        payload = quant_metrics.analyst_ratings_payload(snapshot, 5.0)
+        assert payload["downgrade_room"] == "none"
+        assert payload["upgrade_room"] == "available"
+
+    def test_price_vs_target_upside(self):
+        payload = quant_metrics.analyst_ratings_payload(_ratings_snapshot(), 220.0)
+        pvt = payload["price_vs_target"]
+        assert pvt["upside_pct"] == pytest.approx(48.177, abs=0.01)
+        assert pvt["price_above_target"] is False
+
+    def test_price_above_target(self):
+        payload = quant_metrics.analyst_ratings_payload(_ratings_snapshot(), 400.0)
+        assert payload["price_vs_target"]["price_above_target"] is True
+        assert payload["price_vs_target"]["upside_pct"] == pytest.approx(-18.5, abs=0.01)
+
+    def test_price_vs_target_none_without_price(self):
+        payload = quant_metrics.analyst_ratings_payload(_ratings_snapshot(), None)
+        assert payload["price_vs_target"] is None
+
+    def test_price_vs_target_none_without_target(self):
+        payload = quant_metrics.analyst_ratings_payload(_ratings_snapshot(pt_avg=None), 220.0)
+        assert payload["price_vs_target"] is None
+
+    def test_monthly_trend_computed_totals(self):
+        payload = quant_metrics.analyst_ratings_payload(_ratings_snapshot(), 220.0)
+        trend = payload["monthly_trend"]
+        assert len(trend) == 2
+        assert trend[-1] == {
+            "date": "2026-08-31",
+            "buy_total": 57,
+            "hold": 2,
+            "sell_total": 1,
+            "total": 60,
+            "consensus": "Strong Buy",
+        }
+
+    def test_monthly_trend_empty_when_absent(self):
+        payload = quant_metrics.analyst_ratings_payload(_ratings_snapshot(monthly_history=None), 220.0)
+        assert payload["monthly_trend"] == []

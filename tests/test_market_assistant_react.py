@@ -630,6 +630,39 @@ async def test_first_turn_preserves_prior_provider_history_before_new_message():
 
 
 @pytest.mark.asyncio
+async def test_first_turn_appends_latest_page_snapshot_after_prior_history():
+    stream = _ScriptedStream([narration_step("这是基于最新快照的解读。")])
+    deps = recording_dependencies([], stream=stream)
+    prior = {
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "output_text", "text": "旧数据没有估值。"}],
+    }
+
+    result = await run_hybrid_narration(
+        {
+            "question": "重新解读 AEHR",
+            "answer_language": "zh",
+            "provider_history": [prior],
+            "attached_context": "AEHR Forward P/E: 58.00",
+        },
+        route=react_route(),
+        resolution=resolved_context("ctx_1"),
+        dependencies=deps,
+    )
+
+    items = deps.stream_turn.calls[0]["input_items"]
+    assert items[0] == prior
+    assert items[-1]["content"][0]["text"] == "重新解读 AEHR"
+    assert items[-1]["content"][1]["text"] == (
+        "Latest page snapshot attached for this request. "
+        "When it conflicts with older conversation data, use this snapshot: "
+        "AEHR Forward P/E: 58.00"
+    )
+    assert result["current_user_item"] == items[-1]
+
+
+@pytest.mark.asyncio
 async def test_duplicate_normalized_call_is_rejected_and_forces_final_narration():
     events = []
     repeated = vix_confirmation_call()

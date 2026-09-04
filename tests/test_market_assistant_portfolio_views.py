@@ -325,6 +325,7 @@ def test_compact_ticker_context_keeps_essentials():
         "industry": "Semiconductors",
         "cycle_tag": "cyclical",
         "regime_bias": "unknown",
+        "regime_source": None,
         "side_support": "unknown",
         "regime_note": "Side support cannot be determined.",
     }

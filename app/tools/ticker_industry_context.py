@@ -11,7 +11,8 @@ _SIDE_SUPPORT_BY_TAG_AND_REGIME = {
 }
 
 _REGIME_UNKNOWN_NOTE = (
-    "Side support cannot be determined until a deterministic GDP growth forecast exists."
+    "Side support is unavailable: the survey-based GDP growth direction "
+    "is mixed, missing, or stale."
 )
 
 
@@ -38,7 +39,9 @@ def side_support(cycle_tag, regime_bias):
     return _SIDE_SUPPORT_BY_TAG_AND_REGIME.get((tag, regime), "unknown")
 
 
-def build_industry_context_payload(profile, tag_row, resolution, regime_bias="unknown"):
+def build_industry_context_payload(
+    profile, tag_row, resolution, regime_bias="unknown", regime_source=None
+):
     status = resolution["status"]
     cycle_tag = tag_row["cycle_tag"] if status == "resolved" and tag_row else None
     support = side_support(cycle_tag, regime_bias) if cycle_tag else "unknown"
@@ -60,6 +63,7 @@ def build_industry_context_payload(profile, tag_row, resolution, regime_bias="un
         "provider_sector": profile.get("provider_sector"),
         "provider_industry": profile.get("provider_industry"),
         "regime_bias": regime_bias,
+        "regime_source": regime_source,
         "side_support": support,
         "regime_note": _REGIME_UNKNOWN_NOTE if regime_bias == "unknown" else None,
         "tag_provenance": (

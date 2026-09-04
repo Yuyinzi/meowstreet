@@ -343,10 +343,130 @@ def test_fetch_estimate_consensus_raises_on_404():
     def handler(request):
         return httpx.Response(404, text="Not Found")
 
-    with pytest.raises(ValueError, match="estimate consensus fetch failed for INTC: HTTP 404"):
+    with pytest.raises(ValueError, match="forecast data fetch failed for INTC: HTTP 404"):
         stockanalysis_screener.fetch_estimate_consensus("INTC", http_client=_mock_client(handler))
 
 
 def test_fetch_estimate_consensus_requires_symbol():
     with pytest.raises(ValueError, match="symbol is required"):
         stockanalysis_screener.fetch_estimate_consensus("   ")
+
+
+def _ratings_data_json(include_ratings=True, include_targets=True, include_history=True):
+    flat = [None]
+
+    def add(value):
+        flat.append(value)
+        return len(flat) - 1
+
+    root = {
+        "estimates": add({"stats": add({}), "table": add([])}),
+        "estimatesCharts": add({"eps": add({}), "revenue": add({})}),
+        "estimatesSource": add({"name": add("source")}),
+    }
+    if include_ratings:
+        root["currentRatings"] = add({
+            "consensus": add("Strong Buy"),
+            "score": add(8.583),
+            "count": add(60),
+            "strongBuy": add(48),
+            "buy": add(9),
+            "hold": add(2),
+            "sell": add(0),
+            "strongSell": add(1),
+        })
+    if include_targets:
+        root["priceTargets"] = add({
+            "avg": add(325.99),
+            "median": add(315.0),
+            "low": add(180.0),
+            "high": add(515.0),
+            "numPriceTargets": add(57),
+        })
+    if include_history:
+        root["recommendations"] = add([
+            add({
+                "date": add("2026-08-31"),
+                "strongBuy": add(48),
+                "buy": add(9),
+                "hold": add(2),
+                "sell": add(0),
+                "strongSell": add(1),
+                "total": add(60),
+                "consensus": add("Strong Buy"),
+            }),
+            add({"strongBuy": add(48)}),
+        ])
+    flat[0] = root
+    return json.dumps({"type": "data", "nodes": [{"type": "data", "data": flat}]})
+
+
+class TestParseAnalystRatings:
+    def test_extracts_ratings_targets_and_history(self):
+        result = stockanalysis_screener.parse_analyst_ratings(_ratings_data_json(), "nvda")
+
+        assert result["symbol"] == "NVDA"
+        assert result["consensus"] == "Strong Buy"
+        assert result["analyst_count"] == 60
+        assert result["strong_buy"] == 48
+        assert result["buy"] == 9
+        assert result["hold"] == 2
+        assert result["sell"] == 0
+        assert result["strong_sell"] == 1
+        assert result["price_target"] == {
+            "avg": 325.99,
+            "median": 315.0,
+            "low": 180.0,
+            "high": 515.0,
+            "count": 57,
+        }
+        assert result["monthly_history"] == [{
+            "date": "2026-08-31",
+            "strong_buy": 48,
+            "buy": 9,
+            "hold": 2,
+            "sell": 0,
+            "strong_sell": 1,
+            "total": 60,
+            "consensus": "Strong Buy",
+        }]
+        assert result["provider"] == "stockanalysis"
+
+    def test_missing_current_ratings_raises(self):
+        with pytest.raises(ValueError, match="analyst ratings unavailable for NVDA"):
+            stockanalysis_screener.parse_analyst_ratings(_ratings_data_json(include_ratings=False), "NVDA")
+
+    def test_missing_price_targets_degrades_to_none(self):
+        result = stockanalysis_screener.parse_analyst_ratings(_ratings_data_json(include_targets=False), "NVDA")
+        assert result["price_target"] is None
+
+    def test_missing_history_degrades_to_empty(self):
+        result = stockanalysis_screener.parse_analyst_ratings(_ratings_data_json(include_history=False), "NVDA")
+        assert result["monthly_history"] == []
+
+    def test_requires_symbol(self):
+        with pytest.raises(ValueError, match="symbol is required"):
+            stockanalysis_screener.parse_analyst_ratings(_ratings_data_json(), "   ")
+
+
+def test_fetch_analyst_ratings_requests_data_json_without_brotli():
+    seen = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        seen["accept_encoding"] = request.headers.get("accept-encoding", "")
+        return httpx.Response(200, text=_ratings_data_json())
+
+    result = stockanalysis_screener.fetch_analyst_ratings("NVDA", http_client=_mock_client(handler))
+
+    assert seen["url"] == "https://stockanalysis.com/stocks/nvda/forecast/__data.json"
+    assert "br" not in seen["accept_encoding"]
+    assert result["analyst_count"] == 60
+
+
+def test_fetch_analyst_ratings_raises_on_404():
+    def handler(request):
+        return httpx.Response(404, text="Not Found")
+
+    with pytest.raises(ValueError, match="forecast data fetch failed for NVDA: HTTP 404"):
+        stockanalysis_screener.fetch_analyst_ratings("NVDA", http_client=_mock_client(handler))

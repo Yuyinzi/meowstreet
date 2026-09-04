@@ -196,19 +196,30 @@ async def test_complete_structured_json_object_rejects_unvalidated_provider_text
 @pytest.mark.parametrize("terminal_type", ["response.incomplete", "response.failed"])
 async def test_complete_structured_json_object_rejects_unsuccessful_stream(
     terminal_type,
+    caplog,
 ):
     client = FakeClient(
         stream_events=[SimpleNamespace(type=terminal_type, response=None)]
     )
 
-    with pytest.raises(ValueError, match="structured response stream did not complete"):
-        await complete_structured(
-            client,
-            model="assistant-model",
-            prompt=[],
-            schema_type=DummyStructured,
-            structured_output_mode="json_object",
-        )
+    with caplog.at_level(logging.INFO):
+        with pytest.raises(
+            ValueError, match="structured response stream did not complete"
+        ):
+            await complete_structured(
+                client,
+                model="assistant-model",
+                prompt=[],
+                schema_type=DummyStructured,
+                structured_output_mode="json_object",
+            )
+
+    record = next(
+        record
+        for record in caplog.records
+        if "response stream terminated" in record.getMessage()
+    )
+    assert record.levelno == logging.ERROR
 
 
 @pytest.mark.asyncio
@@ -967,13 +978,21 @@ async def test_stream_response_turn_rejects_malformed_function_arguments():
 
 
 @pytest.mark.asyncio
-async def test_stream_response_turn_rejects_uncompleted_stream():
+async def test_stream_response_turn_rejects_uncompleted_stream(caplog):
     client = FakeClient(
         stream_events=[SimpleNamespace(type="response.incomplete", response=None)]
     )
 
-    with pytest.raises(ValueError, match="response stream did not complete"):
-        await stream_response_turn(client, **tool_call_kwargs())
+    with caplog.at_level(logging.INFO):
+        with pytest.raises(ValueError, match="response stream did not complete"):
+            await stream_response_turn(client, **tool_call_kwargs())
+
+    record = next(
+        record
+        for record in caplog.records
+        if "response turn terminated" in record.getMessage()
+    )
+    assert record.levelno == logging.ERROR
 
 
 @pytest.mark.asyncio

@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -73,6 +74,25 @@ def connect(db_path=DEFAULT_DB_PATH):
             analyst_count integer,
             captured_at text not null
         );
+        create table if not exists analyst_ratings_snapshots (
+            symbol text not null primary key,
+            consensus text,
+            score real,
+            analyst_count integer,
+            strong_buy integer,
+            buy integer,
+            hold integer,
+            sell integer,
+            strong_sell integer,
+            pt_avg real,
+            pt_median real,
+            pt_low real,
+            pt_high real,
+            pt_count integer,
+            monthly_history_json text,
+            provider text not null,
+            captured_at text not null
+        );
         """
     )
     return con
@@ -100,7 +120,7 @@ def fundamentals_fresh(row, max_age_seconds=72000):
     return (datetime.now(UTC) - fetched).total_seconds() <= max_age_seconds
 
 
-def estimate_consensus_fresh(row, max_age_seconds=72000):
+def _captured_at_fresh(row, max_age_seconds):
     if row is None:
         return False
     captured_at = row.get("captured_at")
@@ -113,6 +133,14 @@ def estimate_consensus_fresh(row, max_age_seconds=72000):
     if captured.tzinfo is None:
         captured = captured.replace(tzinfo=UTC)
     return (datetime.now(UTC) - captured).total_seconds() <= max_age_seconds
+
+
+def estimate_consensus_fresh(row, max_age_seconds=72000):
+    return _captured_at_fresh(row, max_age_seconds)
+
+
+def analyst_ratings_fresh(row, max_age_seconds=72000):
+    return _captured_at_fresh(row, max_age_seconds)
 
 
 def save_estimate_consensus_snapshot(con, symbol, consensus):
@@ -177,6 +205,70 @@ def load_estimate_consensus_history(con, symbol, since_iso):
         (normalized, since_iso),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def save_analyst_ratings_snapshot(con, symbol, ratings):
+    normalized = normalize_symbol(symbol)
+    provider = str(ratings.get("provider") or "").strip()
+    if not provider:
+        raise ValueError(f"provider is required for {normalized}")
+    captured_at = ratings.get("captured_at") or datetime.now(UTC).isoformat()
+    price_target = ratings.get("price_target") or {}
+    monthly_history = ratings.get("monthly_history") or []
+    con.execute(
+        """
+        insert or replace into analyst_ratings_snapshots(
+            symbol, consensus, score, analyst_count,
+            strong_buy, buy, hold, sell, strong_sell,
+            pt_avg, pt_median, pt_low, pt_high, pt_count,
+            monthly_history_json, provider, captured_at
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            normalized,
+            ratings.get("consensus"),
+            ratings.get("score"),
+            ratings.get("analyst_count"),
+            ratings.get("strong_buy"),
+            ratings.get("buy"),
+            ratings.get("hold"),
+            ratings.get("sell"),
+            ratings.get("strong_sell"),
+            price_target.get("avg"),
+            price_target.get("median"),
+            price_target.get("low"),
+            price_target.get("high"),
+            price_target.get("count"),
+            json.dumps(monthly_history),
+            provider,
+            captured_at,
+        ),
+    )
+    con.commit()
+
+
+def load_latest_analyst_ratings(con, symbol):
+    normalized = normalize_symbol(symbol)
+    row = con.execute(
+        """
+        select symbol, consensus, score, analyst_count,
+               strong_buy, buy, hold, sell, strong_sell,
+               pt_avg, pt_median, pt_low, pt_high, pt_count,
+               monthly_history_json, provider, captured_at
+        from analyst_ratings_snapshots
+        where symbol = ?
+        """,
+        (normalized,),
+    ).fetchone()
+    if row is None:
+        return None
+    result = dict(row)
+    history_json = result.pop("monthly_history_json")
+    try:
+        result["monthly_history"] = json.loads(history_json) if history_json else []
+    except (ValueError, TypeError):
+        result["monthly_history"] = []
+    return result
 
 
 def save_ticker_profile(con, profile):

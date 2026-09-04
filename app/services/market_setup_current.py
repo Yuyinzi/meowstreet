@@ -1,5 +1,4 @@
 import hashlib
-import logging
 from datetime import date
 
 from app.db import benchmark_market_data
@@ -10,11 +9,11 @@ from app.db import market_assistant as market_assistant_db
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.services import consumer_sentiment_dashboard
 from app.services import economic_confirmation as economic_confirmation_dashboard
-from app.services import ism_services_dashboard
+from app.services import survey_synthesis_current
+from app.runtime_logging import get_runtime_logger
 from app.tools import (
     housing_permits,
     ism_macro_signal,
-    ism_survey_synthesis,
     macro_growth_cycle,
     market_phase,
     market_setup,
@@ -29,6 +28,7 @@ from app.tools import (
 from app.tools import us_rates_liquidity as us_rates_liquidity_tool
 
 DEFAULT_DB_PATH = market_assistant_db.DEFAULT_DB_PATH
+LOGGER = get_runtime_logger(__name__)
 
 _RATES_LIQUIDITY_SCHEMA_DDL = """
 create table if not exists us_rate_series (
@@ -468,31 +468,12 @@ def _build_current_state(con, as_of_date):
         fomc_latest_tone = us_rates_liquidity_db.load_latest_approved_macro_event_tone(
             con, "fomc_meeting", as_of_date
         )
-    ism_industry_breadth = _load_ism_industry_breadth(con)
     ism_at_a_glance = growth_cycle.load_latest_ism_at_a_glance_rows(con)
-    ism_reports = growth_cycle.load_recent_ism_report_snapshots(con, limit=6)
-    ism_macro_signal_result = None
-    if ism_reports:
-        report_ids = [r["report_id"] for r in ism_reports]
-        report_at_a_glance = growth_cycle.load_ism_at_a_glance_rows_for_reports(
-            con, report_ids
-        )
-        try:
-            ism_macro_signal_result = ism_macro_signal.build_ism_macro_signal(
-                ism_reports,
-                report_at_a_glance,
-                industry_breadth=ism_industry_breadth,
-            )
-        except ValueError:
-            logging.warning(
-                "ism macro signal build failed for market setup", exc_info=True
-            )
+    survey_inputs = survey_synthesis_current.load_survey_synthesis_inputs(con)
+    ism_reports = survey_inputs["ism_reports"]
+    ism_macro_signal_result = survey_inputs["ism_macro_signal_result"]
+    survey_synthesis_result = survey_inputs["survey_synthesis_result"]
     growth_cycle_data = dashboard.get("macro", {}).get("growth_cycle", {})
-    ism_services_data = ism_services_dashboard.load_overview(con)
-    survey_synthesis_result = ism_survey_synthesis.build_survey_synthesis(
-        ism_macro_signal_result,
-        ism_services_data["signal"],
-    )
     fomc_tone_headline = macro_growth_cycle.build_fomc_tone_headline(fomc_latest_tone)
     m2_headline = macro_growth_cycle.build_m2_money_supply_headline(growth_cycle_data)
     inflation_context = macro_growth_cycle.build_inflation_context_headline(
@@ -512,7 +493,7 @@ def _build_current_state(con, as_of_date):
     try:
         consumer_sentiment_summary = consumer_sentiment_dashboard.load_overview(con)
     except (ValueError, TypeError, RuntimeError):
-        logging.warning(
+        LOGGER.warning(
             "consumer sentiment load failed for market setup", exc_info=True
         )
     housing_permits_signal = None
@@ -526,7 +507,7 @@ def _build_current_state(con, as_of_date):
             as_of_date,
         )
     except (ValueError, TypeError, RuntimeError):
-        logging.warning("housing permits load failed for market setup", exc_info=True)
+        LOGGER.warning("housing permits load failed for market setup", exc_info=True)
     nfib_sbo_observations = (
         macro_indicators_db.load_macro_indicator_observations_for_series(
             con,
@@ -562,7 +543,7 @@ def _build_current_state(con, as_of_date):
             as_of_date,
         )
     except Exception:
-        logging.warning(
+        LOGGER.warning(
             "economic confirmation overview load failed for market setup",
             exc_info=True,
         )
@@ -582,7 +563,7 @@ def _build_current_state(con, as_of_date):
         if payload:
             observation = {"cyclical_commodities": payload}
     except Exception:
-        logging.warning(
+        LOGGER.warning(
             "commodities load failed for market setup",
             exc_info=True,
         )
@@ -638,12 +619,6 @@ def _build_current_state(con, as_of_date):
     return setup_result, inputs, evidence_layers
 
 
-def _load_ism_industry_breadth(con):
-    from app import api
-
-    return api._load_latest_ism_industry_breadth(con)
-
-
 def _load_market_phase_payload(con):
     from app import api
 
@@ -655,7 +630,7 @@ def _load_market_phase_payload(con):
             benchmark_ids=api.US_BENCHMARK_IDS,
         )
     except (ValueError, TypeError, RuntimeError):
-        logging.warning("market phase load failed for market setup", exc_info=True)
+        LOGGER.warning("market phase load failed for market setup", exc_info=True)
         return None
 
 
@@ -683,7 +658,7 @@ def _load_rates_liquidity_payload(con):
             credit_macro_series_points=credit_macro_points,
         )
     except (ValueError, TypeError, RuntimeError):
-        logging.warning("rates liquidity load failed for market setup", exc_info=True)
+        LOGGER.warning("rates liquidity load failed for market setup", exc_info=True)
         return None
 
 
@@ -691,7 +666,7 @@ def _load_gdp_rows(con):
     try:
         return gdp_market_relationships.load_quad_rows(con, "us_sp500_gdp")
     except Exception:
-        logging.warning("gdp quad rows load failed for market setup", exc_info=True)
+        LOGGER.warning("gdp quad rows load failed for market setup", exc_info=True)
         return None
 
 

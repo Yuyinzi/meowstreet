@@ -397,6 +397,10 @@
           : state.deepAnalysisRequested
       ),
     };
+    const attachedContext = String(options.attachedContext || "").trim();
+    if (attachedContext) {
+      payload.attached_context = attachedContext;
+    }
     if (state.lastContextId) {
       payload.previous_context_id = state.lastContextId;
     }
@@ -590,7 +594,10 @@
     retry.addEventListener("click", () => {
       if (state.busy) return;
       stream.element.remove();
-      sendQuestion(question, { recordUser: false });
+      sendQuestion(question, {
+        recordUser: false,
+        attachedContext: stream.attachedContext,
+      });
     });
     notice.appendChild(text);
     notice.appendChild(retry);
@@ -779,8 +786,8 @@
     }
   }
 
-  async function submitQuestionStream(question, handlers) {
-    const payload = buildPayload(question);
+  async function submitQuestionStream(question, handlers, options = {}) {
+    const payload = buildPayload(question, options);
     const response = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -851,28 +858,33 @@
     el.question.value = "";
     const stream = createStreamingAssistantMessage();
     stream.question = question;
+    stream.attachedContext = options && options.attachedContext;
     renderThinking();
     const timing = createClientTiming();
     let requestId = null;
     try {
-      await submitQuestionStream(question, {
-        onEvent: (event) => {
-          timing.markFirstEvent();
-          if (event.type === "resolution" || event.type === "complete") {
-            requestId = event.request_id || requestId;
-          }
-          if (event.type === "answer_delta") {
-            timing.markFirstDelta();
-          }
-          if (event.type === "validation") {
-            timing.markValidation();
-          }
-          if (event.type === "complete") {
-            timing.markComplete();
-          }
-          applyStreamEvent(stream, event);
+      await submitQuestionStream(
+        question,
+        {
+          onEvent: (event) => {
+            timing.markFirstEvent();
+            if (event.type === "resolution" || event.type === "complete") {
+              requestId = event.request_id || requestId;
+            }
+            if (event.type === "answer_delta") {
+              timing.markFirstDelta();
+            }
+            if (event.type === "validation") {
+              timing.markValidation();
+            }
+            if (event.type === "complete") {
+              timing.markComplete();
+            }
+            applyStreamEvent(stream, event);
+          },
         },
-      });
+        options || {}
+      );
       emitClientTiming(requestId, timing.durations());
     } catch (error) {
       state.error = String(error.message || "request failed");
@@ -1056,7 +1068,7 @@
       const el = elements();
       if (el.question) {
         el.question.value = question;
-        handleSubmit();
+        sendQuestion(question, { attachedContext: seedText });
       }
     }
   }

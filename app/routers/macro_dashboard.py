@@ -1,6 +1,5 @@
 import functools
 import inspect
-import logging
 import time
 from datetime import date
 from datetime import datetime
@@ -17,6 +16,7 @@ from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.services import consumer_sentiment_dashboard, ism_services_dashboard
 from app.services import economic_confirmation as economic_confirmation_dashboard
 from app.services import market_setup_current
+from app.runtime_logging import get_runtime_logger
 from app.tools import (
     housing_permits,
     ism_industry_analysis,
@@ -33,6 +33,7 @@ from app.tools import (
 from app.tools import benchmark_market_data as benchmark_market_data_tool
 
 router = APIRouter(prefix="/api/macro-dashboard", tags=["macro-dashboard"])
+LOGGER = get_runtime_logger(__name__)
 
 _DASHBOARD_CACHE = {}
 _DASHBOARD_CACHE_TTL_SECONDS = 300
@@ -108,7 +109,7 @@ def _survey_synthesis_direction(con):
                 industry_breadth=ism_industry_breadth,
             )
         except ValueError:
-            logging.warning("ism macro signal build failed", exc_info=True)
+            LOGGER.warning("ism macro signal build failed", exc_info=True)
             ism_macro_signal_result = None
     ism_services_data = ism_services_dashboard.load_overview(con)
     survey_synthesis_result = ism_survey_synthesis.build_survey_synthesis(
@@ -362,7 +363,7 @@ def macro_dashboard_growth_cycle():
                     industry_breadth=ism_industry_breadth,
                 )
             except ValueError:
-                logging.warning("ism macro signal build failed", exc_info=True)
+                LOGGER.warning("ism macro signal build failed", exc_info=True)
                 ism_macro_signal_result = {
                     "version": ism_macro_signal.ISM_MACRO_SIGNAL_VERSION,
                     "status": "invalid_data",

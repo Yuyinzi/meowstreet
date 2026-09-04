@@ -1110,7 +1110,7 @@ async def test_stage_logs_include_request_id_and_exclude_privacy(caplog):
     stage_lines = [
         record.getMessage()
         for record in caplog.records
-        if record.name == "uvicorn.error"
+        if record.name == market_assistant.LOGGER.name
         and "market assistant stage" in record.getMessage()
     ]
     expected_stages = {
@@ -1151,7 +1151,7 @@ def _observed_stages(caplog):
     stage_lines = [
         record.getMessage()
         for record in caplog.records
-        if record.name == "uvicorn.error"
+        if record.name == market_assistant.LOGGER.name
         and "market assistant stage" in record.getMessage()
     ]
     return {line.split("stage=")[1].split()[0] for line in stage_lines}
@@ -1190,7 +1190,7 @@ async def test_react_round_completed_stage_not_recorded_without_optional_round(c
 
 
 @pytest.mark.asyncio
-async def test_stream_answer_question_sends_error_and_stops_without_trace():
+async def test_stream_answer_question_sends_error_and_stops_without_trace(caplog):
     deps = hybrid_dependencies()
 
     def fail_save(con, *, artifacts, answer_trace):
@@ -1198,17 +1198,25 @@ async def test_stream_answer_question_sends_error_and_stops_without_trace():
 
     deps.save_bundle = fail_save
 
-    events = [
-        event
-        async for event in market_assistant.stream_answer_question(
-            current_question("现在市场怎么样？"), dependencies=deps
-        )
-    ]
+    with caplog.at_level(logging.INFO):
+        events = [
+            event
+            async for event in market_assistant.stream_answer_question(
+                current_question("现在市场怎么样？"), dependencies=deps
+            )
+        ]
 
     assert events[-1]["type"] == "error"
     assert events[-1]["message"] == "market assistant service is unavailable"
     assert not any(event["type"] == "complete" for event in events)
     assert deps.saved_trace is None
+    record = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "market assistant stream failed"
+    )
+    assert record.levelno == logging.ERROR
+    assert record.exc_info is not None
 
 
 @pytest.mark.asyncio

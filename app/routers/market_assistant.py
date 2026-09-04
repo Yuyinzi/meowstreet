@@ -1,5 +1,4 @@
 import json
-import logging
 import secrets
 from time import monotonic
 from typing import Literal
@@ -20,13 +19,13 @@ from app.services.market_assistant_llm import complete_structured
 from app.services.market_assistant_llm import stream_response_turn
 from app.services.market_assistant_research import build_research_provider
 from app.services.market_setup_current import resolve_current_explanation
+from app.runtime_logging import get_runtime_logger
 from app.tools.market_assistant_answers import detect_answer_language
 from app.tools.market_assistant_claim_audit import ClaimAuditSchema
 from app.tools.market_assistant_knowledge import load_knowledge_catalog
 
 router = APIRouter(prefix="/api/market-assistant", tags=["market-assistant"])
-
-STREAM_LOGGER = logging.getLogger("uvicorn.error")
+LOGGER = get_runtime_logger(__name__)
 
 _ARTIFACT_CORRUPTION_PREFIXES = frozenset(
     {
@@ -58,6 +57,7 @@ class _QuestionRequest(BaseModel):
     conversation_bootstrap: list["_ConversationBootstrapMessage"] | None = Field(
         default=None, max_length=1000
     )
+    attached_context: str | None = Field(default=None, min_length=1, max_length=50000)
     deep_research_requested: bool = False
     external_search_requested: bool = False
     deep_analysis_requested: bool = Field(default=False, strict=True)
@@ -360,7 +360,7 @@ async def _stream_answer_events(request, dependencies, started_at):
         ):
             if not first_answer_delta_sent and event.get("type") == "answer_delta":
                 first_answer_delta_sent = True
-                STREAM_LOGGER.info(
+                LOGGER.info(
                     "market assistant stage stage=first_ndjson_answer_delta_sent "
                     "request_id=%s elapsed_seconds=%.2f",
                     request_id,

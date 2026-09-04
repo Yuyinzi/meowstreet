@@ -202,6 +202,32 @@ def test_external_search_requested_flows_to_service(assistant_env, monkeypatch):
     assert captured["request"]["deep_research_requested"] is False
 
 
+def test_attached_context_flows_to_service(assistant_env, monkeypatch):
+    captured = {}
+
+    async def fake_answer_question(request, *, dependencies):
+        captured["request"] = request
+        return {"resolution": {"mode": "current"}}
+
+    monkeypatch.setattr(
+        market_assistant_service, "answer_question", fake_answer_question
+    )
+
+    response = client.post(
+        "/api/market-assistant/questions",
+        json={
+            "question": "解读一下 AEHR 的量化体检结果",
+            "mode": "current",
+            "conversation_id": "conv_existing",
+            "attached_context": "AEHR Forward P/E: 58.00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["request"]["conversation_id"] == "conv_existing"
+    assert captured["request"]["attached_context"] == "AEHR Forward P/E: 58.00"
+
+
 def test_question_accepts_deep_analysis_without_external_search(
     assistant_env, monkeypatch
 ):
@@ -799,7 +825,7 @@ def test_stream_logs_first_ndjson_answer_delta_sent_with_request_id(
     stage_lines = [
         record.getMessage()
         for record in caplog.records
-        if record.name == "uvicorn.error"
+        if record.name == market_assistant_router.LOGGER.name
         and "stage=first_ndjson_answer_delta_sent" in record.getMessage()
     ]
     assert len(stage_lines) == 1
@@ -809,7 +835,7 @@ def test_stream_logs_first_ndjson_answer_delta_sent_with_request_id(
     combined = " ".join(
         record.getMessage()
         for record in caplog.records
-        if record.name == "uvicorn.error"
+        if record.name == market_assistant_router.LOGGER.name
     )
     assert "Why?" not in combined
 

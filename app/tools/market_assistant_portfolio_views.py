@@ -12,6 +12,7 @@ _CONTEXT_KEYS = (
     "industry",
     "cycle_tag",
     "regime_bias",
+    "regime_source",
     "side_support",
     "regime_note",
 )

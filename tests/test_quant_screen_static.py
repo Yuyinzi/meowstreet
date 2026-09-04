@@ -60,7 +60,7 @@ def test_quant_screen_wires_panel_clicks_and_auto_interpretation():
     assert "/api/ticker-context/" in panel_source
     assert "/api/ticker-quant/" in panel_source
     assert "estimateConsensusLine" in panel_source
-    assert "Consensus (" in panel_source
+    assert "Estimate Consensus" in panel_source
 
 
 def test_ticker_context_auto_interprets_quant_result():
@@ -68,3 +68,59 @@ def test_ticker_context_auto_interprets_quant_result():
 
     assert "openWithContext" in source
     assert "量化体检结果" in source
+
+
+def test_ticker_context_quant_card_offers_forced_refresh():
+    source = (ROOT / "static" / "ticker-context.js").read_text(encoding="utf-8")
+
+    assert 'id="quantRefresh"' in source
+    assert "refresh=true" in source
+    assert "Refreshing…" in source
+
+
+def test_ticker_context_discards_stale_quant_responses():
+    source = (ROOT / "static" / "ticker-context.js").read_text(encoding="utf-8")
+
+    assert "var quantRequestId = 0;" in source
+    assert "requestId !== quantRequestId" in source
+
+
+def test_ticker_context_discards_peer_response_after_quant_refresh():
+    source = (ROOT / "static" / "ticker-context.js").read_text(encoding="utf-8")
+
+    assert "var peerRequestId = quantRequestId;" in source
+    assert source.count("peerRequestId !== quantRequestId") == 2
+
+
+def test_ticker_context_disables_peer_comparison_during_refresh():
+    source = (ROOT / "static" / "ticker-context.js").read_text(encoding="utf-8")
+
+    assert 'var peerApply = document.getElementById("quantPeerApply");' in source
+    assert "peerApply.disabled = true;" in source
+    assert "peerApply.disabled = false;" in source
+
+
+def test_ticker_views_explain_unavailable_dividend_and_ratios():
+    context_source = (ROOT / "static" / "ticker-context.js").read_text(
+        encoding="utf-8"
+    )
+    panel_source = (ROOT / "static" / "quant-screen-ticker-panel.js").read_text(
+        encoding="utf-8"
+    )
+
+    for source in (context_source, panel_source):
+        assert "escapeHtml(dividend.note)" in source
+        assert "escapeHtml(ratio.note)" in source
+        assert "dividend.yield == null && dividend.note" in source
+
+
+def test_ticker_views_label_unreported_dividend_yield():
+    context_source = (ROOT / "static" / "ticker-context.js").read_text(
+        encoding="utf-8"
+    )
+    panel_source = (ROOT / "static" / "quant-screen-ticker-panel.js").read_text(
+        encoding="utf-8"
+    )
+
+    for source in (context_source, panel_source):
+        assert 'dividend.yield == null ? "Not reported" : fmtPct(dividend.yield)' in source

@@ -1,6 +1,5 @@
 import inspect
 import json
-import logging
 from time import monotonic
 from typing import Awaitable
 
@@ -10,10 +9,10 @@ from app.tools.market_assistant_plans import TaskPlanSchema
 from app.tools.market_assistant_plans import registered_operation_ids
 from app.tools.market_assistant_plans import validate_task_plan
 from app.tools.market_assistant_stream import AnswerTextStreamExtractor
+from app.runtime_logging import get_runtime_logger
 
 
-LOGGER = logging.getLogger(__name__)
-STREAM_LOGGER = logging.getLogger("uvicorn.error")
+LOGGER = get_runtime_logger(__name__)
 
 
 async def complete_structured(
@@ -28,7 +27,7 @@ async def complete_structured(
 ) -> Awaitable[dict]:
     if structured_output_mode == "json_object":
         request_started_at = monotonic()
-        STREAM_LOGGER.info("market assistant response stream request started")
+        LOGGER.info("market assistant response stream request started")
         stream = await client.responses.create(
             model=model,
             input=_json_object_prompt(prompt, schema_type),
@@ -36,7 +35,7 @@ async def complete_structured(
             reasoning={"effort": reasoning_effort},
             stream=True,
         )
-        STREAM_LOGGER.info(
+        LOGGER.info(
             "market assistant response stream connected elapsed_seconds=%.2f",
             monotonic() - request_started_at,
         )
@@ -73,12 +72,12 @@ async def _collect_response_stream(stream, stream_observer=None):
     extractor = None
     if stream_observer is not None:
         extractor = AnswerTextStreamExtractor()
-    STREAM_LOGGER.info("market assistant response stream started")
+    LOGGER.info("market assistant response stream started")
     async for event in stream:
         event_type = _event_value(event, "type") or "unknown"
         if not first_event_received:
             first_event_received = True
-            STREAM_LOGGER.info(
+            LOGGER.info(
                 "market assistant response stream first event event_type=%s elapsed_seconds=%.2f",
                 event_type,
                 monotonic() - started_at,
@@ -111,7 +110,7 @@ async def _collect_response_stream(stream, stream_observer=None):
             completed_response = _event_value(event, "response")
             break
         if event_type in {"response.incomplete", "response.failed"}:
-            LOGGER.warning(
+            LOGGER.error(
                 "market assistant response stream terminated event_type=%s elapsed_seconds=%.2f event_counts=%s",
                 event_type,
                 monotonic() - started_at,
@@ -133,7 +132,7 @@ async def _collect_response_stream(stream, stream_observer=None):
     _log_stream_usage(
         completed_response, elapsed_seconds, first_reasoning_at, first_output_at
     )
-    STREAM_LOGGER.info(
+    LOGGER.info(
         "market assistant response stream completed elapsed_seconds=%.2f event_counts=%s",
         elapsed_seconds,
         event_counts,
@@ -159,7 +158,7 @@ def _log_stream_usage(
     usage = _event_value(completed_response, "usage")
     if usage is None:
         return
-    STREAM_LOGGER.info(
+    LOGGER.info(
         "market assistant response usage "
         "input_tokens=%s cached_tokens=%s output_tokens=%s reasoning_tokens=%s "
         "elapsed_seconds=%.2f first_reasoning_seconds=%s first_output_seconds=%s",
@@ -225,7 +224,7 @@ async def stream_response_turn(
     observer=None,
 ):
     request_started_at = monotonic()
-    STREAM_LOGGER.info("market assistant response turn request started")
+    LOGGER.info("market assistant response turn request started")
     stream = await client.responses.create(
         model=model,
         instructions=instructions,
@@ -234,7 +233,7 @@ async def stream_response_turn(
         reasoning={"effort": reasoning_effort},
         stream=True,
     )
-    STREAM_LOGGER.info(
+    LOGGER.info(
         "market assistant response turn connected elapsed_seconds=%.2f",
         monotonic() - request_started_at,
     )
@@ -257,12 +256,12 @@ async def _collect_response_turn(stream, *, observer, started_at):
     first_output_at = None
     first_visible_at = None
     reasoning_started_emitted = False
-    STREAM_LOGGER.info("market assistant response turn started")
+    LOGGER.info("market assistant response turn started")
     async for event in stream:
         event_type = _event_value(event, "type") or "unknown"
         if not first_event_received:
             first_event_received = True
-            STREAM_LOGGER.info(
+            LOGGER.info(
                 "market assistant response turn first event event_type=%s elapsed_seconds=%.2f",
                 event_type,
                 monotonic() - started_at,
@@ -329,7 +328,7 @@ async def _collect_response_turn(stream, *, observer, started_at):
             completed_response = _event_value(event, "response")
             break
         if event_type in {"response.incomplete", "response.failed"}:
-            LOGGER.warning(
+            LOGGER.error(
                 "market assistant response turn terminated event_type=%s elapsed_seconds=%.2f event_counts=%s",
                 event_type,
                 monotonic() - started_at,
@@ -343,7 +342,7 @@ async def _collect_response_turn(stream, *, observer, started_at):
     _log_stream_usage(
         completed_response, elapsed_seconds, first_reasoning_at, first_output_at
     )
-    STREAM_LOGGER.info(
+    LOGGER.info(
         "market assistant response turn completed "
         "first_reasoning_seconds=%s first_output_seconds=%s "
         "first_visible_delta_seconds=%s completed_seconds=%.2f event_counts=%s",

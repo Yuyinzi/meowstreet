@@ -187,7 +187,7 @@ def parse_forecast_data(json_text, symbol, today=None):
     }
 
 
-def fetch_estimate_consensus(symbol, http_client=None):
+def fetch_forecast_document(symbol, http_client=None):
     normalized = _normalize_symbol(symbol)
     client = _client(http_client)
     url = _FORECAST_DATA_URL.format(symbol=normalized.lower())
@@ -199,15 +199,99 @@ def fetch_estimate_consensus(symbol, http_client=None):
             timeout=_FETCH_TIMEOUT_SECONDS,
             browser=True,
         )
-        return parse_forecast_data(response.content.decode("utf-8"), normalized)
+        return response.content.decode("utf-8")
     except httpx.HTTPStatusError as exc:
         if exc.response is not None:
             raise ValueError(
-                f"estimate consensus fetch failed for {normalized}: HTTP {exc.response.status_code} {exc.response.reason_phrase}"
+                f"forecast data fetch failed for {normalized}: HTTP {exc.response.status_code} {exc.response.reason_phrase}"
             ) from exc
-        raise ValueError(f"estimate consensus fetch failed for {normalized}: {exc}") from exc
+        raise ValueError(f"forecast data fetch failed for {normalized}: {exc}") from exc
     except httpx.HTTPError as exc:
-        raise ValueError(f"estimate consensus fetch failed for {normalized}: {exc}") from exc
+        raise ValueError(f"forecast data fetch failed for {normalized}: {exc}") from exc
+
+
+def fetch_estimate_consensus(symbol, http_client=None):
+    normalized = _normalize_symbol(symbol)
+    return parse_forecast_data(fetch_forecast_document(normalized, http_client=http_client), normalized)
+
+
+_RATING_COUNT_KEYS = ("strongBuy", "buy", "hold", "sell", "strongSell")
+
+
+def _parse_price_target(targets):
+    if not isinstance(targets, dict):
+        return None
+    avg = targets.get("avg")
+    count = targets.get("numPriceTargets")
+    if avg is None or count is None:
+        return None
+    return {
+        "avg": float(avg),
+        "median": float(targets["median"]) if targets.get("median") is not None else None,
+        "low": float(targets["low"]) if targets.get("low") is not None else None,
+        "high": float(targets["high"]) if targets.get("high") is not None else None,
+        "count": int(count),
+    }
+
+
+def _parse_monthly_history(recommendations):
+    if not isinstance(recommendations, list):
+        return []
+    entries = []
+    for item in recommendations:
+        if not isinstance(item, dict):
+            continue
+        date = item.get("date")
+        if date is None:
+            continue
+        if any(not isinstance(item.get(key), (int, float)) for key in _RATING_COUNT_KEYS):
+            continue
+        entries.append({
+            "date": str(date),
+            "strong_buy": int(item["strongBuy"]),
+            "buy": int(item["buy"]),
+            "hold": int(item["hold"]),
+            "sell": int(item["sell"]),
+            "strong_sell": int(item["strongSell"]),
+            "total": int(item["total"]) if isinstance(item.get("total"), (int, float)) else None,
+            "consensus": str(item["consensus"]) if item.get("consensus") else None,
+        })
+    return entries
+
+
+def parse_analyst_ratings(json_text, symbol):
+    normalized = _normalize_symbol(symbol)
+    data = json.loads(json_text)
+    flat_array = _find_forecast_data_array(data.get("nodes", []))
+    if flat_array is None:
+        raise ValueError(f"analyst ratings unavailable for {normalized}")
+    root = flat_array[0]
+    ratings = _resolve_devalue_value(root.get("currentRatings"), flat_array)
+    if not isinstance(ratings, dict):
+        raise ValueError(f"analyst ratings unavailable for {normalized}")
+    counts = {key: ratings.get(key) for key in _RATING_COUNT_KEYS}
+    analyst_count = ratings.get("count")
+    if analyst_count is None or any(not isinstance(value, (int, float)) for value in counts.values()):
+        raise ValueError(f"analyst ratings unavailable for {normalized}")
+    return {
+        "symbol": normalized,
+        "consensus": str(ratings["consensus"]) if ratings.get("consensus") else None,
+        "score": float(ratings["score"]) if isinstance(ratings.get("score"), (int, float)) else None,
+        "analyst_count": int(analyst_count),
+        "strong_buy": int(counts["strongBuy"]),
+        "buy": int(counts["buy"]),
+        "hold": int(counts["hold"]),
+        "sell": int(counts["sell"]),
+        "strong_sell": int(counts["strongSell"]),
+        "price_target": _parse_price_target(_resolve_devalue_value(root.get("priceTargets"), flat_array)),
+        "monthly_history": _parse_monthly_history(_resolve_devalue_value(root.get("recommendations"), flat_array)),
+        "provider": "stockanalysis",
+    }
+
+
+def fetch_analyst_ratings(symbol, http_client=None):
+    normalized = _normalize_symbol(symbol)
+    return parse_analyst_ratings(fetch_forecast_document(normalized, http_client=http_client), normalized)
 
 
 def parse_forecast_html(html, symbol):
