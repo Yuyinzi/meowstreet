@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from app.agents.catalyst_research.persistence import repository as catalyst_research
 from app.data_sources import gics_reference
 from app.db import (
     benchmark_market_data,
@@ -15,6 +16,7 @@ from app.db import (
 
 
 SCHEMA_ADAPTERS = (
+    catalyst_research,
     benchmark_market_data,
     economic_confirmation,
     gdp_market_relationships,

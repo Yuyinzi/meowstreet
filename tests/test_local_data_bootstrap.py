@@ -14,6 +14,18 @@ OBSERVATION_TABLES = (
     "assistant_conversations",
 )
 
+CATALYST_TABLES = (
+    "catalyst_research_jobs",
+    "catalyst_search_attempts",
+    "catalyst_search_results",
+    "catalyst_ir_sources",
+    "catalyst_source_snapshots",
+    "catalyst_source_adapters",
+    "catalyst_adapter_validations",
+    "catalyst_ir_events",
+    "catalyst_ir_classifications",
+)
+
 
 def test_bootstrap_creates_database_and_imports_only_reference_rows(tmp_path):
     db_path = tmp_path / "nested" / "market_data.sqlite"
@@ -22,7 +34,7 @@ def test_bootstrap_creates_database_and_imports_only_reference_rows(tmp_path):
 
     assert result["db_path"] == str(db_path)
     assert result["reference_version"] == "gics_reference_v1"
-    assert result["schemas_initialized"] == 9
+    assert result["schemas_initialized"] == 10
     assert result["industries"] == 69
     assert result["aliases"] == 151
     assert result["market_observations"] == 0
@@ -33,6 +45,8 @@ def test_bootstrap_creates_database_and_imports_only_reference_rows(tmp_path):
         assert con.execute("select count(*) from gics_industry_tags").fetchone()[0] == 69
         assert con.execute("select count(*) from industry_aliases").fetchone()[0] == 151
         for table in OBSERVATION_TABLES:
+            assert con.execute(f"select count(*) from {table}").fetchone()[0] == 0
+        for table in CATALYST_TABLES:
             assert con.execute(f"select count(*) from {table}").fetchone()[0] == 0
     finally:
         con.close()
