@@ -302,6 +302,8 @@ No docstrings. No inline comments. Rely entirely on descriptive function and var
 
 Create and modify files according to one clear layer of responsibility:
 
+- `app/agents/<agent_name>/` may use a feature-owned vertical package when an agent must be independently upgradeable. Keep that agent's provider adapters, schemas, prompts, workflow, persistence adapter, domain calculations, CLI, and router inside its directory, with the same responsibility boundaries expressed as internal subpackages. Files outside the agent package should be limited to application registration, shared infrastructure, dependency/configuration declarations, and presentation entry points. Do not scatter agent-specific logic across the shared horizontal layers.
+
 - `app/data_sources/` fetches or parses external source material and returns normalized source payloads. It does not open SQLite connections, write database rows, build API responses, or render UI.
 - `app/db/` owns schema, connections, persistence, transactions, and database reads. It does not fetch external sources, parse source files, implement CLI behavior, or render UI.
 - `app/services/` coordinates focused application workflows across data-source and database adapters. It does not contain FastAPI route handling, frontend rendering, or CLI argument parsing.
@@ -314,7 +316,7 @@ When a feature crosses layers, create focused files at these boundaries rather t
 
 ### Tests
 
-- One test file per source module: `tests/test_<module>.py`
+- One test file per source module: `tests/test_<module>.py`; feature-owned agents use `tests/agents/<agent_name>/test_<module>.py`
 - Use `tmp_path` fixture for filesystem-dependent tests
 - Use `pytest.mark.parametrize` for contract/validation tests with lambda mutations
 - Use `pytest.raises(ValueError, match=...)` to validate exception messages
@@ -327,6 +329,7 @@ When a feature crosses layers, create focused files at these boundaries rather t
 ```
 app/              # Python package (all application code)
   __init__.py
+  agents/          # independently upgradeable feature-owned agent packages
   method_schema.py
   workflow_engine.py
   method_indicators.py
@@ -335,6 +338,7 @@ app/              # Python package (all application code)
   http_client.py
   llm.py
 tests/                   # pytest tests
+  agents/                # tests grouped by feature-owned agent package
   conftest.py
   test_*.py
 scripts/                 # CLI entry points
@@ -345,7 +349,11 @@ data/local_system/       # local runtime data (SQLite, caches; git-ignored)
 
 ### Outbound HTTP
 
-All website requests in `app/` and `scripts/` must use `app.http_client.HttpClient`. Do not call `urllib.request.urlopen`, `urllib.request.urlretrieve`, or raw `httpx` request APIs directly. Parsing and domain error translation remain with the caller. Every new source that makes HTTP requests must test request construction and response/error contracts using `httpx.MockTransport`.
+Direct website requests implemented in `app/` and `scripts/` must use `app.http_client.HttpClient`. Do not call `urllib.request.urlopen`, `urllib.request.urlretrieve`, or raw `httpx` request APIs directly. Parsing and domain error translation remain with the caller.
+
+An official or maintained provider SDK may manage its own transport when it is the supported client for that provider. Keep the SDK behind a focused data-source adapter in `app/data_sources/` or an agent-owned `providers/` package so the rest of the application consumes normalized plain dictionaries and stable domain errors rather than provider objects. Do not reimplement an SDK's HTTP calls solely to force them through `HttpClient`.
+
+Every new direct-HTTP source must test request construction and response/error contracts using `httpx.MockTransport`. SDK-backed sources must test equivalent provider request, normalization, and error contracts using the SDK's supported test transport or a client test double.
 
 ## Self-Containment Rule
 

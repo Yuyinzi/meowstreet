@@ -954,3 +954,51 @@ button {
 .cal-filing {
   border-color: #3B3530;
 }
+
+.insider-title {
+  font-size: 11px;
+  color: #A89B91;
+}
+
+.insider-table {
+  border: 1px solid #E3D5C8;
+}
+
+.insider-table th,
+.insider-table td {
+  border: 1px solid #F0EAE4;
+  padding: 6px 10px;
+}
+
+.insider-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.insider-page-info {
+  font-size: 11px;
+  color: #A89B91;
+  margin-right: auto;
+}
+
+.insider-page-btn {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 10px;
+  border: 1px solid #E3D5C8;
+  border-radius: 6px;
+  background: #FFFDF9;
+  color: #3B3530;
+  cursor: pointer;
+}
+
+.insider-page-btn:hover:not(:disabled) {
+  background: #F7F2EC;
+}
+
+.insider-page-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

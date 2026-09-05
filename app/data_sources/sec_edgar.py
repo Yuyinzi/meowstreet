@@ -1,6 +1,7 @@
 from datetime import date
 import json
 import re
+import xml.etree.ElementTree as ET
 
 import httpx
 
@@ -14,7 +15,7 @@ _FETCH_ATTEMPTS = 3
 _FETCH_TIMEOUT_SECONDS = 45
 
 _EDGAR_HEADERS = {
-    "User-Agent": "Meowstreet/1.0 (local research; contact via repository)",
+    "User-Agent": "Meowstreet Research contact@meowstreet.local",
     "Accept-Encoding": "gzip, deflate",
 }
 
@@ -74,14 +75,14 @@ def fetch_cik_map(http_client=None):
         _raise_fetch("company tickers", exc)
 
 
-def parse_submissions(json_text, symbol, since=None):
+def parse_submissions(json_text, symbol, since=None, form="8-K"):
     normalized = _normalize_symbol(symbol)
     data = json.loads(json_text)
     filings = data.get("filings")
     if not isinstance(filings, dict) or not isinstance(filings.get("recent"), dict):
         raise ValueError(f"submissions payload malformed for {normalized}")
     since_date = date.fromisoformat(since) if since else None
-    rows = _parse_filing_rows(filings["recent"], since_date)
+    rows = _parse_filing_rows(filings["recent"], since_date, form)
     older_files = [
         str(entry["name"])
         for entry in filings.get("files", [])
@@ -90,14 +91,14 @@ def parse_submissions(json_text, symbol, since=None):
     return {"filings": rows, "older_files": older_files}
 
 
-def _parse_filing_rows(recent, since_date):
+def _parse_filing_rows(recent, since_date, form):
     forms = recent.get("form") or []
     dates = recent.get("filingDate") or []
     accessions = recent.get("accessionNumber") or []
     documents = recent.get("primaryDocument") or []
     rows = []
-    for index, form in enumerate(forms):
-        if form != "8-K":
+    for index, row_form in enumerate(forms):
+        if row_form != form:
             continue
         try:
             filing_date = date.fromisoformat(dates[index])
@@ -120,13 +121,13 @@ def _parse_filing_rows(recent, since_date):
     return rows
 
 
-def parse_older_submissions(json_text, symbol, since=None):
+def parse_older_submissions(json_text, symbol, since=None, form="8-K"):
     normalized = _normalize_symbol(symbol)
     data = json.loads(json_text)
     if not isinstance(data, dict) or not isinstance(data.get("form"), list):
         raise ValueError(f"older submissions payload malformed for {normalized}")
     since_date = date.fromisoformat(since) if since else None
-    return _parse_filing_rows(data, since_date)
+    return _parse_filing_rows(data, since_date, form)
 
 
 def parse_8k_items(html):
@@ -189,3 +190,97 @@ def fetch_filing_document(cik, accession, document, http_client=None):
         return response.content.decode("utf-8", errors="replace")
     except httpx.HTTPError as exc:
         _raise_fetch(f"filing {accession}", exc)
+
+
+_FORM4_CODE_LABELS = {
+    "P": "Open-market purchase",
+    "S": "Open-market sale",
+    "A": "Grant or award",
+    "F": "Tax withholding",
+    "M": "Option exercise",
+    "G": "Gift",
+}
+
+
+def _xml_value(node, path):
+    if node is None:
+        return None
+    target = node.find(path)
+    if target is None:
+        return None
+    text = (target.text or "").strip()
+    return text or None
+
+
+def _xml_number(node, path):
+    text = _xml_value(node, path)
+    if text is None:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _xml_flag(node, tag):
+    text = _xml_value(node, tag)
+    return text in ("1", "true")
+
+
+def _insider_title(relationship):
+    if relationship is None:
+        return None
+    officer_title = _xml_value(relationship, "officerTitle")
+    if officer_title:
+        return officer_title
+    if _xml_flag(relationship, "isDirector"):
+        return "Director"
+    if _xml_flag(relationship, "isTenPercentOwner"):
+        return "10% owner"
+    return None
+
+
+def parse_form4_document(xml_text, symbol):
+    normalized = _normalize_symbol(symbol)
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        raise ValueError(f"form 4 document malformed for {normalized}") from exc
+    if root.tag != "ownershipDocument":
+        raise ValueError(f"form 4 document malformed for {normalized}")
+    transactions = []
+    owners = root.findall("reportingOwner")
+    table = root.find("nonDerivativeTable")
+    entries = table.findall("nonDerivativeTransaction") if table is not None else []
+    for owner in owners:
+        name = _xml_value(owner, "reportingOwnerId/rptOwnerName") or "Unknown insider"
+        title = _insider_title(owner.find("reportingOwnerRelationship"))
+        for entry in entries:
+            transaction_date = _xml_value(entry, "transactionDate/value")
+            code = _xml_value(entry, "transactionCoding/transactionCode")
+            if transaction_date is None or code is None:
+                continue
+            try:
+                date.fromisoformat(transaction_date)
+            except ValueError:
+                continue
+            transactions.append({
+                "insider_name": name,
+                "insider_title": title,
+                "transaction_date": transaction_date,
+                "transaction_code": code,
+                "code_label": _FORM4_CODE_LABELS.get(code, code),
+                "shares": _xml_number(entry, "transactionAmounts/transactionShares/value"),
+                "price": _xml_number(entry, "transactionAmounts/transactionPricePerShare/value"),
+                "acquired_disposed": _xml_value(
+                    entry, "transactionAmounts/transactionAcquiredDisposedCode/value"
+                ),
+                "shares_after": _xml_number(
+                    entry, "postTransactionAmounts/sharesOwnedFollowingTransaction/value"
+                ),
+            })
+    return transactions
+
+
+def form4_raw_document(primary_document):
+    return str(primary_document).split("/")[-1]

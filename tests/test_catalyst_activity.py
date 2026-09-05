@@ -3,6 +3,7 @@ from datetime import date, timedelta
 
 import httpx
 
+from app.db import edgar_filings as edgar_db
 from app.db import market_data as market_data_db
 from app.http_client import HttpClient
 from app.services import catalyst_activity
@@ -131,6 +132,45 @@ class TestCatalystActivity:
             "NVDA", db_path=tmp_path / "market_data.sqlite", http_client=_mock_client(handler)
         )
         assert result == {"status": "insufficient_data"}
+
+    def test_unmapped_symbol_miss_is_cached(self, tmp_path):
+        requests = []
+
+        def counting_handler(request):
+            requests.append(str(request.url))
+            return httpx.Response(200, text=json.dumps({
+                "0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."},
+            }))
+
+        db_path = tmp_path / "market_data.sqlite"
+        for _ in range(2):
+            result = catalyst_activity.get_catalyst_activity(
+                "NVDA", db_path=db_path, http_client=_mock_client(counting_handler)
+            )
+            assert result == {"status": "insufficient_data"}
+        assert [url for url in requests if "company_tickers" in url] == [requests[0]]
+
+    def test_stale_unmapped_miss_refreshes(self, tmp_path):
+        db_path = tmp_path / "market_data.sqlite"
+        catalyst_activity.get_catalyst_activity(
+            "NVDA", db_path=db_path, http_client=_mock_client(_happy_handler)
+        )
+        con = edgar_db.connect(db_path)
+        try:
+            edgar_db.save_cik_miss(con, "NVDA")
+            stale = (date.today() - timedelta(days=30)).isoformat()
+            con.execute(
+                "update edgar_cik_map set fetched_at = ? where symbol = ?", (stale, "NVDA")
+            )
+            con.commit()
+        finally:
+            con.close()
+
+        result = catalyst_activity.get_catalyst_activity(
+            "NVDA", db_path=db_path, http_client=_mock_client(_happy_handler)
+        )
+        assert result["status"] == "ok"
+        assert result["cik"] == 1045810
 
     def test_edgar_failure_returns_insufficient_data(self, tmp_path):
         def handler(request):

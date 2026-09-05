@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = ROOT / "data" / "local_system" / "market_data.sqlite"
+UNMAPPED_CIK = -1
 
 
 def connect(db_path=DEFAULT_DB_PATH):
@@ -39,6 +40,29 @@ def connect(db_path=DEFAULT_DB_PATH):
             facts_json text,
             fetched_at text not null
         );
+        create table if not exists edgar_form4_filings (
+            symbol text not null,
+            accession text not null primary key,
+            filing_date text not null,
+            primary_document text not null,
+            fetched_at text not null
+        );
+        create table if not exists edgar_form4_transactions (
+            symbol text not null,
+            accession text not null,
+            insider_name text not null,
+            insider_title text,
+            transaction_date text not null,
+            transaction_code text,
+            code_label text,
+            shares real,
+            price real,
+            shares_after real,
+            acquired_disposed text,
+            fetched_at text not null
+        );
+        create index if not exists idx_edgar_form4_symbol_date
+            on edgar_form4_transactions(symbol, transaction_date);
         """
     )
     return con
@@ -59,6 +83,18 @@ def save_cik(con, symbol, cik, title):
         values (?, ?, ?, ?)
         """,
         (normalized, int(cik), title, datetime.now(UTC).isoformat()),
+    )
+    con.commit()
+
+
+def save_cik_miss(con, symbol):
+    normalized = normalize_symbol(symbol)
+    con.execute(
+        """
+        insert or replace into edgar_cik_map(symbol, cik, title, fetched_at)
+        values (?, ?, ?, ?)
+        """,
+        (normalized, UNMAPPED_CIK, None, datetime.now(UTC).isoformat()),
     )
     con.commit()
 
@@ -195,5 +231,81 @@ def load_filings_missing_items(con, symbol, limit=None):
     if limit is not None:
         query += " limit ?"
         params.append(limit)
+    rows = con.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def save_form4_filing(con, symbol, filing, transactions):
+    normalized = normalize_symbol(symbol)
+    accession = str(filing["accession"])
+    con.execute(
+        """
+        insert or replace into edgar_form4_filings(
+            symbol, accession, filing_date, primary_document, fetched_at
+        ) values (?, ?, ?, ?, ?)
+        """,
+        (
+            normalized,
+            accession,
+            str(filing["filing_date"]),
+            str(filing["primary_document"]),
+            datetime.now(UTC).isoformat(),
+        ),
+    )
+    con.execute(
+        "delete from edgar_form4_transactions where symbol = ? and accession = ?",
+        (normalized, accession),
+    )
+    fetched_at = datetime.now(UTC).isoformat()
+    for transaction in transactions:
+        con.execute(
+            """
+            insert into edgar_form4_transactions(
+                symbol, accession, insider_name, insider_title, transaction_date,
+                transaction_code, code_label, shares, price, shares_after,
+                acquired_disposed, fetched_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                normalized,
+                str(accession),
+                str(transaction["insider_name"]),
+                transaction.get("insider_title"),
+                str(transaction["transaction_date"]),
+                transaction.get("transaction_code"),
+                transaction.get("code_label"),
+                transaction.get("shares"),
+                transaction.get("price"),
+                transaction.get("shares_after"),
+                transaction.get("acquired_disposed"),
+                fetched_at,
+            ),
+        )
+    con.commit()
+
+
+def load_form4_accessions(con, symbol):
+    normalized = normalize_symbol(symbol)
+    rows = con.execute(
+        "select accession from edgar_form4_filings where symbol = ?",
+        (normalized,),
+    ).fetchall()
+    return {row["accession"] for row in rows}
+
+
+def load_form4_transactions(con, symbol, since=None):
+    normalized = normalize_symbol(symbol)
+    query = """
+        select accession, insider_name, insider_title, transaction_date,
+               transaction_code, code_label, shares, price, shares_after,
+               acquired_disposed
+        from edgar_form4_transactions
+        where symbol = ?
+    """
+    params = [normalized]
+    if since:
+        query += " and transaction_date >= ?"
+        params.append(since)
+    query += " order by transaction_date desc, accession, insider_name"
     rows = con.execute(query, params).fetchall()
     return [dict(row) for row in rows]

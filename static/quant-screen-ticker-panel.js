@@ -610,6 +610,130 @@
     );
   }
 
+  var INSIDER_PAGE_SIZE = 25;
+  var insiderTableData = null;
+  var insiderPage = 0;
+
+  function insiderActivityBodyHtml(activity) {
+    insiderTableData = null;
+    if (!activity || activity.status !== "ok") {
+      return '<div class="ticker-detail-meta">Insider activity insufficient data.</div>';
+    }
+    var transactions = activity.transactions || [];
+    if (!transactions.length) {
+      return '<div class="ticker-detail-meta">No insider transactions in the 4-year window.</div>';
+    }
+    insiderTableData = transactions;
+    return (
+      '<div id="tickerDetailInsiderTable"></div>' +
+      '<div class="insider-pager">' +
+      '<span id="tickerDetailInsiderInfo" class="insider-page-info"></span>' +
+      '<button type="button" class="insider-page-btn" id="tickerDetailInsiderPrev">‹ Prev</button>' +
+      '<button type="button" class="insider-page-btn" id="tickerDetailInsiderNext">Next ›</button>' +
+      "</div>"
+    );
+  }
+
+  function _insiderTableHtml(rows) {
+    var body = rows.map(function (row) {
+      return (
+        "<tr>" +
+        "<td>" + escapeHtml(row.transaction_date) + "</td>" +
+        "<td>" + escapeHtml(row.insider_name) +
+        (row.insider_title ? '<span class="insider-title"> · ' + escapeHtml(row.insider_title) + "</span>" : "") +
+        "</td>" +
+        "<td>" + escapeHtml(row.code_label || row.transaction_code || "—") + "</td>" +
+        '<td class="num">' + (row.shares == null ? "—" : Number(row.shares).toLocaleString("en-US")) + "</td>" +
+        '<td class="num">' + fmtNum(row.price) + "</td>" +
+        '<td class="num">' + (row.value == null ? "—" : Number(row.value).toLocaleString("en-US", { maximumFractionDigits: 0 })) + "</td>" +
+        '<td class="num">' + (row.pct_of_holding == null ? "—" : (row.pct_of_holding * 100).toFixed(1) + "%") + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+    return (
+      '<div class="table-wrap"><table class="data-table ticker-detail-table insider-table"><thead><tr>' +
+      "<th>Date</th><th>Insider</th><th>Type</th>" +
+      '<th class="num">Shares</th><th class="num">Price</th><th class="num">Value</th>' +
+      '<th class="num">% of holding</th>' +
+      "</tr></thead><tbody>" + body + "</tbody></table></div>"
+    );
+  }
+
+  function renderInsiderPage() {
+    var region = panel.querySelector("#tickerDetailInsiderTable");
+    var info = panel.querySelector("#tickerDetailInsiderInfo");
+    var prev = panel.querySelector("#tickerDetailInsiderPrev");
+    var next = panel.querySelector("#tickerDetailInsiderNext");
+    if (!insiderTableData || !region || !info || !prev || !next) {
+      return;
+    }
+    var total = insiderTableData.length;
+    var pages = Math.ceil(total / INSIDER_PAGE_SIZE);
+    if (insiderPage < 0) {
+      insiderPage = 0;
+    }
+    if (insiderPage > pages - 1) {
+      insiderPage = pages - 1;
+    }
+    var start = insiderPage * INSIDER_PAGE_SIZE;
+    region.innerHTML = _insiderTableHtml(
+      insiderTableData.slice(start, start + INSIDER_PAGE_SIZE)
+    );
+    info.textContent = total + " transactions (4-year window) · page " + (insiderPage + 1) + " of " + pages;
+    prev.disabled = insiderPage <= 0;
+    next.disabled = insiderPage >= pages - 1;
+  }
+
+  function wireInsiderTable() {
+    var prev = panel.querySelector("#tickerDetailInsiderPrev");
+    var next = panel.querySelector("#tickerDetailInsiderNext");
+    if (!insiderTableData || !prev || !next) {
+      return;
+    }
+    prev.addEventListener("click", function () {
+      insiderPage -= 1;
+      renderInsiderPage();
+    });
+    next.addEventListener("click", function () {
+      insiderPage += 1;
+      renderInsiderPage();
+    });
+    renderInsiderPage();
+  }
+
+  function insiderActivitySection(payload) {
+    var body = payload.insider_activity === undefined
+      ? '<div class="ticker-detail-meta">Loading insider activity…</div>'
+      : insiderActivityBodyHtml(payload.insider_activity);
+    return (
+      '<section class="ticker-detail-section">' +
+      '<div class="ticker-detail-section-title">Insider transactions</div>' +
+      '<div id="tickerDetailInsiderBody">' + body + "</div>" +
+      "</section>"
+    );
+  }
+
+  function loadInsiderAsync(symbol) {
+    var body = panel.querySelector("#tickerDetailInsiderBody");
+    if (!body) {
+      return;
+    }
+    fetchJson("/api/ticker-quant/" + encodeURIComponent(symbol) + "/insider")
+      .then(function (activity) {
+        if (activeSymbol !== symbol) {
+          return;
+        }
+        body.innerHTML = insiderActivityBodyHtml(activity);
+        wireInsiderTable();
+      })
+      .catch(function () {
+        if (activeSymbol !== symbol) {
+          return;
+        }
+        body.innerHTML = '<div class="ticker-detail-meta">Insider activity unavailable.</div>';
+      });
+  }
+
   function loadCatalystAsync(symbol) {
     var body = panel.querySelector("#tickerDetailCatalystBody");
     if (!body) {
@@ -691,9 +815,11 @@
       shortChecksSection(quantPayload) +
       backwardRatiosSection(quantPayload) +
       analystRatingsSection(quantPayload) +
-      catalystActivitySection(quantPayload);
+      catalystActivitySection(quantPayload) +
+      insiderActivitySection(quantPayload);
     wirePeer(quantPayload.symbol);
     loadCatalystAsync(quantPayload.symbol);
+    loadInsiderAsync(quantPayload.symbol);
     askAssistant(activeContext, quantPayload);
   }
 

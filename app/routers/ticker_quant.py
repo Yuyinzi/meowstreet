@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.services import catalyst_activity as catalyst_activity_service
+from app.services import insider_activity as insider_activity_service
 from app.services import ticker_quant_context as ticker_quant_context_service
 
 router = APIRouter(prefix="/api/ticker-quant", tags=["ticker-quant"])
@@ -10,6 +11,14 @@ router = APIRouter(prefix="/api/ticker-quant", tags=["ticker-quant"])
 def ticker_quant_catalyst(symbol: str):
     try:
         return catalyst_activity_service.get_catalyst_activity(symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/{symbol}/insider")
+def ticker_quant_insider(symbol: str):
+    try:
+        return insider_activity_service.get_insider_activity(symbol)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

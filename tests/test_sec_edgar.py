@@ -148,3 +148,90 @@ class TestFetchContracts:
             "000104581026000073/nvda-20260826.htm"
         )
         assert sec_edgar.parse_8k_items(body) == ["2.02"]
+
+
+_FORM4_XML = """<?xml version="1.0"?>
+<ownershipDocument>
+  <issuer><issuerCik>0001045810</issuerCik><issuerTradingSymbol>NVDA</issuerTradingSymbol></issuer>
+  <reportingOwner>
+    <reportingOwnerId><rptOwnerName>HUANG JEN HSUN</rptOwnerName></reportingOwnerId>
+    <reportingOwnerRelationship>
+      <isDirector>1</isDirector><isOfficer>1</isOfficer><officerTitle>President and CEO</officerTitle>
+    </reportingOwnerRelationship>
+  </reportingOwner>
+  <nonDerivativeTable>
+    <nonDerivativeTransaction>
+      <transactionDate><value>2026-08-20</value></transactionDate>
+      <transactionCoding><transactionFormType>4</transactionFormType><transactionCode>S</transactionCode></transactionCoding>
+      <transactionAmounts>
+        <transactionShares><value>60000</value></transactionShares>
+        <transactionPricePerShare><value>177.82</value></transactionPricePerShare>
+        <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+      </transactionAmounts>
+      <postTransactionAmounts><sharesOwnedFollowingTransaction><value>75400000</value></sharesOwnedFollowingTransaction></postTransactionAmounts>
+    </nonDerivativeTransaction>
+    <nonDerivativeTransaction>
+      <transactionDate><value>2026-08-21</value></transactionDate>
+      <transactionCoding><transactionFormType>4</transactionFormType><transactionCode>F</transactionCode></transactionCoding>
+      <transactionAmounts>
+        <transactionShares><value>not-a-number</value></transactionShares>
+        <transactionPricePerShare><value>170.01</value></transactionPricePerShare>
+        <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+      </transactionAmounts>
+      <postTransactionAmounts><sharesOwnedFollowingTransaction><value>75300000</value></sharesOwnedFollowingTransaction></postTransactionAmounts>
+    </nonDerivativeTransaction>
+  </nonDerivativeTable>
+  <derivativeTable>
+    <derivativeTransaction>
+      <transactionDate><value>2026-08-20</value></transactionDate>
+      <transactionCoding><transactionFormType>4</transactionFormType><transactionCode>M</transactionCode></transactionCoding>
+    </derivativeTransaction>
+  </derivativeTable>
+</ownershipDocument>
+"""
+
+
+class TestParseSubmissionsForm4:
+    def test_filters_form4_rows(self):
+        result = sec_edgar.parse_submissions(_submissions_json(), "NVDA", form="4")
+        assert [row["filing_date"] for row in result["filings"]] == ["2026-08-20"]
+        assert result["filings"][0]["primary_document"] == "form4.htm"
+
+    def test_older_submissions_form4(self):
+        payload = json.dumps({
+            "form": ["4", "8-K"],
+            "filingDate": ["2024-05-01", "2024-04-30"],
+            "accessionNumber": ["0001045810-24-000010", "0001045810-24-000009"],
+            "primaryDocument": ["form4.xml", "nvda-8k.htm"],
+        })
+        rows = sec_edgar.parse_older_submissions(payload, "NVDA", form="4")
+        assert [row["accession"] for row in rows] == ["0001045810-24-000010"]
+
+
+class TestParseForm4Document:
+    def test_parses_non_derivative_transactions(self):
+        result = sec_edgar.parse_form4_document(_FORM4_XML, "NVDA")
+        assert len(result) == 2
+        sale = result[0]
+        assert sale["insider_name"] == "HUANG JEN HSUN"
+        assert sale["insider_title"] == "President and CEO"
+        assert sale["transaction_date"] == "2026-08-20"
+        assert sale["transaction_code"] == "S"
+        assert sale["code_label"] == "Open-market sale"
+        assert sale["shares"] == 60000.0
+        assert sale["price"] == 177.82
+        assert sale["shares_after"] == 75400000.0
+        assert sale["acquired_disposed"] == "D"
+
+    def test_unparseable_numbers_become_none(self):
+        result = sec_edgar.parse_form4_document(_FORM4_XML, "NVDA")
+        assert result[1]["shares"] is None
+        assert result[1]["code_label"] == "Tax withholding"
+
+    def test_malformed_xml_raises(self):
+        with pytest.raises(ValueError, match="form 4 document malformed"):
+            sec_edgar.parse_form4_document("<html>not xml</html", "NVDA")
+
+    def test_wrong_root_raises(self):
+        with pytest.raises(ValueError, match="form 4 document malformed"):
+            sec_edgar.parse_form4_document("<html></html>", "NVDA")

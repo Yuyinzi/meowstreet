@@ -112,3 +112,65 @@ class TestStatementFacts:
             assert edgar_db.load_statement_facts(con, "NVDA") is None
         finally:
             con.close()
+
+
+def _form4_filing(accession="0001045810-26-000070", filing_date="2026-08-20"):
+    return {
+        "accession": accession,
+        "filing_date": filing_date,
+        "primary_document": "form4.xml",
+    }
+
+
+def _form4_transaction(transaction_date="2026-08-20"):
+    return {
+        "insider_name": "HUANG JEN HSUN",
+        "insider_title": "President and CEO",
+        "transaction_date": transaction_date,
+        "transaction_code": "S",
+        "code_label": "Open-market sale",
+        "shares": 60000.0,
+        "price": 177.82,
+        "shares_after": 75400000.0,
+        "acquired_disposed": "D",
+    }
+
+
+class TestForm4:
+    def test_save_and_load_roundtrip(self, tmp_path):
+        con = edgar_db.connect(tmp_path / "market_data.sqlite")
+        try:
+            edgar_db.save_form4_filing(con, "NVDA", _form4_filing(), [_form4_transaction()])
+            rows = edgar_db.load_form4_transactions(con, "NVDA")
+        finally:
+            con.close()
+        assert len(rows) == 1
+        assert rows[0]["insider_name"] == "HUANG JEN HSUN"
+        assert rows[0]["shares"] == 60000.0
+
+    def test_resave_replaces_transactions(self, tmp_path):
+        con = edgar_db.connect(tmp_path / "market_data.sqlite")
+        try:
+            edgar_db.save_form4_filing(con, "NVDA", _form4_filing(), [_form4_transaction()])
+            edgar_db.save_form4_filing(con, "NVDA", _form4_filing(), [])
+            rows = edgar_db.load_form4_transactions(con, "NVDA")
+            accessions = edgar_db.load_form4_accessions(con, "NVDA")
+        finally:
+            con.close()
+        assert rows == []
+        assert accessions == {"0001045810-26-000070"}
+
+    def test_since_filter(self, tmp_path):
+        con = edgar_db.connect(tmp_path / "market_data.sqlite")
+        try:
+            edgar_db.save_form4_filing(
+                con, "NVDA", _form4_filing(), [_form4_transaction("2026-08-20")]
+            )
+            edgar_db.save_form4_filing(
+                con, "NVDA", _form4_filing("0001045810-24-000010", "2024-05-01"),
+                [_form4_transaction("2024-05-01")],
+            )
+            rows = edgar_db.load_form4_transactions(con, "NVDA", since="2025-01-01")
+        finally:
+            con.close()
+        assert [row["transaction_date"] for row in rows] == ["2026-08-20"]

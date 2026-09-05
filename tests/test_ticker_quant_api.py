@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.routers import ticker_quant as ticker_quant_router
 from app.services import catalyst_activity as catalyst_activity_service
+from app.services import insider_activity as insider_activity_service
 from app.services import ticker_quant_context as ticker_quant_context_service
 
 
@@ -138,6 +139,38 @@ def test_catalyst_route_converts_value_error_to_400(monkeypatch):
     )
 
     response = client.get("/api/ticker-quant/%20%20/catalyst")
+
+    assert response.status_code == 400
+    assert "symbol is required" in response.json()["detail"]
+
+
+def test_insider_route_returns_service_payload(monkeypatch):
+    seen = {}
+
+    def fake_insider(symbol, db_path=None, http_client=None, today=None):
+        seen["symbol"] = symbol
+        return {"status": "ok", "transactions": []}
+
+    monkeypatch.setattr(
+        insider_activity_service, "get_insider_activity", fake_insider
+    )
+
+    response = client.get("/api/ticker-quant/NVDA/insider")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "transactions": []}
+    assert seen == {"symbol": "NVDA"}
+
+
+def test_insider_route_converts_value_error_to_400(monkeypatch):
+    def fake_insider(symbol, db_path=None, http_client=None, today=None):
+        raise ValueError("symbol is required")
+
+    monkeypatch.setattr(
+        insider_activity_service, "get_insider_activity", fake_insider
+    )
+
+    response = client.get("/api/ticker-quant/%20%20/insider")
 
     assert response.status_code == 400
     assert "symbol is required" in response.json()["detail"]

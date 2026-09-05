@@ -14,13 +14,20 @@ _WINDOW_DAYS = 4 * 365
 _CALENDAR_WINDOW_DAYS = 400
 
 
+_UNMAPPED_CIK_TTL_SECONDS = 7 * 86400
+
+
 def _resolve_cik(con, symbol, http_client):
     row = edgar_db.load_cik(con, symbol)
     if row is not None:
-        return row["cik"]
+        if row["cik"] != edgar_db.UNMAPPED_CIK:
+            return row["cik"]
+        if edgar_db.cik_map_fresh(row, max_age_seconds=_UNMAPPED_CIK_TTL_SECONDS):
+            raise ValueError(f"no edgar cik mapping for {symbol}")
     mapping = sec_edgar.fetch_cik_map(http_client=http_client)
     entry = mapping.get(symbol)
     if entry is None:
+        edgar_db.save_cik_miss(con, symbol)
         raise ValueError(f"no edgar cik mapping for {symbol}")
     edgar_db.save_cik(con, symbol, entry["cik"], entry["title"])
     return entry["cik"]
