@@ -495,15 +495,30 @@ def record_adapter_validation(con, validation):
     if status not in {"passed", "failed"}:
         raise ValueError("adapter validation status is invalid")
     with con:
-        con.execute(
-        """insert into catalyst_adapter_validations(
-            validation_id,adapter_id,job_id,validator_version,executor_version,status,report_json,
-            source_content_hashes_json,page_content_hashes_json,validated_at
-        ) values (?,?,?,?,?,?,?,?,?,?)""",
-        (validation.get("validation_id") or _id("iav_"), adapter_id, validation["job_id"], validation.get("validator_version"),
-         validation.get("executor_version"), status, _json(validation.get("report", validation.get("report_json", {}))),
-         _json(validation.get("source_content_hashes", [])), _json(validation.get("page_content_hashes", [])), validation.get("validated_at") or _now_iso()),
-    )
+        cursor = con.execute(
+            """insert into catalyst_adapter_validations(
+                validation_id,adapter_id,job_id,validator_version,executor_version,status,report_json,
+                source_content_hashes_json,page_content_hashes_json,validated_at
+            ) select ?,?,?,?,?,?,?,?,?,? where exists (
+                select 1 from catalyst_research_jobs
+                where job_id = ? and status = 'running'
+            )""",
+            (
+                validation.get("validation_id") or _id("iav_"),
+                adapter_id,
+                validation["job_id"],
+                validation.get("validator_version"),
+                validation.get("executor_version"),
+                status,
+                _json(validation.get("report", validation.get("report_json", {}))),
+                _json(validation.get("source_content_hashes", [])),
+                _json(validation.get("page_content_hashes", [])),
+                validation.get("validated_at") or _now_iso(),
+                validation["job_id"],
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError(f"research job {validation['job_id']} is terminal")
         if status == "failed":
             con.execute(
                 "update catalyst_source_adapters set state = 'failed_validation' where adapter_id = ? and state = 'candidate'",

@@ -192,3 +192,23 @@ def test_terminal_mutation_is_rejected_after_other_connection_finalizes(tmp_path
     with pytest.raises(ValueError, match="terminal"):
         repository.record_search_attempt(con, {"job_id": job["job_id"], "provider": "ddgs", "query": "NVDA IR"})
     assert con.execute("select count(*) from catalyst_search_attempts").fetchone()[0] == 0
+
+
+def test_adapter_validation_cannot_write_after_other_connection_finalizes(tmp_path, monkeypatch):
+    db_path = tmp_path / "db.sqlite"
+    con = repository.connect(db_path)
+    other = repository.connect(db_path)
+    job = _job(con, status="running")
+    candidate = repository.create_adapter_candidate(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "source_url": "https://ir.example.test/news", "adapter": {}})
+    original_guard = repository._nonterminal_job
+
+    def finalize_after_guard(connection, job_id):
+        result = original_guard(connection, job_id)
+        repository.finalize_job(other, job_id, {"status": "failed", "error": "finished"})
+        return result
+
+    monkeypatch.setattr(repository, "_nonterminal_job", finalize_after_guard)
+    with pytest.raises(ValueError, match="terminal"):
+        repository.record_adapter_validation(con, {"adapter_id": candidate["adapter_id"], "job_id": job["job_id"], "status": "passed", "report": {}})
+    assert con.execute("select count(*) from catalyst_adapter_validations").fetchone()[0] == 0
+    assert con.execute("select state from catalyst_source_adapters where adapter_id = ?", (candidate["adapter_id"],)).fetchone()[0] == "candidate"
