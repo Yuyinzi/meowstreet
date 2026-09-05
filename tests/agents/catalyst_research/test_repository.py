@@ -125,3 +125,70 @@ def test_events_cursor_rejects_ticker_or_job_boundary(tmp_path):
     assert len(page["events"]) == 2 and page["next_cursor"]
     with pytest.raises(ValueError, match="ticker or job"):
         repository.load_events_page(con, "AAPL", job["job_id"], 2, page["next_cursor"])
+
+
+def test_rejects_cross_ticker_source_and_event_provenance(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    with pytest.raises(ValueError, match="source ticker"):
+        repository.save_source(con, {"job_id": job["job_id"], "ticker": "AAPL", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    with pytest.raises(ValueError, match="event ticker"):
+        repository.save_finalized_observations(con, job["job_id"], [{"source_id": source["source_id"], "ticker": "AAPL", "source_type": "press_releases", "count_date": "2026-01-01", "title": "News", "url": "https://ir.example.test/1"}], [])
+
+
+def test_queued_job_cannot_finalize(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con)
+    with pytest.raises(ValueError, match="running"):
+        repository.finalize_job(con, job["job_id"], {"status": "failed"})
+
+
+def test_failed_validation_is_terminal_candidate_state_and_cannot_activate(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    candidate = repository.create_adapter_candidate(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "source_url": "https://ir.example.test/news", "adapter": {}})
+    repository.record_adapter_validation(con, {"adapter_id": candidate["adapter_id"], "job_id": job["job_id"], "status": "failed", "report": {}})
+    assert con.execute("select state from catalyst_source_adapters where adapter_id = ?", (candidate["adapter_id"],)).fetchone()[0] == "failed_validation"
+    with pytest.raises(ValueError, match="candidate"):
+        repository.activate_adapter(con, candidate["adapter_id"], "2026-09-04T01:00:00+00:00")
+
+
+def test_snapshot_hashes_structural_content_and_rejects_mismatch(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    first = repository.save_snapshot(con, {"requested_url": "https://ir.example.test/news", "structural_html": "<main>one</main>", "normalized": {"text": "one"}})
+    second = repository.save_snapshot(con, {"requested_url": "https://ir.example.test/news", "structural_html": "<main>two</main>", "normalized": {"text": "two"}})
+    assert first != second
+    with pytest.raises(ValueError, match="content hash"):
+        repository.save_snapshot(con, {"requested_url": "https://ir.example.test/news", "raw_html": "<main>three</main>", "content_hash": "not-the-content-hash"})
+
+
+def test_cursor_rejects_non_scalar_payload_values(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    cursor = repository._encode_cursor({"ticker": ["NVDA"], "job_id": "cr_x", "count_date": {"date": "2026-01-01"}, "event_id": ["ire_x"]})
+    with pytest.raises(ValueError, match="cursor is invalid"):
+        repository.load_events_page(con, "NVDA", "cr_x", 1, cursor)
+
+
+def test_invalid_date_and_integer_inputs_have_controlled_errors(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    with pytest.raises(ValueError, match="as of date is invalid"):
+        repository.create_job(con, {"ticker": "NVDA", "years": 2, "as_of": "not-a-date"})
+    job = _job(con, status="running")
+    attempt = {"job_id": job["job_id"], "provider": "ddgs", "query": "NVDA IR"}
+    repository.record_search_attempt(con, attempt)
+    attempt_id = con.execute("select attempt_id from catalyst_search_attempts where job_id = ?", (job["job_id"],)).fetchone()[0]
+    with pytest.raises(ValueError, match="result id is invalid"):
+        repository.record_search_results(con, job["job_id"], attempt_id, [{"result_id": "not-an-int", "url": "https://ir.example.test"}])
+
+
+def test_terminal_mutation_is_rejected_after_other_connection_finalizes(tmp_path):
+    db_path = tmp_path / "db.sqlite"
+    con = repository.connect(db_path)
+    other = repository.connect(db_path)
+    job = _job(con)
+    repository.start_job(con, job["job_id"], "2026-09-04T00:01:00+00:00")
+    repository.finalize_job(other, job["job_id"], {"status": "failed", "error": "done"})
+    with pytest.raises(ValueError, match="terminal"):
+        repository.record_search_attempt(con, {"job_id": job["job_id"], "provider": "ddgs", "query": "NVDA IR"})
+    assert con.execute("select count(*) from catalyst_search_attempts").fetchone()[0] == 0

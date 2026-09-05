@@ -244,7 +244,10 @@ def create_job(con, request, company=None, now=None):
     as_of = request.get("as_of") or (now.date() if now else datetime.now(UTC).date())
     if isinstance(as_of, datetime):
         as_of = as_of.date()
-    as_of = date.fromisoformat(str(as_of))
+    try:
+        as_of = date.fromisoformat(str(as_of))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("as of date is invalid") from exc
     try:
         requested_start = as_of.replace(year=as_of.year - years)
     except ValueError:
@@ -304,18 +307,22 @@ def record_search_attempt(con, attempt):
     attempt_id = attempt.get("attempt_id") or _id("csa_")
     if not attempt.get("provider") or not attempt.get("query"):
         raise ValueError("search attempt provider and query are required")
-    con.execute(
+    with con:
+        cursor = con.execute(
         """insert into catalyst_search_attempts(
             attempt_id,job_id,provider,query,requested_limit,started_at,completed_at,
             outcome,diagnostics_json,provider_request_id
-        ) values (?,?,?,?,?,?,?,?,?,?)""",
+        ) select ?,?,?,?,?,?,?,?,?,? where exists (
+            select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
+        )""",
         (attempt_id, attempt["job_id"], attempt["provider"], attempt["query"],
          attempt.get("requested_limit", 10), attempt.get("started_at") or _now_iso(),
          attempt.get("completed_at"), attempt.get("outcome"),
          _json(attempt.get("diagnostics", attempt.get("diagnostics_json", {}))),
-         attempt.get("provider_request_id")),
-    )
-    con.commit()
+         attempt.get("provider_request_id"), attempt["job_id"]),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError(f"research job {attempt['job_id']} is terminal")
 
 
 def record_search_results(con, job_id, attempt_id, results):
@@ -324,39 +331,53 @@ def record_search_results(con, job_id, attempt_id, results):
     if attempt is None or attempt["job_id"] != job_id:
         raise ValueError("search attempt does not belong to job")
     saved = []
-    for position, result in enumerate(results, 1):
-        result_id = result.get("result_id", position)
-        row = {
+    with con:
+        for position, result in enumerate(results, 1):
+            result_id = result.get("result_id", position)
+            try:
+                result_id = int(result_id)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("search result id is invalid") from exc
+            row = {
             "search_result_id": result.get("search_result_id") or _id("csr_"),
             "job_id": job_id,
             "attempt_id": attempt_id,
-            "result_id": int(result_id),
+            "result_id": result_id,
             "query": result.get("query") or attempt["query"],
             "rank": result.get("rank", position),
             "title": result.get("title"),
             "url": result.get("url") or "",
             "snippet": result.get("snippet"),
             "metadata_json": _json(result.get("metadata", {})),
-        }
-        if not row["url"]:
-            raise ValueError("search result url is required")
-        con.execute(
+            }
+            if not row["url"]:
+                raise ValueError("search result url is required")
+            cursor = con.execute(
             """insert into catalyst_search_results(
                 search_result_id,job_id,attempt_id,result_id,query,rank,title,url,snippet,metadata_json
-            ) values (:search_result_id,:job_id,:attempt_id,:result_id,:query,:rank,:title,:url,:snippet,:metadata_json)
+            ) select :search_result_id,:job_id,:attempt_id,:result_id,:query,:rank,:title,:url,:snippet,:metadata_json
+            where exists (select 1 from catalyst_research_jobs where job_id = :job_id and status not in ('completed','completed_partial','unsupported','failed'))
             on conflict(job_id,result_id) do update set
                 attempt_id=excluded.attempt_id,query=excluded.query,rank=excluded.rank,title=excluded.title,
                 url=excluded.url,snippet=excluded.snippet,metadata_json=excluded.metadata_json""",
             row,
-        )
-        saved.append(row)
-    con.commit()
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"research job {job_id} is terminal")
+            saved.append(row)
     return saved
 
 
 def save_snapshot(con, snapshot):
     raw_html = snapshot.get("raw_html")
-    content_hash = snapshot.get("content_hash") or hashlib.sha256(str(raw_html or "").encode()).hexdigest()
+    structural_html = snapshot.get("structural_html")
+    normalized = snapshot.get("normalized", snapshot.get("normalized_json", {}))
+    content = raw_html or structural_html or _json(normalized)
+    computed_hash = hashlib.sha256(str(content).encode()).hexdigest()
+    supplied_hash = snapshot.get("content_hash")
+    if supplied_hash is not None and supplied_hash != computed_hash:
+        raise ValueError("content hash does not match snapshot content")
+    content_hash = supplied_hash or computed_hash
     con.execute(
         """insert or ignore into catalyst_source_snapshots(
             content_hash,requested_url,final_url,content_type,fetched_at,raw_html,structural_html,
@@ -364,7 +385,7 @@ def save_snapshot(con, snapshot):
         ) values (?,?,?,?,?,?,?,?,?,?,?)""",
         (content_hash, snapshot.get("requested_url") or snapshot.get("url") or "", snapshot.get("final_url"),
          snapshot.get("content_type"), snapshot.get("fetched_at") or _now_iso(), raw_html,
-         snapshot.get("structural_html"), _json(snapshot.get("normalized", snapshot.get("normalized_json", {}))),
+         structural_html, _json(normalized),
          snapshot.get("snapshot_schema_version"), snapshot.get("response_bytes"), int(bool(snapshot.get("truncated", False)))),
     )
     con.commit()
@@ -408,15 +429,22 @@ def save_source(con, source):
         raise ValueError("source type is invalid")
     if not row["url"]:
         raise ValueError("source url is required")
-    con.execute(
+    job_ticker = _job(con, job_id)["ticker"]
+    if row["ticker"] != job_ticker:
+        raise ValueError("source ticker does not match job ticker")
+    with con:
+        cursor = con.execute(
         """insert into catalyst_ir_sources(
             source_id,job_id,ticker,source_type,url,final_url,acceptance_status,extraction_status,active_adapter_id,
             evidence_result_ids_json,requested_start,requested_end,coverage_start,coverage_end,page_count,item_count,
             content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at
-        ) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        tuple(row.values()),
-    )
-    con.commit()
+        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
+            select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
+        )""",
+        (*tuple(row.values()), job_id),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError(f"research job {job_id} is terminal")
     row["evidence_result_ids"] = _decode(row.pop("evidence_result_ids_json"))
     return row
 
@@ -456,14 +484,18 @@ def create_adapter_candidate(con, candidate):
 
 
 def record_adapter_validation(con, validation):
+    adapter = con.execute("select state from catalyst_source_adapters where adapter_id = ?", (validation.get("adapter_id"),)).fetchone()
     adapter_id = validation.get("adapter_id")
-    if con.execute("select 1 from catalyst_source_adapters where adapter_id = ?", (adapter_id,)).fetchone() is None:
+    if adapter is None:
         raise ValueError(f"adapter {adapter_id} was not found")
+    if adapter["state"] != "candidate":
+        raise ValueError(f"adapter {adapter_id} is terminal")
     _nonterminal_job(con, validation.get("job_id"))
     status = validation.get("status") or validation.get("validation_status")
     if status not in {"passed", "failed"}:
         raise ValueError("adapter validation status is invalid")
-    con.execute(
+    with con:
+        con.execute(
         """insert into catalyst_adapter_validations(
             validation_id,adapter_id,job_id,validator_version,executor_version,status,report_json,
             source_content_hashes_json,page_content_hashes_json,validated_at
@@ -472,7 +504,11 @@ def record_adapter_validation(con, validation):
          validation.get("executor_version"), status, _json(validation.get("report", validation.get("report_json", {}))),
          _json(validation.get("source_content_hashes", [])), _json(validation.get("page_content_hashes", [])), validation.get("validated_at") or _now_iso()),
     )
-    con.commit()
+        if status == "failed":
+            con.execute(
+                "update catalyst_source_adapters set state = 'failed_validation' where adapter_id = ? and state = 'candidate'",
+                (adapter_id,),
+            )
 
 
 def _require_candidate_with_passing_validation(con, adapter_id):
@@ -480,7 +516,7 @@ def _require_candidate_with_passing_validation(con, adapter_id):
     if adapter is None:
         raise ValueError(f"adapter {adapter_id} was not found")
     if adapter["state"] != "candidate":
-        raise ValueError(f"adapter {adapter_id} is not a candidate")
+        raise ValueError(f"adapter {adapter_id} is not a candidate and has no passing validation")
     if con.execute("select 1 from catalyst_adapter_validations where adapter_id = ? and status = 'passed'", (adapter_id,)).fetchone() is None:
         raise ValueError(f"adapter {adapter_id} has no passing validation")
     return adapter
@@ -542,6 +578,8 @@ def save_finalized_observations(con, job_id, events, classifications):
                 raise ValueError("event title is required")
             if not canonical_url:
                 raise ValueError("event url is required")
+            if _ticker(event.get("ticker")) != job["ticker"]:
+                raise ValueError("event ticker does not match job ticker")
             source_row = con.execute("select job_id, ticker, source_type from catalyst_ir_sources where source_id = ?", (event["source_id"],)).fetchone()
             if source_row is None or source_row["job_id"] != job_id:
                 raise ValueError("event source does not belong to job")
@@ -554,17 +592,21 @@ def save_finalized_observations(con, job_id, events, classifications):
             ).fetchone()
             if existing:
                 event_id = existing["event_id"]
-            con.execute(
+            cursor = con.execute(
                 """insert into catalyst_ir_events(
                     event_id,job_id,source_id,ticker,published_date,event_date,count_date,title,normalized_title,canonical_url,
                     source_type,earnings_state,classification_method,adapter_id,adapter_version,executor_version,first_seen_at,content_hash
-                ) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
+                    select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
+                )
                 on conflict(job_id,ticker,source_type,count_date,normalized_title,canonical_url) do update set earnings_state=excluded.earnings_state""",
                 (event_id, job_id, event["source_id"], _ticker(event.get("ticker")), event.get("published_date"), event.get("event_date"),
                  count_date, title, normalized_title, canonical_url,
                  event["source_type"], state, (classification or event).get("classification_method"), event.get("adapter_id"), event.get("adapter_version"),
-                 event.get("executor_version"), event.get("first_seen_at") or _now_iso(), event.get("content_hash")),
+                 event.get("executor_version"), event.get("first_seen_at") or _now_iso(), event.get("content_hash"), job_id),
             )
+            if cursor.rowcount != 1:
+                raise ValueError(f"research job {job_id} is terminal")
             con.execute(
                 """insert or replace into catalyst_ir_classifications(
                     event_id,earnings_state,classification_method,model,prompt_schema_version,input_hash,output_hash,classified_at
@@ -586,15 +628,20 @@ def finalize_job(con, job_id, result):
     if error_summary:
         error_summary = str(error_summary)[:1000]
     with con:
-        con.execute(
+        cursor = con.execute(
             """update catalyst_research_jobs set status=?, statistics_json=?, warnings_json=?, next_actions_json=?,
                 error_summary=?, completed_at=?, execution_paths_json=coalesce(?, execution_paths_json), call_counts_json=coalesce(?, call_counts_json)
-                where job_id=? and status not in ('completed','completed_partial','unsupported','failed')""",
+                where job_id=? and status = 'running'""",
             (status, _json(result.get("statistics", {})), _json(result.get("warnings", [])), _json(result.get("next_actions", [])),
              error_summary, result.get("completed_at") or _now_iso(),
              _json(result["execution_paths"]) if "execution_paths" in result else None,
              _json(result["call_counts"]) if "call_counts" in result else None, job_id),
         )
+        if cursor.rowcount != 1:
+            current = _job(con, job_id)
+            if current["status"] in _TERMINAL_JOB_STATES:
+                raise ValueError(f"research job {job_id} is terminal")
+            raise ValueError(f"research job {job_id} cannot finalize from {current['status']}; job must be running")
 
 
 def load_job_result(con, job_id):
@@ -643,6 +690,16 @@ def _decode_cursor(value):
     except (ValueError, TypeError, UnicodeError):
         raise ValueError("event cursor is invalid") from None
     if not isinstance(payload, dict) or not {"ticker", "count_date", "event_id"} <= payload.keys():
+        raise ValueError("event cursor is invalid")
+    if (
+        not isinstance(payload["ticker"], str)
+        or not payload["ticker"]
+        or not isinstance(payload["count_date"], str)
+        or not payload["count_date"]
+        or not isinstance(payload["event_id"], str)
+        or not payload["event_id"]
+        or (payload.get("job_id") is not None and not isinstance(payload.get("job_id"), str))
+    ):
         raise ValueError("event cursor is invalid")
     return payload
 
