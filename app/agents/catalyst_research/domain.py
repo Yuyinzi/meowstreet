@@ -29,6 +29,11 @@ _EARNINGS_PATTERNS = (
     re.compile(r"\bresults?\s+(?:conference\s+)?call\b", re.IGNORECASE),
     re.compile(r"\b(?:quarterly|annual)\s+(?:financial\s+)?results?\b", re.IGNORECASE),
 )
+_EXPLICIT_FINANCIAL_RESULTS = re.compile(r"\bfinancial\s+results?\b", re.IGNORECASE)
+_NON_EARNINGS_RESULT_CONTEXT = (
+    re.compile(r"\b(?:product|customer|clinical|operational)\b.{0,40}\bresults?\b", re.IGNORECASE),
+    re.compile(r"\bresults?\s+update\b", re.IGNORECASE),
+)
 
 
 def _fold_whitespace(value):
@@ -270,6 +275,10 @@ def classify_title_by_rule(title, source_type) -> str | None:
     _source_type(source_type)
     normalized = _fold_whitespace(title)
     if not normalized:
+        return None
+    if not _EXPLICIT_FINANCIAL_RESULTS.search(normalized) and any(
+        pattern.search(normalized) for pattern in _NON_EARNINGS_RESULT_CONTEXT
+    ):
         return None
     if any(pattern.search(normalized) for pattern in _EARNINGS_PATTERNS):
         return "earnings"

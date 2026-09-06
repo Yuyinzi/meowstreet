@@ -215,6 +215,7 @@ def test_normalize_observations_rejects_null_title():
         ("FY2024 Financial Results", "press_releases"),
         ("Earnings Release", "press_releases"),
         ("Q2 Results Presentation", "events_presentations"),
+        ("Q2 Product Segment and Financial Results", "press_releases"),
     ],
 )
 def test_classify_title_by_rule_detects_narrow_earnings_titles(title, source_type):
@@ -233,6 +234,9 @@ def test_classify_title_by_rule_detects_narrow_earnings_titles(title, source_typ
         "Q2 release",
         "FY2024 release",
         "Quarterly earnings opportunity",
+        "Q2 product results",
+        "Q2 results update",
+        "Product results presentation",
     ],
 )
 def test_classify_title_by_rule_does_not_treat_generic_economic_words_as_earnings(title):
