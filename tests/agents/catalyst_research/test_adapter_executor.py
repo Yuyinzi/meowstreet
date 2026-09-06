@@ -342,3 +342,46 @@ def test_page_parameter_start_overwrites_existing_source_parameter():
     execute_adapter(adapter, fetch_page=fetch, requested_start="2025-01-01", requested_end="2025-12-31", limits={"max_pages": 1})
 
     assert calls == ["https://investor.example.com/news?page=3"]
+
+
+def test_page_parameter_start_none_derives_current_page_from_source_url():
+    adapter_payload = press_adapter({"type": "page_parameter", "parameter": "page", "start": None}).model_dump(mode="json")
+    adapter_payload["source_url"] = "https://investor.example.com/news?page=3"
+    adapter = IRSourceAdapter.model_validate(adapter_payload)
+    pages = [FIXTURES / "press_releases_page_1.html", FIXTURES / "press_releases_page_2.html"]
+    calls = []
+
+    def fetch(url):
+        calls.append(url)
+        html = pages[len(calls) - 1].read_text()
+        return {
+            "requested_url": url,
+            "final_url": url,
+            "redirect_chain": [url],
+            "content_type": "text/html",
+            "response_bytes": len(html.encode()),
+            "truncated": False,
+            "html": html,
+        }
+
+    execute_adapter(adapter, fetch_page=fetch, requested_start="2024-01-01", requested_end="2025-12-31", limits={"max_pages": 2})
+
+    assert calls == [
+        "https://investor.example.com/news?page=3",
+        "https://investor.example.com/news?page=4",
+    ]
+
+
+@pytest.mark.parametrize("query", ["page=", "page=0", "page=-1", "page=nope", "page=2&page=3"])
+def test_page_parameter_start_none_rejects_invalid_source_page_parameter(query):
+    adapter_payload = press_adapter({"type": "page_parameter", "parameter": "page", "start": None}).model_dump(mode="json")
+    adapter_payload["source_url"] = f"https://investor.example.com/news?{query}"
+    adapter = IRSourceAdapter.model_validate(adapter_payload)
+
+    with pytest.raises(ValueError, match="page parameter"):
+        execute_adapter(
+            adapter,
+            fetch_page=lambda url: {},
+            requested_start="2025-01-01",
+            requested_end="2025-12-31",
+        )

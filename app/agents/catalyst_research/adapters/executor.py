@@ -189,10 +189,18 @@ def _next_url(adapter, soup, current_url, page_number):
 
 def _initial_page(adapter):
     initial_url = canonicalize_public_url(str(adapter.source_url))
-    if adapter.pagination.type != "page_parameter" or adapter.pagination.start is None:
+    if adapter.pagination.type != "page_parameter":
         return initial_url, 0
     parsed = urlsplit(initial_url)
-    query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True) if key != adapter.pagination.parameter]
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    page_values = [value for key, value in query if key == adapter.pagination.parameter]
+    if adapter.pagination.start is None:
+        if not page_values:
+            return initial_url, 0
+        if len(page_values) != 1 or not page_values[0].isdigit() or int(page_values[0]) < 1:
+            raise ValueError("page parameter is invalid")
+        return initial_url, int(page_values[0]) - 1
+    query = [(key, value) for key, value in query if key != adapter.pagination.parameter]
     query.append((adapter.pagination.parameter, str(adapter.pagination.start)))
     initial_url = canonicalize_public_url(urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), "")))
     return initial_url, adapter.pagination.start - 1

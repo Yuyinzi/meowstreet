@@ -48,6 +48,11 @@ def adapter_payload():
         lambda payload: payload["extraction"].update(item_selector="*"),
         lambda payload: payload["extraction"].update(item_selector="body *"),
         lambda payload: payload["extraction"].update(item_selector="html *"),
+        lambda payload: payload["extraction"].update(item_selector="html, body"),
+        lambda payload: payload["extraction"].update(item_selector=":is(html, body)"),
+        lambda payload: payload["extraction"].update(item_selector="main, body"),
+        lambda payload: payload["extraction"].update(item_selector="html > body"),
+        lambda payload: payload["extraction"].update(item_selector="body, .item"),
         lambda payload: payload["extraction"].update(item_selector="a[href], article"),
         lambda payload: payload["extraction"].update(item_selector="*:not(html)"),
         lambda payload: payload["extraction"]["date"].update(value_source="regex"),
@@ -130,3 +135,12 @@ def test_press_release_adapter_requires_url_field():
 
     with pytest.raises((ValidationError, ValueError), match="url"):
         IRSourceAdapter.model_validate(payload)
+
+
+def test_item_selector_allows_literal_star_attribute_value():
+    payload = adapter_payload()
+    payload["extraction"]["item_selector"] = '[data-kind="*"]'
+
+    adapter = IRSourceAdapter.model_validate(payload)
+
+    assert adapter.extraction.item_selector == '[data-kind="*"]'

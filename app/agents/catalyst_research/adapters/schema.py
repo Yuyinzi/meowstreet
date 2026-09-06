@@ -1,5 +1,4 @@
 from collections.abc import Mapping
-import re
 from typing import Literal
 
 from bs4 import BeautifulSoup
@@ -48,14 +47,20 @@ def _validate_selector(value: str) -> str:
 
 
 def _item_selector_is_broad(selector: str) -> bool:
-    if re.search(r"(?<![\w-])\*(?![=])", selector):
-        return True
     probe = BeautifulSoup(
-        "<html><body><main><article class='item'><a href='x'></a><span></span></article>"
+        "<html><body><main><article class='item' data-kind='*'><a href='x'></a><span></span></article>"
         "<article class='other'><a href='y'></a></article><a href='z'></a></main></body></html>",
         "html.parser",
     )
     matched = probe.select(selector)
+    matched_ids = {id(node) for node in matched}
+    roots = [probe.find("html"), probe.find("body")]
+    if any(root is not None and id(root) in matched_ids for root in roots):
+        return True
+    for root in roots:
+        descendants = {id(node) for node in root.find_all(True)} if root is not None else set()
+        if descendants and matched_ids == descendants:
+            return True
     anchors = probe.find_all("a")
     return bool(anchors) and all(any(node is item for item in matched) for node in anchors)
 
