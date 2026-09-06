@@ -2,6 +2,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
+from copy import deepcopy
 from datetime import date, datetime
 from urllib.parse import urljoin
 
@@ -85,6 +86,33 @@ def _report(source_hashes=None, page_hashes=None):
         "repeatability": {"byte_equivalent": False},
         "errors": [],
     }
+
+
+def _merge_reports(base, diagnostics):
+    merged = deepcopy(base)
+    if not isinstance(diagnostics, Mapping):
+        return merged
+    for key in (
+        "match_counts",
+        "valid_observation_count",
+        "duplicate_count",
+        "parsed_date_formats",
+        "pagination",
+        "safety_failures",
+        "limit_checks",
+        "errors",
+    ):
+        if key in diagnostics:
+            merged[key] = deepcopy(diagnostics[key])
+    for key in ("source_content_hashes", "page_content_hashes"):
+        values = list(merged.get(key, []))
+        for value in diagnostics.get(key, []):
+            if value not in values:
+                values.append(value)
+        merged[key] = values
+    if diagnostics.get("repeatability", {}).get("byte_equivalent"):
+        merged["repeatability"] = deepcopy(merged.get("repeatability", {}))
+    return merged
 
 
 def _excluded_reason(item):
@@ -278,6 +306,7 @@ def _execution_snapshot(adapter, snapshot, start, end):
 def _run_live(adapter, fetch_page, start, end, limits):
     pages = []
     report = _report()
+    report["pagination"]["type"] = adapter.pagination.type
 
     def recording_fetch(url):
         page = fetch_page(url)
@@ -294,11 +323,12 @@ def _run_live(adapter, fetch_page, start, end, limits):
             limits=limits,
         )
         report["page_content_hashes"] = result.get("content_hashes", [])
+        loop = result.get("truncation_reason") in {"repeated_url", "repeated_content"}
         report["pagination"] = {
             "type": adapter.pagination.type,
             "pages": result.get("page_count", 0),
-            "distinct_pages": len(result.get("pages", [])) == len(set(result.get("pages", []))),
-            "loop": result.get("truncation_reason") in {"repeated_url", "repeated_content"},
+            "distinct_pages": not loop and len(result.get("pages", [])) == len(set(result.get("pages", []))),
+            "loop": loop,
             "truncation_reason": result.get("truncation_reason"),
         }
         page_observations = []
@@ -316,13 +346,11 @@ def _run_live(adapter, fetch_page, start, end, limits):
         saw_distinct_observation = False
         for index, current_keys in enumerate(observation_keys):
             new_keys = current_keys - prior_keys
-            if index > 0 and not new_keys:
-                distinct_observations = False
-            if new_keys:
+            if index > 0 and new_keys:
                 saw_distinct_observation = True
             prior_keys.update(current_keys)
         if len(observation_keys) > 1:
-            distinct_observations = distinct_observations and saw_distinct_observation
+            distinct_observations = saw_distinct_observation
         report["pagination"]["distinct_observations"] = distinct_observations
         report["limit_checks"]["within_bounds"] = result.get("truncation_reason") not in {"max_pages", "max_events", "max_elapsed_seconds", "response_truncated"}
         report["limit_checks"]["limits"] = dict(limits)
@@ -350,7 +378,7 @@ def validate_candidate(adapter, snapshot, *, fetch_page, requested_start, reques
         second, second_report = _execution_snapshot(adapter, snapshot, start, end)
         first_bytes = _canonical_json(first).encode()
         second_bytes = _canonical_json(second).encode()
-        report.update(first_report)
+        report = _merge_reports(report, first_report)
         report["repeatability"] = {
             "byte_equivalent": first_bytes == second_bytes,
             "first_hash": hashlib.sha256(first_bytes).hexdigest(),
@@ -359,14 +387,8 @@ def validate_candidate(adapter, snapshot, *, fetch_page, requested_start, reques
         if first_bytes != second_bytes:
             raise ValueError("snapshot observations are not byte-equivalent")
         live_result, live_report = _run_live(adapter, fetch_page, start, end, bounds)
-        report["page_content_hashes"] = live_result.get("content_hashes", [])
-        report["match_counts"] = live_report["match_counts"]
+        report = _merge_reports(report, live_report)
         report["valid_observation_count"] = live_result.get("item_count", 0)
-        report["duplicate_count"] = live_report["duplicate_count"]
-        report["parsed_date_formats"] = live_report["parsed_date_formats"]
-        report["pagination"] = live_report["pagination"]
-        report["safety_failures"] = live_report["safety_failures"]
-        report["limit_checks"] = live_report["limit_checks"]
         if report["pagination"]["loop"]:
             raise ValueError("pagination loop detected")
         if not report["pagination"].get("distinct_observations", True):
@@ -376,7 +398,7 @@ def validate_candidate(adapter, snapshot, *, fetch_page, requested_start, reques
         result["status"] = "passed"
         result["observations"] = live_result.get("observations", [])
     except Exception as exc:
-        report = getattr(exc, "report", report)
+        report = _merge_reports(report, getattr(exc, "report", None))
         result["errors"] = [_error(exc)]
         report["errors"] = result["errors"]
         result["observations"] = []

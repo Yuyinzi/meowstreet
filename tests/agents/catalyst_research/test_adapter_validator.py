@@ -165,6 +165,7 @@ def test_candidate_and_active_reject_pagination_loops():
 
     assert candidate["status"] == "failed"
     assert candidate["report"]["pagination"]["loop"] is True
+    assert candidate["report"]["pagination"]["distinct_pages"] is False
     assert candidate["report"]["errors"]
     assert active["status"] == "stale"
     assert active["observations"] == []
@@ -388,6 +389,49 @@ def test_candidate_rejects_paginated_pages_without_distinct_in_window_observatio
 
     assert result["status"] == "failed"
     assert result["report"]["pagination"]["distinct_observations"] is False
+    assert result["report"]["errors"]
+
+
+def test_three_page_pagination_allows_intermediate_overlap_when_later_page_adds_key():
+    pages = [
+        '<article class="news-item"><time>January 3, 2025</time><a class="news-title" href="/a">A</a></article><a class="next" href="/news?page=2">Next</a>',
+        '<article class="news-item"><time>January 3, 2025</time><a class="news-title" href="/a">A</a></article><a class="next" href="/news?page=3">Next</a>',
+        '<article class="news-item"><time>January 4, 2025</time><a class="news-title" href="/b">B</a></article>',
+    ]
+
+    def fetch(url):
+        index = 0 if "page=1" in url else 1 if "page=2" in url else 2
+        return _page(url, pages[index])
+
+    result = validate_candidate(
+        adapter({"type": "next_link", "selector": "a.next"}),
+        snapshot(pages[0]),
+        fetch_page=fetch,
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+
+    assert result["status"] == "passed"
+    assert result["report"]["pagination"]["distinct_observations"] is True
+    assert [row["title"] for row in result["observations"]] == ["A", "B"]
+
+
+def test_live_failure_merges_diagnostics_without_overwriting_snapshot_evidence():
+    page = (FIXTURES / "press_releases_page_1.html").read_text()
+    result = validate_candidate(
+        adapter(),
+        snapshot(page),
+        fetch_page=lambda url: _page(url, page, response_bytes=2_000_001),
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+
+    actual = hashlib.sha256(page.encode()).hexdigest()
+    assert result["status"] == "failed"
+    assert result["report"]["source_content_hashes"] == [actual]
+    assert result["report"]["repeatability"]["byte_equivalent"] is True
+    assert result["report"]["repeatability"]["first_hash"] == result["report"]["repeatability"]["second_hash"]
+    assert result["report"]["limit_checks"]["observed_response_bytes"] == [2_000_001]
     assert result["report"]["errors"]
 
 

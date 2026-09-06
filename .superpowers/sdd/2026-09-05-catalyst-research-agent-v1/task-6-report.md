@@ -21,6 +21,21 @@
 - `python3 -m py_compile app/agents/catalyst_research/adapters/validator.py app/agents/catalyst_research/adapters/generator.py` — passed
 - `git diff --check` — passed
 
+## Reviewer fix round 3
+
+- RED: added precise tests for live-failure evidence merging, three-page `[A], [A], [B]` pagination, two-page `[A], [A]` rejection, and loop evidence requiring `distinct_pages=false`.
+- GREEN: focused adapter validator/generator suite passes (`31 passed`); Catalyst agent suite passes (`195 passed`).
+- Added a dedicated structured report merge helper. Snapshot verified source/page hashes and repeatability hashes survive live failures, while live limit/pagination/safety/error diagnostics are retained.
+- Pagination distinctness now follows aggregate contract: at least one later-page key must be new relative to the accumulated prior pages. Intermediate overlapping pages are allowed when a later page adds a key; two-page full overlap remains invalid.
+- Repeated URL/content loops now report `loop=true` and `distinct_pages=false` before candidate/active fail-closed handling.
+
+### Round 3 verification
+
+- `.venv/bin/pytest tests/agents/catalyst_research/test_adapter_validator.py tests/agents/catalyst_research/test_adapter_generator.py -q` — 31 passed
+- `.venv/bin/pytest tests/agents/catalyst_research -q` — 195 passed
+- `python3 -m py_compile app/agents/catalyst_research/adapters/validator.py app/agents/catalyst_research/adapters/generator.py` — passed
+- `git diff --check` — passed
+
 ## Reviewer fix round 2
 
 - RED: added precise tests for validator-owned response-byte upper/lower bounds and evidence, invalid snapshot hash handling, paginated duplicate/out-of-window observations, and a non-artificial page-parameter success path.
