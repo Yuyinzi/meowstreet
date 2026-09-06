@@ -131,7 +131,7 @@ def test_generator_bounds_aggregate_prompt_and_normalized_shapes_and_recomputes_
     assert len(prompt_text) <= 125_000
     assert "\"untrusted\"" not in prompt_text
     assert len(result["source_snapshot_hash"]) == 64
-    assert result["source_snapshot_hash"] == hashlib.sha256(result["adapter"]["source_url"].encode()).hexdigest() or result["source_snapshot_hash"] != "not-a-sha256"
+    assert result["source_snapshot_hash"] == hashlib.sha256(snapshot["structural_html"][:120_000].encode()).hexdigest()
 
 
 def test_generator_missing_parsed_response_is_bounded_error():

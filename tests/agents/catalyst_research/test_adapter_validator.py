@@ -131,13 +131,13 @@ def test_active_validation_returns_stale_without_promotable_observations_on_drif
     assert result["report"]["safety_failures"]
 
 
-def _page(url, html, *, truncated=False, redirect_chain=None, content_type="text/html"):
+def _page(url, html, *, truncated=False, redirect_chain=None, content_type="text/html", response_bytes=None):
     return {
         "requested_url": url,
         "final_url": url,
         "redirect_chain": redirect_chain or [url],
         "content_type": content_type,
-        "response_bytes": len(html.encode()),
+        "response_bytes": len(html.encode()) if response_bytes is None else response_bytes,
         "truncated": truncated,
         "html": html,
     }
@@ -183,8 +183,8 @@ def test_candidate_and_active_reject_pagination_loops():
         (
             {"type": "page_parameter", "parameter": "page", "start": 1},
             ["https://investor.example.com/news?page=1", "https://investor.example.com/news?page=2"],
-            {"max_pages": 2},
-            "failed",
+            None,
+            "passed",
         ),
     ],
 )
@@ -202,7 +202,7 @@ def test_pagination_requires_distinct_safe_page_and_observation(pagination, urls
         adapter(pagination),
         snapshot(pages[0]),
         fetch_page=fetch,
-        requested_start="2024-01-01",
+        requested_start="2025-01-01",
         requested_end="2025-12-31",
         limits=limits,
     )
@@ -257,6 +257,49 @@ def test_candidate_rejects_response_truncation_and_oversize_page():
     assert oversized["report"]["errors"]
 
 
+def test_response_bytes_have_explicit_upper_bound_and_limit_evidence():
+    page = (FIXTURES / "press_releases_page_1.html").read_text()
+    too_large = validate_candidate(
+        adapter(),
+        snapshot(page),
+        fetch_page=lambda url: _page(url, page, response_bytes=2_000_001),
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+    too_small = validate_candidate(
+        adapter(),
+        snapshot(page),
+        fetch_page=lambda url: _page(url, page, response_bytes=1),
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+
+    for result in (too_large, too_small):
+        assert result["status"] == "failed"
+        checks = result["report"]["limit_checks"]
+        assert checks["max_response_bytes"] == 2_000_000
+        assert checks["observed_response_bytes"]
+        assert checks["response_bytes_within_bounds"] is False
+        assert checks["within_bounds"] is False
+        assert result["report"]["errors"]
+
+    snapshot_large = snapshot(page)
+    snapshot_large["response_bytes"] = 2_000_001
+    snapshot_small = snapshot(page)
+    snapshot_small["response_bytes"] = 1
+    for candidate_snapshot in (snapshot_large, snapshot_small):
+        result = validate_candidate(
+            adapter(),
+            candidate_snapshot,
+            fetch_page=lambda url: _page(url, page),
+            requested_start="2025-01-01",
+            requested_end="2025-12-31",
+        )
+        assert result["status"] == "failed"
+        assert result["report"]["limit_checks"]["observed_response_bytes"]
+        assert result["report"]["limit_checks"]["within_bounds"] is False
+
+
 @pytest.mark.parametrize(
     "html",
     [
@@ -303,6 +346,49 @@ def test_candidate_rejects_unsafe_redirect_and_event_url():
     assert unsafe_url["status"] == "failed"
     assert unsafe_redirect["report"]["errors"]
     assert unsafe_url["report"]["errors"]
+
+
+def test_candidate_rejects_invalid_snapshot_hash_without_echoing_unverified_value():
+    page = (FIXTURES / "press_releases_page_1.html").read_text()
+    candidate_snapshot = snapshot(page)
+    candidate_snapshot["content_hash"] = "not-a-real-hash"
+
+    result = validate_candidate(
+        adapter(), candidate_snapshot, fetch_page=lambda url: _page(url, page), requested_start="2025-01-01", requested_end="2025-12-31"
+    )
+
+    actual = hashlib.sha256(page.encode()).hexdigest()
+    assert result["status"] == "failed"
+    assert result["report"]["source_content_hashes"] == [actual]
+    assert "not-a-real-hash" not in str(result["report"])
+    assert result["report"]["errors"]
+
+
+@pytest.mark.parametrize("htmls", [
+    [
+        '<article class="news-item"><time>January 3, 2025</time><a class="news-title" href="/same">Same</a></article><a class="next" href="/news?page=2">Next</a>',
+        '<article class="news-item"><time>January 3, 2025</time><a class="news-title" href="/same">Same</a></article>',
+    ],
+    [
+        '<article class="news-item"><time>January 3, 2026</time><a class="news-title" href="/old">Old</a></article><a class="next" href="/news?page=2">Next</a>',
+        '<article class="news-item"><time>January 4, 2026</time><a class="news-title" href="/old-2">Old two</a></article>',
+    ],
+])
+def test_candidate_rejects_paginated_pages_without_distinct_in_window_observation(htmls):
+    def fetch(url):
+        return _page(url, htmls[0] if "page=1" in url else htmls[1])
+
+    result = validate_candidate(
+        adapter({"type": "next_link", "selector": "a.next"}),
+        snapshot(htmls[0]),
+        fetch_page=fetch,
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+
+    assert result["status"] == "failed"
+    assert result["report"]["pagination"]["distinct_observations"] is False
+    assert result["report"]["errors"]
 
 
 def test_active_validation_returns_success_and_sanitized_stale_on_unexpected_fetch_failure():

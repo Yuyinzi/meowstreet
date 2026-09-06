@@ -15,10 +15,17 @@ from app.agents.catalyst_research.domain import canonicalize_public_url, url_hos
 
 ADAPTER_VALIDATOR_VERSION = "adapter_validator_v1"
 ADAPTER_EXECUTOR_VERSION = "adapter_executor_v1"
+MAX_RESPONSE_BYTES = 2_000_000
 _MAX_SNAPSHOT_HTML = 120_000
 _EXCLUDED_TAGS = {"nav", "footer", "form", "aside", "iframe", "script", "style"}
 _EXCLUDED_HINTS = {"banner", "consent", "cookie", "privacy", "terms"}
 _HTML_ERROR_RE = re.compile(r"<[^>]*>")
+
+
+class _LiveExecutionError(Exception):
+    def __init__(self, cause, report):
+        super().__init__(str(cause))
+        self.report = report
 
 
 def _as_adapter(adapter):
@@ -68,7 +75,13 @@ def _report(source_hashes=None, page_hashes=None):
         "parsed_date_formats": [],
         "pagination": {"type": "none", "pages": 0, "distinct_pages": True, "loop": False},
         "safety_failures": [],
-        "limit_checks": {"within_bounds": True, "limits": dict(DEFAULT_LIMITS)},
+        "limit_checks": {
+            "within_bounds": True,
+            "limits": dict(DEFAULT_LIMITS),
+            "max_response_bytes": MAX_RESPONSE_BYTES,
+            "observed_response_bytes": [],
+            "response_bytes_within_bounds": True,
+        },
         "repeatability": {"byte_equivalent": False},
         "errors": [],
     }
@@ -214,61 +227,109 @@ def _snapshot_page(adapter, snapshot):
     }
 
 
+def _record_response_size(page, report):
+    if isinstance(page, str):
+        html = page
+        observed = len(html.encode())
+    elif isinstance(page, Mapping):
+        html = page.get("html")
+        observed = page.get("response_bytes")
+        if not isinstance(html, str) or not isinstance(observed, int) or isinstance(observed, bool):
+            raise ValueError("page response bytes are invalid")
+    else:
+        raise ValueError("fetched page is invalid")
+    actual = len(html.encode()) if isinstance(html, str) else 0
+    report["limit_checks"]["observed_response_bytes"].append(observed)
+    if observed < actual:
+        report["limit_checks"]["response_bytes_within_bounds"] = False
+        report["limit_checks"]["within_bounds"] = False
+        raise ValueError("page response bytes are smaller than html")
+    if observed > MAX_RESPONSE_BYTES:
+        report["limit_checks"]["response_bytes_within_bounds"] = False
+        report["limit_checks"]["within_bounds"] = False
+        raise ValueError("page response bytes exceed maximum")
+    return observed
+
+
 def _execution_snapshot(adapter, snapshot, start, end):
-    page = _snapshot_page(adapter, snapshot)
-    report = _report([snapshot.get("content_hash") or hashlib.sha256(page["html"].encode()).hexdigest()])
-    report["pagination"]["type"] = adapter.pagination.type
-    observations = _inspect_html(adapter, page["html"], page["final_url"], start, end, report)
-    report["pagination"]["pages"] = 1
-    report["page_content_hashes"] = [hashlib.sha256(page["html"].encode()).hexdigest()]
-    return observations, report
+    report = _report()
+    snapshot_html = snapshot.get("structural_html") if isinstance(snapshot, Mapping) else None
+    if isinstance(snapshot_html, str):
+        report["source_content_hashes"] = [hashlib.sha256(snapshot_html.encode()).hexdigest()]
+    try:
+        if isinstance(snapshot_html, str):
+            _record_response_size(
+                {
+                    "html": snapshot_html,
+                    "response_bytes": snapshot.get("response_bytes", len(snapshot_html.encode())),
+                },
+                report,
+            )
+        page = _snapshot_page(adapter, snapshot)
+        report["pagination"]["type"] = adapter.pagination.type
+        observations = _inspect_html(adapter, page["html"], page["final_url"], start, end, report)
+        report["pagination"]["pages"] = 1
+        report["page_content_hashes"] = [hashlib.sha256(page["html"].encode()).hexdigest()]
+        return observations, report
+    except Exception as exc:
+        raise _LiveExecutionError(exc, report) from exc
 
 
 def _run_live(adapter, fetch_page, start, end, limits):
     pages = []
+    report = _report()
 
     def recording_fetch(url):
         page = fetch_page(url)
+        _record_response_size(page, report)
         pages.append(page)
         return page
 
-    result = execute_adapter(
-        adapter,
-        fetch_page=recording_fetch,
-        requested_start=start,
-        requested_end=end,
-        limits=limits,
-    )
-    report = _report(page_hashes=result.get("content_hashes", []))
-    report["pagination"] = {
-        "type": adapter.pagination.type,
-        "pages": result.get("page_count", 0),
-        "distinct_pages": len(result.get("pages", [])) == len(set(result.get("pages", []))),
-        "loop": result.get("truncation_reason") in {"repeated_url", "repeated_content"},
-        "truncation_reason": result.get("truncation_reason"),
-    }
-    page_observations = []
-    for page in pages:
-        html = page.get("html") if isinstance(page, Mapping) else page
-        page_url = page.get("final_url") if isinstance(page, Mapping) else None
-        page_url = page_url or (page.get("requested_url") if isinstance(page, Mapping) else str(adapter.source_url))
-        page_observations.append(_inspect_html(adapter, html, page_url, start, end, report))
-    observation_keys = [
-        {(row["count_date"], row["title"].casefold(), row["url"] or "") for row in observations}
-        for observations in page_observations
-    ]
-    prior_keys = set()
-    distinct_observations = True
-    for current_keys in observation_keys:
-        if prior_keys and not current_keys - prior_keys:
-            distinct_observations = False
-        prior_keys.update(current_keys)
-    report["pagination"]["distinct_observations"] = distinct_observations
-    report["limit_checks"] = {
-        "within_bounds": result.get("truncation_reason") not in {"max_pages", "max_events", "max_elapsed_seconds", "response_truncated"},
-        "limits": dict(limits),
-    }
-    return result, report
+    try:
+        result = execute_adapter(
+            adapter,
+            fetch_page=recording_fetch,
+            requested_start=start,
+            requested_end=end,
+            limits=limits,
+        )
+        report["page_content_hashes"] = result.get("content_hashes", [])
+        report["pagination"] = {
+            "type": adapter.pagination.type,
+            "pages": result.get("page_count", 0),
+            "distinct_pages": len(result.get("pages", [])) == len(set(result.get("pages", []))),
+            "loop": result.get("truncation_reason") in {"repeated_url", "repeated_content"},
+            "truncation_reason": result.get("truncation_reason"),
+        }
+        page_observations = []
+        for page in pages:
+            html = page.get("html") if isinstance(page, Mapping) else page
+            page_url = page.get("final_url") if isinstance(page, Mapping) else None
+            page_url = page_url or (page.get("requested_url") if isinstance(page, Mapping) else str(adapter.source_url))
+            page_observations.append(_inspect_html(adapter, html, page_url, start, end, report))
+        observation_keys = [
+            {(row["count_date"], row["title"].casefold(), row["url"] or "") for row in observations}
+            for observations in page_observations
+        ]
+        prior_keys = set()
+        distinct_observations = True
+        saw_distinct_observation = False
+        for index, current_keys in enumerate(observation_keys):
+            new_keys = current_keys - prior_keys
+            if index > 0 and not new_keys:
+                distinct_observations = False
+            if new_keys:
+                saw_distinct_observation = True
+            prior_keys.update(current_keys)
+        if len(observation_keys) > 1:
+            distinct_observations = distinct_observations and saw_distinct_observation
+        report["pagination"]["distinct_observations"] = distinct_observations
+        report["limit_checks"]["within_bounds"] = result.get("truncation_reason") not in {"max_pages", "max_events", "max_elapsed_seconds", "response_truncated"}
+        report["limit_checks"]["limits"] = dict(limits)
+        report["limit_checks"]["within_bounds"] = report["limit_checks"]["within_bounds"] and report["limit_checks"]["response_bytes_within_bounds"]
+        return result, report
+    except Exception as exc:
+        raise _LiveExecutionError(exc, report) from exc
 
 
 def validate_candidate(adapter, snapshot, *, fetch_page, requested_start, requested_end, limits=None) -> dict:
@@ -282,7 +343,7 @@ def validate_candidate(adapter, snapshot, *, fetch_page, requested_start, reques
     bounds = dict(DEFAULT_LIMITS)
     if limits is not None:
         bounds.update(limits)
-    report = _report([snapshot.get("content_hash")] if isinstance(snapshot, Mapping) and snapshot.get("content_hash") else [])
+    report = _report()
     result = {"status": "failed", "observations": [], "errors": [], "report": report}
     try:
         first, first_report = _execution_snapshot(adapter, snapshot, start, end)
@@ -315,6 +376,7 @@ def validate_candidate(adapter, snapshot, *, fetch_page, requested_start, reques
         result["status"] = "passed"
         result["observations"] = live_result.get("observations", [])
     except Exception as exc:
+        report = getattr(exc, "report", report)
         result["errors"] = [_error(exc)]
         report["errors"] = result["errors"]
         result["observations"] = []
@@ -322,6 +384,7 @@ def validate_candidate(adapter, snapshot, *, fetch_page, requested_start, reques
             report["safety_failures"] = [_error(exc)]
     report["validator_version"] = ADAPTER_VALIDATOR_VERSION
     report["executor_version"] = ADAPTER_EXECUTOR_VERSION
+    result["report"] = report
     result["validator_version"] = ADAPTER_VALIDATOR_VERSION
     result["executor_version"] = ADAPTER_EXECUTOR_VERSION
     result["source_content_hashes"] = report["source_content_hashes"]
@@ -353,7 +416,7 @@ def validate_active_adapter(adapter, *, fetch_page, requested_start, requested_e
         observations = result.get("observations", [])
         errors = []
     except Exception as exc:
-        report = report or _report()
+        report = getattr(exc, "report", None) or report or _report()
         report["safety_failures"] = [_error(exc)]
         report["pagination"]["type"] = adapter.pagination.type
         status = "stale"
