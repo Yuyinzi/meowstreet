@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+from ddgs.exceptions import DDGSException
 
 from app.agents.catalyst_research.providers.base import SearchProviderError
 from app.agents.catalyst_research.providers.ddgs import DDGSSearchProvider
@@ -61,6 +62,31 @@ def test_ddgs_empty_results_have_stable_error():
 
     assert error.value.reason_code == "empty_results"
     assert error.value.retryable is False
+
+
+def test_ddgs_real_no_results_exception_is_empty_without_retry_or_raw_text():
+    provider = DDGSSearchProvider(client=FakeDDGS(error=DDGSException("No results found.")))
+
+    with pytest.raises(SearchProviderError) as error:
+        asyncio.run(provider.search("NVIDIA", limit=1))
+
+    assert error.value.reason_code == "empty_results"
+    assert error.value.retryable is False
+    assert "No results found" not in str(error.value)
+    assert error.value.__cause__ is None
+    assert error.value.__context__ is None
+
+
+def test_ddgs_real_provider_exception_is_not_misclassified_or_leaked():
+    provider = DDGSSearchProvider(client=FakeDDGS(error=DDGSException("private upstream payload")))
+
+    with pytest.raises(SearchProviderError) as error:
+        asyncio.run(provider.search("NVIDIA", limit=1))
+
+    assert error.value.reason_code == "provider_error"
+    assert "private upstream payload" not in str(error.value)
+    assert error.value.__cause__ is None
+    assert error.value.__context__ is None
 
 
 def test_ddgs_uses_injected_to_thread_and_factory_context_manager(monkeypatch):

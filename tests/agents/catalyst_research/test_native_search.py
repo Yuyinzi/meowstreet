@@ -164,3 +164,40 @@ def test_native_last_request_id_resets_on_sequential_call():
     with pytest.raises(SearchProviderError):
         asyncio.run(provider.search("second", limit=1))
     assert provider.last_request_id is None
+
+
+def test_native_accepts_tuple_sources_from_sdk_or_pydantic_shapes():
+    provider = NativeSearchProvider(
+        client=FakeClient(
+            response={
+                "output": [
+                    {
+                        "type": "web_search_call",
+                        "action": {"sources": ({"title": "IR", "url": "https://example.com"},)},
+                    }
+                ]
+            }
+        ),
+        model="search-model",
+        native_search_supported=True,
+    )
+
+    rows = asyncio.run(provider.search("NVIDIA", limit=1))
+
+    assert rows[0]["url"] == "https://example.com"
+
+
+@pytest.mark.parametrize("sources", ["https://example.com", {"url": "https://example.com"}])
+def test_native_rejects_string_or_mapping_sources(sources):
+    provider = NativeSearchProvider(
+        client=FakeClient(
+            response={"output": [{"type": "web_search_call", "action": {"sources": sources}}]}
+        ),
+        model="search-model",
+        native_search_supported=True,
+    )
+
+    with pytest.raises(SearchProviderError) as error:
+        asyncio.run(provider.search("NVIDIA", limit=1))
+
+    assert error.value.reason_code == "malformed_response"

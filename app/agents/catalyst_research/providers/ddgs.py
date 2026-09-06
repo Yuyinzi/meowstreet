@@ -2,6 +2,7 @@ import asyncio
 from typing import Any
 
 from ddgs import DDGS
+from ddgs.exceptions import DDGSException
 
 from app.agents.catalyst_research.providers.base import SearchProviderError
 from app.agents.catalyst_research.providers.base import ensure_normalized_results
@@ -30,6 +31,13 @@ class DDGSSearchProvider:
             raw_rows = await asyncio.to_thread(self._search_sync, query, limit)
         except SearchProviderError as exc:
             safe_error = sanitize_provider_error(exc, "ddgs")
+        except DDGSException as exc:
+            if _is_no_results_error(exc):
+                safe_error = SearchProviderError(
+                    "empty_results", "ddgs search provider returned no results"
+                )
+            else:
+                safe_error = provider_error(exc)
         except Exception as exc:
             safe_error = provider_error(exc)
         if safe_error is not None:
@@ -52,3 +60,8 @@ class DDGSSearchProvider:
             with client as active_client:
                 return active_client.text(query, max_results=limit)
         return client.text(query, max_results=limit)
+
+
+def _is_no_results_error(error: DDGSException) -> bool:
+    normalized = " ".join(str(error).casefold().strip().rstrip(".!?").split())
+    return normalized in {"no results", "no results found"} or normalized.startswith("no results found for ")
