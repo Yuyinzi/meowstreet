@@ -24,6 +24,79 @@ def test_request_adds_user_agent_and_forwards_params():
     assert captured["user_agent"] == DEFAULT_USER_AGENT
 
 
+def test_bounded_request_returns_under_limit_body():
+    response = HttpClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, content=b"hello"))).request(
+        "GET", "https://example.test/items", max_response_bytes=5
+    )
+
+    assert response.content == b"hello"
+
+
+def test_bounded_request_accepts_exact_limit_body():
+    response = HttpClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, content=b"hello"))).request(
+        "GET", "https://example.test/items", max_response_bytes=5
+    )
+
+    assert response.content == b"hello"
+
+
+def test_bounded_request_stops_and_errors_when_body_exceeds_limit():
+    reads = []
+
+    class TrackingStream(httpx.SyncByteStream):
+        def __iter__(self):
+            reads.append("first")
+            yield b"123456"
+            reads.append("second")
+            yield b"5678"
+
+    def handler(request):
+        return httpx.Response(200, stream=TrackingStream(), request=request)
+
+    with pytest.raises(httpx.HTTPError, match="response exceeds maximum"):
+        HttpClient(transport=httpx.MockTransport(handler)).request(
+            "GET", "https://example.test/items", max_response_bytes=5
+        )
+
+    assert reads == ["first"]
+
+
+def test_bounded_request_retries_transient_status_then_succeeds():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(503, content=b"retry", request=request)
+        return httpx.Response(200, content=b"ok", request=request)
+
+    client = HttpClient(
+        transport=httpx.MockTransport(handler),
+        sleep=lambda seconds: None,
+        max_attempts=2,
+    )
+    response = client.request("GET", "https://example.test/items", max_response_bytes=10)
+
+    assert response.content == b"ok"
+    assert len(calls) == 2
+
+
+def test_default_request_remains_unbounded_and_follows_redirects():
+    requested_urls = []
+    body = b"x" * 20
+
+    def handler(request):
+        requested_urls.append(str(request.url))
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"Location": "https://example.test/final"}, request=request)
+        return httpx.Response(200, content=body, request=request)
+
+    response = HttpClient(transport=httpx.MockTransport(handler)).request("GET", "https://example.test/start")
+
+    assert response.content == body
+    assert requested_urls == ["https://example.test/start", "https://example.test/final"]
+
+
 def test_follows_redirect_to_final_response():
     requested_urls = []
 

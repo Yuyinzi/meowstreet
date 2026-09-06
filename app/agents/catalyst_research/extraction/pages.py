@@ -1,5 +1,6 @@
-from datetime import UTC, datetime
 from collections.abc import Iterable
+from datetime import UTC, datetime
+from urllib.parse import urljoin
 
 import httpx
 
@@ -8,6 +9,7 @@ from app.agents.catalyst_research.domain import (
     url_host,
     validate_redirect_chain,
 )
+from app.http_client import ResponseTooLargeError
 
 
 _HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
@@ -64,20 +66,38 @@ def fetch_html_page(url, *, http_client, allowed_hosts=None, resolver=None, max_
     max_bytes = _positive_integer(max_bytes, "max bytes")
     requested_url = canonicalize_public_url(url)
     normalized_allowed_hosts = _normalized_allowed_hosts(allowed_hosts)
-    try:
-        response = http_client.request("GET", requested_url, browser=True)
-    except httpx.ReadTimeout as exc:
-        raise ValueError("page request timed out") from exc
-    except httpx.HTTPError as exc:
-        raise ValueError("page request failed") from exc
+    current_url = requested_url
+    chain = []
+    redirect_count = 0
+    while True:
+        normalized_current = validate_redirect_chain([current_url], resolver=resolver)[0]
+        _ensure_allowed_hosts([normalized_current], normalized_allowed_hosts)
+        chain.append(normalized_current)
+        try:
+            response = http_client.request(
+                "GET",
+                normalized_current,
+                browser=True,
+                follow_redirects=False,
+                max_response_bytes=max_bytes,
+            )
+        except httpx.TimeoutException as exc:
+            raise ValueError("page request timed out") from exc
+        except ResponseTooLargeError as exc:
+            raise ValueError("page response exceeds maximum bytes") from exc
+        except httpx.HTTPError as exc:
+            raise ValueError("page request failed") from exc
+        if not response.is_redirect:
+            break
+        if redirect_count >= 5:
+            raise ValueError("page redirect limit exceeded")
+        location = response.headers.get("Location")
+        if not location:
+            raise ValueError("page redirect location is missing")
+        current_url = canonicalize_public_url(urljoin(normalized_current, location))
+        redirect_count += 1
 
-    chain = [str(item.url) for item in response.history] + [str(response.url)]
-    try:
-        normalized_chain = validate_redirect_chain(chain, resolver=resolver)
-    except ValueError:
-        raise
-    _ensure_allowed_hosts(normalized_chain, normalized_allowed_hosts)
-    final_url = normalized_chain[-1]
+    final_url = chain[-1]
     content_type = _content_type(response)
     if content_type not in _HTML_CONTENT_TYPES:
         raise ValueError("page content type is not html")
@@ -92,4 +112,5 @@ def fetch_html_page(url, *, http_client, allowed_hosts=None, resolver=None, max_
         "response_bytes": response_bytes,
         "fetched_at": datetime.now(UTC).isoformat(),
         "truncated": truncated,
+        "redirect_chain": chain,
     }

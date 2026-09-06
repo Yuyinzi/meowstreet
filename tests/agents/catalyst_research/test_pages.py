@@ -40,6 +40,56 @@ def test_fetch_html_page_uses_browser_headers_and_captures_canonical_final_url()
     datetime.fromisoformat(page["fetched_at"])
 
 
+def test_fetch_html_page_validates_initial_dns_before_request():
+    requests = []
+
+    def handler(request):
+        requests.append(str(request.url))
+        return httpx.Response(200, headers={"Content-Type": "text/html"}, content=b"<p>never</p>")
+
+    with pytest.raises(ValueError, match="url host is not public"):
+        fetch_html_page(
+            "https://example.com/page",
+            http_client=client_for(handler),
+            resolver=lambda host: ["192.168.1.8"],
+        )
+
+    assert requests == []
+
+
+def test_fetch_html_page_validates_redirect_target_before_request():
+    requests = []
+
+    def handler(request):
+        requests.append(str(request.url))
+        return httpx.Response(302, headers={"Location": "https://private.example.com/final"}, request=request)
+
+    def resolver(host):
+        return ["93.184.216.34"] if host == "example.com" else ["192.168.1.8"]
+
+    with pytest.raises(ValueError, match="url host is not public"):
+        fetch_html_page("https://example.com/start", http_client=client_for(handler), resolver=resolver)
+
+    assert requests == ["https://example.com/start"]
+
+
+def test_fetch_html_page_stops_after_five_redirects():
+    requests = []
+
+    def handler(request):
+        requests.append(str(request.url))
+        return httpx.Response(302, headers={"Location": f"https://example.com/{len(requests)}"}, request=request)
+
+    with pytest.raises(ValueError, match="redirect limit"):
+        fetch_html_page(
+            "https://example.com/start",
+            http_client=client_for(handler),
+            resolver=lambda host: ["93.184.216.34"],
+        )
+
+    assert len(requests) == 6
+
+
 def test_fetch_html_page_revalidates_repeated_redirect_hosts_with_resolver():
     calls = []
 
@@ -81,16 +131,13 @@ def test_fetch_html_page_bounds_response_bytes_and_marks_truncation():
     def handler(request):
         return httpx.Response(200, headers={"Content-Type": "text/html"}, content=body)
 
-    page = fetch_html_page(
-        "https://example.com/page",
-        http_client=client_for(handler),
-        resolver=lambda host: ["93.184.216.34"],
-        max_bytes=20,
-    )
-
-    assert page["response_bytes"] == 20
-    assert len(page["html"].encode()) == 20
-    assert page["truncated"] is True
+    with pytest.raises(ValueError, match="exceeds maximum bytes"):
+        fetch_html_page(
+            "https://example.com/page",
+            http_client=client_for(handler),
+            resolver=lambda host: ["93.184.216.34"],
+            max_bytes=20,
+        )
 
 
 @pytest.mark.parametrize(

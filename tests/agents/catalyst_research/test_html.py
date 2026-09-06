@@ -53,10 +53,10 @@ def test_build_structural_snapshot_removes_unsafe_content_and_preserves_event_st
     assert "steal()" not in snapshot["structural_html"]
     assert "Investor Events" in snapshot["normalized"]["text"]
     assert len(snapshot["normalized"]["headings"]) == 3
-    assert len(snapshot["normalized"]["links"]) == 3
-    assert snapshot["normalized"]["links"][1]["href"] == "https://example.com/events/q4"
-    assert snapshot["normalized"]["links"][2]["href"] == "https://example.com/events/day?id=2"
-    assert snapshot["normalized"]["links"][1]["title"] == "Details"
+    assert len(snapshot["normalized"]["links"]) == 2
+    assert snapshot["normalized"]["links"][0]["href"] == "https://example.com/events/q4"
+    assert snapshot["normalized"]["links"][1]["href"] == "https://example.com/events/day?id=2"
+    assert snapshot["normalized"]["links"][0]["title"] == "Details"
     assert "event-card" in snapshot["structural_html"]
     assert "data-date=\"2026-01-02\"" in snapshot["structural_html"]
     assert "datetime=\"2026-01-02\"" in snapshot["structural_html"]
@@ -69,8 +69,21 @@ def test_build_structural_snapshot_bounds_html_text_and_links_before_hashing():
 
     assert len(snapshot["structural_html"]) <= 120
     assert len(snapshot["normalized"]["text"]) <= 80
-    assert len(snapshot["normalized"]["links"]) == 3
+    assert len(snapshot["normalized"]["links"]) <= 3
     assert snapshot["content_hash"] == hashlib.sha256(snapshot["structural_html"].encode()).hexdigest()
+
+
+def test_build_structural_snapshot_prunes_navigation_context_and_bounds_headings_without_raw_slicing():
+    source = page("<main><nav>Menu</nav><h1>" + "heading " * 20 + "</h1><article><h2>Event</h2><p>Details</p></article><aside>Ads</aside><footer>Footer</footer></main>")
+
+    snapshot = build_structural_snapshot(source, max_html_chars=80, max_text_chars=40)
+
+    assert "<nav" not in snapshot["structural_html"]
+    assert "<aside" not in snapshot["structural_html"]
+    assert "<footer" not in snapshot["structural_html"]
+    assert all(len(row["text"]) <= 40 for row in snapshot["normalized"]["headings"])
+    assert snapshot["truncated"] is True
+    assert snapshot["structural_html"].count("<") == snapshot["structural_html"].count(">")
 
 
 def test_build_structural_snapshot_is_content_addressed_for_equivalent_normalized_content():
@@ -92,3 +105,14 @@ def test_build_structural_snapshot_preserves_only_stable_attributes_and_plain_fi
     assert snapshot["structural_html"] == '<article aria-label="A" class="card" data-date="2026-01-02" id="one" title="T">Text</article>'
     assert isinstance(snapshot["content_hash"], str)
     assert set(snapshot) >= {"requested_url", "final_url", "structural_html", "normalized", "content_hash", "snapshot_schema_version"}
+
+
+def test_build_structural_snapshot_applies_link_limit_after_invalid_links_are_filtered():
+    html = "<main><a href='mailto:test@example.com'>bad</a><a href='javascript:alert(1)'>bad</a><a href='/first'>first</a><a href='/second'>second</a></main>"
+
+    snapshot = build_structural_snapshot(page(html), max_links=2)
+
+    assert [row["href"] for row in snapshot["normalized"]["links"]] == [
+        "https://example.com/first",
+        "https://example.com/second",
+    ]

@@ -82,7 +82,17 @@ class HttpClient:
         headers=None,
         timeout=None,
         browser=False,
+        follow_redirects=True,
+        max_response_bytes=None,
     ):
+        if not isinstance(follow_redirects, bool):
+            raise ValueError("follow redirects must be boolean")
+        if max_response_bytes is not None and (
+            isinstance(max_response_bytes, bool)
+            or not isinstance(max_response_bytes, int)
+            or max_response_bytes < 0
+        ):
+            raise ValueError("max response bytes must be a non-negative integer")
         if browser:
             merged_headers = dict(BROWSER_HEADERS)
             if headers:
@@ -104,16 +114,34 @@ class HttpClient:
                     coordinator = _REQUEST_COORDINATOR.get()
                     if coordinator is not None:
                         coordinator.before_request(method, url)
-                    response = self._client.request(
-                        method,
-                        url,
-                        params=params,
-                        data=data,
-                        json=json,
-                        headers=merged_headers,
-                        timeout=effective_timeout,
-                    )
-                    response.read()
+                    if follow_redirects and max_response_bytes is None:
+                        response = self._client.request(
+                            method,
+                            url,
+                            params=params,
+                            data=data,
+                            json=json,
+                            headers=merged_headers,
+                            timeout=effective_timeout,
+                        )
+                        response.read()
+                    else:
+                        request = self._client.build_request(
+                            method,
+                            url,
+                            params=params,
+                            data=data,
+                            json=json,
+                            headers=merged_headers,
+                            timeout=effective_timeout,
+                        )
+                        response = self._client.send(
+                            request,
+                            stream=max_response_bytes is not None,
+                            follow_redirects=follow_redirects,
+                        )
+                        if max_response_bytes is not None:
+                            _read_bounded_response(response, max_response_bytes)
                     if response.status_code in (429,) or response.status_code >= 500:
                         if attempt < self._max_attempts - 1:
                             retry_after = _parse_retry_after(response)
@@ -129,6 +157,8 @@ class HttpClient:
                     if attempt < self._max_attempts - 1:
                         self._sleep(self._retry_delay(attempt))
                     continue
+                except ResponseTooLargeError:
+                    raise
                 except httpx.HTTPStatusError:
                     raise
                 except httpx.HTTPError as exc:
@@ -164,6 +194,24 @@ def _parse_retry_after(response):
     except (ValueError, TypeError):
         pass
     return None
+
+
+class ResponseTooLargeError(httpx.HTTPError):
+    pass
+
+
+def _read_bounded_response(response, max_response_bytes):
+    chunks = []
+    total = 0
+    try:
+        for chunk in response.iter_bytes():
+            total += len(chunk)
+            if total > max_response_bytes:
+                raise ResponseTooLargeError("response exceeds maximum byte limit")
+            chunks.append(chunk)
+        response._content = b"".join(chunks)
+    finally:
+        response.close()
 
 
 @contextmanager
