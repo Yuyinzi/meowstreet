@@ -110,7 +110,9 @@ def _link_rows(soup, base_url, max_links):
 
 
 def _contains_protected(node, protected_nodes):
-    return node in protected_nodes or any(item in protected_nodes for item in node.find_all(True))
+    return any(node is protected for protected in protected_nodes) or any(
+        any(item is protected for protected in protected_nodes) for item in node.find_all(True)
+    )
 
 
 def _remove_last_subtree(soup, protected_nodes):
@@ -126,7 +128,9 @@ def _remove_last_subtree(soup, protected_nodes):
                 continue
             child.extract()
             return True
-        if child in protected_nodes:
+        if any(child is protected for protected in protected_nodes):
+            if child.name in {"a", "h1", "h2", "h3", "h4", "h5", "h6", "time"}:
+                continue
             if _remove_last_subtree(child, protected_nodes):
                 return True
             continue
@@ -143,20 +147,43 @@ def _remove_last_subtree(soup, protected_nodes):
     return False
 
 
-def _protected_nodes(soup):
-    protected = set()
+def _accepted_links(node, base_url):
+    anchors = [node] if node.name == "a" else node.find_all("a")
+    return [anchor for anchor in anchors if _canonical_href(anchor.get("href"), base_url)]
+
+
+def _protected_nodes(soup, base_url):
+    protected = []
     for name in ("html", "body", "main"):
         node = soup.find(name)
         if node is not None:
-            protected.add(node)
+            protected.append(node)
     extraction_root = soup.find("main")
     if extraction_root is None:
-        extraction_root = soup.find("body")
+        body = soup.find("body")
+        if body is not None:
+            candidates = [
+                node
+                for node in body.find_all(True)
+                if node.name not in {"a", "h1", "h2", "h3", "h4", "h5", "h6", "time"}
+                and _clean_text(node.get_text(" ", strip=True))
+                and (_accepted_links(node, base_url) or node.find("time"))
+            ]
+            extraction_root = candidates[0] if candidates else body
     if extraction_root is None:
         extraction_root = soup
+    if not any(extraction_root is node for node in protected):
+        protected.append(extraction_root)
     first_card = extraction_root.find(class_=lambda value: value and "event-card" in (value if isinstance(value, list) else [value]))
-    if first_card is not None:
-        protected.add(first_card)
+    first_branch = first_card or extraction_root
+    for name in ("h1", "h2", "h3", "h4", "h5", "h6", "time"):
+        node = first_branch.find(name)
+        if node is not None:
+            protected.append(node)
+            break
+    first_link = _accepted_links(first_branch, base_url)
+    if first_link:
+        protected.append(first_link[0])
     return protected
 
 
@@ -169,10 +196,19 @@ def _truncate_text_nodes(soup, max_html_chars, protected_nodes):
     ordered = [
         node
         for node in reversed(nodes)
-        if not any(node is descendant or node in descendant.descendants for descendant in protected_nodes)
+        if not any(
+            node is protected or any(node is descendant for descendant in protected.descendants)
+            for protected in protected_nodes
+        )
     ]
-    if len(ordered) < len(nodes):
-        ordered.extend(node for node in reversed(nodes) if node not in ordered)
+    ordered.extend(
+        node
+        for node in reversed(nodes)
+        if any(
+            node is protected or any(node is descendant for descendant in protected.descendants)
+            for protected in protected_nodes
+        )
+    )
     for node in ordered:
         if len(str(soup)) <= max_html_chars:
             return True
@@ -185,9 +221,9 @@ def _truncate_text_nodes(soup, max_html_chars, protected_nodes):
     return len(str(soup)) <= max_html_chars
 
 
-def _bounded_normalized_html(soup, max_html_chars):
+def _bounded_normalized_html(soup, base_url, max_html_chars):
     truncated = False
-    protected_nodes = _protected_nodes(soup)
+    protected_nodes = _protected_nodes(soup, base_url)
     while len(str(soup)) > max_html_chars and _remove_last_subtree(soup, protected_nodes):
         truncated = True
     if len(str(soup)) > max_html_chars:
@@ -214,7 +250,7 @@ def build_structural_snapshot(page, *, max_html_chars=120_000, max_text_chars=40
     base_url = final_url
     soup = BeautifulSoup(source_html, "html.parser")
     _remove_unsafe_nodes_and_attributes(soup, base_url)
-    normalized_html, structural_truncated = _bounded_normalized_html(soup, max_html_chars)
+    normalized_html, structural_truncated = _bounded_normalized_html(soup, base_url, max_html_chars)
     normalized = {
         "title": _clean_text(soup.title.get_text(" ", strip=True)) if soup.title else "",
         "text": _bounded(_normalized_text(soup), max_text_chars),

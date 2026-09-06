@@ -112,6 +112,26 @@ def test_build_structural_snapshot_bounds_heading_row_count_with_explicit_limit(
     assert len(snapshot["normalized"]["headings"]) == 3
 
 
+def test_build_structural_snapshot_preserves_generic_body_content_root_without_main_or_event_card():
+    source = page(
+        "<!doctype html><html><body><div class='event-list'><h1>Events</h1>"
+        "<div>noise " + "x " * 80 + "</div>"
+        "<a href='/event-1'>Investor Day</a><div>trailing content " + "y " * 80 + "</div>"
+        "<a href='/event-2'>Another Event</a></div></body></html>"
+    )
+
+    snapshot = build_structural_snapshot(source, max_html_chars=280, max_text_chars=120)
+
+    parsed = __import__("bs4").BeautifulSoup(snapshot["structural_html"], "html.parser")
+    assert len(snapshot["structural_html"]) <= 280
+    assert snapshot["truncated"] is True
+    content_root = parsed.find(class_="event-list")
+    assert content_root is not None
+    assert content_root.find("h1").get_text(strip=True) == "Events"
+    assert content_root.find("a")["href"] == "https://example.com/event-1"
+    assert "Investor Day" in content_root.get_text(" ", strip=True)
+
+
 def test_build_structural_snapshot_is_content_addressed_for_equivalent_normalized_content():
     first = page("<main>  <h1>Investor   Events</h1> <a href='/x?utm_source=a&id=1'> Link </a> </main>")
     second = page("<main><h1>Investor Events</h1><a href='https://example.com/x?id=1&utm_campaign=b'>Link</a></main>")
