@@ -104,7 +104,9 @@ def _normalize_response(response: Any, limit: int) -> list[dict]:
         if item_type == "web_search_call":
             action = mapping_value(item, "action")
             sources = mapping_value(action, "sources", _MISSING) if action is not None else _MISSING
-            if sources is _MISSING or not isinstance(sources, (list, tuple)):
+            if sources is _MISSING or sources is None:
+                sources = ()
+            if not isinstance(sources, (list, tuple)):
                 raise SearchProviderError("malformed_response", "native search returned malformed sources")
             for source in sources:
                 if not _record_source(records, source, ""):

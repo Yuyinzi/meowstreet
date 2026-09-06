@@ -3,6 +3,13 @@ import asyncio
 import httpx
 import pytest
 from openai import BadRequestError
+from openai.types.responses.response_function_web_search import ActionSearch
+from openai.types.responses.response_function_web_search import ActionSearchSource
+from openai.types.responses.response_function_web_search import ResponseFunctionWebSearch
+from openai.types.responses.response_output_message import ResponseOutputMessage
+from openai.types.responses.response_output_text import AnnotationURLCitation
+from openai.types.responses.response_output_text import ResponseOutputText
+from openai.types.responses.response import Response
 
 from app.agents.catalyst_research.providers.base import SearchProviderError
 from app.agents.catalyst_research.providers.native_search import NativeSearchProvider
@@ -201,3 +208,88 @@ def test_native_rejects_string_or_mapping_sources(sources):
         asyncio.run(provider.search("NVIDIA", limit=1))
 
     assert error.value.reason_code == "malformed_response"
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        {"type": "search", "query": "NVIDIA"},
+        {"type": "search", "query": "NVIDIA", "sources": None},
+    ],
+)
+def test_native_missing_or_none_action_sources_continues_to_later_citations(action):
+    provider = NativeSearchProvider(
+        client=FakeClient(
+            response={
+                "output": [
+                    {"type": "web_search_call", "action": action},
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "official archive",
+                                "annotations": [
+                                    {
+                                        "type": "url_citation",
+                                        "title": "IR archive",
+                                        "url": "https://example.com/archive",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                ]
+            }
+        ),
+        model="search-model",
+        native_search_supported=True,
+    )
+
+    rows = asyncio.run(provider.search("NVIDIA", limit=1))
+
+    assert rows[0]["title"] == "IR archive"
+    assert rows[0]["url"] == "https://example.com/archive"
+
+
+def test_native_normalizes_real_openai_pydantic_response_with_none_sources():
+    citation = AnnotationURLCitation(
+        end_index=20,
+        start_index=0,
+        title="IR archive",
+        type="url_citation",
+        url="https://example.com/archive",
+    )
+    search_call = ResponseFunctionWebSearch(
+        id="ws_1",
+        action=ActionSearch(query="NVIDIA", type="search", sources=None),
+        status="completed",
+        type="web_search_call",
+    )
+    message = ResponseOutputMessage(
+        id="msg_1",
+        content=[ResponseOutputText(annotations=[citation], text="official archive", type="output_text")],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
+    response = Response.model_construct(
+        id="resp_pydantic",
+        created_at=0.0,
+        model="gpt-4.1-mini",
+        object="response",
+        output=[search_call, message],
+        parallel_tool_calls=True,
+        tool_choice="auto",
+        tools=[],
+    )
+    provider = NativeSearchProvider(
+        client=FakeClient(response=response),
+        model="search-model",
+        native_search_supported=True,
+    )
+
+    rows = asyncio.run(provider.search("NVIDIA", limit=1))
+
+    assert rows[0]["title"] == "IR archive"
+    assert provider.last_request_id == "resp_pydantic"
