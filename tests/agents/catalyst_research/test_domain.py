@@ -84,6 +84,30 @@ def test_validate_redirect_chain_checks_each_public_host_with_injected_resolver(
     assert result == ["https://example.com/start", "https://cdn.example.com/final"]
 
 
+def test_validate_redirect_chain_resolves_every_hop_even_when_host_repeats():
+    calls = []
+
+    def resolver(host):
+        calls.append(host)
+        return ["93.184.216.34"]
+
+    validate_redirect_chain(
+        ["https://example.com/start", "https://example.com/final"],
+        resolver=resolver,
+    )
+
+    assert calls == ["example.com", "example.com"]
+
+
+def test_validate_redirect_chain_does_not_resolve_when_resolver_is_omitted(monkeypatch):
+    def fail_if_called(host, *args):
+        raise AssertionError("system DNS must not be called")
+
+    monkeypatch.setattr("app.agents.catalyst_research.domain.socket.getaddrinfo", fail_if_called)
+
+    assert validate_redirect_chain(["https://93.184.216.34/"], resolver=None) == ["https://93.184.216.34/"]
+
+
 def test_validate_redirect_chain_rejects_private_dns_result():
     with pytest.raises(ValueError):
         validate_redirect_chain(["https://example.com/"], resolver=lambda host: ["192.168.1.10"])
@@ -118,7 +142,6 @@ def test_normalize_observations_maps_dates_excludes_future_and_out_of_window_and
             "url": "https://example.com/news?utm_medium=x&id=1",
         },
         {"id": 3, "published_date": "2023-12-31", "title": "Before", "url": "https://example.com/before"},
-        {"id": 4, "published_date": "2024-02-01", "title": "Future", "url": "https://example.com/future"},
     ]
 
     result = normalize_observations(" nvda ", "press_releases", events, "2024-01-01", "2024-01-31")
@@ -153,6 +176,16 @@ def test_normalize_observations_maps_adapter_date_field_by_channel():
     assert result["events"][0]["count_date"] == "2024-01-20"
 
 
+def test_normalize_observations_rejects_future_press_release_but_excludes_future_presentation():
+    future_press = {"published_date": "2024-02-01", "title": "Future", "url": "https://example.com/future"}
+    with pytest.raises(ValueError, match="future press release date"):
+        normalize_observations("NVDA", "press_releases", [future_press], "2024-01-01", "2024-01-31")
+
+    future_event = {"event_date": "2024-02-01", "title": "Future", "url": "https://example.com/future"}
+    result = normalize_observations("NVDA", "events_presentations", [future_event], "2024-01-01", "2024-01-31")
+    assert result["events"] == []
+
+
 @pytest.mark.parametrize(
     "event",
     [
@@ -165,6 +198,13 @@ def test_normalize_observations_rejects_missing_title_or_unsafe_url(event):
         normalize_observations("NVDA", "press_releases", [event], "2024-01-01", "2024-01-31")
 
 
+def test_normalize_observations_rejects_null_title():
+    event = {"published_date": "2024-01-01", "title": None, "url": "https://example.com"}
+
+    with pytest.raises(ValueError, match="event title is required"):
+        normalize_observations("NVDA", "press_releases", [event], "2024-01-01", "2024-01-31")
+
+
 @pytest.mark.parametrize(
     ("title", "source_type"),
     [
@@ -173,6 +213,8 @@ def test_normalize_observations_rejects_missing_title_or_unsafe_url(event):
         ("Fiscal 2024 Annual Results", "press_releases"),
         ("Q1 2024 Earnings Release", "press_releases"),
         ("FY2024 Financial Results", "press_releases"),
+        ("Earnings Release", "press_releases"),
+        ("Q2 Results Presentation", "events_presentations"),
     ],
 )
 def test_classify_title_by_rule_detects_narrow_earnings_titles(title, source_type):
@@ -181,7 +223,17 @@ def test_classify_title_by_rule_detects_narrow_earnings_titles(title, source_typ
 
 @pytest.mark.parametrize(
     "title",
-    ["Growth strategy update", "Guidance platform launch", "Earnings opportunity", "Reports customer results"],
+    [
+        "Growth strategy update",
+        "Guidance platform launch",
+        "Earnings opportunity",
+        "Reports customer results",
+        "Q2 earnings opportunity",
+        "FY2024 Earnings Opportunity",
+        "Q2 release",
+        "FY2024 release",
+        "Quarterly earnings opportunity",
+    ],
 )
 def test_classify_title_by_rule_does_not_treat_generic_economic_words_as_earnings(title):
     assert classify_title_by_rule(title, "press_releases") is None
@@ -232,6 +284,25 @@ def test_merge_classifications_makes_rule_model_conflict_ambiguous():
     assert result[0]["earnings_state"] == "ambiguous"
 
 
+def test_merge_classifications_makes_valid_rows_ambiguous_when_payload_contains_unknown_id():
+    events = [
+        {"id": 1, "title": "New product launch", "source_type": "press_releases"},
+        {"id": 2, "title": "New partnership", "source_type": "press_releases"},
+    ]
+
+    result = merge_classifications(
+        events,
+        {
+            "classifications": [
+                {"id": 1, "earnings_state": "non_earnings", "reason": "product"},
+                {"id": 99, "earnings_state": "non_earnings", "reason": "unknown"},
+            ]
+        },
+    )
+
+    assert [item["earnings_state"] for item in result] == ["ambiguous", "ambiguous"]
+
+
 def test_merge_classifications_maps_model_ids_by_position_when_events_have_string_ids():
     events = [{"event_id": "ire_a", "title": "New product launch", "source_type": "press_releases"}]
 
@@ -241,3 +312,32 @@ def test_merge_classifications_maps_model_ids_by_position_when_events_have_strin
     )
 
     assert result[0]["earnings_state"] == "non_earnings"
+
+
+def test_merge_classifications_handles_unhashable_event_ids_as_ambiguous():
+    events = [{"id": [], "title": "New product launch", "source_type": "press_releases"}]
+
+    result = merge_classifications(
+        events,
+        {"classifications": [{"id": 1, "earnings_state": "non_earnings", "reason": "product"}]},
+    )
+
+    assert result[0]["earnings_state"] == "ambiguous"
+
+
+def test_domain_public_functions_advertise_return_types():
+    assert normalize_request.__annotations__["return"] is dict
+    assert normalize_observations.__annotations__["return"] is dict
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("http://example.com:80/path", "http://example.com/path"),
+        ("http://example.com:443/path", "http://example.com:443/path"),
+        ("https://example.com:443/path", "https://example.com/path"),
+        ("https://example.com:80/path", "https://example.com:80/path"),
+    ],
+)
+def test_canonicalize_public_url_preserves_explicit_non_default_port(url, expected):
+    assert canonicalize_public_url(url) == expected

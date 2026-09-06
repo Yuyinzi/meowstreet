@@ -22,16 +22,18 @@ _TRACKING_NAMES = {
 _EARNINGS_PATTERNS = (
     re.compile(r"\b(?:financial|quarterly|annual|full[ -]year|fiscal)\s+(?:financial\s+)?results?\b", re.IGNORECASE),
     re.compile(r"\b(?:q[1-4]|first|second|third|fourth)\s+(?:fiscal\s+)?quarter\s+(?:financial\s+)?results?\b", re.IGNORECASE),
-    re.compile(r"\bq[1-4]\b.{0,20}\b(?:earnings?|financial\s+results?|results?|release)\b", re.IGNORECASE),
-    re.compile(r"\bfy\s*\d{2,4}\b.{0,20}\b(?:earnings?|financial\s+results?|results?|release)\b", re.IGNORECASE),
+    re.compile(r"\b(?:q[1-4]|fy\s*\d{2,4})\b.{0,24}\b(?:financial\s+)?results?\b", re.IGNORECASE),
+    re.compile(r"\b(?:q[1-4]|fy\s*\d{2,4}|quarterly|annual)\b.{0,24}\bearnings?\s+(?:release|conference\s+call|call|webcast)\b", re.IGNORECASE),
+    re.compile(r"\b(?:earnings?|financial\s+results?|results?)\s+(?:release|presentation|webcast)\b", re.IGNORECASE),
     re.compile(r"\bearnings?\s+(?:conference\s+)?call\b", re.IGNORECASE),
     re.compile(r"\bresults?\s+(?:conference\s+)?call\b", re.IGNORECASE),
-    re.compile(r"\b(?:quarterly|annual|fiscal)\s+earnings?\b", re.IGNORECASE),
-    re.compile(r"\b(?:quarterly|annual|fiscal)\s+(?:financial\s+)?results?\b", re.IGNORECASE),
+    re.compile(r"\b(?:quarterly|annual)\s+(?:financial\s+)?results?\b", re.IGNORECASE),
 )
 
 
 def _fold_whitespace(value):
+    if value is None:
+        return ""
     return " ".join(str(value).split())
 
 
@@ -57,7 +59,7 @@ def _subtract_years(value, years):
     return value.replace(year=value.year - years, day=day)
 
 
-def normalize_request(ticker, years=4, as_of=None):
+def normalize_request(ticker, years=4, as_of=None) -> dict:
     normalized = str(ticker or "").strip().upper()
     if not normalized:
         raise ValueError("ticker is required")
@@ -130,7 +132,7 @@ def canonicalize_public_url(url: str) -> str:
         netloc_host = f"[{host}]"
     else:
         netloc_host = host
-    if port is not None and port not in {80, 443}:
+    if port is not None and port != (80 if scheme == "http" else 443):
         netloc_host = f"{netloc_host}:{port}"
     return urlunsplit((scheme, netloc_host, parsed.path, _canonical_query(parsed.query), ""))
 
@@ -141,10 +143,10 @@ def url_host(url: str) -> str:
 
 def _resolved_addresses(host, resolver):
     try:
-        if resolver is None:
-            values = socket.getaddrinfo(host, None)
-        elif callable(resolver):
+        if callable(resolver):
             values = resolver(host)
+        elif hasattr(resolver, "resolve"):
+            values = resolver.resolve(host)
         elif isinstance(resolver, Mapping):
             values = resolver.get(host, ())
         else:
@@ -170,11 +172,10 @@ def validate_redirect_chain(urls: list[str], *, resolver=None) -> list[str]:
     if not isinstance(urls, list) or not urls:
         raise ValueError("redirect chain is required")
     normalized = []
-    resolved_hosts = set()
     for url in urls:
         canonical = canonicalize_public_url(url)
         host = url_host(canonical)
-        if host not in resolved_hosts:
+        if resolver is not None:
             addresses = _resolved_addresses(host, resolver)
             if not addresses:
                 raise ValueError("url host could not be resolved")
@@ -184,7 +185,6 @@ def validate_redirect_chain(urls: list[str], *, resolver=None) -> list[str]:
                 raise ValueError("url host resolution is invalid") from exc
             if any(not address.is_global for address in parsed_addresses):
                 raise ValueError("url host is not public")
-            resolved_hosts.add(host)
         normalized.append(canonical)
     return normalized
 
@@ -195,7 +195,7 @@ def _source_type(source_type):
     return source_type
 
 
-def normalize_observations(ticker, source_type, events, requested_start, requested_end):
+def normalize_observations(ticker, source_type, events, requested_start, requested_end) -> dict:
     normalized_ticker = str(ticker or "").strip().upper()
     if not normalized_ticker:
         raise ValueError("ticker is required")
@@ -225,11 +225,15 @@ def normalize_observations(ticker, source_type, events, requested_start, request
             count_date = published
             if count_date is None:
                 raise ValueError("event published date is required")
+            if count_date > end:
+                raise ValueError("future press release date is invalid")
         else:
             count_date = event_date or published
             if count_date is None:
                 raise ValueError("event date is required")
         supplied_url = event.get("canonical_url") or event.get("url")
+        if source_type == "press_releases" and not supplied_url:
+            raise ValueError("event url is required")
         canonical_url = canonicalize_public_url(supplied_url) if supplied_url else None
         if count_date < start or count_date > end:
             continue
@@ -304,14 +308,28 @@ def merge_classifications(events, model_payload=None) -> list[dict]:
         if identifier in by_id:
             duplicate_ids.add(identifier)
         by_id.setdefault(identifier, []).append(row)
+    event_ids = set()
+    identifiers = []
+    for position, event in enumerate(events, 1):
+        if not isinstance(event, Mapping):
+            raise ValueError("event is invalid")
+        identifier = event.get("id", position)
+        try:
+            hash(identifier)
+        except TypeError:
+            identifiers.append(None)
+            continue
+        event_ids.add(identifier)
+        identifiers.append(identifier)
+    unknown_model_id = any(identifier not in event_ids for identifier in by_id)
     output = []
     for position, event in enumerate(events, 1):
         if not isinstance(event, Mapping):
             raise ValueError("event is invalid")
         item = dict(event)
-        identifier = event.get("id", position)
+        identifier = identifiers[position - 1]
         rule_state = classify_title_by_rule(event.get("title", ""), event.get("source_type"))
-        matched = by_id.get(identifier, [])
+        matched = by_id.get(identifier, []) if identifier is not None else []
         state = rule_state
         method = "rule_v1" if rule_state else None
         reason = None
@@ -320,7 +338,7 @@ def merge_classifications(events, model_payload=None) -> list[dict]:
             if matched and rule_state:
                 state = "ambiguous"
             method = "llm_v1" if model_attempted and matched else method
-        elif malformed and not rule_state:
+        elif (malformed or unknown_model_id) and not rule_state:
             state = "ambiguous"
             method = "llm_v1"
         else:
