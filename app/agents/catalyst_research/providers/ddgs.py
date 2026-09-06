@@ -8,6 +8,7 @@ from app.agents.catalyst_research.providers.base import ensure_normalized_result
 from app.agents.catalyst_research.providers.base import mapping_value
 from app.agents.catalyst_research.providers.base import normalized_result
 from app.agents.catalyst_research.providers.base import provider_error
+from app.agents.catalyst_research.providers.base import sanitize_provider_error
 from app.agents.catalyst_research.providers.base import validate_search_inputs
 
 
@@ -23,12 +24,16 @@ class DDGSSearchProvider:
     async def search(self, query: str, *, limit: int) -> list[dict]:
         self.last_request_id = None
         query, limit = validate_search_inputs(query, limit)
+        safe_error = None
+        raw_rows = None
         try:
             raw_rows = await asyncio.to_thread(self._search_sync, query, limit)
-        except SearchProviderError:
-            raise
+        except SearchProviderError as exc:
+            safe_error = sanitize_provider_error(exc, "ddgs")
         except Exception as exc:
-            raise provider_error(exc) from exc
+            safe_error = provider_error(exc)
+        if safe_error is not None:
+            raise safe_error
         if not isinstance(raw_rows, list):
             raise SearchProviderError("malformed_response", "ddgs returned malformed results")
         rows = []

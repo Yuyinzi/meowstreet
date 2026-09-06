@@ -6,7 +6,9 @@ from app.agents.catalyst_research.providers.base import mapping_value
 from app.agents.catalyst_research.providers.base import normalized_result
 from app.agents.catalyst_research.providers.base import provider_error
 from app.agents.catalyst_research.providers.base import request_id
+from app.agents.catalyst_research.providers.base import sanitize_provider_error
 from app.agents.catalyst_research.providers.base import safe_string
+from app.agents.catalyst_research.providers.base import status_code
 from app.agents.catalyst_research.providers.base import validate_search_inputs
 
 
@@ -56,63 +58,76 @@ class NativeSearchProvider:
             raise SearchProviderError(
                 "not_configured", "native search provider is not capability-ready", disable_provider=True
             )
+        safe_error = None
+        response = None
         try:
             response = await self._client.responses.create(
                 model=self._model,
                 input=query,
                 tools=[{"type": "web_search"}],
             )
-        except SearchProviderError:
-            raise
+        except SearchProviderError as exc:
+            safe_error = sanitize_provider_error(exc, "native")
         except Exception as exc:
             if _is_unsupported_tool(exc):
-                raise SearchProviderError(
+                safe_error = SearchProviderError(
                     "unsupported_tool",
                     "native search tool is unsupported by the endpoint",
                     disable_provider=True,
-                ) from exc
-            raise provider_error(exc) from exc
+                )
+            else:
+                safe_error = provider_error(exc)
+        if safe_error is not None:
+            raise safe_error
         self.last_request_id = request_id(response)
         rows = _normalize_response(response, limit)
         return ensure_normalized_results(rows)
 
 
 def _is_unsupported_tool(error: BaseException) -> bool:
+    code = status_code(error)
     text = type(error).__name__.lower() + " " + str(error).lower()
-    return any(
-        token in text
-        for token in (
-            "unsupported tool",
-            "unknown tool",
-            "unrecognized tool",
-            "web_search is not supported",
-            "web_search.*not supported",
-        )
-    )
+    if code is not None and code != 400:
+        return False
+    if code == 400:
+        return "web_search" in text and any(token in text for token in ("unsupported", "supported", "invalid value", "unknown"))
+    return any(token in text for token in ("unsupported tool", "unknown tool", "unrecognized tool", "web_search is not supported"))
 
 
 def _normalize_response(response: Any, limit: int) -> list[dict]:
     records: dict[str, dict] = {}
-    output = mapping_value(response, "output") or []
-    if not isinstance(output, list):
+    output = mapping_value(response, "output", _MISSING)
+    if output is _MISSING or output is None or not isinstance(output, list):
         raise SearchProviderError("malformed_response", "native search returned malformed output")
     for item in output:
         item_type = safe_string(mapping_value(item, "type"))
         if item_type == "web_search_call":
             action = mapping_value(item, "action")
-            sources = mapping_value(action, "sources") if action is not None else None
-            for source in sources or []:
-                _record_source(records, source, "")
+            sources = mapping_value(action, "sources", _MISSING) if action is not None else _MISSING
+            if sources is _MISSING or not isinstance(sources, list):
+                raise SearchProviderError("malformed_response", "native search returned malformed sources")
+            for source in sources:
+                if not _record_source(records, source, ""):
+                    raise SearchProviderError("malformed_response", "native search returned malformed source")
         if item_type != "message":
             continue
-        for content in mapping_value(item, "content") or []:
+        contents = mapping_value(item, "content", _MISSING)
+        if contents is _MISSING or not isinstance(contents, list):
+            raise SearchProviderError("malformed_response", "native search returned malformed message")
+        for content in contents:
             if safe_string(mapping_value(content, "type")) != "output_text":
                 continue
             text = safe_string(mapping_value(content, "text"))
-            for annotation in mapping_value(content, "annotations") or []:
+            annotations = mapping_value(content, "annotations", _MISSING)
+            if annotations is _MISSING:
+                annotations = []
+            if not isinstance(annotations, list):
+                raise SearchProviderError("malformed_response", "native search returned malformed citations")
+            for annotation in annotations:
                 if safe_string(mapping_value(annotation, "type")) != "url_citation":
                     continue
-                _record_source(records, annotation, text)
+                if not _record_source(records, annotation, text):
+                    raise SearchProviderError("malformed_response", "native search returned malformed citation")
     rows = []
     for rank, record in enumerate(records.values(), start=1):
         rows.append(
@@ -129,10 +144,10 @@ def _normalize_response(response: Any, limit: int) -> list[dict]:
     return rows
 
 
-def _record_source(records: dict[str, dict], source: Any, snippet: str) -> None:
+def _record_source(records: dict[str, dict], source: Any, snippet: str) -> bool:
     url = safe_string(mapping_value(source, "url"))
     if not url:
-        return
+        return False
     current = records.setdefault(
         url,
         {"url": url, "title": "", "snippet": "", "metadata": {}},
@@ -145,3 +160,7 @@ def _record_source(records: dict[str, dict], source: Any, snippet: str) -> None:
         current["snippet"] = source_snippet
     elif snippet and not current["snippet"]:
         current["snippet"] = snippet
+    return True
+
+
+_MISSING = object()

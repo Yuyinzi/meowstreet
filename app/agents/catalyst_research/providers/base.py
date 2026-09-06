@@ -12,6 +12,19 @@ NORMALIZED_RESULT_KEYS = (
     "provider_rank",
     "provider_metadata",
 )
+VALID_REASON_CODES = frozenset(
+    {
+        "authentication_failed",
+        "rate_limited",
+        "timeout",
+        "provider_error",
+        "unsupported_tool",
+        "empty_results",
+        "malformed_response",
+        "not_configured",
+    }
+)
+_MISSING = object()
 
 
 @runtime_checkable
@@ -78,40 +91,61 @@ def normalized_result(
         "url": safe_string(url),
         "snippet": safe_string(snippet),
         "provider_rank": rank,
-        "provider_metadata": dict(metadata or {}),
+        "provider_metadata": _bounded_metadata(metadata),
     }
 
 
+def status_code(error: BaseException) -> int | None:
+    candidates = [error, getattr(error, "response", None), mapping_value(error, "body")]
+    for candidate in candidates:
+        value = mapping_value(candidate, "status_code", _MISSING)
+        if value is _MISSING:
+            value = mapping_value(candidate, "status", _MISSING)
+        try:
+            if value is not _MISSING and value is not None:
+                return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _bounded_metadata(metadata: Mapping[str, Any] | None) -> dict:
+    if not isinstance(metadata, Mapping):
+        return {}
+    bounded = {}
+    for key, value in list(metadata.items())[:8]:
+        if not isinstance(key, str) or not key or len(key) > 64:
+            continue
+        if isinstance(value, bool) or isinstance(value, (int, float)):
+            bounded[key] = value
+        elif isinstance(value, str):
+            bounded[key] = value[:200]
+    return bounded
+
+
 def classify_provider_exception(error: BaseException) -> tuple[str, bool, bool]:
-    status = mapping_value(error, "status_code")
-    if status is None:
-        status = mapping_value(error, "status")
-    try:
-        status = int(status)
-    except (TypeError, ValueError):
-        status = None
+    status = status_code(error)
+    error_name = type(error).__name__.lower()
     text = type(error).__name__.lower() + " " + str(error).lower()
-    if status in {401, 403} or any(token in text for token in (" 401", " 403", "unauthorized", "forbidden", "authentication", "api key", "invalid key")):
-        return "authentication", True, False
-    if status == 429 or "rate limit" in text or "ratelimit" in text or "too many requests" in text:
-        return "rate_limit", False, True
-    if isinstance(error, (TimeoutError,)) or "timeout" in text:
+    if status in {401, 403} or error_name in {"invalidapikeyerror", "missingapikeyerror", "forbiddenerror"} or any(token in text for token in ("unauthorized", "forbidden", "authentication", "api key", "invalid key")):
+        return "authentication_failed", True, False
+    if status == 429 or error_name in {"usagelimitexceedederror", "tavilykeylesslimiterror"} or "rate limit" in text or "ratelimit" in text or "too many requests" in text:
+        return "rate_limited", False, True
+    if isinstance(error, (TimeoutError,)) or error_name in {"timeouterror", "apitimeouterror"} or "timeout" in text:
         return "timeout", False, True
     if status is not None and status >= 500:
-        return "server_error", False, True
+        return "provider_error", False, True
     if any(token in text for token in ("connection", "connecterror", "network", "temporarily unavailable")):
-        return "connection_error", False, True
+        return "provider_error", False, True
     return "provider_error", False, False
 
 
 def provider_error(error: BaseException) -> SearchProviderError:
     reason_code, disable_provider, retryable = classify_provider_exception(error)
     messages = {
-        "authentication": "search provider authentication failed",
-        "rate_limit": "search provider rate limit reached",
+        "authentication_failed": "search provider authentication failed",
+        "rate_limited": "search provider rate limit reached",
         "timeout": "search provider request timed out",
-        "server_error": "search provider server error",
-        "connection_error": "search provider connection failed",
         "provider_error": "search provider request failed",
     }
     return SearchProviderError(
@@ -119,6 +153,16 @@ def provider_error(error: BaseException) -> SearchProviderError:
         messages[reason_code],
         disable_provider=disable_provider,
         retryable=retryable,
+    )
+
+
+def sanitize_provider_error(error: SearchProviderError, provider_name: str) -> SearchProviderError:
+    reason_code = error.reason_code if error.reason_code in VALID_REASON_CODES else "provider_error"
+    return SearchProviderError(
+        reason_code,
+        f"{provider_name} search provider request failed",
+        disable_provider=bool(error.disable_provider),
+        retryable=bool(error.retryable),
     )
 
 
@@ -130,3 +174,11 @@ def ensure_normalized_results(rows: list[dict]) -> list[dict]:
             "malformed_response", "search provider returned malformed results"
         )
     return rows
+
+
+def is_server_error(error: BaseException) -> bool:
+    code = status_code(error)
+    if code is not None:
+        return 500 <= code <= 599
+    text = type(error).__name__.lower() + " " + str(error).lower()
+    return "server error" in text or "internal server" in text or " 5xx" in text

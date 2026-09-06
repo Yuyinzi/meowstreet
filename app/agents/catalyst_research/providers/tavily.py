@@ -4,10 +4,12 @@ from tavily import AsyncTavilyClient
 
 from app.agents.catalyst_research.providers.base import SearchProviderError
 from app.agents.catalyst_research.providers.base import ensure_normalized_results
+from app.agents.catalyst_research.providers.base import is_server_error
 from app.agents.catalyst_research.providers.base import mapping_value
 from app.agents.catalyst_research.providers.base import normalized_result
 from app.agents.catalyst_research.providers.base import provider_error
 from app.agents.catalyst_research.providers.base import request_id
+from app.agents.catalyst_research.providers.base import sanitize_provider_error
 from app.agents.catalyst_research.providers.base import validate_search_inputs
 
 
@@ -32,18 +34,28 @@ class TavilySearchProvider:
             raise SearchProviderError(
                 "not_configured", "tavily search provider is not configured", disable_provider=True
             )
-        try:
-            response = await self._client.search(
-                query=query,
-                max_results=limit,
-                search_depth="basic",
-                include_answer=False,
-                include_raw_content=False,
-            )
-        except SearchProviderError:
-            raise
-        except Exception as exc:
-            raise provider_error(exc) from exc
+        response = None
+        safe_error = None
+        for attempt in range(2):
+            try:
+                response = await self._client.search(
+                    query=query,
+                    max_results=limit,
+                    search_depth="basic",
+                    include_answer=False,
+                    include_raw_content=False,
+                )
+                break
+            except SearchProviderError as exc:
+                safe_error = sanitize_provider_error(exc, "tavily")
+                break
+            except Exception as exc:
+                if attempt == 0 and is_server_error(exc):
+                    continue
+                safe_error = provider_error(exc)
+                break
+        if safe_error is not None:
+            raise safe_error
         self.last_request_id = request_id(response)
         raw_rows = mapping_value(response, "results")
         if not isinstance(raw_rows, list):

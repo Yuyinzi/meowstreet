@@ -61,3 +61,41 @@ def test_ddgs_empty_results_have_stable_error():
 
     assert error.value.reason_code == "empty_results"
     assert error.value.retryable is False
+
+
+def test_ddgs_uses_injected_to_thread_and_factory_context_manager(monkeypatch):
+    calls = []
+
+    class ContextClient(FakeDDGS):
+        def __enter__(self):
+            calls.append("enter")
+            return self
+
+        def __exit__(self, *args):
+            calls.append("exit")
+
+    client = ContextClient(rows=[{"title": "IR", "href": "https://example.com", "body": "x"}])
+    provider = DDGSSearchProvider(client_factory=lambda: client)
+
+    async def fake_to_thread(function, *args):
+        calls.append((function.__name__, args))
+        return function(*args)
+
+    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+    rows = asyncio.run(provider.search("NVIDIA", limit=1))
+
+    assert rows[0]["url"] == "https://example.com"
+    assert calls[0] == ("_search_sync", ("NVIDIA", 1))
+    assert calls[1:] == ["enter", "exit"]
+
+
+@pytest.mark.parametrize("rows", [None, [{"title": "missing-url"}], ["not-a-row"]])
+def test_ddgs_malformed_rows_are_stable_errors(rows):
+    provider = DDGSSearchProvider(client=FakeDDGS(rows=rows))
+
+    with pytest.raises(SearchProviderError) as error:
+        asyncio.run(provider.search("NVIDIA", limit=1))
+
+    assert error.value.reason_code == "malformed_response"
+    assert error.value.__cause__ is None
+    assert error.value.__context__ is None
