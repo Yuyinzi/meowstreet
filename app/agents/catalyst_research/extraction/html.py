@@ -12,7 +12,14 @@ SNAPSHOT_SCHEMA_VERSION = "catalyst_structural_snapshot_v1"
 _UNSAFE_NODES = {"aside", "embed", "footer", "form", "iframe", "nav", "object", "script", "style", "template"}
 _NOISE_HINTS = ("banner", "consent", "cookie")
 _STABLE_ATTRIBUTES = {"aria-label", "class", "data-date", "datetime", "href", "id", "title"}
+_CONTENT_HINTS = ("archive", "event", "investor", "ir", "news", "presentation", "press", "release")
+_IRRELEVANT_CONTENT_HINTS = ("cookie", "consent", "legal", "privacy", "terms")
+_ROOT_EXCLUDED_NODES = {"a", "h1", "h2", "h3", "h4", "h5", "h6", "time"}
+_MAX_RELEVANCE_DATES = 6
+_MAX_RELEVANCE_LINKS = 6
+_MAX_RELEVANCE_REPEATED_ITEMS = 4
 _WHITESPACE_RE = re.compile(r"\s+")
+_WORD_RE = re.compile(r"[a-z0-9]+")
 
 
 def _bounded(value, limit):
@@ -152,6 +159,61 @@ def _accepted_links(node, base_url):
     return [anchor for anchor in anchors if _canonical_href(anchor.get("href"), base_url)]
 
 
+def _structural_identity(node):
+    attributes = node.attrs or {}
+    values = []
+    for name in ("id", "class"):
+        value = attributes.get(name)
+        values.extend(value if isinstance(value, list) else [value])
+    values.extend(heading.get_text(" ", strip=True) for heading in node.find_all(re.compile(r"^h[1-6]$"), limit=3))
+    return _clean_text(" ".join(str(value) for value in values if value)).casefold()
+
+
+def _date_evidence_count(node):
+    date_nodes = node.find_all("time", limit=_MAX_RELEVANCE_DATES)
+    dated_nodes = node.find_all(attrs={"data-date": True}, limit=_MAX_RELEVANCE_DATES)
+    datetime_nodes = node.find_all(attrs={"datetime": True}, limit=_MAX_RELEVANCE_DATES)
+    return min(_MAX_RELEVANCE_DATES, len(date_nodes) + len(dated_nodes) + len(datetime_nodes))
+
+
+def _repeated_item_count(node):
+    items = node.find_all({"article", "li"}, limit=_MAX_RELEVANCE_REPEATED_ITEMS)
+    return min(_MAX_RELEVANCE_REPEATED_ITEMS, len(items))
+
+
+def _content_root_score(node, base_url):
+    identity = _structural_identity(node)
+    identity_words = set(_WORD_RE.findall(identity))
+    content_hint_count = sum(hint in identity_words for hint in _CONTENT_HINTS)
+    irrelevant_hint_count = sum(hint in identity_words for hint in _IRRELEVANT_CONTENT_HINTS)
+    date_count = _date_evidence_count(node)
+    link_count = min(_MAX_RELEVANCE_LINKS, len(_accepted_links(node, base_url)))
+    repeated_item_count = _repeated_item_count(node)
+    heading_count = len(node.find_all(re.compile(r"^h[1-6]$"), limit=2))
+    return (
+        content_hint_count * 6
+        - irrelevant_hint_count * 10
+        + date_count * 3
+        + link_count
+        + max(repeated_item_count - 1, 0) * 4
+        + heading_count
+    )
+
+
+def _generic_content_root(body, base_url):
+    candidates = [
+        node
+        for node in body.find_all(True)
+        if node.name not in _ROOT_EXCLUDED_NODES and _clean_text(node.get_text(" ", strip=True))
+    ]
+    candidates = [
+        node
+        for node in candidates
+        if _accepted_links(node, base_url) or _date_evidence_count(node) or node.find(re.compile(r"^h[1-6]$"))
+    ]
+    return max(candidates, key=lambda node: _content_root_score(node, base_url), default=body)
+
+
 def _protected_nodes(soup, base_url):
     protected = []
     for name in ("html", "body", "main"):
@@ -162,14 +224,7 @@ def _protected_nodes(soup, base_url):
     if extraction_root is None:
         body = soup.find("body")
         if body is not None:
-            candidates = [
-                node
-                for node in body.find_all(True)
-                if node.name not in {"a", "h1", "h2", "h3", "h4", "h5", "h6", "time"}
-                and _clean_text(node.get_text(" ", strip=True))
-                and (_accepted_links(node, base_url) or node.find("time"))
-            ]
-            extraction_root = candidates[0] if candidates else body
+            extraction_root = _generic_content_root(body, base_url)
     if extraction_root is None:
         extraction_root = soup
     if not any(extraction_root is node for node in protected):

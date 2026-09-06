@@ -132,6 +132,55 @@ def test_build_structural_snapshot_preserves_generic_body_content_root_without_m
     assert "Investor Day" in content_root.get_text(" ", strip=True)
 
 
+def test_build_structural_snapshot_prefers_event_evidence_over_earlier_privacy_links():
+    source = page(
+        "<!doctype html><html><head><title>Company</title></head><body>"
+        "<section id='legal-notices'><h2>Privacy policy</h2>"
+        "<a href='/privacy'>Privacy</a><a href='/terms'>Terms</a>"
+        "<p>legal notice " + "x " * 70 + "</p></section>"
+        "<section id='updates'><h1>Upcoming investor events</h1>"
+        "<article><h2>Capital markets day</h2><time datetime='2026-10-14'>October 14, 2026</time>"
+        "<a href='/events/capital-markets-day'>Event details</a></article>"
+        "<article><h2>Quarterly results</h2><time datetime='2026-11-04'>November 4, 2026</time>"
+        "<a href='/events/quarterly-results'>Event details</a></article></section>"
+        "</body></html>"
+    )
+
+    snapshot = build_structural_snapshot(source, max_html_chars=330, max_text_chars=160)
+
+    parsed = __import__("bs4").BeautifulSoup(snapshot["structural_html"], "html.parser")
+    event_root = parsed.find(id="updates")
+    assert len(snapshot["structural_html"]) <= 330
+    assert snapshot["truncated"] is True
+    assert event_root is not None
+    assert event_root.find("h1").get_text(strip=True) == "Upcoming investor events"
+    assert event_root.find("a")["href"] == "https://example.com/events/capital-markets-day"
+    assert parsed.find(id="legal-notices") is None
+
+
+def test_build_structural_snapshot_uses_dom_order_for_tied_neutral_repeated_cards():
+    source = page(
+        "<!doctype html><html><body>"
+        "<section><h1>Updates</h1><article><h2>First briefing</h2>"
+        "<time datetime='2026-10-14'>October 14, 2026</time><a href='/first'>Details</a></article>"
+        "<article><h2>Second briefing</h2><time datetime='2026-11-04'>November 4, 2026</time>"
+        "<a href='/second'>Details</a></article></section>"
+        "<section><h1>Bulletins</h1><article><h2>Earlier briefing</h2>"
+        "<time datetime='2025-10-14'>October 14, 2025</time><a href='/earlier'>Details</a></article>"
+        "<article><h2>Older briefing</h2><time datetime='2025-11-04'>November 4, 2025</time>"
+        "<a href='/older'>Details</a></article></section>"
+        "</body></html>"
+    )
+
+    snapshot = build_structural_snapshot(source, max_html_chars=300, max_text_chars=160)
+
+    parsed = __import__("bs4").BeautifulSoup(snapshot["structural_html"], "html.parser")
+    assert len(snapshot["structural_html"]) <= 300
+    assert snapshot["truncated"] is True
+    assert parsed.find("h1").get_text(strip=True) == "Updates"
+    assert parsed.find("a")["href"] == "https://example.com/first"
+
+
 def test_build_structural_snapshot_is_content_addressed_for_equivalent_normalized_content():
     first = page("<main>  <h1>Investor   Events</h1> <a href='/x?utm_source=a&id=1'> Link </a> </main>")
     second = page("<main><h1>Investor Events</h1><a href='https://example.com/x?id=1&utm_campaign=b'>Link</a></main>")
