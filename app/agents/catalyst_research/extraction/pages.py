@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from datetime import UTC, datetime
+import socket
 from urllib.parse import urljoin
 
 import httpx
@@ -13,6 +14,17 @@ from app.http_client import ResponseTooLargeError
 
 
 _HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
+
+
+def _resolve_host(host):
+    try:
+        entries = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise ValueError("url host could not be resolved") from exc
+    addresses = [entry[4][0] for entry in entries if entry and entry[4]]
+    if not addresses:
+        raise ValueError("url host could not be resolved")
+    return addresses
 
 
 def _positive_integer(value, name):
@@ -66,11 +78,12 @@ def fetch_html_page(url, *, http_client, allowed_hosts=None, resolver=None, max_
     max_bytes = _positive_integer(max_bytes, "max bytes")
     requested_url = canonicalize_public_url(url)
     normalized_allowed_hosts = _normalized_allowed_hosts(allowed_hosts)
+    effective_resolver = resolver if resolver is not None else _resolve_host
     current_url = requested_url
     chain = []
     redirect_count = 0
     while True:
-        normalized_current = validate_redirect_chain([current_url], resolver=resolver)[0]
+        normalized_current = validate_redirect_chain([current_url], resolver=effective_resolver)[0]
         _ensure_allowed_hosts([normalized_current], normalized_allowed_hosts)
         chain.append(normalized_current)
         try:

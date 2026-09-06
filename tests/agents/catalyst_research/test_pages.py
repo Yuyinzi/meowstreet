@@ -57,6 +57,37 @@ def test_fetch_html_page_validates_initial_dns_before_request():
     assert requests == []
 
 
+def test_fetch_html_page_uses_pages_default_resolver_before_request(monkeypatch):
+    requests = []
+    resolved = []
+
+    def fake_getaddrinfo(host, port, *, type):
+        resolved.append(host)
+        return [(None, None, None, None, ("192.168.1.8", 0))]
+
+    def handler(request):
+        requests.append(str(request.url))
+        return httpx.Response(200, headers={"Content-Type": "text/html"}, content=b"<p>never</p>")
+
+    monkeypatch.setattr("app.agents.catalyst_research.extraction.pages.socket.getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(ValueError, match="url host is not public"):
+        fetch_html_page("https://example.com/page", http_client=client_for(handler))
+
+    assert resolved == ["example.com"]
+    assert requests == []
+
+
+def test_fetch_html_page_normalizes_default_resolver_failure(monkeypatch):
+    def fail_getaddrinfo(host, port, *, type):
+        raise OSError("dns failure")
+
+    monkeypatch.setattr("app.agents.catalyst_research.extraction.pages.socket.getaddrinfo", fail_getaddrinfo)
+
+    with pytest.raises(ValueError, match="url host could not be resolved"):
+        fetch_html_page("https://example.com/page", http_client=client_for(lambda request: httpx.Response(200)))
+
+
 def test_fetch_html_page_validates_redirect_target_before_request():
     requests = []
 

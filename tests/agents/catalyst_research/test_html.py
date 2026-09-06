@@ -86,6 +86,32 @@ def test_build_structural_snapshot_prunes_navigation_context_and_bounds_headings
     assert snapshot["structural_html"].count("<") == snapshot["structural_html"].count(">")
 
 
+def test_build_structural_snapshot_prunes_realistic_document_without_discarding_extraction_root():
+    cards = "".join(
+        f'<article class="event-card" data-date="2026-01-{index:02d}"><h2>Event {index}</h2><a href="/events/{index}">Details</a></article>'
+        for index in range(1, 12)
+    )
+    source = page(f"<!doctype html><html><head><title>Events</title></head><body><main id='events'>{cards}</main></body></html>")
+
+    snapshot = build_structural_snapshot(source, max_html_chars=420, max_text_chars=200, max_links=3)
+
+    parsed = __import__("bs4").BeautifulSoup(snapshot["structural_html"], "html.parser")
+    assert len(snapshot["structural_html"]) <= 420
+    assert snapshot["truncated"] is True
+    assert parsed.find("main") is not None
+    assert parsed.find("article", class_="event-card") is not None
+    assert parsed.find("h2").get_text(strip=True) == "Event 1"
+    assert parsed.find("a")["href"] == "https://example.com/events/1"
+
+
+def test_build_structural_snapshot_bounds_heading_row_count_with_explicit_limit():
+    headings = "".join(f"<h2>Heading {index}</h2>" for index in range(8))
+
+    snapshot = build_structural_snapshot(page(f"<main>{headings}</main>"), max_headings=3)
+
+    assert len(snapshot["normalized"]["headings"]) == 3
+
+
 def test_build_structural_snapshot_is_content_addressed_for_equivalent_normalized_content():
     first = page("<main>  <h1>Investor   Events</h1> <a href='/x?utm_source=a&id=1'> Link </a> </main>")
     second = page("<main><h1>Investor Events</h1><a href='https://example.com/x?id=1&utm_campaign=b'>Link</a></main>")
