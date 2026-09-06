@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+import re
 from typing import Literal
 
 from bs4 import BeautifulSoup
@@ -44,6 +45,19 @@ def _validate_selector(value: str) -> str:
     except SelectorSyntaxError as exc:
         raise ValueError("selector is invalid") from exc
     return cleaned
+
+
+def _item_selector_is_broad(selector: str) -> bool:
+    if re.search(r"(?<![\w-])\*(?![=])", selector):
+        return True
+    probe = BeautifulSoup(
+        "<html><body><main><article class='item'><a href='x'></a><span></span></article>"
+        "<article class='other'><a href='y'></a></article><a href='z'></a></main></body></html>",
+        "html.parser",
+    )
+    matched = probe.select(selector)
+    anchors = probe.find_all("a")
+    return bool(anchors) and all(any(node is item for item in matched) for node in anchors)
 
 
 def _validate_public_host(value: str) -> str:
@@ -109,12 +123,7 @@ class ExtractionSpec(BaseModel):
     @classmethod
     def _item_selector_is_safe(cls, value):
         cleaned = _validate_selector(value)
-        probe = BeautifulSoup(
-            "<html><body><main><article class='item'></article><a href='x'></a><a href='y'></a></main></body></html>",
-            "html.parser",
-        )
-        matched = probe.select(cleaned)
-        if cleaned.casefold() in {"html", "body", "*", "a", "a[href]"} or len(matched) == 2 and all(node.name == "a" for node in matched):
+        if cleaned.casefold() in {"html", "body"} or _item_selector_is_broad(cleaned):
             raise ValueError("item selector is too broad")
         return cleaned
 

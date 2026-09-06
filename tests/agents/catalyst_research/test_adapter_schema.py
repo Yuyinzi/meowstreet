@@ -46,6 +46,10 @@ def adapter_payload():
         lambda payload: payload.update(extra=True),
         lambda payload: payload.update(access_mode="json"),
         lambda payload: payload["extraction"].update(item_selector="*"),
+        lambda payload: payload["extraction"].update(item_selector="body *"),
+        lambda payload: payload["extraction"].update(item_selector="html *"),
+        lambda payload: payload["extraction"].update(item_selector="a[href], article"),
+        lambda payload: payload["extraction"].update(item_selector="*:not(html)"),
         lambda payload: payload["extraction"]["date"].update(value_source="regex"),
         lambda payload: payload["extraction"]["date"].update(attribute="onclick"),
         lambda payload: payload["extraction"]["date"].update(formats=["%Q"]),
@@ -101,3 +105,28 @@ def test_events_adapter_allows_missing_url_and_machine_date_attribute():
     adapter = IRSourceAdapter.model_validate(payload)
 
     assert adapter.extraction.url is None
+
+
+@pytest.mark.parametrize(
+    "source_url,allowed_hosts",
+    [
+        ("http://127.0.0.1/news", ["127.0.0.1"]),
+        ("http://localhost/news", ["localhost"]),
+        ("https://investor.example.com/news", ["investor.example.com", "10.0.0.1"]),
+    ],
+)
+def test_adapter_schema_rejects_private_or_loopback_hosts(source_url, allowed_hosts):
+    payload = adapter_payload()
+    payload["source_url"] = source_url
+    payload["allowed_hosts"] = allowed_hosts
+
+    with pytest.raises((ValidationError, ValueError)):
+        IRSourceAdapter.model_validate(payload)
+
+
+def test_press_release_adapter_requires_url_field():
+    payload = adapter_payload()
+    payload["extraction"]["url"] = None
+
+    with pytest.raises((ValidationError, ValueError), match="url"):
+        IRSourceAdapter.model_validate(payload)

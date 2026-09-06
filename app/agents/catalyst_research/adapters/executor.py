@@ -1,4 +1,5 @@
 import hashlib
+import math
 import time
 from collections.abc import Mapping
 from datetime import date, datetime
@@ -8,7 +9,7 @@ from bs4 import BeautifulSoup
 from soupsieve import match as selector_matches
 
 from app.agents.catalyst_research.adapters.schema import IRSourceAdapter
-from app.agents.catalyst_research.domain import canonicalize_public_url, url_host
+from app.agents.catalyst_research.domain import canonicalize_public_url, url_host, validate_redirect_chain
 
 
 DEFAULT_LIMITS = {"max_pages": 40, "max_events": 2_000, "max_elapsed_seconds": 120}
@@ -34,7 +35,7 @@ def _positive_integer_limit(value, name):
 
 
 def _duration_limit(value, name):
-    if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value) or value < 0:
         raise ValueError(f"{name} must be non-negative")
     return value
 
@@ -58,9 +59,25 @@ def _page_payload(page, requested_url):
     if isinstance(page, str):
         html = page
         final_url = requested_url
+        content_type = "text/html"
+        truncated = False
+        response_bytes = len(html.encode("utf-8"))
+        redirect_chain = [requested_url]
     elif isinstance(page, Mapping):
         html = page.get("html")
         final_url = page.get("final_url") or page.get("requested_url") or requested_url
+        content_type = page.get("content_type")
+        if not isinstance(content_type, str) or content_type.split(";", 1)[0].strip().casefold() not in {"text/html", "application/xhtml+xml"}:
+            raise ValueError("page content type is not html")
+        truncated = page.get("truncated", False)
+        if not isinstance(truncated, bool):
+            raise ValueError("page truncation flag is invalid")
+        response_bytes = page.get("response_bytes")
+        if isinstance(response_bytes, bool) or not isinstance(response_bytes, int) or response_bytes < 0:
+            raise ValueError("page response bytes are invalid")
+        redirect_chain = page.get("redirect_chain")
+        if not isinstance(redirect_chain, list) or not redirect_chain:
+            raise ValueError("page redirect chain is required")
     else:
         raise ValueError("fetched page is invalid")
     if not isinstance(html, str) or not html.strip():
@@ -69,7 +86,17 @@ def _page_payload(page, requested_url):
         canonical_final_url = canonicalize_public_url(final_url)
     except ValueError as exc:
         raise ValueError("fetched page url is invalid") from exc
-    return html, canonical_final_url, hashlib.sha256(html.encode("utf-8")).hexdigest()
+    try:
+        canonical_chain = validate_redirect_chain(redirect_chain)
+    except ValueError as exc:
+        raise ValueError("page redirect chain is invalid") from exc
+    if canonical_chain[0] != requested_url:
+        raise ValueError("page redirect chain start is invalid")
+    if canonical_chain[-1] != canonical_final_url:
+        raise ValueError("page redirect chain final url is invalid")
+    if not truncated and response_bytes < len(html.encode("utf-8")):
+        raise ValueError("page response bytes are inconsistent")
+    return html, canonical_final_url, hashlib.sha256(html.encode("utf-8")).hexdigest(), truncated, canonical_chain
 
 
 def _ensure_host(url, allowed_hosts, label):
@@ -165,10 +192,9 @@ def _initial_page(adapter):
     if adapter.pagination.type != "page_parameter" or adapter.pagination.start is None:
         return initial_url, 0
     parsed = urlsplit(initial_url)
-    query = parse_qsl(parsed.query, keep_blank_values=True)
-    if not any(key == adapter.pagination.parameter for key, _ in query):
-        query.append((adapter.pagination.parameter, str(adapter.pagination.start)))
-        initial_url = canonicalize_public_url(urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), "")))
+    query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True) if key != adapter.pagination.parameter]
+    query.append((adapter.pagination.parameter, str(adapter.pagination.start)))
+    initial_url = canonicalize_public_url(urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), "")))
     return initial_url, adapter.pagination.start - 1
 
 
@@ -238,11 +264,14 @@ def execute_adapter(adapter, *, fetch_page, requested_start, requested_end, limi
             state["truncation_reason"] = "repeated_url"
             break
         state["visited_urls"].add(current_url)
-        html, final_url, content_hash = _page_payload(fetch_page(current_url), current_url)
+        html, final_url, content_hash, response_truncated, redirect_chain = _page_payload(fetch_page(current_url), current_url)
+        for redirect_url in redirect_chain:
+            _ensure_host(redirect_url, allowed_hosts, "page redirect")
         _ensure_host(final_url, allowed_hosts, "page redirect")
         if final_url in state["visited_urls"] and final_url != current_url:
             state["truncation_reason"] = "repeated_url"
             break
+        state["visited_urls"].add(final_url)
         if content_hash in state["visited_hashes"]:
             state["truncation_reason"] = "repeated_content"
             break
@@ -251,6 +280,12 @@ def execute_adapter(adapter, *, fetch_page, requested_start, requested_end, limi
         page_index += 1
         state["pages"].append(final_url)
         state["content_hashes"].append(content_hash)
+        if time.monotonic() - state["started"] >= bounds["max_elapsed_seconds"]:
+            state["truncation_reason"] = "max_elapsed_seconds"
+            break
+        if response_truncated:
+            state["truncation_reason"] = "response_truncated"
+            break
         page_observations, all_dates = _extract_observations(adapter, html, final_url, start, end)
         if any(item <= start for item in all_dates):
             state["boundary_reached"] = True
@@ -260,6 +295,9 @@ def execute_adapter(adapter, *, fetch_page, requested_start, requested_end, limi
             state["truncation_reason"] = "max_events"
             break
         state["observations"].extend(page_observations)
+        if time.monotonic() - state["started"] >= bounds["max_elapsed_seconds"]:
+            state["truncation_reason"] = "max_elapsed_seconds"
+            break
         if state["boundary_reached"]:
             break
         soup = BeautifulSoup(html, "html.parser")

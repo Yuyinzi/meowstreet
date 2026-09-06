@@ -1,5 +1,6 @@
 from datetime import date
 from pathlib import Path
+import time
 
 import pytest
 
@@ -65,7 +66,16 @@ def fixture_fetcher():
 
     def fetch(url):
         calls.append(url)
-        return {"requested_url": url, "final_url": url, "html": pages[url].read_text()}
+        html = pages[url].read_text()
+        return {
+            "requested_url": url,
+            "final_url": url,
+            "redirect_chain": [url],
+            "content_type": "text/html",
+            "response_bytes": len(html.encode()),
+            "truncated": False,
+            "html": html,
+        }
 
     return fetch, calls
 
@@ -128,6 +138,10 @@ def test_executor_rejects_cross_host_event_urls_and_reports_bounded_truncation()
         return {
             "requested_url": url,
             "final_url": url,
+            "redirect_chain": [url],
+            "content_type": "text/html",
+            "response_bytes": 200,
+            "truncated": False,
             "html": '<article class="news-item"><time>January 3, 2025</time><a class="news-title" href="https://evil.example.net/releases/old">Old update</a></article>',
         }
 
@@ -182,3 +196,149 @@ def test_executor_enforces_event_and_time_limits():
     assert limited_events["truncation_reason"] == "max_events"
     assert limited_time["observations"] == []
     assert limited_time["truncation_reason"] == "max_elapsed_seconds"
+
+
+def test_executor_marks_truncated_response_without_archive_completion():
+    adapter = press_adapter({"type": "none"})
+    html = (FIXTURES / "press_releases_page_1.html").read_text()
+
+    def fetch(url):
+        return {
+            "requested_url": url,
+            "final_url": url,
+            "redirect_chain": [url],
+            "content_type": "text/html",
+            "response_bytes": len(html.encode()) + 10,
+            "truncated": True,
+            "html": html,
+        }
+
+    result = execute_adapter(adapter, fetch_page=fetch, requested_start="2025-01-01", requested_end="2025-12-31")
+
+    assert result["truncation_reason"] == "response_truncated"
+    assert result["archive_exhausted"] is False
+
+
+def test_executor_rejects_non_html_and_unsafe_redirect_chain():
+    adapter = press_adapter({"type": "none"})
+    html = (FIXTURES / "press_releases_page_1.html").read_text()
+
+    def fetch_non_html(url):
+        return {
+            "requested_url": url,
+            "final_url": url,
+            "redirect_chain": [url],
+            "content_type": "application/json",
+            "response_bytes": len(html.encode()),
+            "truncated": False,
+            "html": html,
+        }
+
+    with pytest.raises(ValueError, match="content type"):
+        execute_adapter(adapter, fetch_page=fetch_non_html, requested_start="2025-01-01", requested_end="2025-12-31")
+
+    def fetch_redirect(url):
+        return {
+            "requested_url": url,
+            "final_url": "https://investor.example.com/news",
+            "redirect_chain": [url, "https://evil.example.net/news"],
+            "content_type": "text/html",
+            "response_bytes": len(html.encode()),
+            "truncated": False,
+            "html": html,
+        }
+
+    with pytest.raises(ValueError, match="redirect"):
+        execute_adapter(adapter, fetch_page=fetch_redirect, requested_start="2025-01-01", requested_end="2025-12-31")
+
+
+def test_executor_marks_slow_injected_fetch_as_elapsed_truncation():
+    adapter = press_adapter({"type": "none"})
+    html = (FIXTURES / "press_releases_page_1.html").read_text()
+
+    def slow_fetch(url):
+        time.sleep(0.02)
+        return {
+            "requested_url": url,
+            "final_url": url,
+            "redirect_chain": [url],
+            "content_type": "text/html",
+            "response_bytes": len(html.encode()),
+            "truncated": False,
+            "html": html,
+        }
+
+    result = execute_adapter(
+        adapter,
+        fetch_page=slow_fetch,
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+        limits={"max_elapsed_seconds": 0.001},
+    )
+
+    assert result["truncation_reason"] == "max_elapsed_seconds"
+    assert result["archive_exhausted"] is False
+
+
+def test_executor_detects_redirected_final_url_loop_and_content_loop():
+    adapter = press_adapter({"type": "next_link", "selector": "a.next"})
+    html = (FIXTURES / "press_releases_page_1.html").read_text()
+
+    def fetch_final_loop(url):
+        return {
+            "requested_url": url,
+            "final_url": "https://investor.example.com/news?page=2" if "page=1" in url else url,
+            "redirect_chain": [url, "https://investor.example.com/news?page=2"] if "page=1" in url else [url],
+            "content_type": "text/html",
+            "response_bytes": len(html.encode()),
+            "truncated": False,
+            "html": html,
+        }
+
+    result = execute_adapter(adapter, fetch_page=fetch_final_loop, requested_start="2025-01-01", requested_end="2025-12-31")
+    assert result["truncation_reason"] == "repeated_url"
+
+    def fetch_content_loop(url):
+        return {
+            "requested_url": url,
+            "final_url": url,
+            "redirect_chain": [url],
+            "content_type": "text/html",
+            "response_bytes": len(html.encode()),
+            "truncated": False,
+            "html": html,
+        }
+
+    content_result = execute_adapter(
+        adapter,
+        fetch_page=fetch_content_loop,
+        requested_start="2024-01-01",
+        requested_end="2025-12-31",
+        limits={"max_pages": 2},
+    )
+    assert content_result["truncation_reason"] == "repeated_content"
+
+
+def test_page_parameter_start_overwrites_existing_source_parameter():
+    adapter_payload = press_adapter({"type": "page_parameter", "parameter": "page", "start": 1}).model_dump(mode="json")
+    adapter_payload["source_url"] = "https://investor.example.com/news?page=1"
+    adapter_payload["pagination"]["start"] = 3
+    adapter = IRSourceAdapter.model_validate(adapter_payload)
+    html = (FIXTURES / "press_releases_page_1.html").read_text()
+    calls = []
+
+    def fetch(url):
+        calls.append(url)
+        return {
+            "requested_url": url,
+            "final_url": url,
+            "redirect_chain": [url],
+            "content_type": "text/html",
+            "response_bytes": len(html.encode()),
+            "truncated": False,
+            "html": html,
+        }
+
+    execute_adapter(adapter, fetch_page=fetch, requested_start="2025-01-01", requested_end="2025-12-31", limits={"max_pages": 1})
+
+    assert calls == ["https://investor.example.com/news?page=3"]
