@@ -1,4 +1,7 @@
+import hashlib
 from pathlib import Path
+
+import pytest
 
 from app.agents.catalyst_research.adapters.schema import IRSourceAdapter
 from app.agents.catalyst_research.adapters.validator import validate_active_adapter, validate_candidate
@@ -47,6 +50,7 @@ def page_fetcher():
 
 
 def snapshot(page):
+    content_hash = hashlib.sha256(page.encode()).hexdigest()
     return {
         "snapshot_schema_version": "catalyst_structural_snapshot_v1",
         "requested_url": "https://investor.example.com/news?page=1",
@@ -54,7 +58,8 @@ def snapshot(page):
         "content_type": "text/html",
         "structural_html": page,
         "normalized": {"title": "Press Releases", "text": "December update June update"},
-        "content_hash": "snapshot-hash",
+        "content_hash": content_hash,
+        "redirect_chain": ["https://investor.example.com/news?page=1"],
     }
 
 
@@ -71,7 +76,7 @@ def test_candidate_validation_reports_safe_repeatable_snapshot_and_live_executio
     assert report["status"] == "passed"
     assert report["validator_version"]
     assert report["executor_version"]
-    assert report["report"]["source_content_hashes"] == ["snapshot-hash"]
+    assert report["report"]["source_content_hashes"] == [hashlib.sha256(page.encode()).hexdigest()]
     assert report["report"]["match_counts"]["items"] == 2
     assert report["report"]["valid_observation_count"] == 2
     assert report["report"]["parsed_date_formats"] == ["%B %d, %Y"]
@@ -124,3 +129,237 @@ def test_active_validation_returns_stale_without_promotable_observations_on_drif
     assert result["observations"] == []
     assert result["promotable_observations"] == []
     assert result["report"]["safety_failures"]
+
+
+def _page(url, html, *, truncated=False, redirect_chain=None, content_type="text/html"):
+    return {
+        "requested_url": url,
+        "final_url": url,
+        "redirect_chain": redirect_chain or [url],
+        "content_type": content_type,
+        "response_bytes": len(html.encode()),
+        "truncated": truncated,
+        "html": html,
+    }
+
+
+def test_candidate_and_active_reject_pagination_loops():
+    html = (FIXTURES / "press_releases_page_1.html").read_text()
+
+    def fetch(url):
+        return _page(url, html)
+
+    candidate = validate_candidate(
+        adapter({"type": "next_link", "selector": "a.next"}),
+        snapshot(html),
+        fetch_page=fetch,
+        requested_start="2024-01-01",
+        requested_end="2025-12-31",
+    )
+    active = validate_active_adapter(
+        adapter({"type": "next_link", "selector": "a.next"}),
+        fetch_page=fetch,
+        requested_start="2024-01-01",
+        requested_end="2025-12-31",
+    )
+
+    assert candidate["status"] == "failed"
+    assert candidate["report"]["pagination"]["loop"] is True
+    assert candidate["report"]["errors"]
+    assert active["status"] == "stale"
+    assert active["observations"] == []
+    assert active["report"]["pagination"]["loop"] is True
+
+
+@pytest.mark.parametrize(
+    "pagination,urls,limits,expected_status",
+    [
+        (
+            {"type": "next_link", "selector": "a.next"},
+            ["https://investor.example.com/news?page=1", "https://investor.example.com/news?page=2"],
+            None,
+            "passed",
+        ),
+        (
+            {"type": "page_parameter", "parameter": "page", "start": 1},
+            ["https://investor.example.com/news?page=1", "https://investor.example.com/news?page=2"],
+            {"max_pages": 2},
+            "failed",
+        ),
+    ],
+)
+def test_pagination_requires_distinct_safe_page_and_observation(pagination, urls, limits, expected_status):
+    pages = [
+        (FIXTURES / "press_releases_page_1.html").read_text(),
+        (FIXTURES / "press_releases_page_2.html").read_text(),
+    ]
+
+    def fetch(url):
+        index = 0 if "page=1" in url else 1
+        return _page(url, pages[index])
+
+    result = validate_candidate(
+        adapter(pagination),
+        snapshot(pages[0]),
+        fetch_page=fetch,
+        requested_start="2024-01-01",
+        requested_end="2025-12-31",
+        limits=limits,
+    )
+
+    assert result["status"] == expected_status
+    assert result["report"]["pagination"]["distinct_pages"] is True
+    assert result["report"]["pagination"]["distinct_observations"] is True
+
+
+@pytest.mark.parametrize(
+    "limits,expected",
+    [({"max_events": 1}, "max_events"), ({"max_elapsed_seconds": 0}, "max_elapsed_seconds")],
+)
+def test_candidate_reports_executor_limit_failures(limits, expected):
+    fetch, _, page = page_fetcher()
+    result = validate_candidate(
+        adapter(),
+        snapshot(page),
+        fetch_page=fetch,
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+        limits=limits,
+    )
+
+    assert result["status"] == "failed"
+    assert result["report"]["pagination"].get("truncation_reason") == expected or expected in result["errors"][0]
+    assert result["report"]["errors"]
+
+
+def test_candidate_rejects_response_truncation_and_oversize_page():
+    page = (FIXTURES / "press_releases_page_1.html").read_text()
+
+    truncated = validate_candidate(
+        adapter(),
+        snapshot(page),
+        fetch_page=lambda url: _page(url, page, truncated=True),
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+    oversized_html = page + (" " * 120_001)
+    oversized = validate_candidate(
+        adapter(),
+        snapshot(page),
+        fetch_page=lambda url: _page(url, oversized_html),
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+
+    assert truncated["status"] == "failed"
+    assert truncated["report"]["errors"]
+    assert oversized["status"] == "failed"
+    assert oversized["report"]["errors"]
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        '<article class="news-item"><time>January 3, 2025</time><a class="news-title" href="/release"></a></article>',
+        '<article class="news-item"><time></time><a class="news-title" href="/release">Release</a></article>',
+        '<article class="news-item"><time>not-a-date</time><a class="news-title" href="/release">Release</a></article>',
+        '<article class="news-item"><time>January 3, 2025</time><a class="news-title" href="/release">Release</a></article><article class="news-item"><time>January 3, 2025</time><a class="news-title" href="/release">Release</a></article>',
+    ],
+)
+def test_candidate_rejects_missing_invalid_and_duplicate_observations(html):
+    result = validate_candidate(
+        adapter(),
+        snapshot(html),
+        fetch_page=lambda url: _page(url, html),
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+
+    assert result["status"] == "failed"
+    assert result["observations"] == []
+    assert result["report"]["errors"]
+    assert all("<" not in error and ">" not in error for error in result["report"]["errors"])
+
+
+def test_candidate_rejects_unsafe_redirect_and_event_url():
+    page = (FIXTURES / "press_releases_page_1.html").read_text()
+    unsafe_redirect = validate_candidate(
+        adapter(),
+        snapshot(page),
+        fetch_page=lambda url: _page(url, page, redirect_chain=[url, "https://evil.example.net/news"]),
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+    unsafe_event = '<article class="news-item"><time>January 3, 2025</time><a class="news-title" href="https://evil.example.net/release">Release</a></article>'
+    unsafe_url = validate_candidate(
+        adapter(),
+        snapshot(unsafe_event),
+        fetch_page=lambda url: _page(url, unsafe_event),
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+
+    assert unsafe_redirect["status"] == "failed"
+    assert unsafe_url["status"] == "failed"
+    assert unsafe_redirect["report"]["errors"]
+    assert unsafe_url["report"]["errors"]
+
+
+def test_active_validation_returns_success_and_sanitized_stale_on_unexpected_fetch_failure():
+    fetch, _, page = page_fetcher()
+    success = validate_active_adapter(
+        adapter(), fetch_page=fetch, requested_start="2025-01-01", requested_end="2025-12-31"
+    )
+
+    def failing_fetch(url):
+        raise RuntimeError("provider <secret> failed")
+
+    stale = validate_active_adapter(
+        adapter(), fetch_page=failing_fetch, requested_start="2025-01-01", requested_end="2025-12-31"
+    )
+
+    assert success["status"] == "passed"
+    assert success["promotable_observations"]
+    assert stale["status"] == "stale"
+    assert stale["observations"] == []
+    assert stale["errors"] == ["provider failed"]
+    assert stale["report"]["errors"] == stale["errors"]
+
+
+def test_candidate_rejects_non_equivalent_snapshot_runs(monkeypatch):
+    fetch, _, page = page_fetcher()
+    calls = iter([([{"title": "first"}], {"source_content_hashes": ["hash"]}), ([{"title": "second"}], {"source_content_hashes": ["hash"]})])
+    monkeypatch.setattr(
+        "app.agents.catalyst_research.adapters.validator._execution_snapshot",
+        lambda *args: next(calls),
+    )
+
+    result = validate_candidate(
+        adapter(), snapshot(page), fetch_page=fetch, requested_start="2025-01-01", requested_end="2025-12-31"
+    )
+
+    assert result["status"] == "failed"
+    assert result["report"]["repeatability"]["byte_equivalent"] is False
+    assert result["report"]["errors"]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda value: value.update(requested_url="https://evil.example.net/news?page=1"),
+        lambda value: value.update(final_url="https://evil.example.net/news?page=1"),
+        lambda value: value.update(redirect_chain=["https://investor.example.com/news?page=1", "https://evil.example.net/news?page=1"]),
+        lambda value: value.update(truncated=True),
+    ],
+)
+def test_candidate_rejects_unsafe_or_truncated_snapshot_metadata(mutation):
+    page = (FIXTURES / "press_releases_page_1.html").read_text()
+    candidate_snapshot = snapshot(page)
+    mutation(candidate_snapshot)
+
+    result = validate_candidate(
+        adapter(), candidate_snapshot, fetch_page=lambda url: _page(url, page), requested_start="2025-01-01", requested_end="2025-12-31"
+    )
+
+    assert result["status"] == "failed"
+    assert result["report"]["errors"]

@@ -30,3 +30,18 @@
 - Validation intentionally operates on bounded structural HTML; a source that requires JavaScript/AJAX remains unsupported by the v1 adapter contract.
 - Active drift validation reports stale and withholds observations, but atomic state transitions and dataset preservation are deliberately left to Task 2 persistence/workflow callers.
 - Pagination and archive coverage remain bounded by the Task 5 executor limits; limit exhaustion is reported as validation failure for candidate activation.
+
+## Reviewer fix round 1
+
+- RED: expanded validator/generator contracts initially produced 18 failures, covering pagination loops/distinctness, mirrored report errors, unexpected fetch exceptions, snapshot metadata, and aggregate prompt bounds.
+- GREEN: focused validator/generator suite now passes (`25 passed`); Catalyst agent suite passes (`189 passed`).
+- Candidate and active validation now fail closed on repeated URL/content loops, missing distinct pagination observations, truncation, executor limits, malformed fields, unsafe redirects/URLs, and oversized pages. Candidate errors are mirrored into `report.errors`; active reports retain loop/page evidence while returning `stale`.
+- Snapshot requested/final URLs, redirect chain, content type, response size, truncation, host allowlist, and content hash are checked before repeatability execution. Normal fetch exceptions are sanitized and returned; `KeyboardInterrupt`/`SystemExit` are not swallowed.
+- Generator now filters company/source fields, bounds normalized headings/links and aggregate prompt size, preserves bounded structural evidence, and recomputes invalid/mismatched snapshot hashes from bounded content. Hashes remain stable for identical bounded inputs.
+
+### Round 1 verification
+
+- `.venv/bin/pytest tests/agents/catalyst_research/test_adapter_validator.py tests/agents/catalyst_research/test_adapter_generator.py -q` — 25 passed
+- `.venv/bin/pytest tests/agents/catalyst_research -q` — 189 passed
+- `python3 -m py_compile app/agents/catalyst_research/adapters/validator.py app/agents/catalyst_research/adapters/generator.py` — passed
+- `git diff --check` — passed

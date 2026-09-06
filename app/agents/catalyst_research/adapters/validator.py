@@ -10,7 +10,7 @@ from soupsieve import match as selector_matches
 
 from app.agents.catalyst_research.adapters.executor import DEFAULT_LIMITS, execute_adapter
 from app.agents.catalyst_research.adapters.schema import IRSourceAdapter
-from app.agents.catalyst_research.domain import canonicalize_public_url, url_host
+from app.agents.catalyst_research.domain import canonicalize_public_url, url_host, validate_redirect_chain
 
 
 ADAPTER_VALIDATOR_VERSION = "adapter_validator_v1"
@@ -70,6 +70,7 @@ def _report(source_hashes=None, page_hashes=None):
         "safety_failures": [],
         "limit_checks": {"within_bounds": True, "limits": dict(DEFAULT_LIMITS)},
         "repeatability": {"byte_equivalent": False},
+        "errors": [],
     }
 
 
@@ -172,14 +173,42 @@ def _snapshot_page(adapter, snapshot):
         raise ValueError("bounded structural snapshot is required")
     if len(html) > _MAX_SNAPSHOT_HTML:
         raise ValueError("bounded structural snapshot exceeds validation bound")
+    if snapshot.get("truncated", False):
+        raise ValueError("snapshot is truncated")
+    content_type = snapshot.get("content_type") or "text/html"
+    if not isinstance(content_type, str) or content_type.split(";", 1)[0].strip().casefold() not in {"text/html", "application/xhtml+xml"}:
+        raise ValueError("snapshot content type is not html")
     requested_url = canonicalize_public_url(str(snapshot.get("requested_url") or adapter.source_url))
     final_url = canonicalize_public_url(str(snapshot.get("final_url") or requested_url))
+    expected_url = canonicalize_public_url(str(adapter.source_url))
+    if requested_url != expected_url:
+        raise ValueError("snapshot requested url does not match source url")
+    allowed_hosts = set(adapter.allowed_hosts)
+    if url_host(requested_url) not in allowed_hosts or url_host(final_url) not in allowed_hosts:
+        raise ValueError("snapshot url host is not allowed")
+    redirect_chain = snapshot.get("redirect_chain")
+    if redirect_chain is None:
+        redirect_chain = [requested_url] if requested_url == final_url else [requested_url, final_url]
+    if not isinstance(redirect_chain, list) or not redirect_chain:
+        raise ValueError("snapshot redirect chain is required")
+    normalized_chain = validate_redirect_chain(redirect_chain)
+    if normalized_chain[0] != requested_url or normalized_chain[-1] != final_url:
+        raise ValueError("snapshot redirect chain is inconsistent")
+    if any(url_host(url) not in allowed_hosts for url in normalized_chain):
+        raise ValueError("snapshot redirect host is not allowed")
+    response_bytes = snapshot.get("response_bytes")
+    if response_bytes is not None and (isinstance(response_bytes, bool) or not isinstance(response_bytes, int) or response_bytes < len(html.encode())):
+        raise ValueError("snapshot response bytes are inconsistent")
+    supplied_hash = snapshot.get("content_hash")
+    computed_hash = hashlib.sha256(html.encode()).hexdigest()
+    if supplied_hash is not None and (not isinstance(supplied_hash, str) or supplied_hash != computed_hash):
+        raise ValueError("snapshot content hash is invalid")
     return {
         "requested_url": requested_url,
         "final_url": final_url,
-        "redirect_chain": [requested_url] if requested_url == final_url else [requested_url, final_url],
-        "content_type": snapshot.get("content_type") or "text/html",
-        "response_bytes": snapshot.get("response_bytes") or len(html.encode()),
+        "redirect_chain": normalized_chain,
+        "content_type": content_type,
+        "response_bytes": response_bytes or len(html.encode()),
         "truncated": bool(snapshot.get("truncated", False)),
         "html": html,
     }
@@ -218,11 +247,23 @@ def _run_live(adapter, fetch_page, start, end, limits):
         "loop": result.get("truncation_reason") in {"repeated_url", "repeated_content"},
         "truncation_reason": result.get("truncation_reason"),
     }
+    page_observations = []
     for page in pages:
         html = page.get("html") if isinstance(page, Mapping) else page
         page_url = page.get("final_url") if isinstance(page, Mapping) else None
         page_url = page_url or (page.get("requested_url") if isinstance(page, Mapping) else str(adapter.source_url))
-        _inspect_html(adapter, html, page_url, start, end, report)
+        page_observations.append(_inspect_html(adapter, html, page_url, start, end, report))
+    observation_keys = [
+        {(row["count_date"], row["title"].casefold(), row["url"] or "") for row in observations}
+        for observations in page_observations
+    ]
+    prior_keys = set()
+    distinct_observations = True
+    for current_keys in observation_keys:
+        if prior_keys and not current_keys - prior_keys:
+            distinct_observations = False
+        prior_keys.update(current_keys)
+    report["pagination"]["distinct_observations"] = distinct_observations
     report["limit_checks"] = {
         "within_bounds": result.get("truncation_reason") not in {"max_pages", "max_events", "max_elapsed_seconds", "response_truncated"},
         "limits": dict(limits),
@@ -265,12 +306,17 @@ def validate_candidate(adapter, snapshot, *, fetch_page, requested_start, reques
         report["pagination"] = live_report["pagination"]
         report["safety_failures"] = live_report["safety_failures"]
         report["limit_checks"] = live_report["limit_checks"]
+        if report["pagination"]["loop"]:
+            raise ValueError("pagination loop detected")
+        if not report["pagination"].get("distinct_observations", True):
+            raise ValueError("pagination produced no distinct observations")
         if not report["limit_checks"]["within_bounds"]:
             raise ValueError("executor limits were reached")
         result["status"] = "passed"
         result["observations"] = live_result.get("observations", [])
-    except (TypeError, ValueError, KeyError) as exc:
+    except Exception as exc:
         result["errors"] = [_error(exc)]
+        report["errors"] = result["errors"]
         result["observations"] = []
         if not report["safety_failures"] and "region" in str(exc):
             report["safety_failures"] = [_error(exc)]
@@ -294,15 +340,20 @@ def validate_active_adapter(adapter, *, fetch_page, requested_start, requested_e
     bounds = dict(DEFAULT_LIMITS)
     if limits is not None:
         bounds.update(limits)
+    report = None
     try:
         result, report = _run_live(adapter, fetch_page, start, end, bounds)
+        if report["pagination"]["loop"]:
+            raise ValueError("pagination loop detected")
+        if not report["pagination"].get("distinct_observations", True):
+            raise ValueError("pagination produced no distinct observations")
         if not report["limit_checks"]["within_bounds"]:
             raise ValueError("executor limits were reached")
         status = "passed"
         observations = result.get("observations", [])
         errors = []
-    except (TypeError, ValueError, KeyError) as exc:
-        report = _report()
+    except Exception as exc:
+        report = report or _report()
         report["safety_failures"] = [_error(exc)]
         report["pagination"]["type"] = adapter.pagination.type
         status = "stale"
