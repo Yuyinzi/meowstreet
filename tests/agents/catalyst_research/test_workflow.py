@@ -951,3 +951,31 @@ def test_hot_workflow_with_real_snapshot_builder_reuses_active_adapters(tmp_path
         assert states == ["active", "active"]
     finally:
         connection.close()
+
+
+def test_workflow_forwards_config_args_to_default_config_loaders(monkeypatch):
+    from app.agents.catalyst_research import workflow
+
+    seen = {}
+
+    def inference(args=None, root=None):
+        seen["inference"] = args
+        return {"client": None, "models": {}, "warnings": []}
+
+    def search(args=None, root=None):
+        seen["search"] = args
+        return {"provider": "none", "fallback": "none", "native_search_supported": "false", "tavily_api_key": None}
+
+    monkeypatch.setattr(workflow, "load_inference_bundle", inference)
+    monkeypatch.setattr(workflow, "load_search_config", search)
+    repository = FakeRepository()
+    calls = []
+    dependencies = _deps(repository, calls)
+    marker = object()
+    dependencies["config_args"] = marker
+
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, dependencies=dependencies))
+
+    assert result["status"] == "completed"
+    assert seen["inference"] is marker
+    assert seen["search"] is marker

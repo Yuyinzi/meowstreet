@@ -237,8 +237,8 @@ def _default_resolver(request, *, connection=None, http_client=None, db_path=Non
         con.close()
 
 
-def _default_search_router(inference):
-    config = load_search_config()
+def _default_search_router(inference, args=None):
+    config = load_search_config(args)
     providers = []
     try:
         providers.append(TavilySearchProvider(config.get("tavily_api_key")))
@@ -269,17 +269,17 @@ class _UnavailableSearchRouter:
         return ["search"]
 
 
-def _default_inference():
+def _default_inference(args=None):
     try:
-        return load_inference_bundle()
+        return load_inference_bundle(args)
     except Exception:
         return {"client": None, "models": {}, "warnings": ["catalyst_llm_configuration_failed"]}
 
 
-def _default_dependencies(db_path, http_client):
-    inference = _default_inference()
+def _default_dependencies(db_path, http_client, args=None):
+    inference = _default_inference(args)
     try:
-        search_router = _default_search_router(inference)
+        search_router = _default_search_router(inference, args)
     except Exception:
         search_router = _UnavailableSearchRouter()
     return {
@@ -799,8 +799,10 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         "execution_paths": {},
         "url_resolver": None,
     }
-    context.update(_default_dependencies(context["db_path"], context["http_client"]))
-    context.update(dependencies or {})
+    extra_dependencies = dict(dependencies or {})
+    config_args = extra_dependencies.pop("config_args", None)
+    context.update(_default_dependencies(context["db_path"], context["http_client"], config_args))
+    context.update(extra_dependencies)
     context["warnings"].extend(context.get("inference_warnings", []))
     if context.get("inference_warnings"):
         context["next_actions"].append("configure_catalyst_llm")
@@ -816,7 +818,7 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         "normalize": "normalize_observations",
     }
     for alias, target in aliases.items():
-        if alias in context and target not in (dependencies or {}):
+        if alias in context and target not in extra_dependencies:
             context[target] = context[alias]
     job = None
     try:
