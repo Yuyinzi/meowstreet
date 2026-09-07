@@ -86,9 +86,10 @@ def _connect_repository(repository, db_path):
 
 def _sanitized_error(error):
     message = " ".join(str(error).split())
-    message = re.sub(r"(?i)authorization\s*[:=]\s*bearer\s+\S+", "Authorization: Bearer [redacted]", message)
+    message = re.sub(r"(?i)\bauthorization\s*[:=]\s*(\S+)(?:\s+\S+)?", r"Authorization: \1 [redacted]", message)
+    message = re.sub(r"(?i)\b(?:cookie|set-cookie)\s*[:=]\s*\S+", "Cookie: [redacted]", message)
     message = re.sub(r"(?i)\bbearer\s+\S+", "Bearer [redacted]", message)
-    message = re.sub(r"(?i)(api[ _-]?key|token)\s*[:=]\s*\S+", r"\1=[redacted]", message)
+    message = re.sub(r"(?i)(api[ _-]?key|token|client[ _-]?secret|password)\s*[:=]\s*\S+", r"\1=[redacted]", message)
     return message[:500] or "workflow failed"
 
 
@@ -147,6 +148,27 @@ def _source_verified(company, source_type, source, snapshot):
 def _unsupported_fetch_error(error):
     text = str(error).casefold()
     return any(term in text for term in _UNSUPPORTED_FETCH_TERMS)
+
+
+def _unsupported_warning_code(error):
+    return "javascript_archive_unsupported" if "javascript archive" in str(error).casefold() else "source_javascript_unsupported"
+
+
+def _javascript_archive_shell(page, snapshot):
+    if not isinstance(page, Mapping) or not isinstance(snapshot, Mapping):
+        return False
+    html = page.get("html")
+    normalized = snapshot.get("normalized") or {}
+    if not isinstance(html, str) or not isinstance(normalized, Mapping):
+        return False
+    script_count = len(re.findall(r"<script\b", html, flags=re.IGNORECASE))
+    text = str(normalized.get("text") or "").strip()
+    visible_text = re.sub(r"<script\b.*?</script>", " ", text, flags=re.IGNORECASE | re.DOTALL)
+    visible_text = re.sub(r"<[^>]+>", " ", visible_text)
+    links = normalized.get("links")
+    structural = str(snapshot.get("structural_html") or "")
+    date_evidence = re.search(r"\b(?:19|20)\d{2}\b|data-date=|datetime=", visible_text + structural, flags=re.IGNORECASE)
+    return script_count >= 4 and len(visible_text.strip()) < 240 and not links and date_evidence is None
 
 
 def _candidate_links(snapshot, origin_url, target_type):
@@ -275,6 +297,8 @@ def _record_snapshot(context, source, page):
     if not isinstance(snapshot, Mapping):
         raise ValueError("source snapshot is invalid")
     snapshot = dict(snapshot)
+    if _javascript_archive_shell(page, snapshot):
+        raise ValueError("javascript archive unsupported")
     if snapshot.get("requires_javascript") or snapshot.get("javascript_required") or snapshot.get("access_mode") in {"javascript", "rendered"}:
         raise ValueError("source requires javascript")
     snapshot.setdefault("requested_url", page.get("requested_url") or source["url"])
@@ -306,6 +330,8 @@ async def _fetch_snapshot(context, company, source, *, allowed_hosts=None):
     if not isinstance(snapshot, Mapping):
         raise ValueError("source snapshot is invalid")
     snapshot = dict(snapshot)
+    if _javascript_archive_shell(page, snapshot):
+        raise ValueError("javascript archive unsupported")
     if snapshot.get("requires_javascript") or snapshot.get("javascript_required") or snapshot.get("access_mode") in {"javascript", "rendered"}:
         raise ValueError("source requires javascript")
     snapshot.setdefault("requested_url", page.get("requested_url") or source["url"])
@@ -316,9 +342,9 @@ async def _fetch_snapshot(context, company, source, *, allowed_hosts=None):
     return snapshot
 
 
-def _save_unaccepted_source(context, source, *, status, snapshot=None, extraction_status="failed"):
+def _save_unaccepted_source(context, source, *, status, snapshot=None, extraction_status="failed", verification_reason=None):
     row = dict(source)
-    row.update({"ticker": context["request"]["ticker"], "job_id": context["job"]["job_id"], "acceptance_status": "pending" if status == "ambiguous" else status, "extraction_status": extraction_status, "execution_path": "cold", "checked_at": _iso(context)})
+    row.update({"ticker": context["request"]["ticker"], "job_id": context["job"]["job_id"], "acceptance_status": status, "extraction_status": extraction_status, "verification_reason": verification_reason, "execution_path": "cold", "checked_at": _iso(context)})
     if isinstance(snapshot, Mapping):
         row.update({"final_url": snapshot.get("final_url"), "snapshot_hash": snapshot.get("content_hash"), "content_hash": snapshot.get("content_hash")})
     _repo_call(context, "save_source", row)
@@ -410,7 +436,7 @@ async def _prepare_sources(context, company, discovery):
             snapshot = await _fetch_snapshot(context, company, source)
         except ValueError as exc:
             if _unsupported_fetch_error(exc):
-                context["warnings"].append("source_javascript_unsupported")
+                context["warnings"].append(_unsupported_warning_code(exc))
                 context["next_actions"].append("provide_extractable_archive_url")
                 _save_unaccepted_source(context, source, status="pending", extraction_status="unsupported")
             else:
@@ -423,7 +449,9 @@ async def _prepare_sources(context, company, discovery):
             origin.update({"ticker": context["request"]["ticker"], "job_id": context["job"]["job_id"], "acceptance_status": "accepted", "extraction_status": "pending", "final_url": snapshot.get("final_url"), "snapshot_hash": snapshot.get("content_hash"), "content_hash": snapshot.get("content_hash"), "execution_path": "cold", "checked_at": _iso(context)})
             _repo_call(context, "save_source", origin)
         else:
-            _save_unaccepted_source(context, source, status="ambiguous", snapshot=snapshot)
+            context["warnings"].append("source_identity_ambiguous")
+            context["next_actions"].append("review_ambiguous_source")
+            _save_unaccepted_source(context, source, status="ambiguous", snapshot=snapshot, verification_reason=snapshot.get("verification_error"))
     prepared = {}
     for source_type in _REQUIRED_CHANNELS:
         accepted = None
@@ -434,7 +462,7 @@ async def _prepare_sources(context, company, discovery):
                 snapshot = await _fetch_snapshot(context, company, source)
             except ValueError as exc:
                 if _unsupported_fetch_error(exc):
-                    context["warnings"].append("source_javascript_unsupported")
+                    context["warnings"].append(_unsupported_warning_code(exc))
                     context["next_actions"].append("provide_extractable_archive_url")
                     _save_unaccepted_source(context, source, status="pending", extraction_status="unsupported")
                 else:
@@ -443,7 +471,9 @@ async def _prepare_sources(context, company, discovery):
             if snapshot.get("company_verified"):
                 accepted = (source, snapshot)
                 break
-            _save_unaccepted_source(context, source, status="ambiguous", snapshot=snapshot)
+            context["warnings"].append("source_identity_ambiguous")
+            context["next_actions"].append("review_ambiguous_source")
+            _save_unaccepted_source(context, source, status="ambiguous", snapshot=snapshot, verification_reason=snapshot.get("verification_error"))
         if accepted is None:
             accepted = await _traverse_source(context, company, origin_snapshots, source_type)
         prepared[source_type] = accepted
@@ -498,9 +528,8 @@ async def _run_channel(context, company, source_type, pair):
         source.update({"extraction_status": "complete" if complete else "partial", "execution_path": "cold", "active_adapter_id": persisted_candidate.get("adapter_id"), "coverage_start": coverage_start, "coverage_end": coverage_end, "coverage_continuous": complete, "page_count": execution.get("page_count", 0), "item_count": execution.get("item_count", len(events)), "truncation_reason": execution.get("truncation_reason"), "checked_at": _iso(context)})
         if complete and not events:
             context["warnings"].append("valid_archive_exhausted_zero")
-        _repo_call(context, "activate_adapter", persisted_candidate["adapter_id"], _iso(context))
+        saved = _repo_call(context, "activate_adapter_with_source", persisted_candidate["adapter_id"], _iso(context), source)
         context["execution_paths"][source_type] = "cold"
-        saved = _repo_call(context, "save_source", source)
         return {"source_type": source_type, "status": "complete" if complete else "partial", "events": events, "source": saved, "adapter": persisted_candidate}
     except (RuntimeError, sqlite3.Error):
         raise
@@ -607,7 +636,11 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         ambiguous = any(event.get("earnings_state") == "ambiguous" for event in classified_events)
         complete_channels = all(channel_results[item]["status"] == "complete" for item in _REQUIRED_CHANNELS)
         accepted_channels = sum(channel_results[item]["status"] in {"complete", "partial"} for item in _REQUIRED_CHANNELS)
-        status = "completed" if complete_channels and not ambiguous else "completed_partial" if accepted_channels or events else "unsupported"
+        llm_unavailable = not context["llm_client"] or not _source_model(context, "adapter_generation")
+        if llm_unavailable:
+            context["warnings"].append("catalyst_llm_unavailable")
+            context["next_actions"].append("configure_catalyst_llm")
+        status = "completed" if complete_channels and not ambiguous else "completed_partial" if accepted_channels or events or llm_unavailable else "unsupported"
         stats = await _invoke(context["calculate_statistics"], classified_events, source_rows, {"start": job["requested_start"], "end": job["requested_end"]})
         if ambiguous:
             context["warnings"].append("classification is incomplete")
@@ -622,7 +655,7 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
             try:
                 _repo_call(context, "fail_job", job["job_id"], _sanitized_error(exc), completed_at=_iso(context))
             except Exception:
-                LOGGER.error("catalyst workflow finalization failed ticker=%s", normalized["ticker"], exc_info=True)
+                LOGGER.error("catalyst workflow finalization failed ticker=%s job_id=%s", normalized["ticker"], job["job_id"])
         else:
             try:
                 connection.close()

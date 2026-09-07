@@ -415,6 +415,64 @@ def test_fail_job_can_terminally_close_queued_or_running_job(tmp_path):
     assert con.execute("select status from catalyst_research_jobs where job_id = ?", (running["job_id"],)).fetchone()[0] == "failed"
 
 
+@pytest.mark.parametrize("message", [
+    "Authorization: Basic abc123",
+    "Authorization=Digest abc123",
+    "Cookie: session=abc123",
+    "Set-Cookie: session=abc123",
+    "client_secret: abc123 password=abc123",
+])
+def test_fail_job_sanitizes_credentials_and_cookie_shapes(tmp_path, message):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con)
+    repository.fail_job(con, job["job_id"], message)
+    error = con.execute("select error_summary from catalyst_research_jobs where job_id = ?", (job["job_id"],)).fetchone()[0]
+    assert "abc123" not in error
+
+
+def test_source_ambiguity_and_verification_reason_round_trip(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news", "acceptance_status": "ambiguous", "verification_reason": "company identity is ambiguous"})
+    assert source["acceptance_status"] == "ambiguous"
+    loaded = repository.load_job_result(con, job["job_id"])
+    assert loaded["sources"][0]["acceptance_status"] == "ambiguous"
+    assert loaded["sources"][0]["verification_reason"] == "company identity is ambiguous"
+
+
+def test_old_source_schema_migrates_ambiguity_and_preserves_foreign_keys(tmp_path):
+    db_path = tmp_path / "legacy.sqlite"
+    con = repository.connect(db_path)
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news", "acceptance_status": "ambiguous"})
+    repository.save_finalized_observations(con, job["job_id"], [{"source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "published_date": "2026-01-01", "count_date": "2026-01-01", "title": "Results", "url": "https://ir.example.test/news/results"}], [{"id": 1, "earnings_state": "earnings", "classification_method": "manual"}])
+    con.execute("pragma foreign_keys = off")
+    con.execute("pragma legacy_alter_table = on")
+    con.execute("alter table catalyst_ir_sources rename to catalyst_ir_sources_saved")
+    con.execute("""create table catalyst_ir_sources (
+        source_id text primary key, job_id text not null references catalyst_research_jobs(job_id), ticker text not null,
+        source_type text not null, url text not null, final_url text,
+        acceptance_status text not null default 'pending' check (acceptance_status in ('pending','accepted','rejected')),
+        extraction_status text not null default 'pending', active_adapter_id text, evidence_result_ids_json text not null default '[]',
+        requested_start text, requested_end text, coverage_start text, coverage_end text,
+        page_count integer not null default 0, item_count integer not null default 0, content_hash text,
+        snapshot_hash text, truncation_reason text, discovery_provider text, execution_path text, checked_at text
+    )""")
+    con.execute("""insert into catalyst_ir_sources select source_id,job_id,ticker,source_type,url,final_url,'pending',extraction_status,active_adapter_id,evidence_result_ids_json,requested_start,requested_end,coverage_start,coverage_end,page_count,item_count,content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at from catalyst_ir_sources_saved""")
+    con.execute("drop table catalyst_ir_sources_saved")
+    con.execute("pragma foreign_keys = on")
+    con.execute("pragma legacy_alter_table = off")
+    con.commit()
+    con.close()
+
+    migrated = repository.connect(db_path)
+    row = migrated.execute("select acceptance_status, verification_reason from catalyst_ir_sources where source_id = ?", (source["source_id"],)).fetchone()
+    assert row[0:2] == ("pending", None)
+    assert migrated.execute("select count(*) from catalyst_ir_events").fetchone()[0] == 1
+    assert migrated.execute("select count(*) from catalyst_ir_classifications").fetchone()[0] == 1
+    assert migrated.execute("pragma foreign_key_check").fetchall() == []
+
+
 def test_resolved_company_is_stored_on_running_job(tmp_path):
     con = repository.connect(tmp_path / "db.sqlite")
     job = _job(con, status="running")
@@ -449,3 +507,30 @@ def test_atomic_finalize_accepts_null_events_url_and_coverage_flag(tmp_path):
     assert row[0] is None
     loaded = repository.load_job_result(con, job["job_id"])
     assert loaded["sources"][0]["coverage_continuous"] is False
+
+
+def test_source_execution_promotion_is_atomic_and_preserves_old_active(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    first = repository.create_adapter_candidate(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "source_url": "https://ir.example.test/news", "adapter": {}})
+    repository.record_adapter_validation(con, {"adapter_id": first["adapter_id"], "job_id": job["job_id"], "status": "passed", "report": {}})
+    repository.activate_adapter(con, first["adapter_id"], "2026-09-07T00:00:00+00:00")
+    second = repository.create_adapter_candidate(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "source_url": "https://ir.example.test/news", "adapter": {}})
+    repository.record_adapter_validation(con, {"adapter_id": second["adapter_id"], "job_id": job["job_id"], "status": "passed", "report": {}})
+    with pytest.raises(ValueError, match="source ticker"):
+        repository.activate_adapter_with_source(con, second["adapter_id"], "2026-09-07T00:00:00+00:00", {"job_id": job["job_id"], "ticker": "OTHER", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    states = dict(con.execute("select adapter_id, state from catalyst_source_adapters").fetchall())
+    assert states[first["adapter_id"]] == "active"
+    assert states[second["adapter_id"]] == "candidate"
+
+
+def test_source_execution_promotion_updates_existing_source_row_atomically(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    candidate = repository.create_adapter_candidate(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "source_url": "https://ir.example.test/news", "adapter": {}})
+    repository.record_adapter_validation(con, {"adapter_id": candidate["adapter_id"], "job_id": job["job_id"], "status": "passed", "report": {}})
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news", "acceptance_status": "pending"})
+    updated = repository.activate_adapter_with_source(con, candidate["adapter_id"], "2026-09-07T00:00:00+00:00", {**source, "acceptance_status": "accepted", "active_adapter_id": candidate["adapter_id"], "extraction_status": "complete"})
+    assert updated["source_id"] == source["source_id"]
+    assert con.execute("select count(*) from catalyst_ir_sources where source_id = ?", (source["source_id"],)).fetchone()[0] == 1
+    assert con.execute("select acceptance_status, extraction_status from catalyst_ir_sources where source_id = ?", (source["source_id"],)).fetchone()[0:2] == ("accepted", "complete")

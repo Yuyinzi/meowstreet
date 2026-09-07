@@ -52,6 +52,10 @@ class FakeRepository:
     def activate_adapter(self, connection, adapter_id, activated_at):
         self.calls.append(f"activate:{adapter_id}")
 
+    def activate_adapter_with_source(self, connection, adapter_id, activated_at, source):
+        self.calls.append(f"activate:{adapter_id}")
+        return {**source, "source_id": f"source_{source['source_type']}"}
+
     def save_finalized_observations(self, connection, job_id, events, classifications):
         self.calls.append("save_observations")
         self.saved_events = events
@@ -259,7 +263,9 @@ def test_ambiguous_source_is_pending_in_real_sqlite_not_invalid_enum(tmp_path):
     assert result["status"] == "unsupported"
     connection = repository.connect(tmp_path / "db.sqlite")
     try:
-        assert connection.execute("select acceptance_status from catalyst_ir_sources").fetchone()[0] == "pending"
+        row = connection.execute("select acceptance_status, verification_reason from catalyst_ir_sources").fetchone()
+        assert row[0] == "ambiguous"
+        assert row[1] == "company identity is ambiguous"
     finally:
         connection.close()
 
@@ -373,3 +379,115 @@ def test_connection_is_closed_when_owned_http_client_setup_fails(monkeypatch):
     else:
         raise AssertionError("expected client setup failure")
     assert connection.closed
+
+
+def test_real_discovery_with_provider_and_missing_llm_is_completed_partial(tmp_path):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    domain = __import__("app.agents.catalyst_research.domain", fromlist=["domain"])
+
+    class Provider:
+        name = "fixture"
+
+        async def search(self, query, limit=10):
+            return [{"title": "Acme Investor Relations", "url": "https://ir.acme.example/", "snippet": "Acme IR archive"}]
+
+    class Router:
+        def provider_chain(self):
+            return [Provider()]
+
+        def provider_order(self):
+            return ["fixture"]
+
+        def unavailable(self):
+            return []
+
+    dependencies = _deps(repository, [])
+    dependencies.update({"discover_sources": domain.discover_sources, "search_router": Router(), "llm_client": None, "models": {}})
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
+    assert result["status"] == "completed_partial"
+    assert "catalyst_llm_unavailable" in result["warnings"]
+    assert "configure_catalyst_llm" in result["next_actions"]
+
+
+def test_failure_to_fail_job_logs_only_safe_context(caplog):
+    repository = FakeRepository()
+    calls = []
+
+    def fail_job(connection, job_id, error_summary, **kwargs):
+        raise RuntimeError("Cookie: session=secret-token")
+
+    repository.fail_job = fail_job
+    dependencies = _deps(repository, calls, fail_resolve=True)
+    with caplog.at_level("ERROR"):
+        result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, dependencies=dependencies))
+    assert result["status"] == "queued"
+    assert "secret-token" not in caplog.text
+    assert "Traceback" not in caplog.text
+    assert "cr_test" in caplog.text
+
+
+def test_js_only_archive_shell_is_unsupported_but_script_enhanced_content_is_not(tmp_path):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    calls = []
+    dependencies = _deps(repository, calls)
+    shell = "<html><body><div id='__next'></div>" + "<script>window.__DATA__={}</script>" * 6 + "</body></html>"
+
+    async def fetch(url, **kwargs):
+        if "/news" in url:
+            return {"requested_url": url, "final_url": url, "html": shell, "content_type": "text/html"}
+        purpose = "Events Presentations" if "/events" in url else "Investor Relations Home"
+        return {"requested_url": url, "final_url": url, "html": f"<html><body><script>enhance()</script><h1>Acme {purpose}</h1><a href='/archive'>Archive</a><time>2025-01-01</time></body></html>"}
+
+    dependencies.update({"fetch_page": fetch})
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
+    assert result["status"] == "completed_partial"
+    source = next(item for item in result["sources"] if item["source_type"] == "press_releases")
+    assert source["extraction_status"] == "unsupported"
+    assert "javascript_archive_unsupported" in result["warnings"]
+    assert "events_presentations" in [item["source_type"] for item in result["sources"]]
+
+
+def test_statistics_failure_terminally_fails_without_events(tmp_path):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    dependencies = _deps(repository, [])
+    dependencies["calculate_statistics"] = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("stats failed"))
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
+    assert result["status"] == "failed"
+    connection = repository.connect(tmp_path / "db.sqlite")
+    try:
+        assert connection.execute("select count(*) from catalyst_ir_events").fetchone()[0] == 0
+        assert connection.execute("select status from catalyst_research_jobs").fetchone()[0] == "failed"
+    finally:
+        connection.close()
+
+
+def test_finalization_failure_terminally_fails_without_events(tmp_path, monkeypatch):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    original = repository.finalize_job_with_observations
+
+    def fail_finalize(*args, **kwargs):
+        raise RuntimeError("finalize failed")
+
+    monkeypatch.setattr(repository, "finalize_job_with_observations", fail_finalize)
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, db_path=tmp_path / "db.sqlite", dependencies=_deps(repository, [])))
+    assert result["status"] == "failed"
+    connection = repository.connect(tmp_path / "db.sqlite")
+    try:
+        assert connection.execute("select count(*) from catalyst_ir_events").fetchone()[0] == 0
+        assert connection.execute("select status from catalyst_research_jobs").fetchone()[0] == "failed"
+    finally:
+        connection.close()
+    assert original is not None
+
+
+def test_source_promotion_failure_leaves_candidates_inactive(tmp_path, monkeypatch):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    dependencies = _deps(repository, [])
+    monkeypatch.setattr(repository, "activate_adapter_with_source", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("source persistence failed")))
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
+    assert result["status"] == "failed"
+    connection = repository.connect(tmp_path / "db.sqlite")
+    try:
+        assert connection.execute("select count(*) from catalyst_source_adapters where state = 'active'").fetchone()[0] == 0
+    finally:
+        connection.close()

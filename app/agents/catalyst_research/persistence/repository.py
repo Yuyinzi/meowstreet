@@ -152,7 +152,7 @@ def connect(db_path=DEFAULT_DB_PATH):
             source_type text not null check (source_type in ('ir_home','press_releases','events_presentations','earnings_results')),
             url text not null,
             final_url text,
-            acceptance_status text not null default 'pending' check (acceptance_status in ('pending','accepted','rejected')),
+            acceptance_status text not null default 'pending' check (acceptance_status in ('pending','accepted','ambiguous','rejected')),
             extraction_status text not null default 'pending' check (extraction_status in ('pending','complete','partial','unsupported','failed')),
             active_adapter_id text,
             evidence_result_ids_json text not null default '[]',
@@ -161,6 +161,7 @@ def connect(db_path=DEFAULT_DB_PATH):
             coverage_start text,
             coverage_end text,
             coverage_continuous integer check (coverage_continuous in (0,1)),
+            verification_reason text,
             page_count integer not null default 0,
             item_count integer not null default 0,
             content_hash text,
@@ -264,8 +265,53 @@ def connect(db_path=DEFAULT_DB_PATH):
 
 def _migrate_schema(con):
     source_columns = {row[1]: row for row in con.execute("pragma table_info(catalyst_ir_sources)")}
-    if "coverage_continuous" not in source_columns:
-        con.execute("alter table catalyst_ir_sources add column coverage_continuous integer check (coverage_continuous in (0,1))")
+    source_sql = con.execute("select sql from sqlite_master where type = 'table' and name = 'catalyst_ir_sources'").fetchone()[0].lower()
+    source_needs_rebuild = "'ambiguous'" not in source_sql
+    if source_needs_rebuild:
+        con.execute("pragma legacy_alter_table = on")
+        con.execute("pragma foreign_keys = off")
+        con.execute("alter table catalyst_ir_sources rename to catalyst_ir_sources_legacy")
+        con.execute("""create table catalyst_ir_sources_new (
+            source_id text primary key,
+            job_id text not null references catalyst_research_jobs(job_id),
+            ticker text not null,
+            source_type text not null check (source_type in ('ir_home','press_releases','events_presentations','earnings_results')),
+            url text not null,
+            final_url text,
+            acceptance_status text not null default 'pending' check (acceptance_status in ('pending','accepted','ambiguous','rejected')),
+            extraction_status text not null default 'pending' check (extraction_status in ('pending','complete','partial','unsupported','failed')),
+            active_adapter_id text,
+            evidence_result_ids_json text not null default '[]',
+            requested_start text,
+            requested_end text,
+            coverage_start text,
+            coverage_end text,
+            coverage_continuous integer check (coverage_continuous in (0,1)),
+            verification_reason text,
+            page_count integer not null default 0,
+            item_count integer not null default 0,
+            content_hash text,
+            snapshot_hash text references catalyst_source_snapshots(content_hash),
+            truncation_reason text,
+            discovery_provider text,
+            execution_path text,
+            checked_at text
+        )""")
+        old_names = {row[1] for row in con.execute("pragma table_info(catalyst_ir_sources_legacy)")}
+        new_names = [row[1] for row in con.execute("pragma table_info(catalyst_ir_sources_new)")]
+        names = [name for name in new_names if name in old_names]
+        con.execute(
+            f"insert into catalyst_ir_sources_new ({','.join(names)}) select {','.join(names)} from catalyst_ir_sources_legacy"
+        )
+        con.execute("drop table catalyst_ir_sources_legacy")
+        con.execute("alter table catalyst_ir_sources_new rename to catalyst_ir_sources")
+        con.execute("pragma foreign_keys = on")
+        con.execute("pragma legacy_alter_table = off")
+    else:
+        if "coverage_continuous" not in source_columns:
+            con.execute("alter table catalyst_ir_sources add column coverage_continuous integer check (coverage_continuous in (0,1))")
+        if "verification_reason" not in source_columns:
+            con.execute("alter table catalyst_ir_sources add column verification_reason text")
     event_columns = {row[1]: row for row in con.execute("pragma table_info(catalyst_ir_events)")}
     if event_columns.get("canonical_url", (None, None, None, 0))[3] == 1:
         con.execute("pragma legacy_alter_table = on")
@@ -390,9 +436,10 @@ def update_resolved_company(con, job_id, company):
 
 def _sanitize_error(value):
     message = " ".join(str(value).split())
-    message = re.sub(r"(?i)authorization\s*[:=]\s*bearer\s+\S+", "Authorization: Bearer [redacted]", message)
+    message = re.sub(r"(?i)\bauthorization\s*[:=]\s*(\S+)(?:\s+\S+)?", r"Authorization: \1 [redacted]", message)
+    message = re.sub(r"(?i)\b(?:cookie|set-cookie)\s*[:=]\s*\S+", "Cookie: [redacted]", message)
     message = re.sub(r"(?i)\bbearer\s+\S+", "Bearer [redacted]", message)
-    message = re.sub(r"(?i)(api[ _-]?key|token)\s*[:=]\s*\S+", r"\1=[redacted]", message)
+    message = re.sub(r"(?i)(api[ _-]?key|token|client[ _-]?secret|password)\s*[:=]\s*\S+", r"\1=[redacted]", message)
     return message[:1000] or "workflow failed"
 
 
@@ -543,7 +590,7 @@ def prune_unreferenced_snapshots(con):
     return len(removable)
 
 
-def save_source(con, source):
+def _source_row(con, source):
     job_id = source.get("job_id")
     _nonterminal_job(con, job_id)
     source_id = source.get("source_id") or _id("cis_")
@@ -553,7 +600,7 @@ def save_source(con, source):
         "final_url": source.get("final_url"), "acceptance_status": source.get("acceptance_status", "pending"),
         "extraction_status": source.get("extraction_status", "pending"), "active_adapter_id": source.get("active_adapter_id"),
         "evidence_result_ids_json": _json(source.get("evidence_result_ids", [])), "requested_start": source.get("requested_start"),
-        "requested_end": source.get("requested_end"), "coverage_start": source.get("coverage_start"), "coverage_end": source.get("coverage_end"), "coverage_continuous": None if source.get("coverage_continuous") is None else int(bool(source.get("coverage_continuous"))),
+        "requested_end": source.get("requested_end"), "coverage_start": source.get("coverage_start"), "coverage_end": source.get("coverage_end"), "coverage_continuous": None if source.get("coverage_continuous") is None else int(bool(source.get("coverage_continuous"))), "verification_reason": source.get("verification_reason"),
         "page_count": source.get("page_count", 0), "item_count": source.get("item_count", 0), "content_hash": source.get("content_hash"),
         "snapshot_hash": source.get("snapshot_hash") or source.get("content_hash"), "truncation_reason": source.get("truncation_reason"),
         "discovery_provider": source.get("discovery_provider"), "execution_path": source.get("execution_path"), "checked_at": source.get("checked_at"),
@@ -565,19 +612,24 @@ def save_source(con, source):
     job_ticker = _job(con, job_id)["ticker"]
     if row["ticker"] != job_ticker:
         raise ValueError("source ticker does not match job ticker")
+    return row
+
+
+def save_source(con, source):
+    row = _source_row(con, source)
     with con:
         cursor = con.execute(
         """insert into catalyst_ir_sources(
             source_id,job_id,ticker,source_type,url,final_url,acceptance_status,extraction_status,active_adapter_id,
-            evidence_result_ids_json,requested_start,requested_end,coverage_start,coverage_end,coverage_continuous,page_count,item_count,
+            evidence_result_ids_json,requested_start,requested_end,coverage_start,coverage_end,coverage_continuous,verification_reason,page_count,item_count,
             content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at
-        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
+        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
             select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
         )""",
-        (*tuple(row.values()), job_id),
+            (*tuple(row.values()), row["job_id"]),
         )
         if cursor.rowcount != 1:
-            raise ValueError(f"research job {job_id} is terminal")
+            raise ValueError(f"research job {row['job_id']} is terminal")
     row["evidence_result_ids"] = _decode(row.pop("evidence_result_ids_json"))
     return row
 
@@ -677,6 +729,32 @@ def activate_adapter(con, adapter_id, activated_at):
         changed = con.execute("update catalyst_source_adapters set state = 'active', validated_at = coalesce(validated_at, ?), activated_at = ? where adapter_id = ? and state = 'candidate'", (activated_at, activated_at, adapter_id)).rowcount
         if changed != 1:
             raise ValueError(f"adapter {adapter_id} could not be activated")
+
+
+def activate_adapter_with_source(con, adapter_id, activated_at, source):
+    con.execute("begin")
+    atomic = _AtomicConnection(con)
+    try:
+        row = _source_row(atomic, source)
+        existing = atomic.execute("select source_id from catalyst_ir_sources where source_id = ?", (row["source_id"],)).fetchone()
+        if existing is None:
+            saved = save_source(atomic, source)
+        else:
+            assignments = ",".join(f"{key} = ?" for key in row if key != "source_id")
+            atomic.execute(
+                f"update catalyst_ir_sources set {assignments} where source_id = ? and job_id = ?",
+                tuple(value for key, value in row.items() if key != "source_id") + (row["source_id"], row["job_id"]),
+            )
+            saved = _dict(atomic.execute("select * from catalyst_ir_sources where source_id = ?", (row["source_id"],)).fetchone())
+            saved["evidence_result_ids"] = _decode(saved.pop("evidence_result_ids_json"))
+            if saved.get("coverage_continuous") is not None:
+                saved["coverage_continuous"] = bool(saved["coverage_continuous"])
+        activate_adapter(atomic, adapter_id, activated_at)
+    except Exception:
+        con.rollback()
+        raise
+    con.commit()
+    return saved
 
 
 def mark_adapter_stale(con, adapter_id, stale_at):

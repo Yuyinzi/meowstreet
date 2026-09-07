@@ -168,7 +168,7 @@ def test_discovery_allocates_job_local_ids_and_persists_each_attempt_before_fall
     )
 
     assert result["sources"][0]["status"] == "ambiguous"
-    assert result["sources"][0]["acceptance_status"] == "pending"
+    assert result["sources"][0]["acceptance_status"] == "ambiguous"
     assert result["sources"][0]["evidence_result_ids"] == [1]
     assert [attempt["outcome"] for attempt in repo.attempts][:2] == ["empty_results", "ambiguous"]
     assert [row["result_id"] for row in repo.results] == [1, 2, 3, 4]
@@ -230,7 +230,7 @@ def test_discovery_manual_override_records_provenance_and_unsafe_override_reject
     by_type = {row["source_type"]: row for row in result["sources"]}
     assert by_type["press_releases"]["discovery_provider"] == "manual_override"
     assert by_type["press_releases"]["status"] == "ambiguous"
-    assert by_type["press_releases"]["acceptance_status"] == "pending"
+    assert by_type["press_releases"]["acceptance_status"] == "ambiguous"
     assert by_type["events_presentations"]["status"] == "rejected"
 
 
@@ -325,9 +325,9 @@ def test_real_repository_persists_attempts_and_results_before_selection(tmp_path
     assert len({row[0] for row in attempts}) == 4
     assert [row[0] for row in results] == [1, 2, 3, 4]
     assert all(row[1] in {attempt[0] for attempt in attempts} for row in results)
-    assert result["sources"][0]["acceptance_status"] == "pending"
+    assert result["sources"][0]["acceptance_status"] == "ambiguous"
     saved = catalyst_repository.save_source(con, result["sources"][0])
-    assert saved["acceptance_status"] == "pending"
+    assert saved["acceptance_status"] == "ambiguous"
 
 
 def test_attempt_ids_are_unique_across_jobs_in_one_sqlite_database(tmp_path):
@@ -445,7 +445,7 @@ def test_override_requires_mapping_and_safe_override_is_pending():
         asyncio.run(discover_sources({"ticker": "ACM", "company_name": "Acme"}, router=router, llm_client=None, model=None, repository=FakeRepository(), job_id="job-7", overrides=[]))
     result = asyncio.run(discover_sources({"ticker": "ACM", "company_name": "Acme"}, router=router, llm_client=None, model=None, repository=FakeRepository(), job_id="job-8", overrides={"press_releases": "https://acme.example/news"}))
     assert result["sources"][0]["status"] == "ambiguous"
-    assert result["sources"][0]["acceptance_status"] == "pending"
+    assert result["sources"][0]["acceptance_status"] == "ambiguous"
 
 
 def test_transport_exhaustion_is_search_unavailable_but_rejected_selection_is_rejected():

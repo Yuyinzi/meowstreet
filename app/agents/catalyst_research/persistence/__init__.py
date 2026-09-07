@@ -1,5 +1,6 @@
 from app.agents.catalyst_research.persistence.repository import (
     activate_adapter,
+    activate_adapter_with_source,
     connect,
     create_adapter_candidate,
     create_job,
@@ -25,6 +26,7 @@ from app.agents.catalyst_research.persistence.repository import (
 
 __all__ = [
     "activate_adapter",
+    "activate_adapter_with_source",
     "connect",
     "create_adapter_candidate",
     "create_job",

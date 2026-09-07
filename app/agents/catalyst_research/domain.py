@@ -805,7 +805,7 @@ def _manual_override_sources(overrides: Mapping) -> tuple[list[dict], list[str]]
                 "source_type": source_type,
                 "url": canonical,
                 "status": "ambiguous",
-                "acceptance_status": "pending",
+                "acceptance_status": "ambiguous",
                 "discovery_provider": "manual_override",
                 "evidence_result_ids": [],
                 "reason": "manual override requires later fetch and identity validation",
@@ -1049,7 +1049,7 @@ async def _discover_sources_impl(
                 for selection in selections:
                     selection["discovery_provider"] = provider.name
                     selection["provider_request_id"] = _bounded_request_id(getattr(provider, "last_request_id", None))
-                    selection["acceptance_status"] = "pending" if selection["status"] == "ambiguous" else selection["status"]
+                    selection["acceptance_status"] = selection["status"]
                     selection["provider_provenance"] = [{
                         "provider": provider.name,
                         "provider_request_id": selection["provider_request_id"],
