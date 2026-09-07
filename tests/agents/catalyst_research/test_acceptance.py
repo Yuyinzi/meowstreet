@@ -21,6 +21,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 MANIFEST = json.loads((FIXTURES / "acceptance_manifest.json").read_text())
 TICKERS = sorted(MANIFEST["tickers"])
 _REQUIRED_CHANNELS = ("press_releases", "events_presentations")
+_INFORMATIONAL_SOURCE_TYPES = ("ir_home", "earnings_results")
 _FIXED_CLOCK = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
 
 
@@ -43,6 +44,9 @@ class _FixtureSearchProvider:
         elif "events presentations" in query.lower():
             source_type = "events_presentations"
             purpose = "Events and Presentations"
+        elif "quarterly earnings" in query.lower():
+            source_type = "earnings_results"
+            purpose = "Quarterly Earnings Financial Results"
         else:
             source_type = "ir_home"
             purpose = "Investor Relations"
@@ -68,6 +72,8 @@ class _FixtureSourceSelectionResponses:
             source_type = "press_releases"
         elif "events presentations" in query:
             source_type = "events_presentations"
+        elif "quarterly earnings" in query:
+            source_type = "earnings_results"
         else:
             source_type = "ir_home"
         parsed = {
@@ -175,7 +181,7 @@ class _AcceptanceHarness:
                 {"ticker": self.ticker, "company_name": self.entry["company_name"], "cik": self.entry["cik"]},
                 job_id=job["job_id"],
                 connection=connection,
-                source_types={"ir_home", *_REQUIRED_CHANNELS},
+                source_types={*_INFORMATIONAL_SOURCE_TYPES, *_REQUIRED_CHANNELS},
             )
         finally:
             connection.close()
@@ -218,6 +224,8 @@ class _AcceptanceHarness:
     def _page_file(self, url):
         if url == self.entry["fixture_source_urls"]["ir_home"]:
             return self.ticker_dir / "ir_home.html", False
+        if url == self.entry["fixture_source_urls"]["earnings_results"]:
+            return self.ticker_dir / "earnings_results.html", False
         for channel in _REQUIRED_CHANNELS:
             spec = self.entry["channels"][channel]
             if not spec["url"]:
@@ -318,9 +326,8 @@ def _expected_classification_batches(observations):
 
 def _cold_call_counts(entry):
     discovered = [channel for channel in _REQUIRED_CHANNELS if entry["channels"][channel]["discovered"]]
-    origin_rediscovery = any(not entry["channels"][channel]["discovered"] for channel in _REQUIRED_CHANNELS)
     return {
-        "discovery": 2 if origin_rediscovery else 1,
+        "discovery": 1,
         "adapter_generation": len(discovered),
         "event_extraction": sum(1 for channel in _REQUIRED_CHANNELS if entry["channels"][channel]["activates"]),
     }
@@ -331,9 +338,8 @@ def _hot_call_counts(entry):
     rediscovered = [channel for channel in cold_channels if entry["channels"][channel]["discovered"]]
     if not cold_channels:
         return {"discovery": 0, "adapter_generation": 0, "event_extraction": 0}
-    origin_rediscovery = any(not entry["channels"][channel]["discovered"] for channel in cold_channels)
     return {
-        "discovery": 2 if origin_rediscovery else 1,
+        "discovery": 1,
         "adapter_generation": len(rediscovered),
         "event_extraction": 0,
     }
@@ -415,7 +421,7 @@ def test_acceptance_manifest_separates_manually_reviewed_official_sources_from_f
         official_sources = entry["official_source_urls"]
         fixture_sources = entry["fixture_source_urls"]
         review = entry["official_source_review"]
-        assert set(official_sources) == {"ir_home", *_REQUIRED_CHANNELS}
+        assert set(official_sources) == {*_INFORMATIONAL_SOURCE_TYPES, *_REQUIRED_CHANNELS}
         assert set(fixture_sources) == set(official_sources)
         assert review["status"] == "manual_reviewed"
         assert review["reviewed_at"] == "2026-09-07"
@@ -437,10 +443,10 @@ def test_acceptance_provider_fallback_uses_real_router_and_discovery_contract(tm
 
     result = asyncio.run(harness.provider_fallback_discovery())
 
-    assert {source["source_type"] for source in result["sources"]} == {"ir_home", *_REQUIRED_CHANNELS}
+    assert {source["source_type"] for source in result["sources"]} == {*_INFORMATIONAL_SOURCE_TYPES, *_REQUIRED_CHANNELS}
     assert {source["discovery_provider"] for source in result["sources"]} == {"ddgs"}
     assert result["warnings"] == MANIFEST["provider_fallback"]["warnings"]
-    assert harness.provider_calls == {"tavily": 1, "native_search": 1, "ddgs": 3}
+    assert harness.provider_calls == {"tavily": 1, "native_search": 1, "ddgs": 4}
     assert harness.provider_disabled == {"tavily", "native_search"}
 
 
@@ -493,13 +499,15 @@ def test_acceptance_ticker_lifecycle(tmp_path, ticker):
     assert all(event["classification_method"] == "llm_v1" for event in cold_events if event["earnings_state"] == "ambiguous")
     connection = repository.connect(harness.db_path)
     try:
-        ir_home = connection.execute(
-            "select url, acceptance_status, extraction_status from catalyst_ir_sources where job_id = ? and source_type = 'ir_home'",
-            (cold["job_id"],),
-        ).fetchone()
-        assert ir_home is not None
-        assert tuple(ir_home) == (entry["fixture_source_urls"]["ir_home"], "accepted", "pending")
+        for source_type in _INFORMATIONAL_SOURCE_TYPES:
+            informational = connection.execute(
+                "select url, acceptance_status, extraction_status from catalyst_ir_sources where job_id = ? and source_type = ?",
+                (cold["job_id"], source_type),
+            ).fetchall()
+            assert len(informational) == 1
+            assert tuple(informational[0]) == (entry["fixture_source_urls"][source_type], "accepted", "pending")
         adapter_states = {row[0]: row[1] for row in connection.execute("select source_type, state from catalyst_source_adapters where ticker = ?", (ticker,))}
+        assert "earnings_results" not in adapter_states
         for channel in _REQUIRED_CHANNELS:
             spec = entry["channels"][channel]
             if spec["activates"]:

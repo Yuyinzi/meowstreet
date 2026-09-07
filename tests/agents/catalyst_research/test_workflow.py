@@ -179,6 +179,42 @@ def test_cold_workflow_uses_fixed_order_and_one_adapter_per_required_channel():
     assert repository.calls[-1] == "load_result"
 
 
+def test_cold_workflow_persists_validated_earnings_results_without_an_adapter():
+    repository = FakeRepository()
+    calls = []
+    dependencies = _deps(repository, calls)
+
+    discovery_source_types = []
+
+    async def discover(company, **kwargs):
+        discovery_source_types.append(set(kwargs["source_types"]))
+        return {
+            "status": "accepted",
+            "sources": [
+                {"source_type": "ir_home", "url": "https://ir.acme.example/"},
+                {"source_type": "earnings_results", "url": "https://ir.acme.example/earnings"},
+                {"source_type": "press_releases", "url": "https://ir.acme.example/news"},
+                {"source_type": "events_presentations", "url": "https://ir.acme.example/events"},
+            ],
+            "warnings": [],
+            "next_actions": [],
+        }
+
+    def fetch(url, **kwargs):
+        purpose = "Quarterly Financial Results" if url.endswith("earnings") else ("Events Presentations" if url.endswith("events") else "Press Releases")
+        return {"requested_url": url, "final_url": url, "html": f"<html><body>Acme Investor Relations {purpose}</body></html>"}
+
+    dependencies.update({"discover_sources": discover, "fetch_page": fetch})
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, dependencies=dependencies))
+
+    assert result["status"] == "completed"
+    assert discovery_source_types == [{"ir_home", "earnings_results", "press_releases", "events_presentations"}]
+    assert "source:ir_home" in repository.calls
+    assert "source:earnings_results" in repository.calls
+    assert "candidate:earnings_results" not in repository.calls
+    assert "activate:adapter_earnings_results" not in repository.calls
+
+
 def test_cold_workflow_unexpected_resolution_failure_finalizes_failed_without_events():
     repository = FakeRepository()
     calls = []
@@ -849,7 +885,7 @@ def test_real_sqlite_drift_requires_discovery_and_preserves_prior_result_on_repl
 
     assert result["status"] == "completed_partial"
     assert result["call_counts"]["discovery"] == 1
-    assert calls == [{"ir_home", "press_releases"}]
+    assert calls == [{"ir_home", "earnings_results", "press_releases"}]
     connection = repository.connect(db_path)
     try:
         latest = repository.load_latest_result(connection, "ACME")

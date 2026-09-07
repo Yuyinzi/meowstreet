@@ -25,6 +25,7 @@ from app.runtime_logging import get_runtime_logger
 LOGGER = get_runtime_logger(__name__)
 _REQUIRED_CHANNELS = ("press_releases", "events_presentations")
 _DISCOVERY_CHANNELS = ("ir_home", "press_releases", "events_presentations", "earnings_results")
+_INFORMATIONAL_SOURCE_TYPES = ("ir_home", "earnings_results")
 _MAX_TRAVERSAL_ORIGINS = 2
 _MAX_TRAVERSAL_TARGETS = 4
 _TRAVERSAL_PURPOSE_TERMS = {
@@ -361,6 +362,12 @@ def _save_unaccepted_source(context, source, *, status, snapshot=None, extractio
     _repo_call(context, "save_source", row)
 
 
+def _save_accepted_information_source(context, source, snapshot):
+    row = dict(source)
+    row.update({"ticker": context["request"]["ticker"], "job_id": context["job"]["job_id"], "acceptance_status": "accepted", "extraction_status": "pending", "final_url": snapshot.get("final_url"), "snapshot_hash": snapshot.get("content_hash"), "content_hash": snapshot.get("content_hash"), "execution_path": "cold", "checked_at": _iso(context)})
+    _repo_call(context, "save_source", row)
+
+
 async def _traverse_source(context, company, origin_snapshots, source_type):
     attempts = 0
     seen = set()
@@ -444,24 +451,24 @@ async def _prepare_sources(context, company, discovery, source_types=None):
             continue
         candidates.setdefault(source["source_type"], []).append(dict(source))
     origin_snapshots = []
-    for source in candidates.get("ir_home", [])[:_MAX_TRAVERSAL_ORIGINS]:
-        try:
-            snapshot = await _fetch_snapshot(context, company, source)
-        except ValueError as exc:
-            if _unsupported_fetch_error(exc):
-                context["warnings"].append(_unsupported_warning_code(exc))
-                context["next_actions"].append("provide_extractable_archive_url")
-                _save_unaccepted_source(context, source, status="pending", extraction_status="unsupported")
-            else:
-                context["warnings"].append("IR homepage fetch failed")
-                _save_unaccepted_source(context, source, status="rejected")
-            continue
-        if snapshot.get("company_verified"):
-            origin_snapshots.append({"source": source, "snapshot": snapshot})
-            origin = dict(source)
-            origin.update({"ticker": context["request"]["ticker"], "job_id": context["job"]["job_id"], "acceptance_status": "accepted", "extraction_status": "pending", "final_url": snapshot.get("final_url"), "snapshot_hash": snapshot.get("content_hash"), "content_hash": snapshot.get("content_hash"), "execution_path": "cold", "checked_at": _iso(context)})
-            _repo_call(context, "save_source", origin)
-        else:
+    for source_type in _INFORMATIONAL_SOURCE_TYPES:
+        for source in candidates.get(source_type, [])[:_MAX_TRAVERSAL_ORIGINS]:
+            try:
+                snapshot = await _fetch_snapshot(context, company, source)
+            except ValueError as exc:
+                if _unsupported_fetch_error(exc):
+                    context["warnings"].append(_unsupported_warning_code(exc))
+                    context["next_actions"].append("provide_extractable_archive_url")
+                    _save_unaccepted_source(context, source, status="pending", extraction_status="unsupported")
+                else:
+                    context["warnings"].append(f"{source_type} fetch failed")
+                    _save_unaccepted_source(context, source, status="rejected")
+                continue
+            if snapshot.get("company_verified"):
+                _save_accepted_information_source(context, source, snapshot)
+                if source_type == "ir_home":
+                    origin_snapshots.append({"source": source, "snapshot": snapshot})
+                continue
             context["warnings"].append("source_identity_ambiguous")
             context["next_actions"].append("review_ambiguous_source")
             _save_unaccepted_source(context, source, status="ambiguous", snapshot=snapshot, verification_reason=snapshot.get("verification_error"))
@@ -846,17 +853,8 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
             else:
                 channel_results[source_type] = result
         if cold_channels:
-            discovery = await _discover(context, company, {"ir_home", *cold_channels})
+            discovery = await _discover(context, company, {"ir_home", "earnings_results", *cold_channels})
             prepared, origins = await _prepare_sources(context, company, discovery, cold_channels)
-            missing_channels = [source_type for source_type in cold_channels if prepared.get(source_type) is None]
-            if missing_channels and "ir_home" not in cold_channels:
-                origin_discovery = await _discover(context, company, {"ir_home"})
-                combined_discovery = dict(discovery)
-                combined_discovery["sources"] = list(discovery.get("sources", [])) + list(origin_discovery.get("sources", []))
-                combined_discovery["alternate_sources"] = list(discovery.get("alternate_sources", [])) + list(origin_discovery.get("alternate_sources", []))
-                retry_prepared, retry_origins = await _prepare_sources(context, company, combined_discovery, missing_channels)
-                prepared.update(retry_prepared)
-                origins.extend(retry_origins)
             for source_type in cold_channels:
                 channel_results[source_type] = await _run_channel(context, company, source_type, prepared.get(source_type))
         events = []
