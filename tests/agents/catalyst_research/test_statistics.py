@@ -358,6 +358,18 @@ def test_statistics_reject_unknown_source_status_instead_of_zero_archive():
     assert result["press_releases"]["per_month"] is None
 
 
+@pytest.mark.parametrize("status", ["unsupported", "failed", "unsupported_access_mode"])
+def test_statistics_preserve_non_complete_source_status(status):
+    result = calculate_statistics(
+        [],
+        [{"source_type": "press_releases", "extraction_status": status}],
+        {"start": "2024-01-01", "end": "2024-12-31"},
+    )
+
+    assert result["press_releases"]["status"] == status
+    assert result["press_releases"]["window_months"] is None
+
+
 @pytest.mark.parametrize(
     "event",
     [
@@ -387,3 +399,33 @@ def test_statistics_reject_duplicate_canonical_observation_keys():
             [{"source_type": "press_releases", "extraction_status": "complete"}],
             {"start": "2024-01-01", "end": "2024-12-31"},
         )
+
+
+def test_statistics_reject_caller_normalized_title_that_disagrees_with_domain_normalization():
+    event = _stat_event("earnings", slug="Title")
+    event["title"] = "  Mixed  Title "
+    event["normalized_title"] = "mixed title forged"
+
+    with pytest.raises(ValueError, match="normalized title is inconsistent"):
+        calculate_statistics(
+            [event],
+            [{"source_type": "press_releases", "extraction_status": "complete"}],
+            {"start": "2024-01-01", "end": "2024-12-31"},
+        )
+
+
+def test_statistics_reject_count_date_and_date_mismatch():
+    event = _stat_event("earnings")
+    event["date"] = "2024-01-02"
+
+    with pytest.raises(ValueError, match="count date is inconsistent"):
+        calculate_statistics(
+            [event],
+            [{"source_type": "press_releases", "extraction_status": "complete"}],
+            {"start": "2024-01-01", "end": "2024-12-31"},
+        )
+
+
+def test_statistics_reject_invalid_source_rows():
+    with pytest.raises(ValueError, match="source is invalid"):
+        calculate_statistics([], ["not-a-source"], {"start": "2024-01-01", "end": "2024-12-31"})

@@ -115,6 +115,108 @@ def test_event_and_classification_atomic_write_and_latest_usable_result(tmp_path
         repository.save_finalized_observations(con, job["job_id"], events, [])
 
 
+def test_batch_local_classification_ids_generate_global_event_ids_across_jobs(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    first_job = _job(con, status="running")
+    first_source = repository.save_source(con, {"job_id": first_job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/first"})
+    second_job = _job(con, status="running")
+    second_source = repository.save_source(con, {"job_id": second_job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/second"})
+
+    for job_id, source_id, title in ((first_job["job_id"], first_source["source_id"], "First job event"), (second_job["job_id"], second_source["source_id"], "Second job event")):
+        repository.save_finalized_observations(
+            con,
+            job_id,
+            [{"id": 1, "source_id": source_id, "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": title, "url": f"https://ir.example.test/{title.replace(' ', '-')}"}],
+            [{"id": 1, "earnings_state": "ambiguous", "classification_method": "manual"}],
+        )
+
+    rows = con.execute("select event_id, job_id from catalyst_ir_events order by job_id").fetchall()
+    assert len(rows) == 2
+    assert len({row["event_id"] for row in rows}) == 2
+    assert all(row["event_id"].startswith("ire_") for row in rows)
+
+
+def test_duplicate_classification_input_ids_save_as_distinct_ambiguous_events(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    events = [
+        {"id": 1, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": "Duplicate one", "url": "https://ir.example.test/one"},
+        {"id": 1, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-02", "title": "Duplicate two", "url": "https://ir.example.test/two"},
+    ]
+
+    repository.save_finalized_observations(
+        con,
+        job["job_id"],
+        events,
+        [{"id": 1, "earnings_state": "non_earnings", "classification_method": "llm_v1"}, {"id": 1, "earnings_state": "earnings", "classification_method": "llm_v1"}],
+    )
+
+    states = [row[0] for row in con.execute("select earnings_state from catalyst_ir_events order by count_date").fetchall()]
+    assert states == ["ambiguous", "ambiguous"]
+
+
+@pytest.mark.parametrize("invalid_id", [False, 0, -1, "external-id", []])
+def test_invalid_classification_input_id_cannot_assign_state(tmp_path, invalid_id):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+
+    repository.save_finalized_observations(
+        con,
+        job["job_id"],
+        [{"id": invalid_id, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": "Business update", "url": "https://ir.example.test/invalid-id"}],
+        [{"id": invalid_id, "earnings_state": "non_earnings", "classification_method": "llm_v1"}],
+    )
+
+    assert con.execute("select earnings_state from catalyst_ir_events").fetchone()[0] == "ambiguous"
+
+
+def test_duplicate_explicit_event_ids_raise_value_error_and_roll_back(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    event = {"event_id": "ire_duplicate", "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": "Duplicate", "url": "https://ir.example.test/duplicate"}
+
+    with pytest.raises(ValueError, match="duplicate event id"):
+        repository.save_finalized_observations(con, job["job_id"], [event, {**event, "count_date": "2026-01-02"}], [])
+
+    assert con.execute("select count(*) from catalyst_ir_events where job_id = ?", (job["job_id"],)).fetchone()[0] == 0
+
+
+def test_explicit_event_id_conflict_across_jobs_is_value_error(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    first_job = _job(con, status="running")
+    first_source = repository.save_source(con, {"job_id": first_job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/first"})
+    event = {"event_id": "ire_cross_job", "source_id": first_source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": "First", "url": "https://ir.example.test/first-event"}
+    repository.save_finalized_observations(con, first_job["job_id"], [event], [])
+    second_job = _job(con, status="running")
+    second_source = repository.save_source(con, {"job_id": second_job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/second"})
+
+    with pytest.raises(ValueError, match="event id conflicts"):
+        repository.save_finalized_observations(con, second_job["job_id"], [{**event, "source_id": second_source["source_id"], "title": "Second"}], [])
+
+
+def test_classification_provenance_round_trips_for_llm_and_rule_events(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    events = [
+        {"id": 1, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": "Business update", "url": "https://ir.example.test/one"},
+        {"id": 2, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-02", "title": "Q1 Financial Results", "url": "https://ir.example.test/two"},
+    ]
+    classifications = [
+        {"id": 1, "earnings_state": "non_earnings", "classification_method": "llm_v1", "model": "test-model", "prompt_schema_version": "classification_v1", "input_hash": "input-hash", "output_hash": "output-hash"},
+        {"id": 2, "earnings_state": "earnings", "classification_method": "rule_v1", "model": None, "prompt_schema_version": None, "input_hash": None, "output_hash": None},
+    ]
+
+    repository.save_finalized_observations(con, job["job_id"], events, classifications)
+
+    rows = con.execute("select c.earnings_state, c.classification_method, c.model, c.prompt_schema_version, c.input_hash, c.output_hash from catalyst_ir_classifications c join catalyst_ir_events e on e.event_id = c.event_id order by e.count_date").fetchall()
+    assert rows[0][0:6] == ("non_earnings", "llm_v1", "test-model", "classification_v1", "input-hash", "output-hash")
+    assert rows[1][0:6] == ("earnings", "rule_v1", None, None, None, None)
+
+
 def test_events_cursor_rejects_ticker_or_job_boundary(tmp_path):
     con = repository.connect(tmp_path / "db.sqlite")
     job = _job(con, status="running")

@@ -1,6 +1,7 @@
-from datetime import date
 from collections.abc import Mapping
+from datetime import date
 
+from app.agents.catalyst_research.domain import _fold_whitespace
 from app.agents.catalyst_research.domain import canonicalize_public_url
 
 
@@ -36,7 +37,11 @@ def _source_for_type(sources, source_type):
         if sources is not None:
             raise ValueError("sources are invalid")
         return None
-    matching = [source for source in sources if isinstance(source, Mapping) and source.get("source_type") == source_type]
+    if any(not isinstance(source, Mapping) for source in sources):
+        raise ValueError("source is invalid")
+    if any(source.get("source_type") not in _CHANNELS for source in sources):
+        raise ValueError("source type is invalid")
+    matching = [source for source in sources if source.get("source_type") == source_type]
     if len(matching) > 1:
         raise ValueError(f"duplicate source {source_type}")
     return matching[0] if matching else None
@@ -79,7 +84,7 @@ def _channel_statistics(events, source, requested_start, requested_end):
         return _empty_channel("missing")
     extraction_status = source.get("extraction_status")
     if extraction_status not in {"complete", "partial"}:
-        return _empty_channel(extraction_status if extraction_status in {"pending", "unknown"} else "unknown")
+        return _empty_channel(extraction_status or "unknown")
     if extraction_status == "partial":
         start = _parse_date(source.get("coverage_start"))
         end = _parse_date(source.get("coverage_end"))
@@ -168,6 +173,10 @@ def calculate_statistics(events, sources, requested_window) -> dict:
         count_date = _parse_date(count_date_value)
         if count_date is None:
             raise ValueError("event count date is invalid")
+        if event.get("count_date") is not None and event.get("date") is not None:
+            date_value = _parse_date(event.get("date"))
+            if date_value is None or date_value != count_date:
+                raise ValueError("event count date is inconsistent")
         if not requested_start <= count_date <= requested_end:
             raise ValueError("event count date is outside requested window")
         title = " ".join(str(event.get("title") or "").split())
@@ -176,8 +185,11 @@ def calculate_statistics(events, sources, requested_window) -> dict:
         normalized_title = event.get("normalized_title")
         if normalized_title is None:
             normalized_title = title.casefold()
+        expected_normalized_title = _fold_whitespace(title).casefold()
         if not isinstance(normalized_title, str) or not normalized_title.strip():
             raise ValueError("event normalized title is required")
+        if normalized_title != expected_normalized_title:
+            raise ValueError("event normalized title is inconsistent")
         supplied_url = event.get("canonical_url") or event.get("url")
         if not supplied_url:
             raise ValueError("event url is required")

@@ -342,11 +342,8 @@ def merge_classifications(events, model_payload=None) -> list[dict]:
             continue
         event_ids.add(identifier)
         identifiers.append(identifier)
-    duplicate_event_ids = {
-        identifier
-        for identifier in identifiers
-        if identifier is not None and sum(other == identifier for other in identifiers) > 1
-    }
+    identifier_counts = Counter(identifier for identifier in identifiers if identifier is not None)
+    duplicate_event_ids = {identifier for identifier, count in identifier_counts.items() if count > 1}
     integer_event_ids = all(isinstance(identifier, int) and not isinstance(identifier, bool) for identifier in identifiers)
     rule_ids = {
         identifier

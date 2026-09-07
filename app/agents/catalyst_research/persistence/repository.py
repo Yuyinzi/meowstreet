@@ -1,3 +1,4 @@
+from collections import Counter
 import base64
 import hashlib
 import json
@@ -54,6 +55,28 @@ def _ticker(value):
     if not normalized:
         raise ValueError("ticker is required")
     return normalized
+
+
+def _validated_event_id(value):
+    if not isinstance(value, str) or not value or value != value.strip() or len(value) > 200:
+        raise ValueError("event id is invalid")
+    return value
+
+
+def _classification_key(item):
+    if not isinstance(item, dict):
+        return None
+    if "event_id" in item and item["event_id"] is not None:
+        value = item["event_id"]
+    elif "id" in item:
+        value = item["id"]
+    else:
+        return None
+    try:
+        hash(value)
+    except TypeError:
+        return None
+    return value
 
 
 def _decode_row(row, json_columns=()):
@@ -596,16 +619,63 @@ def save_finalized_observations(con, job_id, events, classifications):
     job = _job(con, job_id)
     if job["status"] in _TERMINAL_JOB_STATES:
         raise ValueError(f"research job {job_id} is terminal")
-    classification_by_id = {item.get("event_id") or item.get("id"): item for item in classifications}
+    if not isinstance(events, list) or not isinstance(classifications, list):
+        raise ValueError("events and classifications are required")
+    explicit_event_ids = []
+    generated_event_ids = []
+    for event in events:
+        if not isinstance(event, dict):
+            raise ValueError("event is invalid")
+        if "event_id" in event and event["event_id"] is not None:
+            explicit_event_ids.append(_validated_event_id(event["event_id"]))
+        else:
+            generated_event_ids.append(_id("ire_"))
+    duplicate_event_ids = {value for value, count in Counter(explicit_event_ids).items() if count > 1}
+    if duplicate_event_ids:
+        raise ValueError("duplicate event id")
+    existing_ids = {
+        row[0]
+        for row in con.execute(
+            "select event_id from catalyst_ir_events where event_id in ({})".format(",".join("?" for _ in explicit_event_ids)),
+            explicit_event_ids,
+        ).fetchall()
+    } if explicit_event_ids else set()
+    if existing_ids:
+        raise ValueError("event id conflicts with existing event")
+    event_input_ids = [
+        event.get("id")
+        for event in events
+        if isinstance(event.get("id"), int) and not isinstance(event.get("id"), bool) and event.get("id") >= 1
+    ]
+    duplicate_input_ids = {value for value, count in Counter(event_input_ids).items() if count > 1}
+    classification_rows = [_classification_key(item) for item in classifications]
+    duplicate_classification_ids = {value for value, count in Counter(value for value in classification_rows if value is not None).items() if count > 1}
+    classification_by_id = {
+        key: item
+        for key, item in zip(classification_rows, classifications)
+        if key is not None and key not in duplicate_classification_ids
+    }
+    generated_index = 0
     with con:
         for position, event in enumerate(events, 1):
-            event_id = event.get("event_id") or event.get("id") or _id("ire_")
-            classification = (
+            explicit_event_id = event.get("event_id")
+            if explicit_event_id is None:
+                event_id = generated_event_ids[generated_index]
+                generated_index += 1
+            else:
+                event_id = _validated_event_id(explicit_event_id)
+            input_id = event.get("id") if "id" in event else None
+            input_id_valid = isinstance(input_id, int) and not isinstance(input_id, bool) and input_id >= 1
+            duplicate_input_id = input_id_valid and (input_id in duplicate_input_ids or input_id in duplicate_classification_ids)
+            invalid_input_id = "id" in event and not input_id_valid
+            classification = None if duplicate_input_id or invalid_input_id else (
                 classification_by_id.get(event_id)
-                or classification_by_id.get(event.get("id"))
+                or classification_by_id.get(input_id)
                 or classification_by_id.get(position)
             )
             state = (classification or event).get("earnings_state", "ambiguous")
+            if duplicate_input_id:
+                state = "ambiguous"
             if state not in {"earnings", "non_earnings", "ambiguous"}:
                 raise ValueError("event earnings state is invalid")
             count_date = event.get("count_date") or event.get("event_date") or event.get("published_date")
