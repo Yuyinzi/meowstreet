@@ -1,4 +1,7 @@
 from datetime import date
+from collections.abc import Mapping
+
+from app.agents.catalyst_research.domain import canonicalize_public_url
 
 
 _CHANNELS = ("press_releases", "events_presentations")
@@ -30,8 +33,13 @@ def _source_for_type(sources, source_type):
         source = sources.get(source_type)
         return source if isinstance(source, dict) else None
     if not isinstance(sources, list):
+        if sources is not None:
+            raise ValueError("sources are invalid")
         return None
-    return next((source for source in sources if isinstance(source, dict) and source.get("source_type") == source_type), None)
+    matching = [source for source in sources if isinstance(source, Mapping) and source.get("source_type") == source_type]
+    if len(matching) > 1:
+        raise ValueError(f"duplicate source {source_type}")
+    return matching[0] if matching else None
 
 
 def _continuity_is_known(source):
@@ -70,17 +78,15 @@ def _channel_statistics(events, source, requested_start, requested_end):
     if source is None:
         return _empty_channel("missing")
     extraction_status = source.get("extraction_status")
-    if extraction_status is None and source.get("coverage_status") in {"complete", "partial"}:
-        extraction_status = source.get("coverage_status")
-    if extraction_status is None:
-        extraction_status = source.get("status")
-    if extraction_status not in {None, "complete", "partial"}:
-        return _empty_channel(extraction_status or "missing")
+    if extraction_status not in {"complete", "partial"}:
+        return _empty_channel(extraction_status if extraction_status in {"pending", "unknown"} else "unknown")
     if extraction_status == "partial":
         start = _parse_date(source.get("coverage_start"))
         end = _parse_date(source.get("coverage_end"))
+        if start is None or end is None or not requested_start <= start < end <= requested_end:
+            raise ValueError("partial coverage range is invalid")
         status = "partial"
-        continuity_known = start is not None and end is not None and start < end and _continuity_is_known(source)
+        continuity_known = _continuity_is_known(source)
         denominator_days = (end - start).days if continuity_known else None
     else:
         start = requested_start
@@ -90,6 +96,10 @@ def _channel_statistics(events, source, requested_start, requested_end):
         denominator_days = (end - start).days
     counts = {state: 0 for state in _STATES}
     for event in events:
+        if status == "partial":
+            event_date = _parse_date(event.get("count_date"))
+            if event_date is None or not start <= event_date <= end:
+                raise ValueError("event count date is outside observed coverage")
         state = event.get("earnings_state")
         if state in counts:
             counts[state] += 1
@@ -131,9 +141,57 @@ def calculate_statistics(events, sources, requested_window) -> dict:
     if not isinstance(events, list):
         raise ValueError("events are required")
     requested_start, requested_end = _requested_dates(requested_window)
+    if isinstance(sources, dict):
+        source_rows = []
+        for source_type, source in sources.items():
+            if source_type not in _CHANNELS:
+                raise ValueError("source type is invalid")
+            if not isinstance(source, Mapping):
+                raise ValueError("source is invalid")
+            source_rows.append({**source, "source_type": source_type})
+        sources = source_rows
+    elif sources is not None and not isinstance(sources, list):
+        raise ValueError("sources are invalid")
+    validated_events = []
+    seen_keys = set()
+    for event in events:
+        if not isinstance(event, Mapping):
+            raise ValueError("event is invalid")
+        source_type = event.get("source_type")
+        if source_type not in _CHANNELS:
+            raise ValueError("event source type is invalid")
+        if event.get("earnings_state") not in _STATES:
+            raise ValueError("event earnings state is invalid")
+        count_date_value = event.get("count_date")
+        if count_date_value is None and event.get("date") is not None:
+            count_date_value = event.get("date")
+        count_date = _parse_date(count_date_value)
+        if count_date is None:
+            raise ValueError("event count date is invalid")
+        if not requested_start <= count_date <= requested_end:
+            raise ValueError("event count date is outside requested window")
+        title = " ".join(str(event.get("title") or "").split())
+        if not title:
+            raise ValueError("event title is required")
+        normalized_title = event.get("normalized_title")
+        if normalized_title is None:
+            normalized_title = title.casefold()
+        if not isinstance(normalized_title, str) or not normalized_title.strip():
+            raise ValueError("event normalized title is required")
+        supplied_url = event.get("canonical_url") or event.get("url")
+        if not supplied_url:
+            raise ValueError("event url is required")
+        canonical_url = canonicalize_public_url(supplied_url)
+        if event.get("canonical_url") and canonicalize_public_url(event["canonical_url"]) != canonical_url:
+            raise ValueError("event canonical url is inconsistent")
+        key = (source_type, count_date.isoformat(), normalized_title.casefold(), canonical_url)
+        if key in seen_keys:
+            raise ValueError("duplicate event observation")
+        seen_keys.add(key)
+        validated_events.append({**event, "count_date": count_date.isoformat(), "canonical_url": canonical_url})
     return {
         source_type: _channel_statistics(
-            [event for event in events if isinstance(event, dict) and event.get("source_type") == source_type],
+            [event for event in validated_events if event.get("source_type") == source_type],
             _source_for_type(sources, source_type),
             requested_start,
             requested_end,

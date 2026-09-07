@@ -4,6 +4,7 @@ import ipaddress
 import json
 import re
 import socket
+from collections import Counter
 from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
@@ -43,6 +44,7 @@ _EXPLICIT_FINANCIAL_RESULTS = re.compile(r"\bfinancial\s+results?\b", re.IGNOREC
 _NON_EARNINGS_RESULT_CONTEXT = (
     re.compile(r"\b(?:product|customer|clinical|operational)\b.{0,40}\bresults?\b", re.IGNORECASE),
     re.compile(r"\bresults?\s+update\b", re.IGNORECASE),
+    re.compile(r"\bresults?\b.{0,40}\b(?:program|pilot|customer)\b", re.IGNORECASE),
 )
 
 
@@ -424,6 +426,20 @@ def _classification_event_key(event):
     )
 
 
+def _classification_tie_key(event):
+    try:
+        return json.dumps(event, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    except (TypeError, ValueError):
+        return repr(sorted((str(key), repr(value)) for key, value in event.items()))
+
+
+def _classification_output_key(event):
+    identifier = event.get("id")
+    if isinstance(identifier, int) and not isinstance(identifier, bool) and identifier >= 1:
+        return (0, identifier, _classification_event_key(event), _classification_tie_key(event))
+    return (1, 0, _classification_event_key(event), _classification_tie_key(event))
+
+
 def _classification_input(events):
     return [
         {"id": event["id"], "source_type": event["source_type"], "title": event["title"]}
@@ -461,30 +477,38 @@ async def classify_observations(events, *, llm_client=None, model=None, batch_si
             raise ValueError("event title is required")
         _source_type(item.get("source_type"))
         prepared.append(item)
-    prepared.sort(key=_classification_event_key)
-    used_ids = {item.get("id") for item in prepared if isinstance(item.get("id"), int) and not isinstance(item.get("id"), bool)}
+    prepared.sort(key=lambda item: (_classification_event_key(item), _classification_tie_key(item)))
+    explicit_ids = [item.get("id") for item in prepared]
+    valid_ids = [identifier for identifier in explicit_ids if isinstance(identifier, int) and not isinstance(identifier, bool) and identifier >= 1]
+    duplicate_valid_ids = {identifier for identifier, count in Counter(valid_ids).items() if count > 1}
+    used_ids = set(valid_ids)
     next_id = 1
     for item in prepared:
-        identifier = item.get("id")
-        if not isinstance(identifier, int) or isinstance(identifier, bool) or identifier < 1:
+        if "id" not in item:
             while next_id in used_ids:
                 next_id += 1
             item["id"] = next_id
             used_ids.add(next_id)
             next_id += 1
-
-    duplicate_ids = {item["id"] for item in prepared if sum(other["id"] == item["id"] for other in prepared) > 1}
+    for input_id, item in enumerate(prepared, 1):
+        identifier = item.get("id")
+        if not isinstance(identifier, int) or isinstance(identifier, bool) or identifier < 1 or identifier in duplicate_valid_ids:
+            item["classification_input_id"] = input_id
     classified = []
     unresolved = []
     for item in prepared:
         rule_state = classify_title_by_rule(item["title"], item["source_type"])
-        if item["id"] in duplicate_ids:
+        identifier = item.get("id")
+        invalid_id = not isinstance(identifier, int) or isinstance(identifier, bool) or identifier < 1
+        if invalid_id or identifier in duplicate_valid_ids:
             item["earnings_state"] = "ambiguous"
             item["classification_method"] = "manual"
+            item.update({"model": None, "prompt_schema_version": None, "input_hash": None, "output_hash": None})
             classified.append(item)
         elif rule_state:
             item["earnings_state"] = rule_state
             item["classification_method"] = "rule_v1"
+            item.update({"model": None, "prompt_schema_version": None, "input_hash": None, "output_hash": None})
             classified.append(item)
         else:
             unresolved.append(item)
@@ -493,6 +517,7 @@ async def classify_observations(events, *, llm_client=None, model=None, batch_si
     provenance = []
     for start in range(0, len(unresolved), batch_size):
         batch = unresolved[start : start + batch_size]
+        batch_index = start // batch_size
         bounded = _classification_input(batch)
         prompt = classification_prompt(bounded)
         input_hash = _hash_payload(prompt)
@@ -508,11 +533,13 @@ async def classify_observations(events, *, llm_client=None, model=None, batch_si
                     text_format=EventClassificationResponse,
                 )
                 payload, output_text = _response_payload(response)
-                output_hash = _hash_payload(output_text if output_text is not None else payload)
+                output_hash = _hash_payload(payload) if payload is not None else None
             except Exception:
                 payload = None
             provenance.append(
                 {
+                    "batch_index": batch_index,
+                    "event_ids": [item["id"] for item in batch],
                     "method": "llm_v1",
                     "model": model,
                     "prompt_schema_version": PROMPT_VERSIONS["classification"],
@@ -522,8 +549,18 @@ async def classify_observations(events, *, llm_client=None, model=None, batch_si
             )
         merge_payload = payload if payload is not None else {"classifications": []} if attempted else None
         merged = merge_classifications(batch, merge_payload)
+        batch_provenance = provenance[-1] if attempted else None
+        for item in merged:
+            item.update(
+                {
+                    "model": batch_provenance["model"] if batch_provenance else None,
+                    "prompt_schema_version": batch_provenance["prompt_schema_version"] if batch_provenance else None,
+                    "input_hash": batch_provenance["input_hash"] if batch_provenance else None,
+                    "output_hash": batch_provenance["output_hash"] if batch_provenance else None,
+                }
+            )
         classified.extend(merged)
-    classified.sort(key=lambda item: item["id"])
+    classified.sort(key=_classification_output_key)
     return {"events": classified, "llm_call_count": llm_call_count, "provenance": provenance}
 
 
