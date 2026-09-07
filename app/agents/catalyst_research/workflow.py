@@ -489,7 +489,7 @@ async def _prepare_sources(context, company, discovery, source_types=None):
             _save_unaccepted_source(context, source, status="ambiguous", snapshot=snapshot, verification_reason=snapshot.get("verification_error"))
         if accepted is None:
             accepted = await _traverse_source(context, company, origin_snapshots, source_type)
-        prepared[source_type] = accepted
+        prepared[source_type] = accepted if accepted and accepted[0] is not None else None
     return prepared, origin_snapshots
 
 
@@ -854,7 +854,9 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
                 combined_discovery = dict(discovery)
                 combined_discovery["sources"] = list(discovery.get("sources", [])) + list(origin_discovery.get("sources", []))
                 combined_discovery["alternate_sources"] = list(discovery.get("alternate_sources", [])) + list(origin_discovery.get("alternate_sources", []))
-                prepared, origins = await _prepare_sources(context, company, combined_discovery, missing_channels)
+                retry_prepared, retry_origins = await _prepare_sources(context, company, combined_discovery, missing_channels)
+                prepared.update(retry_prepared)
+                origins.extend(retry_origins)
             for source_type in cold_channels:
                 channel_results[source_type] = await _run_channel(context, company, source_type, prepared.get(source_type))
         events = []
