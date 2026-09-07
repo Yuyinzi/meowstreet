@@ -192,9 +192,9 @@ def calculate_statistics(events, sources, requested_window) -> dict:
         if normalized_title != expected_normalized_title:
             raise ValueError("event normalized title is inconsistent")
         supplied_url = event.get("canonical_url") or event.get("url")
-        if not supplied_url:
+        if source_type == "press_releases" and not supplied_url:
             raise ValueError("event url is required")
-        canonical_url = canonicalize_public_url(supplied_url)
+        canonical_url = canonicalize_public_url(supplied_url) if supplied_url else None
         if event.get("canonical_url") and canonicalize_public_url(event["canonical_url"]) != canonical_url:
             raise ValueError("event canonical url is inconsistent")
         key = (source_type, count_date.isoformat(), normalized_title.casefold(), canonical_url)

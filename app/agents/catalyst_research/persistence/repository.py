@@ -2,6 +2,7 @@ from collections import Counter
 import base64
 import hashlib
 import json
+import re
 import secrets
 import sqlite3
 from datetime import UTC, date, datetime
@@ -159,6 +160,7 @@ def connect(db_path=DEFAULT_DB_PATH):
             requested_end text,
             coverage_start text,
             coverage_end text,
+            coverage_continuous integer check (coverage_continuous in (0,1)),
             page_count integer not null default 0,
             item_count integer not null default 0,
             content_hash text,
@@ -226,7 +228,7 @@ def connect(db_path=DEFAULT_DB_PATH):
             count_date text not null,
             title text not null,
             normalized_title text not null,
-            canonical_url text not null,
+            canonical_url text,
             source_type text not null check (source_type in ('press_releases','events_presentations')),
             earnings_state text not null default 'ambiguous' check (earnings_state in ('earnings','non_earnings','ambiguous')),
             classification_method text,
@@ -256,7 +258,47 @@ def connect(db_path=DEFAULT_DB_PATH):
         on catalyst_research_jobs(ticker, status, completed_at desc);
         """
     )
+    _migrate_schema(con)
     return con
+
+
+def _migrate_schema(con):
+    source_columns = {row[1]: row for row in con.execute("pragma table_info(catalyst_ir_sources)")}
+    if "coverage_continuous" not in source_columns:
+        con.execute("alter table catalyst_ir_sources add column coverage_continuous integer check (coverage_continuous in (0,1))")
+    event_columns = {row[1]: row for row in con.execute("pragma table_info(catalyst_ir_events)")}
+    if event_columns.get("canonical_url", (None, None, None, 0))[3] == 1:
+        con.execute("pragma legacy_alter_table = on")
+        con.execute("pragma foreign_keys = off")
+        con.execute("alter table catalyst_ir_events rename to catalyst_ir_events_legacy")
+        con.execute("""create table catalyst_ir_events_new (
+            event_id text primary key,
+            job_id text not null references catalyst_research_jobs(job_id),
+            source_id text not null references catalyst_ir_sources(source_id),
+            ticker text not null,
+            published_date text,
+            event_date text,
+            count_date text not null,
+            title text not null,
+            normalized_title text not null,
+            canonical_url text,
+            source_type text not null check (source_type in ('press_releases','events_presentations')),
+            earnings_state text not null default 'ambiguous' check (earnings_state in ('earnings','non_earnings','ambiguous')),
+            classification_method text,
+            adapter_id text,
+            adapter_version integer,
+            executor_version text,
+            first_seen_at text not null,
+            content_hash text,
+            unique(job_id, ticker, source_type, count_date, normalized_title, canonical_url)
+        )""")
+        con.execute("insert into catalyst_ir_events_new select * from catalyst_ir_events_legacy")
+        con.execute("drop table catalyst_ir_events_legacy")
+        con.execute("alter table catalyst_ir_events_new rename to catalyst_ir_events")
+        con.execute("create unique index if not exists idx_catalyst_event_job_key on catalyst_ir_events(job_id, ticker, source_type, count_date, normalized_title, canonical_url)")
+        con.execute("pragma foreign_keys = on")
+        con.execute("pragma legacy_alter_table = off")
+    con.commit()
 
 
 def create_job(con, request, company=None, now=None):
@@ -321,8 +363,50 @@ def start_job(con, job_id, started_at):
     job = _job(con, job_id)
     if job["status"] != "queued":
         raise ValueError(f"research job {job_id} cannot start from {job['status']}")
-    con.execute("update catalyst_research_jobs set status = 'running', started_at = ? where job_id = ?", (started_at, job_id))
+    cursor = con.execute("update catalyst_research_jobs set status = 'running', started_at = ? where job_id = ? and status = 'queued'", (started_at, job_id))
+    if cursor.rowcount != 1:
+        current = _job(con, job_id)
+        if current["status"] in _TERMINAL_JOB_STATES:
+            raise ValueError(f"research job {job_id} is terminal")
+        raise ValueError(f"research job {job_id} cannot start from {current['status']}")
     con.commit()
+
+
+def update_resolved_company(con, job_id, company):
+    if not isinstance(company, dict):
+        raise ValueError("company identity is required")
+    with con:
+        cursor = con.execute(
+            "update catalyst_research_jobs set company_name = ?, cik = ? where job_id = ? and status = 'running'",
+            (company.get("company_name") or company.get("name"), str(company.get("cik")) if company.get("cik") is not None else None, job_id),
+        )
+        if cursor.rowcount != 1:
+            current = _job(con, job_id)
+            if current["status"] in _TERMINAL_JOB_STATES:
+                raise ValueError(f"research job {job_id} is terminal")
+            raise ValueError(f"research job {job_id} cannot update from {current['status']}")
+    return dict(_job(con, job_id))
+
+
+def _sanitize_error(value):
+    message = " ".join(str(value).split())
+    message = re.sub(r"(?i)authorization\s*[:=]\s*bearer\s+\S+", "Authorization: Bearer [redacted]", message)
+    message = re.sub(r"(?i)\bbearer\s+\S+", "Bearer [redacted]", message)
+    message = re.sub(r"(?i)(api[ _-]?key|token)\s*[:=]\s*\S+", r"\1=[redacted]", message)
+    return message[:1000] or "workflow failed"
+
+
+def fail_job(con, job_id, error_summary, *, completed_at=None):
+    with con:
+        cursor = con.execute(
+            "update catalyst_research_jobs set status = 'failed', error_summary = ?, completed_at = ? where job_id = ? and status in ('queued','running')",
+            (_sanitize_error(error_summary), completed_at or _now_iso(), job_id),
+        )
+        if cursor.rowcount != 1:
+            current = _job(con, job_id)
+            if current["status"] in _TERMINAL_JOB_STATES:
+                raise ValueError(f"research job {job_id} is terminal")
+            raise ValueError(f"research job {job_id} cannot fail from {current['status']}")
 
 
 def record_search_attempt(con, attempt):
@@ -469,7 +553,7 @@ def save_source(con, source):
         "final_url": source.get("final_url"), "acceptance_status": source.get("acceptance_status", "pending"),
         "extraction_status": source.get("extraction_status", "pending"), "active_adapter_id": source.get("active_adapter_id"),
         "evidence_result_ids_json": _json(source.get("evidence_result_ids", [])), "requested_start": source.get("requested_start"),
-        "requested_end": source.get("requested_end"), "coverage_start": source.get("coverage_start"), "coverage_end": source.get("coverage_end"),
+        "requested_end": source.get("requested_end"), "coverage_start": source.get("coverage_start"), "coverage_end": source.get("coverage_end"), "coverage_continuous": None if source.get("coverage_continuous") is None else int(bool(source.get("coverage_continuous"))),
         "page_count": source.get("page_count", 0), "item_count": source.get("item_count", 0), "content_hash": source.get("content_hash"),
         "snapshot_hash": source.get("snapshot_hash") or source.get("content_hash"), "truncation_reason": source.get("truncation_reason"),
         "discovery_provider": source.get("discovery_provider"), "execution_path": source.get("execution_path"), "checked_at": source.get("checked_at"),
@@ -485,9 +569,9 @@ def save_source(con, source):
         cursor = con.execute(
         """insert into catalyst_ir_sources(
             source_id,job_id,ticker,source_type,url,final_url,acceptance_status,extraction_status,active_adapter_id,
-            evidence_result_ids_json,requested_start,requested_end,coverage_start,coverage_end,page_count,item_count,
+            evidence_result_ids_json,requested_start,requested_end,coverage_start,coverage_end,coverage_continuous,page_count,item_count,
             content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at
-        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
+        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
             select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
         )""",
         (*tuple(row.values()), job_id),
@@ -687,7 +771,7 @@ def save_finalized_observations(con, job_id, events, classifications):
                 raise ValueError("event count date is required")
             if not title:
                 raise ValueError("event title is required")
-            if not canonical_url:
+            if event["source_type"] == "press_releases" and not canonical_url:
                 raise ValueError("event url is required")
             if _ticker(event.get("ticker")) != job["ticker"]:
                 raise ValueError("event ticker does not match job ticker")
@@ -698,8 +782,8 @@ def save_finalized_observations(con, job_id, events, classifications):
                 raise ValueError("event source does not match event")
             normalized_title = event.get("normalized_title") or " ".join(title.lower().split())
             existing = con.execute(
-                "select event_id from catalyst_ir_events where job_id = ? and ticker = ? and source_type = ? and count_date = ? and normalized_title = ? and canonical_url = ?",
-                (job_id, _ticker(event.get("ticker")), event.get("source_type"), count_date, normalized_title, canonical_url),
+                "select event_id from catalyst_ir_events where job_id = ? and ticker = ? and source_type = ? and count_date = ? and normalized_title = ? and (canonical_url = ? or (canonical_url is null and ? is null))",
+                (job_id, _ticker(event.get("ticker")), event.get("source_type"), count_date, normalized_title, canonical_url, canonical_url),
             ).fetchone()
             if existing:
                 event_id = existing["event_id"]
@@ -726,6 +810,32 @@ def save_finalized_observations(con, job_id, events, classifications):
                  (classification or event).get("prompt_schema_version"), (classification or event).get("input_hash"),
                  (classification or event).get("output_hash"), (classification or event).get("classified_at") or _now_iso()),
             )
+
+
+class _AtomicConnection:
+    def __init__(self, connection):
+        self._connection = connection
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+
+def finalize_job_with_observations(con, job_id, events, classifications, result):
+    con.execute("begin")
+    atomic = _AtomicConnection(con)
+    try:
+        save_finalized_observations(atomic, job_id, events, classifications)
+        finalize_job(atomic, job_id, result)
+    except Exception:
+        con.rollback()
+        raise
+    con.commit()
 
 
 def finalize_job(con, job_id, result):
@@ -760,9 +870,11 @@ def load_job_result(con, job_id):
     sources = [_decode_row(row, ("evidence_result_ids_json",)) for row in con.execute("select * from catalyst_ir_sources where job_id = ? order by source_type, source_id", (job_id,))]
     for source in sources:
         source["evidence_result_ids"] = source.pop("evidence_result_ids_json")
+        if source.get("coverage_continuous") is not None:
+            source["coverage_continuous"] = bool(source["coverage_continuous"])
     result = {
         "schema_version": RESULT_SCHEMA_VERSION, "research_version": job["research_version"], "job_id": job_id,
-        "status": job["status"], "ticker": job["ticker"], "company_name": job["company_name"], "as_of": job["as_of"],
+        "status": job["status"], "ticker": job["ticker"], "company_name": job["company_name"], "cik": job["cik"], "as_of": job["as_of"],
         "requested_window": {"start": job["requested_start"], "end": job["requested_end"], "years": job["requested_years"]},
         "sources": sources, "statistics": _decode(job["statistics_json"]) or {}, "warnings": _decode(job["warnings_json"]) or [],
         "next_actions": _decode(job["next_actions_json"]) or [], "error_summary": job["error_summary"],

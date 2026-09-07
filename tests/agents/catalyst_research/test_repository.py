@@ -57,6 +57,28 @@ def test_job_transition_and_terminal_immutability(tmp_path):
     assert con.execute("select status, statistics_json from catalyst_research_jobs where job_id = ?", (job["job_id"],)).fetchone()[0] == "completed"
 
 
+def test_start_job_guard_does_not_overwrite_terminal_race(tmp_path, monkeypatch):
+    db_path = tmp_path / "db.sqlite"
+    con = repository.connect(db_path)
+    job = _job(con)
+    original_job = repository._job
+    reads = 0
+
+    def finalize_after_read(connection, job_id):
+        nonlocal reads
+        reads += 1
+        row = original_job(connection, job_id)
+        if reads == 1:
+            connection.execute("update catalyst_research_jobs set status = 'failed' where job_id = ?", (job_id,))
+            connection.commit()
+        return row
+
+    monkeypatch.setattr(repository, "_job", finalize_after_read)
+    with pytest.raises(ValueError, match="terminal"):
+        repository.start_job(con, job["job_id"], "2026-09-04T00:01:00+00:00")
+    assert con.execute("select status from catalyst_research_jobs where job_id = ?", (job["job_id"],)).fetchone()[0] == "failed"
+
+
 def test_snapshot_hash_deduplication_and_reference_safe_pruning(tmp_path):
     con = repository.connect(tmp_path / "db.sqlite")
     job = _job(con, status="running")
@@ -381,3 +403,49 @@ def test_update_search_attempt_refuses_terminal_job_and_missing_attempt(tmp_path
     repository.finalize_job(con, job["job_id"], {"status": "failed"})
     with pytest.raises(ValueError, match="terminal"):
         repository.update_search_attempt(con, "attempt_1", outcome="rejected")
+
+
+def test_fail_job_can_terminally_close_queued_or_running_job(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    queued = _job(con)
+    repository.fail_job(con, queued["job_id"], "Authorization: Bearer secret")
+    assert con.execute("select status, error_summary from catalyst_research_jobs where job_id = ?", (queued["job_id"],)).fetchone()[0:2] == ("failed", "Authorization: Bearer [redacted]")
+    running = _job(con, status="running")
+    repository.fail_job(con, running["job_id"], "api_key=secret token:other")
+    assert con.execute("select status from catalyst_research_jobs where job_id = ?", (running["job_id"],)).fetchone()[0] == "failed"
+
+
+def test_resolved_company_is_stored_on_running_job(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    updated = repository.update_resolved_company(con, job["job_id"], {"ticker": "NVDA", "company_name": "NVIDIA Corporation", "cik": 1045810})
+    assert updated["company_name"] == "NVIDIA Corporation"
+    assert con.execute("select company_name, cik from catalyst_research_jobs where job_id = ?", (job["job_id"],)).fetchone()[0:2] == ("NVIDIA Corporation", "1045810")
+    repository.finalize_job(con, job["job_id"], {"status": "unsupported"})
+    assert repository.load_job_result(con, job["job_id"])["cik"] == "1045810"
+
+
+def test_atomic_finalize_rolls_back_events_on_insert_failure(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "events_presentations", "url": "https://ir.example.test/events"})
+    events = [
+        {"id": 1, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "events_presentations", "event_date": "2026-01-01", "count_date": "2026-01-01", "title": "Investor event", "url": None},
+        {"id": 2, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "events_presentations", "event_date": "2026-01-02", "count_date": "2026-01-02", "title": "", "url": "https://ir.example.test/broken"},
+    ]
+    with pytest.raises(ValueError, match="event title"):
+        repository.finalize_job_with_observations(con, job["job_id"], events, [], {"status": "completed", "statistics": {}})
+    assert con.execute("select count(*) from catalyst_ir_events where job_id = ?", (job["job_id"],)).fetchone()[0] == 0
+    assert con.execute("select status from catalyst_research_jobs where job_id = ?", (job["job_id"],)).fetchone()[0] == "running"
+
+
+def test_atomic_finalize_accepts_null_events_url_and_coverage_flag(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "events_presentations", "url": "https://ir.example.test/events", "extraction_status": "partial", "coverage_start": "2025-01-01", "coverage_end": "2026-01-01", "coverage_continuous": False})
+    event = {"id": 1, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "events_presentations", "event_date": "2026-01-01", "count_date": "2026-01-01", "title": "Investor event", "url": None}
+    repository.finalize_job_with_observations(con, job["job_id"], [event], [{"id": 1, "earnings_state": "non_earnings", "classification_method": "manual"}], {"status": "completed_partial", "statistics": {"events_presentations": {"status": "partial"}}})
+    row = con.execute("select canonical_url from catalyst_ir_events").fetchone()
+    assert row[0] is None
+    loaded = repository.load_job_result(con, job["job_id"])
+    assert loaded["sources"][0]["coverage_continuous"] is False

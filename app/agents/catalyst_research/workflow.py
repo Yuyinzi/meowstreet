@@ -31,6 +31,7 @@ _TRAVERSAL_PURPOSE_TERMS = {
     "press_releases": ("press", "release", "news"),
     "events_presentations": ("event", "presentation", "webcast", "conference"),
 }
+_UNSUPPORTED_FETCH_TERMS = ("content type", "non-html", "non html", "javascript", "requires js", "requires javascript")
 
 
 async def _invoke(function, *args, **kwargs):
@@ -85,7 +86,9 @@ def _connect_repository(repository, db_path):
 
 def _sanitized_error(error):
     message = " ".join(str(error).split())
-    message = re.sub(r"(?i)(authorization|api[_-]?key|bearer|token)\s*[:=]\s*[^ ,;]+", r"\1: [redacted]", message)
+    message = re.sub(r"(?i)authorization\s*[:=]\s*bearer\s+\S+", "Authorization: Bearer [redacted]", message)
+    message = re.sub(r"(?i)\bbearer\s+\S+", "Bearer [redacted]", message)
+    message = re.sub(r"(?i)(api[ _-]?key|token)\s*[:=]\s*\S+", r"\1=[redacted]", message)
     return message[:500] or "workflow failed"
 
 
@@ -139,6 +142,11 @@ def _source_verified(company, source_type, source, snapshot):
     if not any(term in text for term in purpose):
         return False, "IR archive purpose is ambiguous"
     return True, None
+
+
+def _unsupported_fetch_error(error):
+    text = str(error).casefold()
+    return any(term in text for term in _UNSUPPORTED_FETCH_TERMS)
 
 
 def _candidate_links(snapshot, origin_url, target_type):
@@ -233,7 +241,7 @@ def _default_inference():
     try:
         return load_inference_bundle()
     except Exception:
-        return {"client": None, "models": {}}
+        return {"client": None, "models": {}, "warnings": ["catalyst_llm_configuration_failed"]}
 
 
 def _default_dependencies(db_path, http_client):
@@ -248,6 +256,7 @@ def _default_dependencies(db_path, http_client):
         "search_router": search_router,
         "llm_client": inference.get("client"),
         "models": inference.get("models", {}),
+        "inference_warnings": inference.get("warnings", []),
         "fetch_page": lambda url, **kwargs: fetch_html_page(url, http_client=http_client, **kwargs),
         "repository": default_repository,
         "discover_sources": domain.discover_sources,
@@ -266,6 +275,8 @@ def _record_snapshot(context, source, page):
     if not isinstance(snapshot, Mapping):
         raise ValueError("source snapshot is invalid")
     snapshot = dict(snapshot)
+    if snapshot.get("requires_javascript") or snapshot.get("javascript_required") or snapshot.get("access_mode") in {"javascript", "rendered"}:
+        raise ValueError("source requires javascript")
     snapshot.setdefault("requested_url", page.get("requested_url") or source["url"])
     snapshot.setdefault("final_url", page.get("final_url") or source["url"])
     snapshot["source_type"] = source["source_type"]
@@ -286,12 +297,17 @@ def _invoke_sync(function, *args, **kwargs):
     return function(*args, **kwargs)
 
 
-async def _fetch_snapshot(context, company, source):
-    page = await _invoke(context["fetch_page"], source["url"], allowed_hosts=None)
+async def _fetch_snapshot(context, company, source, *, allowed_hosts=None):
+    fetch_kwargs = {"allowed_hosts": allowed_hosts}
+    if context.get("url_resolver") is not None:
+        fetch_kwargs["resolver"] = context["url_resolver"]
+    page = await _invoke(context["fetch_page"], source["url"], **fetch_kwargs)
     snapshot = await _invoke(context["build_snapshot"], page, source=source)
     if not isinstance(snapshot, Mapping):
         raise ValueError("source snapshot is invalid")
     snapshot = dict(snapshot)
+    if snapshot.get("requires_javascript") or snapshot.get("javascript_required") or snapshot.get("access_mode") in {"javascript", "rendered"}:
+        raise ValueError("source requires javascript")
     snapshot.setdefault("requested_url", page.get("requested_url") or source["url"])
     snapshot.setdefault("final_url", page.get("final_url") or source["url"])
     snapshot["source_type"] = source["source_type"]
@@ -300,9 +316,9 @@ async def _fetch_snapshot(context, company, source):
     return snapshot
 
 
-def _save_unaccepted_source(context, source, *, status, snapshot=None):
+def _save_unaccepted_source(context, source, *, status, snapshot=None, extraction_status="failed"):
     row = dict(source)
-    row.update({"ticker": context["request"]["ticker"], "job_id": context["job"]["job_id"], "acceptance_status": status, "extraction_status": "failed", "execution_path": "cold", "checked_at": _iso(context)})
+    row.update({"ticker": context["request"]["ticker"], "job_id": context["job"]["job_id"], "acceptance_status": "pending" if status == "ambiguous" else status, "extraction_status": extraction_status, "execution_path": "cold", "checked_at": _iso(context)})
     if isinstance(snapshot, Mapping):
         row.update({"final_url": snapshot.get("final_url"), "snapshot_hash": snapshot.get("content_hash"), "content_hash": snapshot.get("content_hash")})
     _repo_call(context, "save_source", row)
@@ -312,17 +328,27 @@ async def _traverse_source(context, company, origin_snapshots, source_type):
     attempts = 0
     seen = set()
     for origin in origin_snapshots[:_MAX_TRAVERSAL_ORIGINS]:
-        for target_url in _candidate_links(origin["snapshot"], origin["source"]["url"], source_type):
+        origin_url = origin["snapshot"].get("final_url") or origin["source"]["url"]
+        try:
+            origin_host = domain.url_host(domain.canonicalize_public_url(origin_url))
+        except ValueError:
+            continue
+        for target_url in _candidate_links(origin["snapshot"], origin_url, source_type):
             if target_url in seen or attempts >= _MAX_TRAVERSAL_TARGETS:
                 continue
             seen.add(target_url)
             attempts += 1
             candidate = {"source_type": source_type, "url": target_url, "discovery_provider": "same_site_traversal", "evidence_result_ids": []}
             try:
-                snapshot = await _fetch_snapshot(context, company, candidate)
+                snapshot = await _fetch_snapshot(context, company, candidate, allowed_hosts=[origin_host])
             except ValueError:
                 continue
             if not snapshot.get("company_verified"):
+                continue
+            try:
+                if domain.url_host(domain.canonicalize_public_url(snapshot.get("final_url") or target_url)) != origin_host:
+                    continue
+            except ValueError:
                 continue
             return candidate, snapshot
     return None, None
@@ -361,6 +387,12 @@ async def _discover(context, company):
         raise ValueError("source discovery result is invalid")
     context["warnings"].extend(result.get("warnings", []))
     context["next_actions"].extend(result.get("next_actions", []))
+    if result.get("status") == "search_unavailable":
+        context["warnings"].append("catalyst_no_search_provider")
+        context["next_actions"].append("configure_catalyst_search_provider")
+    elif result.get("status") == "ambiguous":
+        context["warnings"].append("source_identity_ambiguous")
+        context["next_actions"].append("review_ambiguous_source")
     return result
 
 
@@ -377,8 +409,13 @@ async def _prepare_sources(context, company, discovery):
         try:
             snapshot = await _fetch_snapshot(context, company, source)
         except ValueError as exc:
-            context["warnings"].append("IR homepage fetch failed")
-            _save_unaccepted_source(context, source, status="rejected")
+            if _unsupported_fetch_error(exc):
+                context["warnings"].append("source_javascript_unsupported")
+                context["next_actions"].append("provide_extractable_archive_url")
+                _save_unaccepted_source(context, source, status="pending", extraction_status="unsupported")
+            else:
+                context["warnings"].append("IR homepage fetch failed")
+                _save_unaccepted_source(context, source, status="rejected")
             continue
         if snapshot.get("company_verified"):
             origin_snapshots.append({"source": source, "snapshot": snapshot})
@@ -395,8 +432,13 @@ async def _prepare_sources(context, company, discovery):
                 continue
             try:
                 snapshot = await _fetch_snapshot(context, company, source)
-            except ValueError:
-                _save_unaccepted_source(context, source, status="rejected")
+            except ValueError as exc:
+                if _unsupported_fetch_error(exc):
+                    context["warnings"].append("source_javascript_unsupported")
+                    context["next_actions"].append("provide_extractable_archive_url")
+                    _save_unaccepted_source(context, source, status="pending", extraction_status="unsupported")
+                else:
+                    _save_unaccepted_source(context, source, status="rejected")
                 continue
             if snapshot.get("company_verified"):
                 accepted = (source, snapshot)
@@ -416,6 +458,8 @@ async def _run_channel(context, company, source_type, pair):
     source.update({"ticker": context["request"]["ticker"], "job_id": context["job"]["job_id"], "acceptance_status": "accepted", "requested_start": context["job"]["requested_start"], "requested_end": context["job"]["requested_end"], "final_url": snapshot.get("final_url"), "snapshot_hash": snapshot.get("content_hash"), "content_hash": snapshot.get("content_hash")})
     model = _source_model(context, "adapter_generation")
     if not context["llm_client"] or not model:
+        context["warnings"].append("catalyst_llm_unavailable")
+        context["next_actions"].append("configure_catalyst_llm")
         context["execution_paths"][source_type] = "cold"
         source.update({"extraction_status": "unsupported", "execution_path": "cold", "checked_at": _iso(context)})
         saved = _repo_call(context, "save_source", source)
@@ -436,16 +480,26 @@ async def _run_channel(context, company, source_type, pair):
             source.update({"extraction_status": "failed", "execution_path": "cold", "checked_at": _iso(context), "truncation_reason": "adapter_validation_failed"})
             saved = _repo_call(context, "save_source", source)
             return {"source_type": source_type, "status": "partial", "events": [], "source": saved}
-        _repo_call(context, "activate_adapter", persisted_candidate["adapter_id"], _iso(context))
-        context["execution_paths"][source_type] = "cold"
         context["call_counts"]["event_extraction"] += 1
-        execution = await _invoke(context["execute_adapter"], adapter_value, fetch_page=context["fetch_page"], requested_start=context["job"]["requested_start"], requested_end=context["job"]["requested_end"])
+        try:
+            execution = await _invoke(context["execute_adapter"], adapter_value, fetch_page=context["fetch_page"], requested_start=context["job"]["requested_start"], requested_end=context["job"]["requested_end"])
+            if not isinstance(execution, Mapping) or not isinstance(execution.get("observations", []), list):
+                raise ValueError("adapter execution result is invalid")
+        except Exception as exc:
+            failure = {"status": "failed", "report": {"errors": [_sanitized_error(exc)]}, "errors": [_sanitized_error(exc)]}
+            failure.update({"adapter_id": persisted_candidate["adapter_id"], "job_id": context["job"]["job_id"], "source_type": source_type})
+            _repo_call(context, "record_adapter_validation", failure)
+            raise ValueError("adapter execution failed") from None
         execution = dict(execution or {})
         events = execution.get("observations", [])
         complete = bool(execution.get("boundary_reached") or execution.get("archive_exhausted")) and not execution.get("truncation_reason")
         coverage_start = execution.get("coverage_start") or context["job"]["requested_start"]
         coverage_end = execution.get("coverage_end") or context["job"]["requested_end"]
         source.update({"extraction_status": "complete" if complete else "partial", "execution_path": "cold", "active_adapter_id": persisted_candidate.get("adapter_id"), "coverage_start": coverage_start, "coverage_end": coverage_end, "coverage_continuous": complete, "page_count": execution.get("page_count", 0), "item_count": execution.get("item_count", len(events)), "truncation_reason": execution.get("truncation_reason"), "checked_at": _iso(context)})
+        if complete and not events:
+            context["warnings"].append("valid_archive_exhausted_zero")
+        _repo_call(context, "activate_adapter", persisted_candidate["adapter_id"], _iso(context))
+        context["execution_paths"][source_type] = "cold"
         saved = _repo_call(context, "save_source", source)
         return {"source_type": source_type, "status": "complete" if complete else "partial", "events": events, "source": saved, "adapter": persisted_candidate}
     except (RuntimeError, sqlite3.Error):
@@ -468,11 +522,23 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
     normalized.update({key: value for key, value in request.items() if key not in normalized})
     repository = (dependencies or {}).get("repository", default_repository)
     effective_db_path = db_path or getattr(repository, "DEFAULT_DB_PATH", default_repository.DEFAULT_DB_PATH)
-    connection = _connect_repository(repository, effective_db_path)
+    owns_http_client = http_client is None
+    effective_http_client = http_client
+    connection = None
+    try:
+        connection = _connect_repository(repository, effective_db_path)
+        if owns_http_client:
+            effective_http_client = HttpClient()
+    except Exception:
+        if connection is not None:
+            close = getattr(connection, "close", None)
+            if callable(close):
+                close()
+        raise
     context = {
         "request": normalized,
         "db_path": effective_db_path,
-        "http_client": http_client or HttpClient(),
+        "http_client": effective_http_client,
         "repository": repository,
         "connection": connection,
         "clock": (dependencies or {}).get("clock", lambda: datetime.now(UTC)),
@@ -480,9 +546,13 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         "warnings": [],
         "next_actions": [],
         "execution_paths": {},
+        "url_resolver": None,
     }
     context.update(_default_dependencies(context["db_path"], context["http_client"]))
     context.update(dependencies or {})
+    context["warnings"].extend(context.get("inference_warnings", []))
+    if context.get("inference_warnings"):
+        context["next_actions"].append("configure_catalyst_llm")
     aliases = {
         "discover": "discover_sources",
         "inspect_snapshot": "build_snapshot",
@@ -503,6 +573,7 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         _repo_call(context, "start_job", job["job_id"], _iso(context))
         company = await _resolve(context)
         context["company"] = company
+        _repo_call(context, "update_resolved_company", company=company, job_id=job["job_id"])
         discovery = await _discover(context, company)
         prepared, origins = await _prepare_sources(context, company, discovery)
         channel_results = {source_type: await _run_channel(context, company, source_type, prepared.get(source_type)) for source_type in _REQUIRED_CHANNELS}
@@ -537,23 +608,29 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         complete_channels = all(channel_results[item]["status"] == "complete" for item in _REQUIRED_CHANNELS)
         accepted_channels = sum(channel_results[item]["status"] in {"complete", "partial"} for item in _REQUIRED_CHANNELS)
         status = "completed" if complete_channels and not ambiguous else "completed_partial" if accepted_channels or events else "unsupported"
-        if classified_events:
-            _repo_call(context, "save_finalized_observations", job["job_id"], classified_events, classified_events)
         stats = await _invoke(context["calculate_statistics"], classified_events, source_rows, {"start": job["requested_start"], "end": job["requested_end"]})
         if ambiguous:
             context["warnings"].append("classification is incomplete")
+            context["warnings"].append("classification_ambiguous")
             context["next_actions"].append("review ambiguous earnings classifications")
+            context["next_actions"].append("review_ambiguous_classification")
         if status == "completed_partial":
             context["next_actions"].append("provide missing archive coverage or review partial extraction")
-        _repo_call(context, "finalize_job", job["job_id"], {"status": status, "statistics": stats, "warnings": list(dict.fromkeys(context["warnings"])), "next_actions": list(dict.fromkeys(context["next_actions"])), "execution_paths": context["execution_paths"], "call_counts": context["call_counts"], "completed_at": _iso(context)})
+        _repo_call(context, "finalize_job_with_observations", job["job_id"], classified_events, classified_events, {"status": status, "statistics": stats, "warnings": list(dict.fromkeys(context["warnings"])), "next_actions": list(dict.fromkeys(context["next_actions"])), "execution_paths": context["execution_paths"], "call_counts": context["call_counts"], "completed_at": _iso(context)})
     except Exception as exc:
         if job is not None:
             try:
-                _repo_call(context, "finalize_job", job["job_id"], {"status": "failed", "error_summary": _sanitized_error(exc), "warnings": list(dict.fromkeys(context["warnings"])), "next_actions": list(dict.fromkeys(context["next_actions"])), "execution_paths": context["execution_paths"], "call_counts": context["call_counts"], "completed_at": _iso(context)})
+                _repo_call(context, "fail_job", job["job_id"], _sanitized_error(exc), completed_at=_iso(context))
             except Exception:
                 LOGGER.error("catalyst workflow finalization failed ticker=%s", normalized["ticker"], exc_info=True)
         else:
-            connection.close()
+            try:
+                connection.close()
+            finally:
+                if owns_http_client:
+                    close = getattr(effective_http_client, "close", None)
+                    if callable(close):
+                        close()
             raise
     try:
         loaded = _repo_call(context, "load_job_result", context["job"]["job_id"])
@@ -565,3 +642,7 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         close = getattr(connection, "close", None)
         if callable(close):
             close()
+        if owns_http_client:
+            close = getattr(effective_http_client, "close", None)
+            if callable(close):
+                close()

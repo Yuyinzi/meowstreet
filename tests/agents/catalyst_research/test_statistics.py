@@ -250,6 +250,15 @@ def test_partial_known_continuity_uses_observed_calendar_window():
     assert result["press_releases"]["per_month"] == 0.17
 
 
+def test_events_presentations_allow_missing_canonical_url():
+    result = calculate_statistics(
+        [{"source_type": "events_presentations", "title": "Investor day", "count_date": "2025-06-01", "normalized_title": "investor day", "earnings_state": "non_earnings", "canonical_url": None}],
+        [{"source_type": "events_presentations", "extraction_status": "complete"}],
+        {"start": "2025-01-01", "end": "2026-01-01"},
+    )
+    assert result["events_presentations"]["total"] == 1
+
+
 def test_missing_source_is_not_a_zero_archive():
     result = calculate_statistics([], [], {"start": "2024-01-01", "end": "2024-12-31"})
 

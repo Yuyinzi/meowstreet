@@ -3,7 +3,9 @@ from app.agents.catalyst_research.persistence.repository import (
     connect,
     create_adapter_candidate,
     create_job,
+    fail_job,
     finalize_job,
+    finalize_job_with_observations,
     load_active_adapter,
     load_events_page,
     load_job_result,
@@ -18,6 +20,7 @@ from app.agents.catalyst_research.persistence.repository import (
     save_snapshot,
     save_source,
     start_job,
+    update_resolved_company,
 )
 
 __all__ = [
@@ -25,7 +28,9 @@ __all__ = [
     "connect",
     "create_adapter_candidate",
     "create_job",
+    "fail_job",
     "finalize_job",
+    "finalize_job_with_observations",
     "load_active_adapter",
     "load_events_page",
     "load_job_result",
@@ -40,4 +45,5 @@ __all__ = [
     "save_snapshot",
     "save_source",
     "start_job",
+    "update_resolved_company",
 ]
