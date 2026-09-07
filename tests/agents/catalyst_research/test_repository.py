@@ -217,6 +217,35 @@ def test_classification_provenance_round_trips_for_llm_and_rule_events(tmp_path)
     assert rows[1][0:6] == ("earnings", "rule_v1", None, None, None, None)
 
 
+def test_load_job_result_and_events_page_return_complete_persisted_event_list(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    events = [
+        {"id": 1, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": "Business update", "url": "https://ir.example.test/one"},
+        {"id": 2, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-02", "title": "Q1 Financial Results", "url": "https://ir.example.test/two"},
+    ]
+    classifications = [
+        {"id": 1, "earnings_state": "ambiguous", "classification_method": "llm_v1", "model": "test-model", "prompt_schema_version": "classification_v1", "input_hash": "input-1", "output_hash": "output-1"},
+        {"id": 2, "earnings_state": "earnings", "classification_method": "rule_v1"},
+    ]
+    repository.save_finalized_observations(con, job["job_id"], events, classifications)
+    repository.finalize_job(con, job["job_id"], {"status": "completed", "statistics": {"press_releases": {"total": 2}}})
+
+    result = repository.load_job_result(con, job["job_id"])
+    page = repository.load_events_page(con, "NVDA", job["job_id"], 200, None)
+
+    assert result["observation_count"] == 2
+    assert len(result["sources"]) == 1
+    assert [event["title"] for event in page["events"]] == ["Business update", "Q1 Financial Results"]
+    assert [event["earnings_state"] for event in page["events"]] == ["ambiguous", "earnings"]
+    assert page["next_cursor"] is None
+    rows = con.execute("select event_id, model, prompt_schema_version, input_hash, output_hash from catalyst_ir_classifications").fetchall()
+    rows_by_input_hash = {row[3]: row for row in rows}
+    assert rows_by_input_hash["input-1"][1:] == ("test-model", "classification_v1", "input-1", "output-1")
+    assert rows_by_input_hash[None][1:] == (None, None, None, None)
+
+
 def test_events_cursor_rejects_ticker_or_job_boundary(tmp_path):
     con = repository.connect(tmp_path / "db.sqlite")
     job = _job(con, status="running")

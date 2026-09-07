@@ -191,6 +191,43 @@ def test_statistics_keep_channels_separate_and_round_rates():
     assert result["events_presentations"]["per_month"] == 0.08
 
 
+def test_statistics_ignores_non_event_bearing_sources_in_source_list():
+    events = [
+        _stat_event("earnings", slug="press-earnings"),
+        _stat_event("non_earnings", source_type="events_presentations", slug="event-update"),
+    ]
+    sources = [
+        {"source_type": "ir_home", "extraction_status": "complete"},
+        {"source_type": "press_releases", "extraction_status": "complete"},
+        {"source_type": "earnings_results", "extraction_status": "unsupported"},
+        {"source_type": "events_presentations", "extraction_status": "complete"},
+    ]
+
+    result = calculate_statistics(events, sources, {"start": "2024-01-01", "end": "2024-12-31"})
+
+    assert result["press_releases"]["total"] == 1
+    assert result["events_presentations"]["total"] == 1
+    assert set(result) == {"press_releases", "events_presentations"}
+
+
+def test_statistics_rejects_unknown_source_type_even_with_ignored_sources():
+    with pytest.raises(ValueError, match="source type is invalid"):
+        calculate_statistics(
+            [],
+            [{"source_type": "ir_home", "extraction_status": "complete"}, {"source_type": "unknown", "extraction_status": "complete"}],
+            {"start": "2024-01-01", "end": "2024-12-31"},
+        )
+
+
+def test_statistics_rejects_duplicate_event_bearing_source_type():
+    with pytest.raises(ValueError, match="duplicate source press_releases"):
+        calculate_statistics(
+            [],
+            [{"source_type": "ir_home"}, {"source_type": "press_releases"}, {"source_type": "press_releases"}],
+            {"start": "2024-01-01", "end": "2024-12-31"},
+        )
+
+
 def test_partial_unknown_continuity_keeps_rates_null():
     result = calculate_statistics(
         [_stat_event("earnings")],

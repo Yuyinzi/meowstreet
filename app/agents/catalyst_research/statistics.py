@@ -6,6 +6,7 @@ from app.agents.catalyst_research.domain import canonicalize_public_url
 
 
 _CHANNELS = ("press_releases", "events_presentations")
+_SOURCE_TYPES = ("ir_home", "press_releases", "events_presentations", "earnings_results")
 _MONTHS_PER_QUARTER = 3
 _MONTHS_PER_YEAR = 12
 _DAYS_PER_MONTH = 30.4375
@@ -39,7 +40,7 @@ def _source_for_type(sources, source_type):
         return None
     if any(not isinstance(source, Mapping) for source in sources):
         raise ValueError("source is invalid")
-    if any(source.get("source_type") not in _CHANNELS for source in sources):
+    if any(source.get("source_type") not in _SOURCE_TYPES for source in sources):
         raise ValueError("source type is invalid")
     matching = [source for source in sources if source.get("source_type") == source_type]
     if len(matching) > 1:
@@ -149,7 +150,7 @@ def calculate_statistics(events, sources, requested_window) -> dict:
     if isinstance(sources, dict):
         source_rows = []
         for source_type, source in sources.items():
-            if source_type not in _CHANNELS:
+            if source_type not in _SOURCE_TYPES:
                 raise ValueError("source type is invalid")
             if not isinstance(source, Mapping):
                 raise ValueError("source is invalid")
