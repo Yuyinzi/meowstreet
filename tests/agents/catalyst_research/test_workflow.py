@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -683,8 +684,10 @@ def test_hot_workflow_reuses_active_adapters_without_discovery_or_generation(tmp
         "https://ir.acme.example/news?page=2": FIXTURES / "press_releases_page_2.html",
         "https://ir.acme.example/events": FIXTURES / "events_page.html",
     }
+    fetch_urls = []
 
     def fetch(url, **kwargs):
+        fetch_urls.append(url)
         path = pages[url]
         html = path.read_text()
         return {"requested_url": url, "final_url": url, "redirect_chain": [url], "content_type": "text/html", "response_bytes": len(html.encode()), "truncated": False, "html": html}
@@ -709,6 +712,7 @@ def test_hot_workflow_reuses_active_adapters_without_discovery_or_generation(tmp
     cold = asyncio.run(run_research(request, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
     assert cold["status"] == "completed"
     calls.clear()
+    fetch_urls.clear()
     dependencies["discover_sources"] = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("discovery should not run"))
     dependencies["generate_adapter"] = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("generation should not run"))
     hot = asyncio.run(run_research(request, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
@@ -719,6 +723,8 @@ def test_hot_workflow_reuses_active_adapters_without_discovery_or_generation(tmp
     assert hot["call_counts"]["event_extraction"] == 0
     assert {source["adapter_version"] for source in hot["sources"]} == {1}
     assert all(source["content_hash"] for source in hot["sources"])
+    assert all(source["snapshot_hash"] for source in hot["sources"])
+    assert all(fetch_urls.count(url) == 1 for url in pages)
     pages["https://ir.acme.example/news"] = FIXTURES / "press_releases_appended.html"
     appended = asyncio.run(run_research(request, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
     assert appended["status"] == "completed"
@@ -732,6 +738,12 @@ def test_hot_workflow_reuses_active_adapters_without_discovery_or_generation(tmp
         provenance = connection.execute("select adapter_id, adapter_version, executor_version, content_hash from catalyst_ir_events where job_id = ?", (appended["job_id"],)).fetchall()
         assert len(provenance) == appended["observation_count"]
         assert all(row[0] and row[1] == 1 and row[2] and row[3] for row in provenance)
+        runtime = connection.execute("select page_content_hashes_json, report_json from catalyst_adapter_validations where job_id = ? order by rowid desc limit 2", (appended["job_id"],)).fetchall()
+        hashes = {value for row in runtime for value in __import__("json").loads(row[0])}
+        assert hashes
+        assert all(connection.execute("select 1 from catalyst_source_snapshots where content_hash = ?", (value,)).fetchone() for value in hashes)
+        assert all("html" not in row[1] and "raw_html" not in row[1] and "structural_html" not in row[1] for row in runtime)
+        assert repository.prune_unreferenced_snapshots(connection) == 0
     finally:
         connection.close()
 
@@ -779,7 +791,7 @@ def test_real_sqlite_drift_requires_discovery_and_preserves_prior_result_on_repl
     repository.start_job(connection, prior["job_id"], "2026-09-04T00:01:00+00:00")
     adapters = {}
     for source_type, url in (("press_releases", "https://ir.acme.example/news"), ("events_presentations", "https://ir.acme.example/events")):
-        candidate = repository.create_adapter_candidate(connection, {"job_id": prior["job_id"], "ticker": "ACME", "source_type": source_type, "source_url": url, "adapter": {"source_type": source_type}})
+        candidate = repository.create_adapter_candidate(connection, {"job_id": prior["job_id"], "ticker": "ACME", "source_type": source_type, "source_url": url, "adapter": {"source_type": source_type, "source_url": url, "allowed_hosts": ["ir.acme.example"]}})
         repository.record_adapter_validation(connection, {"adapter_id": candidate["adapter_id"], "job_id": prior["job_id"], "status": "passed", "report": {}})
         repository.activate_adapter(connection, candidate["adapter_id"], "2026-09-04T01:00:00+00:00")
         adapters[source_type] = candidate
@@ -811,8 +823,12 @@ def test_real_sqlite_drift_requires_discovery_and_preserves_prior_result_on_repl
     def validate_active(adapter, **kwargs):
         source_type = adapter["source_type"]
         if source_type == "press_releases":
-            return {"status": "stale", "observations": [], "promotable_observations": [], "errors": ["selector drift"], "report": {"safety_failures": ["selector drift"], "page_content_hashes": ["broken-page"]}, "page_content_hashes": ["broken-page"], "validator_version": "validator-v1", "executor_version": "executor-v1"}
-        return {"status": "passed", "promotable_observations": [{"source_type": source_type, "title": "Healthy event", "count_date": "2025-07-01", "event_date": "2025-07-01", "url": "https://ir.acme.example/events/healthy"}], "execution": {"observations": [{"source_type": source_type, "title": "Healthy event", "count_date": "2025-07-01", "event_date": "2025-07-01", "url": "https://ir.acme.example/events/healthy"}], "boundary_reached": True, "page_count": 1, "item_count": 1, "content_hashes": ["healthy-page"]}, "report": {"page_content_hashes": ["healthy-page"]}, "page_content_hashes": ["healthy-page"], "validator_version": "validator-v1", "executor_version": "executor-v1"}
+            page = kwargs["fetch_page"](adapter["source_url"])
+            page_hash = hashlib.sha256(page["html"].encode()).hexdigest()
+            return {"status": "stale", "observations": [], "promotable_observations": [], "errors": ["selector drift"], "report": {"safety_failures": ["selector drift"], "page_content_hashes": [page_hash]}, "page_content_hashes": [page_hash], "validator_version": "validator-v1", "executor_version": "executor-v1"}
+        page = kwargs["fetch_page"](adapter["source_url"])
+        page_hash = hashlib.sha256(page["html"].encode()).hexdigest()
+        return {"status": "passed", "promotable_observations": [{"source_type": source_type, "title": "Healthy event", "count_date": "2025-07-01", "event_date": "2025-07-01", "url": "https://ir.acme.example/events/healthy"}], "execution": {"observations": [{"source_type": source_type, "title": "Healthy event", "count_date": "2025-07-01", "event_date": "2025-07-01", "url": "https://ir.acme.example/events/healthy"}], "boundary_reached": True, "page_count": 1, "item_count": 1, "content_hashes": [page_hash]}, "report": {"page_content_hashes": [page_hash]}, "page_content_hashes": [page_hash], "validator_version": "validator-v1", "executor_version": "executor-v1"}
 
     async def generate(company, source, snapshot, **kwargs):
         return {"adapter": {"source_type": source["source_type"]}}
@@ -841,6 +857,8 @@ def test_real_sqlite_drift_requires_discovery_and_preserves_prior_result_on_repl
         assert latest["latest_job_status"] == "completed_partial"
         assert connection.execute("select state from catalyst_source_adapters where adapter_id = ?", (adapters["press_releases"]["adapter_id"],)).fetchone()[0] == "stale"
         assert connection.execute("select state from catalyst_source_adapters where adapter_id = ?", (adapters["events_presentations"]["adapter_id"],)).fetchone()[0] == "active"
+        stale_source = connection.execute("select snapshot_hash from catalyst_ir_sources where job_id = ? and source_type = 'press_releases' and extraction_status = 'discovery_required'", (result["job_id"],)).fetchone()
+        assert stale_source and connection.execute("select 1 from catalyst_source_snapshots where content_hash = ?", (stale_source[0],)).fetchone()
         assert connection.execute("select extraction_status from catalyst_ir_sources where job_id = ? and source_type = 'press_releases' order by rowid desc limit 1", (result["job_id"],)).fetchone()[0] == "failed"
         assert connection.execute("select count(*) from catalyst_ir_events where job_id = ?", (prior["job_id"],)).fetchone()[0] == 2
         assert connection.execute("select status from catalyst_adapter_validations where adapter_id = ? order by rowid desc limit 1", (adapters["press_releases"]["adapter_id"],)).fetchone()[0] == "failed"

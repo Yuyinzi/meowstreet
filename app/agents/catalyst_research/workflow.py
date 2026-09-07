@@ -570,7 +570,7 @@ async def _run_channel(context, company, source_type, pair):
         return {"source_type": source_type, "status": "partial", "events": [], "source": saved, "error": _sanitized_error(exc)}
 
 
-def _bound_adapter_fetch(context, adapter):
+def _bound_adapter_fetch(context, adapter, *, capture_snapshots=None):
     allowed_hosts = list(adapter.get("allowed_hosts", []))
 
     def fetch(url, **kwargs):
@@ -578,7 +578,33 @@ def _bound_adapter_fetch(context, adapter):
         fetch_kwargs["allowed_hosts"] = allowed_hosts
         if context.get("url_resolver") is not None:
             fetch_kwargs["resolver"] = context["url_resolver"]
-        return _invoke_sync(context["fetch_page"], url, **fetch_kwargs)
+        page = _invoke_sync(context["fetch_page"], url, **fetch_kwargs)
+        if capture_snapshots is None:
+            return page
+        if not isinstance(page, Mapping):
+            raise ValueError("fetched page is invalid")
+        html = page.get("html")
+        if not isinstance(html, str):
+            raise ValueError("fetched page html is invalid")
+        source = {"source_type": adapter.get("source_type"), "url": adapter.get("source_url") or url}
+        snapshot = _invoke_sync(context["build_snapshot"], page, source=source)
+        if not isinstance(snapshot, Mapping):
+            raise ValueError("source snapshot is invalid")
+        snapshot = dict(snapshot)
+        snapshot.setdefault("requested_url", page.get("requested_url") or url)
+        snapshot.setdefault("final_url", page.get("final_url") or url)
+        snapshot.setdefault("raw_html", html)
+        snapshot.setdefault("metadata", page.get("metadata") or {})
+        normalized = snapshot.get("normalized")
+        normalized = dict(normalized) if isinstance(normalized, Mapping) else {}
+        normalized.setdefault("metadata", snapshot["metadata"])
+        snapshot["normalized"] = normalized
+        snapshot.setdefault("response_bytes", page.get("response_bytes") or len(html.encode()))
+        snapshot.setdefault("content_type", page.get("content_type") or "text/html")
+        snapshot.setdefault("truncated", bool(page.get("truncated", False)))
+        content_hash = _repo_call(context, "save_snapshot", snapshot)
+        capture_snapshots.append({"requested_url": snapshot["requested_url"], "final_url": snapshot["final_url"], "content_hash": content_hash})
+        return page
 
     return fetch
 
@@ -613,7 +639,7 @@ def _hot_source(context, adapter_row, execution):
         "page_count": execution.get("page_count") or report.get("pagination", {}).get("pages", 0),
         "item_count": execution.get("item_count") if execution.get("item_count") is not None else len(observations),
         "content_hash": hashes[-1] if hashes else None,
-        "snapshot_hash": None,
+        "snapshot_hash": hashes[-1] if hashes else None,
         "truncation_reason": truncation_reason,
         "execution_path": "hot",
         "checked_at": _iso(context),
@@ -664,7 +690,7 @@ def _stale_source(context, adapter_row, validation):
         "page_count": report.get("pagination", {}).get("pages", 0),
         "item_count": 0,
         "content_hash": page_hashes[-1] if page_hashes else None,
-        "snapshot_hash": None,
+        "snapshot_hash": page_hashes[-1] if page_hashes else None,
         "execution_path": "hot",
         "checked_at": _iso(context),
     }
@@ -676,16 +702,33 @@ async def _run_hot_adapter(context, adapter_row):
         validation = {"status": "failed", "observations": [], "promotable_observations": [], "errors": ["active adapter is invalid"]}
         _record_runtime_validation(context, adapter_row, validation)
         return {"source_type": adapter_row.get("source_type"), "status": "stale", "events": [], "source": None, "validation": validation}
+    captured_snapshots = []
+    bound_fetch = _bound_adapter_fetch(context, adapter, capture_snapshots=captured_snapshots)
     try:
         validation = await _invoke(
             context["validate_active_adapter"],
             adapter,
-            fetch_page=_bound_adapter_fetch(context, adapter),
+            fetch_page=bound_fetch,
             requested_start=context["job"]["requested_start"],
             requested_end=context["job"]["requested_end"],
         )
     except Exception as exc:
         validation = {"status": "stale", "observations": [], "promotable_observations": [], "errors": [_sanitized_error(exc)]}
+    if isinstance(validation, Mapping):
+        report = validation.get("report") if isinstance(validation.get("report"), Mapping) else {}
+        execution = validation.get("execution") if isinstance(validation.get("execution"), Mapping) else {}
+        reported_hashes = list(validation.get("page_content_hashes") or report.get("page_content_hashes", []) or execution.get("content_hashes", []))
+        captured_hashes = [item["content_hash"] for item in captured_snapshots]
+        if reported_hashes and captured_hashes != reported_hashes:
+            validation = {
+                **validation,
+                "status": "stale",
+                "observations": [],
+                "promotable_observations": [],
+                "errors": ["runtime page hash mismatch"],
+                "report": {**report, "errors": ["runtime page hash mismatch"], "page_content_hashes": captured_hashes},
+                "page_content_hashes": captured_hashes,
+            }
     _record_runtime_validation(context, adapter_row, validation)
     if not isinstance(validation, Mapping) or validation.get("status") != "passed":
         return {"source_type": adapter_row.get("source_type"), "status": "stale", "events": [], "source": None, "validation": dict(validation or {})}
