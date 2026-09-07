@@ -864,3 +864,90 @@ def test_real_sqlite_drift_requires_discovery_and_preserves_prior_result_on_repl
         assert connection.execute("select status from catalyst_adapter_validations where adapter_id = ? order by rowid desc limit 1", (adapters["press_releases"]["adapter_id"],)).fetchone()[0] == "failed"
     finally:
         connection.close()
+
+
+def test_hot_workflow_with_real_snapshot_builder_reuses_active_adapters(tmp_path):
+    from app.agents.catalyst_research.adapters.executor import execute_adapter
+    from app.agents.catalyst_research.adapters.validator import validate_active_adapter
+    from app.agents.catalyst_research.extraction.html import build_structural_snapshot
+    from app.agents.catalyst_research.persistence import repository
+
+    db_path = tmp_path / "hot_real.sqlite"
+    press_adapter = {
+        "schema_version": "ir_source_adapter_v1", "ticker": "ACME", "source_type": "press_releases",
+        "source_url": "https://ir.acme.example/news", "allowed_hosts": ["ir.acme.example"], "access_mode": "html",
+        "extraction": {"item_selector": ".news-item", "date": {"selector": "time", "value_source": "text", "formats": ["%B %d, %Y"]}, "title": {"selector": ".news-title", "value_source": "text"}, "url": {"selector": ".news-title", "value_source": "attribute", "attribute": "href"}},
+        "pagination": {"type": "next_link", "selector": "a.next"},
+    }
+    events_adapter = {
+        "schema_version": "ir_source_adapter_v1", "ticker": "ACME", "source_type": "events_presentations",
+        "source_url": "https://ir.acme.example/events", "allowed_hosts": ["ir.acme.example"], "access_mode": "html",
+        "extraction": {"item_selector": ".event-item", "date": {"selector": "[data-date]", "value_source": "attribute", "attribute": "data-date", "formats": ["%Y-%m-%d"]}, "title": {"selector": ".event-title", "value_source": "text"}},
+        "pagination": {"type": "none"},
+    }
+    connection = repository.connect(db_path)
+    seed_job = repository.create_job(connection, {"ticker": "ACME", "years": 1}, {"name": "Acme Corporation", "cik": 123}, datetime(2026, 9, 4, tzinfo=UTC))
+    repository.start_job(connection, seed_job["job_id"], "2026-09-04T00:01:00+00:00")
+    for adapter in (press_adapter, events_adapter):
+        candidate = repository.create_adapter_candidate(connection, {"job_id": seed_job["job_id"], "ticker": "ACME", "source_type": adapter["source_type"], "source_url": adapter["source_url"], "adapter": adapter})
+        repository.record_adapter_validation(connection, {"adapter_id": candidate["adapter_id"], "job_id": seed_job["job_id"], "status": "passed", "report": {}})
+        repository.activate_adapter(connection, candidate["adapter_id"], "2026-09-04T01:00:00+00:00")
+    connection.close()
+
+    pages = {
+        "https://ir.acme.example/news": FIXTURES / "press_releases_page_1.html",
+        "https://ir.acme.example/news?page=2": FIXTURES / "press_releases_page_2.html",
+        "https://ir.acme.example/events": FIXTURES / "events_page.html",
+    }
+
+    def fetch(url, **kwargs):
+        html = pages[url].read_text()
+        return {"requested_url": url, "final_url": url, "redirect_chain": [url], "content_type": "text/html", "response_bytes": len(html.encode()), "truncated": False, "html": html}
+
+    async def resolve(request, **kwargs):
+        return {"ticker": "ACME", "company_name": "Acme Corporation", "cik": 123}
+
+    async def discover(*args, **kwargs):
+        raise AssertionError("discovery should not run")
+
+    async def generate(*args, **kwargs):
+        raise AssertionError("generation should not run")
+
+    async def classify(events, **kwargs):
+        return {"events": [{**event, "earnings_state": "non_earnings", "classification_method": "rule_v1"} for event in events], "llm_call_count": 0}
+
+    def stats(events, sources, requested_window):
+        return {"total": len(events)}
+
+    dependencies = {
+        "repository": repository, "llm_client": object(), "models": {"adapter_generation": "adapter-model"},
+        "resolver": resolve, "discover_sources": discover, "generate_adapter": generate,
+        "fetch_page": fetch, "build_snapshot": build_structural_snapshot,
+        "validate_active_adapter": validate_active_adapter, "execute_adapter": execute_adapter,
+        "classify_observations": classify, "calculate_statistics": stats,
+    }
+    request = {"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}
+    hot = asyncio.run(run_research(request, db_path=db_path, dependencies=dependencies))
+    assert hot["status"] == "completed"
+    assert all(source["execution_path"] == "hot" for source in hot["sources"])
+    assert hot["call_counts"]["discovery"] == 0
+    assert hot["call_counts"]["adapter_generation"] == 0
+    assert hot["call_counts"]["event_extraction"] == 0
+
+    pages["https://ir.acme.example/news"] = FIXTURES / "press_releases_appended.html"
+    appended = asyncio.run(run_research(request, db_path=db_path, dependencies=dependencies))
+    assert appended["status"] == "completed"
+    assert appended["observation_count"] == hot["observation_count"] + 1
+    assert all(source["execution_path"] == "hot" for source in appended["sources"])
+    assert appended["call_counts"]["discovery"] == 0
+    assert appended["call_counts"]["adapter_generation"] == 0
+    assert appended["call_counts"]["event_extraction"] == 0
+
+    appended_hash = hashlib.sha256((FIXTURES / "press_releases_appended.html").read_text().encode()).hexdigest()
+    connection = repository.connect(db_path)
+    try:
+        assert connection.execute("select 1 from catalyst_source_snapshots where content_hash = ?", (appended_hash,)).fetchone()
+        states = [row[0] for row in connection.execute("select state from catalyst_source_adapters where ticker = 'ACME'").fetchall()]
+        assert states == ["active", "active"]
+    finally:
+        connection.close()

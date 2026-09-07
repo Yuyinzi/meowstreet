@@ -147,6 +147,26 @@ def test_active_validation_exposes_single_execution_for_hot_path_reuse():
     assert "pages" in result["execution"]
 
 
+def test_active_validation_limit_exhaustion_returns_partial_execution_not_stale():
+    page = (FIXTURES / "press_releases_page_1.html").read_text()
+
+    def fetch(url):
+        return _page(url, page)
+
+    result = validate_active_adapter(
+        adapter({"type": "next_link", "selector": "a.next"}),
+        fetch_page=fetch,
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+        limits={"max_pages": 1},
+    )
+
+    assert result["status"] == "passed"
+    assert result["execution"]["truncation_reason"] == "max_pages"
+    assert result["report"]["limit_checks"]["within_bounds"] is False
+    assert result["promotable_observations"]
+
+
 def _page(url, html, *, truncated=False, redirect_chain=None, content_type="text/html", response_bytes=None):
     return {
         "requested_url": url,

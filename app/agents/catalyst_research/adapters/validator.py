@@ -432,14 +432,12 @@ def validate_active_adapter(adapter, *, fetch_page, requested_start, requested_e
             raise ValueError("pagination loop detected")
         if not report["pagination"].get("distinct_observations", True):
             raise ValueError("pagination produced no distinct observations")
-        if not report["limit_checks"]["within_bounds"]:
-            raise ValueError("executor limits were reached")
         status = "passed"
         observations = result.get("observations", [])
         errors = []
     except Exception as exc:
         report = getattr(exc, "report", None) or report or _report()
-        report["safety_failures"] = [_error(exc)]
+        report["safety_failures"] = [*(report.get("safety_failures") or []), _error(exc)]
         report["pagination"]["type"] = adapter.pagination.type
         status = "stale"
         observations = []

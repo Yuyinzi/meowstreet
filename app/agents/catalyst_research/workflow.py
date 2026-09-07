@@ -593,7 +593,9 @@ def _bound_adapter_fetch(context, adapter, *, capture_snapshots=None):
         snapshot = dict(snapshot)
         snapshot.setdefault("requested_url", page.get("requested_url") or url)
         snapshot.setdefault("final_url", page.get("final_url") or url)
-        snapshot.setdefault("raw_html", html)
+        if "raw_html" not in snapshot:
+            snapshot["raw_html"] = html
+            snapshot.pop("content_hash", None)
         snapshot.setdefault("metadata", page.get("metadata") or {})
         normalized = snapshot.get("normalized")
         normalized = dict(normalized) if isinstance(normalized, Mapping) else {}
@@ -650,6 +652,8 @@ def _hot_source(context, adapter_row, execution):
 def _record_runtime_validation(context, adapter_row, validation):
     record = getattr(context["repository"], "record_runtime_adapter_validation", None)
     if not callable(record):
+        return
+    if not adapter_row.get("adapter_id"):
         return
     report = validation.get("report") if isinstance(validation, Mapping) else {}
     report = report if isinstance(report, Mapping) else {}
