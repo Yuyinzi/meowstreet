@@ -5,7 +5,7 @@ import pytest
 
 from app.agents.catalyst_research.providers.base import SearchProviderError
 from app.agents.catalyst_research.providers.router import SearchRouter
-from app.agents.catalyst_research.domain import discover_sources
+from app.agents.catalyst_research.domain import MAX_ALTERNATE_SOURCES_PER_TYPE, _shape_source_candidates, discover_sources
 from app.agents.catalyst_research.persistence import repository as catalyst_repository
 
 
@@ -47,6 +47,30 @@ def test_provider_chain_respects_auto_order_and_process_disablement():
 def test_router_rejects_unknown_configuration(config):
     with pytest.raises(ValueError):
         SearchRouter(config, [FakeProvider("ddgs")])
+
+
+def test_alternate_sources_are_stably_capped_per_source_type_without_losing_primary_evidence():
+    candidates = [
+        {"source_type": "press_releases", "url": f"https://acme.example/news-{index}", "discovery_provider": "ddgs", "provider_rank": index, "evidence_result_ids": [index], "provider_provenance": []}
+        for index in range(5)
+    ]
+    candidates.append({"source_type": "press_releases", "url": "https://acme.example/news-0", "discovery_provider": "ddgs", "provider_rank": 1, "evidence_result_ids": [99], "provider_provenance": []})
+    primaries, alternates = _shape_source_candidates(candidates, SearchRouter({"provider": "ddgs", "fallback": "none"}, [FakeProvider("ddgs")]))
+
+    assert MAX_ALTERNATE_SOURCES_PER_TYPE == 2
+    assert primaries[0]["url"] == "https://acme.example/news-0"
+    assert primaries[0]["evidence_result_ids"] == [0, 99]
+    assert len(alternates) == MAX_ALTERNATE_SOURCES_PER_TYPE
+    assert [row["url"] for row in alternates] == ["https://acme.example/news-1", "https://acme.example/news-2"]
+
+
+def test_discovery_reports_deferred_same_site_capability_and_bounds_attempts():
+    providers = [FakeProvider(name) for name in ("tavily", "native_search", "ddgs")]
+    result = asyncio.run(discover_sources({"ticker": "ACM", "company_name": "Acme"}, router=SearchRouter({"provider": "auto", "fallback": "auto"}, providers), llm_client=None, model=None, repository=FakeRepository(), job_id="job-deferred"))
+
+    assert result["deferred_capabilities"] == ["same_site_traversal_from_trusted_snapshot"]
+    assert len(result["provider_provenance"]) <= 12
+    assert all(len(provider.calls) <= 4 for provider in providers)
 
 
 @pytest.mark.parametrize(

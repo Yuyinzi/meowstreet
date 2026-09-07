@@ -382,6 +382,8 @@ def merge_classifications(events, model_payload=None) -> list[dict]:
 
 
 _DISCOVERY_SOURCE_TYPES = ("ir_home", "press_releases", "events_presentations", "earnings_results")
+MAX_ALTERNATE_SOURCES_PER_TYPE = 2
+DEFERRED_DISCOVERY_CAPABILITIES = ("same_site_traversal_from_trusted_snapshot",)
 _DISCOVERY_QUERY_LABELS = {
     "ir_home": "investor relations",
     "press_releases": "investor relations press releases news",
@@ -678,8 +680,15 @@ def _merge_source_candidates(existing: dict, incoming: dict) -> dict:
 def _shape_source_candidates(candidates: list[dict], router) -> tuple[list[dict], list[dict]]:
     names = router.provider_order() if hasattr(router, "provider_order") else ("tavily", "native_search", "ddgs")
     provider_order = {name: index for index, name in enumerate(names)}
+    deduped = {}
+    for candidate in candidates:
+        key = (candidate.get("source_type"), candidate.get("url"))
+        if key in deduped:
+            deduped[key].update(_merge_source_candidates(deduped[key], candidate))
+        else:
+            deduped[key] = dict(candidate)
     grouped = {}
-    for index, candidate in enumerate(candidates):
+    for index, candidate in enumerate(deduped.values()):
         source_type = candidate.get("source_type")
         grouped.setdefault(source_type, []).append((index, candidate))
     primaries = []
@@ -695,7 +704,7 @@ def _shape_source_candidates(candidates: list[dict], router) -> tuple[list[dict]
         )
         if rows:
             primaries.append(rows[0][1])
-            alternates.extend(item[1] for item in rows[1:])
+            alternates.extend(item[1] for item in rows[1 : MAX_ALTERNATE_SOURCES_PER_TYPE + 1])
     return primaries, alternates
 
 
@@ -723,7 +732,6 @@ async def _discover_sources_impl(
             warnings.append(f"{provider_name} is not configured or capability-ready")
     selected_types = {item["source_type"] for item in discovered if item["status"] != "rejected"}
     result_counter = 0
-    attempt_counter = 0
     provider_provenance = []
     query_specs = _discovery_queries(company, set(_DISCOVERY_SOURCE_TYPES) - selected_types)
     for query_spec in query_specs:
@@ -731,7 +739,6 @@ async def _discover_sources_impl(
             continue
         accepted_for_query = False
         for provider in router.provider_chain():
-            attempt_counter += 1
             started_at = datetime.now(UTC).isoformat()
             outcome = "provider_error"
             diagnostics = {}
@@ -917,6 +924,7 @@ async def _discover_sources_impl(
         "status": status,
         "sources": primary_sources,
         "alternate_sources": alternate_sources,
+        "deferred_capabilities": list(DEFERRED_DISCOVERY_CAPABILITIES),
         "provider_provenance": provider_provenance,
         "warnings": list(dict.fromkeys(warnings)),
         "next_actions": list(dict.fromkeys(next_actions)),
