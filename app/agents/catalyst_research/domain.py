@@ -1,5 +1,7 @@
 import calendar
+import hashlib
 import ipaddress
+import json
 import re
 import socket
 from collections.abc import Mapping
@@ -8,7 +10,10 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from app.agents.catalyst_research.providers.base import SearchProviderError
 from app.agents.catalyst_research.providers.base import VALID_REASON_CODES
+from app.agents.catalyst_research.config import PROMPT_VERSIONS
+from app.agents.catalyst_research.prompts import classification_prompt
 from app.agents.catalyst_research.prompts import source_selection_prompt
+from app.agents.catalyst_research.schemas import EventClassificationResponse
 from app.agents.catalyst_research.schemas import SourceSelectionResponse
 
 
@@ -335,7 +340,26 @@ def merge_classifications(events, model_payload=None) -> list[dict]:
             continue
         event_ids.add(identifier)
         identifiers.append(identifier)
-    unknown_model_id = any(identifier not in event_ids for identifier in by_id)
+    integer_event_ids = all(isinstance(identifier, int) and not isinstance(identifier, bool) for identifier in identifiers)
+    rule_ids = {
+        identifier
+        for identifier, event in zip(identifiers, events)
+        if identifier is not None and classify_title_by_rule(event.get("title", ""), event.get("source_type"))
+    }
+    if integer_event_ids:
+        expected_model_ids = event_ids - rule_ids
+    else:
+        rule_positions = {
+            position
+            for position, (identifier, event) in enumerate(zip(identifiers, events), 1)
+            if identifier is not None and classify_title_by_rule(event.get("title", ""), event.get("source_type"))
+        }
+        expected_model_ids = set(range(1, len(events) + 1)) - rule_positions
+    unknown_model_id = any(identifier not in expected_model_ids for identifier in by_id)
+    model_ids = set(by_id)
+    incomplete_model_output = model_attempted and (
+        malformed or unknown_model_id or duplicate_ids or model_ids != expected_model_ids
+    )
     output = []
     for position, event in enumerate(events, 1):
         if not isinstance(event, Mapping):
@@ -347,14 +371,14 @@ def merge_classifications(events, model_payload=None) -> list[dict]:
         state = rule_state
         method = "rule_v1" if rule_state else None
         reason = None
-        if len(matched) != 1 or identifier in duplicate_ids:
+        if incomplete_model_output and not rule_state:
+            state = "ambiguous"
+            method = "llm_v1"
+        elif len(matched) != 1 or identifier in duplicate_ids:
             state = rule_state or "ambiguous"
             if matched and rule_state:
                 state = "ambiguous"
             method = "llm_v1" if model_attempted and matched else method
-        elif (malformed or unknown_model_id) and not rule_state:
-            state = "ambiguous"
-            method = "llm_v1"
         else:
             model_state = matched[0].get("earnings_state")
             if model_state not in {"earnings", "non_earnings", "ambiguous"}:
@@ -379,6 +403,120 @@ def merge_classifications(events, model_payload=None) -> list[dict]:
             item["classification_reason"] = _fold_whitespace(reason)
         output.append(item)
     return output
+
+
+def _classification_event_key(event):
+    return (
+        str(event.get("source_type") or ""),
+        str(event.get("count_date") or event.get("event_date") or event.get("published_date") or ""),
+        _fold_whitespace(event.get("title", "")).casefold(),
+        str(event.get("canonical_url") or event.get("url") or ""),
+        str(event.get("published_date") or ""),
+        str(event.get("event_date") or ""),
+    )
+
+
+def _classification_input(events):
+    return [
+        {"id": event["id"], "source_type": event["source_type"], "title": event["title"]}
+        for event in events
+    ]
+
+
+def _hash_payload(value):
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _response_payload(response):
+    parsed = getattr(response, "output_parsed", None)
+    if parsed is None:
+        payload = None
+    else:
+        candidate = parsed.model_dump(mode="json") if hasattr(parsed, "model_dump") else parsed
+        payload = EventClassificationResponse.model_validate(candidate).model_dump(mode="json")
+    output_text = getattr(response, "output_text", None)
+    return payload, output_text
+
+
+async def classify_observations(events, *, llm_client=None, model=None, batch_size=50) -> dict:
+    if not isinstance(events, list):
+        raise ValueError("events are required")
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or not 1 <= batch_size <= 50:
+        raise ValueError("batch size must be between 1 and 50")
+    prepared = []
+    for event in events:
+        if not isinstance(event, Mapping):
+            raise ValueError("event is invalid")
+        item = dict(event)
+        if not _fold_whitespace(item.get("title")):
+            raise ValueError("event title is required")
+        _source_type(item.get("source_type"))
+        prepared.append(item)
+    prepared.sort(key=_classification_event_key)
+    used_ids = {item.get("id") for item in prepared if isinstance(item.get("id"), int) and not isinstance(item.get("id"), bool)}
+    next_id = 1
+    for item in prepared:
+        identifier = item.get("id")
+        if not isinstance(identifier, int) or isinstance(identifier, bool) or identifier < 1:
+            while next_id in used_ids:
+                next_id += 1
+            item["id"] = next_id
+            used_ids.add(next_id)
+            next_id += 1
+
+    duplicate_ids = {item["id"] for item in prepared if sum(other["id"] == item["id"] for other in prepared) > 1}
+    classified = []
+    unresolved = []
+    for item in prepared:
+        rule_state = classify_title_by_rule(item["title"], item["source_type"])
+        if item["id"] in duplicate_ids:
+            item["earnings_state"] = "ambiguous"
+            item["classification_method"] = "manual"
+            classified.append(item)
+        elif rule_state:
+            item["earnings_state"] = rule_state
+            item["classification_method"] = "rule_v1"
+            classified.append(item)
+        else:
+            unresolved.append(item)
+
+    llm_call_count = 0
+    provenance = []
+    for start in range(0, len(unresolved), batch_size):
+        batch = unresolved[start : start + batch_size]
+        bounded = _classification_input(batch)
+        prompt = classification_prompt(bounded)
+        input_hash = _hash_payload(prompt)
+        payload = None
+        output_hash = None
+        attempted = llm_client is not None and bool(model)
+        if attempted:
+            llm_call_count += 1
+            try:
+                response = await llm_client.responses.parse(
+                    model=model,
+                    input=prompt,
+                    text_format=EventClassificationResponse,
+                )
+                payload, output_text = _response_payload(response)
+                output_hash = _hash_payload(output_text if output_text is not None else payload)
+            except Exception:
+                payload = None
+            provenance.append(
+                {
+                    "method": "llm_v1",
+                    "model": model,
+                    "prompt_schema_version": PROMPT_VERSIONS["classification"],
+                    "input_hash": input_hash,
+                    "output_hash": output_hash,
+                }
+            )
+        merge_payload = payload if payload is not None else {"classifications": []} if attempted else None
+        merged = merge_classifications(batch, merge_payload)
+        classified.extend(merged)
+    classified.sort(key=lambda item: item["id"])
+    return {"events": classified, "llm_call_count": llm_call_count, "provenance": provenance}
 
 
 _DISCOVERY_SOURCE_TYPES = ("ir_home", "press_releases", "events_presentations", "earnings_results")

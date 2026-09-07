@@ -7,6 +7,7 @@ from app.agents.catalyst_research.domain import (
     _discovery_queries,
     canonicalize_public_url,
     classify_title_by_rule,
+    classify_observations,
     merge_classifications,
     normalize_observations,
     normalize_request,
