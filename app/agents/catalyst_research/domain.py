@@ -340,6 +340,11 @@ def merge_classifications(events, model_payload=None) -> list[dict]:
             continue
         event_ids.add(identifier)
         identifiers.append(identifier)
+    duplicate_event_ids = {
+        identifier
+        for identifier in identifiers
+        if identifier is not None and sum(other == identifier for other in identifiers) > 1
+    }
     integer_event_ids = all(isinstance(identifier, int) and not isinstance(identifier, bool) for identifier in identifiers)
     rule_ids = {
         identifier
@@ -371,7 +376,10 @@ def merge_classifications(events, model_payload=None) -> list[dict]:
         state = rule_state
         method = "rule_v1" if rule_state else None
         reason = None
-        if incomplete_model_output and not rule_state:
+        if identifier in duplicate_event_ids and not rule_state:
+            state = "ambiguous"
+            method = "llm_v1" if model_attempted else "manual"
+        elif incomplete_model_output and not rule_state:
             state = "ambiguous"
             method = "llm_v1"
         elif len(matched) != 1 or identifier in duplicate_ids:

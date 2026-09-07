@@ -354,6 +354,20 @@ def test_merge_classifications_handles_unhashable_event_ids_as_ambiguous():
     assert result[0]["earnings_state"] == "ambiguous"
 
 
+def test_merge_classifications_handles_duplicate_event_ids_as_ambiguous():
+    events = [
+        {"id": 1, "title": "New product launch", "source_type": "press_releases"},
+        {"id": 1, "title": "Business update", "source_type": "press_releases"},
+    ]
+
+    result = merge_classifications(
+        events,
+        {"classifications": [{"id": 1, "earnings_state": "non_earnings", "reason": "one"}]},
+    )
+
+    assert [item["earnings_state"] for item in result] == ["ambiguous", "ambiguous"]
+
+
 def test_domain_public_functions_advertise_return_types():
     assert normalize_request.__annotations__["return"] is dict
     assert normalize_observations.__annotations__["return"] is dict
