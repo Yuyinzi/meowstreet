@@ -4,6 +4,7 @@ from datetime import date
 import pytest
 
 from app.agents.catalyst_research.domain import (
+    _discovery_queries,
     canonicalize_public_url,
     classify_title_by_rule,
     merge_classifications,
@@ -12,6 +13,19 @@ from app.agents.catalyst_research.domain import (
     url_host,
     validate_redirect_chain,
 )
+
+
+def test_discovery_queries_are_bounded_and_cover_each_source_target():
+    queries = _discovery_queries({"ticker": "NVDA", "company_name": "NVIDIA Corporation"})
+
+    assert [item["source_type"] for item in queries] == [
+        "ir_home",
+        "press_releases",
+        "events_presentations",
+        "earnings_results",
+    ]
+    assert all(0 < len(item["query"]) <= 240 for item in queries)
+    assert all("NVIDIA Corporation" in item["query"] for item in queries)
 
 
 @pytest.mark.parametrize("ticker, expected", [(" nvda ", "NVDA"), ("aapl", "AAPL")])

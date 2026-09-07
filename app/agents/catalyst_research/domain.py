@@ -6,6 +6,11 @@ from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
+from app.agents.catalyst_research.providers.base import SearchProviderError
+from app.agents.catalyst_research.providers.base import VALID_REASON_CODES
+from app.agents.catalyst_research.prompts import source_selection_prompt
+from app.agents.catalyst_research.schemas import SourceSelectionResponse
+
 
 _SOURCE_TYPES = {"press_releases", "events_presentations"}
 _URL_SCHEMES = {"http", "https"}
@@ -374,3 +379,431 @@ def merge_classifications(events, model_payload=None) -> list[dict]:
             item["classification_reason"] = _fold_whitespace(reason)
         output.append(item)
     return output
+
+
+_DISCOVERY_SOURCE_TYPES = ("ir_home", "press_releases", "events_presentations", "earnings_results")
+_DISCOVERY_QUERY_LABELS = {
+    "ir_home": "investor relations",
+    "press_releases": "investor relations press releases news",
+    "events_presentations": "investor relations events presentations",
+    "earnings_results": "investor relations quarterly earnings financial results",
+}
+_THIRD_PARTY_HOST_MARKERS = (
+    "bloomberg.",
+    "businesswire.",
+    "facebook.",
+    "globenewswire.",
+    "linkedin.",
+    "marketwatch.",
+    "prnewswire.",
+    "reuters.",
+    "seekingalpha.",
+    "stockanalysis.",
+    "yahoo.",
+)
+_COMMON_IDENTITY_WORDS = {
+    "and",
+    "company",
+    "corp",
+    "corporation",
+    "inc",
+    "incorporated",
+    "international",
+    "limited",
+    "ltd",
+    "plc",
+    "the",
+}
+
+
+def _discovery_queries(company: Mapping, source_types: set[str] | None = None) -> list[dict]:
+    name = _fold_whitespace(company.get("company_name") or company.get("name") or "")
+    ticker = _fold_whitespace(company.get("ticker") or "").upper()
+    identity = name or ticker
+    if not identity:
+        raise ValueError("company identity is required")
+    requested = set(source_types or _DISCOVERY_SOURCE_TYPES)
+    return [
+        {
+            "source_type": source_type,
+            "query": f"{identity} {ticker} {_DISCOVERY_QUERY_LABELS[source_type]}".strip()[:240],
+        }
+        for source_type in _DISCOVERY_SOURCE_TYPES
+        if source_type in requested
+    ]
+
+
+def _repository_call(repository, method_name, *args, connection=None):
+    method = getattr(repository, method_name, None)
+    if method is None:
+        raise ValueError(f"repository method {method_name} is unavailable")
+    try:
+        import inspect
+
+        parameters = list(inspect.signature(method).parameters.values())
+    except (TypeError, ValueError):
+        parameters = []
+    first = parameters[0].name if parameters else ""
+    if first in {"con", "connection"}:
+        return method(connection, *args)
+    return method(*args)
+
+
+def _identity_tokens(company: Mapping) -> set[str]:
+    name = _fold_whitespace(company.get("company_name") or company.get("name") or "")
+    ticker = _fold_whitespace(company.get("ticker") or "").casefold()
+    words = {
+        token.casefold()
+        for token in re.findall(r"[A-Za-z0-9]+", name)
+        if token.casefold() not in _COMMON_IDENTITY_WORDS and len(token) >= 3
+    }
+    if ticker:
+        words.add(ticker)
+    return words
+
+
+def _has_identity_evidence(company: Mapping, result: Mapping) -> bool:
+    haystack = " ".join(
+        str(result.get(key) or "") for key in ("title", "snippet", "text", "description")
+    ).casefold()
+    tokens = _identity_tokens(company)
+    return bool(tokens and any(re.search(rf"\b{re.escape(token)}\b", haystack) for token in tokens))
+
+
+def _has_source_purpose(source_type: str, result: Mapping) -> bool:
+    haystack = " ".join(
+        str(result.get(key) or "") for key in ("title", "snippet", "text", "description")
+    ).casefold()
+    terms = {
+        "ir_home": ("investor relations", "investors", "shareholders"),
+        "press_releases": ("press release", "press releases", "news release", "news"),
+        "events_presentations": ("events", "presentations", "webcast", "conference"),
+        "earnings_results": ("earnings", "financial results", "quarterly results", "annual results"),
+    }[source_type]
+    return any(term in haystack for term in terms)
+
+
+def _is_third_party(host: str) -> bool:
+    return any(marker in host for marker in _THIRD_PARTY_HOST_MARKERS)
+
+
+def _candidate_rows(results: list[Mapping]) -> dict[int, Mapping]:
+    return {
+        int(result["result_id"]): result
+        for result in results
+        if isinstance(result.get("result_id"), int) and not isinstance(result.get("result_id"), bool)
+    }
+
+
+def _same_site_links(result: Mapping) -> dict[str, Mapping]:
+    links = result.get("links")
+    metadata = result.get("provider_metadata")
+    if links is None and isinstance(metadata, Mapping):
+        links = metadata.get("links")
+    if not isinstance(links, list):
+        return {}
+    try:
+        base_host = url_host(result.get("url"))
+    except ValueError:
+        return {}
+    linked = {}
+    for link in links:
+        if not isinstance(link, Mapping):
+            continue
+        linked_url = link.get("url")
+        try:
+            canonical = canonicalize_public_url(linked_url)
+            if url_host(canonical) == base_host:
+                linked[canonical] = {**result, **link, "url": canonical}
+        except ValueError:
+            continue
+    return linked
+
+
+def _selection_result(selection, rows: dict[int, Mapping], company: Mapping) -> dict:
+    try:
+        selected_url = canonicalize_public_url(selection.url)
+    except ValueError:
+        return {
+            **selection.model_dump(mode="json"),
+            "status": "rejected",
+            "reason": "selected url is unsafe",
+        }
+    evidence_rows = [rows[item] for item in selection.evidence_result_ids if item in rows]
+    if len(evidence_rows) != len(selection.evidence_result_ids):
+        return {
+            **selection.model_dump(mode="json"),
+            "url": selected_url,
+            "status": "rejected",
+            "reason": "selection references unavailable evidence",
+        }
+    evidence = None
+    for row in evidence_rows:
+        try:
+            if canonicalize_public_url(row.get("url")) == selected_url:
+                evidence = row
+                break
+        except ValueError:
+            continue
+        if selected_url in _same_site_links(row):
+            evidence = _same_site_links(row)[selected_url]
+            break
+    if evidence is None:
+        return {
+            **selection.model_dump(mode="json"),
+            "url": selected_url,
+            "status": "rejected",
+            "reason": "selected url is not in current evidence",
+        }
+    try:
+        host = url_host(selected_url)
+    except ValueError:
+        return {
+            **selection.model_dump(mode="json"),
+            "url": selected_url,
+            "status": "rejected",
+            "reason": "selected url is unsafe",
+        }
+    if _is_third_party(host):
+        status = "rejected"
+        reason = "third-party source is not an official IR archive"
+    elif not _has_identity_evidence(company, evidence):
+        status = "ambiguous"
+        reason = "company identity is not established by page evidence"
+    elif not _has_source_purpose(selection.source_type, evidence):
+        status = "ambiguous"
+        reason = "IR archive purpose is not established by page evidence"
+    else:
+        status = "accepted"
+        reason = selection.reason
+    return {
+        **selection.model_dump(mode="json"),
+        "url": selected_url,
+        "status": status,
+        "reason": reason,
+    }
+
+
+async def _select_discovery_sources(company, results, *, llm_client, model):
+    if llm_client is None or not model or not results:
+        return [], None
+    try:
+        response = await llm_client.responses.parse(
+            model=model,
+            input=source_selection_prompt(company, results),
+            text_format=SourceSelectionResponse,
+        )
+        payload = response.output_parsed
+        if not isinstance(payload, SourceSelectionResponse):
+            payload = SourceSelectionResponse.model_validate(
+                payload.model_dump(mode="json") if hasattr(payload, "model_dump") else payload
+            )
+        rows = _candidate_rows(results)
+        return [_selection_result(selection, rows, company) for selection in payload.selections], None
+    except Exception:
+        return [], "source selection failed"
+
+
+def _manual_override_sources(overrides: Mapping) -> tuple[list[dict], list[str]]:
+    sources = []
+    warnings = []
+    for source_type, url in (overrides or {}).items():
+        if source_type not in _DISCOVERY_SOURCE_TYPES:
+            warnings.append("manual override source type was ignored")
+            continue
+        try:
+            canonical = canonicalize_public_url(url)
+        except ValueError:
+            sources.append(
+                {
+                    "source_type": source_type,
+                    "url": str(url or ""),
+                    "status": "rejected",
+                    "acceptance_status": "rejected",
+                    "discovery_provider": "manual_override",
+                    "evidence_result_ids": [],
+                    "reason": "manual override url is unsafe",
+                }
+            )
+            continue
+        sources.append(
+            {
+                "source_type": source_type,
+                "url": canonical,
+                "status": "accepted",
+                "acceptance_status": "accepted",
+                "discovery_provider": "manual_override",
+                "evidence_result_ids": [],
+                "reason": "manual override requires later fetch and identity validation",
+            }
+        )
+    return sources, warnings
+
+
+async def discover_sources(
+    company,
+    *,
+    router,
+    llm_client,
+    model,
+    repository,
+    job_id,
+    overrides=None,
+    connection=None,
+    result_limit=10,
+):
+    if not isinstance(company, Mapping):
+        raise ValueError("company identity is required")
+    if isinstance(result_limit, bool) or not isinstance(result_limit, int) or not 1 <= result_limit <= 50:
+        raise ValueError("result limit is invalid")
+    discovered, warnings = _manual_override_sources(overrides or {})
+    if hasattr(router, "unavailable"):
+        for provider_name in router.unavailable():
+            warnings.append(f"{provider_name} is not configured or capability-ready")
+    selected_types = {item["source_type"] for item in discovered if item["status"] == "accepted"}
+    result_counter = 0
+    provider_provenance = []
+    query_specs = _discovery_queries(company, set(_DISCOVERY_SOURCE_TYPES) - selected_types)
+    for query_spec in query_specs:
+        if query_spec["source_type"] in selected_types:
+            continue
+        accepted_for_query = False
+        for provider in router.provider_chain():
+            attempt_id = f"discovery_{result_counter + 1}_{provider.name}"
+            started_at = datetime.now(UTC).isoformat()
+            outcome = "provider_error"
+            diagnostics = {}
+            rows = []
+            selections = []
+            try:
+                rows = await provider.search(query_spec["query"], limit=result_limit)
+                if not isinstance(rows, list):
+                    raise SearchProviderError("malformed_response", "search provider returned malformed results")
+                normalized_rows = []
+                for row in rows:
+                    if not isinstance(row, Mapping) or not row.get("url"):
+                        raise SearchProviderError("malformed_response", "search provider returned malformed results")
+                    result_counter += 1
+                    normalized = dict(row)
+                    normalized.update(
+                        {
+                            "result_id": result_counter,
+                            "query": query_spec["query"],
+                            "provider": provider.name,
+                            "metadata": normalized.get("provider_metadata", {}),
+                        }
+                    )
+                    normalized_rows.append(normalized)
+                rows = normalized_rows
+                diagnostics["result_ids"] = [row["result_id"] for row in rows]
+                if not rows:
+                    outcome = "empty_results"
+                else:
+                    selections, selection_warning = await _select_discovery_sources(
+                        company, rows, llm_client=llm_client, model=model
+                    )
+                    if selection_warning:
+                        warnings.append(selection_warning)
+                    outcome = "accepted" if any(item["status"] == "accepted" for item in selections) else "rejected"
+                    if selections and not any(item["status"] == "accepted" for item in selections):
+                        outcome = "rejected"
+            except SearchProviderError as exc:
+                outcome = exc.reason_code if exc.reason_code in VALID_REASON_CODES else "provider_error"
+                diagnostics = {"reason": outcome}
+                if exc.disable_provider:
+                    router.disable(provider.name)
+                    warnings.append(f"{provider.name} was disabled for this process run")
+            except Exception:
+                outcome = "provider_error"
+                diagnostics = {"reason": "search provider request failed"}
+            completed_at = datetime.now(UTC).isoformat()
+            attempt = {
+                "attempt_id": attempt_id,
+                "job_id": job_id,
+                "provider": provider.name,
+                "query": query_spec["query"],
+                "requested_limit": result_limit,
+                "started_at": started_at,
+                "completed_at": completed_at,
+                "outcome": outcome,
+                "diagnostics": diagnostics,
+                "provider_request_id": getattr(provider, "last_request_id", None),
+            }
+            try:
+                _repository_call(repository, "record_search_attempt", attempt, connection=connection)
+                if rows:
+                    _repository_call(
+                        repository,
+                        "record_search_results",
+                        job_id,
+                        attempt_id,
+                        rows,
+                        connection=connection,
+                    )
+            except Exception:
+                warnings.append("search evidence persistence failed")
+            provider_provenance.append(
+                {
+                    "provider": provider.name,
+                    "query": query_spec["query"],
+                    "outcome": outcome,
+                    "provider_request_id": getattr(provider, "last_request_id", None),
+                    "result_ids": diagnostics.get("result_ids", []),
+                }
+            )
+            if selections:
+                for selection in selections:
+                    selection["discovery_provider"] = provider.name
+                    selection["provider_request_id"] = getattr(provider, "last_request_id", None)
+                    selection["acceptance_status"] = selection["status"]
+                    existing = next(
+                        (
+                            item
+                            for item in discovered
+                            if item["source_type"] == selection["source_type"]
+                            and item["url"] == selection["url"]
+                        ),
+                        None,
+                    )
+                    if existing and existing["status"] == "accepted" and selection["status"] != "accepted":
+                        continue
+                    discovered = [
+                        item
+                        for item in discovered
+                        if not (
+                            item["source_type"] == selection["source_type"]
+                            and item["url"] == selection["url"]
+                        )
+                    ]
+                    discovered.append(selection)
+                accepted = [item for item in selections if item["status"] == "accepted"]
+                if accepted:
+                    accepted_for_query = True
+                    selected_types.update(item["source_type"] for item in accepted)
+            if accepted_for_query:
+                break
+        if not accepted_for_query and not router.provider_chain():
+            warnings.append("search provider chain is unavailable")
+            break
+    accepted_count = sum(item["status"] == "accepted" for item in discovered)
+    ambiguous_count = sum(item["status"] == "ambiguous" for item in discovered)
+    if accepted_count:
+        status = "accepted"
+    elif ambiguous_count:
+        status = "ambiguous"
+    elif provider_provenance:
+        status = "rejected"
+    else:
+        status = "search_unavailable"
+    next_actions = []
+    if status != "accepted":
+        next_actions.append("provide a verified Investor Relations source override")
+    if warnings:
+        next_actions.append("review search provider and source evidence warnings")
+    return {
+        "status": status,
+        "sources": discovered,
+        "provider_provenance": provider_provenance,
+        "warnings": list(dict.fromkeys(warnings)),
+        "next_actions": list(dict.fromkeys(next_actions)),
+    }
