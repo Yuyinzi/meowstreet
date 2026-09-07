@@ -154,9 +154,12 @@
     if (source.discovery_provider) {
       details.push("discovered via " + source.discovery_provider);
     }
+    var safeUrl = typeof source.url === "string" && /^https:\/\//i.test(source.url) ? source.url : null;
     var url = source.url
-      ? '<a class="catalyst-research-source-url" href="' + escapeHtml(source.url) +
-        '" target="_blank" rel="noopener noreferrer">' + escapeHtml(source.url) + "</a>"
+      ? safeUrl
+        ? '<a class="catalyst-research-source-url" href="' + escapeHtml(safeUrl) +
+          '" target="_blank" rel="noopener noreferrer">' + escapeHtml(source.url) + "</a>"
+        : '<span class="catalyst-research-source-url">' + escapeHtml(source.url) + "</span>"
       : "";
     var truncation = source.truncation_reason
       ? '<div class="catalyst-research-note">Truncated: ' +
