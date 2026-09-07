@@ -75,6 +75,25 @@ def test_discovery_reports_deferred_same_site_capability_and_bounds_attempts():
     assert result["alternate_sources_truncated"] == {}
 
 
+def test_discovery_restricts_queries_to_requested_channels():
+    providers = [FakeProvider("ddgs")]
+    result = asyncio.run(
+        discover_sources(
+            {"ticker": "ACM", "company_name": "Acme"},
+            router=SearchRouter({"provider": "ddgs", "fallback": "none"}, providers),
+            llm_client=None,
+            model=None,
+            repository=FakeRepository(),
+            job_id="job-targeted",
+            source_types={"press_releases"},
+        )
+    )
+
+    assert len(providers[0].calls) == 1
+    assert "press releases" in providers[0].calls[0][0].lower()
+    assert result["provider_provenance"][0]["query"] == providers[0].calls[0][0]
+
+
 @pytest.mark.parametrize(
     ("fallback", "expected"),
     [("auto", ["tavily", "native_search", "ddgs"]), ("ddgs", ["tavily", "ddgs"]), ("none", ["tavily"])],

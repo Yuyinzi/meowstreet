@@ -408,7 +408,7 @@ async def _resolve(context):
     return result
 
 
-async def _discover(context, company):
+async def _discover(context, company, source_types=None):
     context["call_counts"]["discovery"] += 1
     result = await _invoke(
         context["discover_sources"], company,
@@ -419,6 +419,7 @@ async def _discover(context, company):
         job_id=context["job"]["job_id"],
         connection=context["connection"],
         overrides=context["request"].get("source_overrides"),
+        source_types=source_types,
     )
     if not isinstance(result, Mapping):
         raise ValueError("source discovery result is invalid")
@@ -549,7 +550,8 @@ async def _run_channel(context, company, source_type, pair):
         complete = bool(execution.get("boundary_reached") or execution.get("archive_exhausted")) and not execution.get("truncation_reason")
         coverage_start = execution.get("coverage_start") or context["job"]["requested_start"]
         coverage_end = execution.get("coverage_end") or context["job"]["requested_end"]
-        source.update({"extraction_status": "complete" if complete else "partial", "execution_path": "cold", "active_adapter_id": persisted_candidate.get("adapter_id"), "coverage_start": coverage_start, "coverage_end": coverage_end, "coverage_continuous": complete, "page_count": execution.get("page_count", 0), "item_count": execution.get("item_count", len(events)), "truncation_reason": execution.get("truncation_reason"), "checked_at": _iso(context)})
+        page_hashes = list(execution.get("content_hashes", []))
+        source.update({"extraction_status": "complete" if complete else "partial", "execution_path": "cold", "active_adapter_id": persisted_candidate.get("adapter_id"), "adapter_version": persisted_candidate.get("version"), "executor_version": execution.get("executor_version"), "coverage_start": coverage_start, "coverage_end": coverage_end, "coverage_continuous": complete, "page_count": execution.get("page_count", 0), "item_count": execution.get("item_count", len(events)), "content_hash": page_hashes[-1] if page_hashes else source.get("content_hash"), "truncation_reason": execution.get("truncation_reason"), "checked_at": _iso(context)})
         if complete and not events:
             context["warnings"].append("valid_archive_exhausted_zero")
         saved = _repo_call(context, "activate_adapter_with_source", persisted_candidate["adapter_id"], _iso(context), source)
@@ -619,10 +621,61 @@ def _hot_source(context, adapter_row, execution):
     return source
 
 
+def _record_runtime_validation(context, adapter_row, validation):
+    record = getattr(context["repository"], "record_runtime_adapter_validation", None)
+    if not callable(record):
+        return
+    report = validation.get("report") if isinstance(validation, Mapping) else {}
+    report = report if isinstance(report, Mapping) else {}
+    runtime_status = "passed" if isinstance(validation, Mapping) and validation.get("status") == "passed" else "failed"
+    _repo_call(
+        context,
+        "record_runtime_adapter_validation",
+        {
+            "adapter_id": adapter_row.get("adapter_id"),
+            "job_id": context["job"]["job_id"],
+            "status": runtime_status,
+            "report": report,
+            "source_content_hashes": validation.get("source_content_hashes", report.get("source_content_hashes", [])) if isinstance(validation, Mapping) else [],
+            "page_content_hashes": validation.get("page_content_hashes", report.get("page_content_hashes", [])) if isinstance(validation, Mapping) else [],
+            "validator_version": validation.get("validator_version") if isinstance(validation, Mapping) else None,
+            "executor_version": validation.get("executor_version") if isinstance(validation, Mapping) else report.get("executor_version"),
+        },
+    )
+
+
+def _stale_source(context, adapter_row, validation):
+    report = validation.get("report") if isinstance(validation, Mapping) else {}
+    report = report if isinstance(report, Mapping) else {}
+    errors = validation.get("errors", []) if isinstance(validation, Mapping) else []
+    if not errors:
+        errors = report.get("errors", [])
+    page_hashes = validation.get("page_content_hashes", report.get("page_content_hashes", [])) if isinstance(validation, Mapping) else []
+    return {
+        "job_id": context["job"]["job_id"],
+        "ticker": context["request"]["ticker"],
+        "source_type": adapter_row.get("source_type"),
+        "url": adapter_row.get("source_url") or str(adapter_row.get("adapter", {}).get("source_url", "")),
+        "final_url": adapter_row.get("source_url"),
+        "active_adapter_id": adapter_row.get("adapter_id"),
+        "adapter_version": adapter_row.get("version"),
+        "executor_version": validation.get("executor_version") if isinstance(validation, Mapping) else None,
+        "verification_reason": _sanitized_error(errors[0] if errors else "runtime adapter validation failed"),
+        "page_count": report.get("pagination", {}).get("pages", 0),
+        "item_count": 0,
+        "content_hash": page_hashes[-1] if page_hashes else None,
+        "snapshot_hash": None,
+        "execution_path": "hot",
+        "checked_at": _iso(context),
+    }
+
+
 async def _run_hot_adapter(context, adapter_row):
     adapter = adapter_row.get("adapter")
     if not isinstance(adapter, Mapping):
-        return {"source_type": adapter_row.get("source_type"), "status": "stale", "events": [], "source": None, "validation": {"errors": ["active adapter is invalid"]}}
+        validation = {"status": "failed", "observations": [], "promotable_observations": [], "errors": ["active adapter is invalid"]}
+        _record_runtime_validation(context, adapter_row, validation)
+        return {"source_type": adapter_row.get("source_type"), "status": "stale", "events": [], "source": None, "validation": validation}
     try:
         validation = await _invoke(
             context["validate_active_adapter"],
@@ -633,6 +686,7 @@ async def _run_hot_adapter(context, adapter_row):
         )
     except Exception as exc:
         validation = {"status": "stale", "observations": [], "promotable_observations": [], "errors": [_sanitized_error(exc)]}
+    _record_runtime_validation(context, adapter_row, validation)
     if not isinstance(validation, Mapping) or validation.get("status") != "passed":
         return {"source_type": adapter_row.get("source_type"), "status": "stale", "events": [], "source": None, "validation": dict(validation or {})}
     execution = validation.get("execution")
@@ -651,9 +705,13 @@ async def _run_source(context, company, source_type, active_adapter):
         hot = await _run_hot_adapter(context, active_adapter)
         if hot["status"] != "stale":
             return hot
-        mark_stale = getattr(context["repository"], "mark_adapter_stale", None)
-        if callable(mark_stale):
-            _repo_call(context, "mark_adapter_stale", active_adapter["adapter_id"], _iso(context))
+        mark_stale_with_source = getattr(context["repository"], "mark_adapter_stale_with_source", None)
+        if callable(mark_stale_with_source):
+            _repo_call(context, "mark_adapter_stale_with_source", active_adapter["adapter_id"], _iso(context), _stale_source(context, active_adapter, hot.get("validation", {})))
+        else:
+            mark_stale = getattr(context["repository"], "mark_adapter_stale", None)
+            if callable(mark_stale):
+                _repo_call(context, "mark_adapter_stale", active_adapter["adapter_id"], _iso(context))
         context["warnings"].append(f"{source_type} adapter drift detected")
         context["warnings"].append("source_discovery_required")
         context["next_actions"].append(f"discover {source_type} source")
@@ -739,8 +797,15 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
             else:
                 channel_results[source_type] = result
         if cold_channels:
-            discovery = await _discover(context, company)
+            discovery = await _discover(context, company, cold_channels)
             prepared, origins = await _prepare_sources(context, company, discovery, cold_channels)
+            missing_channels = [source_type for source_type in cold_channels if prepared.get(source_type) is None]
+            if missing_channels and "ir_home" not in cold_channels:
+                origin_discovery = await _discover(context, company, {"ir_home"})
+                combined_discovery = dict(discovery)
+                combined_discovery["sources"] = list(discovery.get("sources", [])) + list(origin_discovery.get("sources", []))
+                combined_discovery["alternate_sources"] = list(discovery.get("alternate_sources", [])) + list(origin_discovery.get("alternate_sources", []))
+                prepared, origins = await _prepare_sources(context, company, combined_discovery, missing_channels)
             for source_type in cold_channels:
                 channel_results[source_type] = await _run_channel(context, company, source_type, prepared.get(source_type))
         events = []
@@ -758,6 +823,9 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
                 event.setdefault("ticker", normalized["ticker"])
                 event.setdefault("source_type", source_type)
                 event.setdefault("adapter_id", result.get("adapter", {}).get("adapter_id") if isinstance(result.get("adapter"), Mapping) else None)
+                event.setdefault("adapter_version", result.get("adapter", {}).get("version") if isinstance(result.get("adapter"), Mapping) else source.get("adapter_version") if source else None)
+                event.setdefault("executor_version", source.get("executor_version") if source else None)
+                event.setdefault("content_hash", source.get("content_hash") if source else None)
                 events.append(event)
         normalized_events = []
         for source_type in _REQUIRED_CHANNELS:

@@ -1,4 +1,5 @@
 from collections import Counter
+from collections.abc import Mapping
 import base64
 import hashlib
 import json
@@ -153,7 +154,7 @@ def connect(db_path=DEFAULT_DB_PATH):
             url text not null,
             final_url text,
             acceptance_status text not null default 'pending' check (acceptance_status in ('pending','accepted','ambiguous','rejected')),
-            extraction_status text not null default 'pending' check (extraction_status in ('pending','complete','partial','unsupported','failed')),
+            extraction_status text not null default 'pending' check (extraction_status in ('pending','complete','partial','unsupported','failed','discovery_required')),
             active_adapter_id text,
             adapter_version integer,
             executor_version text,
@@ -268,7 +269,7 @@ def connect(db_path=DEFAULT_DB_PATH):
 def _migrate_schema(con):
     source_columns = {row[1]: row for row in con.execute("pragma table_info(catalyst_ir_sources)")}
     source_sql = con.execute("select sql from sqlite_master where type = 'table' and name = 'catalyst_ir_sources'").fetchone()[0].lower()
-    source_needs_rebuild = "'ambiguous'" not in source_sql
+    source_needs_rebuild = "'ambiguous'" not in source_sql or "discovery_required" not in source_sql
     if source_needs_rebuild:
         con.execute("pragma legacy_alter_table = on")
         con.execute("pragma foreign_keys = off")
@@ -281,7 +282,7 @@ def _migrate_schema(con):
             url text not null,
             final_url text,
             acceptance_status text not null default 'pending' check (acceptance_status in ('pending','accepted','ambiguous','rejected')),
-            extraction_status text not null default 'pending' check (extraction_status in ('pending','complete','partial','unsupported','failed')),
+            extraction_status text not null default 'pending' check (extraction_status in ('pending','complete','partial','unsupported','failed','discovery_required')),
             active_adapter_id text,
             adapter_version integer,
             executor_version text,
@@ -449,6 +450,18 @@ def _sanitize_error(value):
     message = re.sub(r"(?i)\bbearer\s+\S+", "Bearer [redacted]", message)
     message = re.sub(r"(?i)(api[ _-]?key|token|client[ _-]?secret|password)\s*[:=]\s*\S+", r"\1=[redacted]", message)
     return message[:1000] or "workflow failed"
+
+
+def _sanitize_runtime_report(value):
+    if isinstance(value, Mapping):
+        return {
+            key: _sanitize_runtime_report(item)
+            for key, item in value.items()
+            if isinstance(key, str) and key.casefold() not in {"html", "raw_html", "structural_html"}
+        }
+    if isinstance(value, list):
+        return [_sanitize_runtime_report(item) for item in value]
+    return value
 
 
 def fail_job(con, job_id, error_summary, *, completed_at=None):
@@ -776,6 +789,55 @@ def mark_adapter_stale(con, adapter_id, stale_at):
     con.commit()
 
 
+def record_runtime_adapter_validation(con, validation):
+    adapter_id = validation.get("adapter_id")
+    adapter = con.execute("select state from catalyst_source_adapters where adapter_id = ?", (adapter_id,)).fetchone()
+    if adapter is None:
+        raise ValueError(f"adapter {adapter_id} was not found")
+    if adapter["state"] != "active":
+        raise ValueError(f"adapter {adapter_id} is not active")
+    _nonterminal_job(con, validation.get("job_id"))
+    status = validation.get("status") or validation.get("validation_status")
+    if status not in {"passed", "failed"}:
+        raise ValueError("runtime validation status is invalid")
+    report = _sanitize_runtime_report(validation.get("report", {}))
+    with con:
+        con.execute(
+            "insert into catalyst_adapter_validations(validation_id,adapter_id,job_id,validator_version,executor_version,status,report_json,source_content_hashes_json,page_content_hashes_json,validated_at) values (?,?,?,?,?,?,?,?,?,?)",
+            (validation.get("validation_id") or _id("iarv_"), adapter_id, validation["job_id"], validation.get("validator_version"), validation.get("executor_version"), status, _json(report), _json(validation.get("source_content_hashes", [])), _json(validation.get("page_content_hashes", [])), validation.get("validated_at") or _now_iso()),
+        )
+
+
+def mark_adapter_stale_with_source(con, adapter_id, stale_at, source):
+    con.execute("begin")
+    atomic = _AtomicConnection(con)
+    try:
+        adapter = atomic.execute("select * from catalyst_source_adapters where adapter_id = ?", (adapter_id,)).fetchone()
+        if adapter is None:
+            raise ValueError(f"adapter {adapter_id} was not found")
+        if adapter["state"] != "active":
+            raise ValueError(f"adapter {adapter_id} is not active")
+        source = dict(source)
+        source.update({"active_adapter_id": adapter_id, "adapter_version": adapter["version"], "acceptance_status": "accepted", "extraction_status": "discovery_required"})
+        row = _source_row(atomic, source)
+        existing = atomic.execute("select source_id from catalyst_ir_sources where source_id = ?", (row["source_id"],)).fetchone()
+        if existing is None:
+            saved = save_source(atomic, source)
+        else:
+            assignments = ",".join(f"{key} = ?" for key in row if key != "source_id")
+            atomic.execute(f"update catalyst_ir_sources set {assignments} where source_id = ? and job_id = ?", tuple(value for key, value in row.items() if key != "source_id") + (row["source_id"], row["job_id"]))
+            saved = _decode_row(atomic.execute("select * from catalyst_ir_sources where source_id = ?", (row["source_id"],)).fetchone(), ("evidence_result_ids_json",))
+            saved["evidence_result_ids"] = saved.pop("evidence_result_ids_json")
+        changed = atomic.execute("update catalyst_source_adapters set state = 'stale', stale_at = ? where adapter_id = ? and state = 'active'", (stale_at, adapter_id)).rowcount
+        if changed != 1:
+            raise ValueError(f"adapter {adapter_id} could not be marked stale")
+    except Exception:
+        con.rollback()
+        raise
+    con.commit()
+    return saved
+
+
 def load_active_adapter(con, ticker, source_type):
     row = con.execute("select * from catalyst_source_adapters where ticker = ? and source_type = ? and state = 'active'", (_ticker(ticker), source_type)).fetchone()
     result = _decode_row(row, ("allowed_hosts_json", "adapter_json"))
@@ -966,6 +1028,7 @@ def load_job_result(con, job_id):
         "sources": sources, "statistics": _decode(job["statistics_json"]) or {}, "warnings": _decode(job["warnings_json"]) or [],
         "next_actions": _decode(job["next_actions_json"]) or [], "error_summary": job["error_summary"],
         "completed_at": job["completed_at"], "observation_count": con.execute("select count(*) from catalyst_ir_events where job_id = ?", (job_id,)).fetchone()[0],
+        "execution_paths": _decode(job["execution_paths_json"]) or {}, "call_counts": _decode(job["call_counts_json"]) or {},
     }
     return result
 
@@ -974,13 +1037,13 @@ def load_latest_result(con, ticker):
     normalized = _ticker(ticker)
     row = con.execute(
         """select job_id from catalyst_research_jobs where ticker = ? and status in ('completed','completed_partial')
-           order by case status when 'completed' then 0 else 1 end, completed_at desc limit 1""", (normalized,)
+           order by case status when 'completed' then 0 else 1 end, completed_at desc, created_at desc, rowid desc limit 1""", (normalized,)
     ).fetchone()
     if not row:
         return None
     result = load_job_result(con, row["job_id"])
     latest = con.execute(
-        "select job_id, status, completed_at from catalyst_research_jobs where ticker = ? order by created_at desc limit 1",
+        "select job_id, status, completed_at from catalyst_research_jobs where ticker = ? order by created_at desc, rowid desc limit 1",
         (normalized,),
     ).fetchone()
     result["latest_job_id"] = latest["job_id"]

@@ -120,6 +120,65 @@ def test_adapter_versions_activation_supersession_and_failed_candidate(tmp_path)
     assert con.execute("select state from catalyst_source_adapters where adapter_id = ?", (second["adapter_id"],)).fetchone()[0] == "stale"
 
 
+def test_runtime_validation_and_discovery_required_source_are_atomic(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    candidate = repository.create_adapter_candidate(
+        con,
+        {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "source_url": "https://ir.example.test/news", "adapter": {}},
+    )
+    repository.record_adapter_validation(con, {"adapter_id": candidate["adapter_id"], "job_id": job["job_id"], "status": "passed", "report": {}})
+    repository.activate_adapter(con, candidate["adapter_id"], "2026-09-04T01:00:00+00:00")
+    repository.record_runtime_adapter_validation(
+        con,
+        {"adapter_id": candidate["adapter_id"], "job_id": job["job_id"], "status": "failed", "report": {"errors": ["selector drift"], "html": "must not persist"}, "page_content_hashes": ["page-hash"], "validator_version": "validator-v1", "executor_version": "executor-v1"},
+    )
+    source = repository.mark_adapter_stale_with_source(
+        con,
+        candidate["adapter_id"],
+        "2026-09-04T02:00:00+00:00",
+        {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news", "active_adapter_id": candidate["adapter_id"], "adapter_version": 1, "verification_reason": "selector drift"},
+    )
+
+    assert source["extraction_status"] == "discovery_required"
+    assert source["verification_reason"] == "selector drift"
+    assert con.execute("select state from catalyst_source_adapters where adapter_id = ?", (candidate["adapter_id"],)).fetchone()[0] == "stale"
+    validation = con.execute("select status, page_content_hashes_json, report_json from catalyst_adapter_validations where adapter_id = ? order by rowid desc", (candidate["adapter_id"],)).fetchone()
+    assert validation[0] == "failed"
+    assert "page-hash" in validation[1]
+    assert "html" not in validation[2]
+
+
+def test_stale_source_transition_rolls_back_when_source_is_invalid(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    candidate = repository.create_adapter_candidate(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "source_url": "https://ir.example.test/news", "adapter": {}})
+    repository.record_adapter_validation(con, {"adapter_id": candidate["adapter_id"], "job_id": job["job_id"], "status": "passed", "report": {}})
+    repository.activate_adapter(con, candidate["adapter_id"], "2026-09-04T01:00:00+00:00")
+
+    with pytest.raises(ValueError, match="source ticker"):
+        repository.mark_adapter_stale_with_source(con, candidate["adapter_id"], "2026-09-04T02:00:00+00:00", {"job_id": job["job_id"], "ticker": "OTHER", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+
+    assert con.execute("select state from catalyst_source_adapters where adapter_id = ?", (candidate["adapter_id"],)).fetchone()[0] == "active"
+    assert con.execute("select count(*) from catalyst_ir_sources where job_id = ?", (job["job_id"],)).fetchone()[0] == 0
+
+
+def test_latest_result_uses_rowid_tiebreak_for_same_clock_jobs(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    first = _job(con, status="running")
+    repository.finalize_job(con, first["job_id"], {"status": "completed", "statistics": {"version": 1}, "execution_paths": {"press_releases": "hot"}, "call_counts": {"discovery": 0}})
+    second = _job(con, status="running")
+    repository.finalize_job(con, second["job_id"], {"status": "failed", "error": "replacement failed", "execution_paths": {"press_releases": "cold"}, "call_counts": {"discovery": 1}})
+
+    result = repository.load_latest_result(con, "NVDA")
+
+    assert result["job_id"] == first["job_id"]
+    assert result["latest_job_id"] == second["job_id"]
+    assert result["latest_job_status"] == "failed"
+    assert result["execution_paths"] == {"press_releases": "hot"}
+    assert result["call_counts"] == {"discovery": 0}
+
+
 def test_event_and_classification_atomic_write_and_latest_usable_result(tmp_path):
     con = repository.connect(tmp_path / "db.sqlite")
     job = _job(con, status="running")

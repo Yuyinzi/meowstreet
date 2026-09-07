@@ -143,6 +143,8 @@ def test_active_validation_exposes_single_execution_for_hot_path_reuse():
     assert result["status"] == "passed"
     assert result["execution"]["observations"] == result["promotable_observations"]
     assert result["execution"]["page_count"] == 1
+    assert "html" not in result["execution"]
+    assert "pages" in result["execution"]
 
 
 def _page(url, html, *, truncated=False, redirect_chain=None, content_type="text/html", response_bytes=None):

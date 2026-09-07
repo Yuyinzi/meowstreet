@@ -605,7 +605,14 @@ def _discovery_queries(company: Mapping, source_types: set[str] | None = None) -
     identity = name or ticker
     if not identity:
         raise ValueError("company identity is required")
-    requested = set(source_types or _DISCOVERY_SOURCE_TYPES)
+    if source_types is None:
+        requested = set(_DISCOVERY_SOURCE_TYPES)
+    elif isinstance(source_types, (str, bytes)) or not isinstance(source_types, (set, frozenset, list, tuple)):
+        raise ValueError("source types are invalid")
+    else:
+        requested = set(source_types)
+        if not requested or not requested <= set(_DISCOVERY_SOURCE_TYPES):
+            raise ValueError("source types are invalid")
     return [
         {
             "source_type": source_type,
@@ -914,6 +921,7 @@ async def _discover_sources_impl(
     overrides=None,
     connection=None,
     result_limit=10,
+    source_types=None,
 )-> dict:
     if not isinstance(company, Mapping):
         raise ValueError("company identity is required")
@@ -921,6 +929,12 @@ async def _discover_sources_impl(
         raise ValueError("result limit is invalid")
     if overrides is not None and not isinstance(overrides, Mapping):
         raise ValueError("overrides are invalid")
+    requested_source_types = set(_DISCOVERY_SOURCE_TYPES) if source_types is None else source_types
+    if isinstance(requested_source_types, (str, bytes)) or not isinstance(requested_source_types, (set, frozenset, list, tuple)):
+        raise ValueError("source types are invalid")
+    requested_source_types = set(requested_source_types)
+    if not requested_source_types or not requested_source_types <= set(_DISCOVERY_SOURCE_TYPES):
+        raise ValueError("source types are invalid")
     discovered, warnings = _manual_override_sources(overrides or {})
     if hasattr(router, "unavailable"):
         for provider_name in router.unavailable():
@@ -928,7 +942,7 @@ async def _discover_sources_impl(
     selected_types = {item["source_type"] for item in discovered if item["status"] != "rejected"}
     result_counter = 0
     provider_provenance = []
-    query_specs = _discovery_queries(company, set(_DISCOVERY_SOURCE_TYPES) - selected_types)
+    query_specs = _discovery_queries(company, requested_source_types - selected_types)
     for query_spec in query_specs:
         if query_spec["source_type"] in selected_types:
             continue
@@ -1143,6 +1157,7 @@ async def discover_sources(
     overrides=None,
     connection=None,
     result_limit=10,
+    source_types=None,
 ) -> dict:
     owned_connection = None
     if connection is None and callable(getattr(repository, "connect", None)):
@@ -1159,6 +1174,7 @@ async def discover_sources(
             overrides=overrides,
             connection=connection,
             result_limit=result_limit,
+            source_types=source_types,
         )
     finally:
         if owned_connection is not None:

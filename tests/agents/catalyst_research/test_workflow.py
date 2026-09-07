@@ -727,6 +727,13 @@ def test_hot_workflow_reuses_active_adapters_without_discovery_or_generation(tmp
     assert appended["call_counts"]["discovery"] == 0
     assert appended["call_counts"]["adapter_generation"] == 0
     assert appended["call_counts"]["event_extraction"] == 0
+    connection = repository.connect(tmp_path / "db.sqlite")
+    try:
+        provenance = connection.execute("select adapter_id, adapter_version, executor_version, content_hash from catalyst_ir_events where job_id = ?", (appended["job_id"],)).fetchall()
+        assert len(provenance) == appended["observation_count"]
+        assert all(row[0] and row[1] == 1 and row[2] and row[3] for row in provenance)
+    finally:
+        connection.close()
 
 
 def test_drift_marks_only_failed_active_adapter_stale_before_cold_recovery():
@@ -762,3 +769,80 @@ def test_drift_marks_only_failed_active_adapter_stale_before_cold_recovery():
     assert context["execution_paths"]["press_releases"] == "cold"
     assert "source_discovery_required" in context["warnings"]
     assert saved == []
+
+
+def test_real_sqlite_drift_requires_discovery_and_preserves_prior_result_on_replacement_failure(tmp_path):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    db_path = tmp_path / "drift.sqlite"
+    connection = repository.connect(db_path)
+    prior = repository.create_job(connection, {"ticker": "ACME", "years": 1}, {"name": "Acme Corporation", "cik": "123"}, datetime(2026, 9, 4, tzinfo=UTC))
+    repository.start_job(connection, prior["job_id"], "2026-09-04T00:01:00+00:00")
+    adapters = {}
+    for source_type, url in (("press_releases", "https://ir.acme.example/news"), ("events_presentations", "https://ir.acme.example/events")):
+        candidate = repository.create_adapter_candidate(connection, {"job_id": prior["job_id"], "ticker": "ACME", "source_type": source_type, "source_url": url, "adapter": {"source_type": source_type}})
+        repository.record_adapter_validation(connection, {"adapter_id": candidate["adapter_id"], "job_id": prior["job_id"], "status": "passed", "report": {}})
+        repository.activate_adapter(connection, candidate["adapter_id"], "2026-09-04T01:00:00+00:00")
+        adapters[source_type] = candidate
+    prior_sources = {}
+    prior_events = []
+    for source_type, url in (("press_releases", "https://ir.acme.example/news"), ("events_presentations", "https://ir.acme.example/events")):
+        source = repository.save_source(connection, {"job_id": prior["job_id"], "ticker": "ACME", "source_type": source_type, "url": url, "acceptance_status": "accepted", "extraction_status": "complete", "active_adapter_id": adapters[source_type]["adapter_id"], "adapter_version": 1})
+        prior_sources[source_type] = source
+        date_key = "published_date" if source_type == "press_releases" else "event_date"
+        prior_events.append({"source_id": source["source_id"], "ticker": "ACME", "source_type": source_type, date_key: "2025-06-01", "count_date": "2025-06-01", "title": f"Prior {source_type}", "url": f"https://ir.acme.example/{source_type}/prior"})
+    repository.finalize_job_with_observations(connection, prior["job_id"], prior_events, [{"id": index, "earnings_state": "non_earnings", "classification_method": "rule_v1"} for index, _ in enumerate(prior_events, 1)], {"status": "completed", "statistics": {"total": 2}, "execution_paths": {"press_releases": "cold", "events_presentations": "cold"}, "call_counts": {"discovery": 1}})
+    connection.close()
+
+    calls = []
+
+    async def resolve(request, **kwargs):
+        return {"ticker": "ACME", "company_name": "Acme Corporation", "cik": 123}
+
+    async def discover(company, **kwargs):
+        calls.append(kwargs.get("source_types"))
+        return {"status": "accepted", "sources": [{"source_type": "press_releases", "url": "https://ir.acme.example/news"}], "alternate_sources": [], "warnings": [], "next_actions": []}
+
+    def fetch(url, **kwargs):
+        return {"requested_url": url, "final_url": url, "content_type": "text/html", "response_bytes": 80, "html": "<html><body>Acme Press Releases archive</body></html>"}
+
+    def snapshot(page, **kwargs):
+        return {"requested_url": page["requested_url"], "final_url": page["final_url"], "content_type": "text/html", "structural_html": page["html"], "text": "Acme Press Releases archive", "normalized": {"text": "Acme Press Releases archive", "links": []}}
+
+    def validate_active(adapter, **kwargs):
+        source_type = adapter["source_type"]
+        if source_type == "press_releases":
+            return {"status": "stale", "observations": [], "promotable_observations": [], "errors": ["selector drift"], "report": {"safety_failures": ["selector drift"], "page_content_hashes": ["broken-page"]}, "page_content_hashes": ["broken-page"], "validator_version": "validator-v1", "executor_version": "executor-v1"}
+        return {"status": "passed", "promotable_observations": [{"source_type": source_type, "title": "Healthy event", "count_date": "2025-07-01", "event_date": "2025-07-01", "url": "https://ir.acme.example/events/healthy"}], "execution": {"observations": [{"source_type": source_type, "title": "Healthy event", "count_date": "2025-07-01", "event_date": "2025-07-01", "url": "https://ir.acme.example/events/healthy"}], "boundary_reached": True, "page_count": 1, "item_count": 1, "content_hashes": ["healthy-page"]}, "report": {"page_content_hashes": ["healthy-page"]}, "page_content_hashes": ["healthy-page"], "validator_version": "validator-v1", "executor_version": "executor-v1"}
+
+    async def generate(company, source, snapshot, **kwargs):
+        return {"adapter": {"source_type": source["source_type"]}}
+
+    def validate_candidate(adapter, snapshot, **kwargs):
+        return {"status": "passed", "observations": [], "report": {}}
+
+    async def execute(adapter, **kwargs):
+        raise ValueError("replacement selector failed")
+
+    async def classify(events, **kwargs):
+        return {"events": [{**event, "earnings_state": "non_earnings", "classification_method": "rule_v1"} for event in events], "llm_call_count": 0}
+
+    def stats(events, sources, requested_window):
+        return {"total": len(events)}
+
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, db_path=db_path, dependencies={"repository": repository, "llm_client": object(), "models": {"adapter_generation": "adapter-model"}, "resolver": resolve, "discover_sources": discover, "fetch_page": fetch, "build_snapshot": snapshot, "validate_active_adapter": validate_active, "generate_adapter": generate, "validate_candidate": validate_candidate, "execute_adapter": execute, "classify_observations": classify, "calculate_statistics": stats}))
+
+    assert result["status"] == "completed_partial"
+    assert result["call_counts"]["discovery"] == 1
+    assert calls == [["press_releases"]]
+    connection = repository.connect(db_path)
+    try:
+        latest = repository.load_latest_result(connection, "ACME")
+        assert latest["job_id"] == prior["job_id"]
+        assert latest["latest_job_status"] == "completed_partial"
+        assert connection.execute("select state from catalyst_source_adapters where adapter_id = ?", (adapters["press_releases"]["adapter_id"],)).fetchone()[0] == "stale"
+        assert connection.execute("select state from catalyst_source_adapters where adapter_id = ?", (adapters["events_presentations"]["adapter_id"],)).fetchone()[0] == "active"
+        assert connection.execute("select extraction_status from catalyst_ir_sources where job_id = ? and source_type = 'press_releases' order by rowid desc limit 1", (result["job_id"],)).fetchone()[0] == "failed"
+        assert connection.execute("select count(*) from catalyst_ir_events where job_id = ?", (prior["job_id"],)).fetchone()[0] == 2
+        assert connection.execute("select status from catalyst_adapter_validations where adapter_id = ? order by rowid desc limit 1", (adapters["press_releases"]["adapter_id"],)).fetchone()[0] == "failed"
+    finally:
+        connection.close()

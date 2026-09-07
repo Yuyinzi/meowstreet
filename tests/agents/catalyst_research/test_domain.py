@@ -39,6 +39,15 @@ def test_discovery_query_identity_is_cleaned_before_each_distinct_suffix():
     assert all("<" not in item["query"] and ">" not in item["query"] for item in queries)
 
 
+def test_discovery_queries_can_be_restricted_to_requested_source_types():
+    queries = _discovery_queries(
+        {"ticker": "NVDA", "company_name": "NVIDIA Corporation"},
+        source_types={"press_releases", "events_presentations"},
+    )
+
+    assert [item["source_type"] for item in queries] == ["press_releases", "events_presentations"]
+
+
 @pytest.mark.parametrize("ticker, expected", [(" nvda ", "NVDA"), ("aapl", "AAPL")])
 def test_normalize_request_normalizes_ticker_and_window(ticker, expected):
     result = normalize_request(ticker, years=2, as_of=date(2024, 2, 29))
