@@ -417,8 +417,9 @@ _COMMON_IDENTITY_WORDS = {
 
 
 def _discovery_queries(company: Mapping, source_types: set[str] | None = None) -> list[dict]:
-    name = _fold_whitespace(company.get("company_name") or company.get("name") or "")
-    ticker = _fold_whitespace(company.get("ticker") or "").upper()
+    name = re.sub(r"[^A-Za-z0-9 .&-]", " ", _fold_whitespace(company.get("company_name") or company.get("name") or ""))
+    name = " ".join(name.split())[:120]
+    ticker = re.sub(r"[^A-Za-z0-9.-]", "", _fold_whitespace(company.get("ticker") or "").upper())[:24]
     identity = name or ticker
     if not identity:
         raise ValueError("company identity is required")
@@ -433,7 +434,7 @@ def _discovery_queries(company: Mapping, source_types: set[str] | None = None) -
     ]
 
 
-def _repository_call(repository, method_name, *args, connection=None):
+def _repository_call(repository, method_name, *args, connection=None, **kwargs):
     method = getattr(repository, method_name, None)
     if method is None:
         raise ValueError(f"repository method {method_name} is unavailable")
@@ -445,8 +446,10 @@ def _repository_call(repository, method_name, *args, connection=None):
         parameters = []
     first = parameters[0].name if parameters else ""
     if first in {"con", "connection"}:
-        return method(connection, *args)
-    return method(*args)
+        if connection is None:
+            raise ValueError("repository connection is required")
+        return method(connection, *args, **kwargs)
+    return method(*args, **kwargs)
 
 
 def _identity_tokens(company: Mapping) -> set[str]:
@@ -495,31 +498,6 @@ def _candidate_rows(results: list[Mapping]) -> dict[int, Mapping]:
     }
 
 
-def _same_site_links(result: Mapping) -> dict[str, Mapping]:
-    links = result.get("links")
-    metadata = result.get("provider_metadata")
-    if links is None and isinstance(metadata, Mapping):
-        links = metadata.get("links")
-    if not isinstance(links, list):
-        return {}
-    try:
-        base_host = url_host(result.get("url"))
-    except ValueError:
-        return {}
-    linked = {}
-    for link in links:
-        if not isinstance(link, Mapping):
-            continue
-        linked_url = link.get("url")
-        try:
-            canonical = canonicalize_public_url(linked_url)
-            if url_host(canonical) == base_host:
-                linked[canonical] = {**result, **link, "url": canonical}
-        except ValueError:
-            continue
-    return linked
-
-
 def _selection_result(selection, rows: dict[int, Mapping], company: Mapping) -> dict:
     try:
         selected_url = canonicalize_public_url(selection.url)
@@ -545,9 +523,6 @@ def _selection_result(selection, rows: dict[int, Mapping], company: Mapping) -> 
                 break
         except ValueError:
             continue
-        if selected_url in _same_site_links(row):
-            evidence = _same_site_links(row)[selected_url]
-            break
     if evidence is None:
         return {
             **selection.model_dump(mode="json"),
@@ -574,8 +549,8 @@ def _selection_result(selection, rows: dict[int, Mapping], company: Mapping) -> 
         status = "ambiguous"
         reason = "IR archive purpose is not established by page evidence"
     else:
-        status = "accepted"
-        reason = selection.reason
+        status = "ambiguous"
+        reason = "candidate requires fetched company identity and IR-purpose verification"
     return {
         **selection.model_dump(mode="json"),
         "url": selected_url,
@@ -605,6 +580,8 @@ async def _select_discovery_sources(company, results, *, llm_client, model):
 
 
 def _manual_override_sources(overrides: Mapping) -> tuple[list[dict], list[str]]:
+    if not isinstance(overrides, Mapping):
+        raise ValueError("overrides are invalid")
     sources = []
     warnings = []
     for source_type, url in (overrides or {}).items():
@@ -626,18 +603,62 @@ def _manual_override_sources(overrides: Mapping) -> tuple[list[dict], list[str]]
                 }
             )
             continue
+        if _is_third_party(url_host(canonical)):
+            sources.append(
+                {
+                    "source_type": source_type,
+                    "url": canonical,
+                    "status": "rejected",
+                    "acceptance_status": "rejected",
+                    "discovery_provider": "manual_override",
+                    "evidence_result_ids": [],
+                    "reason": "third-party source is not an official IR archive",
+                }
+            )
+            continue
         sources.append(
             {
                 "source_type": source_type,
                 "url": canonical,
-                "status": "accepted",
-                "acceptance_status": "accepted",
+                "status": "ambiguous",
+                "acceptance_status": "pending",
                 "discovery_provider": "manual_override",
                 "evidence_result_ids": [],
                 "reason": "manual override requires later fetch and identity validation",
             }
         )
     return sources, warnings
+
+
+def _bounded_request_id(value) -> str | None:
+    if value is None:
+        return None
+    normalized = " ".join(str(value).split())
+    return normalized[:200] or None
+
+
+def _bounded_metadata(value) -> dict:
+    if not isinstance(value, Mapping):
+        return {}
+    output = {}
+    for key, item in list(value.items())[:8]:
+        if not isinstance(key, str) or not key or len(key) > 64:
+            continue
+        if isinstance(item, bool) or isinstance(item, (int, float)):
+            output[key] = item
+        elif isinstance(item, str):
+            output[key] = " ".join(item.split())[:200]
+    return output
+
+
+def _bounded_search_result(row: Mapping) -> dict:
+    return {
+        "title": " ".join(str(row.get("title") or "").split())[:500],
+        "url": " ".join(str(row.get("url") or "").split())[:2000],
+        "snippet": " ".join(str(row.get("snippet") or "").split())[:1000],
+        "provider_rank": row.get("provider_rank") if isinstance(row.get("provider_rank"), int) else None,
+        "provider_metadata": _bounded_metadata(row.get("provider_metadata")),
+    }
 
 
 async def discover_sources(
@@ -651,17 +672,24 @@ async def discover_sources(
     overrides=None,
     connection=None,
     result_limit=10,
-):
+)-> dict:
     if not isinstance(company, Mapping):
         raise ValueError("company identity is required")
     if isinstance(result_limit, bool) or not isinstance(result_limit, int) or not 1 <= result_limit <= 50:
         raise ValueError("result limit is invalid")
+    if overrides is not None and not isinstance(overrides, Mapping):
+        raise ValueError("overrides are invalid")
+    owns_connection = False
+    if connection is None and callable(getattr(repository, "connect", None)):
+        connection = repository.connect()
+        owns_connection = True
     discovered, warnings = _manual_override_sources(overrides or {})
     if hasattr(router, "unavailable"):
         for provider_name in router.unavailable():
             warnings.append(f"{provider_name} is not configured or capability-ready")
-    selected_types = {item["source_type"] for item in discovered if item["status"] == "accepted"}
+    selected_types = {item["source_type"] for item in discovered if item["status"] != "rejected"}
     result_counter = 0
+    attempt_counter = 0
     provider_provenance = []
     query_specs = _discovery_queries(company, set(_DISCOVERY_SOURCE_TYPES) - selected_types)
     for query_spec in query_specs:
@@ -669,12 +697,14 @@ async def discover_sources(
             continue
         accepted_for_query = False
         for provider in router.provider_chain():
-            attempt_id = f"discovery_{result_counter + 1}_{provider.name}"
+            attempt_counter += 1
+            attempt_id = f"discovery_{attempt_counter}_{provider.name}"
             started_at = datetime.now(UTC).isoformat()
             outcome = "provider_error"
             diagnostics = {}
             rows = []
             selections = []
+            selection_warning = None
             try:
                 rows = await provider.search(query_spec["query"], limit=result_limit)
                 if not isinstance(rows, list):
@@ -684,7 +714,7 @@ async def discover_sources(
                     if not isinstance(row, Mapping) or not row.get("url"):
                         raise SearchProviderError("malformed_response", "search provider returned malformed results")
                     result_counter += 1
-                    normalized = dict(row)
+                    normalized = _bounded_search_result(row)
                     normalized.update(
                         {
                             "result_id": result_counter,
@@ -699,14 +729,7 @@ async def discover_sources(
                 if not rows:
                     outcome = "empty_results"
                 else:
-                    selections, selection_warning = await _select_discovery_sources(
-                        company, rows, llm_client=llm_client, model=model
-                    )
-                    if selection_warning:
-                        warnings.append(selection_warning)
-                    outcome = "accepted" if any(item["status"] == "accepted" for item in selections) else "rejected"
-                    if selections and not any(item["status"] == "accepted" for item in selections):
-                        outcome = "rejected"
+                    outcome = "candidate_results"
             except SearchProviderError as exc:
                 outcome = exc.reason_code if exc.reason_code in VALID_REASON_CODES else "provider_error"
                 diagnostics = {"reason": outcome}
@@ -727,7 +750,7 @@ async def discover_sources(
                 "completed_at": completed_at,
                 "outcome": outcome,
                 "diagnostics": diagnostics,
-                "provider_request_id": getattr(provider, "last_request_id", None),
+                "provider_request_id": _bounded_request_id(getattr(provider, "last_request_id", None)),
             }
             try:
                 _repository_call(repository, "record_search_attempt", attempt, connection=connection)
@@ -741,21 +764,52 @@ async def discover_sources(
                         connection=connection,
                     )
             except Exception:
-                warnings.append("search evidence persistence failed")
+                if owns_connection:
+                    connection.close()
+                raise ValueError("search evidence persistence failed") from None
+            if rows:
+                selections, selection_warning = await _select_discovery_sources(
+                    company, rows, llm_client=llm_client, model=model
+                )
+                if selection_warning:
+                    warnings.append(selection_warning)
+                target_candidates = [
+                    item
+                    for item in selections
+                    if item["source_type"] == query_spec["source_type"]
+                    and item["status"] == "ambiguous"
+                ]
+                outcome = "ambiguous" if target_candidates else "rejected"
+            if hasattr(repository, "update_search_attempt"):
+                try:
+                    _repository_call(
+                        repository,
+                        "update_search_attempt",
+                        attempt_id,
+                        outcome=outcome,
+                        diagnostics=diagnostics,
+                        completed_at=completed_at,
+                        provider_request_id=_bounded_request_id(getattr(provider, "last_request_id", None)),
+                        connection=connection,
+                    )
+                except Exception:
+                    if owns_connection:
+                        connection.close()
+                    raise ValueError("search evidence persistence failed") from None
             provider_provenance.append(
                 {
                     "provider": provider.name,
                     "query": query_spec["query"],
                     "outcome": outcome,
-                    "provider_request_id": getattr(provider, "last_request_id", None),
+                    "provider_request_id": _bounded_request_id(getattr(provider, "last_request_id", None)),
                     "result_ids": diagnostics.get("result_ids", []),
                 }
             )
             if selections:
                 for selection in selections:
                     selection["discovery_provider"] = provider.name
-                    selection["provider_request_id"] = getattr(provider, "last_request_id", None)
-                    selection["acceptance_status"] = selection["status"]
+                    selection["provider_request_id"] = _bounded_request_id(getattr(provider, "last_request_id", None))
+                    selection["acceptance_status"] = "pending" if selection["status"] == "ambiguous" else selection["status"]
                     existing = next(
                         (
                             item
@@ -765,7 +819,7 @@ async def discover_sources(
                         ),
                         None,
                     )
-                    if existing and existing["status"] == "accepted" and selection["status"] != "accepted":
+                    if existing and existing["status"] == "ambiguous" and selection["status"] != "ambiguous":
                         continue
                     discovered = [
                         item
@@ -776,7 +830,12 @@ async def discover_sources(
                         )
                     ]
                     discovered.append(selection)
-                accepted = [item for item in selections if item["status"] == "accepted"]
+                accepted = [
+                    item
+                    for item in selections
+                    if item["source_type"] == query_spec["source_type"]
+                    and item["status"] == "ambiguous"
+                ]
                 if accepted:
                     accepted_for_query = True
                     selected_types.update(item["source_type"] for item in accepted)
@@ -787,12 +846,17 @@ async def discover_sources(
             break
     accepted_count = sum(item["status"] == "accepted" for item in discovered)
     ambiguous_count = sum(item["status"] == "ambiguous" for item in discovered)
+    rejected_count = sum(item["status"] == "rejected" for item in discovered)
+    transport_outcomes = {"authentication_failed", "rate_limited", "timeout", "provider_error", "empty_results", "malformed_response", "not_configured"}
+    only_transport_failures = bool(provider_provenance) and all(item["outcome"] in transport_outcomes for item in provider_provenance)
     if accepted_count:
         status = "accepted"
     elif ambiguous_count:
         status = "ambiguous"
-    elif provider_provenance:
+    elif rejected_count or any(item["outcome"] == "rejected" for item in provider_provenance):
         status = "rejected"
+    elif only_transport_failures:
+        status = "search_unavailable"
     else:
         status = "search_unavailable"
     next_actions = []
@@ -800,10 +864,17 @@ async def discover_sources(
         next_actions.append("provide a verified Investor Relations source override")
     if warnings:
         next_actions.append("review search provider and source evidence warnings")
-    return {
+    normalized_ticker = _fold_whitespace(company.get("ticker") or "").upper()
+    for source in discovered:
+        source.setdefault("ticker", normalized_ticker)
+        source.setdefault("job_id", job_id)
+    result = {
         "status": status,
         "sources": discovered,
         "provider_provenance": provider_provenance,
         "warnings": list(dict.fromkeys(warnings)),
         "next_actions": list(dict.fromkeys(next_actions)),
     }
+    if owns_connection:
+        connection.close()
+    return result

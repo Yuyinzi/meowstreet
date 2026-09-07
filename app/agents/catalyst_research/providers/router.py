@@ -2,11 +2,20 @@ from collections.abc import Iterable, Mapping
 
 
 _PROVIDER_ORDER = ("tavily", "native_search", "ddgs")
+_VALID_PROVIDERS = {"auto", "tavily", "native_search", "ddgs"}
+_VALID_FALLBACKS = {"auto", "ddgs", "none"}
 
 
 class SearchRouter:
     def __init__(self, config: Mapping[str, str] | None, providers: Iterable):
         self.config = dict(config or {})
+        primary = str(self.config.get("provider", "auto")).strip().lower() or "auto"
+        fallback = str(self.config.get("fallback", "auto")).strip().lower() or "auto"
+        if primary not in _VALID_PROVIDERS:
+            raise ValueError("catalyst search provider is invalid")
+        if fallback not in _VALID_FALLBACKS:
+            raise ValueError("catalyst search fallback is invalid")
+        self.config.update({"provider": primary, "fallback": fallback})
         self._providers = {}
         for provider in providers:
             name = getattr(provider, "name", None)

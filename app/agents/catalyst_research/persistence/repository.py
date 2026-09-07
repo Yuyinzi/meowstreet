@@ -325,6 +325,22 @@ def record_search_attempt(con, attempt):
             raise ValueError(f"research job {attempt['job_id']} is terminal")
 
 
+def update_search_attempt(con, attempt_id, *, outcome, diagnostics=None, completed_at=None, provider_request_id=None):
+    row = con.execute("select job_id from catalyst_search_attempts where attempt_id = ?", (attempt_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"search attempt {attempt_id} was not found")
+    _nonterminal_job(con, row["job_id"])
+    with con:
+        cursor = con.execute(
+            """update catalyst_search_attempts
+            set completed_at = coalesce(?, completed_at), outcome = ?, diagnostics_json = ?, provider_request_id = coalesce(?, provider_request_id)
+            where attempt_id = ?""",
+            (completed_at or _now_iso(), outcome, _json(diagnostics or {}), provider_request_id, attempt_id),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError(f"search attempt {attempt_id} was not found")
+
+
 def record_search_results(con, job_id, attempt_id, results):
     _nonterminal_job(con, job_id)
     attempt = con.execute("select * from catalyst_search_attempts where attempt_id = ?", (attempt_id,)).fetchone()

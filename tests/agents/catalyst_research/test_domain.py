@@ -28,6 +28,16 @@ def test_discovery_queries_are_bounded_and_cover_each_source_target():
     assert all("NVIDIA Corporation" in item["query"] for item in queries)
 
 
+def test_discovery_query_identity_is_cleaned_before_each_distinct_suffix():
+    queries = _discovery_queries({"ticker": "nv da!", "company_name": "A" * 300 + "\n<script>"})
+
+    assert len(queries) == 4
+    assert len({item["query"] for item in queries}) == 4
+    assert all(len(item["query"]) <= 240 for item in queries)
+    assert all("investor relations" in item["query"] for item in queries)
+    assert all("<" not in item["query"] and ">" not in item["query"] for item in queries)
+
+
 @pytest.mark.parametrize("ticker, expected", [(" nvda ", "NVDA"), ("aapl", "AAPL")])
 def test_normalize_request_normalizes_ticker_and_window(ticker, expected):
     result = normalize_request(ticker, years=2, as_of=date(2024, 2, 29))
