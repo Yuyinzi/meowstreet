@@ -451,6 +451,7 @@ def validate_active_adapter(adapter, *, fetch_page, requested_start, requested_e
         "status": status,
         "observations": observations if status == "passed" else [],
         "promotable_observations": observations if status == "passed" else [],
+        "execution": result if status == "passed" else None,
         "report": report,
         "errors": errors,
         "validator_version": ADAPTER_VALIDATOR_VERSION,

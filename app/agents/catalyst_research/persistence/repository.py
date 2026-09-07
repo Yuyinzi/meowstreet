@@ -155,6 +155,8 @@ def connect(db_path=DEFAULT_DB_PATH):
             acceptance_status text not null default 'pending' check (acceptance_status in ('pending','accepted','ambiguous','rejected')),
             extraction_status text not null default 'pending' check (extraction_status in ('pending','complete','partial','unsupported','failed')),
             active_adapter_id text,
+            adapter_version integer,
+            executor_version text,
             evidence_result_ids_json text not null default '[]',
             requested_start text,
             requested_end text,
@@ -281,6 +283,8 @@ def _migrate_schema(con):
             acceptance_status text not null default 'pending' check (acceptance_status in ('pending','accepted','ambiguous','rejected')),
             extraction_status text not null default 'pending' check (extraction_status in ('pending','complete','partial','unsupported','failed')),
             active_adapter_id text,
+            adapter_version integer,
+            executor_version text,
             evidence_result_ids_json text not null default '[]',
             requested_start text,
             requested_end text,
@@ -312,6 +316,10 @@ def _migrate_schema(con):
             con.execute("alter table catalyst_ir_sources add column coverage_continuous integer check (coverage_continuous in (0,1))")
         if "verification_reason" not in source_columns:
             con.execute("alter table catalyst_ir_sources add column verification_reason text")
+        if "adapter_version" not in source_columns:
+            con.execute("alter table catalyst_ir_sources add column adapter_version integer")
+        if "executor_version" not in source_columns:
+            con.execute("alter table catalyst_ir_sources add column executor_version text")
     event_columns = {row[1]: row for row in con.execute("pragma table_info(catalyst_ir_events)")}
     if event_columns.get("canonical_url", (None, None, None, 0))[3] == 1:
         con.execute("pragma legacy_alter_table = on")
@@ -599,10 +607,11 @@ def _source_row(con, source):
         "source_type": source.get("source_type"), "url": source.get("url") or "",
         "final_url": source.get("final_url"), "acceptance_status": source.get("acceptance_status", "pending"),
         "extraction_status": source.get("extraction_status", "pending"), "active_adapter_id": source.get("active_adapter_id"),
+        "adapter_version": source.get("adapter_version"), "executor_version": source.get("executor_version"),
         "evidence_result_ids_json": _json(source.get("evidence_result_ids", [])), "requested_start": source.get("requested_start"),
         "requested_end": source.get("requested_end"), "coverage_start": source.get("coverage_start"), "coverage_end": source.get("coverage_end"), "coverage_continuous": None if source.get("coverage_continuous") is None else int(bool(source.get("coverage_continuous"))), "verification_reason": source.get("verification_reason"),
         "page_count": source.get("page_count", 0), "item_count": source.get("item_count", 0), "content_hash": source.get("content_hash"),
-        "snapshot_hash": source.get("snapshot_hash") or source.get("content_hash"), "truncation_reason": source.get("truncation_reason"),
+        "snapshot_hash": source.get("snapshot_hash") if "snapshot_hash" in source else source.get("content_hash"), "truncation_reason": source.get("truncation_reason"),
         "discovery_provider": source.get("discovery_provider"), "execution_path": source.get("execution_path"), "checked_at": source.get("checked_at"),
     }
     if row["source_type"] not in _SOURCE_TYPES:
@@ -620,10 +629,10 @@ def save_source(con, source):
     with con:
         cursor = con.execute(
         """insert into catalyst_ir_sources(
-            source_id,job_id,ticker,source_type,url,final_url,acceptance_status,extraction_status,active_adapter_id,
+            source_id,job_id,ticker,source_type,url,final_url,acceptance_status,extraction_status,active_adapter_id,adapter_version,executor_version,
             evidence_result_ids_json,requested_start,requested_end,coverage_start,coverage_end,coverage_continuous,verification_reason,page_count,item_count,
             content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at
-        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
+        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
             select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
         )""",
             (*tuple(row.values()), row["job_id"]),

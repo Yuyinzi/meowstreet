@@ -295,6 +295,7 @@ def _default_dependencies(db_path, http_client):
         "build_snapshot": build_structural_snapshot,
         "generate_adapter": adapter_generator.generate_adapter,
         "validate_candidate": adapter_validator.validate_candidate,
+        "validate_active_adapter": adapter_validator.validate_active_adapter,
         "execute_adapter": adapter_executor.execute_adapter,
         "classify_observations": domain.classify_observations,
         "normalize_observations": domain.normalize_observations,
@@ -432,7 +433,8 @@ async def _discover(context, company):
     return result
 
 
-async def _prepare_sources(context, company, discovery):
+async def _prepare_sources(context, company, discovery, source_types=None):
+    source_types = tuple(source_types or _REQUIRED_CHANNELS)
     raw_sources = list(discovery.get("sources", []))
     raw_sources.extend(discovery.get("alternate_sources", []))
     candidates = {}
@@ -463,7 +465,7 @@ async def _prepare_sources(context, company, discovery):
             context["next_actions"].append("review_ambiguous_source")
             _save_unaccepted_source(context, source, status="ambiguous", snapshot=snapshot, verification_reason=snapshot.get("verification_error"))
     prepared = {}
-    for source_type in _REQUIRED_CHANNELS:
+    for source_type in source_types:
         accepted = None
         for source in candidates.get(source_type, []):
             if source.get("status") == "rejected" or source.get("acceptance_status") == "rejected":
@@ -492,6 +494,7 @@ async def _prepare_sources(context, company, discovery):
 
 async def _run_channel(context, company, source_type, pair):
     if pair is None or pair[0] is None:
+        context["execution_paths"][source_type] = "cold"
         return {"source_type": source_type, "status": "missing", "events": [], "source": None}
     source, snapshot = pair
     source = dict(source)
@@ -565,6 +568,99 @@ async def _run_channel(context, company, source_type, pair):
         return {"source_type": source_type, "status": "partial", "events": [], "source": saved, "error": _sanitized_error(exc)}
 
 
+def _bound_adapter_fetch(context, adapter):
+    allowed_hosts = list(adapter.get("allowed_hosts", []))
+
+    def fetch(url, **kwargs):
+        fetch_kwargs = dict(kwargs)
+        fetch_kwargs["allowed_hosts"] = allowed_hosts
+        if context.get("url_resolver") is not None:
+            fetch_kwargs["resolver"] = context["url_resolver"]
+        return _invoke_sync(context["fetch_page"], url, **fetch_kwargs)
+
+    return fetch
+
+
+def _hot_source(context, adapter_row, execution):
+    adapter = adapter_row["adapter"]
+    observations = list(execution.get("observations", []))
+    report = execution.get("report") or {}
+    truncation_reason = execution.get("truncation_reason") or report.get("pagination", {}).get("truncation_reason")
+    coverage_dates = [item.get("count_date") for item in observations if item.get("count_date")]
+    coverage_start = execution.get("coverage_start") or (min(coverage_dates) if coverage_dates else None)
+    coverage_end = execution.get("coverage_end") or (max(coverage_dates) if coverage_dates else None)
+    has_boundary_evidence = "boundary_reached" in execution or "archive_exhausted" in execution
+    complete = (bool(execution.get("boundary_reached") or execution.get("archive_exhausted")) if has_boundary_evidence else bool(observations)) and not truncation_reason
+    hashes = list(execution.get("content_hashes") or execution.get("page_content_hashes") or report.get("page_content_hashes", []))
+    source = {
+        "ticker": context["request"]["ticker"],
+        "job_id": context["job"]["job_id"],
+        "source_type": adapter_row["source_type"],
+        "url": adapter_row.get("source_url") or str(adapter.get("source_url")),
+        "final_url": adapter_row.get("source_url") or str(adapter.get("source_url")),
+        "acceptance_status": "accepted",
+        "extraction_status": "complete" if complete else "partial",
+        "active_adapter_id": adapter_row.get("adapter_id"),
+        "adapter_version": adapter_row.get("version"),
+        "executor_version": execution.get("executor_version") or report.get("executor_version"),
+        "requested_start": context["job"]["requested_start"],
+        "requested_end": context["job"]["requested_end"],
+        "coverage_start": coverage_start,
+        "coverage_end": coverage_end,
+        "coverage_continuous": complete,
+        "page_count": execution.get("page_count") or report.get("pagination", {}).get("pages", 0),
+        "item_count": execution.get("item_count") if execution.get("item_count") is not None else len(observations),
+        "content_hash": hashes[-1] if hashes else None,
+        "snapshot_hash": None,
+        "truncation_reason": truncation_reason,
+        "execution_path": "hot",
+        "checked_at": _iso(context),
+    }
+    return source
+
+
+async def _run_hot_adapter(context, adapter_row):
+    adapter = adapter_row.get("adapter")
+    if not isinstance(adapter, Mapping):
+        return {"source_type": adapter_row.get("source_type"), "status": "stale", "events": [], "source": None, "validation": {"errors": ["active adapter is invalid"]}}
+    try:
+        validation = await _invoke(
+            context["validate_active_adapter"],
+            adapter,
+            fetch_page=_bound_adapter_fetch(context, adapter),
+            requested_start=context["job"]["requested_start"],
+            requested_end=context["job"]["requested_end"],
+        )
+    except Exception as exc:
+        validation = {"status": "stale", "observations": [], "promotable_observations": [], "errors": [_sanitized_error(exc)]}
+    if not isinstance(validation, Mapping) or validation.get("status") != "passed":
+        return {"source_type": adapter_row.get("source_type"), "status": "stale", "events": [], "source": None, "validation": dict(validation or {})}
+    execution = validation.get("execution")
+    if not isinstance(execution, Mapping):
+        execution = {"observations": validation.get("promotable_observations", validation.get("observations", [])), "report": validation.get("report", {}), "page_content_hashes": validation.get("page_content_hashes", [])}
+    events = list(validation.get("promotable_observations", execution.get("observations", [])))
+    execution = {**execution, "observations": events, "report": validation.get("report", execution.get("report", {})), "page_content_hashes": validation.get("page_content_hashes", execution.get("page_content_hashes", [])), "executor_version": validation.get("executor_version")}
+    source = _hot_source(context, adapter_row, execution)
+    saved = _repo_call(context, "save_source", source)
+    context["execution_paths"][adapter_row["source_type"]] = "hot"
+    return {"source_type": adapter_row["source_type"], "status": "complete" if source["extraction_status"] == "complete" else "partial", "events": events, "source": saved, "adapter": adapter_row, "validation": validation}
+
+
+async def _run_source(context, company, source_type, active_adapter):
+    if active_adapter is not None:
+        hot = await _run_hot_adapter(context, active_adapter)
+        if hot["status"] != "stale":
+            return hot
+        mark_stale = getattr(context["repository"], "mark_adapter_stale", None)
+        if callable(mark_stale):
+            _repo_call(context, "mark_adapter_stale", active_adapter["adapter_id"], _iso(context))
+        context["warnings"].append(f"{source_type} adapter drift detected")
+        context["warnings"].append("source_discovery_required")
+        context["next_actions"].append(f"discover {source_type} source")
+    context["execution_paths"][source_type] = "cold"
+    return None
+
+
 async def run_research(request, *, db_path=None, http_client=None, dependencies=None):
     if not isinstance(request, Mapping):
         raise ValueError("research request is required")
@@ -608,6 +704,7 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         "inspect_snapshot": "build_snapshot",
         "generate": "generate_adapter",
         "validate": "validate_candidate",
+        "validate_active": "validate_active_adapter",
         "execute": "execute_adapter",
         "classify": "classify_observations",
         "stats": "calculate_statistics",
@@ -624,9 +721,28 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         company = await _resolve(context)
         context["company"] = company
         _repo_call(context, "update_resolved_company", company=company, job_id=job["job_id"])
-        discovery = await _discover(context, company)
-        prepared, origins = await _prepare_sources(context, company, discovery)
-        channel_results = {source_type: await _run_channel(context, company, source_type, prepared.get(source_type)) for source_type in _REQUIRED_CHANNELS}
+        force_discovery = bool(normalized.get("force_discovery"))
+        active_adapters = {}
+        if not force_discovery:
+            load_active = getattr(repository, "load_active_adapter", None)
+            if callable(load_active):
+                active_adapters = {
+                    source_type: _repo_call(context, "load_active_adapter", normalized["ticker"], source_type)
+                    for source_type in _REQUIRED_CHANNELS
+                }
+        channel_results = {}
+        cold_channels = []
+        for source_type in _REQUIRED_CHANNELS:
+            result = await _run_source(context, company, source_type, active_adapters.get(source_type))
+            if result is None:
+                cold_channels.append(source_type)
+            else:
+                channel_results[source_type] = result
+        if cold_channels:
+            discovery = await _discover(context, company)
+            prepared, origins = await _prepare_sources(context, company, discovery, cold_channels)
+            for source_type in cold_channels:
+                channel_results[source_type] = await _run_channel(context, company, source_type, prepared.get(source_type))
         events = []
         source_rows = []
         for source_type, result in channel_results.items():

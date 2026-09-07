@@ -1,11 +1,15 @@
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 
 from app.agents.catalyst_research.workflow import _javascript_archive_shell, run_research
 from app.agents.catalyst_research.extraction.pages import fetch_html_page
 from app.http_client import HttpClient
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class FakeRepository:
@@ -106,7 +110,7 @@ def _deps(repository, calls, *, fail_resolve=False):
             "next_actions": [],
         }
 
-    async def fetch(url, **kwargs):
+    def fetch(url, **kwargs):
         calls.append(f"fetch:{url.rsplit('/', 1)[-1] or 'home'}")
         purpose = "Events Presentations" if "/events" in url else "Press Releases"
         return {"requested_url": url, "final_url": url, "html": f"<html><body>Acme Investor Relations {purpose}</body></html>"}
@@ -655,3 +659,106 @@ def test_ordinary_script_enhanced_content_is_not_javascript_archive_shell():
     snapshot = {"normalized": {"text": html, "links": [], "headings": [{"level": 1, "text": "Acme Investor Relations"}]}, "structural_html": html}
 
     assert _javascript_archive_shell(page, snapshot) is False
+
+
+def test_hot_workflow_reuses_active_adapters_without_discovery_or_generation(tmp_path):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    calls = []
+    dependencies = _deps(repository, calls)
+    press_adapter = {
+        "schema_version": "ir_source_adapter_v1", "ticker": "ACME", "source_type": "press_releases",
+        "source_url": "https://ir.acme.example/news", "allowed_hosts": ["ir.acme.example"], "access_mode": "html",
+        "extraction": {"item_selector": ".news-item", "date": {"selector": "time", "value_source": "text", "formats": ["%B %d, %Y"]}, "title": {"selector": ".news-title", "value_source": "text"}, "url": {"selector": ".news-title", "value_source": "attribute", "attribute": "href"}},
+        "pagination": {"type": "next_link", "selector": "a.next"},
+    }
+    events_adapter = {
+        "schema_version": "ir_source_adapter_v1", "ticker": "ACME", "source_type": "events_presentations",
+        "source_url": "https://ir.acme.example/events", "allowed_hosts": ["ir.acme.example"], "access_mode": "html",
+        "extraction": {"item_selector": ".event-item", "date": {"selector": "[data-date]", "value_source": "attribute", "attribute": "data-date", "formats": ["%Y-%m-%d"]}, "title": {"selector": ".event-title", "value_source": "text"}},
+        "pagination": {"type": "none"},
+    }
+    adapters = {"press_releases": press_adapter, "events_presentations": events_adapter}
+    pages = {
+        "https://ir.acme.example/news": FIXTURES / "press_releases_page_1.html",
+        "https://ir.acme.example/news?page=2": FIXTURES / "press_releases_page_2.html",
+        "https://ir.acme.example/events": FIXTURES / "events_page.html",
+    }
+
+    def fetch(url, **kwargs):
+        path = pages[url]
+        html = path.read_text()
+        return {"requested_url": url, "final_url": url, "redirect_chain": [url], "content_type": "text/html", "response_bytes": len(html.encode()), "truncated": False, "html": html}
+
+    def snapshot(page, **kwargs):
+        purpose = "Events Presentations" if "/events" in page["requested_url"] else "Press Releases"
+        return {"requested_url": page["requested_url"], "final_url": page["final_url"], "redirect_chain": [page["requested_url"]], "content_type": "text/html", "structural_html": page["html"], "text": f"Acme Investor Relations {purpose}", "normalized": {"text": page["html"], "links": []}}
+
+    async def discover(*args, **kwargs):
+        calls.append("discover")
+        return {"status": "accepted", "sources": [{"source_type": "press_releases", "url": "https://ir.acme.example/news"}, {"source_type": "events_presentations", "url": "https://ir.acme.example/events"}], "warnings": [], "next_actions": []}
+
+    async def generate(company, source, snapshot, **kwargs):
+        calls.append(f"generate:{source['source_type']}")
+        return {"adapter": adapters[source["source_type"]]}
+
+    def validate(adapter, snapshot, **kwargs):
+        return {"status": "passed", "observations": [], "report": {}}
+
+    dependencies.update({"fetch_page": fetch, "build_snapshot": snapshot, "discover_sources": discover, "generate_adapter": generate, "validate_candidate": validate, "execute_adapter": __import__("app.agents.catalyst_research.adapters.executor", fromlist=["execute_adapter"]).execute_adapter, "validate_active_adapter": __import__("app.agents.catalyst_research.adapters.validator", fromlist=["validate_active_adapter"]).validate_active_adapter})
+    request = {"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}
+    cold = asyncio.run(run_research(request, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
+    assert cold["status"] == "completed"
+    calls.clear()
+    dependencies["discover_sources"] = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("discovery should not run"))
+    dependencies["generate_adapter"] = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("generation should not run"))
+    hot = asyncio.run(run_research(request, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
+    assert hot["status"] == "completed"
+    assert all(source["execution_path"] == "hot" for source in hot["sources"])
+    assert hot["call_counts"]["discovery"] == 0
+    assert hot["call_counts"]["adapter_generation"] == 0
+    assert hot["call_counts"]["event_extraction"] == 0
+    assert {source["adapter_version"] for source in hot["sources"]} == {1}
+    assert all(source["content_hash"] for source in hot["sources"])
+    pages["https://ir.acme.example/news"] = FIXTURES / "press_releases_appended.html"
+    appended = asyncio.run(run_research(request, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
+    assert appended["status"] == "completed"
+    assert appended["observation_count"] == hot["observation_count"] + 1
+    assert all(source["execution_path"] == "hot" for source in appended["sources"])
+    assert appended["call_counts"]["discovery"] == 0
+    assert appended["call_counts"]["adapter_generation"] == 0
+    assert appended["call_counts"]["event_extraction"] == 0
+
+
+def test_drift_marks_only_failed_active_adapter_stale_before_cold_recovery():
+    from app.agents.catalyst_research.workflow import _run_source
+
+    marked = []
+    saved = []
+
+    class Repository:
+        def mark_adapter_stale(self, connection, adapter_id, stale_at):
+            marked.append(adapter_id)
+
+        def save_source(self, connection, source):
+            saved.append(source)
+            return source
+
+    async def validate_active(*args, **kwargs):
+        return {"status": "stale", "observations": [], "promotable_observations": [], "errors": ["selector drift"]}
+
+    context = {
+        "repository": Repository(), "connection": object(), "request": {"ticker": "ACME"},
+        "job": {"job_id": "job", "requested_start": "2025-01-01", "requested_end": "2026-01-01"},
+        "clock": datetime(2026, 1, 1, tzinfo=UTC), "fetch_page": lambda *args, **kwargs: None,
+        "validate_active_adapter": validate_active, "warnings": [], "next_actions": [], "execution_paths": {},
+        "url_resolver": None,
+    }
+    adapter = {"adapter_id": "adapter-1", "source_type": "press_releases", "adapter": {}}
+
+    result = asyncio.run(_run_source(context, {}, "press_releases", adapter))
+
+    assert result is None
+    assert marked == ["adapter-1"]
+    assert context["execution_paths"]["press_releases"] == "cold"
+    assert "source_discovery_required" in context["warnings"]
+    assert saved == []

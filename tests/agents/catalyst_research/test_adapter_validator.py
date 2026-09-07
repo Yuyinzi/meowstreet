@@ -131,6 +131,20 @@ def test_active_validation_returns_stale_without_promotable_observations_on_drif
     assert result["report"]["safety_failures"]
 
 
+def test_active_validation_exposes_single_execution_for_hot_path_reuse():
+    fetch, _, _ = page_fetcher()
+    result = validate_active_adapter(
+        adapter(),
+        fetch_page=fetch,
+        requested_start="2025-01-01",
+        requested_end="2025-12-31",
+    )
+
+    assert result["status"] == "passed"
+    assert result["execution"]["observations"] == result["promotable_observations"]
+    assert result["execution"]["page_count"] == 1
+
+
 def _page(url, html, *, truncated=False, redirect_chain=None, content_type="text/html", response_bytes=None):
     return {
         "requested_url": url,
