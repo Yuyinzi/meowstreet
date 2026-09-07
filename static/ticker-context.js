@@ -942,6 +942,27 @@
     return freqHtml + movesHtml;
   }
 
+  function loadCatalystResearchAsync(symbol) {
+    var region = document.getElementById("catalystResearchRegion");
+    if (!region || !window.CatalystResearch) {
+      return;
+    }
+    window.CatalystResearch.load(symbol, {
+      isCurrent: function (resultSymbol) {
+        return Boolean(latestQuantPayload) && latestQuantPayload.symbol === resultSymbol;
+      },
+      onResult: function (payload, html) {
+        region.innerHTML = html;
+        latestQuantPayload.catalyst_research = payload;
+      },
+    }).catch(function () {
+      if (!latestQuantPayload || latestQuantPayload.symbol !== symbol) {
+        return;
+      }
+      region.innerHTML = '<p class="section-note">IR communication history unavailable.</p>';
+    });
+  }
+
   var INSIDER_PAGE_SIZE = 25;
   var insiderTableData = null;
   var insiderPage = 0;
@@ -1181,6 +1202,9 @@
       '<div class="quant-section"><div class="quant-section-title">Catalyst activity (8-K filings)</div>' +
       '<div id="catalystAsyncRegion"><p class="section-note">Loading catalyst activity…</p></div>' +
       "</div>" +
+      '<div class="quant-section"><div class="quant-section-title">IR communication history</div>' +
+      '<div id="catalystResearchRegion"><p class="section-note">Loading IR communication history…</p></div>' +
+      "</div>" +
       '<div class="quant-section"><div class="quant-section-title">Insider transactions</div>' +
       '<div id="insiderAsyncRegion"><p class="section-note">Loading insider activity…</p></div>' +
       "</div>" +
@@ -1188,6 +1212,7 @@
     wireQuantRefresh(payload.symbol);
     wireQuantPeer(payload.symbol);
     loadCatalystAsync(payload.symbol);
+    loadCatalystResearchAsync(payload.symbol);
     loadInsiderAsync(payload.symbol);
     var aiButton = document.getElementById("quantAiInterpret");
     if (aiButton) {
@@ -1287,6 +1312,24 @@
     var missing = payload.backward_ratios && payload.backward_ratios.missing_inputs || [];
     if (missing.length) {
       lines.push("Missing inputs: " + missing.join(", "));
+    }
+    var research = payload.catalyst_research;
+    if (research && research.status && research.status !== "not_researched") {
+      var researchStats = research.statistics || {};
+      lines.push(
+        "IR communication history (historical communication frequency evidence only; do not derive a verdict or prediction from it):"
+      );
+      ["press_releases", "events_presentations"].forEach(function (channelKey) {
+        var channel = researchStats[channelKey];
+        if (!channel) {
+          return;
+        }
+        var channelLabel = channelKey === "press_releases" ? "Press releases" : "Events & presentations";
+        lines.push("- " + channelLabel + ": " +
+          (channel.total == null ? "—" : channel.total) +
+          " observed, coverage " + (channel.status || "unknown") +
+          (channel.per_year == null ? "" : ", about " + channel.per_year + " per year"));
+      });
     }
     return lines.join("\n");
   }

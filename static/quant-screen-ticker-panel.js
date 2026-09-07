@@ -3,6 +3,7 @@
   var panel = document.getElementById("tickerDetailPanel");
   var activeSymbol = null;
   var activeContext = null;
+  var catalystResearchPayload = null;
 
   function escapeHtml(value) {
     return String(value == null ? "" : value)
@@ -610,6 +611,39 @@
     );
   }
 
+  function catalystResearchSection() {
+    var body = catalystResearchPayload === null
+      ? '<div class="ticker-detail-meta">Loading IR communication history…</div>'
+      : window.CatalystResearch.render(catalystResearchPayload);
+    return (
+      '<section class="ticker-detail-section">' +
+      '<div class="ticker-detail-section-title">IR communication history</div>' +
+      '<div id="tickerDetailCatalystResearchBody">' + body + "</div>" +
+      "</section>"
+    );
+  }
+
+  function loadCatalystResearchAsync(symbol) {
+    var body = panel.querySelector("#tickerDetailCatalystResearchBody");
+    if (!body || !window.CatalystResearch) {
+      return;
+    }
+    window.CatalystResearch.load(symbol, {
+      isCurrent: function (resultSymbol) {
+        return activeSymbol === resultSymbol;
+      },
+      onResult: function (payload, html) {
+        catalystResearchPayload = payload;
+        body.innerHTML = html;
+      },
+    }).catch(function () {
+      if (activeSymbol !== symbol) {
+        return;
+      }
+      body.innerHTML = '<div class="ticker-detail-meta">IR communication history unavailable.</div>';
+    });
+  }
+
   var INSIDER_PAGE_SIZE = 25;
   var insiderTableData = null;
   var insiderPage = 0;
@@ -790,6 +824,24 @@
     if (missing.length) {
       lines.push("Missing inputs: " + missing.join(", "));
     }
+    var research = catalystResearchPayload;
+    if (research && research.ticker === quantPayload.symbol && research.status !== "not_researched") {
+      var researchStats = research.statistics || {};
+      lines.push(
+        "IR communication history (historical communication frequency evidence only; do not derive a verdict or prediction from it):"
+      );
+      ["press_releases", "events_presentations"].forEach(function (channelKey) {
+        var channel = researchStats[channelKey];
+        if (!channel) {
+          return;
+        }
+        var channelLabel = channelKey === "press_releases" ? "Press releases" : "Events & presentations";
+        lines.push("- " + channelLabel + ": " +
+          (channel.total == null ? "—" : channel.total) +
+          " observed, coverage " + (channel.status || "unknown") +
+          (channel.per_year == null ? "" : ", about " + channel.per_year + " per year"));
+      });
+    }
     return lines.join("\n");
   }
 
@@ -816,9 +868,11 @@
       backwardRatiosSection(quantPayload) +
       analystRatingsSection(quantPayload) +
       catalystActivitySection(quantPayload) +
+      catalystResearchSection() +
       insiderActivitySection(quantPayload);
     wirePeer(quantPayload.symbol);
     loadCatalystAsync(quantPayload.symbol);
+    loadCatalystResearchAsync(quantPayload.symbol);
     loadInsiderAsync(quantPayload.symbol);
     askAssistant(activeContext, quantPayload);
   }
@@ -865,6 +919,7 @@
   function closeTickerPanel() {
     activeSymbol = null;
     activeContext = null;
+    catalystResearchPayload = null;
     app.classList.remove("panel-open");
     panel.innerHTML = "";
   }
@@ -875,6 +930,7 @@
       return;
     }
     activeSymbol = normalized;
+    catalystResearchPayload = null;
     app.classList.add("panel-open");
     panel.innerHTML = panelHead(normalized) +
       '<div class="detail-panel-body">' +
