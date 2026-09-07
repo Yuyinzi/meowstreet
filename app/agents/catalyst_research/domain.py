@@ -677,6 +677,21 @@ def _merge_source_candidates(existing: dict, incoming: dict) -> dict:
     return merged
 
 
+def _alternate_sources_truncated(candidates: list[dict]) -> dict[str, int]:
+    urls_by_type = {}
+    for candidate in candidates:
+        source_type = candidate.get("source_type")
+        url = candidate.get("url")
+        if source_type not in _DISCOVERY_SOURCE_TYPES or not url:
+            continue
+        urls_by_type.setdefault(source_type, set()).add(url)
+    return {
+        source_type: max(0, len(urls) - MAX_ALTERNATE_SOURCES_PER_TYPE - 1)
+        for source_type, urls in urls_by_type.items()
+        if len(urls) > MAX_ALTERNATE_SOURCES_PER_TYPE + 1
+    }
+
+
 def _shape_source_candidates(candidates: list[dict], router) -> tuple[list[dict], list[dict]]:
     names = router.provider_order() if hasattr(router, "provider_order") else ("tavily", "native_search", "ddgs")
     provider_order = {name: index for index, name in enumerate(names)}
@@ -920,10 +935,15 @@ async def _discover_sources_impl(
         source.setdefault("ticker", normalized_ticker)
         source.setdefault("job_id", job_id)
     primary_sources, alternate_sources = _shape_source_candidates(discovered, router)
+    alternate_sources_truncated = _alternate_sources_truncated(discovered)
+    for provenance in provider_provenance:
+        provenance["alternate_sources_truncated"] = dict(alternate_sources_truncated)
     result = {
         "status": status,
         "sources": primary_sources,
         "alternate_sources": alternate_sources,
+        "alternate_sources_truncated": alternate_sources_truncated,
+        "diagnostics": {"alternate_sources_truncated": alternate_sources_truncated},
         "deferred_capabilities": list(DEFERRED_DISCOVERY_CAPABILITIES),
         "provider_provenance": provider_provenance,
         "warnings": list(dict.fromkeys(warnings)),

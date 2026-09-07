@@ -5,7 +5,7 @@ import pytest
 
 from app.agents.catalyst_research.providers.base import SearchProviderError
 from app.agents.catalyst_research.providers.router import SearchRouter
-from app.agents.catalyst_research.domain import MAX_ALTERNATE_SOURCES_PER_TYPE, _shape_source_candidates, discover_sources
+from app.agents.catalyst_research.domain import MAX_ALTERNATE_SOURCES_PER_TYPE, _alternate_sources_truncated, _shape_source_candidates, discover_sources
 from app.agents.catalyst_research.persistence import repository as catalyst_repository
 
 
@@ -62,6 +62,7 @@ def test_alternate_sources_are_stably_capped_per_source_type_without_losing_prim
     assert primaries[0]["evidence_result_ids"] == [0, 99]
     assert len(alternates) == MAX_ALTERNATE_SOURCES_PER_TYPE
     assert [row["url"] for row in alternates] == ["https://acme.example/news-1", "https://acme.example/news-2"]
+    assert _alternate_sources_truncated(candidates) == {"press_releases": 2}
 
 
 def test_discovery_reports_deferred_same_site_capability_and_bounds_attempts():
@@ -71,6 +72,7 @@ def test_discovery_reports_deferred_same_site_capability_and_bounds_attempts():
     assert result["deferred_capabilities"] == ["same_site_traversal_from_trusted_snapshot"]
     assert len(result["provider_provenance"]) <= 12
     assert all(len(provider.calls) <= 4 for provider in providers)
+    assert result["alternate_sources_truncated"] == {}
 
 
 @pytest.mark.parametrize(
