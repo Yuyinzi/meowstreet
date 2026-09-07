@@ -318,8 +318,8 @@ def test_load_job_result_and_events_page_return_complete_persisted_event_list(tm
 
     assert result["observation_count"] == 2
     assert len(result["sources"]) == 1
-    assert [event["title"] for event in page["events"]] == ["Business update", "Q1 Financial Results"]
-    assert [event["earnings_state"] for event in page["events"]] == ["ambiguous", "earnings"]
+    assert [event["title"] for event in page["events"]] == ["Q1 Financial Results", "Business update"]
+    assert [event["earnings_state"] for event in page["events"]] == ["earnings", "ambiguous"]
     assert page["next_cursor"] is None
     rows = con.execute("select event_id, model, prompt_schema_version, input_hash, output_hash from catalyst_ir_classifications").fetchall()
     rows_by_input_hash = {row[3]: row for row in rows}

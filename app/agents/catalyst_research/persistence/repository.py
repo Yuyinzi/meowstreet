@@ -848,6 +848,18 @@ def load_active_adapter(con, ticker, source_type):
     return result
 
 
+def load_adapter_brief(con, adapter_id):
+    if not adapter_id:
+        return None
+    row = con.execute(
+        "select adapter_id, version, state, access_mode from catalyst_source_adapters where adapter_id = ?",
+        (adapter_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {"adapter_id": row["adapter_id"], "version": row["version"], "status": row["state"], "access_mode": row["access_mode"]}
+
+
 def save_finalized_observations(con, job_id, events, classifications):
     job = _job(con, job_id)
     if job["status"] in _TERMINAL_JOB_STATES:
@@ -1091,10 +1103,10 @@ def load_events_page(con, ticker, job_id, limit, cursor):
         where.append("job_id = ?")
         params.append(job_id)
     if payload:
-        where.append("(count_date > ? or (count_date = ? and event_id > ?))")
+        where.append("(count_date < ? or (count_date = ? and event_id < ?))")
         params.extend([payload["count_date"], payload["count_date"], payload["event_id"]])
     rows = con.execute(
-        f"select * from catalyst_ir_events where {' and '.join(where)} order by count_date, event_id limit ?",
+        f"select * from catalyst_ir_events where {' and '.join(where)} order by count_date desc, event_id desc limit ?",
         (*params, limit + 1),
     ).fetchall()
     has_more = len(rows) > limit

@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from app import tool_runner
+from app.agents.catalyst_research import router as catalyst_research_router
 from app.db import benchmark_market_data, consumer_sentiment, gdp_market_relationships
 from app.db import growth_cycle
 from app.db import macro_indicators as macro_indicators_db
@@ -237,3 +238,4 @@ app.include_router(pair_analysis_router.router)
 app.include_router(portfolio_analysis_router.router)
 app.include_router(quant_screen_router.router)
 app.include_router(ticker_quant_router.router)
+app.include_router(catalyst_research_router.router)
