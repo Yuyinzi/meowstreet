@@ -326,19 +326,28 @@ def record_search_attempt(con, attempt):
 
 
 def update_search_attempt(con, attempt_id, *, outcome, diagnostics=None, completed_at=None, provider_request_id=None):
-    row = con.execute("select job_id from catalyst_search_attempts where attempt_id = ?", (attempt_id,)).fetchone()
-    if row is None:
-        raise ValueError(f"search attempt {attempt_id} was not found")
-    _nonterminal_job(con, row["job_id"])
     with con:
         cursor = con.execute(
             """update catalyst_search_attempts
             set completed_at = coalesce(?, completed_at), outcome = ?, diagnostics_json = ?, provider_request_id = coalesce(?, provider_request_id)
-            where attempt_id = ?""",
+            where attempt_id = ? and exists (
+                select 1 from catalyst_research_jobs
+                where catalyst_research_jobs.job_id = catalyst_search_attempts.job_id
+                  and status not in ('completed','completed_partial','unsupported','failed')
+            )""",
             (completed_at or _now_iso(), outcome, _json(diagnostics or {}), provider_request_id, attempt_id),
         )
-        if cursor.rowcount != 1:
-            raise ValueError(f"search attempt {attempt_id} was not found")
+    if cursor.rowcount == 1:
+        return
+    row = con.execute(
+        "select job_id from catalyst_search_attempts where attempt_id = ?", (attempt_id,)
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"search attempt {attempt_id} was not found")
+    job = con.execute("select status from catalyst_research_jobs where job_id = ?", (row["job_id"],)).fetchone()
+    if job is not None and job["status"] in _TERMINAL_JOB_STATES:
+        raise ValueError(f"research job {row['job_id']} is terminal")
+    raise ValueError(f"search attempt {attempt_id} could not be updated")
 
 
 def record_search_results(con, job_id, attempt_id, results):

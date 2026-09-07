@@ -212,3 +212,19 @@ def test_adapter_validation_cannot_write_after_other_connection_finalizes(tmp_pa
         repository.record_adapter_validation(con, {"adapter_id": candidate["adapter_id"], "job_id": job["job_id"], "status": "passed", "report": {}})
     assert con.execute("select count(*) from catalyst_adapter_validations").fetchone()[0] == 0
     assert con.execute("select state from catalyst_source_adapters where adapter_id = ?", (candidate["adapter_id"],)).fetchone()[0] == "candidate"
+
+
+def test_update_search_attempt_refuses_terminal_job_and_missing_attempt(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    repository.record_search_attempt(
+        con,
+        {"attempt_id": "attempt_1", "job_id": job["job_id"], "provider": "ddgs", "query": "acme ir"},
+    )
+    repository.update_search_attempt(con, "attempt_1", outcome="empty_results")
+    assert con.execute("select outcome from catalyst_search_attempts where attempt_id = 'attempt_1'").fetchone()[0] == "empty_results"
+    with pytest.raises(ValueError, match="not found"):
+        repository.update_search_attempt(con, "missing", outcome="empty_results")
+    repository.finalize_job(con, job["job_id"], {"status": "failed"})
+    with pytest.raises(ValueError, match="terminal"):
+        repository.update_search_attempt(con, "attempt_1", outcome="rejected")

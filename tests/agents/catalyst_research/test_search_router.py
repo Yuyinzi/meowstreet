@@ -301,6 +301,19 @@ def test_real_repository_persists_attempts_and_results_before_selection(tmp_path
     assert saved["acceptance_status"] == "pending"
 
 
+def test_attempt_ids_are_unique_across_jobs_in_one_sqlite_database(tmp_path):
+    con = catalyst_repository.connect(Path(tmp_path) / "market_data.sqlite")
+    first_job = catalyst_repository.create_job(con, {"ticker": "ACM", "years": 1}, {"name": "Acme"})
+    second_job = catalyst_repository.create_job(con, {"ticker": "BETA", "years": 1}, {"name": "Beta"})
+    catalyst_repository.start_job(con, first_job["job_id"], "2026-09-07T00:00:00+00:00")
+    catalyst_repository.start_job(con, second_job["job_id"], "2026-09-07T00:00:00+00:00")
+    for job in (first_job, second_job):
+        asyncio.run(discover_sources({"ticker": job["ticker"], "company_name": job["company_name"]}, router=SearchRouter({"provider": "ddgs", "fallback": "none"}, [FakeProvider("ddgs")] ), llm_client=None, model=None, repository=catalyst_repository, connection=con, job_id=job["job_id"]))
+    ids = [row[0] for row in con.execute("select attempt_id from catalyst_search_attempts")]
+    assert len(ids) == 8
+    assert len(ids) == len(set(ids))
+
+
 def test_discovery_does_not_accept_unknown_domain_or_provider_metadata_links():
     provider = FakeProvider(
         "ddgs",
@@ -326,6 +339,17 @@ def test_discovery_does_not_accept_unknown_domain_or_provider_metadata_links():
     assert result["sources"] == [] or result["sources"][0]["status"] == "rejected"
 
 
+@pytest.mark.parametrize("url", ["file:///secret", "https://user:pass@example.com/ir", "https://127.0.0.1/ir"])
+def test_unsafe_search_results_are_not_persisted_or_sent_to_llm(url):
+    provider = FakeProvider("ddgs", rows=[{"title": "Acme IR", "url": url, "snippet": "Acme investor relations"}])
+    repo = FakeRepository()
+    llm = FakeLLM([])
+    result = asyncio.run(discover_sources({"ticker": "ACM", "company_name": "Acme"}, router=SearchRouter({"provider": "ddgs", "fallback": "none"}, [provider]), llm_client=llm, model="selector", repository=repo, job_id="job-12"))
+    assert repo.results == []
+    assert llm.responses.calls == []
+    assert result["provider_provenance"][0]["outcome"] == "rejected"
+
+
 def test_override_requires_mapping_and_safe_override_is_pending():
     router = SearchRouter({"provider": "ddgs", "fallback": "none"}, [FakeProvider("ddgs")])
     with pytest.raises(ValueError, match="overrides are invalid"):
@@ -344,3 +368,25 @@ def test_transport_exhaustion_is_search_unavailable_but_rejected_selection_is_re
     rejected_provider = FakeProvider("ddgs", rows=[{"title": "Acme Investor Relations", "url": "https://acme.example/ir", "snippet": "Acme investor relations"}])
     rejected = asyncio.run(discover_sources({"ticker": "ACM", "company_name": "Acme"}, router=SearchRouter({"provider": "ddgs", "fallback": "none"}, [rejected_provider]), llm_client=FakeLLM([]), model="selector", repository=FakeRepository(), job_id="job-10"))
     assert rejected["status"] == "rejected"
+
+
+def test_owned_repository_connection_closes_when_identity_validation_fails():
+    class OwnedConnection:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    class RepositoryWithConnection(FakeRepository):
+        def __init__(self):
+            super().__init__()
+            self.connection = OwnedConnection()
+
+        def connect(self):
+            return self.connection
+
+    repository = RepositoryWithConnection()
+    with pytest.raises(ValueError, match="company identity"):
+        asyncio.run(discover_sources({}, router=SearchRouter({"provider": "ddgs", "fallback": "none"}, [FakeProvider("ddgs")]), llm_client=None, model=None, repository=repository, job_id="job-11"))
+    assert repository.connection.closed is True

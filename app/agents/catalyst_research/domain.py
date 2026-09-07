@@ -637,6 +637,13 @@ def _bounded_request_id(value) -> str | None:
     return normalized[:200] or None
 
 
+def _attempt_id(job_id, counter: int) -> str:
+    safe_job_id = re.sub(r"[^A-Za-z0-9_-]", "_", str(job_id or ""))[:120]
+    if not safe_job_id:
+        raise ValueError("job id is required")
+    return f"{safe_job_id}_attempt_{counter}"
+
+
 def _bounded_metadata(value) -> dict:
     if not isinstance(value, Mapping):
         return {}
@@ -661,7 +668,7 @@ def _bounded_search_result(row: Mapping) -> dict:
     }
 
 
-async def discover_sources(
+async def _discover_sources_impl(
     company,
     *,
     router,
@@ -679,10 +686,6 @@ async def discover_sources(
         raise ValueError("result limit is invalid")
     if overrides is not None and not isinstance(overrides, Mapping):
         raise ValueError("overrides are invalid")
-    owns_connection = False
-    if connection is None and callable(getattr(repository, "connect", None)):
-        connection = repository.connect()
-        owns_connection = True
     discovered, warnings = _manual_override_sources(overrides or {})
     if hasattr(router, "unavailable"):
         for provider_name in router.unavailable():
@@ -698,13 +701,14 @@ async def discover_sources(
         accepted_for_query = False
         for provider in router.provider_chain():
             attempt_counter += 1
-            attempt_id = f"discovery_{attempt_counter}_{provider.name}"
+            attempt_id = _attempt_id(job_id, attempt_counter)
             started_at = datetime.now(UTC).isoformat()
             outcome = "provider_error"
             diagnostics = {}
             rows = []
             selections = []
             selection_warning = None
+            unsafe_result_count = 0
             try:
                 rows = await provider.search(query_spec["query"], limit=result_limit)
                 if not isinstance(rows, list):
@@ -713,8 +717,13 @@ async def discover_sources(
                 for row in rows:
                     if not isinstance(row, Mapping) or not row.get("url"):
                         raise SearchProviderError("malformed_response", "search provider returned malformed results")
-                    result_counter += 1
                     normalized = _bounded_search_result(row)
+                    try:
+                        normalized["url"] = canonicalize_public_url(normalized["url"])
+                    except ValueError:
+                        unsafe_result_count += 1
+                        continue
+                    result_counter += 1
                     normalized.update(
                         {
                             "result_id": result_counter,
@@ -726,8 +735,10 @@ async def discover_sources(
                     normalized_rows.append(normalized)
                 rows = normalized_rows
                 diagnostics["result_ids"] = [row["result_id"] for row in rows]
+                if unsafe_result_count:
+                    diagnostics["rejected_unsafe_count"] = min(unsafe_result_count, result_limit)
                 if not rows:
-                    outcome = "empty_results"
+                    outcome = "rejected" if unsafe_result_count else "empty_results"
                 else:
                     outcome = "candidate_results"
             except SearchProviderError as exc:
@@ -764,8 +775,6 @@ async def discover_sources(
                         connection=connection,
                     )
             except Exception:
-                if owns_connection:
-                    connection.close()
                 raise ValueError("search evidence persistence failed") from None
             if rows:
                 selections, selection_warning = await _select_discovery_sources(
@@ -793,8 +802,6 @@ async def discover_sources(
                         connection=connection,
                     )
                 except Exception:
-                    if owns_connection:
-                        connection.close()
                     raise ValueError("search evidence persistence failed") from None
             provider_provenance.append(
                 {
@@ -819,7 +826,7 @@ async def discover_sources(
                         ),
                         None,
                     )
-                    if existing and existing["status"] == "ambiguous" and selection["status"] != "ambiguous":
+                    if existing and existing["status"] in {"ambiguous", "accepted"}:
                         continue
                     discovered = [
                         item
@@ -839,8 +846,6 @@ async def discover_sources(
                 if accepted:
                     accepted_for_query = True
                     selected_types.update(item["source_type"] for item in accepted)
-            if accepted_for_query:
-                break
         if not accepted_for_query and not router.provider_chain():
             warnings.append("search provider chain is unavailable")
             break
@@ -875,6 +880,37 @@ async def discover_sources(
         "warnings": list(dict.fromkeys(warnings)),
         "next_actions": list(dict.fromkeys(next_actions)),
     }
-    if owns_connection:
-        connection.close()
     return result
+
+
+async def discover_sources(
+    company,
+    *,
+    router,
+    llm_client,
+    model,
+    repository,
+    job_id,
+    overrides=None,
+    connection=None,
+    result_limit=10,
+) -> dict:
+    owned_connection = None
+    if connection is None and callable(getattr(repository, "connect", None)):
+        owned_connection = repository.connect()
+        connection = owned_connection
+    try:
+        return await _discover_sources_impl(
+            company,
+            router=router,
+            llm_client=llm_client,
+            model=model,
+            repository=repository,
+            job_id=job_id,
+            overrides=overrides,
+            connection=connection,
+            result_limit=result_limit,
+        )
+    finally:
+        if owned_connection is not None:
+            owned_connection.close()
