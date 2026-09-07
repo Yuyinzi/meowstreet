@@ -846,7 +846,7 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
             else:
                 channel_results[source_type] = result
         if cold_channels:
-            discovery = await _discover(context, company, cold_channels)
+            discovery = await _discover(context, company, {"ir_home", *cold_channels})
             prepared, origins = await _prepare_sources(context, company, discovery, cold_channels)
             missing_channels = [source_type for source_type in cold_channels if prepared.get(source_type) is None]
             if missing_channels and "ir_home" not in cold_channels:

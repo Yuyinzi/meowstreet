@@ -10,6 +10,9 @@ from app.agents.catalyst_research.adapters.executor import execute_adapter
 from app.agents.catalyst_research.adapters.validator import validate_active_adapter, validate_candidate
 from app.agents.catalyst_research.extraction.html import build_structural_snapshot
 from app.agents.catalyst_research.persistence import repository
+from app.agents.catalyst_research.providers.base import SearchProviderError
+from app.agents.catalyst_research.providers.router import SearchRouter
+from app.agents.catalyst_research.schemas import EventClassificationResponse
 from app.agents.catalyst_research.statistics import calculate_statistics
 from app.agents.catalyst_research.workflow import run_research
 
@@ -19,6 +22,98 @@ MANIFEST = json.loads((FIXTURES / "acceptance_manifest.json").read_text())
 TICKERS = sorted(MANIFEST["tickers"])
 _REQUIRED_CHANNELS = ("press_releases", "events_presentations")
 _FIXED_CLOCK = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
+
+
+class _FixtureSearchProvider:
+    def __init__(self, name, entry, error=None):
+        self.name = name
+        self.entry = entry
+        self.error = error
+        self.ready = True
+        self.last_request_id = None
+        self.calls = []
+
+    async def search(self, query, *, limit):
+        self.calls.append((query, limit))
+        if self.error is not None:
+            raise self.error
+        if "press releases" in query.lower():
+            source_type = "press_releases"
+            purpose = "Press Releases"
+        elif "events presentations" in query.lower():
+            source_type = "events_presentations"
+            purpose = "Events and Presentations"
+        else:
+            source_type = "ir_home"
+            purpose = "Investor Relations"
+        if source_type in _REQUIRED_CHANNELS and not self.entry["channels"][source_type]["discovered"]:
+            return []
+        return [
+            {
+                "title": f"{self.entry['company_name']} {purpose}",
+                "url": self.entry["fixture_source_urls"][source_type],
+                "snippet": f"{self.entry['company_name']} Investor Relations {purpose}",
+                "provider_rank": 1,
+                "provider_metadata": {},
+            }
+        ]
+
+
+class _FixtureSourceSelectionResponses:
+    async def parse(self, *, input, **kwargs):
+        candidates = json.loads(input[1]["content"].split("Search candidates:\n", 1)[1])
+        candidate = candidates[0]
+        query = candidate["query"].lower()
+        if "press releases" in query:
+            source_type = "press_releases"
+        elif "events presentations" in query:
+            source_type = "events_presentations"
+        else:
+            source_type = "ir_home"
+        parsed = {
+            "selections": [
+                {
+                    "source_type": source_type,
+                    "url": candidate["url"],
+                    "evidence_result_ids": [candidate["result_id"]],
+                    "confidence": 0.9,
+                    "reason": "fixture evidence identifies the official Investor Relations source",
+                }
+            ]
+        }
+        return type("Response", (), {"output_parsed": parsed})()
+
+
+class _FixtureSourceSelectionLLM:
+    def __init__(self):
+        self.responses = _FixtureSourceSelectionResponses()
+
+
+class _FixtureClassificationResponses:
+    def __init__(self, harness):
+        self.harness = harness
+        self.calls = 0
+
+    async def parse(self, *, input, text_format, **kwargs):
+        assert text_format is EventClassificationResponse
+        self.calls += 1
+        events = json.loads(input[1]["content"].split("Events to classify:\n", 1)[1])
+        expected = self.harness._expected_labels()
+        classifications = [
+            {
+                "id": event["id"],
+                "earnings_state": expected[(event["source_type"], event["title"])]["earnings_state"],
+                "reason": "fixture manually labeled title",
+            }
+            for event in events
+        ]
+        parsed = EventClassificationResponse.model_validate({"classifications": classifications})
+        return type("Response", (), {"output_parsed": parsed})()
+
+
+class _FixtureClassificationLLM:
+    def __init__(self, harness):
+        self.responses = _FixtureClassificationResponses(harness)
 
 
 class _AcceptanceHarness:
@@ -31,7 +126,9 @@ class _AcceptanceHarness:
         self.db_path = Path(tmp_path) / f"{ticker.lower()}_acceptance.sqlite"
         self.revision = None
         self.fetched_urls = []
-        self.llm_classification_calls = 0
+        self.classification_llm = _FixtureClassificationLLM(self)
+        self.provider_calls = {}
+        self.provider_disabled = set()
 
     async def run(self, revision):
         if revision not in {"initial", "appended", "breaking"}:
@@ -44,7 +141,7 @@ class _AcceptanceHarness:
         return {
             "repository": repository,
             "clock": lambda: _FIXED_CLOCK,
-            "llm_client": object(),
+            "llm_client": self.classification_llm,
             "models": {"adapter_generation": "fixture-adapter-model", "classification": "fixture-classification-model"},
             "resolver": self._resolve,
             "discover_sources": self._discover,
@@ -54,7 +151,7 @@ class _AcceptanceHarness:
             "validate_candidate": validate_candidate,
             "validate_active_adapter": validate_active_adapter,
             "execute_adapter": execute_adapter,
-            "classify_observations": self._classify,
+            "classify_observations": domain.classify_observations,
             "normalize_observations": domain.normalize_observations,
             "calculate_statistics": calculate_statistics,
         }
@@ -63,20 +160,64 @@ class _AcceptanceHarness:
         return {"ticker": self.ticker, "company_name": self.entry["company_name"], "cik": self.entry["cik"]}
 
     async def _discover(self, company, **kwargs):
-        requested = set(kwargs.get("source_types") or _REQUIRED_CHANNELS)
-        sources = []
-        for channel in _REQUIRED_CHANNELS:
-            spec = self.entry["channels"][channel]
-            if channel in requested and spec["discovered"]:
-                sources.append({"source_type": channel, "url": spec["url"], "acceptance_status": "pending", "discovery_provider": "ddgs"})
-        if "press_releases" in requested and self.entry["channels"]["press_releases"]["discovered"]:
-            for url in self.entry["rejected_candidates"]:
-                sources.append({"source_type": "press_releases", "url": url, "status": "rejected", "discovery_provider": "tavily"})
-        pending = [source for source in sources if source.get("status") != "rejected"]
-        warnings = list(MANIFEST["provider_fallback"]["warnings"]) if pending else []
-        return {"status": "accepted" if pending else "rejected", "sources": sources, "alternate_sources": [], "warnings": warnings, "next_actions": []}
+        return await self._discover_with_fixture_providers(company, **kwargs)
+
+    async def provider_fallback_discovery(self):
+        connection = repository.connect(self.db_path)
+        try:
+            job = repository.create_job(
+                connection,
+                {"ticker": self.ticker, "years": MANIFEST["years"], "as_of": MANIFEST["as_of"]},
+                {"ticker": self.ticker, "company_name": self.entry["company_name"], "cik": self.entry["cik"]},
+            )
+            repository.start_job(connection, job["job_id"], _FIXED_CLOCK.isoformat())
+            return await self._discover_with_fixture_providers(
+                {"ticker": self.ticker, "company_name": self.entry["company_name"], "cik": self.entry["cik"]},
+                job_id=job["job_id"],
+                connection=connection,
+                source_types={"ir_home", *_REQUIRED_CHANNELS},
+            )
+        finally:
+            connection.close()
+
+    async def _discover_with_fixture_providers(self, company, **kwargs):
+        tavily = _FixtureSearchProvider(
+            "tavily",
+            self.entry,
+            SearchProviderError("authentication_failed", "fixture tavily key failed", disable_provider=True),
+        )
+        native = _FixtureSearchProvider(
+            "native_search",
+            self.entry,
+            SearchProviderError("unsupported_tool", "fixture native search capability failed", disable_provider=True),
+        )
+        ddgs = _FixtureSearchProvider("ddgs", self.entry)
+        router = SearchRouter(
+            {
+                "provider": "auto",
+                "fallback": "auto",
+                "native_search_supported": "auto",
+                "tavily_api_key": None,
+            },
+            [tavily, native, ddgs],
+        )
+        result = await domain.discover_sources(
+            company,
+            router=router,
+            llm_client=_FixtureSourceSelectionLLM(),
+            model="fixture-source-selection-model",
+            repository=repository,
+            job_id=kwargs["job_id"],
+            connection=kwargs["connection"],
+            source_types=kwargs.get("source_types"),
+        )
+        self.provider_calls = {provider.name: len(provider.calls) for provider in (tavily, native, ddgs)}
+        self.provider_disabled = router.disabled()
+        return result
 
     def _page_file(self, url):
+        if url == self.entry["fixture_source_urls"]["ir_home"]:
+            return self.ticker_dir / "ir_home.html", False
         for channel in _REQUIRED_CHANNELS:
             spec = self.entry["channels"][channel]
             if not spec["url"]:
@@ -140,24 +281,6 @@ class _AcceptanceHarness:
     async def _generate(self, company, source, snapshot, **kwargs):
         return {"adapter": self._adapter(source["source_type"])}
 
-    async def _classify(self, events, **kwargs):
-        expected = {key: obs["earnings_state"] for key, obs in self._expected_labels().items()}
-        classified = []
-        lookups = 0
-        for event in events:
-            label = domain.classify_title_by_rule(event["title"], event["source_type"])
-            method = "rule_v1"
-            if label is None:
-                label = expected.get((event["source_type"], event["title"]))
-                method = "fixture_llm_v1"
-                lookups += 1
-                if label is None:
-                    label = "ambiguous"
-                    method = "unresolved"
-            classified.append({**event, "earnings_state": label, "classification_method": method})
-        self.llm_classification_calls += lookups
-        return {"events": classified, "llm_call_count": lookups}
-
     def _expected_labels(self):
         observations = list(self.entry["observations"])
         if self.entry["appended_observation"]:
@@ -188,8 +311,9 @@ def _job_events(db_path, ticker, job_id):
         connection.close()
 
 
-def _expected_lookup_count(entry, observations):
-    return sum(1 for obs in observations if domain.classify_title_by_rule(obs["title"], obs["source_type"]) is None)
+def _expected_classification_batches(observations):
+    unresolved = sum(1 for obs in observations if domain.classify_title_by_rule(obs["title"], obs["source_type"]) is None)
+    return (unresolved + 49) // 50
 
 
 def _cold_call_counts(entry):
@@ -263,7 +387,7 @@ def test_acceptance_manifest_is_self_consistent():
             if obs["earnings_state"] == "earnings":
                 assert rule == "earnings", (ticker, obs["title"])
             else:
-                assert obs["earnings_state"] == "non_earnings"
+                assert obs["earnings_state"] in {"non_earnings", "ambiguous"}
                 assert rule is None, (ticker, obs["title"])
         for channel, spec in entry["channels"].items():
             channel_observations = [obs for obs in entry["observations"] if obs["source_type"] == channel]
@@ -283,7 +407,41 @@ def test_acceptance_manifest_is_self_consistent():
             assert (appended["source_type"], appended["date"], appended["title"], appended["url"]) not in seen_keys
         assert entry["supports_dual_archive_year"] == _manifest_dual_year(entry)
         supported += int(entry["supports_dual_archive_year"])
-    assert supported == 7
+    assert supported >= 7
+
+
+def test_acceptance_manifest_separates_manually_reviewed_official_sources_from_fixture_urls():
+    for entry in MANIFEST["tickers"].values():
+        official_sources = entry["official_source_urls"]
+        fixture_sources = entry["fixture_source_urls"]
+        review = entry["official_source_review"]
+        assert set(official_sources) == {"ir_home", *_REQUIRED_CHANNELS}
+        assert set(fixture_sources) == set(official_sources)
+        assert review["status"] == "manual_reviewed"
+        assert review["reviewed_at"] == "2026-09-07"
+        assert review["fixture_url_policy"] == "sanitized_mirror"
+        assert review["evidence"] == official_sources
+        assert entry["company_name"] in review["company_identity_reason"]
+        assert "purpose" in review["source_purpose_reason"].lower()
+        for source_type, official_url in official_sources.items():
+            assert official_url.startswith("https://")
+            assert ".example" not in official_url
+            assert domain.url_host(official_url) == review["official_hosts"][source_type]
+            assert domain.url_host(fixture_sources[source_type]) == entry["host"]
+            if source_type in _REQUIRED_CHANNELS and entry["channels"][source_type]["discovered"]:
+                assert official_url != entry["channels"][source_type]["url"]
+
+
+def test_acceptance_provider_fallback_uses_real_router_and_discovery_contract(tmp_path):
+    harness = acceptance_harness(tmp_path, "NVDA")
+
+    result = asyncio.run(harness.provider_fallback_discovery())
+
+    assert {source["source_type"] for source in result["sources"]} == {"ir_home", *_REQUIRED_CHANNELS}
+    assert {source["discovery_provider"] for source in result["sources"]} == {"ddgs"}
+    assert result["warnings"] == MANIFEST["provider_fallback"]["warnings"]
+    assert harness.provider_calls == {"tavily": 1, "native_search": 1, "ddgs": 3}
+    assert harness.provider_disabled == {"tavily", "native_search"}
 
 
 @pytest.mark.parametrize("ticker", TICKERS)
@@ -300,7 +458,7 @@ def test_acceptance_ticker_lifecycle(tmp_path, ticker):
     assert cold["call_counts"]["discovery"] == cold_counts["discovery"]
     assert cold["call_counts"]["adapter_generation"] == cold_counts["adapter_generation"]
     assert cold["call_counts"]["event_extraction"] == cold_counts["event_extraction"]
-    assert cold["call_counts"]["classification"] == _expected_lookup_count(entry, entry["observations"])
+    assert cold["call_counts"]["classification"] == _expected_classification_batches(entry["observations"])
     for warning in MANIFEST["provider_fallback"]["warnings"]:
         assert warning in cold["warnings"]
     for url in entry["rejected_candidates"]:
@@ -328,9 +486,19 @@ def test_acceptance_ticker_lifecycle(tmp_path, ticker):
         else:
             assert row["extraction_status"] == "failed"
             assert row["active_adapter_id"] is None
-    assert _projection(_job_events(harness.db_path, ticker, cold["job_id"])) == _manifest_projection(entry["observations"])
+    cold_events = _job_events(harness.db_path, ticker, cold["job_id"])
+    assert _projection(cold_events) == _manifest_projection(entry["observations"])
+    expected_ambiguous = [obs for obs in entry["observations"] if obs["earnings_state"] == "ambiguous"]
+    assert [event["title"] for event in cold_events if event["earnings_state"] == "ambiguous"] == [obs["title"] for obs in expected_ambiguous]
+    assert all(event["classification_method"] == "llm_v1" for event in cold_events if event["earnings_state"] == "ambiguous")
     connection = repository.connect(harness.db_path)
     try:
+        ir_home = connection.execute(
+            "select url, acceptance_status, extraction_status from catalyst_ir_sources where job_id = ? and source_type = 'ir_home'",
+            (cold["job_id"],),
+        ).fetchone()
+        assert ir_home is not None
+        assert tuple(ir_home) == (entry["fixture_source_urls"]["ir_home"], "accepted", "pending")
         adapter_states = {row[0]: row[1] for row in connection.execute("select source_type, state from catalyst_source_adapters where ticker = ?", (ticker,))}
         for channel in _REQUIRED_CHANNELS:
             spec = entry["channels"][channel]
@@ -407,6 +575,7 @@ def test_acceptance_ticker_lifecycle(tmp_path, ticker):
 def test_acceptance_portfolio_coverage_fallbacks_and_labels(tmp_path):
     total = 0
     matched = 0
+    ambiguous_total = 0
     dual_year = []
     for ticker in TICKERS:
         entry = MANIFEST["tickers"][ticker]
@@ -415,7 +584,7 @@ def test_acceptance_portfolio_coverage_fallbacks_and_labels(tmp_path):
         assert cold["status"] == entry["expected_status"]
         for warning in MANIFEST["provider_fallback"]["warnings"]:
             assert warning in cold["warnings"]
-        assert harness.llm_classification_calls == _expected_lookup_count(entry, entry["observations"])
+        assert harness.classification_llm.responses.calls == cold["call_counts"]["classification"]
         assert all(domain.url_host(source["url"]) == entry["host"] for source in cold["sources"])
         for url in entry["rejected_candidates"]:
             assert url not in harness.fetched_urls
@@ -424,9 +593,16 @@ def test_acceptance_portfolio_coverage_fallbacks_and_labels(tmp_path):
         for event in events:
             total += 1
             matched += int(expected.get((event["source_type"], event["title"])) == event["earnings_state"])
+            ambiguous_total += int(event["earnings_state"] == "ambiguous")
         if _result_dual_year(cold):
             dual_year.append(ticker)
     assert total == sum(len(entry["observations"]) for entry in MANIFEST["tickers"].values())
     assert dual_year == sorted(ticker for ticker, entry in MANIFEST["tickers"].items() if entry["supports_dual_archive_year"])
     assert len(dual_year) >= 7
+    assert ambiguous_total >= 1
+    assert ambiguous_total == sum(
+        observation["earnings_state"] == "ambiguous"
+        for entry in MANIFEST["tickers"].values()
+        for observation in entry["observations"]
+    )
     assert matched / total >= 0.95

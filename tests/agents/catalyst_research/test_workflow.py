@@ -849,7 +849,7 @@ def test_real_sqlite_drift_requires_discovery_and_preserves_prior_result_on_repl
 
     assert result["status"] == "completed_partial"
     assert result["call_counts"]["discovery"] == 1
-    assert calls == [["press_releases"]]
+    assert calls == [{"ir_home", "press_releases"}]
     connection = repository.connect(db_path)
     try:
         latest = repository.load_latest_result(connection, "ACME")

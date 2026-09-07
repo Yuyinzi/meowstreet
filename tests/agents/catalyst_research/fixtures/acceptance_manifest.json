@@ -1,0 +1,1042 @@
+{
+  "as_of": "2026-09-01",
+  "provider_fallback": {
+    "succeeding_provider": "ddgs",
+    "warnings": [
+      "tavily was disabled for this process run",
+      "native_search was disabled for this process run"
+    ]
+  },
+  "schema": "catalyst_acceptance_manifest_v1",
+  "tickers": {
+    "AAPL": {
+      "appended_delta": 1,
+      "appended_observation": {
+        "date": "2026-08-26",
+        "earnings_state": "non_earnings",
+        "source_type": "press_releases",
+        "title": "Apple Announces Education Grant Program Expansion",
+        "url": "https://ir.apple.example/news/apple-announces-education-grant-program-expansion"
+      },
+      "channels": {
+        "events_presentations": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "paginated": false,
+          "url": "https://ir.apple.example/events"
+        },
+        "press_releases": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "page_2_truncated": false,
+          "paginated": false,
+          "url": "https://ir.apple.example/news"
+        }
+      },
+      "cik": "320193",
+      "company_name": "Apple Inc.",
+      "expected_status": "completed",
+      "fixture_source_urls": {"events_presentations": "https://ir.apple.example/events", "ir_home": "https://ir.apple.example/", "press_releases": "https://ir.apple.example/news"},
+      "host": "ir.apple.example",
+      "official_source_urls": {"events_presentations": "https://investor.apple.com/investor-relations/default.aspx", "ir_home": "https://investor.apple.com/investor-relations/default.aspx", "press_releases": "https://www.apple.com/newsroom/archive/"},
+      "official_source_review": {"company_identity_reason": "Apple Inc. identity was manually reviewed on the official Investor Relations experience", "evidence": {"events_presentations": "https://investor.apple.com/investor-relations/default.aspx", "ir_home": "https://investor.apple.com/investor-relations/default.aspx", "press_releases": "https://www.apple.com/newsroom/archive/"}, "fixture_url_policy": "sanitized_mirror", "official_hosts": {"events_presentations": "investor.apple.com", "ir_home": "investor.apple.com", "press_releases": "www.apple.com"}, "reviewed_at": "2026-09-07", "source_purpose_reason": "Manual review established the IR home, press/news, and events purpose of the listed sources", "status": "manual_reviewed"},
+      "observations": [
+        {
+          "date": "2026-07-30",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Apple Reports Third Quarter 2026 Financial Results",
+          "url": "https://ir.apple.example/news/apple-reports-third-quarter-2026-financial-results"
+        },
+        {
+          "date": "2026-06-08",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Apple Introduces New MacBook Pro Lineup",
+          "url": "https://ir.apple.example/news/apple-introduces-new-macbook-pro-lineup"
+        },
+        {
+          "date": "2026-05-04",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Apple Services Reach New Milestone for Developers",
+          "url": "https://ir.apple.example/news/apple-services-reach-new-milestone-for-developers"
+        },
+        {
+          "date": "2026-01-29",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Apple Reports First Quarter 2026 Financial Results",
+          "url": "https://ir.apple.example/news/apple-reports-first-quarter-2026-financial-results"
+        },
+        {
+          "date": "2025-09-09",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Apple Debuts iPhone 18 and Apple Watch Series 12",
+          "url": "https://ir.apple.example/news/apple-debuts-iphone-18-and-apple-watch"
+        },
+        {
+          "date": "2024-10-31",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Apple Reports Fourth Quarter 2025 Financial Results",
+          "url": "https://ir.apple.example/news/apple-reports-fourth-quarter-2025-financial-results"
+        },
+        {
+          "date": "2026-07-30",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q3 2026 Earnings Conference Call",
+          "url": "https://ir.apple.example/events/q3-2026-earnings-conference-call"
+        },
+        {
+          "date": "2026-06-08",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "WWDC 2026 Platforms State of the Union",
+          "url": "https://ir.apple.example/events/wwdc-2026-platforms-state-of-the-union"
+        },
+        {
+          "date": "2026-02-24",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Apple 2026 Annual Shareholder Meeting",
+          "url": "https://ir.apple.example/events/apple-2026-annual-shareholder-meeting"
+        },
+        {
+          "date": "2025-06-02",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Apple at WWDC 2025 Investor Session",
+          "url": "https://ir.apple.example/events/apple-at-wwdc-2025-investor-session"
+        }
+      ],
+      "rejected_candidates": [
+        "https://newswire.third-party.invalid/apple/press"
+      ],
+      "supports_dual_archive_year": true
+    },
+    "AMD": {
+      "appended_delta": 1,
+      "appended_observation": {
+        "date": "2026-08-26",
+        "earnings_state": "non_earnings",
+        "source_type": "press_releases",
+        "title": "AMD and HP Announce Expanded PC Collaboration",
+        "url": "https://ir.amd.example/news/amd-and-hp-announce-expanded-pc-collaboration"
+      },
+      "channels": {
+        "events_presentations": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "paginated": false,
+          "url": "https://ir.amd.example/events"
+        },
+        "press_releases": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "page_2_truncated": false,
+          "paginated": false,
+          "url": "https://ir.amd.example/news"
+        }
+      },
+      "cik": "2488",
+      "company_name": "Advanced Micro Devices, Inc.",
+      "expected_status": "completed",
+      "fixture_source_urls": {"events_presentations": "https://ir.amd.example/events", "ir_home": "https://ir.amd.example/", "press_releases": "https://ir.amd.example/news"},
+      "host": "ir.amd.example",
+      "official_source_urls": {"events_presentations": "https://ir.amd.com/news-events/ir-calendar", "ir_home": "https://ir.amd.com/", "press_releases": "https://ir.amd.com/news-events/press-releases"},
+      "official_source_review": {"company_identity_reason": "Advanced Micro Devices, Inc. identity was manually reviewed on the official Investor Relations experience", "evidence": {"events_presentations": "https://ir.amd.com/news-events/ir-calendar", "ir_home": "https://ir.amd.com/", "press_releases": "https://ir.amd.com/news-events/press-releases"}, "fixture_url_policy": "sanitized_mirror", "official_hosts": {"events_presentations": "ir.amd.com", "ir_home": "ir.amd.com", "press_releases": "ir.amd.com"}, "reviewed_at": "2026-09-07", "source_purpose_reason": "Manual review established the IR home, press/news, and events purpose of the listed sources", "status": "manual_reviewed"},
+      "observations": [
+        {
+          "date": "2026-08-04",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "AMD Reports Second Quarter 2026 Financial Results",
+          "url": "https://ir.amd.example/news/amd-reports-second-quarter-2026-financial-results"
+        },
+        {
+          "date": "2026-06-12",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "AMD Unveils Instinct MI400 Series Accelerators",
+          "url": "https://ir.amd.example/news/amd-unveils-instinct-mi400-series-accelerators"
+        },
+        {
+          "date": "2026-02-03",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "AMD Reports Fourth Quarter 2025 Financial Results",
+          "url": "https://ir.amd.example/news/amd-reports-fourth-quarter-2025-financial-results"
+        },
+        {
+          "date": "2025-11-11",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "AMD Expands EPYC Processor Adoption with Cloud Partners",
+          "url": "https://ir.amd.example/news/amd-expands-epyc-processor-adoption-with-cloud"
+        },
+        {
+          "date": "2025-05-06",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "AMD Reports First Quarter 2025 Financial Results",
+          "url": "https://ir.amd.example/news/amd-reports-first-quarter-2025-financial-results"
+        },
+        {
+          "date": "2024-10-29",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "AMD Reports Third Quarter 2024 Financial Results",
+          "url": "https://ir.amd.example/news/amd-reports-third-quarter-2024-financial-results"
+        },
+        {
+          "date": "2026-08-04",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q2 2026 Earnings Conference Call",
+          "url": "https://ir.amd.example/events/q2-2026-earnings-conference-call"
+        },
+        {
+          "date": "2026-06-12",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "AMD Advancing AI 2026 Presentation",
+          "url": "https://ir.amd.example/events/amd-advancing-ai-2026-presentation"
+        },
+        {
+          "date": "2026-03-05",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "AMD at Morgan Stanley Technology Media and Telecom Conference",
+          "url": "https://ir.amd.example/events/amd-at-morgan-stanley-technology-media-and"
+        },
+        {
+          "date": "2025-06-11",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "AMD Advancing AI 2025 Keynote",
+          "url": "https://ir.amd.example/events/amd-advancing-ai-2025-keynote"
+        }
+      ],
+      "rejected_candidates": [
+        "https://newswire.third-party.invalid/amd/press"
+      ],
+      "supports_dual_archive_year": true
+    },
+    "BA": {
+      "appended_delta": 1,
+      "appended_observation": {
+        "date": "2026-08-26",
+        "earnings_state": "non_earnings",
+        "source_type": "press_releases",
+        "title": "Boeing Delivers 1,000th 787 Dreamliner",
+        "url": "https://ir.boeing.example/news/boeing-delivers-1-000th-787-dreamliner"
+      },
+      "channels": {
+        "events_presentations": {
+          "activates": false,
+          "complete": false,
+          "discovered": false,
+          "paginated": false,
+          "url": null
+        },
+        "press_releases": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "page_2_truncated": false,
+          "paginated": false,
+          "url": "https://ir.boeing.example/news"
+        }
+      },
+      "cik": "12927",
+      "company_name": "The Boeing Company",
+      "expected_status": "completed_partial",
+      "fixture_source_urls": {"events_presentations": "https://ir.boeing.example/events", "ir_home": "https://ir.boeing.example/", "press_releases": "https://ir.boeing.example/news"},
+      "host": "ir.boeing.example",
+      "official_source_urls": {"events_presentations": "https://investors.boeing.com/investors/events-presentations/default.aspx", "ir_home": "https://investors.boeing.com/", "press_releases": "https://investors.boeing.com/investors/news/default.aspx"},
+      "official_source_review": {"company_identity_reason": "The Boeing Company identity was manually reviewed on the official Investor Relations experience", "evidence": {"events_presentations": "https://investors.boeing.com/investors/events-presentations/default.aspx", "ir_home": "https://investors.boeing.com/", "press_releases": "https://investors.boeing.com/investors/news/default.aspx"}, "fixture_url_policy": "sanitized_mirror", "official_hosts": {"events_presentations": "investors.boeing.com", "ir_home": "investors.boeing.com", "press_releases": "investors.boeing.com"}, "reviewed_at": "2026-09-07", "source_purpose_reason": "Manual review established the IR home, press/news, and events purpose of the listed sources", "status": "manual_reviewed"},
+      "observations": [
+        {
+          "date": "2026-07-28",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Boeing Reports Second Quarter 2026 Financial Results",
+          "url": "https://ir.boeing.example/news/boeing-reports-second-quarter-2026-financial-results"
+        },
+        {
+          "date": "2026-06-16",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Boeing and Qatar Airways Finalize Widebody Order at Paris Air Show",
+          "url": "https://ir.boeing.example/news/boeing-and-qatar-airways-finalize-widebody-order"
+        },
+        {
+          "date": "2026-04-22",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Boeing Reports First Quarter 2026 Financial Results",
+          "url": "https://ir.boeing.example/news/boeing-reports-first-quarter-2026-financial-results"
+        },
+        {
+          "date": "2026-03-09",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Boeing Opens New Composite Manufacturing Facility",
+          "url": "https://ir.boeing.example/news/boeing-opens-new-composite-manufacturing-facility"
+        },
+        {
+          "date": "2025-10-28",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Boeing Reports Third Quarter 2025 Financial Results",
+          "url": "https://ir.boeing.example/news/boeing-reports-third-quarter-2025-financial-results"
+        },
+        {
+          "date": "2024-12-02",
+          "earnings_state": "ambiguous",
+          "source_type": "press_releases",
+          "title": "Boeing Names New Vice President of Supplier Management",
+          "url": "https://ir.boeing.example/news/boeing-names-new-vice-president-of-supplier"
+        }
+      ],
+      "rejected_candidates": [
+        "https://newswire.third-party.invalid/boeing/press"
+      ],
+      "supports_dual_archive_year": false
+    },
+    "JPM": {
+      "appended_delta": 1,
+      "appended_observation": {
+        "date": "2026-08-26",
+        "earnings_state": "non_earnings",
+        "source_type": "press_releases",
+        "title": "JPMorgan Chase Announces Leadership Appointment in Asset Management",
+        "url": "https://ir.jpmorgan.example/news/jpmorgan-chase-announces-leadership-appointment-in-asset"
+      },
+      "channels": {
+        "events_presentations": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "paginated": false,
+          "url": "https://ir.jpmorgan.example/events"
+        },
+        "press_releases": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "page_2_truncated": false,
+          "paginated": false,
+          "url": "https://ir.jpmorgan.example/news"
+        }
+      },
+      "cik": "19617",
+      "company_name": "JPMorgan Chase & Co.",
+      "expected_status": "completed",
+      "fixture_source_urls": {"events_presentations": "https://ir.jpmorgan.example/events", "ir_home": "https://ir.jpmorgan.example/", "press_releases": "https://ir.jpmorgan.example/news"},
+      "host": "ir.jpmorgan.example",
+      "official_source_urls": {"events_presentations": "https://www.jpmorganchase.com/ir/events", "ir_home": "https://www.jpmorganchase.com/ir", "press_releases": "https://www.jpmorganchase.com/ir/news"},
+      "official_source_review": {"company_identity_reason": "JPMorgan Chase & Co. identity was manually reviewed on the official Investor Relations experience", "evidence": {"events_presentations": "https://www.jpmorganchase.com/ir/events", "ir_home": "https://www.jpmorganchase.com/ir", "press_releases": "https://www.jpmorganchase.com/ir/news"}, "fixture_url_policy": "sanitized_mirror", "official_hosts": {"events_presentations": "www.jpmorganchase.com", "ir_home": "www.jpmorganchase.com", "press_releases": "www.jpmorganchase.com"}, "reviewed_at": "2026-09-07", "source_purpose_reason": "Manual review established the IR home, press/news, and events purpose of the listed sources", "status": "manual_reviewed"},
+      "observations": [
+        {
+          "date": "2026-07-14",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "JPMorgan Chase Reports Second Quarter 2026 Financial Results",
+          "url": "https://ir.jpmorgan.example/news/jpmorgan-chase-reports-second-quarter-2026-financial"
+        },
+        {
+          "date": "2026-05-18",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "JPMorgan Chase Announces Expansion of Chase Branches in Midwest",
+          "url": "https://ir.jpmorgan.example/news/jpmorgan-chase-announces-expansion-of-chase-branches"
+        },
+        {
+          "date": "2026-04-14",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "JPMorgan Chase Reports First Quarter 2026 Financial Results",
+          "url": "https://ir.jpmorgan.example/news/jpmorgan-chase-reports-first-quarter-2026-financial"
+        },
+        {
+          "date": "2026-02-23",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "JPMorgan Chase Launches New Small Business Lending Program",
+          "url": "https://ir.jpmorgan.example/news/jpmorgan-chase-launches-new-small-business-lending"
+        },
+        {
+          "date": "2025-10-14",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "JPMorgan Chase Reports Third Quarter 2025 Financial Results",
+          "url": "https://ir.jpmorgan.example/news/jpmorgan-chase-reports-third-quarter-2025-financial"
+        },
+        {
+          "date": "2024-11-04",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "JPMorgan Chase Commits New Capital to Affordable Housing Initiative",
+          "url": "https://ir.jpmorgan.example/news/jpmorgan-chase-commits-new-capital-to-affordable"
+        },
+        {
+          "date": "2026-07-14",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q2 2026 Earnings Conference Call",
+          "url": "https://ir.jpmorgan.example/events/q2-2026-earnings-conference-call"
+        },
+        {
+          "date": "2026-05-19",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "JPMorgan Chase 2026 Investor Day",
+          "url": "https://ir.jpmorgan.example/events/jpmorgan-chase-2026-investor-day"
+        },
+        {
+          "date": "2026-02-24",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "JPMorgan Chase at RBC Global Financial Institutions Conference",
+          "url": "https://ir.jpmorgan.example/events/jpmorgan-chase-at-rbc-global-financial-institutions"
+        },
+        {
+          "date": "2025-06-04",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "JPMorgan Chase at Bernstein Strategic Decisions Conference",
+          "url": "https://ir.jpmorgan.example/events/jpmorgan-chase-at-bernstein-strategic-decisions-conference"
+        }
+      ],
+      "rejected_candidates": [
+        "https://newswire.third-party.invalid/jpmorgan/press"
+      ],
+      "supports_dual_archive_year": true
+    },
+    "META": {
+      "appended_delta": 1,
+      "appended_observation": {
+        "date": "2026-08-26",
+        "earnings_state": "non_earnings",
+        "source_type": "press_releases",
+        "title": "Meta Announces New AI Research Lab Partnership",
+        "url": "https://ir.meta.example/news/meta-announces-new-ai-research-lab-partnership"
+      },
+      "channels": {
+        "events_presentations": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "paginated": false,
+          "url": "https://ir.meta.example/events"
+        },
+        "press_releases": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "page_2_truncated": false,
+          "paginated": true,
+          "url": "https://ir.meta.example/news"
+        }
+      },
+      "cik": "1326801",
+      "company_name": "Meta Platforms, Inc.",
+      "expected_status": "completed",
+      "fixture_source_urls": {"events_presentations": "https://ir.meta.example/events", "ir_home": "https://ir.meta.example/", "press_releases": "https://ir.meta.example/news"},
+      "host": "ir.meta.example",
+      "official_source_urls": {"events_presentations": "https://investor.atmeta.com/investor-events/default.aspx?ShowEvents=PAST", "ir_home": "https://investor.atmeta.com/", "press_releases": "https://investor.atmeta.com/investor-news/default.aspx"},
+      "official_source_review": {"company_identity_reason": "Meta Platforms, Inc. identity was manually reviewed on the official Investor Relations experience", "evidence": {"events_presentations": "https://investor.atmeta.com/investor-events/default.aspx?ShowEvents=PAST", "ir_home": "https://investor.atmeta.com/", "press_releases": "https://investor.atmeta.com/investor-news/default.aspx"}, "fixture_url_policy": "sanitized_mirror", "official_hosts": {"events_presentations": "investor.atmeta.com", "ir_home": "investor.atmeta.com", "press_releases": "investor.atmeta.com"}, "reviewed_at": "2026-09-07", "source_purpose_reason": "Manual review established the IR home, press/news, and events purpose of the listed sources", "status": "manual_reviewed"},
+      "observations": [
+        {
+          "date": "2026-07-29",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Meta Reports Second Quarter 2026 Financial Results",
+          "url": "https://ir.meta.example/news/meta-reports-second-quarter-2026-financial-results"
+        },
+        {
+          "date": "2026-06-03",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Meta Introduces Llama 5 Model Family",
+          "url": "https://ir.meta.example/news/meta-introduces-llama-5-model-family"
+        },
+        {
+          "date": "2026-04-22",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Meta Connect 2026 Announces New Quest Hardware",
+          "url": "https://ir.meta.example/news/meta-connect-2026-announces-new-quest-hardware"
+        },
+        {
+          "date": "2026-01-28",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Meta Reports Fourth Quarter 2025 Financial Results",
+          "url": "https://ir.meta.example/news/meta-reports-fourth-quarter-2025-financial-results"
+        },
+        {
+          "date": "2025-10-29",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Meta Reports Third Quarter 2025 Financial Results",
+          "url": "https://ir.meta.example/news/meta-reports-third-quarter-2025-financial-results"
+        },
+        {
+          "date": "2024-12-10",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Meta Expands Community Notes Program Globally",
+          "url": "https://ir.meta.example/news/meta-expands-community-notes-program-globally"
+        },
+        {
+          "date": "2026-07-29",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q2 2026 Earnings Conference Call",
+          "url": "https://ir.meta.example/events/q2-2026-earnings-conference-call"
+        },
+        {
+          "date": "2026-04-22",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Meta Connect 2026 Developer Keynote",
+          "url": "https://ir.meta.example/events/meta-connect-2026-developer-keynote"
+        },
+        {
+          "date": "2026-03-04",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Meta at Morgan Stanley Technology Media and Telecom Conference",
+          "url": "https://ir.meta.example/events/meta-at-morgan-stanley-technology-media-and"
+        },
+        {
+          "date": "2025-06-25",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Meta at Cannes Lions 2025 Advertiser Session",
+          "url": "https://ir.meta.example/events/meta-at-cannes-lions-2025-advertiser-session"
+        }
+      ],
+      "rejected_candidates": [
+        "https://newswire.third-party.invalid/meta/press"
+      ],
+      "supports_dual_archive_year": true
+    },
+    "MSFT": {
+      "appended_delta": 1,
+      "appended_observation": {
+        "date": "2026-08-26",
+        "earnings_state": "non_earnings",
+        "source_type": "press_releases",
+        "title": "Microsoft Announces Cybersecurity Skills Initiative",
+        "url": "https://ir.microsoft.example/news/microsoft-announces-cybersecurity-skills-initiative"
+      },
+      "channels": {
+        "events_presentations": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "paginated": true,
+          "url": "https://ir.microsoft.example/events"
+        },
+        "press_releases": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "page_2_truncated": false,
+          "paginated": true,
+          "url": "https://ir.microsoft.example/news"
+        }
+      },
+      "cik": "789019",
+      "company_name": "Microsoft Corporation",
+      "expected_status": "completed",
+      "fixture_source_urls": {"events_presentations": "https://ir.microsoft.example/events", "ir_home": "https://ir.microsoft.example/", "press_releases": "https://ir.microsoft.example/news"},
+      "host": "ir.microsoft.example",
+      "official_source_urls": {"events_presentations": "https://www.microsoft.com/en-us/investor/events/default.aspx", "ir_home": "https://www.microsoft.com/en-us/investor/default.aspx", "press_releases": "https://www.microsoft.com/en-us/investor/news/default.aspx"},
+      "official_source_review": {"company_identity_reason": "Microsoft Corporation identity was manually reviewed on the official Investor Relations experience", "evidence": {"events_presentations": "https://www.microsoft.com/en-us/investor/events/default.aspx", "ir_home": "https://www.microsoft.com/en-us/investor/default.aspx", "press_releases": "https://www.microsoft.com/en-us/investor/news/default.aspx"}, "fixture_url_policy": "sanitized_mirror", "official_hosts": {"events_presentations": "www.microsoft.com", "ir_home": "www.microsoft.com", "press_releases": "www.microsoft.com"}, "reviewed_at": "2026-09-07", "source_purpose_reason": "Manual review established the IR home, press/news, and events purpose of the listed sources", "status": "manual_reviewed"},
+      "observations": [
+        {
+          "date": "2026-07-28",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Microsoft Reports Fourth Quarter FY26 Financial Results",
+          "url": "https://ir.microsoft.example/news/microsoft-reports-fourth-quarter-fy26-financial-results"
+        },
+        {
+          "date": "2026-05-19",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Microsoft Build 2026 Showcases Copilot Studio Updates",
+          "url": "https://ir.microsoft.example/news/microsoft-build-2026-showcases-copilot-studio-updates"
+        },
+        {
+          "date": "2026-04-14",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Microsoft Expands Azure Regions Across Southeast Asia",
+          "url": "https://ir.microsoft.example/news/microsoft-expands-azure-regions-across-southeast-asia"
+        },
+        {
+          "date": "2026-01-27",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Microsoft Reports Second Quarter FY26 Financial Results",
+          "url": "https://ir.microsoft.example/news/microsoft-reports-second-quarter-fy26-financial-results"
+        },
+        {
+          "date": "2025-10-21",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Microsoft and Open Source Partners Expand Developer Programs",
+          "url": "https://ir.microsoft.example/news/microsoft-and-open-source-partners-expand-developer"
+        },
+        {
+          "date": "2024-10-30",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Microsoft Reports First Quarter FY25 Financial Results",
+          "url": "https://ir.microsoft.example/news/microsoft-reports-first-quarter-fy25-financial-results"
+        },
+        {
+          "date": "2026-07-28",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q4 FY26 Earnings Conference Call",
+          "url": "https://ir.microsoft.example/events/q4-fy26-earnings-conference-call"
+        },
+        {
+          "date": "2026-05-20",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Microsoft Build 2026 Investor Presentation",
+          "url": "https://ir.microsoft.example/events/microsoft-build-2026-investor-presentation"
+        },
+        {
+          "date": "2026-01-27",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q2 FY26 Earnings Conference Call",
+          "url": "https://ir.microsoft.example/events/q2-fy26-earnings-conference-call"
+        },
+        {
+          "date": "2025-06-24",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Microsoft at Wells Fargo Digital Infrastructure Conference",
+          "url": "https://ir.microsoft.example/events/microsoft-at-wells-fargo-digital-infrastructure-conference"
+        }
+      ],
+      "rejected_candidates": [
+        "https://newswire.third-party.invalid/microsoft/press"
+      ],
+      "supports_dual_archive_year": true
+    },
+    "NVDA": {
+      "appended_delta": 1,
+      "appended_observation": {
+        "date": "2026-08-26",
+        "earnings_state": "non_earnings",
+        "source_type": "press_releases",
+        "title": "NVIDIA Sets AI Inference Performance Marks in New MLPerf Round",
+        "url": "https://ir.nvidia.example/news/nvidia-sets-ai-inference-performance-marks-in"
+      },
+      "channels": {
+        "events_presentations": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "paginated": false,
+          "url": "https://ir.nvidia.example/events"
+        },
+        "press_releases": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "page_2_truncated": false,
+          "paginated": true,
+          "url": "https://ir.nvidia.example/news"
+        }
+      },
+      "cik": "1045810",
+      "company_name": "NVIDIA Corporation",
+      "expected_status": "completed",
+      "fixture_source_urls": {"events_presentations": "https://ir.nvidia.example/events", "ir_home": "https://ir.nvidia.example/", "press_releases": "https://ir.nvidia.example/news"},
+      "host": "ir.nvidia.example",
+      "official_source_urls": {"events_presentations": "https://investor.nvidia.com/events-and-presentations/default.aspx", "ir_home": "https://investor.nvidia.com/", "press_releases": "https://nvidianews.nvidia.com/news"},
+      "official_source_review": {"company_identity_reason": "NVIDIA Corporation identity was manually reviewed on the official Investor Relations experience", "evidence": {"events_presentations": "https://investor.nvidia.com/events-and-presentations/default.aspx", "ir_home": "https://investor.nvidia.com/", "press_releases": "https://nvidianews.nvidia.com/news"}, "fixture_url_policy": "sanitized_mirror", "official_hosts": {"events_presentations": "investor.nvidia.com", "ir_home": "investor.nvidia.com", "press_releases": "nvidianews.nvidia.com"}, "reviewed_at": "2026-09-07", "source_purpose_reason": "Manual review established the IR home, press/news, and events purpose of the listed sources", "status": "manual_reviewed"},
+      "observations": [
+        {
+          "date": "2026-08-19",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "NVIDIA Announces Financial Results for Second Quarter Fiscal 2027",
+          "url": "https://ir.nvidia.example/news/nvidia-announces-financial-results-for-second-quarter"
+        },
+        {
+          "date": "2026-06-10",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "NVIDIA Unveils Blackwell Ultra Systems at Computex 2026",
+          "url": "https://ir.nvidia.example/news/nvidia-unveils-blackwell-ultra-systems-at-computex"
+        },
+        {
+          "date": "2026-03-16",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "NVIDIA GTC 2026 Keynote Highlights Rubin Platform",
+          "url": "https://ir.nvidia.example/news/nvidia-gtc-2026-keynote-highlights-rubin-platform"
+        },
+        {
+          "date": "2026-02-25",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "NVIDIA Announces Financial Results for Fourth Quarter Fiscal 2026",
+          "url": "https://ir.nvidia.example/news/nvidia-announces-financial-results-for-fourth-quarter"
+        },
+        {
+          "date": "2025-11-18",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "NVIDIA and Partners Announce AI Infrastructure Initiative",
+          "url": "https://ir.nvidia.example/news/nvidia-and-partners-announce-ai-infrastructure-initiative"
+        },
+        {
+          "date": "2024-11-20",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "NVIDIA Announces Financial Results for Third Quarter Fiscal 2026",
+          "url": "https://ir.nvidia.example/news/nvidia-announces-financial-results-for-third-quarter"
+        },
+        {
+          "date": "2026-08-19",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q2 Fiscal 2027 Earnings Conference Call",
+          "url": "https://ir.nvidia.example/events/q2-fiscal-2027-earnings-conference-call"
+        },
+        {
+          "date": "2026-06-02",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "NVIDIA at Computex 2026 Investor Session",
+          "url": "https://ir.nvidia.example/events/nvidia-at-computex-2026-investor-session"
+        },
+        {
+          "date": "2026-03-17",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "GTC 2026 Investor Presentation",
+          "url": "https://ir.nvidia.example/events/gtc-2026-investor-presentation"
+        },
+        {
+          "date": "2025-06-10",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "NVIDIA at Bank of America Global Technology Conference",
+          "url": "https://ir.nvidia.example/events/nvidia-at-bank-of-america-global-technology"
+        }
+      ],
+      "rejected_candidates": [
+        "https://newswire.third-party.invalid/nvidia/press"
+      ],
+      "supports_dual_archive_year": true
+    },
+    "PFE": {
+      "appended_delta": 1,
+      "appended_observation": {
+        "date": "2026-08-26",
+        "earnings_state": "non_earnings",
+        "source_type": "press_releases",
+        "title": "Pfizer Announces New Manufacturing Investment in Ireland",
+        "url": "https://ir.pfizer.example/news/pfizer-announces-new-manufacturing-investment-in-ireland"
+      },
+      "channels": {
+        "events_presentations": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "paginated": false,
+          "url": "https://ir.pfizer.example/events"
+        },
+        "press_releases": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "page_2_truncated": false,
+          "paginated": false,
+          "url": "https://ir.pfizer.example/news"
+        }
+      },
+      "cik": "78003",
+      "company_name": "Pfizer Inc.",
+      "expected_status": "completed",
+      "fixture_source_urls": {"events_presentations": "https://ir.pfizer.example/events", "ir_home": "https://ir.pfizer.example/", "press_releases": "https://ir.pfizer.example/news"},
+      "host": "ir.pfizer.example",
+      "official_source_urls": {"events_presentations": "https://investors.pfizer.com/Investors/news-events/default.aspx", "ir_home": "https://investors.pfizer.com/Investors/default.aspx", "press_releases": "https://investors.pfizer.com/Investors/news-events/default.aspx"},
+      "official_source_review": {"company_identity_reason": "Pfizer Inc. identity was manually reviewed on the official Investor Relations experience", "evidence": {"events_presentations": "https://investors.pfizer.com/Investors/news-events/default.aspx", "ir_home": "https://investors.pfizer.com/Investors/default.aspx", "press_releases": "https://investors.pfizer.com/Investors/news-events/default.aspx"}, "fixture_url_policy": "sanitized_mirror", "official_hosts": {"events_presentations": "investors.pfizer.com", "ir_home": "investors.pfizer.com", "press_releases": "investors.pfizer.com"}, "reviewed_at": "2026-09-07", "source_purpose_reason": "Manual review established the IR home, press/news, and events purpose of the listed sources", "status": "manual_reviewed"},
+      "observations": [
+        {
+          "date": "2026-08-04",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Pfizer Reports Second Quarter 2026 Financial Results",
+          "url": "https://ir.pfizer.example/news/pfizer-reports-second-quarter-2026-financial-results"
+        },
+        {
+          "date": "2026-06-22",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Pfizer Announces Positive Phase 3 Data for Oncology Candidate",
+          "url": "https://ir.pfizer.example/news/pfizer-announces-positive-phase-3-data-for"
+        },
+        {
+          "date": "2026-05-05",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Pfizer Reports First Quarter 2026 Financial Results",
+          "url": "https://ir.pfizer.example/news/pfizer-reports-first-quarter-2026-financial-results"
+        },
+        {
+          "date": "2026-03-30",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Pfizer and BioNTech Expand Vaccine Collaboration",
+          "url": "https://ir.pfizer.example/news/pfizer-and-biontech-expand-vaccine-collaboration"
+        },
+        {
+          "date": "2026-02-03",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Pfizer Reports Fourth Quarter 2025 Financial Results",
+          "url": "https://ir.pfizer.example/news/pfizer-reports-fourth-quarter-2025-financial-results"
+        },
+        {
+          "date": "2025-12-15",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Pfizer Foundation Announces Global Health Grant Recipients",
+          "url": "https://ir.pfizer.example/news/pfizer-foundation-announces-global-health-grant-recipients"
+        },
+        {
+          "date": "2026-08-04",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q2 2026 Earnings Conference Call",
+          "url": "https://ir.pfizer.example/events/q2-2026-earnings-conference-call"
+        },
+        {
+          "date": "2026-06-16",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Pfizer at Goldman Sachs Global Healthcare Conference",
+          "url": "https://ir.pfizer.example/events/pfizer-at-goldman-sachs-global-healthcare-conference"
+        },
+        {
+          "date": "2026-04-28",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Pfizer 2026 Annual Shareholder Meeting",
+          "url": "https://ir.pfizer.example/events/pfizer-2026-annual-shareholder-meeting"
+        },
+        {
+          "date": "2026-03-02",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Pfizer at TD Cowen Health Care Conference",
+          "url": "https://ir.pfizer.example/events/pfizer-at-td-cowen-health-care-conference"
+        }
+      ],
+      "rejected_candidates": [
+        "https://newswire.third-party.invalid/pfizer/press"
+      ],
+      "supports_dual_archive_year": false
+    },
+    "TSLA": {
+      "appended_delta": 1,
+      "appended_observation": {
+        "date": "2026-08-26",
+        "earnings_state": "non_earnings",
+        "source_type": "press_releases",
+        "title": "Tesla Expands Supercharger Network Across Europe",
+        "url": "https://ir.tesla.example/news/tesla-expands-supercharger-network-across-europe"
+      },
+      "channels": {
+        "events_presentations": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "paginated": false,
+          "url": "https://ir.tesla.example/events"
+        },
+        "press_releases": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "page_2_truncated": false,
+          "paginated": false,
+          "url": "https://ir.tesla.example/news"
+        }
+      },
+      "cik": "1318605",
+      "company_name": "Tesla, Inc.",
+      "expected_status": "completed",
+      "fixture_source_urls": {"events_presentations": "https://ir.tesla.example/events", "ir_home": "https://ir.tesla.example/", "press_releases": "https://ir.tesla.example/news"},
+      "host": "ir.tesla.example",
+      "official_source_urls": {"events_presentations": "https://ir.tesla.com/", "ir_home": "https://ir.tesla.com/", "press_releases": "https://ir.tesla.com/press"},
+      "official_source_review": {"company_identity_reason": "Tesla, Inc. identity was manually reviewed on the official Investor Relations experience", "evidence": {"events_presentations": "https://ir.tesla.com/", "ir_home": "https://ir.tesla.com/", "press_releases": "https://ir.tesla.com/press"}, "fixture_url_policy": "sanitized_mirror", "official_hosts": {"events_presentations": "ir.tesla.com", "ir_home": "ir.tesla.com", "press_releases": "ir.tesla.com"}, "reviewed_at": "2026-09-07", "source_purpose_reason": "Manual review established the IR home, press/news, and events purpose of the listed sources", "status": "manual_reviewed"},
+      "observations": [
+        {
+          "date": "2026-07-22",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Tesla Announces Second Quarter 2026 Financial Results",
+          "url": "https://ir.tesla.example/news/tesla-announces-second-quarter-2026-financial-results"
+        },
+        {
+          "date": "2026-06-15",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Tesla Opens Giga Texas Expansion Phase Two",
+          "url": "https://ir.tesla.example/news/tesla-opens-giga-texas-expansion-phase-two"
+        },
+        {
+          "date": "2026-04-02",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Tesla First Quarter 2026 Vehicle Production and Deliveries",
+          "url": "https://ir.tesla.example/news/tesla-first-quarter-2026-vehicle-production-and"
+        },
+        {
+          "date": "2026-01-28",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Tesla Announces Fourth Quarter 2025 Financial Results",
+          "url": "https://ir.tesla.example/news/tesla-announces-fourth-quarter-2025-financial-results"
+        },
+        {
+          "date": "2025-10-02",
+          "earnings_state": "non_earnings",
+          "source_type": "press_releases",
+          "title": "Tesla Third Quarter 2025 Vehicle Production and Deliveries",
+          "url": "https://ir.tesla.example/news/tesla-third-quarter-2025-vehicle-production-and"
+        },
+        {
+          "date": "2024-10-23",
+          "earnings_state": "earnings",
+          "source_type": "press_releases",
+          "title": "Tesla Announces Third Quarter 2024 Financial Results",
+          "url": "https://ir.tesla.example/news/tesla-announces-third-quarter-2024-financial-results"
+        },
+        {
+          "date": "2026-07-22",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q2 2026 Earnings Call",
+          "url": "https://ir.tesla.example/events/q2-2026-earnings-call"
+        },
+        {
+          "date": "2026-06-11",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Tesla 2026 Annual Shareholder Meeting",
+          "url": "https://ir.tesla.example/events/tesla-2026-annual-shareholder-meeting"
+        },
+        {
+          "date": "2026-01-28",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q4 2025 Earnings Call",
+          "url": "https://ir.tesla.example/events/q4-2025-earnings-call"
+        },
+        {
+          "date": "2025-06-05",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "Tesla at Goldman Sachs Industrials Conference 2025",
+          "url": "https://ir.tesla.example/events/tesla-at-goldman-sachs-industrials-conference-2025"
+        }
+      ],
+      "rejected_candidates": [
+        "https://newswire.third-party.invalid/tesla/press"
+      ],
+      "supports_dual_archive_year": true
+    },
+    "XOM": {
+      "appended_delta": 0,
+      "appended_observation": null,
+      "channels": {
+        "events_presentations": {
+          "activates": true,
+          "complete": true,
+          "discovered": true,
+          "paginated": false,
+          "url": "https://ir.exxonmobil.example/events"
+        },
+        "press_releases": {
+          "activates": false,
+          "complete": false,
+          "discovered": true,
+          "page_2_truncated": true,
+          "paginated": true,
+          "url": "https://ir.exxonmobil.example/news"
+        }
+      },
+      "cik": "34088",
+      "company_name": "Exxon Mobil Corporation",
+      "expected_status": "completed_partial",
+      "fixture_source_urls": {"events_presentations": "https://ir.exxonmobil.example/events", "ir_home": "https://ir.exxonmobil.example/", "press_releases": "https://ir.exxonmobil.example/news"},
+      "host": "ir.exxonmobil.example",
+      "official_source_urls": {"events_presentations": "https://investor.exxonmobil.com/news-events/ir-calendar", "ir_home": "https://investor.exxonmobil.com/", "press_releases": "https://corporate.exxonmobil.com/news/news-releases"},
+      "official_source_review": {"company_identity_reason": "Exxon Mobil Corporation identity was manually reviewed on the official Investor Relations experience", "evidence": {"events_presentations": "https://investor.exxonmobil.com/news-events/ir-calendar", "ir_home": "https://investor.exxonmobil.com/", "press_releases": "https://corporate.exxonmobil.com/news/news-releases"}, "fixture_url_policy": "sanitized_mirror", "official_hosts": {"events_presentations": "investor.exxonmobil.com", "ir_home": "investor.exxonmobil.com", "press_releases": "corporate.exxonmobil.com"}, "reviewed_at": "2026-09-07", "source_purpose_reason": "Manual review established the IR home, press/news, and events purpose of the listed sources", "status": "manual_reviewed"},
+      "observations": [
+        {
+          "date": "2026-07-31",
+          "earnings_state": "earnings",
+          "source_type": "events_presentations",
+          "title": "Q2 2026 Earnings Conference Call",
+          "url": "https://ir.exxonmobil.example/events/q2-2026-earnings-conference-call"
+        },
+        {
+          "date": "2026-05-27",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "ExxonMobil 2026 Annual Shareholder Meeting",
+          "url": "https://ir.exxonmobil.example/events/exxonmobil-2026-annual-shareholder-meeting"
+        },
+        {
+          "date": "2026-03-04",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "ExxonMobil at Morgan Stanley Energy Conference",
+          "url": "https://ir.exxonmobil.example/events/exxonmobil-at-morgan-stanley-energy-conference"
+        },
+        {
+          "date": "2025-12-09",
+          "earnings_state": "non_earnings",
+          "source_type": "events_presentations",
+          "title": "ExxonMobil 2025 Corporate Plan Update",
+          "url": "https://ir.exxonmobil.example/events/exxonmobil-2025-corporate-plan-update"
+        }
+      ],
+      "rejected_candidates": [
+        "https://newswire.third-party.invalid/exxonmobil/press"
+      ],
+      "supports_dual_archive_year": false
+    }
+  },
+  "window": {
+    "end": "2026-09-01",
+    "start": "2024-09-01"
+  },
+  "years": 2
+}
