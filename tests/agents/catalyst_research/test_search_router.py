@@ -66,7 +66,10 @@ class FakeRepository:
         self.results = []
 
     def record_search_attempt(self, attempt):
-        self.attempts.append(dict(attempt))
+        saved = dict(attempt)
+        saved["attempt_id"] = f"fake_attempt_{len(self.attempts) + 1}"
+        self.attempts.append(saved)
+        return saved["attempt_id"]
 
     def record_search_results(self, job_id, attempt_id, results):
         rows = []
@@ -312,6 +315,66 @@ def test_attempt_ids_are_unique_across_jobs_in_one_sqlite_database(tmp_path):
     ids = [row[0] for row in con.execute("select attempt_id from catalyst_search_attempts")]
     assert len(ids) == 8
     assert len(ids) == len(set(ids))
+
+
+def test_job_id_punctuation_does_not_cause_attempt_id_collision(tmp_path):
+    con = catalyst_repository.connect(Path(tmp_path) / "market_data.sqlite")
+    jobs = []
+    for ticker in ("A", "B"):
+        job = catalyst_repository.create_job(con, {"ticker": ticker, "years": 1}, {"name": "Acme"})
+        catalyst_repository.start_job(con, job["job_id"], "2026-09-07T00:00:00+00:00")
+        jobs.append(job)
+    original_ids = [job["job_id"] for job in jobs]
+    for original, replacement in zip(original_ids, ("job/a", "job?a")):
+        con.execute("update catalyst_research_jobs set job_id = ? where job_id = ?", (replacement, original))
+    con.commit()
+    for job, replacement in zip(jobs, ("job/a", "job?a")):
+        job["job_id"] = replacement
+
+    for job in jobs:
+        asyncio.run(discover_sources({"ticker": job["ticker"], "company_name": "Acme"}, router=SearchRouter({"provider": "ddgs", "fallback": "none"}, [FakeProvider("ddgs")]), llm_client=None, model=None, repository=catalyst_repository, connection=con, job_id=job["job_id"]))
+    ids = [row[0] for row in con.execute("select attempt_id from catalyst_search_attempts")]
+    assert len(ids) == len(set(ids))
+
+
+def test_primary_and_alternates_are_stable_and_merge_same_url_evidence():
+    tavily = FakeProvider("tavily", rows=[
+        {"title": "Acme Press Releases", "url": "https://acme.example/news", "snippet": "Acme press releases", "provider_rank": 2},
+        {"title": "Acme Press Releases alternate", "url": "https://acme.example/releases", "snippet": "Acme press releases", "provider_rank": 1},
+    ])
+    ddgs = FakeProvider("ddgs", rows=[
+        {"title": "Acme News", "url": "https://acme.example/news", "snippet": "Acme press releases", "provider_rank": 1},
+    ])
+    class SelectionLLM(FakeLLM):
+        def __init__(self):
+            super().__init__([])
+            self.index = 0
+
+        async def _parse(self, **kwargs):
+            return None
+
+    class Responses:
+        def __init__(self):
+            self.calls = []
+
+        async def parse(self, **kwargs):
+            self.calls.append(kwargs)
+            rows = kwargs["input"][1]["content"]
+            import json
+
+            candidates = json.loads(rows.split("Search candidates:\n", 1)[1])
+            row = candidates[1] if len(candidates) > 1 and len(self.calls) == 3 else candidates[0]
+            selections = [{"source_type": "press_releases", "url": row["url"], "evidence_result_ids": [row["result_id"]], "confidence": 0.7, "reason": "candidate"}]
+            return type("Response", (), {"output_parsed": FakeParsed(selections)})()
+
+    llm = type("LLM", (), {"responses": Responses()})()
+    result = asyncio.run(discover_sources({"ticker": "ACM", "company_name": "Acme"}, router=SearchRouter({"provider": "tavily", "fallback": "ddgs"}, [tavily, ddgs]), llm_client=llm, model="selector", repository=FakeRepository(), job_id="job-13"))
+
+    primary = [row for row in result["sources"] if row["source_type"] == "press_releases"]
+    alternates = [row for row in result["alternate_sources"] if row["source_type"] == "press_releases"]
+    assert primary[0]["url"] == "https://acme.example/releases"
+    assert [row["url"] for row in alternates] == ["https://acme.example/news"]
+    assert alternates[0]["evidence_result_ids"][:2] == [1, 3]
 
 
 def test_discovery_does_not_accept_unknown_domain_or_provider_metadata_links():

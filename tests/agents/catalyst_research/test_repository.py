@@ -182,6 +182,14 @@ def test_invalid_date_and_integer_inputs_have_controlled_errors(tmp_path):
         repository.record_search_results(con, job["job_id"], attempt_id, [{"result_id": "not-an-int", "url": "https://ir.example.test"}])
 
 
+def test_record_search_attempt_returns_repository_owned_id(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    attempt_id = repository.record_search_attempt(con, {"job_id": job["job_id"], "provider": "ddgs", "query": "NVDA IR"})
+    assert isinstance(attempt_id, str)
+    assert con.execute("select attempt_id from catalyst_search_attempts where job_id = ?", (job["job_id"],)).fetchone()[0] == attempt_id
+
+
 def test_terminal_mutation_is_rejected_after_other_connection_finalizes(tmp_path):
     db_path = tmp_path / "db.sqlite"
     con = repository.connect(db_path)
@@ -212,6 +220,20 @@ def test_adapter_validation_cannot_write_after_other_connection_finalizes(tmp_pa
         repository.record_adapter_validation(con, {"adapter_id": candidate["adapter_id"], "job_id": job["job_id"], "status": "passed", "report": {}})
     assert con.execute("select count(*) from catalyst_adapter_validations").fetchone()[0] == 0
     assert con.execute("select state from catalyst_source_adapters where adapter_id = ?", (candidate["adapter_id"],)).fetchone()[0] == "candidate"
+
+
+def test_update_search_attempt_is_immutable_after_other_connection_finalizes(tmp_path):
+    db_path = tmp_path / "db.sqlite"
+    con = repository.connect(db_path)
+    other = repository.connect(db_path)
+    job = _job(con, status="running")
+    attempt_id = repository.record_search_attempt(con, {"job_id": job["job_id"], "provider": "ddgs", "query": "NVDA IR", "outcome": "candidate_results", "diagnostics": {"safe": True}})
+    repository.finalize_job(other, job["job_id"], {"status": "failed", "error": "done"})
+    with pytest.raises(ValueError, match="terminal"):
+        repository.update_search_attempt(con, attempt_id, outcome="rejected", diagnostics={"changed": True})
+    row = con.execute("select outcome, diagnostics_json from catalyst_search_attempts where attempt_id = ?", (attempt_id,)).fetchone()
+    assert row[0] == "candidate_results"
+    assert '"safe":true' in row[1]
 
 
 def test_update_search_attempt_refuses_terminal_job_and_missing_attempt(tmp_path):

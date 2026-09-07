@@ -551,12 +551,14 @@ def _selection_result(selection, rows: dict[int, Mapping], company: Mapping) -> 
     else:
         status = "ambiguous"
         reason = "candidate requires fetched company identity and IR-purpose verification"
-    return {
+    result = {
         **selection.model_dump(mode="json"),
         "url": selected_url,
         "status": status,
         "reason": reason,
     }
+    result["provider_rank"] = evidence.get("provider_rank") if isinstance(evidence.get("provider_rank"), int) else 10_000
+    return result
 
 
 async def _select_discovery_sources(company, results, *, llm_client, model):
@@ -637,13 +639,6 @@ def _bounded_request_id(value) -> str | None:
     return normalized[:200] or None
 
 
-def _attempt_id(job_id, counter: int) -> str:
-    safe_job_id = re.sub(r"[^A-Za-z0-9_-]", "_", str(job_id or ""))[:120]
-    if not safe_job_id:
-        raise ValueError("job id is required")
-    return f"{safe_job_id}_attempt_{counter}"
-
-
 def _bounded_metadata(value) -> dict:
     if not isinstance(value, Mapping):
         return {}
@@ -666,6 +661,42 @@ def _bounded_search_result(row: Mapping) -> dict:
         "provider_rank": row.get("provider_rank") if isinstance(row.get("provider_rank"), int) else None,
         "provider_metadata": _bounded_metadata(row.get("provider_metadata")),
     }
+
+
+def _merge_source_candidates(existing: dict, incoming: dict) -> dict:
+    evidence_ids = list(dict.fromkeys(existing.get("evidence_result_ids", []) + incoming.get("evidence_result_ids", [])))[:20]
+    provenance = list(existing.get("provider_provenance", []))
+    for item in incoming.get("provider_provenance", []):
+        if item not in provenance and len(provenance) < 8:
+            provenance.append(item)
+    merged = dict(existing)
+    merged["evidence_result_ids"] = evidence_ids
+    merged["provider_provenance"] = provenance
+    return merged
+
+
+def _shape_source_candidates(candidates: list[dict], router) -> tuple[list[dict], list[dict]]:
+    names = router.provider_order() if hasattr(router, "provider_order") else ("tavily", "native_search", "ddgs")
+    provider_order = {name: index for index, name in enumerate(names)}
+    grouped = {}
+    for index, candidate in enumerate(candidates):
+        source_type = candidate.get("source_type")
+        grouped.setdefault(source_type, []).append((index, candidate))
+    primaries = []
+    alternates = []
+    for source_type in _DISCOVERY_SOURCE_TYPES:
+        rows = grouped.get(source_type, [])
+        rows.sort(
+            key=lambda item: (
+                -1 if item[1].get("discovery_provider") == "manual_override" else provider_order.get(item[1].get("discovery_provider"), 99),
+                item[1].get("provider_rank") if isinstance(item[1].get("provider_rank"), int) else 10_000,
+                item[0],
+            )
+        )
+        if rows:
+            primaries.append(rows[0][1])
+            alternates.extend(item[1] for item in rows[1:])
+    return primaries, alternates
 
 
 async def _discover_sources_impl(
@@ -701,7 +732,6 @@ async def _discover_sources_impl(
         accepted_for_query = False
         for provider in router.provider_chain():
             attempt_counter += 1
-            attempt_id = _attempt_id(job_id, attempt_counter)
             started_at = datetime.now(UTC).isoformat()
             outcome = "provider_error"
             diagnostics = {}
@@ -752,7 +782,6 @@ async def _discover_sources_impl(
                 diagnostics = {"reason": "search provider request failed"}
             completed_at = datetime.now(UTC).isoformat()
             attempt = {
-                "attempt_id": attempt_id,
                 "job_id": job_id,
                 "provider": provider.name,
                 "query": query_spec["query"],
@@ -764,7 +793,9 @@ async def _discover_sources_impl(
                 "provider_request_id": _bounded_request_id(getattr(provider, "last_request_id", None)),
             }
             try:
-                _repository_call(repository, "record_search_attempt", attempt, connection=connection)
+                attempt_id = _repository_call(repository, "record_search_attempt", attempt, connection=connection)
+                if not isinstance(attempt_id, str) or not attempt_id:
+                    raise ValueError("repository did not return search attempt id")
                 if rows:
                     _repository_call(
                         repository,
@@ -817,6 +848,10 @@ async def _discover_sources_impl(
                     selection["discovery_provider"] = provider.name
                     selection["provider_request_id"] = _bounded_request_id(getattr(provider, "last_request_id", None))
                     selection["acceptance_status"] = "pending" if selection["status"] == "ambiguous" else selection["status"]
+                    selection["provider_provenance"] = [{
+                        "provider": provider.name,
+                        "provider_request_id": selection["provider_request_id"],
+                    }]
                     existing = next(
                         (
                             item
@@ -826,8 +861,12 @@ async def _discover_sources_impl(
                         ),
                         None,
                     )
-                    if existing and existing["status"] in {"ambiguous", "accepted"}:
-                        continue
+                    if existing:
+                        if existing["status"] == "rejected" and selection["status"] == "ambiguous":
+                            discovered.remove(existing)
+                        else:
+                            existing.update(_merge_source_candidates(existing, selection))
+                            continue
                     discovered = [
                         item
                         for item in discovered
@@ -873,9 +912,11 @@ async def _discover_sources_impl(
     for source in discovered:
         source.setdefault("ticker", normalized_ticker)
         source.setdefault("job_id", job_id)
+    primary_sources, alternate_sources = _shape_source_candidates(discovered, router)
     result = {
         "status": status,
-        "sources": discovered,
+        "sources": primary_sources,
+        "alternate_sources": alternate_sources,
         "provider_provenance": provider_provenance,
         "warnings": list(dict.fromkeys(warnings)),
         "next_actions": list(dict.fromkeys(next_actions)),

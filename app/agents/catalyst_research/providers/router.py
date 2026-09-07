@@ -61,6 +61,19 @@ class SearchRouter:
                 result.append(provider)
         return result
 
+    def provider_order(self) -> list[str]:
+        primary = self.config.get("provider", "auto")
+        fallback = self.config.get("fallback", "auto")
+        if primary == "auto":
+            names = list(_PROVIDER_ORDER)
+        elif fallback == "auto":
+            names = [primary, *(name for name in _PROVIDER_ORDER if name != primary)]
+        elif fallback == "ddgs":
+            names = [primary, "ddgs"]
+        else:
+            names = [primary]
+        return list(dict.fromkeys(names))
+
 
 def _ready(provider) -> bool:
     try:

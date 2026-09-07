@@ -323,6 +323,7 @@ def record_search_attempt(con, attempt):
         )
         if cursor.rowcount != 1:
             raise ValueError(f"research job {attempt['job_id']} is terminal")
+    return attempt_id
 
 
 def update_search_attempt(con, attempt_id, *, outcome, diagnostics=None, completed_at=None, provider_request_id=None):
