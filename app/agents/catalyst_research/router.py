@@ -74,7 +74,7 @@ def _source_summary(connection, source):
     adapter_id = source.get("active_adapter_id")
     if adapter_id:
         adapter = repository.load_adapter_brief(connection, adapter_id)
-        summary["adapter"] = adapter or {"adapter_id": adapter_id, "version": source.get("adapter_version")}
+        summary["adapter"] = adapter or {"adapter_id": adapter_id, "version": source.get("adapter_version"), "status": None, "access_mode": None}
     return summary
 
 
