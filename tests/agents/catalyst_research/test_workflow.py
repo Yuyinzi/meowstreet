@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import httpx
 
-from app.agents.catalyst_research.workflow import run_research
+from app.agents.catalyst_research.workflow import _javascript_archive_shell, run_research
 from app.agents.catalyst_research.extraction.pages import fetch_html_page
 from app.http_client import HttpClient
 
@@ -623,3 +623,35 @@ def test_static_zero_archive_with_many_scripts_is_not_marked_javascript_unsuppor
     source = next(item for item in result["sources"] if item["source_type"] == "press_releases")
     assert source["extraction_status"] == "complete"
     assert "javascript_archive_unsupported" not in result["warnings"]
+
+
+def test_loading_press_archive_shell_with_app_root_and_bundle_is_javascript_unsupported():
+    html = "<html><body><div id='__next'><h1>Acme Press Releases</h1><p>Loading archive...</p></div>" + "<script src='/bundle.js'></script>" * 6 + "</body></html>"
+    page = {"html": html}
+    snapshot = {"normalized": {"text": html, "links": []}, "structural_html": html}
+
+    assert _javascript_archive_shell(page, snapshot) is True
+
+
+def test_loading_events_archive_shell_is_javascript_unsupported():
+    html = "<html><body><main id='root'><h1>Acme Events &amp; Presentations</h1><p>Please wait while archive loads</p></main>" + "<script src='/events.bundle.js'></script>" * 6 + "</body></html>"
+    page = {"html": html}
+    snapshot = {"normalized": {"text": html, "links": []}, "structural_html": html}
+
+    assert _javascript_archive_shell(page, snapshot) is True
+
+
+def test_static_zero_short_phrase_wins_over_archive_shell_detection():
+    html = "<html><body><div id='app'><h1>Acme Press Releases</h1><p>No releases currently available</p></div>" + "<script src='/analytics.js'></script>" * 6 + "</body></html>"
+    page = {"html": html}
+    snapshot = {"normalized": {"text": html, "links": []}, "structural_html": html}
+
+    assert _javascript_archive_shell(page, snapshot) is False
+
+
+def test_ordinary_script_enhanced_content_is_not_javascript_archive_shell():
+    html = "<html><body><div id='app'><h1>Acme Investor Relations</h1><p>Contact our team for shareholder information.</p></div>" + "<script src='/analytics.js'></script>" * 6 + "</body></html>"
+    page = {"html": html}
+    snapshot = {"normalized": {"text": html, "links": [], "headings": [{"level": 1, "text": "Acme Investor Relations"}]}, "structural_html": html}
+
+    assert _javascript_archive_shell(page, snapshot) is False

@@ -173,8 +173,12 @@ def _javascript_archive_shell(page, snapshot):
     archive_terms = ("press", "release", "news", "event", "presentation", "investor", "archive")
     zero_terms = ("no press", "no event", "no presentation", "no result", "no announcement", "no upcoming", "no item", "no content", "none available", "nothing found", "no archive", "no record")
     meaningful_archive_text = any(term in visible_text for term in archive_terms + zero_terms)
+    zero_state = bool(re.search(r"\b(?:no|none)\b[^.]{0,80}\b(?:press releases?|news releases?|events?|presentations?)\b[^.]{0,80}\b(?:available|currently)\b", visible_text))
+    placeholder = bool(re.search(r"\b(?:loading|please wait)\b", visible_text)) and any(term in visible_text for term in archive_terms)
+    placeholder = placeholder or bool(re.search(r"\b(?:enable|turn on) javascript\b|\bjavascript (?:is )?required\b", visible_text))
     script_bundle = script_count >= 4 or bool(re.search(r"<script\b[^>]+\bsrc=", html, flags=re.IGNORECASE))
-    return bool(app_root and script_bundle and not meaningful_archive_text and not links and date_evidence is None)
+    empty_shell = not meaningful_archive_text
+    return bool(app_root and script_bundle and (empty_shell or placeholder) and not zero_state and not links and date_evidence is None)
 
 
 def _candidate_links(snapshot, origin_url, target_type):
