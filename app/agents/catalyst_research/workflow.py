@@ -165,10 +165,16 @@ def _javascript_archive_shell(page, snapshot):
     text = str(normalized.get("text") or "").strip()
     visible_text = re.sub(r"<script\b.*?</script>", " ", text, flags=re.IGNORECASE | re.DOTALL)
     visible_text = re.sub(r"<[^>]+>", " ", visible_text)
+    visible_text = " ".join(visible_text.casefold().split())
     links = normalized.get("links")
     structural = str(snapshot.get("structural_html") or "")
     date_evidence = re.search(r"\b(?:19|20)\d{2}\b|data-date=|datetime=", visible_text + structural, flags=re.IGNORECASE)
-    return script_count >= 4 and len(visible_text.strip()) < 240 and not links and date_evidence is None
+    app_root = re.search(r"<(?:div|main|section)[^>]*(?:id|class)=[\"'][^\"']*(?:__next|root|app)[^\"']*[\"']", html, flags=re.IGNORECASE)
+    archive_terms = ("press", "release", "news", "event", "presentation", "investor", "archive")
+    zero_terms = ("no press", "no event", "no presentation", "no result", "no announcement", "no upcoming", "no item", "no content", "none available", "nothing found", "no archive", "no record")
+    meaningful_archive_text = any(term in visible_text for term in archive_terms + zero_terms)
+    script_bundle = script_count >= 4 or bool(re.search(r"<script\b[^>]+\bsrc=", html, flags=re.IGNORECASE))
+    return bool(app_root and script_bundle and not meaningful_archive_text and not links and date_evidence is None)
 
 
 def _candidate_links(snapshot, origin_url, target_type):
@@ -299,7 +305,7 @@ def _record_snapshot(context, source, page):
     snapshot = dict(snapshot)
     if _javascript_archive_shell(page, snapshot):
         raise ValueError("javascript archive unsupported")
-    if snapshot.get("requires_javascript") or snapshot.get("javascript_required") or snapshot.get("access_mode") in {"javascript", "rendered"}:
+    if snapshot.get("requires_javascript") or snapshot.get("javascript_required") or snapshot.get("unsupported_access_mode") or snapshot.get("access_mode") in {"javascript", "rendered", "unsupported"}:
         raise ValueError("source requires javascript")
     snapshot.setdefault("requested_url", page.get("requested_url") or source["url"])
     snapshot.setdefault("final_url", page.get("final_url") or source["url"])
@@ -332,7 +338,7 @@ async def _fetch_snapshot(context, company, source, *, allowed_hosts=None):
     snapshot = dict(snapshot)
     if _javascript_archive_shell(page, snapshot):
         raise ValueError("javascript archive unsupported")
-    if snapshot.get("requires_javascript") or snapshot.get("javascript_required") or snapshot.get("access_mode") in {"javascript", "rendered"}:
+    if snapshot.get("requires_javascript") or snapshot.get("javascript_required") or snapshot.get("unsupported_access_mode") or snapshot.get("access_mode") in {"javascript", "rendered", "unsupported"}:
         raise ValueError("source requires javascript")
     snapshot.setdefault("requested_url", page.get("requested_url") or source["url"])
     snapshot.setdefault("final_url", page.get("final_url") or source["url"])
@@ -486,6 +492,10 @@ async def _run_channel(context, company, source_type, pair):
     source, snapshot = pair
     source = dict(source)
     source.update({"ticker": context["request"]["ticker"], "job_id": context["job"]["job_id"], "acceptance_status": "accepted", "requested_start": context["job"]["requested_start"], "requested_end": context["job"]["requested_end"], "final_url": snapshot.get("final_url"), "snapshot_hash": snapshot.get("content_hash"), "content_hash": snapshot.get("content_hash")})
+    trusted_final_url = domain.canonicalize_public_url(source["final_url"] or source["url"])
+    trusted_allowed_hosts = [domain.url_host(trusted_final_url)]
+    source["final_url"] = trusted_final_url
+    source["allowed_hosts"] = list(trusted_allowed_hosts)
     model = _source_model(context, "adapter_generation")
     if not context["llm_client"] or not model:
         context["warnings"].append("catalyst_llm_unavailable")
@@ -499,10 +509,17 @@ async def _run_channel(context, company, source_type, pair):
         candidate = await _invoke(context["generate_adapter"], company, source, snapshot, llm_client=context["llm_client"], model=model)
         if not isinstance(candidate, Mapping):
             raise ValueError("adapter candidate is invalid")
-        candidate = {**candidate, "job_id": context["job"]["job_id"], "ticker": context["request"]["ticker"], "source_type": source_type, "source_url": source["url"], "allowed_hosts": candidate.get("allowed_hosts") or [domain.url_host(source["url"])]}
+        candidate = {**candidate, "job_id": context["job"]["job_id"], "ticker": context["request"]["ticker"], "source_type": source_type, "source_url": source["url"], "allowed_hosts": list(trusted_allowed_hosts)}
         persisted_candidate = _repo_call(context, "create_adapter_candidate", candidate)
         adapter_value = persisted_candidate.get("adapter", candidate.get("adapter")) if isinstance(persisted_candidate, Mapping) else candidate.get("adapter")
-        validation = await _invoke(context["validate_candidate"], adapter_value, snapshot, fetch_page=context["fetch_page"], requested_start=context["job"]["requested_start"], requested_end=context["job"]["requested_end"])
+        def adapter_fetch(url, **kwargs):
+            fetch_kwargs = dict(kwargs)
+            fetch_kwargs["allowed_hosts"] = list(trusted_allowed_hosts)
+            if context.get("url_resolver") is not None:
+                fetch_kwargs["resolver"] = context["url_resolver"]
+            return _invoke_sync(context["fetch_page"], url, **fetch_kwargs)
+
+        validation = await _invoke(context["validate_candidate"], adapter_value, snapshot, fetch_page=adapter_fetch, requested_start=context["job"]["requested_start"], requested_end=context["job"]["requested_end"])
         validation = dict(validation or {})
         validation.update({"adapter_id": persisted_candidate.get("adapter_id"), "job_id": context["job"]["job_id"], "source_type": source_type})
         _repo_call(context, "record_adapter_validation", validation)
@@ -512,7 +529,7 @@ async def _run_channel(context, company, source_type, pair):
             return {"source_type": source_type, "status": "partial", "events": [], "source": saved}
         context["call_counts"]["event_extraction"] += 1
         try:
-            execution = await _invoke(context["execute_adapter"], adapter_value, fetch_page=context["fetch_page"], requested_start=context["job"]["requested_start"], requested_end=context["job"]["requested_end"])
+            execution = await _invoke(context["execute_adapter"], adapter_value, fetch_page=adapter_fetch, requested_start=context["job"]["requested_start"], requested_end=context["job"]["requested_end"])
             if not isinstance(execution, Mapping) or not isinstance(execution.get("observations", []), list):
                 raise ValueError("adapter execution result is invalid")
         except Exception as exc:

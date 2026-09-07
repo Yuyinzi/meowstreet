@@ -1,7 +1,11 @@
 import asyncio
 from datetime import UTC, datetime
 
+import httpx
+
 from app.agents.catalyst_research.workflow import run_research
+from app.agents.catalyst_research.extraction.pages import fetch_html_page
+from app.http_client import HttpClient
 
 
 class FakeRepository:
@@ -491,3 +495,131 @@ def test_source_promotion_failure_leaves_candidates_inactive(tmp_path, monkeypat
         assert connection.execute("select count(*) from catalyst_source_adapters where state = 'active'").fetchone()[0] == 0
     finally:
         connection.close()
+
+
+def test_verified_source_passes_trusted_final_host_to_real_generator():
+    repository = FakeRepository()
+    calls = []
+    dependencies = _deps(repository, calls)
+    seen = []
+
+    async def generate(company, source, snapshot, **kwargs):
+        seen.append((source["source_type"], source["allowed_hosts"]))
+        assert source["allowed_hosts"] == ["ir.acme.example"]
+        return {"source_type": source["source_type"], "source_url": source["url"], "allowed_hosts": ["ir.acme.example"], "adapter": {"source_type": source["source_type"]}}
+
+    dependencies["generate_adapter"] = generate
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, dependencies=dependencies))
+
+    assert result["status"] == "completed"
+    assert seen == [("press_releases", ["ir.acme.example"]), ("events_presentations", ["ir.acme.example"])]
+
+
+def test_adapter_stages_receive_bound_fetch_that_rejects_offsite_redirect():
+    repository = FakeRepository()
+    calls = []
+    dependencies = _deps(repository, calls)
+    requested = []
+
+    async def fetch(url, **kwargs):
+        requested.append((url, dict(kwargs)))
+        if url.endswith("/offsite"):
+            assert kwargs["allowed_hosts"] == ["ir.acme.example"]
+            raise ValueError("page redirect host is not allowed")
+        purpose = "Events Presentations" if "/events" in url else "Press Releases"
+        return {"requested_url": url, "final_url": url, "html": f"<html><body>Acme Investor Relations {purpose}</body></html>"}
+
+    async def validate(adapter, snapshot, **kwargs):
+        await kwargs["fetch_page"]("https://ir.acme.example/offsite")
+        return {"status": "passed", "observations": [], "report": {}}
+
+    dependencies.update({"fetch_page": fetch, "validate_candidate": validate})
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, dependencies=dependencies))
+
+    assert result["status"] == "completed_partial"
+    assert [url for url, _ in requested if url.endswith("/offsite")] == ["https://ir.acme.example/offsite"] * 2
+    assert not any("evil" in url for url, _ in requested)
+
+
+def test_bound_fetch_mock_transport_rejects_offsite_redirect_before_evil_request():
+    repository = FakeRepository()
+    calls = []
+    dependencies = _deps(repository, calls)
+    requests = []
+
+    def handler(request):
+        requests.append(str(request.url))
+        if request.url.path == "/offsite":
+            return httpx.Response(302, headers={"Location": "https://evil.example/item"}, request=request)
+        return httpx.Response(200, headers={"Content-Type": "text/html"}, content=b"<html><body>Acme archive</body></html>", request=request)
+
+    client = HttpClient(transport=httpx.MockTransport(handler), sleep=lambda _: None, max_attempts=1)
+
+    def fetch(url, **kwargs):
+        if url.endswith("/offsite"):
+            return fetch_html_page(url, http_client=client, resolver=lambda host: ["93.184.216.34"], **kwargs)
+        purpose = "Events Presentations" if "/events" in url else "Press Releases"
+        return {"requested_url": url, "final_url": url, "html": f"<html><body>Acme Investor Relations {purpose}</body></html>"}
+
+    def validate(adapter, snapshot, **kwargs):
+        kwargs["fetch_page"]("https://ir.acme.example/offsite")
+        return {"status": "passed", "observations": [], "report": {}}
+
+    dependencies.update({"fetch_page": fetch, "validate_candidate": validate})
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, dependencies=dependencies))
+
+    assert result["status"] == "completed_partial"
+    assert requests == ["https://ir.acme.example/offsite", "https://ir.acme.example/offsite"]
+    assert not any("evil.example" in url for url in requests)
+
+
+def test_executor_receives_same_bound_fetch_as_validator():
+    repository = FakeRepository()
+    calls = []
+    dependencies = _deps(repository, calls)
+    probes = []
+
+    async def fetch(url, **kwargs):
+        if url.endswith("/probe"):
+            probes.append(dict(kwargs))
+        purpose = "Events Presentations" if "/events" in url else "Press Releases"
+        return {"requested_url": url, "final_url": url, "html": f"<html><body>Acme Investor Relations {purpose}</body></html>"}
+
+    def validate(adapter, snapshot, **kwargs):
+        return {"status": "passed", "observations": [], "report": {}}
+
+    async def execute(adapter, **kwargs):
+        await kwargs["fetch_page"]("https://ir.acme.example/probe")
+        return {"observations": [], "coverage_start": "2025-01-01", "coverage_end": "2026-01-01", "boundary_reached": True, "archive_exhausted": False, "page_count": 1, "item_count": 0}
+
+    dependencies.update({"fetch_page": fetch, "validate_candidate": validate, "execute_adapter": execute})
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, dependencies=dependencies))
+
+    assert result["status"] == "completed"
+    assert len(probes) == 2
+    assert all(item["allowed_hosts"] == ["ir.acme.example"] for item in probes)
+
+
+def test_static_zero_archive_with_many_scripts_is_not_marked_javascript_unsupported(tmp_path):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    calls = []
+    dependencies = _deps(repository, calls)
+    zero_archive = "<html><body><div id='app'><h1>Acme Press Releases</h1><p>No press releases available</p></div>" + "<script>analytics()</script>" * 6 + "</body></html>"
+
+    async def fetch(url, **kwargs):
+        if "/news" in url:
+            return {"requested_url": url, "final_url": url, "html": zero_archive, "content_type": "text/html"}
+        purpose = "Events Presentations" if "/events" in url else "Investor Relations Home"
+        return {"requested_url": url, "final_url": url, "html": f"<html><body>Acme {purpose}</body></html>"}
+
+    def snapshot(page, **kwargs):
+        source_type = kwargs["source"]["source_type"]
+        return {**page, "source_type": source_type, "text": page["html"], "normalized": {"text": page["html"], "links": []}}
+
+    dependencies.update({"fetch_page": fetch, "build_snapshot": snapshot})
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, db_path=tmp_path / "db.sqlite", dependencies=dependencies))
+
+    assert result["status"] == "completed"
+    source = next(item for item in result["sources"] if item["source_type"] == "press_releases")
+    assert source["extraction_status"] == "complete"
+    assert "javascript_archive_unsupported" not in result["warnings"]
