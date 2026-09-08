@@ -963,3 +963,84 @@ def test_source_url_seen_detects_persisted_source_urls_across_jobs(tmp_path):
     assert repository.source_url_seen(con, "AAPL", "https://nvidianews.nvidia.com/news/nvidia-announces-new-platform") is False
     with pytest.raises(ValueError, match="url"):
         repository.source_url_seen(con, "NVDA", "")
+
+
+LEGACY_RESEARCH_VERSION = "catalyst_research_v1"
+LEGACY_RESULT_SCHEMA_VERSION = "catalyst_research_result_v1"
+V1_1_RESULT_SCHEMA_VERSION = "catalyst_research_result_v1_1"
+
+
+def _mark_legacy_research_version(con, job_id):
+    con.execute(
+        "update catalyst_research_jobs set research_version = ? where job_id = ?",
+        (LEGACY_RESEARCH_VERSION, job_id),
+    )
+    con.commit()
+
+
+def test_load_job_result_selects_stored_legacy_schema_version(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    _mark_legacy_research_version(con, job["job_id"])
+    repository.finalize_job(
+        con,
+        job["job_id"],
+        {"status": "completed", "statistics": {"press_releases": {"status": "complete", "total": 2, "per_month": 0.17}}},
+    )
+
+    result = repository.load_job_result(con, job["job_id"])
+
+    assert result["schema_version"] == LEGACY_RESULT_SCHEMA_VERSION
+    assert result["research_version"] == LEGACY_RESEARCH_VERSION
+    assert result["mode"] == "research"
+    assert result["statistics"]["press_releases"]["total"] == 2
+    assert result["statistics"]["press_releases"]["per_month"] == 0.17
+    assert "coverage_status" not in result["statistics"]["press_releases"]
+    assert "observed_total" not in result["statistics"]["press_releases"]
+
+
+def test_load_job_result_reports_v1_1_schema_version_and_stored_mode(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = repository.create_job(
+        con,
+        {"ticker": "NVDA", "years": 1, "mode": "update"},
+        {"name": "NVIDIA Corporation", "cik": "1045810"},
+        datetime(2026, 9, 4, tzinfo=UTC),
+    )
+    repository.start_job(con, job["job_id"], "2026-09-04T00:01:00+00:00")
+    repository.finalize_job(
+        con,
+        job["job_id"],
+        {
+            "status": "completed_partial",
+            "statistics": {"press_releases": {"coverage_status": "observed_partial", "observed_total": 3}},
+        },
+    )
+
+    result = repository.load_job_result(con, job["job_id"])
+
+    assert result["schema_version"] == V1_1_RESULT_SCHEMA_VERSION
+    assert result["mode"] == "update"
+    assert result["statistics"]["press_releases"]["observed_total"] == 3
+
+
+def test_load_latest_result_falls_back_to_prior_usable_legacy_result(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    legacy = _job(con, status="running")
+    _mark_legacy_research_version(con, legacy["job_id"])
+    repository.finalize_job(
+        con,
+        legacy["job_id"],
+        {"status": "completed", "statistics": {"press_releases": {"status": "complete", "total": 1}}, "completed_at": "2026-09-01T00:00:00+00:00"},
+    )
+    failed = _job(con)
+    repository.fail_job(con, failed["job_id"], "provider exhausted", completed_at="2026-09-08T00:00:00+00:00")
+
+    result = repository.load_latest_result(con, "NVDA")
+
+    assert result["job_id"] == legacy["job_id"]
+    assert result["schema_version"] == LEGACY_RESULT_SCHEMA_VERSION
+    assert result["mode"] == "research"
+    assert result["statistics"]["press_releases"]["total"] == 1
+    assert result["latest_job_id"] == failed["job_id"]
+    assert result["latest_job_status"] == "failed"

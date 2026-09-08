@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 from datetime import date
+from statistics import median
 
 from app.agents.catalyst_research.domain import _fold_whitespace
 from app.agents.catalyst_research.domain import canonicalize_public_url
@@ -11,6 +12,9 @@ _MONTHS_PER_QUARTER = 3
 _MONTHS_PER_YEAR = 12
 _DAYS_PER_MONTH = 30.4375
 _STATES = ("earnings", "non_earnings", "ambiguous")
+_V1_1_COVERAGE_STATUSES = ("complete", "observed_partial", "missing", "unsupported")
+_DISCOVERY_METHODS = ("rss", "atom", "search", "archive_adapter", "manual")
+_COVERAGE_WARNING = "search and feed history may omit official records"
 
 
 def _parse_date(value):
@@ -143,6 +147,86 @@ def _channel_statistics(events, source, requested_start, requested_end):
     return result
 
 
+def _observed_range(source, requested_start, requested_end):
+    raw_start = _parse_date(source.get("observed_start"))
+    raw_end = _parse_date(source.get("observed_end"))
+    if (raw_start is None) != (raw_end is None):
+        raise ValueError("observed range is invalid")
+    if raw_start is None:
+        return None, None
+    if raw_start > raw_end:
+        raise ValueError("observed range is invalid")
+    start = max(raw_start, requested_start)
+    end = min(raw_end, requested_end)
+    if start > end:
+        raise ValueError("observed range is outside requested window")
+    return start, end
+
+
+def _observed_discovery_methods(source):
+    methods = source.get("discovery_methods")
+    if methods is None:
+        return []
+    if not isinstance(methods, list) or any(method not in _DISCOVERY_METHODS for method in methods):
+        raise ValueError("discovery methods are invalid")
+    unique = []
+    for method in methods:
+        if method not in unique:
+            unique.append(method)
+    return unique
+
+
+def _observed_channel_statistics(events, source, requested_start, requested_end):
+    coverage_status = source.get("coverage_status")
+    if coverage_status not in _V1_1_COVERAGE_STATUSES:
+        raise ValueError("coverage status is invalid")
+    methods = _observed_discovery_methods(source)
+    start, end = _observed_range(source, requested_start, requested_end)
+    counts = {state: 0 for state in _STATES}
+    non_earnings_days = []
+    for event in events:
+        state = event.get("earnings_state")
+        if state in counts:
+            counts[state] += 1
+        if state == "non_earnings":
+            non_earnings_days.append(_parse_date(event.get("count_date")))
+    result = {
+        "coverage_status": coverage_status,
+        "discovery_methods": methods,
+        "observed_start": start.isoformat() if start else None,
+        "observed_end": end.isoformat() if end else None,
+        "observed_total": sum(counts.values()),
+        "observed_earnings": counts["earnings"],
+        "observed_non_earnings": counts["non_earnings"],
+        "observed_non_earnings_per_year": None,
+        "observed_non_earnings_per_quarter": None,
+        "observed_non_earnings_per_month": None,
+        "median_days_between_observed_non_earnings": None,
+    }
+    if coverage_status in {"observed_partial", "missing"}:
+        result["coverage_warning"] = _COVERAGE_WARNING
+    span_days = (end - start).days if start and end else None
+    if span_days is None or span_days <= 0:
+        return result
+    if counts["non_earnings"] == 0 and coverage_status != "complete":
+        return result
+    months = span_days / _DAYS_PER_MONTH
+    result.update(
+        {
+            "observed_non_earnings_per_year": _round_rate(counts["non_earnings"] / months * _MONTHS_PER_YEAR),
+            "observed_non_earnings_per_quarter": _round_rate(counts["non_earnings"] / months * _MONTHS_PER_QUARTER),
+            "observed_non_earnings_per_month": _round_rate(counts["non_earnings"] / months),
+        }
+    )
+    if len(non_earnings_days) >= 2:
+        gaps = [
+            (later - earlier).days
+            for earlier, later in zip(sorted(non_earnings_days), sorted(non_earnings_days)[1:])
+        ]
+        result["median_days_between_observed_non_earnings"] = _round_rate(median(gaps))
+    return result
+
+
 def calculate_statistics(events, sources, requested_window) -> dict:
     if not isinstance(events, list):
         raise ValueError("events are required")
@@ -202,12 +286,11 @@ def calculate_statistics(events, sources, requested_window) -> dict:
             raise ValueError("duplicate event observation")
         seen_keys.add(key)
         validated_events.append({**event, "count_date": count_date.isoformat(), "canonical_url": canonical_url})
-    return {
-        source_type: _channel_statistics(
-            [event for event in validated_events if event.get("source_type") == source_type],
-            _source_for_type(sources, source_type),
-            requested_start,
-            requested_end,
-        )
-        for source_type in _CHANNELS
-    }
+    def _channel(source_type):
+        source = _source_for_type(sources, source_type)
+        channel_events = [event for event in validated_events if event.get("source_type") == source_type]
+        if source is not None and "coverage_status" in source:
+            return _observed_channel_statistics(channel_events, source, requested_start, requested_end)
+        return _channel_statistics(channel_events, source, requested_start, requested_end)
+
+    return {source_type: _channel(source_type) for source_type in _CHANNELS}

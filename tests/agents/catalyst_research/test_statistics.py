@@ -475,3 +475,217 @@ def test_statistics_reject_count_date_and_date_mismatch():
 def test_statistics_reject_invalid_source_rows():
     with pytest.raises(ValueError, match="source is invalid"):
         calculate_statistics([], ["not-a-source"], {"start": "2024-01-01", "end": "2024-12-31"})
+
+
+_PARTIAL_WARNING = "search and feed history may omit official records"
+
+
+def _observed_source(source_type="press_releases", **overrides):
+    source = {
+        "source_type": source_type,
+        "coverage_status": "observed_partial",
+        "discovery_methods": ["rss", "search"],
+        "observed_start": "2024-01-15",
+        "observed_end": "2024-11-20",
+    }
+    source.update(overrides)
+    return source
+
+
+def _observed_window():
+    return {"start": "2024-01-01", "end": "2024-12-31"}
+
+
+def test_search_feed_history_uses_observed_names_and_partial_coverage():
+    events = [
+        _stat_event("non_earnings", day="2024-02-01", slug="product-launch"),
+        _stat_event("earnings", day="2024-05-01", slug="quarterly-results"),
+        _stat_event("ambiguous", day="2024-09-01", slug="business-update"),
+    ]
+
+    result = calculate_statistics(events, [_observed_source()], _observed_window())
+    channel = result["press_releases"]
+
+    assert channel["coverage_status"] == "observed_partial"
+    assert channel["observed_total"] == 3
+    assert channel["observed_earnings"] == 1
+    assert channel["observed_non_earnings"] == 1
+    assert "total" not in channel
+    assert "status" not in channel
+    assert channel["coverage_warning"] == _PARTIAL_WARNING
+    assert channel["observed_start"] == "2024-01-15"
+    assert channel["observed_end"] == "2024-11-20"
+    assert channel["discovery_methods"] == ["rss", "search"]
+
+
+def test_observed_partial_without_events_reports_no_zero_frequency():
+    result = calculate_statistics([], [_observed_source()], _observed_window())
+    channel = result["press_releases"]
+
+    assert channel["coverage_status"] == "observed_partial"
+    assert channel["observed_total"] == 0
+    assert channel["observed_non_earnings_per_year"] is None
+    assert channel["observed_non_earnings_per_quarter"] is None
+    assert channel["observed_non_earnings_per_month"] is None
+    assert channel["median_days_between_observed_non_earnings"] is None
+    assert channel["coverage_warning"] == _PARTIAL_WARNING
+
+
+def test_observed_partial_single_event_has_no_rates_or_median():
+    events = [_stat_event("non_earnings", day="2024-06-01", slug="sole-launch")]
+    source = _observed_source(observed_start="2024-06-01", observed_end="2024-06-01")
+
+    channel = calculate_statistics(events, [source], _observed_window())["press_releases"]
+
+    assert channel["observed_total"] == 1
+    assert channel["observed_non_earnings_per_month"] is None
+    assert channel["median_days_between_observed_non_earnings"] is None
+
+
+def test_observed_non_earnings_rates_use_explicit_observed_span():
+    events = [_stat_event("non_earnings", day="2024-06-15", slug="midyear-launch")]
+    source = _observed_source(observed_start="2024-01-01", observed_end="2024-12-31")
+
+    channel = calculate_statistics(events, [source], _observed_window())["press_releases"]
+
+    assert channel["observed_non_earnings_per_month"] == 0.08
+    assert channel["observed_non_earnings_per_quarter"] == 0.25
+    assert channel["observed_non_earnings_per_year"] == 1.0
+
+
+def test_observed_median_interval_uses_non_earnings_gaps_only():
+    events = [
+        _stat_event("non_earnings", day="2024-01-01", slug="first-launch"),
+        _stat_event("earnings", day="2024-01-06", slug="early-results"),
+        _stat_event("non_earnings", day="2024-01-11", slug="second-launch"),
+        _stat_event("non_earnings", day="2024-01-26", slug="third-launch"),
+    ]
+    source = _observed_source(observed_start="2024-01-01", observed_end="2024-03-31")
+
+    channel = calculate_statistics(events, [source], _observed_window())["press_releases"]
+
+    assert channel["observed_non_earnings"] == 3
+    assert channel["median_days_between_observed_non_earnings"] == 12.5
+
+
+def test_observed_range_is_clipped_to_requested_window():
+    events = [_stat_event("non_earnings", day="2024-06-15", slug="window-launch")]
+    source = _observed_source(observed_start="2023-06-01", observed_end="2025-06-01")
+
+    channel = calculate_statistics(events, [source], _observed_window())["press_releases"]
+
+    assert channel["observed_start"] == "2024-01-01"
+    assert channel["observed_end"] == "2024-12-31"
+    assert channel["observed_non_earnings_per_month"] == 0.08
+
+
+def test_v1_1_complete_channel_uses_observed_keys_without_partial_warning():
+    events = [_stat_event("non_earnings", day="2024-06-15", slug="archived-launch")]
+    source = _observed_source(
+        coverage_status="complete",
+        discovery_methods=["archive_adapter", "search"],
+        observed_start="2024-01-01",
+        observed_end="2024-12-31",
+    )
+
+    channel = calculate_statistics(events, [source], _observed_window())["press_releases"]
+
+    assert channel["coverage_status"] == "complete"
+    assert channel["observed_total"] == 1
+    assert "total" not in channel
+    assert "coverage_warning" not in channel
+
+
+def test_v1_1_missing_and_unsupported_channels_do_not_zero_fill_rates():
+    sources = [
+        _observed_source(coverage_status="missing", discovery_methods=["rss"], observed_start=None, observed_end=None),
+        _observed_source(source_type="events_presentations", coverage_status="unsupported", discovery_methods=[], observed_start=None, observed_end=None),
+    ]
+
+    result = calculate_statistics([], sources, _observed_window())
+
+    assert result["press_releases"]["coverage_status"] == "missing"
+    assert result["press_releases"]["observed_total"] == 0
+    assert result["press_releases"]["observed_non_earnings_per_month"] is None
+    assert result["press_releases"]["coverage_warning"] == _PARTIAL_WARNING
+    assert result["events_presentations"]["coverage_status"] == "unsupported"
+    assert result["events_presentations"]["observed_non_earnings_per_month"] is None
+    assert "coverage_warning" not in result["events_presentations"]
+
+
+def test_statistics_support_mixed_v1_and_v1_1_source_rows():
+    events = [
+        _stat_event("non_earnings", day="2024-06-15", slug="observed-launch"),
+        _stat_event("earnings", source_type="events_presentations", day="2024-03-01", slug="legacy-results"),
+    ]
+    sources = [
+        _observed_source(observed_start="2024-01-01", observed_end="2024-12-31"),
+        {"source_type": "events_presentations", "extraction_status": "complete"},
+    ]
+
+    result = calculate_statistics(events, sources, _observed_window())
+
+    assert result["press_releases"]["coverage_status"] == "observed_partial"
+    assert "total" not in result["press_releases"]
+    assert result["events_presentations"]["status"] == "complete"
+    assert result["events_presentations"]["total"] == 1
+
+
+@pytest.mark.parametrize("coverage_status", ["partial", "observed", "unknown", 3])
+def test_v1_1_source_rejects_unknown_coverage_status(coverage_status):
+    with pytest.raises(ValueError, match="coverage status is invalid"):
+        calculate_statistics(
+            [],
+            [_observed_source(coverage_status=coverage_status)],
+            _observed_window(),
+        )
+
+
+def test_v1_1_source_rejects_reversed_or_half_open_observed_range():
+    with pytest.raises(ValueError, match="observed range is invalid"):
+        calculate_statistics(
+            [],
+            [_observed_source(observed_start="2024-12-31", observed_end="2024-01-01")],
+            _observed_window(),
+        )
+    with pytest.raises(ValueError, match="observed range is invalid"):
+        calculate_statistics(
+            [],
+            [_observed_source(observed_start=None, observed_end="2024-12-31")],
+            _observed_window(),
+        )
+
+
+def test_v1_1_source_rejects_unknown_discovery_methods():
+    with pytest.raises(ValueError, match="discovery methods are invalid"):
+        calculate_statistics(
+            [],
+            [_observed_source(discovery_methods=["rss", "scraping"])],
+            _observed_window(),
+        )
+
+
+def test_v1_1_source_rejects_observed_range_outside_requested_window():
+    with pytest.raises(ValueError, match="observed range is outside requested window"):
+        calculate_statistics(
+            [],
+            [_observed_source(observed_start="2023-01-01", observed_end="2023-12-31")],
+            _observed_window(),
+        )
+
+
+def test_v1_1_complete_zero_non_earnings_reports_zero_rates():
+    events = [_stat_event("earnings", day="2024-06-15", slug="archived-results")]
+    source = _observed_source(
+        coverage_status="complete",
+        discovery_methods=["archive_adapter"],
+        observed_start="2024-01-01",
+        observed_end="2024-12-31",
+    )
+
+    channel = calculate_statistics(events, [source], _observed_window())["press_releases"]
+
+    assert channel["observed_non_earnings"] == 0
+    assert channel["observed_non_earnings_per_month"] == 0.0
+    assert channel["observed_non_earnings_per_year"] == 0.0
+    assert channel["median_days_between_observed_non_earnings"] is None

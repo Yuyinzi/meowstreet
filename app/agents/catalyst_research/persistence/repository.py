@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app.agents.catalyst_research.config import (
     ADAPTER_SCHEMA_VERSION,
+    LEGACY_RESULT_SCHEMA_VERSION,
     RESEARCH_MODES,
     RESEARCH_VERSION,
     RESULT_SCHEMA_VERSION,
@@ -1147,8 +1148,9 @@ def load_job_result(con, job_id):
         source["evidence_result_ids"] = source.pop("evidence_result_ids_json")
         if source.get("coverage_continuous") is not None:
             source["coverage_continuous"] = bool(source["coverage_continuous"])
+    schema_version = RESULT_SCHEMA_VERSION if job["research_version"] == RESEARCH_VERSION else LEGACY_RESULT_SCHEMA_VERSION
     result = {
-        "schema_version": RESULT_SCHEMA_VERSION, "research_version": job["research_version"], "job_id": job_id,
+        "schema_version": schema_version, "research_version": job["research_version"], "mode": job["mode"], "job_id": job_id,
         "status": job["status"], "ticker": job["ticker"], "company_name": job["company_name"], "cik": job["cik"], "as_of": job["as_of"],
         "requested_window": {"start": job["requested_start"], "end": job["requested_end"], "years": job["requested_years"]},
         "sources": sources, "statistics": _decode(job["statistics_json"]) or {}, "warnings": _decode(job["warnings_json"]) or [],
