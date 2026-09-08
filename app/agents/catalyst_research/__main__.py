@@ -12,6 +12,7 @@ from app.http_client import HttpClient
 _OVERRIDE_SOURCE_TYPES = ("press_releases", "events_presentations")
 _LLM_FLAGS = (
     "catalyst_source_selection_model",
+    "catalyst_registry_selection_model",
     "catalyst_adapter_generation_model",
     "catalyst_classification_model",
     "openai_api_key",
@@ -49,6 +50,7 @@ def _parser():
     parser.add_argument("--firecrawl-base-url", dest="firecrawl_base_url", default=None)
     parser.add_argument("--archive-enrichment", dest="archive_enrichment_enabled", action="store_true", default=None)
     parser.add_argument("--source-selection-model", dest="catalyst_source_selection_model", default=None)
+    parser.add_argument("--registry-selection-model", dest="catalyst_registry_selection_model", default=None)
     parser.add_argument("--adapter-generation-model", dest="catalyst_adapter_generation_model", default=None)
     parser.add_argument("--classification-model", dest="catalyst_classification_model", default=None)
     parser.add_argument("--openai-api-key", dest="openai_api_key", default=None)

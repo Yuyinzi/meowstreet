@@ -240,6 +240,12 @@ def load_inference_bundle(args=None, root=ROOT):
                 "label": "catalyst source selection model",
             },
             {
+                "name": "registry_selection_model",
+                "arg_name": "catalyst_registry_selection_model",
+                "env_names": ["CATALYST_REGISTRY_SELECTION_MODEL", "CATALYST_SOURCE_SELECTION_MODEL", "OPENAI_MODEL"],
+                "label": "catalyst registry selection model",
+            },
+            {
                 "name": "adapter_generation_model",
                 "arg_name": "catalyst_adapter_generation_model",
                 "env_names": ["CATALYST_ADAPTER_GENERATION_MODEL", "OPENAI_MODEL"],

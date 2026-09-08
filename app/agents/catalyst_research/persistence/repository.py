@@ -256,7 +256,7 @@ def connect(db_path=DEFAULT_DB_PATH):
             title text not null,
             normalized_title text not null,
             canonical_url text,
-            source_type text not null check (source_type in ('press_releases','events_presentations')),
+            source_type text not null check (source_type in ('press_releases','events_presentations','earnings_results')),
             earnings_state text not null default 'ambiguous' check (earnings_state in ('earnings','non_earnings','ambiguous')),
             classification_method text,
             adapter_id text,
@@ -354,6 +354,44 @@ def _migrate_v1_1_schema(con):
     for column in ("endpoint_id", "discovery_method", "extraction_provider"):
         _ensure_column(con, "catalyst_ir_sources", column, "text")
     _ensure_column(con, "catalyst_ir_sources", "external_guid", "text")
+    event_sql = con.execute("select sql from sqlite_master where type = 'table' and name = 'catalyst_ir_events'").fetchone()
+    if event_sql is not None and "'earnings_results'" not in event_sql[0]:
+        con.execute("pragma legacy_alter_table = on")
+        con.execute("pragma foreign_keys = off")
+        con.execute("alter table catalyst_ir_events rename to catalyst_ir_events_legacy")
+        con.execute("""create table catalyst_ir_events (
+            event_id text primary key,
+            job_id text not null references catalyst_research_jobs(job_id),
+            source_id text not null references catalyst_ir_sources(source_id),
+            ticker text not null,
+            published_date text,
+            event_date text,
+            count_date text not null,
+            title text not null,
+            normalized_title text not null,
+            canonical_url text,
+            source_type text not null check (source_type in ('press_releases','events_presentations','earnings_results')),
+            earnings_state text not null default 'ambiguous' check (earnings_state in ('earnings','non_earnings','ambiguous')),
+            classification_method text,
+            adapter_id text,
+            adapter_version integer,
+            executor_version text,
+            first_seen_at text not null,
+            content_hash text,
+            endpoint_id text,
+            external_guid text,
+            discovery_method text,
+            extraction_provider text,
+            unique(job_id, ticker, source_type, count_date, normalized_title, canonical_url)
+        )""")
+        columns = [row[1] for row in con.execute("pragma table_info(catalyst_ir_events_legacy)")]
+        con.execute(
+            f"insert into catalyst_ir_events ({','.join(columns)}) select {','.join(columns)} from catalyst_ir_events_legacy"
+        )
+        con.execute("drop table catalyst_ir_events_legacy")
+        con.execute("create unique index if not exists idx_catalyst_event_job_key on catalyst_ir_events(job_id, ticker, source_type, count_date, normalized_title, canonical_url)")
+        con.execute("pragma foreign_keys = on")
+        con.execute("pragma legacy_alter_table = off")
     for column in ("endpoint_id", "external_guid", "discovery_method", "extraction_provider"):
         _ensure_column(con, "catalyst_ir_events", column, "text")
     con.commit()
@@ -430,7 +468,7 @@ def _migrate_schema(con):
             title text not null,
             normalized_title text not null,
             canonical_url text,
-            source_type text not null check (source_type in ('press_releases','events_presentations')),
+            source_type text not null check (source_type in ('press_releases','events_presentations','earnings_results')),
             earnings_state text not null default 'ambiguous' check (earnings_state in ('earnings','non_earnings','ambiguous')),
             classification_method text,
             adapter_id text,

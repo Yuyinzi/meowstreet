@@ -172,11 +172,32 @@ def test_inference_bundle_delegates_named_models_to_llm(monkeypatch, tmp_path):
     specs = calls["kwargs"]["model_specs"]
     assert [spec["name"] for spec in specs] == [
         "source_selection_model",
+        "registry_selection_model",
         "adapter_generation_model",
         "classification_model",
     ]
     assert [spec["env_names"] for spec in specs] == [
         ["CATALYST_SOURCE_SELECTION_MODEL", "OPENAI_MODEL"],
+        ["CATALYST_REGISTRY_SELECTION_MODEL", "CATALYST_SOURCE_SELECTION_MODEL", "OPENAI_MODEL"],
         ["CATALYST_ADAPTER_GENERATION_MODEL", "OPENAI_MODEL"],
         ["CATALYST_CLASSIFICATION_MODEL", "OPENAI_MODEL"],
     ]
+
+
+def test_inference_bundle_covers_workflow_model_roles(monkeypatch, tmp_path):
+    calls = {}
+
+    def fake_bundle(*args, **kwargs):
+        calls["kwargs"] = kwargs
+        return {"client": object(), "config": {}, "models": {}}
+
+    monkeypatch.setattr(
+        "app.agents.catalyst_research.config.llm.build_async_client_bundle",
+        fake_bundle,
+    )
+
+    load_inference_bundle(root=tmp_path)
+
+    spec_names = {spec["name"] for spec in calls["kwargs"]["model_specs"]}
+    for role in ("source_selection", "registry_selection", "adapter_generation", "classification"):
+        assert f"{role}_model" in spec_names

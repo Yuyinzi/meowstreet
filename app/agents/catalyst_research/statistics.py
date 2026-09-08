@@ -7,6 +7,7 @@ from app.agents.catalyst_research.domain import canonicalize_public_url
 
 
 _CHANNELS = ("press_releases", "events_presentations")
+_EVENT_CHANNELS = ("press_releases", "events_presentations", "earnings_results")
 _SOURCE_TYPES = ("ir_home", "press_releases", "events_presentations", "earnings_results")
 _MONTHS_PER_QUARTER = 3
 _MONTHS_PER_YEAR = 12
@@ -248,7 +249,7 @@ def calculate_statistics(events, sources, requested_window) -> dict:
         if not isinstance(event, Mapping):
             raise ValueError("event is invalid")
         source_type = event.get("source_type")
-        if source_type not in _CHANNELS:
+        if source_type not in _EVENT_CHANNELS:
             raise ValueError("event source type is invalid")
         if event.get("earnings_state") not in _STATES:
             raise ValueError("event earnings state is invalid")
@@ -293,4 +294,15 @@ def calculate_statistics(events, sources, requested_window) -> dict:
             return _observed_channel_statistics(channel_events, source, requested_start, requested_end)
         return _channel_statistics(channel_events, source, requested_start, requested_end)
 
-    return {source_type: _channel(source_type) for source_type in _CHANNELS}
+    reported_channels = list(_CHANNELS)
+    earnings_reported = any(event.get("source_type") == "earnings_results" for event in validated_events)
+    if isinstance(sources, list):
+        earnings_reported = earnings_reported or any(
+            isinstance(source, Mapping)
+            and source.get("source_type") == "earnings_results"
+            and "coverage_status" in source
+            for source in sources
+        )
+    if earnings_reported:
+        reported_channels.append("earnings_results")
+    return {source_type: _channel(source_type) for source_type in reported_channels}

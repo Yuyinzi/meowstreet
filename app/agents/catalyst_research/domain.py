@@ -19,7 +19,7 @@ from app.agents.catalyst_research.schemas import EventClassificationResponse
 from app.agents.catalyst_research.schemas import SourceSelectionResponse
 
 
-_SOURCE_TYPES = {"press_releases", "events_presentations"}
+_SOURCE_TYPES = {"press_releases", "events_presentations", "earnings_results"}
 _URL_SCHEMES = {"http", "https"}
 _TRACKING_NAMES = {
     "_hsenc",
