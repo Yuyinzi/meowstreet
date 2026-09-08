@@ -109,7 +109,7 @@ def _decode_bounded(content, max_bytes):
     return text, len(bounded), len(content) > max_bytes
 
 
-def fetch_html_page(url, *, http_client, allowed_hosts=None, resolver=None, max_bytes=2_000_000) -> dict:
+def _fetch_redirected_document(url, *, http_client, allowed_hosts=None, resolver=None, max_bytes=2_000_000, browser=True, headers=None, error_prefix="page"):
     max_bytes = _positive_integer(max_bytes, "max bytes")
     requested_url = canonicalize_public_url(url)
     normalized_allowed_hosts = _normalized_allowed_hosts(allowed_hosts)
@@ -125,26 +125,37 @@ def fetch_html_page(url, *, http_client, allowed_hosts=None, resolver=None, max_
             response = http_client.request(
                 "GET",
                 normalized_current,
-                browser=True,
+                browser=browser,
                 follow_redirects=False,
                 max_response_bytes=max_bytes,
+                headers=headers,
             )
         except httpx.TimeoutException as exc:
-            raise ValueError("page request timed out") from exc
+            raise ValueError(f"{error_prefix} request timed out") from exc
         except ResponseTooLargeError as exc:
-            raise ValueError("page response exceeds maximum bytes") from exc
+            raise ValueError(f"{error_prefix} response exceeds maximum bytes") from exc
         except httpx.HTTPError as exc:
-            raise ValueError("page request failed") from exc
+            raise ValueError(f"{error_prefix} request failed") from exc
         if not response.is_redirect:
             break
         if redirect_count >= 5:
-            raise ValueError("page redirect limit exceeded")
+            raise ValueError(f"{error_prefix} redirect limit exceeded")
         location = response.headers.get("Location")
         if not location:
-            raise ValueError("page redirect location is missing")
+            raise ValueError(f"{error_prefix} redirect location is missing")
         current_url = canonicalize_public_url(urljoin(normalized_current, location))
         redirect_count += 1
+    return requested_url, chain, response
 
+
+def fetch_html_page(url, *, http_client, allowed_hosts=None, resolver=None, max_bytes=2_000_000) -> dict:
+    requested_url, chain, response = _fetch_redirected_document(
+        url,
+        http_client=http_client,
+        allowed_hosts=allowed_hosts,
+        resolver=resolver,
+        max_bytes=max_bytes,
+    )
     final_url = chain[-1]
     content_type = _content_type(response)
     if content_type not in _HTML_CONTENT_TYPES:

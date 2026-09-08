@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>NVIDIA Newsroom</title>
+    <link>https://nvidianews.nvidia.com/</link>
+    <description>NVIDIA corporate news</description>
+    <item>
+      <title>NVIDIA Announces New Platform</title>
+      <link>https://nvidianews.nvidia.com/news/new-platform?utm_source=feed</link>
+      <guid isPermaLink="false">nvda-100</guid>
+      <pubDate>Mon, 07 Sep 2026 12:00:00 GMT</pubDate>
+      <description>NVIDIA announced a new platform.</description>
+    </item>
+    <item>
+      <title>NVIDIA Sets Conference Participation</title>
+      <link>https://nvidianews.nvidia.com/news/conference</link>
+      <guid isPermaLink="false">nvda-99</guid>
+      <pubDate>Fri, 04 Sep 2026 08:00:00 GMT</pubDate>
+      <description><![CDATA[NVIDIA will participate in an upcoming investor conference.]]></description>
+    </item>
+    <item>
+      <title>NVIDIA Research Wins Award</title>
+      <link>https://nvidianews.nvidia.com/news/research-award</link>
+      <guid isPermaLink="false">nvda-98</guid>
+      <pubDate>Tue, 01 Sep 2026 09:00:00 GMT</pubDate>
+      <content:encoded><![CDATA[<p>NVIDIA research won a scientific award.</p>]]></content:encoded>
+    </item>
+  </channel>
+</rss>

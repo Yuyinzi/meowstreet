@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>NVIDIA Investor Events</title>
+  <link rel="self" href="https://investor.nvidia.com/events.atom"/>
+  <link rel="alternate" href="https://investor.nvidia.com/events"/>
+  <entry>
+    <id>urn:nvda:event:investor-day-2026</id>
+    <title>NVIDIA Investor Day 2026</title>
+    <link rel="enclosure" href="https://investor.nvidia.com/media/investor-day-deck.pdf"/>
+    <link rel="alternate" href="/events/investor-day"/>
+    <published>2026-09-04T09:30:00+00:00</published>
+    <updated>2026-09-05T09:30:00+00:00</updated>
+    <summary>Join NVIDIA leadership for Investor Day 2026.</summary>
+  </entry>
+  <entry>
+    <id>urn:nvda:event:q2-earnings-call</id>
+    <title>NVIDIA Q2 Earnings Call</title>
+    <link rel="alternate" href="https://investor.nvidia.com/events/q2-earnings-call"/>
+    <updated>2026-08-26T17:00:00Z</updated>
+    <summary>Second quarter earnings conference call.</summary>
+  </entry>
+</feed>
