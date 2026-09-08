@@ -40,6 +40,33 @@ def source_selection_prompt(company: dict, results: list[dict]) -> list[dict]:
     ]
 
 
+def registry_selection_prompt(company: dict, results: list[dict]) -> list[dict]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                f"You are selecting durable official source endpoints for a bounded research registry. "
+                f"Use prompt version {PROMPT_VERSIONS['registry_selection']}. "
+                "Return strict JSON with key endpoints. Each endpoint must contain channel, endpoint_type, url, domain, "
+                "evidence_result_ids, confidence, and reason. Allowed channels are press_releases, "
+                "events_presentations, and earnings_results. Allowed endpoint types are rss, atom, search_domain, "
+                "and archive; rss and atom require a concrete feed URL, archive requires a concrete archive URL, and "
+                "search_domain uses an official company domain with an optional page URL. Distinguish feed endpoints "
+                "from search domains and archive endpoints. Select only official company-owned sources present in the "
+                "supplied current search results whose evidence_result_ids refer to those current results. Individual "
+                "article, release, event, or presentation URLs are not registry endpoints; select the archive, list, "
+                "or feed URL instead. Reject third-party news, aggregator, social, and search-result pages. "
+                "Do not invent URLs or evidence IDs. "
+                f"{_UNTRUSTED_EVIDENCE}"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Company identity:\n{_json(company)}\nSearch candidates:\n{_json(results)}",
+        },
+    ]
+
+
 def adapter_generation_prompt(company: dict, source: dict, snapshot: dict) -> list[dict]:
     return [
         {

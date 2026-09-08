@@ -13,6 +13,7 @@ RESEARCH_MODES = frozenset({"research", "update", "rediscover"})
 ADAPTER_SCHEMA_VERSION = "ir_source_adapter_v1"
 PROMPT_VERSIONS = {
     "source_selection": "source_selection_v2",
+    "registry_selection": "registry_selection_v1",
     "adapter_generation": "adapter_generation_v1",
     "classification": "classification_v1",
 }
