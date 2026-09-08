@@ -333,6 +333,16 @@ def _invoke_sync(function, *args, **kwargs):
     return function(*args, **kwargs)
 
 
+def _progress(context, stage, **details):
+    callback = context.get("progress")
+    if not callable(callback):
+        return
+    try:
+        callback(stage, **details)
+    except Exception:
+        pass
+
+
 async def _fetch_snapshot(context, company, source, *, allowed_hosts=None):
     fetch_kwargs = {"allowed_hosts": allowed_hosts}
     if context.get("url_resolver") is not None:
@@ -416,6 +426,7 @@ async def _resolve(context):
 
 
 async def _discover(context, company, source_types=None):
+    _progress(context, "discovery", channels=",".join(sorted(str(item) for item in source_types)) if source_types else "all")
     context["call_counts"]["discovery"] += 1
     result = await _invoke(
         context["discover_sources"], company,
@@ -503,6 +514,7 @@ async def _prepare_sources(context, company, discovery, source_types=None):
 async def _run_channel(context, company, source_type, pair):
     if pair is None or pair[0] is None:
         context["execution_paths"][source_type] = "cold"
+        _progress(context, "source_missing", source=source_type)
         return {"source_type": source_type, "status": "missing", "events": [], "source": None}
     source, snapshot = pair
     source = dict(source)
@@ -520,6 +532,7 @@ async def _run_channel(context, company, source_type, pair):
         saved = _repo_call(context, "save_source", source)
         return {"source_type": source_type, "status": "partial", "events": [], "source": saved}
     context["call_counts"]["adapter_generation"] += 1
+    _progress(context, "adapter_generation", source=source_type)
     try:
         candidate = await _invoke(context["generate_adapter"], company, source, snapshot, llm_client=context["llm_client"], model=model)
         if not isinstance(candidate, Mapping):
@@ -538,6 +551,7 @@ async def _run_channel(context, company, source_type, pair):
         validation = dict(validation or {})
         validation.update({"adapter_id": persisted_candidate.get("adapter_id"), "job_id": context["job"]["job_id"], "source_type": source_type})
         _repo_call(context, "record_adapter_validation", validation)
+        _progress(context, "adapter_validated", source=source_type, status=validation.get("status"))
         if validation.get("status") != "passed":
             source.update({"extraction_status": "failed", "execution_path": "cold", "checked_at": _iso(context), "truncation_reason": "adapter_validation_failed"})
             saved = _repo_call(context, "save_source", source)
@@ -756,9 +770,12 @@ async def _run_hot_adapter(context, adapter_row):
 
 async def _run_source(context, company, source_type, active_adapter):
     if active_adapter is not None:
+        _progress(context, "hot_validation", source=source_type)
         hot = await _run_hot_adapter(context, active_adapter)
         if hot["status"] != "stale":
+            _progress(context, "hot_complete", source=source_type, status=hot["status"])
             return hot
+        _progress(context, "adapter_stale", source=source_type)
         mark_stale_with_source = getattr(context["repository"], "mark_adapter_stale_with_source", None)
         if callable(mark_stale_with_source):
             _repo_call(context, "mark_adapter_stale_with_source", active_adapter["adapter_id"], _iso(context), _stale_source(context, active_adapter, hot.get("validation", {})))
@@ -834,6 +851,7 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         _repo_call(context, "start_job", job["job_id"], _iso(context))
         company = await _resolve(context)
         context["company"] = company
+        _progress(context, "company_resolved", ticker=normalized["ticker"])
         _repo_call(context, "update_resolved_company", company=company, job_id=job["job_id"])
         force_discovery = bool(normalized.get("force_discovery"))
         active_adapters = {}
@@ -887,6 +905,7 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         classification = dict(classification or {})
         context["call_counts"]["classification"] = classification.get("llm_call_count", 0)
         classified_events = classification.get("events", normalized_events)
+        _progress(context, "classification", events=len(classified_events))
         ambiguous = any(event.get("earnings_state") == "ambiguous" for event in classified_events)
         complete_channels = all(channel_results[item]["status"] == "complete" for item in _REQUIRED_CHANNELS)
         accepted_channels = sum(channel_results[item]["status"] in {"complete", "partial"} for item in _REQUIRED_CHANNELS)
@@ -903,6 +922,7 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
             context["next_actions"].append("review_ambiguous_classification")
         if status == "completed_partial":
             context["next_actions"].append("provide missing archive coverage or review partial extraction")
+        _progress(context, "finalizing", status=status)
         _repo_call(context, "finalize_job_with_observations", job["job_id"], classified_events, classified_events, {"status": status, "statistics": stats, "warnings": list(dict.fromkeys(context["warnings"])), "next_actions": list(dict.fromkeys(context["next_actions"])), "execution_paths": context["execution_paths"], "call_counts": context["call_counts"], "completed_at": _iso(context)})
     except Exception as exc:
         if job is not None:

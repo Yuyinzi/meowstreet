@@ -75,6 +75,11 @@ def _build_dependencies(args):
     return {"config_args": args}
 
 
+def _stage_progress(stage, **details):
+    suffix = "".join(f" {key}={value}" for key, value in details.items() if value is not None)
+    print(f"stage {stage}{suffix}", file=sys.stderr)
+
+
 def _request_from_args(args):
     request = {"ticker": args.ticker, "years": args.years, "force_discovery": bool(args.force_discovery)}
     overrides = _source_overrides(args.source)
@@ -87,7 +92,7 @@ def main(argv=None):
     args = _parser().parse_args(argv)
     try:
         request = _request_from_args(args)
-        dependencies = _build_dependencies(args)
+        dependencies = {**_build_dependencies(args), "progress": _stage_progress}
         with HttpClient() as http_client:
             print(f"catalyst research started ticker={args.ticker} years={args.years}", file=sys.stderr)
             result = asyncio.run(run_research(request, db_path=args.db_path, http_client=http_client, dependencies=dependencies))

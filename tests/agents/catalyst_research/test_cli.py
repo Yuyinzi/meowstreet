@@ -42,7 +42,7 @@ def test_cli_completed_returns_zero_and_prints_final_json(monkeypatch, capsys):
     assert "completed" in output.err
     assert captured["request"] == {"ticker": "acme", "years": 4, "force_discovery": False}
     assert captured["db_path"] is None
-    assert captured["dependencies"] == {}
+    assert captured["dependencies"] == {"progress": cli._stage_progress}
 
 
 def test_cli_passes_years_force_discovery_db_path_and_repeatable_source_overrides(monkeypatch, tmp_path):
@@ -62,6 +62,22 @@ def test_cli_passes_years_force_discovery_db_path_and_repeatable_source_override
         "events_presentations": "https://example.com/investors/events",
     }
     assert captured["db_path"] == tmp_path / "db.sqlite"
+
+
+def test_cli_prints_stage_progress_lines(monkeypatch, capsys):
+    captured = _install(monkeypatch)
+
+    async def run(request, *, db_path=None, http_client=None, dependencies=None):
+        captured.update({"request": request, "db_path": db_path, "http_client": http_client, "dependencies": dependencies})
+        dependencies["progress"]("discovery", channels="press_releases")
+        return {"status": "completed", "job_id": "cr_1", "sources": []}
+
+    monkeypatch.setattr(cli, "run_research", run)
+
+    exit_code = cli.main(["NVDA"])
+
+    assert exit_code == 0
+    assert "stage discovery channels=press_releases" in capsys.readouterr().err
 
 
 def test_cli_override_flags_default_to_none():

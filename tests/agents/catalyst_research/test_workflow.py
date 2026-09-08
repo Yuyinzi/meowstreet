@@ -179,6 +179,54 @@ def test_cold_workflow_uses_fixed_order_and_one_adapter_per_required_channel():
     assert repository.calls[-1] == "load_result"
 
 
+def test_cold_workflow_reports_stage_progress_in_order():
+    repository = FakeRepository()
+    calls = []
+    stages = []
+    dependencies = _deps(repository, calls)
+    dependencies["progress"] = lambda stage, **details: stages.append((stage, details))
+    result = asyncio.run(
+        run_research(
+            {"ticker": "acme", "years": 1, "as_of": "2026-01-01"},
+            dependencies=dependencies,
+        )
+    )
+
+    assert result["status"] == "completed"
+    stage_names = [stage for stage, _ in stages]
+    assert stage_names == [
+        "company_resolved",
+        "discovery",
+        "adapter_generation",
+        "adapter_validated",
+        "adapter_generation",
+        "adapter_validated",
+        "classification",
+        "finalizing",
+    ]
+    assert ("company_resolved", {"ticker": "ACME"}) in stages
+    assert ("finalizing", {"status": "completed"}) in stages
+
+
+def test_workflow_ignores_failing_progress_callback():
+    repository = FakeRepository()
+    calls = []
+    dependencies = _deps(repository, calls)
+
+    def progress(stage, **details):
+        raise RuntimeError("progress sink unavailable")
+
+    dependencies["progress"] = progress
+    result = asyncio.run(
+        run_research(
+            {"ticker": "acme", "years": 1, "as_of": "2026-01-01"},
+            dependencies=dependencies,
+        )
+    )
+
+    assert result["status"] == "completed"
+
+
 def test_cold_workflow_persists_validated_earnings_results_without_an_adapter():
     repository = FakeRepository()
     calls = []
