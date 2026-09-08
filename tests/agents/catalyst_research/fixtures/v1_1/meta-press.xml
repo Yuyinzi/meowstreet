@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Meta Newsroom</title>
+    <link>https://about.fb.com/news/</link>
+    <description>Meta newsroom</description>
+    <item>
+      <title>Meta Platforms Rolls Out New AI Features</title>
+      <link>https://about.fb.com/news/2026/09/meta-platforms-ai-features</link>
+      <guid isPermaLink="false">meta-pres-1</guid>
+      <pubDate>Sat, 05 Sep 2026 09:30:00 GMT</pubDate>
+      <description>Meta rolls out AI features.</description>
+    </item>
+    <item>
+      <title>Meta Reports Second Quarter Results</title>
+      <link>https://about.fb.com/news/2026/08/meta-reports-second-quarter-results</link>
+      <guid isPermaLink="false">meta-pres-2</guid>
+      <pubDate>Sun, 30 Aug 2026 16:00:00 GMT</pubDate>
+      <description>Meta reports second quarter results.</description>
+    </item>
+  </channel>
+</rss>

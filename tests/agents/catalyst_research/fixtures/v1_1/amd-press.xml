@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>AMD Newsroom</title>
+    <link>https://www.amd.com/en/newsroom</link>
+    <description>AMD newsroom</description>
+    <item>
+      <title>AMD Launches New Instinct Accelerators</title>
+      <link>https://www.amd.com/en/newsroom/press-releases/amd-launches-instinct-accelerators</link>
+      <guid isPermaLink="false">amd-pres-1</guid>
+      <pubDate>Sun, 06 Sep 2026 11:00:00 GMT</pubDate>
+      <description>AMD launches new accelerators.</description>
+    </item>
+    <item>
+      <title>AMD Reports Second Quarter Results</title>
+      <link>https://www.amd.com/en/newsroom/press-releases/amd-reports-second-quarter-results</link>
+      <guid isPermaLink="false">amd-pres-2</guid>
+      <pubDate>Sat, 29 Aug 2026 12:00:00 GMT</pubDate>
+      <description>AMD reports second quarter results.</description>
+    </item>
+  </channel>
+</rss>

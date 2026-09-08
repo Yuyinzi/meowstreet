@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Apple Investor Events</title>
+  <link rel="self" href="https://www.apple.com/investor-events.atom"/>
+  <entry>
+    <id>urn:aapl:event:1</id>
+    <title>Apple to Host Product Webcast for Investors</title>
+    <link rel="alternate" href="/investor-events/product-webcast"/>
+    <updated>2026-09-03T10:00:00Z</updated>
+    <summary>Apple will host a product webcast for investors.</summary>
+  </entry>
+</feed>

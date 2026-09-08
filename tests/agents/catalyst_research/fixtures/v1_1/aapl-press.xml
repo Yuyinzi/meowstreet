@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Apple Newsroom</title>
+    <link>https://www.apple.com/newsroom/</link>
+    <description>Apple newsroom</description>
+    <item>
+      <title>Apple Introduces Next-Generation Developer Tools</title>
+      <link>https://www.apple.com/newsroom/2026/09/apple-introduces-next-generation-developer-tools</link>
+      <guid isPermaLink="false">aapl-pres-1</guid>
+      <pubDate>Sun, 06 Sep 2026 09:00:00 GMT</pubDate>
+      <description>Apple introduces new developer tools.</description>
+    </item>
+    <item>
+      <title>Apple Reports Third Quarter Results</title>
+      <link>https://www.apple.com/newsroom/2026/08/apple-reports-third-quarter-results</link>
+      <guid isPermaLink="false">aapl-pres-2</guid>
+      <pubDate>Thu, 27 Aug 2026 13:00:00 GMT</pubDate>
+      <description>Apple reports third quarter results.</description>
+    </item>
+  </channel>
+</rss>

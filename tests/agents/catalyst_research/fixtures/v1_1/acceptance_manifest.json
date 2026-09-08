@@ -1,0 +1,773 @@
+{
+  "as_of": "2026-09-08",
+  "fixture_url_policy": "sanitized_mirror",
+  "reviewed_at": "2026-09-08",
+  "schema": "catalyst_acceptance_manifest_v1_1",
+  "tickers": {
+    "AAPL": {
+      "channels": {
+        "earnings_results": {
+          "observations": [
+            {
+              "article_fixture": "AAPL-earnings_results-1.html",
+              "date": "2026-08-28",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "Apple Reports Third Quarter Financial Results",
+              "url": "https://investor.apple.com/investor-relations/apple-q3-2026-financial-results"
+            }
+          ],
+          "search_domain": "investor.apple.com"
+        },
+        "events_presentations": {
+          "feed": {
+            "channel_description": "Apple investor events",
+            "channel_title": "Apple Investor Events",
+            "endpoint_type": "atom",
+            "fixture": "aapl-events.xml",
+            "url": "https://www.apple.com/investor-events.atom"
+          },
+          "observations": [
+            {
+              "date": "2026-09-03",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "Apple to Host Product Webcast for Investors",
+              "url": "https://www.apple.com/investor-events/product-webcast"
+            }
+          ],
+          "search_domain": "www.apple.com"
+        },
+        "press_releases": {
+          "feed": {
+            "channel_description": "Apple newsroom",
+            "channel_title": "Apple Newsroom",
+            "endpoint_type": "rss",
+            "fixture": "aapl-press.xml",
+            "link": "https://www.apple.com/newsroom/",
+            "url": "https://www.apple.com/newsroom/rss.xml"
+          },
+          "observations": [
+            {
+              "date": "2026-09-06",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "Apple Introduces Next-Generation Developer Tools",
+              "url": "https://www.apple.com/newsroom/2026/09/apple-introduces-next-generation-developer-tools"
+            },
+            {
+              "date": "2026-08-27",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "feed",
+              "rule": true,
+              "title": "Apple Reports Third Quarter Results",
+              "url": "https://www.apple.com/newsroom/2026/08/apple-reports-third-quarter-results"
+            }
+          ],
+          "search_domain": "investor.apple.com"
+        }
+      },
+      "cik": "320193",
+      "company_name": "Apple Inc.",
+      "official_domains": [
+        "apple.com",
+        "www.apple.com",
+        "investor.apple.com"
+      ]
+    },
+    "AMD": {
+      "channels": {
+        "earnings_results": {
+          "observations": [
+            {
+              "article_fixture": "AMD-earnings_results-1.html",
+              "date": "2026-08-20",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "AMD Announces Second Quarter Financial Results",
+              "url": "https://www.amd.com/en/investor-relations/amd-q2-2026-financial-results"
+            }
+          ],
+          "search_domain": "www.amd.com"
+        },
+        "events_presentations": {
+          "feed": {
+            "channel_description": "AMD investor events",
+            "channel_title": "AMD Investor Events",
+            "endpoint_type": "atom",
+            "fixture": "amd-events.xml",
+            "url": "https://www.amd.com/en/events.atom"
+          },
+          "observations": [
+            {
+              "date": "2026-09-02",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "AMD Financial Analyst Day Webcast",
+              "url": "https://www.amd.com/en/events/financial-analyst-day"
+            }
+          ],
+          "search_domain": "www.amd.com"
+        },
+        "press_releases": {
+          "feed": {
+            "channel_description": "AMD newsroom",
+            "channel_title": "AMD Newsroom",
+            "endpoint_type": "rss",
+            "fixture": "amd-press.xml",
+            "link": "https://www.amd.com/en/newsroom",
+            "url": "https://www.amd.com/en/newsroom/feed"
+          },
+          "observations": [
+            {
+              "date": "2026-09-06",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "AMD Launches New Instinct Accelerators",
+              "url": "https://www.amd.com/en/newsroom/press-releases/amd-launches-instinct-accelerators"
+            },
+            {
+              "date": "2026-08-29",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "feed",
+              "rule": true,
+              "title": "AMD Reports Second Quarter Results",
+              "url": "https://www.amd.com/en/newsroom/press-releases/amd-reports-second-quarter-results"
+            }
+          ],
+          "search_domain": "www.amd.com"
+        }
+      },
+      "cik": "2488",
+      "company_name": "Advanced Micro Devices, Inc.",
+      "official_domains": [
+        "amd.com",
+        "www.amd.com"
+      ]
+    },
+    "BA": {
+      "channels": {
+        "earnings_results": {
+          "observations": [
+            {
+              "article_fixture": "BA-earnings_results-1.html",
+              "date": "2026-08-26",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "Boeing Second Quarter Financial Results",
+              "url": "https://investor.boeing.com/financial-results/boeing-q2-2026-financial-results"
+            }
+          ],
+          "search_domain": "investor.boeing.com"
+        },
+        "events_presentations": {
+          "observations": [
+            {
+              "article_fixture": "BA-events_presentations-1.html",
+              "date": "2026-09-03",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "search",
+              "rule": false,
+              "title": "Boeing to Present at Aerospace Conference Webcast",
+              "url": "https://boeing.mediaroom.com/events/2026-aerospace-conference-webcast"
+            }
+          ],
+          "search_domain": "boeing.mediaroom.com"
+        },
+        "press_releases": {
+          "feed": {
+            "channel_description": "Boeing newsroom",
+            "channel_title": "Boeing Newsroom",
+            "endpoint_type": "rss",
+            "fixture": "ba-press.xml",
+            "link": "https://boeing.mediaroom.com/",
+            "url": "https://boeing.mediaroom.com/rss"
+          },
+          "observations": [
+            {
+              "date": "2026-09-05",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "Boeing Delivers New Widebody Jets",
+              "url": "https://boeing.mediaroom.com/2026-09-05-Boeing-Delivers-New-Widebody-Jets"
+            },
+            {
+              "date": "2026-08-27",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "feed",
+              "rule": true,
+              "title": "Boeing Reports Second Quarter Results",
+              "url": "https://boeing.mediaroom.com/2026-08-27-Boeing-Reports-Second-Quarter-Results"
+            }
+          ],
+          "search_domain": "investor.boeing.com"
+        }
+      },
+      "cik": "12927",
+      "company_name": "The Boeing Company",
+      "official_domains": [
+        "boeing.com",
+        "boeing.mediaroom.com",
+        "investor.boeing.com"
+      ]
+    },
+    "JPM": {
+      "channels": {
+        "earnings_results": {
+          "observations": [
+            {
+              "article_fixture": "JPM-earnings_results-1.html",
+              "date": "2026-08-24",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "JPMorgan Chase Second Quarter Earnings Call",
+              "url": "https://www.jpmorganchase.com/ir/2026/jpmorgan-chase-q2-earnings-call"
+            }
+          ],
+          "search_domain": "www.jpmorganchase.com"
+        },
+        "events_presentations": {
+          "observations": [
+            {
+              "article_fixture": "JPM-events_presentations-1.html",
+              "date": "2026-09-02",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "search",
+              "rule": false,
+              "title": "JPMorgan Chase Investor Day Webcast",
+              "url": "https://www.jpmorganchase.com/events/2026/investor-day-webcast"
+            }
+          ],
+          "search_domain": "www.jpmorganchase.com"
+        },
+        "press_releases": {
+          "feed": {
+            "channel_description": "JPMorgan Chase newsroom",
+            "channel_title": "JPMorgan Chase Newsroom",
+            "endpoint_type": "rss",
+            "fixture": "jpm-press.xml",
+            "link": "https://www.jpmorganchase.com/",
+            "url": "https://www.jpmorganchase.com/rss"
+          },
+          "observations": [
+            {
+              "date": "2026-09-06",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "JPMorgan Chase Expands Community Development Program",
+              "url": "https://www.jpmorganchase.com/newsroom/2026/09/community-development-expansion"
+            },
+            {
+              "date": "2026-08-28",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "feed",
+              "rule": true,
+              "title": "JPMorgan Chase Reports Second Quarter Results",
+              "url": "https://www.jpmorganchase.com/newsroom/2026/08/jpmorgan-chase-reports-second-quarter-results"
+            }
+          ],
+          "search_domain": "www.jpmorganchase.com"
+        }
+      },
+      "cik": "19617",
+      "company_name": "JPMorgan Chase & Co.",
+      "official_domains": [
+        "jpmorganchase.com",
+        "www.jpmorganchase.com"
+      ]
+    },
+    "META": {
+      "channels": {
+        "earnings_results": {
+          "observations": [
+            {
+              "article_fixture": "META-earnings_results-1.html",
+              "date": "2026-08-27",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "Meta Platforms Second Quarter Financial Results Conference Call",
+              "url": "https://about.fb.com/investor-events/meta-q2-2026-earnings-call"
+            }
+          ],
+          "search_domain": "about.fb.com"
+        },
+        "events_presentations": {
+          "observations": [
+            {
+              "article_fixture": "META-events_presentations-1.html",
+              "date": "2026-09-03",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "search",
+              "rule": false,
+              "title": "Meta Platforms to Host Investor Day Presentation",
+              "url": "https://about.fb.com/events/2026/meta-investor-day-presentation"
+            }
+          ],
+          "search_domain": "about.fb.com"
+        },
+        "press_releases": {
+          "feed": {
+            "channel_description": "Meta newsroom",
+            "channel_title": "Meta Newsroom",
+            "endpoint_type": "rss",
+            "fixture": "meta-press.xml",
+            "link": "https://about.fb.com/news/",
+            "url": "https://about.fb.com/news/feed"
+          },
+          "observations": [
+            {
+              "date": "2026-09-05",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "Meta Platforms Rolls Out New AI Features",
+              "url": "https://about.fb.com/news/2026/09/meta-platforms-ai-features"
+            },
+            {
+              "date": "2026-08-30",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "feed",
+              "rule": true,
+              "title": "Meta Reports Second Quarter Results",
+              "url": "https://about.fb.com/news/2026/08/meta-reports-second-quarter-results"
+            }
+          ],
+          "search_domain": "about.fb.com"
+        }
+      },
+      "cik": "1326801",
+      "company_name": "Meta Platforms, Inc.",
+      "official_domains": [
+        "meta.com",
+        "about.fb.com"
+      ]
+    },
+    "MSFT": {
+      "channels": {
+        "earnings_results": {
+          "observations": [
+            {
+              "article_fixture": "MSFT-earnings_results-1.html",
+              "date": "2026-08-25",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": false,
+              "title": "Microsoft Fourth Quarter Investor Update",
+              "url": "https://investor.microsoft.com/en-us/events-and-presentations/microsoft-q4-investor-update"
+            }
+          ],
+          "search_domain": "investor.microsoft.com"
+        },
+        "events_presentations": {
+          "observations": [
+            {
+              "article_fixture": "MSFT-events_presentations-1.html",
+              "date": "2026-09-02",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "search",
+              "rule": false,
+              "title": "Microsoft to Present at Investor Conference Webcast",
+              "url": "https://news.microsoft.com/source/2026/09/02/microsoft-investor-conference-webcast"
+            }
+          ],
+          "search_domain": "news.microsoft.com"
+        },
+        "press_releases": {
+          "feed": {
+            "channel_description": "Microsoft news",
+            "channel_title": "Microsoft News",
+            "endpoint_type": "rss",
+            "fixture": "msft-press.xml",
+            "link": "https://news.microsoft.com/",
+            "url": "https://news.microsoft.com/rss"
+          },
+          "observations": [
+            {
+              "date": "2026-09-05",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "Microsoft Unveils New Cloud Infrastructure Innovations",
+              "url": "https://news.microsoft.com/source/2026/09/05/microsoft-unveils-cloud-innovations"
+            },
+            {
+              "date": "2026-08-26",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "Microsoft Announces Quarterly Dividend",
+              "url": "https://news.microsoft.com/source/2026/08/26/microsoft-announces-quarterly-dividend"
+            }
+          ],
+          "search_domain": "news.microsoft.com"
+        }
+      },
+      "cik": "789019",
+      "company_name": "Microsoft Corporation",
+      "official_domains": [
+        "microsoft.com",
+        "news.microsoft.com",
+        "investor.microsoft.com"
+      ]
+    },
+    "NVDA": {
+      "channels": {
+        "earnings_results": {
+          "observations": [
+            {
+              "date": "2026-08-19",
+              "direct": "blocked",
+              "earnings_state": "earnings",
+              "firecrawl_fixture": "nvda-q2-earnings.md",
+              "origin": "search",
+              "rule": true,
+              "title": "NVIDIA Announces Second Quarter Financial Results",
+              "url": "https://investor.nvidia.com/financial-info/quarterly-results/nvidia-q2-fy2026"
+            }
+          ],
+          "search_domain": "investor.nvidia.com"
+        },
+        "events_presentations": {
+          "feed": {
+            "channel_description": "NVIDIA investor events",
+            "channel_title": "NVIDIA Investor Events",
+            "endpoint_type": "atom",
+            "fixture": "atom-events.xml",
+            "url": "https://investor.nvidia.com/events.atom"
+          },
+          "observations": [
+            {
+              "date": "2026-09-05",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "NVIDIA Investor Day 2026",
+              "url": "https://investor.nvidia.com/events/investor-day"
+            },
+            {
+              "date": "2026-08-26",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "feed",
+              "rule": true,
+              "title": "NVIDIA Q2 Earnings Call",
+              "url": "https://investor.nvidia.com/events/q2-earnings-call"
+            }
+          ],
+          "search_domain": "investor.nvidia.com"
+        },
+        "press_releases": {
+          "feed": {
+            "channel_description": "NVIDIA corporate news",
+            "channel_title": "NVIDIA Newsroom",
+            "endpoint_type": "rss",
+            "fixture": "nvda-news.xml",
+            "link": "https://nvidianews.nvidia.com/",
+            "url": "https://nvidianews.nvidia.com/rss.xml"
+          },
+          "observations": [
+            {
+              "date": "2026-09-07",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "NVIDIA Announces New Platform",
+              "url": "https://nvidianews.nvidia.com/news/new-platform"
+            },
+            {
+              "date": "2026-09-04",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "NVIDIA Sets Conference Participation",
+              "url": "https://nvidianews.nvidia.com/news/conference"
+            },
+            {
+              "date": "2026-09-01",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "NVIDIA Research Wins Award",
+              "url": "https://nvidianews.nvidia.com/news/research-award"
+            }
+          ],
+          "search_domain": "nvidianews.nvidia.com"
+        }
+      },
+      "cik": "1045810",
+      "company_name": "NVIDIA Corporation",
+      "official_domains": [
+        "nvidia.com",
+        "nvidianews.nvidia.com",
+        "investor.nvidia.com"
+      ]
+    },
+    "PFE": {
+      "channels": {
+        "earnings_results": {
+          "observations": [
+            {
+              "article_fixture": "PFE-earnings_results-1.html",
+              "date": "2026-08-25",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "Pfizer Second Quarter Financial Results Conference Call",
+              "url": "https://www.pfizer.com/investors/pfizer-q2-2026-financial-results-call"
+            }
+          ],
+          "search_domain": "www.pfizer.com"
+        },
+        "events_presentations": {
+          "observations": [
+            {
+              "article_fixture": "PFE-events_presentations-1.html",
+              "date": "2026-09-02",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "search",
+              "rule": false,
+              "title": "Pfizer to Host Research and Development Day Webcast",
+              "url": "https://www.pfizer.com/events/2026/pfizer-rd-day-webcast"
+            }
+          ],
+          "search_domain": "www.pfizer.com"
+        },
+        "press_releases": {
+          "feed": {
+            "broken": true,
+            "endpoint_type": "rss",
+            "fixture": "pfe-press-broken.xml",
+            "url": "https://www.pfizer.com/news/feed"
+          },
+          "observations": [
+            {
+              "article_fixture": "PFE-press_releases-1.html",
+              "date": "2026-09-06",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "search",
+              "rule": false,
+              "title": "Pfizer Announces Oncology Pipeline Advancement",
+              "url": "https://www.pfizer.com/news/press-release/2026/pfizer-oncology-pipeline-advancement"
+            },
+            {
+              "article_fixture": "PFE-press_releases-2.html",
+              "date": "2026-08-28",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "Pfizer Reports Second Quarter Results",
+              "url": "https://www.pfizer.com/news/press-release/2026/pfizer-reports-second-quarter-results"
+            }
+          ],
+          "search_domain": "www.pfizer.com"
+        }
+      },
+      "cik": "780084",
+      "company_name": "Pfizer Inc.",
+      "official_domains": [
+        "pfizer.com",
+        "www.pfizer.com"
+      ]
+    },
+    "TSLA": {
+      "channels": {
+        "earnings_results": {
+          "observations": [
+            {
+              "article_fixture": "TSLA-earnings_results-1.html",
+              "date": "2026-08-22",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "Tesla Second Quarter Earnings Release",
+              "url": "https://ir.tesla.com/press-release/tesla-q2-2026-earnings-release"
+            }
+          ],
+          "search_domain": "ir.tesla.com"
+        },
+        "events_presentations": {
+          "feed": {
+            "channel_description": "Tesla investor events",
+            "channel_title": "Tesla Investor Events",
+            "endpoint_type": "atom",
+            "fixture": "tsla-events.xml",
+            "url": "https://ir.tesla.com/events.atom"
+          },
+          "observations": [
+            {
+              "date": "2026-09-01",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "Tesla Shareholder Meeting Webcast",
+              "url": "https://ir.tesla.com/events/shareholder-meeting"
+            }
+          ],
+          "search_domain": "ir.tesla.com"
+        },
+        "press_releases": {
+          "feed": {
+            "channel_description": "Tesla newsroom",
+            "channel_title": "Tesla Newsroom",
+            "endpoint_type": "rss",
+            "fixture": "tsla-press.xml",
+            "link": "https://ir.tesla.com/",
+            "url": "https://ir.tesla.com/rss"
+          },
+          "observations": [
+            {
+              "date": "2026-09-07",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "Tesla Updates Full Self-Driving Software",
+              "url": "https://ir.tesla.com/press-release/tesla-updates-fsd-software"
+            },
+            {
+              "date": "2026-08-26",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "feed",
+              "rule": false,
+              "title": "Tesla Production and Delivery Update",
+              "url": "https://ir.tesla.com/press-release/tesla-production-delivery-update"
+            }
+          ],
+          "search_domain": "ir.tesla.com"
+        }
+      },
+      "cik": "1318605",
+      "company_name": "Tesla, Inc.",
+      "official_domains": [
+        "tesla.com",
+        "ir.tesla.com"
+      ]
+    },
+    "XOM": {
+      "channels": {
+        "earnings_results": {
+          "observations": [
+            {
+              "date": "2026-08-26",
+              "direct": "blocked",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "Exxon Mobil Second Quarter Financial Results",
+              "url": "https://corporate.exxonmobil.com/investors/exxon-mobil-q2-2026-financial-results"
+            },
+            {
+              "date": "2026-08-26",
+              "direct": "blocked",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "Exxon Mobil Quarterly Earnings Webcast",
+              "url": "https://corporate.exxonmobil.com/investors/exxon-mobil-q2-2026-earnings-webcast"
+            }
+          ],
+          "search_domain": "corporate.exxonmobil.com"
+        },
+        "events_presentations": {
+          "observations": [
+            {
+              "article_fixture": "XOM-events_presentations-1.html",
+              "date": "2026-09-02",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "search",
+              "rule": false,
+              "title": "Exxon Mobil to Host Investor Day Webcast",
+              "url": "https://corporate.exxonmobil.com/events/2026/exxon-mobil-investor-day-webcast"
+            }
+          ],
+          "search_domain": "corporate.exxonmobil.com"
+        },
+        "press_releases": {
+          "feed": {
+            "broken": true,
+            "endpoint_type": "rss",
+            "fixture": "xom-press-broken.xml",
+            "url": "https://corporate.exxonmobil.com/rss"
+          },
+          "observations": [
+            {
+              "article_fixture": "XOM-press_releases-1.html",
+              "date": "2026-09-06",
+              "direct": "ok",
+              "earnings_state": "non_earnings",
+              "origin": "search",
+              "rule": false,
+              "title": "Exxon Mobil Announces Low Carbon Solutions Expansion",
+              "url": "https://corporate.exxonmobil.com/news/press-release/2026/exxon-mobil-low-carbon-solutions-expansion"
+            },
+            {
+              "article_fixture": "XOM-press_releases-2.html",
+              "date": "2026-08-28",
+              "direct": "ok",
+              "earnings_state": "earnings",
+              "origin": "search",
+              "rule": true,
+              "title": "Exxon Mobil Reports Second Quarter Results",
+              "url": "https://corporate.exxonmobil.com/news/press-release/2026/exxon-mobil-reports-second-quarter-results"
+            }
+          ],
+          "search_domain": "corporate.exxonmobil.com"
+        }
+      },
+      "cik": "34088",
+      "company_name": "Exxon Mobil Corporation",
+      "official_domains": [
+        "exxonmobil.com",
+        "corporate.exxonmobil.com"
+      ]
+    }
+  },
+  "years": 1
+}

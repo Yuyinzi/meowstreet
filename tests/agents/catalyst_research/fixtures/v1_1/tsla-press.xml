@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Tesla Newsroom</title>
+    <link>https://ir.tesla.com/</link>
+    <description>Tesla newsroom</description>
+    <item>
+      <title>Tesla Updates Full Self-Driving Software</title>
+      <link>https://ir.tesla.com/press-release/tesla-updates-fsd-software</link>
+      <guid isPermaLink="false">tsla-pres-1</guid>
+      <pubDate>Mon, 07 Sep 2026 08:00:00 GMT</pubDate>
+      <description>Tesla updates FSD software.</description>
+    </item>
+    <item>
+      <title>Tesla Production and Delivery Update</title>
+      <link>https://ir.tesla.com/press-release/tesla-production-delivery-update</link>
+      <guid isPermaLink="false">tsla-pres-2</guid>
+      <pubDate>Wed, 26 Aug 2026 15:00:00 GMT</pubDate>
+      <description>Tesla production and delivery update.</description>
+    </item>
+  </channel>
+</rss>

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Microsoft News</title>
+    <link>https://news.microsoft.com/</link>
+    <description>Microsoft news</description>
+    <item>
+      <title>Microsoft Unveils New Cloud Infrastructure Innovations</title>
+      <link>https://news.microsoft.com/source/2026/09/05/microsoft-unveils-cloud-innovations</link>
+      <guid isPermaLink="false">msft-pres-1</guid>
+      <pubDate>Sat, 05 Sep 2026 10:00:00 GMT</pubDate>
+      <description>Microsoft unveils cloud innovations.</description>
+    </item>
+    <item>
+      <title>Microsoft Announces Quarterly Dividend</title>
+      <link>https://news.microsoft.com/source/2026/08/26/microsoft-announces-quarterly-dividend</link>
+      <guid isPermaLink="false">msft-pres-2</guid>
+      <pubDate>Wed, 26 Aug 2026 14:00:00 GMT</pubDate>
+      <description>Microsoft announces quarterly dividend.</description>
+    </item>
+  </channel>
+</rss>

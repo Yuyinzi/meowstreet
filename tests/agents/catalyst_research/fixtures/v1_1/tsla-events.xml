@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Tesla Investor Events</title>
+  <link rel="self" href="https://ir.tesla.com/events.atom"/>
+  <entry>
+    <id>urn:tsla:event:1</id>
+    <title>Tesla Shareholder Meeting Webcast</title>
+    <link rel="alternate" href="/events/shareholder-meeting"/>
+    <updated>2026-09-01T15:00:00Z</updated>
+    <summary>Tesla shareholder meeting webcast.</summary>
+  </entry>
+</feed>

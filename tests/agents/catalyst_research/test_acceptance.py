@@ -3,18 +3,25 @@ import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+import httpx
 import pytest
 
-from app.agents.catalyst_research import domain
+from app.agents.catalyst_research import backfill, domain, registry, registry_discovery, scheduler
+from app.agents.catalyst_research import statistics as v1_1_statistics
 from app.agents.catalyst_research.adapters.executor import execute_adapter
 from app.agents.catalyst_research.adapters.validator import validate_active_adapter, validate_candidate
+from app.agents.catalyst_research.extraction.articles import extract_direct_article
+from app.agents.catalyst_research.extraction.feeds import fetch_feed
 from app.agents.catalyst_research.extraction.html import build_structural_snapshot
+from app.agents.catalyst_research.extraction.router import ExtractionRouter
 from app.agents.catalyst_research.persistence import repository
 from app.agents.catalyst_research.providers.base import SearchProviderError
+from app.agents.catalyst_research.providers.firecrawl import FirecrawlExtractProvider
 from app.agents.catalyst_research.providers.router import SearchRouter
-from app.agents.catalyst_research.schemas import EventClassificationResponse
+from app.agents.catalyst_research.schemas import EventClassificationResponse, RegistrySelectionResponse
 from app.agents.catalyst_research.statistics import calculate_statistics
 from app.agents.catalyst_research.workflow import run_research
+from app.http_client import HttpClient
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -614,3 +621,655 @@ def test_acceptance_portfolio_coverage_fallbacks_and_labels(tmp_path):
         for observation in entry["observations"]
     )
     assert matched / total >= 0.95
+
+
+V1_1_FIXTURES = FIXTURES / "v1_1"
+V1_1_MANIFEST = json.loads((V1_1_FIXTURES / "acceptance_manifest.json").read_text())
+V1_1_TICKERS = sorted(V1_1_MANIFEST["tickers"])
+_V1_1_CHANNELS = ("press_releases", "events_presentations", "earnings_results")
+_V1_1_DISCOVERY_PHRASES = {
+    "press_releases": "press releases news feed",
+    "events_presentations": "events presentations webcast",
+    "earnings_results": "quarterly earnings financial results",
+}
+_V1_1_HISTORICAL_PHRASES = {
+    "press_releases": " press release ",
+    "events_presentations": " events presentations ",
+    "earnings_results": "quarterly earnings financial results",
+}
+_V1_1_LISTING_PATHS = {
+    "press_releases": "news",
+    "events_presentations": "events",
+    "earnings_results": "investor-relations",
+}
+_V1_1_CLOCK = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
+_V1_1_UPDATE_CLOCK = datetime(2026, 9, 9, 12, 0, tzinfo=UTC)
+_V1_1_RESOLVER_ADDRESSES = ["93.184.216.34"]
+_V1_1_COLLECTION_CONFIG = {
+    "historical_slice_days": 92,
+    "max_historical_queries_per_channel": 8,
+    "search_result_limit": 10,
+    "max_unseen_urls_per_channel": 50,
+    "gap_lookback_days": 14,
+    "max_gap_queries_per_channel": 2,
+    "gap_search_interval_days": 7,
+    "feed_failure_threshold": 3,
+    "firecrawl_api_key": None,
+    "firecrawl_base_url": None,
+    "archive_enrichment_enabled": False,
+}
+_AGENT_PACKAGE = Path(__file__).resolve().parents[3] / "app" / "agents" / "catalyst_research"
+
+
+def _v1_1_observations(ticker, channel=None):
+    entry = V1_1_MANIFEST["tickers"][ticker]
+    channels = [channel] if channel else _V1_1_CHANNELS
+    rows = []
+    for name in channels:
+        rows.extend(dict(obs, channel=name) for obs in entry["channels"][name]["observations"])
+    return rows
+
+
+def _v1_1_expected_events(ticker):
+    return [obs for obs in _v1_1_observations(ticker) if obs["origin"] == "feed" or obs["direct"] == "ok"]
+
+
+class _V11FixtureSearchProvider:
+    def __init__(self, ticker):
+        self.name = "ddgs"
+        self.entry = V1_1_MANIFEST["tickers"][ticker]
+        self.ready = True
+        self.last_request_id = None
+        self.calls = []
+
+    async def search(self, query, *, limit):
+        self.calls.append(query)
+        if " official investor relations " in query:
+            return self._discovery_rows(query)
+        return self._historical_rows(query)
+
+    def _channel_for(self, query):
+        for channel, phrase in _V1_1_DISCOVERY_PHRASES.items():
+            if phrase in query:
+                return channel
+        for channel, phrase in _V1_1_HISTORICAL_PHRASES.items():
+            if phrase in query:
+                return channel
+        raise AssertionError(f"fixture search query is not recognized: {query}")
+
+    def _discovery_rows(self, query):
+        channel = self._channel_for(query)
+        company = self.entry["company_name"]
+        spec = self.entry["channels"][channel]
+        rows = []
+        feed = spec.get("feed")
+        if feed:
+            rows.append(
+                {
+                    "title": f"{company} {channel.replace('_', ' ').title()} Feed",
+                    "url": feed["url"],
+                    "snippet": f"{company} official investor relations {_V1_1_DISCOVERY_PHRASES[channel]}",
+                    "provider_rank": 1,
+                    "provider_metadata": {},
+                }
+            )
+        rows.append(
+            {
+                "title": f"{company} Official Investor Relations {_V1_1_LISTING_PATHS[channel].replace('-', ' ').title()}",
+                "url": f"https://{spec['search_domain']}/{_V1_1_LISTING_PATHS[channel]}",
+                "snippet": f"{company} official {_V1_1_DISCOVERY_PHRASES[channel]} on {spec['search_domain']}",
+                "provider_rank": 2,
+                "provider_metadata": {},
+            }
+        )
+        return rows
+
+    def _historical_rows(self, query):
+        channel = self._channel_for(query)
+        domain = query.split("site:", 1)[1].split()[0].strip()
+        spec = self.entry["channels"][channel]
+        if domain != spec["search_domain"]:
+            return []
+        company = self.entry["company_name"]
+        return [
+            {
+                "title": obs["title"],
+                "url": obs["url"],
+                "snippet": f"{company} official investor relations record",
+                "provider_rank": index,
+                "provider_metadata": {},
+            }
+            for index, obs in enumerate(spec["observations"], 1)
+            if obs["origin"] == "search"
+        ]
+
+
+class _V11RegistryResponses:
+    def __init__(self, llm):
+        self.llm = llm
+
+    async def parse(self, *, model, input, text_format, **kwargs):
+        assert text_format is RegistrySelectionResponse
+        self.llm.registry_selection_calls += 1
+        user_text = input[1]["content"]
+        candidates = json.loads(user_text.split("Search candidates:\n", 1)[1])
+        query = candidates[0]["query"]
+        for channel, phrase in _V1_1_DISCOVERY_PHRASES.items():
+            if phrase in query:
+                break
+        else:
+            raise AssertionError(f"registry selection prompt has an unrecognized query: {query}")
+        spec = self.llm.entry["channels"][channel]
+        ids_by_url = {row["url"]: row["result_id"] for row in candidates}
+        endpoints = []
+        feed = spec.get("feed")
+        if feed:
+            endpoints.append(
+                {
+                    "channel": channel,
+                    "endpoint_type": feed["endpoint_type"],
+                    "url": feed["url"],
+                    "domain": domain.url_host(feed["url"]),
+                    "evidence_result_ids": [ids_by_url[feed["url"]]],
+                    "confidence": "high",
+                    "reason": "fixture evidence identifies the official feed endpoint",
+                }
+            )
+        listing_url = f"https://{spec['search_domain']}/{_V1_1_LISTING_PATHS[channel]}"
+        endpoints.append(
+            {
+                "channel": channel,
+                "endpoint_type": "search_domain",
+                "url": None,
+                "domain": spec["search_domain"],
+                "evidence_result_ids": [ids_by_url[listing_url]],
+                "confidence": "medium",
+                "reason": "fixture evidence identifies the official search domain",
+            }
+        )
+        parsed = RegistrySelectionResponse.model_validate({"endpoints": endpoints})
+        return type("Response", (), {"output_parsed": parsed})()
+
+
+class _V11ClassificationResponses:
+    def __init__(self, llm):
+        self.llm = llm
+
+    async def parse(self, *, model, input, text_format, **kwargs):
+        assert text_format is EventClassificationResponse
+        self.llm.classification_calls += 1
+        events = json.loads(input[1]["content"].split("Events to classify:\n", 1)[1])
+        expected = {(obs["channel"], obs["title"]): obs["earnings_state"] for obs in _v1_1_observations(self.llm.ticker)}
+        classifications = [
+            {
+                "id": event["id"],
+                "earnings_state": expected[(event["source_type"], event["title"])],
+                "reason": "fixture manually labeled title",
+            }
+            for event in events
+        ]
+        parsed = EventClassificationResponse.model_validate({"classifications": classifications})
+        return type("Response", (), {"output_parsed": parsed})()
+
+
+class _V11FixtureLLM:
+    def __init__(self, ticker):
+        self.ticker = ticker
+        self.entry = V1_1_MANIFEST["tickers"][ticker]
+        self.registry_selection_calls = 0
+        self.classification_calls = 0
+        self.responses = type(
+            "Responses",
+            (),
+            {
+                "parse": lambda _self, **kwargs: _V11RegistryResponses(self).parse(**kwargs)
+                if kwargs.get("text_format") is RegistrySelectionResponse
+                else _V11ClassificationResponses(self).parse(**kwargs)
+            },
+        )()
+
+
+class _FixturePaymentRequiredError(Exception):
+    status_code = 402
+
+
+class _FakeFirecrawlClient:
+    def __init__(self, markdown_by_url=None, error=None):
+        self.markdown_by_url = markdown_by_url or {}
+        self.error = error
+        self.scrape_calls = []
+
+    def scrape(self, url, formats=None):
+        self.scrape_calls.append(url)
+        if self.error is not None:
+            raise self.error
+        markdown = self.markdown_by_url[url]
+        title = next(line.lstrip("# ").strip() for line in markdown.splitlines() if line.startswith("# "))
+        return {
+            "markdown": markdown,
+            "metadata": {
+                "title": title,
+                "url": url,
+                "publishedDate": "2026-08-19T12:00:00.000Z",
+                "requestId": "fc-fixture-request-1",
+            },
+        }
+
+
+class _V11AcceptanceHarness:
+    def __init__(self, tmp_path, ticker, *, firecrawl_markdown=None, firecrawl_error=None, archive_enrichment=False, extra_pages=None):
+        if ticker not in V1_1_MANIFEST["tickers"]:
+            raise ValueError(f"acceptance ticker {ticker} is not in the v1_1 manifest")
+        self.ticker = ticker
+        self.entry = V1_1_MANIFEST["tickers"][ticker]
+        self.db_path = Path(tmp_path) / f"{ticker.lower()}_v1_1.sqlite"
+        self.clock = _V1_1_CLOCK
+        self.llm = _V11FixtureLLM(ticker)
+        self.provider = _V11FixtureSearchProvider(ticker)
+        self.firecrawl_client = None
+        if firecrawl_markdown is not None or firecrawl_error is not None:
+            self.firecrawl_client = _FakeFirecrawlClient(firecrawl_markdown, firecrawl_error)
+        self.collection_config = {**_V1_1_COLLECTION_CONFIG, "archive_enrichment_enabled": archive_enrichment}
+        self.extra_pages = dict(extra_pages or {})
+        self.extraction_router = self._build_extraction_router()
+        self.http_client = HttpClient(transport=httpx.MockTransport(self._handle_request), sleep=lambda _: None)
+
+    def run(self, mode):
+        request = {"ticker": self.ticker, "years": V1_1_MANIFEST["years"], "as_of": V1_1_MANIFEST["as_of"], "mode": mode}
+        return asyncio.run(
+            run_research(request, db_path=self.db_path, http_client=self.http_client, dependencies=self._dependencies())
+        )
+
+    def _dependencies(self):
+        return {
+            "repository": repository,
+            "clock": lambda: self.clock,
+            "llm_client": self.llm,
+            "models": {"registry_selection": "fixture-registry-model", "classification": "fixture-classification-model"},
+            "resolver": self._resolve_company,
+            "discover_registry": registry_discovery.discover_registry,
+            "run_historical_backfill": backfill.run_historical_backfill,
+            "run_daily_update": scheduler.run_daily_update,
+            "classify_observations": domain.classify_observations,
+            "calculate_statistics": v1_1_statistics.calculate_statistics,
+            "search_router": SearchRouter(
+                {"provider": "auto", "fallback": "auto", "native_search_supported": "auto", "tavily_api_key": None},
+                [self.provider],
+            ),
+            "http_client": self.http_client,
+            "fetch_feed": self._fetch_feed,
+            "url_resolver": self._resolve_host,
+            "collection_config": self.collection_config,
+            "extraction_router": self.extraction_router,
+            "progress": lambda stage, **details: None,
+        }
+
+    def _resolve_company(self, request, **kwargs):
+        return {"ticker": self.ticker, "company_name": self.entry["company_name"], "cik": self.entry["cik"]}
+
+    def _resolve_host(self, host):
+        return list(_V1_1_RESOLVER_ADDRESSES)
+
+    def _build_extraction_router(self):
+        def direct_extractor(url, **kwargs):
+            kwargs.setdefault("resolver", self._resolve_host)
+            return extract_direct_article(url, http_client=self.http_client, **kwargs)
+
+        firecrawl_provider = None
+        if self.firecrawl_client is not None:
+            firecrawl_provider = FirecrawlExtractProvider(api_key="fixture-firecrawl-key", client=self.firecrawl_client)
+        return ExtractionRouter(direct_extractor, firecrawl_provider=firecrawl_provider)
+
+    async def _fetch_feed(self, endpoint, *, http_client, approved_domains, **kwargs):
+        return fetch_feed(
+            endpoint,
+            http_client=http_client,
+            approved_domains=approved_domains,
+            resolver=self._resolve_host,
+        )
+
+    def _handle_request(self, request):
+        url = str(request.url)
+        for page_url, fixture_name in self.extra_pages.items():
+            if url == page_url:
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, content=(V1_1_FIXTURES / fixture_name).read_bytes())
+        for channel in _V1_1_CHANNELS:
+            feed = self.entry["channels"][channel].get("feed")
+            if feed and url == feed["url"]:
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "application/rss+xml"},
+                    content=(V1_1_FIXTURES / feed["fixture"]).read_bytes(),
+                )
+        for obs in _v1_1_observations(self.ticker):
+            if url == obs["url"] and obs.get("direct") == "blocked":
+                return httpx.Response(403, content=b"fixture blocked direct extraction")
+        for obs in _v1_1_observations(self.ticker):
+            if url == obs["url"] and obs.get("article_fixture"):
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    content=(V1_1_FIXTURES / obs["article_fixture"]).read_bytes(),
+                )
+        return httpx.Response(404, content=f"missing fixture for {url}".encode())
+
+
+def v1_1_harness(tmp_path: Path, ticker: str, **overrides):
+    return _V11AcceptanceHarness(tmp_path, ticker, **overrides)
+
+
+def _v1_1_events(db_path, job_id):
+    connection = repository.connect(db_path)
+    try:
+        rows = connection.execute(
+            "select source_type, count_date, title, canonical_url, earnings_state, classification_method, discovery_method, extraction_provider from catalyst_ir_events where job_id = ? order by source_type, count_date, title",
+            (job_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        connection.close()
+
+
+def _v1_1_projection(events):
+    return sorted((event["source_type"], event["count_date"], event["title"], event["canonical_url"], event["earnings_state"]) for event in events)
+
+
+def _v1_1_manifest_projection(observations):
+    return sorted((obs["channel"], obs["date"], obs["title"], obs["url"], obs["earnings_state"]) for obs in observations)
+
+
+def _registry_ready(db_path, ticker):
+    connection = repository.connect(db_path)
+    try:
+        saved = repository.load_company_registry(connection, ticker)
+        endpoints = repository.load_source_endpoints(connection, ticker)
+        return saved is not None and registry.registry_ready(saved, endpoints)
+    finally:
+        connection.close()
+
+
+def _adapter_row_count(db_path, ticker):
+    connection = repository.connect(db_path)
+    try:
+        return connection.execute("select count(*) from catalyst_source_adapters where ticker = ?", (ticker,)).fetchone()[0]
+    finally:
+        connection.close()
+
+
+def test_acceptance_v1_1_manifest_is_self_consistent():
+    assert V1_1_MANIFEST["schema"] == "catalyst_acceptance_manifest_v1_1"
+    assert V1_1_MANIFEST["fixture_url_policy"] == "sanitized_mirror"
+    assert sorted(V1_1_MANIFEST["tickers"]) == ["AAPL", "AMD", "BA", "JPM", "META", "MSFT", "NVDA", "PFE", "TSLA", "XOM"]
+    start = date.fromisoformat(V1_1_MANIFEST["as_of"]).replace(year=date.fromisoformat(V1_1_MANIFEST["as_of"]).year - V1_1_MANIFEST["years"])
+    end = date.fromisoformat(V1_1_MANIFEST["as_of"])
+    strong_feeds = 0
+    for ticker, entry in V1_1_MANIFEST["tickers"].items():
+        assert set(entry["channels"]) == set(_V1_1_CHANNELS)
+        approved = entry["official_domains"]
+        for channel, spec in entry["channels"].items():
+            seen_titles = set()
+            feed = spec.get("feed")
+            if feed:
+                assert (V1_1_FIXTURES / feed["fixture"]).exists()
+                assert domain.url_host(feed["url"]) in approved
+                strong_feeds += int(not feed.get("broken"))
+            for obs in spec["observations"]:
+                assert obs["title"] not in seen_titles
+                seen_titles.add(obs["title"])
+                assert start <= date.fromisoformat(obs["date"]) <= end
+                assert obs["origin"] in {"feed", "search"}
+                assert domain.canonicalize_public_url(obs["url"]) == obs["url"]
+                host = domain.url_host(obs["url"])
+                assert any(host == approved_domain or host.endswith(f".{approved_domain}") for approved_domain in approved)
+                if channel == "earnings_results":
+                    assert obs["earnings_state"] == "earnings", (ticker, channel, obs["title"])
+                else:
+                    rule = domain.classify_title_by_rule(obs["title"], channel)
+                    if obs["rule"]:
+                        assert rule == obs["earnings_state"], (ticker, channel, obs["title"])
+                    else:
+                        assert rule is None, (ticker, channel, obs["title"])
+                        assert obs["earnings_state"] in {"non_earnings", "ambiguous"}
+                if obs["origin"] == "feed":
+                    assert feed and not feed.get("broken")
+                if obs.get("direct") == "blocked":
+                    assert obs["origin"] == "search"
+                    assert not obs.get("article_fixture")
+                elif obs["origin"] == "search":
+                    assert obs.get("article_fixture") and (V1_1_FIXTURES / obs["article_fixture"]).exists()
+                if obs.get("firecrawl_fixture"):
+                    assert (V1_1_FIXTURES / obs["firecrawl_fixture"]).exists()
+    assert strong_feeds >= 7
+
+
+def test_acceptance_v1_1_trusted_source_registries(tmp_path):
+    trusted = {}
+    for ticker in V1_1_TICKERS:
+        harness = v1_1_harness(tmp_path / ticker.lower(), ticker)
+        result = harness.run("research")
+        assert result["status"] == "completed_partial"
+        trusted[ticker] = _registry_ready(harness.db_path, ticker)
+    assert sum(trusted.values()) >= 7
+    assert {ticker for ticker, ready in trusted.items() if ready} >= {"NVDA", "AAPL", "MSFT", "AMD", "TSLA", "META", "JPM", "BA"}
+
+
+def test_acceptance_v1_1_working_feed_or_search_channel_and_manifest_projection(tmp_path):
+    working = 0
+    for ticker in V1_1_TICKERS:
+        harness = v1_1_harness(tmp_path / ticker.lower(), ticker)
+        result = harness.run("research")
+        events = _v1_1_events(harness.db_path, result["job_id"])
+        expected = _v1_1_expected_events(ticker)
+        assert _v1_1_projection(events) == _v1_1_manifest_projection(expected)
+        channels_with_events = {event["source_type"] for event in events}
+        assert channels_with_events
+        working += int(bool(channels_with_events))
+    assert working == 10
+
+
+def test_acceptance_v1_1_nvda_press_releases_from_feed_and_search_without_adapters(tmp_path):
+    harness = v1_1_harness(tmp_path, "NVDA")
+    result = harness.run("research")
+    assert result["call_counts"]["discovery"] == 1
+    assert result["call_counts"]["adapter_generation"] == 0
+    events = _v1_1_events(harness.db_path, result["job_id"])
+    press = [event for event in events if event["source_type"] == "press_releases"]
+    assert len(press) == 3
+    assert {event["discovery_method"] for event in press} == {"rss"}
+    assert {event["extraction_provider"] for event in press} == {"feed_metadata"}
+    assert all(event["classification_method"] == "llm_v1" for event in press)
+    assert _adapter_row_count(harness.db_path, "NVDA") == 0
+    connection = repository.connect(harness.db_path)
+    try:
+        adapters = connection.execute("select count(*) from catalyst_source_adapters where ticker = 'NVDA'").fetchone()[0]
+        assert adapters == 0
+        feed_endpoints = connection.execute(
+            "select count(*) from catalyst_source_endpoints where ticker = 'NVDA' and endpoint_type in ('rss','atom') and status = 'active'"
+        ).fetchone()[0]
+        assert feed_endpoints == 2
+    finally:
+        connection.close()
+
+
+def test_acceptance_v1_1_second_nvda_update_makes_zero_model_calls(tmp_path):
+    harness = v1_1_harness(tmp_path, "NVDA")
+    research = harness.run("research")
+    assert research["call_counts"]["discovery"] == 1
+    harness.clock = _V1_1_UPDATE_CLOCK
+    first_update = harness.run("update")
+    assert first_update["call_counts"]["discovery"] == 0
+    connection = repository.connect(harness.db_path)
+    try:
+        gap_attempts = connection.execute(
+            "select count(*) from catalyst_search_attempts where job_id = ? and search_purpose = 'incremental_gap_check'",
+            (first_update["job_id"],),
+        ).fetchone()[0]
+        assert gap_attempts > 0
+    finally:
+        connection.close()
+    llm_calls_before = (harness.llm.registry_selection_calls, harness.llm.classification_calls)
+    second_update = harness.run("update")
+    assert second_update["call_counts"]["discovery"] == 0
+    assert second_update["call_counts"]["adapter_generation"] == 0
+    assert second_update["call_counts"]["classification"] == 0
+    assert (harness.llm.registry_selection_calls, harness.llm.classification_calls) == llm_calls_before
+    assert _adapter_row_count(harness.db_path, "NVDA") == 0
+
+
+def test_acceptance_v1_1_direct_failure_firecrawl_success_stores_one_event(tmp_path):
+    blocked = [obs for obs in _v1_1_observations("NVDA") if obs.get("direct") == "blocked"]
+    assert len(blocked) == 1
+    markdown = {obs["url"]: (V1_1_FIXTURES / obs["firecrawl_fixture"]).read_text() for obs in blocked}
+    harness = v1_1_harness(tmp_path, "NVDA", firecrawl_markdown=markdown)
+    result = harness.run("research")
+    events = _v1_1_events(harness.db_path, result["job_id"])
+    firecrawl_events = [event for event in events if event["extraction_provider"] == "firecrawl"]
+    assert len(firecrawl_events) == 1
+    assert firecrawl_events[0]["source_type"] == "earnings_results"
+    assert firecrawl_events[0]["count_date"] == blocked[0]["date"]
+    assert firecrawl_events[0]["title"] == blocked[0]["title"]
+    assert harness.firecrawl_client.scrape_calls == [blocked[0]["url"]]
+    connection = repository.connect(harness.db_path)
+    try:
+        sources = connection.execute(
+            "select extraction_status, extraction_provider from catalyst_ir_sources where job_id = ? and source_type = 'earnings_results'",
+            (result["job_id"],),
+        ).fetchall()
+        assert len(sources) == 1
+        assert tuple(sources[0]) == ("complete", "firecrawl")
+    finally:
+        connection.close()
+
+
+def test_acceptance_v1_1_payment_required_disables_firecrawl_for_remaining_urls(tmp_path):
+    blocked = [obs for obs in _v1_1_observations("XOM", "earnings_results") if obs.get("direct") == "blocked"]
+    assert len(blocked) == 2
+    harness = v1_1_harness(tmp_path, "XOM", firecrawl_error=_FixturePaymentRequiredError())
+    result = harness.run("research")
+    assert len(harness.firecrawl_client.scrape_calls) == 1
+    assert harness.firecrawl_client.scrape_calls[0] in {obs["url"] for obs in blocked}
+    assert harness.extraction_router.firecrawl_disabled_reason == "payment_required"
+    events = _v1_1_events(harness.db_path, result["job_id"])
+    assert [event for event in events if event["extraction_provider"] == "firecrawl"] == []
+    connection = repository.connect(harness.db_path)
+    try:
+        rows = connection.execute(
+            "select url, acceptance_status, extraction_status, verification_reason from catalyst_ir_sources where job_id = ? and source_type = 'earnings_results' order by url",
+            (result["job_id"],),
+        ).fetchall()
+        assert [row[0] for row in rows] == sorted(obs["url"] for obs in blocked)
+        assert all(row[1:] == ("ambiguous", "failed", "manual_review_required") for row in rows)
+    finally:
+        connection.close()
+
+
+def test_acceptance_v1_1_feed_and_search_only_history_is_observed_partial(tmp_path):
+    for ticker in V1_1_TICKERS:
+        harness = v1_1_harness(tmp_path / ticker.lower(), ticker)
+        result = harness.run("research")
+        assert result["status"] == "completed_partial"
+        for channel, stats in result["statistics"].items():
+            assert stats["coverage_status"] in {"observed_partial", "missing", "unsupported"}
+            if stats["observed_total"] > 0:
+                assert stats["coverage_status"] == "observed_partial"
+                assert stats["coverage_warning"]
+                assert stats["observed_start"] and stats["observed_end"]
+            elif stats["coverage_status"] == "unsupported":
+                assert "coverage_warning" not in stats
+            else:
+                assert stats["coverage_status"] == "missing"
+                assert stats["coverage_warning"]
+
+
+def test_acceptance_v1_1_existing_v1_adapter_still_enriches_when_enabled(tmp_path):
+    db_path = Path(tmp_path) / "nvda_enrichment.sqlite"
+    connection = repository.connect(db_path)
+    try:
+        repository.save_company_registry(
+            connection,
+            {
+                "ticker": "NVDA",
+                "company_name": "NVIDIA Corporation",
+                "cik": "1045810",
+                "official_domains": V1_1_MANIFEST["tickers"]["NVDA"]["official_domains"],
+                "source_confidence": "high",
+                "registry_version": 1,
+            },
+        )
+        for channel in ("press_releases", "events_presentations"):
+            feed = V1_1_MANIFEST["tickers"]["NVDA"]["channels"][channel]["feed"]
+            repository.upsert_source_endpoint(
+                connection,
+                {
+                    "ticker": "NVDA",
+                    "channel": channel,
+                    "endpoint_type": feed["endpoint_type"],
+                    "url": feed["url"],
+                    "domain": domain.url_host(feed["url"]),
+                    "status": "active",
+                    "confidence": "high",
+                },
+            )
+        seed_job = repository.create_job(connection, {"ticker": "NVDA", "years": 1}, {"company_name": "NVIDIA Corporation", "cik": "1045810"}, _V1_1_CLOCK)
+        repository.start_job(connection, seed_job["job_id"], _V1_1_CLOCK.isoformat())
+        adapter = {
+            "schema_version": "ir_source_adapter_v1",
+            "ticker": "NVDA",
+            "source_type": "press_releases",
+            "source_url": "https://nvidianews.nvidia.com/news",
+            "allowed_hosts": ["nvidianews.nvidia.com"],
+            "access_mode": "html",
+            "extraction": {
+                "item_selector": ".news-item",
+                "date": {"selector": "time", "value_source": "text", "formats": ["%B %d, %Y"]},
+                "title": {"selector": ".news-title", "value_source": "text"},
+                "url": {"selector": ".news-title", "value_source": "attribute", "attribute": "href"},
+            },
+            "pagination": {"type": "none"},
+        }
+        candidate = repository.create_adapter_candidate(
+            connection,
+            {"job_id": seed_job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "source_url": adapter["source_url"], "adapter": adapter},
+        )
+        repository.record_adapter_validation(connection, {"adapter_id": candidate["adapter_id"], "job_id": seed_job["job_id"], "status": "passed", "report": {}})
+        repository.activate_adapter(connection, candidate["adapter_id"], _V1_1_CLOCK.isoformat())
+    finally:
+        connection.close()
+
+    harness = v1_1_harness(
+        tmp_path,
+        "NVDA",
+        archive_enrichment=True,
+        extra_pages={"https://nvidianews.nvidia.com/news": "nvda-archive.html"},
+    )
+    harness.db_path = db_path
+    result = harness.run("research")
+    events = _v1_1_events(harness.db_path, result["job_id"])
+    enriched = [event for event in events if event["discovery_method"] == "archive_adapter"]
+    assert len(enriched) == 1
+    assert enriched[0]["title"] == "NVIDIA Archived Release"
+    assert enriched[0]["count_date"] == "2026-07-15"
+    press = [event for event in events if event["source_type"] == "press_releases"]
+    assert {event["discovery_method"] for event in press} == {"rss", "archive_adapter"}
+    assert result["statistics"]["press_releases"]["coverage_status"] == "observed_partial"
+    connection = repository.connect(harness.db_path)
+    try:
+        states = [row[0] for row in connection.execute("select state from catalyst_source_adapters where ticker = 'NVDA'").fetchall()]
+        assert states == ["active"]
+    finally:
+        connection.close()
+
+
+def test_acceptance_v1_1_no_browser_or_generic_crawl_dependency():
+    forbidden_tokens = ("playwright", "selenium", "pyppeteer", "captcha", "cloudflare", "stealth", "undetected")
+    for path in sorted(_AGENT_PACKAGE.rglob("*.py")):
+        text = path.read_text().casefold()
+        for token in forbidden_tokens:
+            assert token not in text, (path, token)
+    firecrawl_source = (_AGENT_PACKAGE / "providers" / "firecrawl.py").read_text()
+    for api_call in (".search(", ".crawl(", ".map(", ".interact(", ".browser(", ".agent("):
+        assert api_call not in firecrawl_source
+    feeds_source = (_AGENT_PACKAGE / "extraction" / "feeds.py").read_text()
+    assert "browser=False" in feeds_source
+    workflow_source = (_AGENT_PACKAGE / "workflow.py").read_text()
+    assert "Browser(" not in workflow_source

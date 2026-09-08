@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>JPMorgan Chase Newsroom</title>
+    <link>https://www.jpmorganchase.com/</link>
+    <description>JPMorgan Chase newsroom</description>
+    <item>
+      <title>JPMorgan Chase Expands Community Development Program</title>
+      <link>https://www.jpmorganchase.com/newsroom/2026/09/community-development-expansion</link>
+      <guid isPermaLink="false">jpm-pres-1</guid>
+      <pubDate>Sun, 06 Sep 2026 10:30:00 GMT</pubDate>
+      <description>JPMorgan Chase expands community development.</description>
+    </item>
+    <item>
+      <title>JPMorgan Chase Reports Second Quarter Results</title>
+      <link>https://www.jpmorganchase.com/newsroom/2026/08/jpmorgan-chase-reports-second-quarter-results</link>
+      <guid isPermaLink="false">jpm-pres-2</guid>
+      <pubDate>Fri, 28 Aug 2026 12:30:00 GMT</pubDate>
+      <description>JPMorgan Chase reports second quarter results.</description>
+    </item>
+  </channel>
+</rss>
