@@ -78,6 +78,31 @@ def test_fetch_html_page_uses_pages_default_resolver_before_request(monkeypatch)
     assert requests == []
 
 
+def test_fetch_html_page_uses_doh_when_system_dns_returns_proxy_fake_ip(monkeypatch):
+    requests = []
+
+    def fake_getaddrinfo(host, port, *, type):
+        return [(None, None, None, None, ("198.18.6.235", 0))]
+
+    def handler(request):
+        requests.append(str(request.url))
+        if request.url.host == "dns.google":
+            answers = [{"type": 1, "data": "35.190.66.32"}] if request.url.params["type"] == "A" else []
+            return httpx.Response(200, json={"Status": 0, "Answer": answers}, request=request)
+        return httpx.Response(200, headers={"Content-Type": "text/html"}, content=b"<p>ready</p>", request=request)
+
+    monkeypatch.setattr("app.agents.catalyst_research.extraction.pages.socket.getaddrinfo", fake_getaddrinfo)
+
+    page = fetch_html_page("https://example.com/page", http_client=client_for(handler))
+
+    assert page["html"] == "<p>ready</p>"
+    assert requests == [
+        "https://dns.google/resolve?name=example.com&type=A",
+        "https://dns.google/resolve?name=example.com&type=AAAA",
+        "https://example.com/page",
+    ]
+
+
 def test_fetch_html_page_normalizes_default_resolver_failure(monkeypatch):
     def fail_getaddrinfo(host, port, *, type):
         raise OSError("dns failure")

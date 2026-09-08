@@ -485,7 +485,7 @@ async def _prepare_sources(context, company, discovery, source_types=None):
             _save_unaccepted_source(context, source, status="ambiguous", snapshot=snapshot, verification_reason=snapshot.get("verification_error"))
     prepared = {}
     for source_type in source_types:
-        accepted = None
+        accepted = []
         for source in candidates.get(source_type, []):
             if source.get("status") == "rejected" or source.get("acceptance_status") == "rejected":
                 continue
@@ -500,18 +500,20 @@ async def _prepare_sources(context, company, discovery, source_types=None):
                     _save_unaccepted_source(context, source, status="rejected")
                 continue
             if snapshot.get("company_verified"):
-                accepted = (source, snapshot)
-                break
+                accepted.append((source, snapshot))
+                continue
             context["warnings"].append("source_identity_ambiguous")
             context["next_actions"].append("review_ambiguous_source")
             _save_unaccepted_source(context, source, status="ambiguous", snapshot=snapshot, verification_reason=snapshot.get("verification_error"))
-        if accepted is None:
-            accepted = await _traverse_source(context, company, origin_snapshots, source_type)
-        prepared[source_type] = accepted if accepted and accepted[0] is not None else None
+        if not accepted:
+            traversed = await _traverse_source(context, company, origin_snapshots, source_type)
+            if traversed and traversed[0] is not None:
+                accepted.append(traversed)
+        prepared[source_type] = accepted
     return prepared, origin_snapshots
 
 
-async def _run_channel(context, company, source_type, pair):
+async def _run_channel_candidate(context, company, source_type, pair):
     if pair is None or pair[0] is None:
         context["execution_paths"][source_type] = "cold"
         _progress(context, "source_missing", source=source_type)
@@ -535,6 +537,14 @@ async def _run_channel(context, company, source_type, pair):
     _progress(context, "adapter_generation", source=source_type)
     try:
         candidate = await _invoke(context["generate_adapter"], company, source, snapshot, llm_client=context["llm_client"], model=model)
+    except Exception:
+        context["warnings"].append("catalyst_llm_request_failed")
+        context["next_actions"].append("configure_catalyst_llm")
+        context["execution_paths"][source_type] = "cold"
+        source.update({"extraction_status": "failed", "execution_path": "cold", "checked_at": _iso(context), "truncation_reason": "adapter_generation_failed"})
+        saved = _repo_call(context, "save_source", source)
+        return {"source_type": source_type, "status": "partial", "events": [], "source": saved}
+    try:
         if not isinstance(candidate, Mapping):
             raise ValueError("adapter candidate is invalid")
         candidate = {**candidate, "job_id": context["job"]["job_id"], "ticker": context["request"]["ticker"], "source_type": source_type, "source_url": source["url"], "allowed_hosts": list(trusted_allowed_hosts)}
@@ -589,6 +599,19 @@ async def _run_channel(context, company, source_type, pair):
             saved = source
         context["execution_paths"][source_type] = "cold"
         return {"source_type": source_type, "status": "partial", "events": [], "source": saved, "error": _sanitized_error(exc)}
+
+
+async def _run_channel(context, company, source_type, candidates):
+    if not candidates:
+        return await _run_channel_candidate(context, company, source_type, None)
+    best_result = None
+    for candidate in candidates:
+        result = await _run_channel_candidate(context, company, source_type, candidate)
+        if result.get("status") == "complete":
+            return result
+        if best_result is None or len(result.get("events", [])) > len(best_result.get("events", [])):
+            best_result = result
+    return best_result
 
 
 def _bound_adapter_fetch(context, adapter, *, capture_snapshots=None):

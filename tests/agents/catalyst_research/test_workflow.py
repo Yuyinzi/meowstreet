@@ -179,6 +179,54 @@ def test_cold_workflow_uses_fixed_order_and_one_adapter_per_required_channel():
     assert repository.calls[-1] == "load_result"
 
 
+def test_cold_workflow_tries_alternate_source_after_adapter_validation_failure():
+    repository = FakeRepository()
+    calls = []
+    dependencies = _deps(repository, calls)
+
+    async def discover(company, **kwargs):
+        return {
+            "status": "ambiguous",
+            "sources": [
+                {"source_type": "press_releases", "url": "https://ir.acme.example/news/detail", "acceptance_status": "ambiguous"},
+                {"source_type": "events_presentations", "url": "https://ir.acme.example/events", "acceptance_status": "ambiguous"},
+            ],
+            "alternate_sources": [
+                {"source_type": "press_releases", "url": "https://ir.acme.example/news", "acceptance_status": "ambiguous"},
+            ],
+            "warnings": [],
+            "next_actions": [],
+        }
+
+    async def generate(company, source, snapshot, **kwargs):
+        calls.append(f"generate:{source['url']}")
+        return {
+            "source_type": source["source_type"],
+            "source_url": source["url"],
+            "allowed_hosts": ["ir.acme.example"],
+            "adapter": {"source_type": source["source_type"], "source_url": source["url"]},
+        }
+
+    def validate(adapter, snapshot, **kwargs):
+        status = "failed" if adapter["source_url"].endswith("/detail") else "passed"
+        return {"status": status, "observations": [], "report": {}}
+
+    dependencies.update({"discover_sources": discover, "generate_adapter": generate, "validate_candidate": validate})
+
+    result = asyncio.run(
+        run_research(
+            {"ticker": "ACME", "years": 1, "as_of": "2026-01-01"},
+            dependencies=dependencies,
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert [call for call in calls if call.startswith("generate:https://ir.acme.example/news")] == [
+        "generate:https://ir.acme.example/news/detail",
+        "generate:https://ir.acme.example/news",
+    ]
+
+
 def test_cold_workflow_reports_stage_progress_in_order():
     repository = FakeRepository()
     calls = []
@@ -386,6 +434,29 @@ def test_missing_catalyst_llm_is_partial_and_requests_configuration():
     result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, dependencies=dependencies))
     assert result["status"] == "completed_partial"
     assert "configure_catalyst_llm" in result["next_actions"]
+
+
+def test_adapter_generation_llm_failure_requests_configuration_without_raw_error():
+    repository = FakeRepository()
+    calls = []
+    dependencies = _deps(repository, calls)
+
+    async def generate(company, source, snapshot, **kwargs):
+        raise ValueError("insufficient balance api_key=secret")
+
+    dependencies["generate_adapter"] = generate
+
+    result = asyncio.run(
+        run_research(
+            {"ticker": "ACME", "years": 1, "as_of": "2026-01-01"},
+            dependencies=dependencies,
+        )
+    )
+
+    assert result["status"] == "completed_partial"
+    assert "catalyst_llm_request_failed" in result["warnings"]
+    assert "configure_catalyst_llm" in result["next_actions"]
+    assert "secret" not in str(result)
 
 
 def test_non_html_source_is_unsupported_with_stable_action_code(tmp_path):

@@ -767,7 +767,7 @@ async def _select_discovery_sources(company, results, *, llm_client, model):
         rows = _candidate_rows(results)
         return [_selection_result(selection, rows, company) for selection in payload.selections], None
     except Exception:
-        return [], "source selection failed"
+        return [], "catalyst_llm_request_failed"
 
 
 def _manual_override_sources(overrides: Mapping) -> tuple[list[dict], list[str]]:
@@ -1122,6 +1122,8 @@ async def _discover_sources_impl(
     next_actions = []
     if status != "accepted":
         next_actions.append("provide a verified Investor Relations source override")
+    if "catalyst_llm_request_failed" in warnings:
+        next_actions.append("configure_catalyst_llm")
     if warnings:
         next_actions.append("review search provider and source evidence warnings")
     normalized_ticker = _fold_whitespace(company.get("ticker") or "").upper()

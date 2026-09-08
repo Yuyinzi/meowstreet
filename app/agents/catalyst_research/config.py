@@ -9,7 +9,7 @@ RESEARCH_VERSION = "catalyst_research_v1"
 RESULT_SCHEMA_VERSION = "catalyst_research_result_v1"
 ADAPTER_SCHEMA_VERSION = "ir_source_adapter_v1"
 PROMPT_VERSIONS = {
-    "source_selection": "source_selection_v1",
+    "source_selection": "source_selection_v2",
     "adapter_generation": "adapter_generation_v1",
     "classification": "classification_v1",
 }

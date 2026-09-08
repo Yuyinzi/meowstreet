@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from datetime import UTC, datetime
+import ipaddress
 import socket
 from urllib.parse import urljoin
 
@@ -14,16 +15,50 @@ from app.http_client import ResponseTooLargeError
 
 
 _HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
+_DOH_URL = "https://dns.google/resolve"
+_PROXY_FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
 
 
-def _resolve_host(host):
+def _resolve_with_doh(host, http_client):
+    addresses = []
     try:
-        entries = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
-    except OSError as exc:
+        for record_type, answer_type in (("A", 1), ("AAAA", 28)):
+            response = http_client.request(
+                "GET",
+                _DOH_URL,
+                params={"name": host, "type": record_type},
+                headers={"Accept": "application/dns-json"},
+                max_response_bytes=65_536,
+            )
+            payload = response.json()
+            if payload.get("Status") != 0:
+                continue
+            addresses.extend(
+                answer.get("data")
+                for answer in payload.get("Answer", [])
+                if isinstance(answer, dict) and answer.get("type") == answer_type and isinstance(answer.get("data"), str)
+            )
+    except (AttributeError, TypeError, ValueError, httpx.HTTPError) as exc:
         raise ValueError("url host could not be resolved") from exc
-    addresses = [entry[4][0] for entry in entries if entry and entry[4]]
     if not addresses:
         raise ValueError("url host could not be resolved")
+    return addresses
+
+
+def _resolve_host(host, http_client):
+    try:
+        entries = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except OSError:
+        return _resolve_with_doh(host, http_client)
+    addresses = [entry[4][0] for entry in entries if entry and entry[4]]
+    if not addresses:
+        return _resolve_with_doh(host, http_client)
+    try:
+        parsed = [ipaddress.ip_address(address) for address in addresses]
+    except ValueError:
+        return addresses
+    if parsed and all(address in _PROXY_FAKE_IP_NETWORK for address in parsed):
+        return _resolve_with_doh(host, http_client)
     return addresses
 
 
@@ -78,7 +113,7 @@ def fetch_html_page(url, *, http_client, allowed_hosts=None, resolver=None, max_
     max_bytes = _positive_integer(max_bytes, "max bytes")
     requested_url = canonicalize_public_url(url)
     normalized_allowed_hosts = _normalized_allowed_hosts(allowed_hosts)
-    effective_resolver = resolver if resolver is not None else _resolve_host
+    effective_resolver = resolver if resolver is not None else lambda host: _resolve_host(host, http_client)
     current_url = requested_url
     chain = []
     redirect_count = 0

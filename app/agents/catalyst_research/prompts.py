@@ -26,7 +26,10 @@ def source_selection_prompt(company: dict, results: list[dict]) -> list[dict]:
                 "Select only URLs present in the supplied current search results whose evidence_result_ids "
                 "refer to those current results. A company-like hostname "
                 "alone is not evidence of ownership; reject third-party news, aggregator, social, and "
-                "search-result pages. Do not invent URLs or evidence IDs. "
+                "search-result pages. For press_releases and events_presentations, select an archive or list page "
+                "that contains multiple dated records; never select an individual release, article, event, or "
+                "presentation detail page. Prefer a stable archive root over a recent record. Do not invent URLs "
+                "or evidence IDs. "
                 f"{_UNTRUSTED_EVIDENCE}"
             ),
         },

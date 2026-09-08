@@ -478,6 +478,34 @@ def test_transport_exhaustion_is_search_unavailable_but_rejected_selection_is_re
     assert rejected["status"] == "rejected"
 
 
+def test_discovery_reports_runtime_llm_failure_as_configuration_action():
+    provider = FakeProvider(
+        "ddgs",
+        rows=[{"title": "Acme Investor Relations", "url": "https://acme.example/ir", "snippet": "Acme investor relations"}],
+    )
+
+    class FailingResponses:
+        async def parse(self, **kwargs):
+            raise RuntimeError("provider balance and secret details")
+
+    llm = type("LLM", (), {"responses": FailingResponses()})()
+    result = asyncio.run(
+        discover_sources(
+            {"ticker": "ACM", "company_name": "Acme"},
+            router=SearchRouter({"provider": "ddgs", "fallback": "none"}, [provider]),
+            llm_client=llm,
+            model="selector",
+            repository=FakeRepository(),
+            job_id="job-llm-failure",
+            source_types={"ir_home"},
+        )
+    )
+
+    assert result["warnings"] == ["catalyst_llm_request_failed"]
+    assert "configure_catalyst_llm" in result["next_actions"]
+    assert "provider balance" not in str(result)
+
+
 def test_owned_repository_connection_closes_when_identity_validation_fails():
     class OwnedConnection:
         def __init__(self):
