@@ -4,8 +4,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+import pytest
 
-from app.agents.catalyst_research.workflow import _javascript_archive_shell, run_research
+from app.agents.catalyst_research import scheduler as catalyst_scheduler
+from app.agents.catalyst_research import statistics as catalyst_statistics
+from app.agents.catalyst_research.config import RESULT_SCHEMA_VERSION
+from app.agents.catalyst_research.workflow import _UnavailableSearchRouter, _javascript_archive_shell, run_research
 from app.agents.catalyst_research.extraction.pages import fetch_html_page
 from app.http_client import HttpClient
 
@@ -1134,3 +1138,990 @@ def test_workflow_forwards_config_args_to_default_config_loaders(monkeypatch):
     assert result["status"] == "completed"
     assert seen["inference"] is marker
     assert seen["search"] is marker
+
+
+V1_1_COLLECTION_CONFIG = {
+    "historical_query_limit": 16,
+    "search_result_limit": 10,
+    "unseen_url_limit": 200,
+    "max_unseen_urls_per_channel": 200,
+    "slice_days": 92,
+    "max_historical_queries_per_channel": 16,
+    "gap_lookback_days": 14,
+    "max_gap_queries_per_channel": 2,
+    "gap_search_interval_days": 7,
+    "feed_failure_threshold": 3,
+    "firecrawl_api_key": None,
+    "firecrawl_base_url": None,
+    "archive_enrichment_enabled": False,
+}
+
+
+def v1_1_registry(overrides=None):
+    registry = {
+        "ticker": "NVDA",
+        "company_name": "NVIDIA Corporation",
+        "cik": "1045810",
+        "official_domains": ["nvidia.com", "nvidianews.nvidia.com"],
+        "source_confidence": "high",
+        "registry_version": 1,
+    }
+    registry.update(overrides or {})
+    return registry
+
+
+def v1_1_endpoint(overrides=None):
+    endpoint = {
+        "ticker": "NVDA",
+        "channel": "press_releases",
+        "endpoint_type": "rss",
+        "url": "https://nvidianews.nvidia.com/rss",
+        "domain": "nvidianews.nvidia.com",
+        "status": "active",
+        "confidence": "high",
+    }
+    endpoint.update(overrides or {})
+    return endpoint
+
+
+def v1_1_event(channel="press_releases", title="NVIDIA announces launch"):
+    event = {
+        "ticker": "NVDA",
+        "source_type": channel,
+        "title": title,
+        "published_date": "2026-08-15",
+        "count_date": "2026-08-15",
+        "url": "https://nvidianews.nvidia.com/news/launch",
+        "canonical_url": "https://nvidianews.nvidia.com/news/launch",
+        "source_id": f"source_{channel}",
+        "discovery_method": "rss",
+        "discovery_methods": ["rss"],
+    }
+    if channel == "events_presentations":
+        event["event_date"] = "2026-08-15"
+    return event
+
+
+def v1_1_channel_payload(events):
+    days = sorted({event["count_date"] for event in events if event.get("count_date")})
+    return {
+        "coverage_status": "observed_partial" if events else "unsupported",
+        "discovery_methods": ["rss"] if events else [],
+        "observed_start": days[0] if days else None,
+        "observed_end": days[-1] if days else None,
+        "events": events,
+        "sources": [],
+        "warnings": [],
+        "limit_state": [],
+        "archive_boundary_proven": False,
+    }
+
+
+class FakeRegistryRepository:
+    def __init__(self, registry=None, endpoints=None):
+        self.calls = []
+        self.registry = registry
+        self.endpoints = list(endpoints or [])
+        self.job = {
+            "job_id": "cr_v1_1_test",
+            "ticker": "NVDA",
+            "requested_start": "2025-09-08",
+            "requested_end": "2026-09-08",
+            "status": "queued",
+        }
+        self.result = {"job_id": "cr_v1_1_test", "status": "queued"}
+        self.search_attempts = []
+        self.active_adapters = {}
+
+    def connect(self, db_path=None):
+        self.calls.append("connect")
+        return object()
+
+    def create_job(self, connection, request, company=None, now=None):
+        self.calls.append("create")
+        self.job.update({"ticker": request["ticker"], "mode": request.get("mode", "research"), "status": "queued"})
+        return dict(self.job)
+
+    def start_job(self, connection, job_id, started_at):
+        self.calls.append("start")
+        self.job["status"] = "running"
+
+    def update_resolved_company(self, connection, job_id, company):
+        self.calls.append("company")
+        return dict(self.job)
+
+    def load_company_registry(self, connection, ticker):
+        self.calls.append("load_registry")
+        return self.registry
+
+    def load_source_endpoints(self, connection, ticker):
+        self.calls.append("load_endpoints")
+        return list(self.endpoints)
+
+    def load_active_adapter(self, connection, ticker, source_type):
+        self.calls.append(f"load_adapter:{source_type}")
+        return self.active_adapters.get(source_type)
+
+    def load_latest_gap_search_at(self, connection, ticker, channel):
+        self.calls.append(f"gap_at:{channel}")
+        return None
+
+    def record_search_attempt(self, connection, attempt):
+        self.calls.append("record_search_attempt")
+        self.search_attempts.append(dict(attempt))
+        return "csa_gap_1"
+
+    def save_company_registry(self, connection, registry):
+        self.calls.append("save_registry")
+        self.registry = dict(registry)
+        return dict(registry)
+
+    def upsert_source_endpoint(self, connection, endpoint):
+        self.calls.append("upsert_endpoint")
+        return dict(endpoint)
+
+    def record_endpoint_check(self, connection, check):
+        self.calls.append("record_check")
+
+    def update_endpoint_health(self, connection, endpoint_id, state):
+        self.calls.append("update_health")
+
+    def save_source(self, connection, source):
+        self.calls.append(f"source:{source['source_type']}")
+        return {**source, "source_id": f"source_{source['source_type']}"}
+
+    def save_finalized_observations(self, connection, job_id, events, classifications):
+        self.calls.append("save_observations")
+        self.saved_events = list(events)
+
+    def finalize_job(self, connection, job_id, result):
+        self.calls.append("finalize")
+        self.job["status"] = result["status"]
+        self.result = {**self.result, **result, "status": result["status"]}
+
+    def finalize_job_with_observations(self, connection, job_id, events, classifications, result):
+        self.save_finalized_observations(connection, job_id, events, classifications)
+        self.finalize_job(connection, job_id, result)
+
+    def fail_job(self, connection, job_id, error_summary, **kwargs):
+        self.calls.append("fail")
+        self.job["status"] = "failed"
+        self.result = {**self.result, "status": "failed", "error_summary": error_summary}
+
+    def load_job_result(self, connection, job_id):
+        self.calls.append("load_result")
+        return {
+            **self.result,
+            "schema_version": RESULT_SCHEMA_VERSION,
+            "observation_count": len(getattr(self, "saved_events", []) or []),
+            "job_id": job_id,
+        }
+
+
+def mode_dependencies(calls, repository=None, **overrides):
+    async def resolve(request, **kwargs):
+        calls.append("resolve")
+        return {"ticker": "NVDA", "company_name": "NVIDIA Corporation", "cik": 1045810}
+
+    async def discover_registry(company, **kwargs):
+        calls.append("dep:discover_registry")
+        return {
+            "status": "accepted",
+            "registry": v1_1_registry(),
+            "endpoints": [v1_1_endpoint()],
+            "warnings": [],
+            "next_actions": [],
+            "provider_provenance": [],
+        }
+
+    async def run_historical_backfill(company, request, *, endpoints, config, dependencies):
+        calls.append("dep:run_historical_backfill")
+        assert company["official_domains"]
+        return {
+            "ticker": "NVDA",
+            "requested_window": {"start": "2025-09-08", "end": "2026-09-08"},
+            "channels": {
+                "press_releases": v1_1_channel_payload([v1_1_event()]),
+                "events_presentations": v1_1_channel_payload([]),
+                "earnings_results": v1_1_channel_payload([]),
+            },
+            "warnings": [],
+        }
+
+    async def run_daily_update(company, *, registry, endpoints, as_of, config, dependencies):
+        calls.append("dep:run_daily_update")
+        assert company["official_domains"]
+        return {"as_of": as_of.isoformat(), "plan": {"items": []}, "feeds": [], "gaps": []}
+
+    async def classify(events, **kwargs):
+        calls.append("classify")
+        return {
+            "events": [{**event, "earnings_state": "non_earnings", "classification_method": "rule_v1"} for event in events],
+            "llm_call_count": 0,
+            "provenance": [],
+        }
+
+    def stats(events, sources, requested_window):
+        calls.append("stats")
+        return {"total": len(events)}
+
+    def progress(stage, **details):
+        calls.append(stage)
+
+    dependencies = {
+        "repository": repository or FakeRegistryRepository(),
+        "llm_client": object(),
+        "models": {"registry_selection": "registry-model", "classification": "classification-model"},
+        "search_router": _UnavailableSearchRouter(),
+        "resolver": resolve,
+        "discover_registry": discover_registry,
+        "run_historical_backfill": run_historical_backfill,
+        "run_daily_update": run_daily_update,
+        "classify_observations": classify,
+        "calculate_statistics": stats,
+        "progress": progress,
+        "clock": datetime(2026, 9, 8, 12, 0, tzinfo=UTC),
+        "collection_config": dict(V1_1_COLLECTION_CONFIG),
+    }
+    dependencies.update(overrides)
+    return dependencies
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_stage"),
+    [("research", "historical_backfill"), ("update", "daily_update"), ("rediscover", "rediscover")],
+)
+def test_run_research_dispatches_v1_1_mode(mode, expected_stage):
+    calls = []
+    repository = FakeRegistryRepository(registry=v1_1_registry(), endpoints=[v1_1_endpoint()])
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": mode},
+            dependencies=mode_dependencies(calls, repository),
+        )
+    )
+    assert expected_stage in calls
+    assert result["schema_version"] == RESULT_SCHEMA_VERSION
+    assert result["status"] in {"completed", "completed_partial", "unsupported"}
+
+
+def test_research_without_registry_discovers_once_and_backfills_without_adapters():
+    calls = []
+    repository = FakeRegistryRepository(registry=None, endpoints=[])
+    dependencies = mode_dependencies(calls, repository)
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            dependencies=dependencies,
+        )
+    )
+    assert calls.count("discover_registry") == 1
+    assert calls.count("historical_backfill") == 1
+    assert not [call for call in repository.calls if call.startswith("load_adapter:")]
+    assert result["call_counts"]["adapter_generation"] == 0
+    assert result["status"] == "completed_partial"
+    assert result["observation_count"] == 1
+
+
+def test_research_with_healthy_registry_skips_discovery():
+    calls = []
+    repository = FakeRegistryRepository(registry=v1_1_registry(), endpoints=[v1_1_endpoint()])
+    asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            dependencies=mode_dependencies(calls, repository),
+        )
+    )
+    assert "discover_registry" not in calls
+    assert calls.count("historical_backfill") == 1
+
+
+def test_update_with_healthy_registry_makes_zero_discovery_calls():
+    calls = []
+    repository = FakeRegistryRepository(registry=v1_1_registry(), endpoints=[v1_1_endpoint()])
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "update"},
+            dependencies=mode_dependencies(calls, repository),
+        )
+    )
+    assert "discover_registry" not in calls
+    assert "historical_backfill" not in calls
+    assert calls.count("daily_update") == 1
+    assert result["call_counts"]["discovery"] == 0
+    assert result["call_counts"]["adapter_generation"] == 0
+
+
+def test_update_without_registry_is_unsupported_with_source_review_action():
+    calls = []
+    repository = FakeRegistryRepository(registry=None, endpoints=[])
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "update"},
+            dependencies=mode_dependencies(calls, repository),
+        )
+    )
+    assert result["status"] == "unsupported"
+    assert "daily_update" not in calls
+    assert result["next_actions"]
+
+
+def test_rediscovery_failure_preserves_registry_and_prior_dataset(tmp_path):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    db_path = tmp_path / "rediscover.sqlite"
+    connection = repository.connect(db_path)
+    registry = repository.save_company_registry(connection, v1_1_registry())
+    repository.upsert_source_endpoint(connection, v1_1_endpoint())
+    prior = repository.create_job(connection, {"ticker": "NVDA", "years": 1, "mode": "research"}, {"company_name": "NVIDIA Corporation", "cik": "1045810"}, datetime(2026, 9, 1, tzinfo=UTC))
+    repository.start_job(connection, prior["job_id"], "2026-09-01T00:01:00+00:00")
+    prior_source = repository.save_source(
+        connection,
+        {
+            "job_id": prior["job_id"],
+            "ticker": "NVDA",
+            "source_type": "press_releases",
+            "url": "https://nvidianews.nvidia.com/news",
+            "acceptance_status": "accepted",
+            "extraction_status": "complete",
+        },
+    )
+    prior_event = {
+        "source_id": prior_source["source_id"],
+        "ticker": "NVDA",
+        "source_type": "press_releases",
+        "title": "NVIDIA prior release",
+        "published_date": "2026-08-01",
+        "count_date": "2026-08-01",
+        "url": "https://nvidianews.nvidia.com/news/prior",
+    }
+    repository.finalize_job_with_observations(
+        connection,
+        prior["job_id"],
+        [prior_event],
+        [{"id": 1, "earnings_state": "non_earnings", "classification_method": "rule_v1"}],
+        {"status": "completed", "statistics": {"total": 1}, "execution_paths": {}, "call_counts": {}},
+    )
+    connection.close()
+
+    calls = []
+
+    async def failing_discovery(company, **kwargs):
+        calls.append("discover_registry")
+        return {
+            "status": "insufficient",
+            "registry": None,
+            "endpoints": [],
+            "warnings": ["search provider chain is unavailable"],
+            "next_actions": ["provide a verified official source override"],
+            "provider_provenance": [],
+        }
+
+    dependencies = mode_dependencies(calls, repository, **{"discover_registry": failing_discovery})
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "rediscover"},
+            db_path=db_path,
+            dependencies=dependencies,
+        )
+    )
+    assert result["status"] == "completed_partial"
+    connection = repository.connect(db_path)
+    try:
+        assert connection.execute("select count(*) from catalyst_ir_events where job_id = ?", (prior["job_id"],)).fetchone()[0] == 1
+        assert connection.execute("select count(*) from catalyst_ir_events where job_id = ?", (result["job_id"],)).fetchone()[0] == 0
+        preserved = repository.load_company_registry(connection, "NVDA")
+        assert preserved["registry_version"] == registry["registry_version"]
+        assert preserved["official_domains"] == registry["official_domains"]
+    finally:
+        connection.close()
+
+
+def test_rediscovery_success_increments_registry_version(tmp_path):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    db_path = tmp_path / "rediscover_ok.sqlite"
+    connection = repository.connect(db_path)
+    registry = repository.save_company_registry(connection, v1_1_registry())
+    repository.upsert_source_endpoint(connection, v1_1_endpoint())
+    connection.close()
+    calls = []
+
+    async def rediscover(company, **kwargs):
+        calls.append("discover_registry")
+        existing = repository.load_company_registry(kwargs["connection"], "NVDA")
+        saved = repository.save_company_registry(
+            kwargs["connection"],
+            {**v1_1_registry(), "official_domains": [*existing["official_domains"], "news.nvidia.com"], "registry_version": existing["registry_version"] + 1},
+        )
+        return {
+            "status": "accepted",
+            "registry": saved,
+            "endpoints": [v1_1_endpoint()],
+            "warnings": [],
+            "next_actions": [],
+            "provider_provenance": [],
+        }
+
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "rediscover"},
+            db_path=db_path,
+            dependencies=mode_dependencies(calls, repository, **{"discover_registry": rediscover}),
+        )
+    )
+    assert result["status"] == "completed"
+    connection = repository.connect(db_path)
+    try:
+        updated = repository.load_company_registry(connection, "NVDA")
+        assert updated["registry_version"] == registry["registry_version"] + 1
+        assert "news.nvidia.com" in updated["official_domains"]
+    finally:
+        connection.close()
+
+
+def test_v1_1_partial_feed_events_finalize_atomically_once():
+    calls = []
+    repository = FakeRegistryRepository(registry=v1_1_registry(), endpoints=[v1_1_endpoint()])
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            dependencies=mode_dependencies(calls, repository),
+        )
+    )
+    assert result["status"] == "completed_partial"
+    assert repository.calls.count("save_observations") == 1
+    assert repository.saved_events[0]["earnings_state"] == "non_earnings"
+    finalize_index = repository.calls.index("finalize")
+    assert repository.calls[finalize_index - 1] == "save_observations"
+
+
+def test_v1_1_ambiguous_classification_downgrades_status():
+    calls = []
+
+    async def classify(events, **kwargs):
+        calls.append("classify")
+        return {
+            "events": [{**event, "earnings_state": "ambiguous", "classification_method": "llm_v1"} for event in events],
+            "llm_call_count": 1,
+            "provenance": [],
+        }
+
+    repository = FakeRegistryRepository(registry=v1_1_registry(), endpoints=[v1_1_endpoint()])
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            dependencies=mode_dependencies(calls, repository, **{"classify_observations": classify}),
+        )
+    )
+    assert result["status"] == "completed_partial"
+    assert "classification_ambiguous" in result["warnings"]
+
+
+def test_v1_1_manual_review_candidates_keep_job_partial():
+    calls = []
+
+    async def run_historical_backfill(company, request, *, endpoints, config, dependencies):
+        calls.append("historical_backfill")
+        payload = v1_1_channel_payload([v1_1_event()])
+        payload["warnings"] = ["manual_review_required"]
+        return {
+            "ticker": "NVDA",
+            "requested_window": {"start": "2025-09-08", "end": "2026-09-08"},
+            "channels": {
+                "press_releases": payload,
+                "events_presentations": v1_1_channel_payload([]),
+                "earnings_results": v1_1_channel_payload([]),
+            },
+            "warnings": ["manual_review_required"],
+        }
+
+    repository = FakeRegistryRepository(registry=v1_1_registry(), endpoints=[v1_1_endpoint()])
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            dependencies=mode_dependencies(calls, repository, **{"run_historical_backfill": run_historical_backfill}),
+        )
+    )
+    assert result["status"] == "completed_partial"
+    assert "manual_review_required" in result["warnings"]
+
+
+def test_v1_1_firecrawl_absence_does_not_fail_job_and_builds_one_router(tmp_path):
+    ingestion = __import__("app.agents.catalyst_research.ingestion", fromlist=["ingestion"])
+    backfill = __import__("app.agents.catalyst_research.backfill", fromlist=["backfill"])
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    db_path = tmp_path / "firecrawl_absent.sqlite"
+    connection = repository.connect(db_path)
+    repository.save_company_registry(connection, v1_1_registry())
+    repository.upsert_source_endpoint(connection, v1_1_endpoint())
+    connection.close()
+
+    routers = []
+
+    real_ingest = ingestion.ingest_candidates
+
+    async def recording_ingest(candidates, **kwargs):
+        routers.append(kwargs["extraction_router"])
+        return await real_ingest(candidates, **kwargs)
+
+    async def fetch_feed(endpoint, *, http_client=None, approved_domains=None):
+        return {
+            "format": "rss",
+            "items": [
+                {
+                    "external_guid": "guid-1",
+                    "title": "NVIDIA announces launch",
+                    "url": "https://nvidianews.nvidia.com/news/launch",
+                    "published_at": "2026-08-15T12:00:00+00:00",
+                    "summary": "summary",
+                    "discovery_method": "rss",
+                    "endpoint_id": endpoint["endpoint_id"],
+                }
+            ],
+            "item_count": 1,
+            "newest_item_at": "2026-08-15T12:00:00+00:00",
+            "content_hash": "hash-1",
+            "final_url": endpoint["url"],
+        }
+
+    calls = []
+    dependencies = mode_dependencies(
+        calls,
+        repository,
+        **{
+            "run_historical_backfill": backfill.run_historical_backfill,
+            "ingest_candidates": recording_ingest,
+            "fetch_feed": fetch_feed,
+            "collection_config": {**V1_1_COLLECTION_CONFIG, "archive_enrichment_enabled": False},
+        },
+    )
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            db_path=db_path,
+            dependencies=dependencies,
+        )
+    )
+    assert result["status"] == "completed_partial"
+    assert len(routers) == 3
+    assert len({id(router) for router in routers}) == 1
+    assert result["observation_count"] == 1
+
+
+def test_v1_1_optional_adapter_failure_cannot_discard_feed_events(tmp_path):
+    backfill = __import__("app.agents.catalyst_research.backfill", fromlist=["backfill"])
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    db_path = tmp_path / "adapter_failure.sqlite"
+    connection = repository.connect(db_path)
+    repository.save_company_registry(connection, v1_1_registry())
+    repository.upsert_source_endpoint(connection, v1_1_endpoint())
+    connection.close()
+
+    async def failing_adapter(*, channel, company, request):
+        raise RuntimeError("adapter exploded")
+
+    async def fetch_feed(endpoint, *, http_client=None, approved_domains=None):
+        return {
+            "format": "rss",
+            "items": [
+                {
+                    "external_guid": "guid-1",
+                    "title": "NVIDIA announces launch",
+                    "url": "https://nvidianews.nvidia.com/news/launch",
+                    "published_at": "2026-08-15T12:00:00+00:00",
+                    "summary": "summary",
+                    "discovery_method": "rss",
+                    "endpoint_id": endpoint["endpoint_id"],
+                }
+            ],
+            "item_count": 1,
+            "newest_item_at": "2026-08-15T12:00:00+00:00",
+            "content_hash": "hash-1",
+            "final_url": endpoint["url"],
+        }
+
+    calls = []
+    dependencies = mode_dependencies(
+        calls,
+        repository,
+        **{
+            "run_historical_backfill": backfill.run_historical_backfill,
+            "adapter": failing_adapter,
+            "fetch_feed": fetch_feed,
+            "collection_config": {**V1_1_COLLECTION_CONFIG, "archive_enrichment_enabled": True},
+        },
+    )
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            db_path=db_path,
+            dependencies=dependencies,
+        )
+    )
+    assert result["status"] == "completed_partial"
+    assert result["observation_count"] == 1
+    assert "archive_adapter_failed" in result["warnings"]
+
+
+def test_v1_1_hot_adapter_enrichment_still_executes_when_enabled(tmp_path):
+    backfill = __import__("app.agents.catalyst_research.backfill", fromlist=["backfill"])
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    db_path = tmp_path / "adapter_enrichment.sqlite"
+    connection = repository.connect(db_path)
+    repository.save_company_registry(connection, v1_1_registry())
+    repository.upsert_source_endpoint(connection, v1_1_endpoint())
+    connection.close()
+
+    async def healthy_adapter(*, channel, company, request):
+        if channel != "press_releases":
+            return {"status": "complete", "events": [], "source": None}
+        connection = repository.connect(db_path)
+        try:
+            source = repository.save_source(
+                connection,
+                {
+                    "job_id": request["job_id"],
+                    "ticker": "NVDA",
+                    "source_type": channel,
+                    "url": "https://nvidianews.nvidia.com/news",
+                    "acceptance_status": "accepted",
+                    "extraction_status": "complete",
+                    "execution_path": "hot",
+                },
+            )
+        finally:
+            connection.close()
+        return {
+            "status": "complete",
+            "boundary_reached": True,
+            "events": [
+                {
+                    "source_type": channel,
+                    "title": "NVIDIA archived release",
+                    "published_date": "2026-07-01",
+                    "count_date": "2026-07-01",
+                    "url": "https://nvidianews.nvidia.com/news/archived",
+                }
+            ],
+            "source": source,
+        }
+
+    async def fetch_feed(endpoint, *, http_client=None, approved_domains=None):
+        return {
+            "format": "rss",
+            "items": [
+                {
+                    "external_guid": "guid-1",
+                    "title": "NVIDIA announces launch",
+                    "url": "https://nvidianews.nvidia.com/news/launch",
+                    "published_at": "2026-08-15T12:00:00+00:00",
+                    "summary": "summary",
+                    "discovery_method": "rss",
+                    "endpoint_id": endpoint["endpoint_id"],
+                }
+            ],
+            "item_count": 1,
+            "newest_item_at": "2026-08-15T12:00:00+00:00",
+            "content_hash": "hash-1",
+            "final_url": endpoint["url"],
+        }
+
+    calls = []
+    dependencies = mode_dependencies(
+        calls,
+        repository,
+        **{
+            "run_historical_backfill": backfill.run_historical_backfill,
+            "adapter": healthy_adapter,
+            "fetch_feed": fetch_feed,
+            "collection_config": {**V1_1_COLLECTION_CONFIG, "archive_enrichment_enabled": True},
+        },
+    )
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            db_path=db_path,
+            dependencies=dependencies,
+        )
+    )
+    assert result["status"] == "completed_partial"
+    assert result["observation_count"] == 2
+
+
+def test_v1_1_unexpected_persistence_failure_fails_with_sanitized_summary(tmp_path, monkeypatch):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    db_path = tmp_path / "persist_failure.sqlite"
+    original = repository.finalize_job_with_observations
+
+    def fail_finalize(*args, **kwargs):
+        raise RuntimeError("insert failed api_key=secret-token")
+
+    monkeypatch.setattr(repository, "finalize_job_with_observations", fail_finalize)
+    calls = []
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            db_path=db_path,
+            dependencies=mode_dependencies(calls, repository),
+        )
+    )
+    assert result["status"] == "failed"
+    assert "secret-token" not in str(result)
+    connection = repository.connect(db_path)
+    try:
+        assert connection.execute("select count(*) from catalyst_ir_events").fetchone()[0] == 0
+        assert connection.execute("select status from catalyst_research_jobs").fetchone()[0] == "failed"
+    finally:
+        connection.close()
+    assert original is not None
+
+
+def test_v1_1_interrupted_run_leaves_no_promoted_event_rows(tmp_path):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    db_path = tmp_path / "interrupted.sqlite"
+    calls = []
+
+    async def classify(events, **kwargs):
+        raise RuntimeError("classification crashed")
+
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            db_path=db_path,
+            dependencies=mode_dependencies(calls, repository, **{"classify_observations": classify}),
+        )
+    )
+    assert result["status"] == "failed"
+    connection = repository.connect(db_path)
+    try:
+        assert connection.execute("select count(*) from catalyst_ir_events").fetchone()[0] == 0
+    finally:
+        connection.close()
+
+
+def test_v1_1_update_gap_search_records_incremental_gap_attempts(tmp_path):
+    repository = __import__("app.agents.catalyst_research.persistence.repository", fromlist=["repository"])
+    db_path = tmp_path / "gap_attempts.sqlite"
+    connection = repository.connect(db_path)
+    repository.save_company_registry(connection, v1_1_registry())
+    repository.upsert_source_endpoint(
+        connection,
+        v1_1_endpoint({"status": "failing", "consecutive_failures": 3, "last_checked_at": "2026-09-08T00:00:00+00:00"}),
+    )
+    connection.close()
+
+    async def execute_query(query):
+        return [
+            {
+                "url": "https://nvidianews.nvidia.com/news/gap-item",
+                "title": "NVIDIA gap item",
+                "snippet": "NVIDIA announces",
+                "published_date": "2026-09-07",
+                "provider_rank": 1,
+            }
+        ]
+
+    class ManualRouter:
+        def extract(self, candidate, *, company, approved_domains):
+            return {"status": "manual_review_required", "url": candidate["url"], "extraction_provider": "manual"}
+
+    calls = []
+    dependencies = mode_dependencies(
+        calls,
+        repository,
+        **{
+            "run_daily_update": __import__("app.agents.catalyst_research.scheduler", fromlist=["scheduler"]).run_daily_update,
+            "execute_query": execute_query,
+            "extraction_router": ManualRouter(),
+        },
+    )
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "update"},
+            db_path=db_path,
+            dependencies=dependencies,
+        )
+    )
+    assert result["status"] in {"completed", "completed_partial"}
+    connection = repository.connect(db_path)
+    try:
+        attempts = connection.execute(
+            "select search_purpose, completed_at, outcome from catalyst_search_attempts where job_id = ?",
+            (result["job_id"],),
+        ).fetchall()
+        assert attempts
+        assert all(attempt[0] == "incremental_gap_check" for attempt in attempts)
+        assert all(attempt[1] for attempt in attempts)
+        assert repository.load_latest_gap_search_at(connection, "NVDA", "press_releases") is not None
+    finally:
+        connection.close()
+
+
+def test_v1_1_research_real_statistics_accept_multiple_sources_per_channel():
+    calls = []
+    first = v1_1_event(title="NVIDIA announces launch")
+    second = v1_1_event(title="NVIDIA announces partnership")
+    second.update(
+        {
+            "published_date": "2026-08-20",
+            "count_date": "2026-08-20",
+            "url": "https://nvidianews.nvidia.com/news/partnership",
+            "canonical_url": "https://nvidianews.nvidia.com/news/partnership",
+            "source_id": "source_press_releases_2",
+        }
+    )
+
+    async def run_backfill(company, request, *, endpoints, config, dependencies):
+        calls.append("dep:run_historical_backfill")
+        press_payload = v1_1_channel_payload([first, second])
+        press_payload["sources"] = [
+            {
+                "source_type": "press_releases",
+                "source_id": "source_press_releases_1",
+                "url": first["url"],
+                "extraction_status": "complete",
+            },
+            {
+                "source_type": "press_releases",
+                "source_id": "source_press_releases_2",
+                "url": second["url"],
+                "extraction_status": "complete",
+            },
+        ]
+        return {
+            "ticker": "NVDA",
+            "requested_window": {"start": "2025-09-08", "end": "2026-09-08"},
+            "channels": {
+                "press_releases": press_payload,
+                "events_presentations": v1_1_channel_payload([]),
+                "earnings_results": v1_1_channel_payload([]),
+            },
+            "warnings": [],
+        }
+
+    repository = FakeRegistryRepository(registry=v1_1_registry(), endpoints=[v1_1_endpoint()])
+    dependencies = mode_dependencies(
+        calls,
+        repository,
+        **{"run_historical_backfill": run_backfill, "calculate_statistics": catalyst_statistics.calculate_statistics},
+    )
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "research"},
+            dependencies=dependencies,
+        )
+    )
+    assert result["status"] == "completed_partial"
+    statistics = result["statistics"]
+    assert statistics["press_releases"]["coverage_status"] == "observed_partial"
+    assert statistics["press_releases"]["observed_total"] == 2
+    assert statistics["press_releases"]["observed_non_earnings"] == 2
+    assert statistics["press_releases"]["observed_start"] == "2026-08-15"
+    assert statistics["press_releases"]["observed_end"] == "2026-08-20"
+    assert "observed_total" in statistics["events_presentations"]
+    assert statistics["events_presentations"]["coverage_status"] == "unsupported"
+    assert statistics["events_presentations"]["observed_total"] == 0
+
+
+def test_v1_1_update_real_statistics_describe_run_observation():
+    calls = []
+
+    async def fetch_feed(endpoint, **kwargs):
+        if endpoint.get("channel") == "press_releases":
+            return {
+                "items": [
+                    {
+                        "url": "https://nvidianews.nvidia.com/news/daily-item",
+                        "title": "NVIDIA daily item",
+                        "published_date": "2026-09-07",
+                    }
+                ],
+                "newest_item_at": "2026-09-07T00:00:00+00:00",
+            }
+        return {"items": []}
+
+    async def ingest_candidates(candidates, **kwargs):
+        channel = kwargs.get("channel")
+        events = []
+        sources = []
+        for index, candidate in enumerate(candidates):
+            url = candidate.get("url")
+            events.append(
+                {
+                    "ticker": "NVDA",
+                    "source_type": channel,
+                    "title": candidate.get("title"),
+                    "published_date": candidate.get("published_date"),
+                    "count_date": candidate.get("published_date"),
+                    "url": url,
+                    "canonical_url": url,
+                    "discovery_method": "rss",
+                    "discovery_methods": ["rss"],
+                }
+            )
+            sources.append(
+                {
+                    "source_type": channel,
+                    "source_id": f"source_{channel}_{index}",
+                    "url": url,
+                    "extraction_status": "complete",
+                }
+            )
+        return {"events": events, "sources": sources}
+
+    endpoints = [
+        v1_1_endpoint({"endpoint_id": "ep_press"}),
+        v1_1_endpoint(
+            {
+                "endpoint_id": "ep_events",
+                "channel": "events_presentations",
+                "url": "https://nvidia.com/events/rss",
+                "domain": "nvidia.com",
+            }
+        ),
+    ]
+    repository = FakeRegistryRepository(registry=v1_1_registry(), endpoints=endpoints)
+    dependencies = mode_dependencies(
+        calls,
+        repository,
+        **{
+            "run_daily_update": catalyst_scheduler.run_daily_update,
+            "fetch_feed": fetch_feed,
+            "ingest_candidates": ingest_candidates,
+            "record_endpoint_check": lambda check: repository.calls.append("record_check"),
+            "update_endpoint_health": lambda endpoint_id, health: repository.calls.append("update_health"),
+            "calculate_statistics": catalyst_statistics.calculate_statistics,
+        },
+    )
+    result = asyncio.run(
+        run_research(
+            {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "update"},
+            dependencies=dependencies,
+        )
+    )
+    assert result["status"] == "completed"
+    statistics = result["statistics"]
+    press = statistics["press_releases"]
+    assert press["coverage_status"] == "observed_partial"
+    assert press["observed_total"] == 1
+    assert press["observed_start"] == "2026-09-07"
+    assert press["observed_end"] == "2026-09-07"
+    assert press["discovery_methods"] == ["rss"]
+    events_channel = statistics["events_presentations"]
+    assert events_channel["coverage_status"] == "missing"
+    assert events_channel["observed_total"] == 0
+    assert events_channel["coverage_warning"]
+
+
+def test_v1_1_explicit_mode_requires_registry_persistence():
+    class LegacyRepository(FakeRegistryRepository):
+        load_company_registry = None
+        load_source_endpoints = None
+
+    calls = []
+    with pytest.raises(ValueError, match="registry persistence"):
+        asyncio.run(
+            run_research(
+                {"ticker": "NVDA", "years": 1, "as_of": "2026-09-08", "mode": "update"},
+                dependencies=mode_dependencies(calls, LegacyRepository()),
+            )
+        )

@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from app.agents.catalyst_research.backfill import _router_executor
 from app.agents.catalyst_research.extraction.feeds import fetch_feed as _default_fetch_feed
 from app.agents.catalyst_research.persistence.repository import record_endpoint_check as _record_endpoint_check
 from app.agents.catalyst_research.persistence.repository import update_endpoint_health as _update_endpoint_health
@@ -14,6 +15,9 @@ _FAILURE_OUTCOMES = frozenset({"request_failed", "parse_failed"})
 _PARSE_FAILURE_MESSAGES = frozenset(
     {"feed xml is invalid", "feed body is empty", "feed content type is not xml"}
 )
+_DEFAULT_MAX_URLS = 200
+_GAP_ATTEMPT_PROVIDER = "search_router"
+_GAP_ATTEMPT_PURPOSE = "incremental_gap_check"
 _HEALTH_FIELDS = (
     "status",
     "last_checked_at",
@@ -140,7 +144,7 @@ async def run_daily_update(company, *, registry, endpoints, as_of, config, depen
     for endpoint_id in plan["feed_endpoint_ids"]:
         endpoint = endpoints_by_id[endpoint_id]
         check, event_count = await _run_feed_check(
-            endpoint, fetcher, ingester, router, dependencies, company, domains, as_of_utc
+            endpoint, fetcher, ingester, router, dependencies, company, domains, as_of_utc, config
         )
         _persist_check(dependencies, check)
         state = transition_endpoint(endpoint, check)
@@ -161,6 +165,8 @@ async def run_daily_update(company, *, registry, endpoints, as_of, config, depen
     gap_results = []
     if gap_reasons:
         executor = dependencies.get("execute_query")
+        if executor is None and dependencies.get("search_router") is not None:
+            executor = _router_executor(dependencies["search_router"])
         if executor is None:
             raise ValueError("execute_query is required for gap search")
         for channel, reason in gap_reasons.items():
@@ -172,7 +178,7 @@ async def run_daily_update(company, *, registry, endpoints, as_of, config, depen
     return {"as_of": as_of_utc.isoformat(), "plan": plan, "feeds": feed_results, "gaps": gap_results}
 
 
-async def _run_feed_check(endpoint, fetcher, ingester, router, dependencies, company, domains, as_of_utc):
+async def _run_feed_check(endpoint, fetcher, ingester, router, dependencies, company, domains, as_of_utc, config):
     checked_at = as_of_utc.isoformat()
     try:
         parsed = await fetcher(
@@ -209,7 +215,7 @@ async def _run_feed_check(endpoint, fetcher, ingester, router, dependencies, com
     if items:
         if ingester is None:
             raise ValueError("ingest_candidates is required when a feed returns items")
-        events = await _ingest(ingester, items, company, endpoint["channel"], router, dependencies)
+        events = await _ingest(ingester, items, company, endpoint["channel"], router, dependencies, endpoint=endpoint, config=config)
     outcome = "success_new" if events else "success_empty"
     return (
         {
@@ -228,11 +234,17 @@ async def _run_feed_check(endpoint, fetcher, ingester, router, dependencies, com
 async def _run_gap_search(executor, ingester, router, dependencies, company, domains, channel, reason, as_of_utc, config):
     queries = gap_queries(company, channel, list(domains), as_of_utc.date(), config)
     rows = []
+    outcomes = []
     for query in queries:
         try:
-            rows.extend(await executor(query))
+            result_rows = await executor(query)
         except Exception:
+            outcomes.append("provider_error")
             continue
+        result_rows = list(result_rows or [])
+        outcomes.append("candidate_results" if result_rows else "empty_results")
+        rows.extend(result_rows)
+    _record_gap_attempts(dependencies, queries, outcomes, as_of_utc)
     candidates = filter_official_candidates(
         rows, company=company, channel=channel, approved_domains=domains
     )
@@ -240,7 +252,7 @@ async def _run_gap_search(executor, ingester, router, dependencies, company, dom
     if candidates:
         if ingester is None:
             raise ValueError("ingest_candidates is required when gap search finds candidates")
-        events = await _ingest(ingester, candidates, company, channel, router, dependencies)
+        events = await _ingest(ingester, candidates, company, channel, router, dependencies, endpoint=None, config=config)
     return {
         "channel": channel,
         "reason": reason,
@@ -250,13 +262,52 @@ async def _run_gap_search(executor, ingester, router, dependencies, company, dom
     }
 
 
-async def _ingest(ingester, candidates, company, channel, router, dependencies):
+def _gap_attempt_recorder(dependencies):
+    recorder = dependencies.get("record_search_attempt")
+    if recorder is not None:
+        return recorder
+    repository = dependencies.get("repository")
+    connection = dependencies.get("connection")
+    method = getattr(repository, "record_search_attempt", None)
+    if not callable(method) or connection is None:
+        return None
+    return lambda attempt: method(connection, attempt)
+
+
+def _record_gap_attempts(dependencies, queries, outcomes, as_of_utc):
+    job_id = (dependencies.get("job") or {}).get("job_id")
+    if not job_id:
+        return
+    recorder = _gap_attempt_recorder(dependencies)
+    if recorder is None:
+        return
+    for query, outcome in zip(queries, outcomes):
+        recorder(
+            {
+                "job_id": job_id,
+                "provider": _GAP_ATTEMPT_PROVIDER,
+                "query": query.get("query") or "",
+                "requested_limit": query.get("result_limit"),
+                "started_at": as_of_utc.isoformat(),
+                "completed_at": as_of_utc.isoformat(),
+                "outcome": outcome,
+                "diagnostics": {"reason": outcome},
+                "search_purpose": _GAP_ATTEMPT_PURPOSE,
+            }
+        )
+
+
+async def _ingest(ingester, candidates, company, channel, router, dependencies, *, endpoint=None, config=None):
     result = await ingester(
         candidates,
         company=company,
         channel=channel,
+        endpoint=endpoint,
+        job=dependencies.get("job") or {},
         extraction_router=router,
+        repository=dependencies.get("repository"),
         connection=dependencies.get("connection"),
+        max_urls=(config or {}).get("max_unseen_urls_per_channel", _DEFAULT_MAX_URLS),
     )
     if isinstance(result, dict):
         return list(result.get("events") or [])

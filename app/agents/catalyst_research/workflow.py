@@ -5,14 +5,22 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from urllib.parse import urljoin
 
+from app.agents.catalyst_research import backfill as historical_backfill
 from app.agents.catalyst_research import domain, statistics
+from app.agents.catalyst_research import ingestion as candidate_ingestion
+from app.agents.catalyst_research import registry as registry_state
+from app.agents.catalyst_research import registry_discovery
+from app.agents.catalyst_research import scheduler as update_scheduler
 from app.agents.catalyst_research.adapters import executor as adapter_executor
 from app.agents.catalyst_research.adapters import generator as adapter_generator
 from app.agents.catalyst_research.adapters import validator as adapter_validator
-from app.agents.catalyst_research.config import load_inference_bundle, load_search_config
+from app.agents.catalyst_research.config import load_collection_config, load_inference_bundle, load_search_config
+from app.agents.catalyst_research.extraction.articles import extract_direct_article
+from app.agents.catalyst_research.extraction.router import ExtractionRouter
 from app.agents.catalyst_research.extraction import build_structural_snapshot, fetch_html_page
 from app.agents.catalyst_research.persistence import repository as default_repository
 from app.agents.catalyst_research.providers.ddgs import DDGSSearchProvider
+from app.agents.catalyst_research.providers.firecrawl import build_firecrawl_provider
 from app.agents.catalyst_research.providers.native_search import NativeSearchProvider
 from app.agents.catalyst_research.providers.router import SearchRouter
 from app.agents.catalyst_research.providers.tavily import TavilySearchProvider
@@ -24,6 +32,7 @@ from app.runtime_logging import get_runtime_logger
 
 LOGGER = get_runtime_logger(__name__)
 _REQUIRED_CHANNELS = ("press_releases", "events_presentations")
+_V1_1_CHANNELS = ("press_releases", "events_presentations", "earnings_results")
 _DISCOVERY_CHANNELS = ("ir_home", "press_releases", "events_presentations", "earnings_results")
 _INFORMATIONAL_SOURCE_TYPES = ("ir_home", "earnings_results")
 _MAX_TRAVERSAL_ORIGINS = 2
@@ -33,6 +42,7 @@ _TRAVERSAL_PURPOSE_TERMS = {
     "events_presentations": ("event", "presentation", "webcast", "conference"),
 }
 _UNSUPPORTED_FETCH_TERMS = ("content type", "non-html", "non html", "javascript", "requires js", "requires javascript")
+_ANSWERED_FEED_OUTCOMES = ("success_new", "success_empty")
 
 
 async def _invoke(function, *args, **kwargs):
@@ -301,6 +311,9 @@ def _default_dependencies(db_path, http_client, args=None):
         "classify_observations": domain.classify_observations,
         "normalize_observations": domain.normalize_observations,
         "calculate_statistics": statistics.calculate_statistics,
+        "discover_registry": registry_discovery.discover_registry,
+        "run_historical_backfill": historical_backfill.run_historical_backfill,
+        "run_daily_update": update_scheduler.run_daily_update,
     }
 
 
@@ -813,12 +826,511 @@ async def _run_source(context, company, source_type, active_adapter):
     return None
 
 
+def _registry_supported(repository):
+    return callable(getattr(repository, "load_company_registry", None)) and callable(
+        getattr(repository, "load_source_endpoints", None)
+    )
+
+
+def _collection_config(context):
+    supplied = context.get("collection_config")
+    if isinstance(supplied, dict):
+        return supplied
+    return load_collection_config(context.get("config_args"))
+
+
+def _build_extraction_router(context):
+    supplied = context.get("extraction_router")
+    if supplied is not None:
+        return supplied
+    factory = context.get("build_extraction_router")
+    if callable(factory):
+        return _invoke_sync(factory, context)
+    config = _collection_config(context)
+    firecrawl_provider = build_firecrawl_provider(config)
+
+    def direct_extractor(url, **kwargs):
+        if context.get("url_resolver") is not None:
+            kwargs.setdefault("resolver", context["url_resolver"])
+        return extract_direct_article(url, http_client=context["http_client"], **kwargs)
+
+    return ExtractionRouter(direct_extractor, firecrawl_provider=firecrawl_provider)
+
+
+def _recording_ingester(context, recorded):
+    ingester = context.get("ingest_candidates") or candidate_ingestion.ingest_candidates
+
+    async def ingest(candidates, **kwargs):
+        result = await ingester(candidates, **kwargs)
+        if isinstance(result, dict):
+            recorded["events"].extend(result.get("events") or [])
+            recorded["sources"].extend(result.get("sources") or [])
+        return result
+
+    return ingest
+
+
+def _archive_enrichment_runner(context, company):
+    async def run_adapter(*, channel, company=None, request=None):
+        loader = getattr(context["repository"], "load_active_adapter", None)
+        if not callable(loader):
+            return None
+        active = _repo_call(context, "load_active_adapter", context["request"]["ticker"], channel)
+        if not isinstance(active, Mapping):
+            return None
+        return await _run_source(context, company or context["company"], channel, active)
+
+    return run_adapter
+
+
+def _backfill_dependencies(context, company):
+    dependencies = {
+        "http_client": context["http_client"],
+        "search_router": context.get("search_router"),
+        "ingest_candidates": context.get("ingest_candidates") or candidate_ingestion.ingest_candidates,
+        "extraction_router": _build_extraction_router(context),
+        "repository": context["repository"],
+        "connection": context["connection"],
+        "job": context["job"],
+        "run_adapter": _archive_enrichment_runner(context, company),
+    }
+    for key in ("fetch_feed", "adapter", "execute_query"):
+        if context.get(key) is not None:
+            dependencies[key] = context[key]
+    return dependencies
+
+
+async def _load_registry_state(context):
+    _progress(context, "load_registry", ticker=context["request"]["ticker"])
+    registry = _repo_call(context, "load_company_registry", context["request"]["ticker"])
+    endpoints = _repo_call(context, "load_source_endpoints", context["request"]["ticker"])
+    if registry is not None and not isinstance(registry, Mapping):
+        raise ValueError("company registry is invalid")
+    if not isinstance(endpoints, list):
+        raise ValueError("source endpoints are invalid")
+    return dict(registry) if isinstance(registry, Mapping) else None, endpoints
+
+
+async def _discover_registry_stage(context, company):
+    _progress(context, "discover_registry", ticker=context["request"]["ticker"])
+    context["call_counts"]["discovery"] += 1
+    result = await _invoke(
+        context["discover_registry"],
+        company,
+        router=context["search_router"],
+        llm_client=context["llm_client"],
+        model=_source_model(context, "registry_selection"),
+        repository=context["repository"],
+        job_id=context["job"]["job_id"],
+        connection=context["connection"],
+        http_client=context["http_client"],
+        overrides=context["request"].get("source_overrides"),
+        resolver=context.get("url_resolver"),
+    )
+    if not isinstance(result, Mapping):
+        raise ValueError("registry discovery result is invalid")
+    result = dict(result)
+    context["warnings"].extend(result.get("warnings") or [])
+    context["next_actions"].extend(result.get("next_actions") or [])
+    if result.get("status") == "search_unavailable":
+        context["warnings"].append("catalyst_no_search_provider")
+        context["next_actions"].append("configure_catalyst_search_provider")
+    return result
+
+
+async def _run_research_mode(context, company, registry, endpoints):
+    if context["request"].get("force_discovery") or not registry_state.registry_ready(registry, endpoints):
+        discovery = await _discover_registry_stage(context, company)
+        registry = discovery.get("registry") or registry
+        discovered_endpoints = discovery.get("endpoints")
+        if isinstance(discovered_endpoints, list):
+            endpoints = discovered_endpoints
+    if not isinstance(registry, Mapping):
+        context["next_actions"].append("provide a verified official source override")
+        return {
+            "events": [],
+            "sources": [],
+            "status": "unsupported",
+            "channel_evidence": _channel_evidence_stub("unsupported"),
+        }
+    company = {**company, "official_domains": list(registry_state.approved_domains(dict(registry)))}
+    context["company"] = company
+    request = {
+        **context["request"],
+        "requested_start": context["job"]["requested_start"],
+        "requested_end": context["job"]["requested_end"],
+        "job_id": context["job"]["job_id"],
+    }
+    _progress(context, "historical_backfill", channels=",".join(_V1_1_CHANNELS))
+    result = await _invoke(
+        context["run_historical_backfill"],
+        company,
+        request,
+        endpoints=endpoints,
+        config=_collection_config(context),
+        dependencies=_backfill_dependencies(context, company),
+    )
+    if not isinstance(result, Mapping):
+        raise ValueError("historical backfill result is invalid")
+    context["warnings"].extend(result.get("warnings") or [])
+    channels = result.get("channels") or {}
+    events = []
+    sources = []
+    statuses = []
+    channel_evidence = []
+    for channel in _V1_1_CHANNELS:
+        payload = channels.get(channel) or {}
+        channel_sources = payload.get("sources") or []
+        fallback_source_id = next(
+            (
+                source.get("source_id")
+                for source in reversed(channel_sources)
+                if isinstance(source, Mapping) and source.get("source_id")
+            ),
+            None,
+        )
+        for event in payload.get("events") or []:
+            event = dict(event)
+            if fallback_source_id is not None:
+                event.setdefault("source_id", fallback_source_id)
+            events.append(event)
+        sources.extend(channel_sources)
+        coverage_status = payload.get("coverage_status") or "unsupported"
+        statuses.append(coverage_status)
+        channel_evidence.append(
+            _channel_evidence_row(
+                channel,
+                coverage_status=coverage_status,
+                discovery_methods=payload.get("discovery_methods"),
+                observed_start=payload.get("observed_start"),
+                observed_end=payload.get("observed_end"),
+            )
+        )
+        context["execution_paths"][channel] = "v1_1"
+    if all(status == "complete" for status in statuses):
+        status = "completed"
+    elif events or any(item in {"observed_partial", "missing"} for item in statuses):
+        status = "completed_partial"
+    else:
+        status = "unsupported"
+    return {"events": events, "sources": sources, "status": status, "channel_evidence": channel_evidence}
+
+
+async def _run_update_mode(context, company, registry, endpoints):
+    try:
+        official_domains = registry_state.approved_domains(dict(registry)) if isinstance(registry, Mapping) else frozenset()
+    except ValueError:
+        official_domains = frozenset()
+    if not official_domains:
+        context["warnings"].append("catalyst_registry_unavailable")
+        context["next_actions"].append("run catalyst research to establish a source registry")
+        return {
+            "events": [],
+            "sources": [],
+            "status": "unsupported",
+            "channel_evidence": _channel_evidence_stub("unsupported"),
+        }
+    company = {**company, "official_domains": list(registry_state.approved_domains(dict(registry)))}
+    context["company"] = company
+    latest_gap_search = {}
+    for channel in _V1_1_CHANNELS:
+        loader = getattr(context["repository"], "load_latest_gap_search_at", None)
+        if callable(loader):
+            latest_gap_search[channel] = _repo_call(context, "load_latest_gap_search_at", context["request"]["ticker"], channel)
+    recorded = {"events": [], "sources": []}
+    dependencies = {
+        "http_client": context["http_client"],
+        "search_router": context.get("search_router"),
+        "ingest_candidates": _recording_ingester(context, recorded),
+        "extraction_router": _build_extraction_router(context),
+        "latest_gap_search": latest_gap_search,
+        "repository": context["repository"],
+        "connection": context["connection"],
+        "job": context["job"],
+    }
+    for key in ("fetch_feed", "execute_query", "record_endpoint_check", "update_endpoint_health"):
+        if context.get(key) is not None:
+            dependencies[key] = context[key]
+    _progress(context, "daily_update", ticker=context["request"]["ticker"])
+    result = await _invoke(
+        context["run_daily_update"],
+        company,
+        registry=dict(registry),
+        endpoints=endpoints,
+        as_of=_now(context),
+        config=_collection_config(context),
+        dependencies=dependencies,
+    )
+    if not isinstance(result, Mapping):
+        raise ValueError("daily update result is invalid")
+    failure_outcomes = {"request_failed", "parse_failed"}
+    feed_outcomes = [feed.get("outcome") for feed in result.get("feeds") or [] if isinstance(feed, Mapping)]
+    status = "completed_partial" if any(outcome in failure_outcomes for outcome in feed_outcomes) else "completed"
+    for channel in {feed.get("channel") for feed in result.get("feeds") or [] if isinstance(feed, Mapping)}:
+        context["execution_paths"][channel] = "v1_1"
+    feeds = [feed for feed in result.get("feeds") or [] if isinstance(feed, Mapping)]
+    gaps = [gap for gap in result.get("gaps") or [] if isinstance(gap, Mapping)]
+    endpoint_types = {
+        endpoint.get("endpoint_id"): endpoint.get("endpoint_type")
+        for endpoint in endpoints
+        if isinstance(endpoint, Mapping)
+    }
+    channel_evidence = []
+    for channel in _V1_1_CHANNELS:
+        channel_events = [event for event in recorded["events"] if event.get("source_type") == channel]
+        channel_evidence.append(
+            _update_channel_evidence(
+                channel,
+                events=channel_events,
+                feeds=feeds,
+                gaps=gaps,
+                endpoint_types=endpoint_types,
+            )
+        )
+    return {
+        "events": recorded["events"],
+        "sources": recorded["sources"],
+        "status": status,
+        "channel_evidence": channel_evidence,
+    }
+
+
+async def _run_rediscover_mode(context, company, registry, endpoints):
+    _progress(context, "rediscover", ticker=context["request"]["ticker"])
+    try:
+        discovery = await _discover_registry_stage(context, company)
+    except Exception:
+        context["warnings"].append("registry_rediscovery_failed")
+        context["next_actions"].append("review source registry discovery inputs")
+        return {
+            "events": [],
+            "sources": [],
+            "status": "completed_partial" if isinstance(registry, Mapping) else "unsupported",
+            "channel_evidence": _channel_evidence_stub("missing"),
+        }
+    if discovery.get("status") in {"accepted", "partial", "unchanged"} and isinstance(discovery.get("registry"), Mapping):
+        return {
+            "events": [],
+            "sources": [],
+            "status": "completed",
+            "channel_evidence": _channel_evidence_stub("missing"),
+        }
+    if isinstance(registry, Mapping):
+        context["next_actions"].append("review source registry coverage")
+        return {
+            "events": [],
+            "sources": [],
+            "status": "completed_partial",
+            "channel_evidence": _channel_evidence_stub("missing"),
+        }
+    context["next_actions"].append("provide a verified official source override")
+    return {
+        "events": [],
+        "sources": [],
+        "status": "unsupported",
+        "channel_evidence": _channel_evidence_stub("missing"),
+    }
+
+
+def _channel_evidence_row(channel, *, coverage_status, discovery_methods=None, observed_start=None, observed_end=None):
+    return {
+        "source_type": channel,
+        "coverage_status": coverage_status,
+        "discovery_methods": list(discovery_methods or []),
+        "observed_start": observed_start,
+        "observed_end": observed_end,
+    }
+
+
+def _channel_evidence_stub(coverage_status):
+    return [_channel_evidence_row(channel, coverage_status=coverage_status) for channel in _V1_1_CHANNELS]
+
+
+def _update_channel_evidence(channel, *, events, feeds, gaps, endpoint_types):
+    channel_feeds = [feed for feed in feeds if feed.get("channel") == channel]
+    answered_feeds = [feed for feed in channel_feeds if feed.get("outcome") in _ANSWERED_FEED_OUTCOMES]
+    gap_searched = any(gap.get("channel") == channel for gap in gaps)
+    if events:
+        coverage_status = "observed_partial"
+    elif answered_feeds or gap_searched:
+        coverage_status = "missing"
+    else:
+        coverage_status = "unsupported"
+    methods = []
+    for event in events:
+        discovered = event.get("discovery_methods")
+        if not discovered and event.get("discovery_method"):
+            discovered = [event.get("discovery_method")]
+        for method in discovered or []:
+            if method and method not in methods:
+                methods.append(method)
+    for feed in answered_feeds:
+        method = endpoint_types.get(feed.get("endpoint_id"))
+        if method and method not in methods:
+            methods.append(method)
+    days = sorted({event.get("count_date") for event in events if event.get("count_date")})
+    return _channel_evidence_row(
+        channel,
+        coverage_status=coverage_status,
+        discovery_methods=methods,
+        observed_start=days[0] if days else None,
+        observed_end=days[-1] if days else None,
+    )
+
+
+async def _classify_events(context, job, events):
+    normalized_events = []
+    for source_type in dict.fromkeys(event.get("source_type") for event in events):
+        rows = [event for event in events if event.get("source_type") == source_type]
+        normalized_result = _invoke_sync(
+            context["normalize_observations"],
+            context["request"]["ticker"],
+            source_type,
+            rows,
+            job["requested_start"],
+            job["requested_end"],
+        )
+        normalized_events.extend(normalized_result["events"])
+    for index, event in enumerate(normalized_events, 1):
+        event.setdefault("id", index)
+    classification = await _invoke(
+        context["classify_observations"],
+        normalized_events,
+        llm_client=context["llm_client"],
+        model=_source_model(context, "classification"),
+    )
+    classification = dict(classification or {})
+    context["call_counts"]["classification"] = classification.get("llm_call_count", 0)
+    classified_events = classification.get("events", normalized_events)
+    _progress(context, "classification", events=len(classified_events))
+    ambiguous = any(event.get("earnings_state") == "ambiguous" for event in classified_events)
+    return classified_events, ambiguous
+
+
+async def _finalize_run(context, job, classified_events, source_rows, status, stats):
+    _progress(context, "finalizing", status=status)
+    _repo_call(
+        context,
+        "finalize_job_with_observations",
+        job["job_id"],
+        classified_events,
+        classified_events,
+        {
+            "status": status,
+            "statistics": stats,
+            "warnings": list(dict.fromkeys(context["warnings"])),
+            "next_actions": list(dict.fromkeys(context["next_actions"])),
+            "execution_paths": context["execution_paths"],
+            "call_counts": context["call_counts"],
+            "completed_at": _iso(context),
+        },
+    )
+
+
+async def _run_v1_1_workflow(context, company, job):
+    mode = context["request"]["mode"]
+    registry, endpoints = await _load_registry_state(context)
+    if mode == "update":
+        payload = await _run_update_mode(context, company, registry, endpoints)
+    elif mode == "rediscover":
+        payload = await _run_rediscover_mode(context, company, registry, endpoints)
+    else:
+        payload = await _run_research_mode(context, company, registry, endpoints)
+    status = payload["status"]
+    classified_events, ambiguous = await _classify_events(context, job, payload["events"])
+    if ambiguous:
+        context["warnings"].append("classification is incomplete")
+        context["warnings"].append("classification_ambiguous")
+        context["next_actions"].append("review ambiguous earnings classifications")
+        context["next_actions"].append("review_ambiguous_classification")
+        if status == "completed":
+            status = "completed_partial"
+    if status == "completed_partial":
+        context["next_actions"].append("provide missing archive coverage or review partial extraction")
+    stats = await _invoke(
+        context["calculate_statistics"],
+        classified_events,
+        payload["channel_evidence"],
+        {"start": job["requested_start"], "end": job["requested_end"]},
+    )
+    await _finalize_run(context, job, classified_events, payload["sources"], status, stats)
+
+
+async def _run_legacy_workflow(context, company, normalized, repository, job):
+    force_discovery = bool(normalized.get("force_discovery"))
+    active_adapters = {}
+    if not force_discovery:
+        load_active = getattr(repository, "load_active_adapter", None)
+        if callable(load_active):
+            active_adapters = {
+                source_type: _repo_call(context, "load_active_adapter", normalized["ticker"], source_type)
+                for source_type in _REQUIRED_CHANNELS
+            }
+    channel_results = {}
+    cold_channels = []
+    for source_type in _REQUIRED_CHANNELS:
+        result = await _run_source(context, company, source_type, active_adapters.get(source_type))
+        if result is None:
+            cold_channels.append(source_type)
+        else:
+            channel_results[source_type] = result
+    if cold_channels:
+        discovery = await _discover(context, company, {"ir_home", "earnings_results", *cold_channels})
+        prepared, origins = await _prepare_sources(context, company, discovery, cold_channels)
+        for source_type in cold_channels:
+            channel_results[source_type] = await _run_channel(context, company, source_type, prepared.get(source_type))
+    events = []
+    source_rows = []
+    for source_type, result in channel_results.items():
+        source = result.get("source")
+        if source:
+            source_rows.append(source)
+        for index, event in enumerate(result.get("events", []), 1):
+            if not isinstance(event, Mapping):
+                continue
+            event = dict(event)
+            event.setdefault("id", len(events) + 1)
+            event["source_id"] = source.get("source_id") if source else None
+            event.setdefault("ticker", normalized["ticker"])
+            event.setdefault("source_type", source_type)
+            event.setdefault("adapter_id", result.get("adapter", {}).get("adapter_id") if isinstance(result.get("adapter"), Mapping) else None)
+            event.setdefault("adapter_version", result.get("adapter", {}).get("version") if isinstance(result.get("adapter"), Mapping) else source.get("adapter_version") if source else None)
+            event.setdefault("executor_version", source.get("executor_version") if source else None)
+            event.setdefault("content_hash", source.get("content_hash") if source else None)
+            events.append(event)
+    classified_events, ambiguous = await _classify_events(context, job, events)
+    complete_channels = all(channel_results[item]["status"] == "complete" for item in _REQUIRED_CHANNELS)
+    accepted_channels = sum(channel_results[item]["status"] in {"complete", "partial"} for item in _REQUIRED_CHANNELS)
+    llm_unavailable = not context["llm_client"] or not _source_model(context, "adapter_generation")
+    if llm_unavailable:
+        context["warnings"].append("catalyst_llm_unavailable")
+        context["next_actions"].append("configure_catalyst_llm")
+    status = "completed" if complete_channels and not ambiguous else "completed_partial" if accepted_channels or events or llm_unavailable else "unsupported"
+    if ambiguous:
+        context["warnings"].append("classification is incomplete")
+        context["warnings"].append("classification_ambiguous")
+        context["next_actions"].append("review ambiguous earnings classifications")
+        context["next_actions"].append("review_ambiguous_classification")
+    if status == "completed_partial":
+        context["next_actions"].append("provide missing archive coverage or review partial extraction")
+    stats = await _invoke(context["calculate_statistics"], classified_events, source_rows, {"start": job["requested_start"], "end": job["requested_end"]})
+    await _finalize_run(context, job, classified_events, source_rows, status, stats)
+
+
 async def run_research(request, *, db_path=None, http_client=None, dependencies=None):
     if not isinstance(request, Mapping):
         raise ValueError("research request is required")
-    normalized = domain.normalize_request(request.get("ticker"), request.get("years", 4), request.get("as_of"))
+    v1_1_requested = "mode" in request
+    normalized = domain.normalize_request(
+        request.get("ticker"),
+        request.get("years", 4),
+        request.get("as_of"),
+        request.get("mode") or "research",
+    )
     normalized.update({key: value for key, value in request.items() if key not in normalized})
     repository = (dependencies or {}).get("repository", default_repository)
+    if v1_1_requested and not _registry_supported(repository):
+        raise ValueError("v1_1 research modes require registry persistence")
     effective_db_path = db_path or getattr(repository, "DEFAULT_DB_PATH", default_repository.DEFAULT_DB_PATH)
     owns_http_client = http_client is None
     effective_http_client = http_client
@@ -876,77 +1388,10 @@ async def run_research(request, *, db_path=None, http_client=None, dependencies=
         context["company"] = company
         _progress(context, "company_resolved", ticker=normalized["ticker"])
         _repo_call(context, "update_resolved_company", company=company, job_id=job["job_id"])
-        force_discovery = bool(normalized.get("force_discovery"))
-        active_adapters = {}
-        if not force_discovery:
-            load_active = getattr(repository, "load_active_adapter", None)
-            if callable(load_active):
-                active_adapters = {
-                    source_type: _repo_call(context, "load_active_adapter", normalized["ticker"], source_type)
-                    for source_type in _REQUIRED_CHANNELS
-                }
-        channel_results = {}
-        cold_channels = []
-        for source_type in _REQUIRED_CHANNELS:
-            result = await _run_source(context, company, source_type, active_adapters.get(source_type))
-            if result is None:
-                cold_channels.append(source_type)
-            else:
-                channel_results[source_type] = result
-        if cold_channels:
-            discovery = await _discover(context, company, {"ir_home", "earnings_results", *cold_channels})
-            prepared, origins = await _prepare_sources(context, company, discovery, cold_channels)
-            for source_type in cold_channels:
-                channel_results[source_type] = await _run_channel(context, company, source_type, prepared.get(source_type))
-        events = []
-        source_rows = []
-        for source_type, result in channel_results.items():
-            source = result.get("source")
-            if source:
-                source_rows.append(source)
-            for index, event in enumerate(result.get("events", []), 1):
-                if not isinstance(event, Mapping):
-                    continue
-                event = dict(event)
-                event.setdefault("id", len(events) + 1)
-                event["source_id"] = source.get("source_id") if source else None
-                event.setdefault("ticker", normalized["ticker"])
-                event.setdefault("source_type", source_type)
-                event.setdefault("adapter_id", result.get("adapter", {}).get("adapter_id") if isinstance(result.get("adapter"), Mapping) else None)
-                event.setdefault("adapter_version", result.get("adapter", {}).get("version") if isinstance(result.get("adapter"), Mapping) else source.get("adapter_version") if source else None)
-                event.setdefault("executor_version", source.get("executor_version") if source else None)
-                event.setdefault("content_hash", source.get("content_hash") if source else None)
-                events.append(event)
-        normalized_events = []
-        for source_type in _REQUIRED_CHANNELS:
-            rows = [event for event in events if event.get("source_type") == source_type]
-            normalized_result = _invoke_sync(context["normalize_observations"], normalized["ticker"], source_type, rows, job["requested_start"], job["requested_end"])
-            normalized_events.extend(normalized_result["events"])
-        for index, event in enumerate(normalized_events, 1):
-            event.setdefault("id", index)
-        classification = await _invoke(context["classify_observations"], normalized_events, llm_client=context["llm_client"], model=_source_model(context, "classification"))
-        classification = dict(classification or {})
-        context["call_counts"]["classification"] = classification.get("llm_call_count", 0)
-        classified_events = classification.get("events", normalized_events)
-        _progress(context, "classification", events=len(classified_events))
-        ambiguous = any(event.get("earnings_state") == "ambiguous" for event in classified_events)
-        complete_channels = all(channel_results[item]["status"] == "complete" for item in _REQUIRED_CHANNELS)
-        accepted_channels = sum(channel_results[item]["status"] in {"complete", "partial"} for item in _REQUIRED_CHANNELS)
-        llm_unavailable = not context["llm_client"] or not _source_model(context, "adapter_generation")
-        if llm_unavailable:
-            context["warnings"].append("catalyst_llm_unavailable")
-            context["next_actions"].append("configure_catalyst_llm")
-        status = "completed" if complete_channels and not ambiguous else "completed_partial" if accepted_channels or events or llm_unavailable else "unsupported"
-        stats = await _invoke(context["calculate_statistics"], classified_events, source_rows, {"start": job["requested_start"], "end": job["requested_end"]})
-        if ambiguous:
-            context["warnings"].append("classification is incomplete")
-            context["warnings"].append("classification_ambiguous")
-            context["next_actions"].append("review ambiguous earnings classifications")
-            context["next_actions"].append("review_ambiguous_classification")
-        if status == "completed_partial":
-            context["next_actions"].append("provide missing archive coverage or review partial extraction")
-        _progress(context, "finalizing", status=status)
-        _repo_call(context, "finalize_job_with_observations", job["job_id"], classified_events, classified_events, {"status": status, "statistics": stats, "warnings": list(dict.fromkeys(context["warnings"])), "next_actions": list(dict.fromkeys(context["next_actions"])), "execution_paths": context["execution_paths"], "call_counts": context["call_counts"], "completed_at": _iso(context)})
+        if v1_1_requested:
+            await _run_v1_1_workflow(context, company, job)
+        else:
+            await _run_legacy_workflow(context, company, normalized, repository, job)
     except Exception as exc:
         if job is not None:
             try:

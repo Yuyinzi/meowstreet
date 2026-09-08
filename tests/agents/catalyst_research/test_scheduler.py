@@ -90,7 +90,7 @@ class FakeIngestion:
         self.calls = []
         self.routers = []
 
-    async def ingest(self, candidates, *, company, channel, extraction_router=None, connection=None):
+    async def ingest(self, candidates, *, company, channel, endpoint=None, job=None, extraction_router=None, repository=None, connection=None, max_urls=None):
         self.calls.append(channel)
         self.routers.append(extraction_router)
         events = []
@@ -110,7 +110,7 @@ class RouterUsingIngestion:
         self.routers = []
         self.results = []
 
-    async def ingest(self, candidates, *, company, channel, extraction_router=None, connection=None):
+    async def ingest(self, candidates, *, company, channel, endpoint=None, job=None, extraction_router=None, repository=None, connection=None, max_urls=None):
         self.routers.append(extraction_router)
         events = []
         for candidate in candidates:
