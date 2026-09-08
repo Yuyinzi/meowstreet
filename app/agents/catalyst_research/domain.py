@@ -12,6 +12,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 from app.agents.catalyst_research.providers.base import SearchProviderError
 from app.agents.catalyst_research.providers.base import VALID_REASON_CODES
 from app.agents.catalyst_research.config import PROMPT_VERSIONS
+from app.agents.catalyst_research.config import RESEARCH_MODES
 from app.agents.catalyst_research.prompts import classification_prompt
 from app.agents.catalyst_research.prompts import source_selection_prompt
 from app.agents.catalyst_research.schemas import EventClassificationResponse
@@ -76,12 +77,15 @@ def _subtract_years(value, years):
     return value.replace(year=value.year - years, day=day)
 
 
-def normalize_request(ticker, years=4, as_of=None) -> dict:
+def normalize_request(ticker, years=4, as_of=None, mode="research") -> dict:
     normalized = str(ticker or "").strip().upper()
     if not normalized:
         raise ValueError("ticker is required")
     if isinstance(years, bool) or not isinstance(years, int) or not 1 <= years <= 4:
         raise ValueError("years must be between 1 and 4")
+    normalized_mode = str(mode or "").strip().casefold()
+    if normalized_mode not in RESEARCH_MODES:
+        raise ValueError(f"research mode is invalid: {normalized_mode}")
     end = datetime.now(UTC).date() if as_of is None else _parse_date(as_of, "as of date")
     start = _subtract_years(end, years)
     return {
@@ -90,6 +94,7 @@ def normalize_request(ticker, years=4, as_of=None) -> dict:
         "as_of": end.isoformat(),
         "start": start.isoformat(),
         "end": end.isoformat(),
+        "mode": normalized_mode,
     }
 
 

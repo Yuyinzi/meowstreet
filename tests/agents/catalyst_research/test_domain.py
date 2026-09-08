@@ -48,6 +48,24 @@ def test_discovery_queries_can_be_restricted_to_requested_source_types():
     assert [item["source_type"] for item in queries] == ["press_releases", "events_presentations"]
 
 
+def test_normalize_request_defaults_to_v1_1_research_mode():
+    result = normalize_request("nvda", years=1, as_of="2026-09-08")
+
+    assert result["mode"] == "research"
+    assert result["ticker"] == "NVDA"
+    assert result["start"] == "2025-09-08"
+
+
+@pytest.mark.parametrize("mode", ["research", "update", "rediscover"])
+def test_normalize_request_accepts_v1_1_modes(mode):
+    assert normalize_request("NVDA", 1, "2026-09-08", mode)["mode"] == mode
+
+
+def test_normalize_request_rejects_unknown_mode():
+    with pytest.raises(ValueError, match="research mode is invalid"):
+        normalize_request("NVDA", 1, "2026-09-08", "crawl")
+
+
 @pytest.mark.parametrize("ticker, expected", [(" nvda ", "NVDA"), ("aapl", "AAPL")])
 def test_normalize_request_normalizes_ticker_and_window(ticker, expected):
     result = normalize_request(ticker, years=2, as_of=date(2024, 2, 29))
@@ -58,6 +76,7 @@ def test_normalize_request_normalizes_ticker_and_window(ticker, expected):
         "as_of": "2024-02-29",
         "start": "2022-02-28",
         "end": "2024-02-29",
+        "mode": "research",
     }
 
 
