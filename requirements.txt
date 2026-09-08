@@ -14,3 +14,4 @@ websocket-client>=1.7,<2
 tavily-python>=0.8,<1
 ddgs>=9.16,<10
 beautifulsoup4>=4.15,<5
+firecrawl-py>=4.41,<5
