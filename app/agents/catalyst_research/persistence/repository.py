@@ -352,6 +352,7 @@ def _migrate_v1_1_schema(con):
     _ensure_column(con, "catalyst_search_attempts", "search_purpose", "text not null default 'source_discovery'")
     for column in ("endpoint_id", "discovery_method", "extraction_provider"):
         _ensure_column(con, "catalyst_ir_sources", column, "text")
+    _ensure_column(con, "catalyst_ir_sources", "external_guid", "text")
     for column in ("endpoint_id", "external_guid", "discovery_method", "extraction_provider"):
         _ensure_column(con, "catalyst_ir_events", column, "text")
     con.commit()
@@ -735,7 +736,7 @@ def _source_row(con, source):
         "page_count": source.get("page_count", 0), "item_count": source.get("item_count", 0), "content_hash": source.get("content_hash"),
         "snapshot_hash": source.get("snapshot_hash") if "snapshot_hash" in source else source.get("content_hash"), "truncation_reason": source.get("truncation_reason"),
         "discovery_provider": source.get("discovery_provider"), "execution_path": source.get("execution_path"), "checked_at": source.get("checked_at"),
-        "endpoint_id": source.get("endpoint_id"), "discovery_method": discovery_method, "extraction_provider": extraction_provider,
+        "endpoint_id": source.get("endpoint_id"), "external_guid": source.get("external_guid"), "discovery_method": discovery_method, "extraction_provider": extraction_provider,
     }
     if row["source_type"] not in _SOURCE_TYPES:
         raise ValueError("source type is invalid")
@@ -754,8 +755,8 @@ def save_source(con, source):
         """insert into catalyst_ir_sources(
             source_id,job_id,ticker,source_type,url,final_url,acceptance_status,extraction_status,active_adapter_id,adapter_version,executor_version,
             evidence_result_ids_json,requested_start,requested_end,coverage_start,coverage_end,coverage_continuous,verification_reason,page_count,item_count,
-            content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at,endpoint_id,discovery_method,extraction_provider
-        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
+            content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at,endpoint_id,external_guid,discovery_method,extraction_provider
+        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
             select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
         )""",
             (*tuple(row.values()), row["job_id"]),
@@ -1471,6 +1472,18 @@ def event_url_seen(con, ticker, canonical_url):
             join catalyst_research_jobs j on j.job_id = e.job_id
             where e.ticker = ? and e.canonical_url = ? and j.status in ('completed','completed_partial')
             limit 1""",
+        (normalized, url),
+    ).fetchone()
+    return row is not None
+
+
+def source_url_seen(con, ticker, canonical_url):
+    normalized = _ticker(ticker)
+    url = str(canonical_url or "").strip()
+    if not url:
+        raise ValueError("canonical url is required")
+    row = con.execute(
+        "select 1 from catalyst_ir_sources where ticker = ? and url = ? limit 1",
         (normalized, url),
     ).fetchone()
     return row is not None

@@ -917,3 +917,49 @@ def test_create_job_persists_mode_and_validates_value(tmp_path):
     assert _job(con)["mode"] == "research"
     with pytest.raises(ValueError, match="mode"):
         repository.create_job(con, {"ticker": "NVDA", "years": 1, "mode": "crawl"})
+
+
+def test_source_external_guid_provenance_round_trip(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    columns = {row[1] for row in con.execute("pragma table_info(catalyst_ir_sources)")}
+    assert "external_guid" in columns
+    job = _job(con, status="running")
+    endpoint = repository.upsert_source_endpoint(con, endpoint_payload())
+    source = repository.save_source(
+        con,
+        {
+            "job_id": job["job_id"],
+            "ticker": "NVDA",
+            "source_type": "press_releases",
+            "url": "https://nvidianews.nvidia.com/rss",
+            "endpoint_id": endpoint["endpoint_id"],
+            "external_guid": "guid-9",
+            "discovery_method": "rss",
+            "extraction_provider": "feed_metadata",
+        },
+    )
+    assert source["external_guid"] == "guid-9"
+    result = repository.load_job_result(con, job["job_id"])
+    assert result["sources"][0]["external_guid"] == "guid-9"
+
+
+def test_source_url_seen_detects_persisted_source_urls_across_jobs(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    repository.save_source(
+        con,
+        {
+            "job_id": job["job_id"],
+            "ticker": "NVDA",
+            "source_type": "press_releases",
+            "url": "https://nvidianews.nvidia.com/news/nvidia-announces-new-platform",
+            "acceptance_status": "ambiguous",
+            "extraction_status": "failed",
+            "extraction_provider": "manual",
+        },
+    )
+    assert repository.source_url_seen(con, "NVDA", "https://nvidianews.nvidia.com/news/nvidia-announces-new-platform") is True
+    assert repository.source_url_seen(con, "NVDA", "https://nvidianews.nvidia.com/news/other") is False
+    assert repository.source_url_seen(con, "AAPL", "https://nvidianews.nvidia.com/news/nvidia-announces-new-platform") is False
+    with pytest.raises(ValueError, match="url"):
+        repository.source_url_seen(con, "NVDA", "")
