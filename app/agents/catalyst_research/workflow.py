@@ -1064,12 +1064,17 @@ async def _run_update_mode(context, company, registry, endpoints):
     if not isinstance(result, Mapping):
         raise ValueError("daily update result is invalid")
     failure_outcomes = {"request_failed", "parse_failed"}
-    feed_outcomes = [feed.get("outcome") for feed in result.get("feeds") or [] if isinstance(feed, Mapping)]
-    status = "completed_partial" if any(outcome in failure_outcomes for outcome in feed_outcomes) else "completed"
-    for channel in {feed.get("channel") for feed in result.get("feeds") or [] if isinstance(feed, Mapping)}:
-        context["execution_paths"][channel] = "v1_1"
     feeds = [feed for feed in result.get("feeds") or [] if isinstance(feed, Mapping)]
     gaps = [gap for gap in result.get("gaps") or [] if isinstance(gap, Mapping)]
+    if feeds:
+        failures = sum(1 for feed in feeds if feed.get("outcome") in failure_outcomes)
+        _progress(context, "feeds", count=len(feeds), failures=failures)
+    if gaps:
+        _progress(context, "gap_search", channels=",".join(sorted({str(gap.get("channel")) for gap in gaps})))
+    feed_outcomes = [feed.get("outcome") for feed in feeds]
+    status = "completed_partial" if any(outcome in failure_outcomes for outcome in feed_outcomes) else "completed"
+    for channel in {feed.get("channel") for feed in feeds}:
+        context["execution_paths"][channel] = "v1_1"
     endpoint_types = {
         endpoint.get("endpoint_id"): endpoint.get("endpoint_type")
         for endpoint in endpoints

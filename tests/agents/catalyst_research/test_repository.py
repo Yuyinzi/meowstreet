@@ -1044,3 +1044,99 @@ def test_load_latest_result_falls_back_to_prior_usable_legacy_result(tmp_path):
     assert result["statistics"]["press_releases"]["total"] == 1
     assert result["latest_job_id"] == failed["job_id"]
     assert result["latest_job_status"] == "failed"
+
+
+def _finalize_v1_1_job(con, mode, *, events=None, status="completed", completed_at="2026-09-08T00:00:00+00:00"):
+    job = repository.create_job(
+        con,
+        {"ticker": "NVDA", "years": 1, "mode": mode},
+        {"name": "NVIDIA Corporation", "cik": "1045810"},
+        datetime(2026, 9, 8, tzinfo=UTC),
+    )
+    repository.start_job(con, job["job_id"], "2026-09-08T00:00:30+00:00")
+    if events:
+        source = repository.save_source(
+            con,
+            {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://nvidianews.nvidia.com/news"},
+        )
+        rows = [
+            {
+                "event_id": f"ire_{mode}_{index}",
+                "source_id": source["source_id"],
+                "ticker": "NVDA",
+                "source_type": "press_releases",
+                "published_date": "2026-09-07",
+                "count_date": "2026-09-07",
+                "title": f"NVIDIA update {index}",
+                "url": f"https://nvidianews.nvidia.com/news/{index}",
+            }
+            for index, _ in enumerate(events, 1)
+        ]
+        repository.save_finalized_observations(
+            con,
+            job["job_id"],
+            rows,
+            [{"event_id": row["event_id"], "earnings_state": "non_earnings", "classification_method": "rule_v1"} for row in rows],
+        )
+    repository.finalize_job(
+        con,
+        job["job_id"],
+        {"status": status, "statistics": {"press_releases": {"observed_total": len(events or [])}}, "completed_at": completed_at},
+    )
+    return job
+
+
+def test_load_latest_result_excludes_zero_event_rediscover_job(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    prior = _finalize_v1_1_job(con, "research", events=[object()], completed_at="2026-09-01T00:00:00+00:00")
+    rediscover = _finalize_v1_1_job(con, "rediscover", events=[], status="completed")
+
+    result = repository.load_latest_result(con, "NVDA")
+
+    assert result["job_id"] == prior["job_id"]
+    assert result["latest_job_id"] == rediscover["job_id"]
+    assert result["latest_job_status"] == "completed"
+
+
+def test_load_latest_result_excludes_zero_event_update_job(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    prior = _finalize_v1_1_job(con, "research", events=[object()], completed_at="2026-09-01T00:00:00+00:00")
+    update = _finalize_v1_1_job(con, "update", events=[], status="completed")
+
+    result = repository.load_latest_result(con, "NVDA")
+
+    assert result["job_id"] == prior["job_id"]
+    assert result["latest_job_id"] == update["job_id"]
+
+
+def test_load_latest_result_selects_update_job_with_new_events(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    prior = _finalize_v1_1_job(con, "research", events=[object()], status="completed_partial", completed_at="2026-09-01T00:00:00+00:00")
+    update = _finalize_v1_1_job(con, "update", events=[object(), object()], status="completed")
+
+    result = repository.load_latest_result(con, "NVDA")
+
+    assert result["job_id"] == update["job_id"]
+    assert result["mode"] == "update"
+    assert result["observation_count"] == 2
+    assert result["latest_job_id"] == update["job_id"]
+    assert prior["job_id"] != update["job_id"]
+
+
+def test_load_latest_result_keeps_zero_event_research_job_usable(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    research = _finalize_v1_1_job(con, "research", events=[], status="completed")
+
+    result = repository.load_latest_result(con, "NVDA")
+
+    assert result["job_id"] == research["job_id"]
+
+
+def test_load_job_result_schema_version_tracks_research_version(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    v1_1_job = _job(con, status="running")
+    assert repository.load_job_result_schema_version(con, v1_1_job["job_id"]) == V1_1_RESULT_SCHEMA_VERSION
+    _mark_legacy_research_version(con, v1_1_job["job_id"])
+    assert repository.load_job_result_schema_version(con, v1_1_job["job_id"]) == LEGACY_RESULT_SCHEMA_VERSION
+    with pytest.raises(ValueError, match="was not found"):
+        repository.load_job_result_schema_version(con, "cr_missing")

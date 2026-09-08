@@ -88,10 +88,13 @@ def test_cli_override_flags_default_to_none():
     assert args.db_path is None
     assert args.source is None
     assert args.force_discovery is False
+    assert args.mode is None
+    assert args.archive_enrichment_enabled is None
     for name in (
         "catalyst_search_provider", "catalyst_search_fallback", "catalyst_native_search_supported",
         "tavily_api_key", "catalyst_source_selection_model", "catalyst_adapter_generation_model",
         "catalyst_classification_model", "openai_api_key", "openai_base_url",
+        "firecrawl_api_key", "firecrawl_base_url",
     ):
         assert getattr(args, name) is None
 
@@ -201,3 +204,112 @@ def test_cli_invalid_search_provider_returns_two(monkeypatch, capsys):
 
     assert exit_code == 2
     assert "error:" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("mode", ["research", "update", "rediscover"])
+def test_cli_mode_flag_flows_into_request(monkeypatch, mode):
+    captured = _install(monkeypatch)
+
+    exit_code = cli.main(["NVDA", "--mode", mode])
+
+    assert exit_code == 0
+    assert captured["request"]["mode"] == mode
+
+
+def test_cli_omits_mode_without_flag_to_keep_legacy_dispatch(monkeypatch):
+    captured = _install(monkeypatch)
+
+    exit_code = cli.main(["NVDA"])
+
+    assert exit_code == 0
+    assert "mode" not in captured["request"]
+
+
+def test_cli_builds_update_request_without_forcing_discovery(monkeypatch):
+    captured = _install(monkeypatch)
+
+    exit_code = cli.main(["NVDA", "--mode", "update"])
+
+    assert exit_code == 0
+    assert captured["request"]["mode"] == "update"
+    assert captured["request"]["force_discovery"] is False
+
+
+def test_cli_invalid_mode_exits_two(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["ACME", "--mode", "bogus"])
+
+    assert exc.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+
+
+def test_cli_progress_lines_name_feeds_and_gap_search_stages(monkeypatch, capsys):
+    async def run(request, *, db_path=None, http_client=None, dependencies=None):
+        dependencies["progress"]("feeds", endpoints=2)
+        dependencies["progress"]("gap_search", channels="press_releases")
+        return {"status": "completed", "job_id": "cr_1", "sources": []}
+
+    monkeypatch.setattr(cli, "run_research", run)
+    monkeypatch.setattr(cli, "HttpClient", FakeHttpClient)
+
+    exit_code = cli.main(["NVDA", "--mode", "update"])
+
+    assert exit_code == 0
+    err = capsys.readouterr().err
+    assert "stage feeds" in err
+    assert "stage gap_search" in err
+
+
+def test_cli_firecrawl_flags_flow_through_collection_config(monkeypatch, capsys):
+    seen = {}
+
+    def collection(args=None, **kwargs):
+        seen["args"] = args
+        return {}
+
+    monkeypatch.setattr(cli.config, "load_collection_config", collection)
+    captured = _install(monkeypatch)
+
+    exit_code = cli.main([
+        "ACME",
+        "--firecrawl-api-key", "fc-secret-key",
+        "--firecrawl-base-url", "https://api.firecrawl.test",
+    ])
+
+    output = capsys.readouterr()
+    assert exit_code == 0
+    assert seen["args"].firecrawl_api_key == "fc-secret-key"
+    assert seen["args"].firecrawl_base_url == "https://api.firecrawl.test"
+    assert captured["dependencies"]["config_args"].firecrawl_api_key == "fc-secret-key"
+    assert "fc-secret-key" not in output.out
+    assert "fc-secret-key" not in output.err
+
+
+def test_cli_archive_enrichment_flag_flows_through_collection_config(monkeypatch):
+    seen = {}
+
+    def collection(args=None, **kwargs):
+        seen["args"] = args
+        return {}
+
+    monkeypatch.setattr(cli.config, "load_collection_config", collection)
+    captured = _install(monkeypatch)
+
+    exit_code = cli.main(["ACME", "--archive-enrichment"])
+
+    assert exit_code == 0
+    assert seen["args"].archive_enrichment_enabled is True
+    assert captured["dependencies"]["config_args"].archive_enrichment_enabled is True
+
+
+def test_cli_collection_config_stays_env_authoritative_without_flags(monkeypatch):
+    def collection(args=None, **kwargs):
+        raise AssertionError("collection config should not load")
+
+    monkeypatch.setattr(cli.config, "load_collection_config", collection)
+    captured = _install(monkeypatch)
+
+    exit_code = cli.main(["ACME"])
+
+    assert exit_code == 0
+    assert "config_args" not in captured["dependencies"]

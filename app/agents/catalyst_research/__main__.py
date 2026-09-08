@@ -23,6 +23,11 @@ _SEARCH_FLAGS = (
     "catalyst_native_search_supported",
     "tavily_api_key",
 )
+_COLLECTION_FLAGS = (
+    "firecrawl_api_key",
+    "firecrawl_base_url",
+    "archive_enrichment_enabled",
+)
 
 
 def _parser():
@@ -33,12 +38,16 @@ def _parser():
     parser.add_argument("ticker")
     parser.add_argument("--years", type=int, default=4)
     parser.add_argument("--db-path", type=Path, default=None)
+    parser.add_argument("--mode", choices=sorted(config.RESEARCH_MODES), default=None)
     parser.add_argument("--source", action="append", default=None, metavar="SOURCE_TYPE=URL")
     parser.add_argument("--force-discovery", action="store_true")
     parser.add_argument("--search-provider", dest="catalyst_search_provider", default=None)
     parser.add_argument("--search-fallback", dest="catalyst_search_fallback", default=None)
     parser.add_argument("--native-search-supported", dest="catalyst_native_search_supported", default=None)
     parser.add_argument("--tavily-api-key", dest="tavily_api_key", default=None)
+    parser.add_argument("--firecrawl-api-key", dest="firecrawl_api_key", default=None)
+    parser.add_argument("--firecrawl-base-url", dest="firecrawl_base_url", default=None)
+    parser.add_argument("--archive-enrichment", dest="archive_enrichment_enabled", action="store_true", default=None)
     parser.add_argument("--source-selection-model", dest="catalyst_source_selection_model", default=None)
     parser.add_argument("--adapter-generation-model", dest="catalyst_adapter_generation_model", default=None)
     parser.add_argument("--classification-model", dest="catalyst_classification_model", default=None)
@@ -70,7 +79,9 @@ def _build_dependencies(args):
         config.load_inference_bundle(args)
     if any(getattr(args, name, None) for name in _SEARCH_FLAGS):
         config.load_search_config(args)
-    if not any(getattr(args, name, None) for name in _LLM_FLAGS + _SEARCH_FLAGS):
+    if any(getattr(args, name, None) for name in _COLLECTION_FLAGS):
+        config.load_collection_config(args)
+    if not any(getattr(args, name, None) for name in _LLM_FLAGS + _SEARCH_FLAGS + _COLLECTION_FLAGS):
         return {}
     return {"config_args": args}
 
@@ -82,6 +93,8 @@ def _stage_progress(stage, **details):
 
 def _request_from_args(args):
     request = {"ticker": args.ticker, "years": args.years, "force_discovery": bool(args.force_discovery)}
+    if args.mode is not None:
+        request["mode"] = args.mode
     overrides = _source_overrides(args.source)
     if overrides:
         request["source_overrides"] = overrides

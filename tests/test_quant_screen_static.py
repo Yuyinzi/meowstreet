@@ -172,6 +172,25 @@ def test_catalyst_research_renderer_contract():
         assert forbidden not in lowered
 
 
+def test_catalyst_research_renderer_supports_v1_1_observed_channels():
+    source = _catalyst_research_js()
+
+    assert "channel.coverage_status || channel.status" in source
+    assert "channel.observed_total == null ? channel.total : channel.observed_total" in source
+    assert "channel.observed_earnings == null ? channel.earnings : channel.observed_earnings" in source
+    assert "channel.observed_non_earnings == null ? channel.non_earnings : channel.observed_non_earnings" in source
+    assert "Observed communications" in source
+    assert "coverage_warning" in source
+    assert "payload.channels || payload.statistics" in source
+    assert "observed_partial" in source
+
+
+def test_ticker_pages_bump_shared_catalyst_research_asset_version():
+    for page in ("ticker-context.html", "quant-screen.html"):
+        html = (ROOT / "static" / page).read_text(encoding="utf-8")
+        assert _CATALYST_REVIEW_JS + "?v=2" in html
+
+
 def test_catalyst_research_styles_are_scoped_to_agent_selectors():
     css = (
         ROOT / "static" / "agents" / "catalyst-research" / "catalyst-research.css"

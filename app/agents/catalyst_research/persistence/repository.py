@@ -1141,6 +1141,11 @@ def finalize_job(con, job_id, result):
             raise ValueError(f"research job {job_id} cannot finalize from {current['status']}; job must be running")
 
 
+def load_job_result_schema_version(con, job_id):
+    job = _job(con, job_id)
+    return RESULT_SCHEMA_VERSION if job["research_version"] == RESEARCH_VERSION else LEGACY_RESULT_SCHEMA_VERSION
+
+
 def load_job_result(con, job_id):
     job = _job(con, job_id)
     sources = [_decode_row(row, ("evidence_result_ids_json",)) for row in con.execute("select * from catalyst_ir_sources where job_id = ? order by source_type, source_id", (job_id,))]
@@ -1148,7 +1153,7 @@ def load_job_result(con, job_id):
         source["evidence_result_ids"] = source.pop("evidence_result_ids_json")
         if source.get("coverage_continuous") is not None:
             source["coverage_continuous"] = bool(source["coverage_continuous"])
-    schema_version = RESULT_SCHEMA_VERSION if job["research_version"] == RESEARCH_VERSION else LEGACY_RESULT_SCHEMA_VERSION
+    schema_version = load_job_result_schema_version(con, job_id)
     result = {
         "schema_version": schema_version, "research_version": job["research_version"], "mode": job["mode"], "job_id": job_id,
         "status": job["status"], "ticker": job["ticker"], "company_name": job["company_name"], "cik": job["cik"], "as_of": job["as_of"],
@@ -1165,7 +1170,11 @@ def load_latest_result(con, ticker):
     normalized = _ticker(ticker)
     row = con.execute(
         """select job_id from catalyst_research_jobs where ticker = ? and status in ('completed','completed_partial')
-           order by case status when 'completed' then 0 else 1 end, completed_at desc, created_at desc, rowid desc limit 1""", (normalized,)
+           and mode != 'rediscover'
+           and (mode = 'research' or research_version != ? or exists(
+               select 1 from catalyst_ir_events where job_id = catalyst_research_jobs.job_id))
+           order by case status when 'completed' then 0 else 1 end, completed_at desc, created_at desc, rowid desc limit 1""",
+        (normalized, RESEARCH_VERSION),
     ).fetchone()
     if not row:
         return None

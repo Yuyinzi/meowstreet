@@ -67,9 +67,68 @@ def _latest_result(**overrides):
     return result
 
 
-def _client(monkeypatch, *, latest=None, events_page=None, adapter_brief=None, recorded=None):
+def _v1_1_result(**overrides):
+    result = _latest_result(
+        schema_version="catalyst_research_result_v1_1",
+        research_version="catalyst_research_v1_1",
+        mode="research",
+        statistics={
+            "press_releases": {
+                "coverage_status": "observed_partial",
+                "discovery_methods": ["rss", "search"],
+                "observed_start": "2025-09-10",
+                "observed_end": "2026-09-08",
+                "observed_total": 84,
+                "observed_earnings": 4,
+                "observed_non_earnings": 80,
+                "observed_non_earnings_per_month": 6.67,
+                "observed_non_earnings_per_quarter": 20.0,
+                "observed_non_earnings_per_year": 80.0,
+                "median_days_between_observed_non_earnings": 4.0,
+                "coverage_warning": "search and feed history may omit official records",
+            },
+            "events_presentations": {
+                "coverage_status": "missing",
+                "discovery_methods": [],
+                "observed_start": None,
+                "observed_end": None,
+                "observed_total": 0,
+                "observed_earnings": 0,
+                "observed_non_earnings": 0,
+                "coverage_warning": "search and feed history may omit official records",
+            },
+        },
+    )
+    result["sources"] = [
+        {
+            "source_id": "irs_9",
+            "job_id": "cr_1",
+            "ticker": "NVDA",
+            "source_type": "press_releases",
+            "url": "https://nvidianews.example.test/rss.xml",
+            "final_url": "https://nvidianews.example.test/rss.xml",
+            "acceptance_status": "accepted",
+            "extraction_status": "complete",
+            "endpoint_id": "cse_1",
+            "item_count": 84,
+            "execution_path": "v1_1",
+            "coverage_start": None,
+            "coverage_end": None,
+            "truncation_reason": None,
+            "discovery_provider": None,
+            "active_adapter_id": None,
+        }
+    ]
+    result.update(overrides)
+    return result
+
+
+def _client(monkeypatch, *, latest=None, events_page=None, adapter_brief=None, registry=None, endpoints=None, job_schema_version="catalyst_research_result_v1", recorded=None):
     monkeypatch.setattr(catalyst_router.repository, "connect", lambda *args, **kwargs: FakeConnection())
     monkeypatch.setattr(catalyst_router.repository, "load_latest_result", lambda con, ticker: latest)
+    monkeypatch.setattr(catalyst_router.repository, "load_company_registry", lambda con, ticker: registry)
+    monkeypatch.setattr(catalyst_router.repository, "load_source_endpoints", lambda con, ticker: endpoints or [])
+    monkeypatch.setattr(catalyst_router.repository, "load_job_result_schema_version", lambda con, job_id: job_schema_version)
 
     def events(con, ticker, job_id, limit, cursor):
         if recorded is not None:
@@ -95,8 +154,10 @@ def test_summary_unknown_ticker_returns_not_researched_with_cli_next_action(monk
     assert payload["status"] == "not_researched"
     assert payload["ticker"] == "NVDA"
     assert payload["observation_count"] == 0
+    assert payload["schema_version"] == "catalyst_research_result_v1_1"
     assert payload["next_actions"]
     assert "python -m app.agents.catalyst_research NVDA" in payload["next_actions"][0]
+    assert "--mode research" in payload["next_actions"][0]
 
 
 def test_summary_completed_exposes_compact_sources_and_hides_internal_evidence(monkeypatch):
@@ -271,3 +332,202 @@ def test_events_unknown_ticker_returns_not_researched(monkeypatch):
     assert payload["status"] == "not_researched"
     assert payload["events"] == []
     assert recorded == []
+
+
+_REGISTRY_ROW = {
+    "ticker": "NVDA",
+    "company_name": "NVIDIA Corporation",
+    "official_domains": ["nvidia.com"],
+    "source_confidence": "high",
+    "registry_version": 1,
+    "discovered_at": "2026-09-01T00:00:00+00:00",
+    "last_validated_at": "2026-09-08T00:00:00+00:00",
+    "updated_at": "2026-09-08T00:00:00+00:00",
+}
+
+_ENDPOINT_ROWS = [
+    {
+        "endpoint_id": "cse_1",
+        "ticker": "NVDA",
+        "channel": "press_releases",
+        "endpoint_type": "rss",
+        "url": "https://nvidianews.example.test/rss.xml",
+        "domain": "nvidianews.example.test",
+        "status": "active",
+        "confidence": "high",
+        "discovered_at": "2026-09-01T00:00:00+00:00",
+        "last_checked_at": "2026-09-08T00:00:00+00:00",
+    }
+]
+
+
+def test_summary_returns_v1_1_registry_and_observed_channels(monkeypatch):
+    client = _client(monkeypatch, latest=_v1_1_result(), registry=dict(_REGISTRY_ROW), endpoints=[dict(_ENDPOINT_ROWS[0])])
+
+    response = client.get("/api/ticker-quant/NVDA/catalyst-research")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "catalyst_research_result_v1_1"
+    assert payload["mode"] == "research"
+    assert payload["registry"] == {
+        "version": 1,
+        "source_confidence": "high",
+        "last_validated_at": "2026-09-08T00:00:00+00:00",
+    }
+    channel = payload["channels"]["press_releases"]
+    assert channel["coverage_status"] == "observed_partial"
+    assert channel["observed_total"] == 84
+    assert channel["observed_earnings"] == 4
+    assert channel["observed_non_earnings"] == 80
+    assert channel["observed_start"] == "2025-09-10"
+    assert channel["observed_end"] == "2026-09-08"
+    assert channel["coverage_warning"] == "search and feed history may omit official records"
+    assert payload["channels"]["events_presentations"]["coverage_status"] == "missing"
+    assert payload["endpoints"] == [
+        {
+            "endpoint_id": "cse_1",
+            "channel": "press_releases",
+            "endpoint_type": "rss",
+            "url": "https://nvidianews.example.test/rss.xml",
+            "domain": "nvidianews.example.test",
+            "status": "active",
+            "confidence": "high",
+        }
+    ]
+    source = payload["sources"][0]
+    assert source["endpoint_id"] == "cse_1"
+    assert source["execution_path"] == "v1_1"
+
+
+def test_summary_v1_1_without_registry_row_exposes_null_registry(monkeypatch):
+    client = _client(monkeypatch, latest=_v1_1_result(), registry=None, endpoints=[])
+
+    payload = client.get("/api/ticker-quant/NVDA/catalyst-research").json()
+
+    assert payload["schema_version"] == "catalyst_research_result_v1_1"
+    assert payload["registry"] is None
+    assert payload["endpoints"] == []
+
+
+def test_summary_v1_keeps_legacy_fields_without_v1_1_projection(monkeypatch):
+    client = _client(monkeypatch, latest=_latest_result(), registry=dict(_REGISTRY_ROW), endpoints=[dict(_ENDPOINT_ROWS[0])])
+
+    payload = client.get("/api/ticker-quant/NVDA/catalyst-research").json()
+
+    assert payload["schema_version"] == "catalyst_research_result_v1"
+    for key in ("mode", "registry", "channels", "endpoints"):
+        assert key not in payload
+    assert payload["statistics"] == {"press_releases": {"total": 78}}
+    assert "endpoint_id" not in payload["sources"][0]
+
+
+def test_events_v1_1_rows_expose_nullable_provenance(monkeypatch):
+    page = {
+        "ticker": "NVDA",
+        "job_id": "cr_1",
+        "events": [
+            {
+                "event_id": "ire_9",
+                "job_id": "cr_1",
+                "ticker": "NVDA",
+                "published_date": "2026-08-27",
+                "event_date": None,
+                "count_date": "2026-08-27",
+                "title": "NVIDIA Announces New Platform",
+                "canonical_url": "https://nvidianews.example.test/news/9",
+                "source_type": "press_releases",
+                "earnings_state": "non_earnings",
+                "classification_method": "rule_v1",
+                "first_seen_at": "2026-09-04T01:00:00+00:00",
+                "endpoint_id": "cse_1",
+                "external_guid": "guid-9",
+                "discovery_method": "rss",
+                "extraction_provider": "direct_http",
+            },
+            {
+                "event_id": "ire_10",
+                "job_id": "cr_1",
+                "ticker": "NVDA",
+                "published_date": "2026-08-20",
+                "event_date": None,
+                "count_date": "2026-08-20",
+                "title": "NVIDIA Announces Results",
+                "canonical_url": "https://nvidianews.example.test/news/10",
+                "source_type": "press_releases",
+                "earnings_state": "earnings",
+                "classification_method": "llm_v1",
+                "first_seen_at": "2026-09-04T01:00:00+00:00",
+                "endpoint_id": None,
+                "external_guid": None,
+                "discovery_method": "search",
+                "extraction_provider": None,
+            },
+        ],
+        "next_cursor": None,
+    }
+    client = _client(monkeypatch, latest=_v1_1_result(), events_page=page, job_schema_version="catalyst_research_result_v1_1")
+
+    response = client.get("/api/ticker-quant/NVDA/catalyst-research/events?job_id=cr_1")
+
+    assert response.status_code == 200
+    first, second = response.json()["events"]
+    assert first["endpoint_id"] == "cse_1"
+    assert first["external_guid"] == "guid-9"
+    assert first["discovery_method"] == "rss"
+    assert first["extraction_provider"] == "direct_http"
+    assert second["endpoint_id"] is None
+    assert second["external_guid"] is None
+    assert second["discovery_method"] == "search"
+    assert second["extraction_provider"] is None
+
+
+def test_events_v1_rows_keep_legacy_fields_without_provenance(monkeypatch):
+    page = {
+        "ticker": "NVDA",
+        "job_id": "cr_1",
+        "events": [
+            {
+                "event_id": "ire_1",
+                "job_id": "cr_1",
+                "ticker": "NVDA",
+                "published_date": "2026-08-27",
+                "event_date": None,
+                "count_date": "2026-08-27",
+                "title": "NVIDIA Announces Financial Results",
+                "canonical_url": "https://nvidianews.example.test/news/1",
+                "source_type": "press_releases",
+                "earnings_state": "earnings",
+                "classification_method": "rule_v1",
+                "first_seen_at": "2026-09-04T01:00:00+00:00",
+                "endpoint_id": "cse_1",
+                "discovery_method": "rss",
+            }
+        ],
+        "next_cursor": None,
+    }
+    client = _client(monkeypatch, latest=_latest_result(), events_page=page)
+
+    response = client.get("/api/ticker-quant/NVDA/catalyst-research/events?job_id=cr_1")
+
+    assert response.status_code == 200
+    event = response.json()["events"][0]
+    for key in ("endpoint_id", "external_guid", "discovery_method", "extraction_provider"):
+        assert key not in event
+
+
+def test_api_calls_never_trigger_network_or_model_work(monkeypatch):
+    from app.agents.catalyst_research import workflow as catalyst_workflow
+
+    calls = []
+    monkeypatch.setattr(catalyst_workflow, "run_research", lambda *args, **kwargs: calls.append("run_research"))
+    monkeypatch.setattr(catalyst_router.config, "load_collection_config", lambda *args, **kwargs: calls.append("collection_config"))
+    page = {"ticker": "NVDA", "job_id": "cr_1", "events": [], "next_cursor": None}
+    client = _client(monkeypatch, latest=_v1_1_result(), registry=dict(_REGISTRY_ROW), endpoints=[], events_page=page)
+
+    summary = client.get("/api/ticker-quant/NVDA/catalyst-research")
+    events = client.get("/api/ticker-quant/NVDA/catalyst-research/events")
+
+    assert summary.status_code == 200
+    assert events.status_code == 200
+    assert calls == []

@@ -34,6 +34,21 @@ _EVENT_FIELDS = (
     "classification_method",
     "first_seen_at",
 )
+_EVENT_PROVENANCE_FIELDS = (
+    "endpoint_id",
+    "external_guid",
+    "discovery_method",
+    "extraction_provider",
+)
+_ENDPOINT_FIELDS = (
+    "endpoint_id",
+    "channel",
+    "endpoint_type",
+    "url",
+    "domain",
+    "status",
+    "confidence",
+)
 
 
 def _normalize_symbol(symbol):
@@ -53,7 +68,7 @@ def _not_researched(ticker):
         "statistics": {},
         "observation_count": 0,
         "warnings": [],
-        "next_actions": [f"run .venv/bin/python -m app.agents.catalyst_research {ticker} --years 4"],
+        "next_actions": [f"run .venv/bin/python -m app.agents.catalyst_research {ticker} --years 4 --mode research"],
     }
 
 
@@ -78,6 +93,40 @@ def _source_summary(connection, source):
     return summary
 
 
+def _registry_summary(registry):
+    if not registry:
+        return None
+    return {
+        "version": registry.get("registry_version"),
+        "source_confidence": registry.get("source_confidence"),
+        "last_validated_at": registry.get("last_validated_at"),
+    }
+
+
+def _endpoint_summary(endpoint):
+    return {key: endpoint.get(key) for key in _ENDPOINT_FIELDS}
+
+
+def _v1_1_source_summary(connection, source):
+    summary = _source_summary(connection, source)
+    if source.get("endpoint_id"):
+        summary["endpoint_id"] = source["endpoint_id"]
+    return summary
+
+
+def _v1_1_summary(connection, result):
+    summary = {key: result.get(key) for key in _SUMMARY_FIELDS}
+    summary["mode"] = result.get("mode")
+    summary["registry"] = _registry_summary(repository.load_company_registry(connection, result.get("ticker")))
+    summary["channels"] = result.get("statistics") or {}
+    summary["endpoints"] = [
+        _endpoint_summary(endpoint)
+        for endpoint in repository.load_source_endpoints(connection, result.get("ticker"))
+    ]
+    summary["sources"] = [_v1_1_source_summary(connection, source) for source in result.get("sources", [])]
+    return summary
+
+
 def _load_summary(symbol):
     ticker = _normalize_symbol(symbol)
     connection = repository.connect()
@@ -85,6 +134,8 @@ def _load_summary(symbol):
         result = repository.load_latest_result(connection, ticker)
         if result is None:
             return _not_researched(ticker)
+        if result.get("schema_version") == config.RESULT_SCHEMA_VERSION:
+            return _v1_1_summary(connection, result)
         summary = {key: result.get(key) for key in _SUMMARY_FIELDS}
         summary["sources"] = [_source_summary(connection, source) for source in result.get("sources", [])]
         return summary
@@ -92,9 +143,12 @@ def _load_summary(symbol):
         connection.close()
 
 
-def _event_payload(row):
+def _event_payload(row, provenance):
     event = {key: row.get(key) for key in _EVENT_FIELDS}
     event["url"] = row.get("canonical_url")
+    if provenance:
+        for key in _EVENT_PROVENANCE_FIELDS:
+            event[key] = row.get(key)
     return event
 
 
@@ -107,11 +161,15 @@ def _load_events(symbol, job_id, limit, cursor):
             if latest is None:
                 return {**_not_researched(ticker), "job_id": None, "events": [], "next_cursor": None}
             job_id = latest["job_id"]
+            schema_version = latest["schema_version"]
+        else:
+            schema_version = repository.load_job_result_schema_version(connection, job_id)
         page = repository.load_events_page(connection, ticker, job_id, limit, cursor)
+        provenance = schema_version == config.RESULT_SCHEMA_VERSION
         return {
             "ticker": page["ticker"],
             "job_id": page["job_id"],
-            "events": [_event_payload(row) for row in page["events"]],
+            "events": [_event_payload(row, provenance) for row in page["events"]],
             "next_cursor": page["next_cursor"],
         }
     finally:

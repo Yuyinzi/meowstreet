@@ -7,6 +7,7 @@
   var STATUS_LABELS = {
     complete: "Complete coverage",
     partial: "Partial coverage",
+    observed_partial: "Observed partial history",
     missing: "No source",
     unsupported: "Unsupported archive",
     failed: "Extraction failed",
@@ -76,55 +77,86 @@
         "</div>"
       );
     }
+    var coverageStatus = channel.coverage_status || channel.status;
+    var observedPartial = coverageStatus === "observed_partial";
+    var total = channel.observed_total == null ? channel.total : channel.observed_total;
+    var earnings = channel.observed_earnings == null ? channel.earnings : channel.observed_earnings;
+    var nonEarnings = channel.observed_non_earnings == null ? channel.non_earnings : channel.observed_non_earnings;
+    var ambiguous = channel.observed_ambiguous == null ? channel.ambiguous : channel.observed_ambiguous;
     var rows = "";
-    if (channel.total != null) {
-      rows += row("Total", escapeHtml(channel.total));
+    var totalLabel = observedPartial ? "Observed communications" : "Total";
+    if (observedPartial && total === 0) {
+      rows += row(
+        totalLabel,
+        '<span class="catalyst-research-muted">none observed in the sampled window</span>'
+      );
+    } else if (total != null) {
+      rows += row(totalLabel, escapeHtml(total));
     }
-    if (channel.earnings != null) {
-      rows += row("Earnings", escapeHtml(channel.earnings));
+    if (earnings != null) {
+      rows += row("Earnings", escapeHtml(earnings));
     }
-    if (channel.non_earnings != null) {
-      rows += row("Non-earnings", escapeHtml(channel.non_earnings));
+    if (nonEarnings != null) {
+      rows += row("Non-earnings", escapeHtml(nonEarnings));
     }
-    if (channel.ambiguous != null) {
-      rows += row("Ambiguous", escapeHtml(channel.ambiguous));
+    if (ambiguous != null) {
+      rows += row("Ambiguous", escapeHtml(ambiguous));
     }
+    var perMonth = channel.observed_non_earnings_per_month == null ? channel.per_month : channel.observed_non_earnings_per_month;
+    var perQuarter = channel.observed_non_earnings_per_quarter == null ? channel.per_quarter : channel.observed_non_earnings_per_quarter;
+    var perYear = channel.observed_non_earnings_per_year == null ? channel.per_year : channel.observed_non_earnings_per_year;
+    var observedFrequency =
+      channel.observed_non_earnings_per_month != null ||
+      channel.observed_non_earnings_per_quarter != null ||
+      channel.observed_non_earnings_per_year != null;
+    var frequencyLabel = observedFrequency ? "Observed non-earnings frequency" : "Frequency";
     var frequency = "";
-    if (channel.per_month != null) {
-      frequency = fmt(channel.per_month) + " / month";
-    } else if (channel.per_quarter != null) {
-      frequency = fmt(channel.per_quarter) + " / quarter";
-    } else if (channel.per_year != null) {
-      frequency = fmt(channel.per_year) + " / year";
+    if (perMonth != null) {
+      frequency = fmt(perMonth) + " / month";
+    } else if (perQuarter != null) {
+      frequency = fmt(perQuarter) + " / quarter";
+    } else if (perYear != null) {
+      frequency = fmt(perYear) + " / year";
     }
     if (frequency) {
-      rows += row("Frequency", escapeHtml(frequency));
+      rows += row(frequencyLabel, escapeHtml(frequency));
     } else {
       rows += row(
-        "Frequency",
+        frequencyLabel,
         '<span class="catalyst-research-muted">not estimable for the observed window</span>'
       );
     }
+    if (channel.median_days_between_observed_non_earnings != null) {
+      rows += row(
+        "Median gap between non-earnings",
+        escapeHtml(channel.median_days_between_observed_non_earnings) + " days"
+      );
+    }
     var notes = "";
-    if (channel.status === "partial") {
+    if (observedPartial) {
+      notes +=
+        '<div class="catalyst-research-note catalyst-research-note-partial">' +
+        escapeHtml(channel.coverage_warning || "Observed history may omit official records; an empty sample is not proof of zero history.") +
+        "</div>";
+    } else if (coverageStatus === "partial") {
       notes +=
         '<div class="catalyst-research-note catalyst-research-note-partial">Partial coverage: counts reflect only the observed window, not the full requested window.</div>';
-    } else if (channel.status === "unsupported") {
+    } else if (coverageStatus === "unsupported") {
       notes +=
         '<div class="catalyst-research-note">This channel archive is unsupported; no valid counts are reported.</div>';
-    } else if (channel.status === "missing" || channel.status === "failed" || channel.status === "discovery_required") {
+    } else if (coverageStatus === "missing" || coverageStatus === "failed" || coverageStatus === "discovery_required") {
       notes +=
         '<div class="catalyst-research-note">Coverage for this channel is unavailable (' +
-        escapeHtml(String(channel.status).replace(/_/g, " ")) + ").</div>";
+        escapeHtml(String(coverageStatus).replace(/_/g, " ")) + ").</div>";
     }
-    if (channel.ambiguous > 0) {
+    if (ambiguous > 0) {
       notes +=
-        '<div class="catalyst-research-note">' + escapeHtml(channel.ambiguous) +
+        '<div class="catalyst-research-note">' + escapeHtml(ambiguous) +
         " record(s) have ambiguous earnings classification; non-earnings frequency is withheld.</div>";
     }
     return (
       '<div class="catalyst-research-channel">' +
-      '<div class="catalyst-research-channel-head">' + title + statusChip(channel.status) + "</div>" +
+      '<div class="catalyst-research-channel-head">' + title + statusChip(coverageStatus) + "</div>" +
       '<div class="catalyst-research-rows">' + rows + "</div>" +
       notes +
       "</div>"
@@ -140,7 +172,7 @@
     return escapeHtml(String(sourceType || "source").replace(/_/g, " "));
   }
 
-  function sourceHtml(source) {
+  function sourceHtml(source, endpoints) {
     var details = [];
     if (source.coverage_start && source.coverage_end) {
       details.push("coverage " + source.coverage_start + " → " + source.coverage_end);
@@ -153,6 +185,19 @@
     }
     if (source.discovery_provider) {
       details.push("discovered via " + source.discovery_provider);
+    }
+    var endpoint = null;
+    if (source.endpoint_id && endpoints && endpoints.length) {
+      for (var index = 0; index < endpoints.length; index += 1) {
+        if (endpoints[index].endpoint_id === source.endpoint_id) {
+          endpoint = endpoints[index];
+          break;
+        }
+      }
+    }
+    if (endpoint) {
+      details.push("endpoint status: " + endpoint.status);
+      details.push("confidence: " + endpoint.confidence);
     }
     var safeUrl = typeof source.url === "string" && /^https:\/\//i.test(source.url) ? source.url : null;
     var url = source.url
@@ -178,13 +223,15 @@
     );
   }
 
-  function sourcesHtml(sources) {
+  function sourcesHtml(sources, endpoints) {
     if (!sources || !sources.length) {
       return "";
     }
     return (
       '<div class="catalyst-research-sources">' +
-      sources.map(sourceHtml).join("") +
+      sources.map(function (source) {
+        return sourceHtml(source, endpoints);
+      }).join("") +
       "</div>"
     );
   }
@@ -215,7 +262,7 @@
     if (!payload || payload.status === "not_researched") {
       return notResearchedHtml(payload);
     }
-    var statistics = payload.statistics || {};
+    var statistics = payload.channels || payload.statistics || {};
     var meta = [];
     if (payload.as_of) {
       meta.push("as of " + payload.as_of);
@@ -243,7 +290,7 @@
       channelHtml("Press Releases", statistics.press_releases) +
       channelHtml("Events &amp; Presentations", statistics.events_presentations) +
       "</div>" +
-      sourcesHtml(payload.sources) +
+      sourcesHtml(payload.sources, payload.endpoints) +
       warningsHtml(payload.warnings) +
       nextActions +
       "</div>"
