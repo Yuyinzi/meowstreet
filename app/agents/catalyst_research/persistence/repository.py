@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app.agents.catalyst_research.config import (
     ADAPTER_SCHEMA_VERSION,
+    RESEARCH_MODES,
     RESEARCH_VERSION,
     RESULT_SCHEMA_VERSION,
 )
@@ -22,6 +23,22 @@ _TERMINAL_JOB_STATES = {"completed", "completed_partial", "unsupported", "failed
 _JOB_STATES = {"queued", "running", *_TERMINAL_JOB_STATES}
 _ADAPTER_STATES = {"candidate", "active", "failed_validation", "stale", "superseded"}
 _SOURCE_TYPES = {"ir_home", "press_releases", "events_presentations", "earnings_results"}
+_REGISTRY_CONFIDENCE = {"high", "medium", "low"}
+_ENDPOINT_CHANNELS = {"press_releases", "events_presentations", "earnings_results"}
+_ENDPOINT_TYPES = {"rss", "atom", "search_domain", "archive"}
+_ENDPOINT_STATES = {"unverified", "active", "quiet", "stale", "failing", "retired"}
+_ENDPOINT_HEALTH_COLUMNS = {
+    "status",
+    "last_checked_at",
+    "last_success_at",
+    "last_item_at",
+    "last_guid",
+    "consecutive_failures",
+    "last_error_code",
+}
+_DISCOVERY_METHODS = {"rss", "atom", "search", "archive_adapter", "manual"}
+_EXTRACTION_PROVIDERS = {"feed_metadata", "direct_http", "firecrawl", "manual"}
+_SEARCH_PURPOSES = {"source_discovery", "historical_backfill", "incremental_gap_check"}
 
 
 def _json(value):
@@ -119,7 +136,8 @@ def connect(db_path=DEFAULT_DB_PATH):
             error_summary text,
             created_at text not null,
             started_at text,
-            completed_at text
+            completed_at text,
+            mode text not null default 'research'
         );
         create table if not exists catalyst_search_attempts (
             attempt_id text primary key,
@@ -131,7 +149,8 @@ def connect(db_path=DEFAULT_DB_PATH):
             completed_at text,
             outcome text,
             diagnostics_json text,
-            provider_request_id text
+            provider_request_id text,
+            search_purpose text not null default 'source_discovery'
         );
         create table if not exists catalyst_search_results (
             search_result_id text primary key,
@@ -172,7 +191,10 @@ def connect(db_path=DEFAULT_DB_PATH):
             truncation_reason text,
             discovery_provider text,
             execution_path text,
-            checked_at text
+            checked_at text,
+            endpoint_id text,
+            discovery_method text,
+            extraction_provider text
         );
         create table if not exists catalyst_source_snapshots (
             content_hash text primary key,
@@ -241,6 +263,10 @@ def connect(db_path=DEFAULT_DB_PATH):
             executor_version text,
             first_seen_at text not null,
             content_hash text,
+            endpoint_id text,
+            external_guid text,
+            discovery_method text,
+            extraction_provider text,
             unique(job_id, ticker, source_type, count_date, normalized_title, canonical_url)
         );
         create table if not exists catalyst_ir_classifications (
@@ -260,10 +286,75 @@ def connect(db_path=DEFAULT_DB_PATH):
         on catalyst_ir_events(job_id, ticker, source_type, count_date, normalized_title, canonical_url);
         create index if not exists idx_catalyst_jobs_ticker_completed
         on catalyst_research_jobs(ticker, status, completed_at desc);
+        create table if not exists catalyst_company_registry (
+            ticker text primary key,
+            company_name text not null,
+            cik text,
+            official_domains_json text not null,
+            source_confidence text not null,
+            registry_version integer not null,
+            discovered_at text not null,
+            last_validated_at text,
+            updated_at text not null
+        );
+        create table if not exists catalyst_source_endpoints (
+            endpoint_id text primary key,
+            ticker text not null,
+            channel text not null,
+            endpoint_type text not null,
+            url text,
+            domain text not null,
+            status text not null,
+            confidence text not null,
+            discovered_at text not null,
+            last_checked_at text,
+            last_success_at text,
+            last_item_at text,
+            last_guid text,
+            consecutive_failures integer not null default 0,
+            last_error_code text,
+            updated_at text not null
+        );
+        create table if not exists catalyst_endpoint_checks (
+            check_id text primary key,
+            endpoint_id text not null,
+            job_id text,
+            checked_at text not null,
+            outcome text not null,
+            http_status integer,
+            item_count integer not null,
+            new_item_count integer not null,
+            newest_item_at text,
+            error_code text,
+            content_hash text
+        );
+        create index if not exists idx_catalyst_endpoints_ticker
+        on catalyst_source_endpoints(ticker, channel);
+        create index if not exists idx_catalyst_endpoint_checks_endpoint
+        on catalyst_endpoint_checks(endpoint_id, checked_at desc);
+        create unique index if not exists idx_catalyst_endpoint_identity
+        on catalyst_source_endpoints(ticker, channel, endpoint_type, coalesce(lower(url), lower(domain)));
         """
     )
     _migrate_schema(con)
+    _migrate_v1_1_schema(con)
     return con
+
+
+def _ensure_column(con, table, name, definition):
+    columns = {row[1] for row in con.execute(f"pragma table_info({table})")}
+    if name not in columns:
+        con.execute(f"alter table {table} add column {name} {definition}")
+
+
+def _migrate_v1_1_schema(con):
+    _ensure_column(con, "catalyst_research_jobs", "mode", "text not null default 'research'")
+    _ensure_column(con, "catalyst_search_attempts", "search_purpose", "text not null default 'source_discovery'")
+    for column in ("endpoint_id", "discovery_method", "extraction_provider"):
+        _ensure_column(con, "catalyst_ir_sources", column, "text")
+    for column in ("endpoint_id", "external_guid", "discovery_method", "extraction_provider"):
+        _ensure_column(con, "catalyst_ir_events", column, "text")
+    con.commit()
 
 
 def _migrate_schema(con):
@@ -373,6 +464,9 @@ def create_job(con, request, company=None, now=None):
     except ValueError:
         requested_start = as_of.replace(year=as_of.year - years, day=28)
     company = company or {}
+    mode = request.get("mode") or "research"
+    if mode not in RESEARCH_MODES:
+        raise ValueError("research mode is invalid")
     job = {
         "job_id": _id("cr_"),
         "ticker": ticker,
@@ -384,6 +478,7 @@ def create_job(con, request, company=None, now=None):
         "as_of": str(as_of),
         "research_version": RESEARCH_VERSION,
         "status": "queued",
+        "mode": mode,
         "execution_paths_json": _json({}),
         "call_counts_json": _json({}),
         "created_at": _now_iso(now),
@@ -391,9 +486,9 @@ def create_job(con, request, company=None, now=None):
     con.execute(
         """insert into catalyst_research_jobs(
             job_id,ticker,company_name,cik,requested_years,requested_start,requested_end,
-            as_of,research_version,status,execution_paths_json,call_counts_json,created_at
+            as_of,research_version,status,mode,execution_paths_json,call_counts_json,created_at
         ) values (:job_id,:ticker,:company_name,:cik,:requested_years,:requested_start,:requested_end,
-            :as_of,:research_version,:status,:execution_paths_json,:call_counts_json,:created_at)""",
+            :as_of,:research_version,:status,:mode,:execution_paths_json,:call_counts_json,:created_at)""",
         job,
     )
     con.commit()
@@ -482,19 +577,22 @@ def record_search_attempt(con, attempt):
     attempt_id = attempt.get("attempt_id") or _id("csa_")
     if not attempt.get("provider") or not attempt.get("query"):
         raise ValueError("search attempt provider and query are required")
+    purpose = attempt.get("search_purpose") or "source_discovery"
+    if purpose not in _SEARCH_PURPOSES:
+        raise ValueError("search attempt purpose is invalid")
     with con:
         cursor = con.execute(
         """insert into catalyst_search_attempts(
             attempt_id,job_id,provider,query,requested_limit,started_at,completed_at,
-            outcome,diagnostics_json,provider_request_id
-        ) select ?,?,?,?,?,?,?,?,?,? where exists (
+            outcome,diagnostics_json,provider_request_id,search_purpose
+        ) select ?,?,?,?,?,?,?,?,?,?,? where exists (
             select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
         )""",
         (attempt_id, attempt["job_id"], attempt["provider"], attempt["query"],
          attempt.get("requested_limit", 10), attempt.get("started_at") or _now_iso(),
          attempt.get("completed_at"), attempt.get("outcome"),
          _json(attempt.get("diagnostics", attempt.get("diagnostics_json", {}))),
-         attempt.get("provider_request_id"), attempt["job_id"]),
+         attempt.get("provider_request_id"), purpose, attempt["job_id"]),
         )
         if cursor.rowcount != 1:
             raise ValueError(f"research job {attempt['job_id']} is terminal")
@@ -611,10 +709,21 @@ def prune_unreferenced_snapshots(con):
     return len(removable)
 
 
+def _provenance_values(item):
+    discovery_method = item.get("discovery_method")
+    if discovery_method is not None and discovery_method not in _DISCOVERY_METHODS:
+        raise ValueError("discovery method is invalid")
+    extraction_provider = item.get("extraction_provider")
+    if extraction_provider is not None and extraction_provider not in _EXTRACTION_PROVIDERS:
+        raise ValueError("extraction provider is invalid")
+    return discovery_method, extraction_provider
+
+
 def _source_row(con, source):
     job_id = source.get("job_id")
     _nonterminal_job(con, job_id)
     source_id = source.get("source_id") or _id("cis_")
+    discovery_method, extraction_provider = _provenance_values(source)
     row = {
         "source_id": source_id, "job_id": job_id, "ticker": _ticker(source.get("ticker")),
         "source_type": source.get("source_type"), "url": source.get("url") or "",
@@ -626,6 +735,7 @@ def _source_row(con, source):
         "page_count": source.get("page_count", 0), "item_count": source.get("item_count", 0), "content_hash": source.get("content_hash"),
         "snapshot_hash": source.get("snapshot_hash") if "snapshot_hash" in source else source.get("content_hash"), "truncation_reason": source.get("truncation_reason"),
         "discovery_provider": source.get("discovery_provider"), "execution_path": source.get("execution_path"), "checked_at": source.get("checked_at"),
+        "endpoint_id": source.get("endpoint_id"), "discovery_method": discovery_method, "extraction_provider": extraction_provider,
     }
     if row["source_type"] not in _SOURCE_TYPES:
         raise ValueError("source type is invalid")
@@ -644,8 +754,8 @@ def save_source(con, source):
         """insert into catalyst_ir_sources(
             source_id,job_id,ticker,source_type,url,final_url,acceptance_status,extraction_status,active_adapter_id,adapter_version,executor_version,
             evidence_result_ids_json,requested_start,requested_end,coverage_start,coverage_end,coverage_continuous,verification_reason,page_count,item_count,
-            content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at
-        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
+            content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at,endpoint_id,discovery_method,extraction_provider
+        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
             select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
         )""",
             (*tuple(row.values()), row["job_id"]),
@@ -942,6 +1052,7 @@ def save_finalized_observations(con, job_id, events, classifications):
             if source_row["ticker"] != _ticker(event.get("ticker")) or source_row["source_type"] != event.get("source_type"):
                 raise ValueError("event source does not match event")
             normalized_title = event.get("normalized_title") or " ".join(title.lower().split())
+            discovery_method, extraction_provider = _provenance_values(event)
             existing = con.execute(
                 "select event_id from catalyst_ir_events where job_id = ? and ticker = ? and source_type = ? and count_date = ? and normalized_title = ? and (canonical_url = ? or (canonical_url is null and ? is null))",
                 (job_id, _ticker(event.get("ticker")), event.get("source_type"), count_date, normalized_title, canonical_url, canonical_url),
@@ -951,15 +1062,17 @@ def save_finalized_observations(con, job_id, events, classifications):
             cursor = con.execute(
                 """insert into catalyst_ir_events(
                     event_id,job_id,source_id,ticker,published_date,event_date,count_date,title,normalized_title,canonical_url,
-                    source_type,earnings_state,classification_method,adapter_id,adapter_version,executor_version,first_seen_at,content_hash
-                ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
+                    source_type,earnings_state,classification_method,adapter_id,adapter_version,executor_version,first_seen_at,content_hash,
+                    endpoint_id,external_guid,discovery_method,extraction_provider
+                ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
                     select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
                 )
                 on conflict(job_id,ticker,source_type,count_date,normalized_title,canonical_url) do update set earnings_state=excluded.earnings_state""",
                 (event_id, job_id, event["source_id"], _ticker(event.get("ticker")), event.get("published_date"), event.get("event_date"),
                  count_date, title, normalized_title, canonical_url,
                  event["source_type"], state, (classification or event).get("classification_method"), event.get("adapter_id"), event.get("adapter_version"),
-                 event.get("executor_version"), event.get("first_seen_at") or _now_iso(), event.get("content_hash"), job_id),
+                 event.get("executor_version"), event.get("first_seen_at") or _now_iso(), event.get("content_hash"),
+                 event.get("endpoint_id"), event.get("external_guid"), discovery_method, extraction_provider, job_id),
             )
             if cursor.rowcount != 1:
                 raise ValueError(f"research job {job_id} is terminal")
@@ -1117,3 +1230,261 @@ def load_events_page(con, ticker, job_id, limit, cursor):
         last = rows[-1]
         next_cursor = _encode_cursor({"ticker": normalized, "job_id": job_id, "count_date": last["count_date"], "event_id": last["event_id"]})
     return {"ticker": normalized, "job_id": job_id, "events": events, "next_cursor": next_cursor}
+
+
+def save_company_registry(con, registry):
+    ticker = _ticker(registry.get("ticker"))
+    company_name = str(registry.get("company_name") or "").strip()
+    if not company_name:
+        raise ValueError("registry company name is required")
+    domains = registry.get("official_domains")
+    if not isinstance(domains, list) or not domains or not all(isinstance(item, str) and item.strip() for item in domains):
+        raise ValueError("registry official domains are required")
+    confidence = registry.get("source_confidence")
+    if confidence not in _REGISTRY_CONFIDENCE:
+        raise ValueError("registry source confidence is invalid")
+    version = registry.get("registry_version")
+    if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+        raise ValueError("registry version is invalid")
+    row = {
+        "ticker": ticker,
+        "company_name": company_name,
+        "cik": str(registry.get("cik")) if registry.get("cik") is not None else None,
+        "official_domains_json": _json(sorted({item.strip().lower() for item in domains})),
+        "source_confidence": confidence,
+        "registry_version": version,
+        "discovered_at": registry.get("discovered_at") or _now_iso(),
+        "last_validated_at": registry.get("last_validated_at"),
+        "updated_at": registry.get("updated_at") or _now_iso(),
+    }
+    comparable = ("company_name", "cik", "official_domains_json", "source_confidence", "registry_version", "discovered_at", "last_validated_at")
+    with con:
+        existing = con.execute("select * from catalyst_company_registry where ticker = ?", (ticker,)).fetchone()
+        if existing is None:
+            if version != 1:
+                raise ValueError("initial registry version must be 1")
+            con.execute(
+                """insert into catalyst_company_registry(
+                    ticker,company_name,cik,official_domains_json,source_confidence,registry_version,discovered_at,last_validated_at,updated_at
+                ) values (:ticker,:company_name,:cik,:official_domains_json,:source_confidence,:registry_version,:discovered_at,:last_validated_at,:updated_at)""",
+                row,
+            )
+        else:
+            if all(existing[key] == row[key] for key in comparable):
+                return _registry_row(existing)
+            if version != existing["registry_version"] + 1:
+                raise ValueError(f"registry version must be {existing['registry_version'] + 1}")
+            con.execute(
+                """update catalyst_company_registry set company_name=:company_name, cik=:cik, official_domains_json=:official_domains_json,
+                    source_confidence=:source_confidence, registry_version=:registry_version, discovered_at=:discovered_at,
+                    last_validated_at=:last_validated_at, updated_at=:updated_at where ticker=:ticker""",
+                row,
+            )
+    return load_company_registry(con, ticker)
+
+
+def _registry_row(row):
+    result = _decode_row(row, ("official_domains_json",))
+    result["official_domains"] = result.pop("official_domains_json")
+    return result
+
+
+def load_company_registry(con, ticker):
+    row = con.execute("select * from catalyst_company_registry where ticker = ?", (_ticker(ticker),)).fetchone()
+    if row is None:
+        return None
+    return _registry_row(row)
+
+
+def _endpoint_row(endpoint):
+    ticker = _ticker(endpoint.get("ticker"))
+    channel = endpoint.get("channel")
+    if channel not in _ENDPOINT_CHANNELS:
+        raise ValueError("endpoint channel is invalid")
+    endpoint_type = endpoint.get("endpoint_type")
+    if endpoint_type not in _ENDPOINT_TYPES:
+        raise ValueError("endpoint type is invalid")
+    domain = str(endpoint.get("domain") or "").strip().lower()
+    if not domain:
+        raise ValueError("endpoint domain is required")
+    url = endpoint.get("url")
+    if url is not None:
+        url = str(url).strip()
+        if not url:
+            raise ValueError("endpoint url is invalid")
+    status = endpoint.get("status") or "unverified"
+    if status not in _ENDPOINT_STATES:
+        raise ValueError("endpoint status is invalid")
+    confidence = endpoint.get("confidence")
+    if confidence not in _REGISTRY_CONFIDENCE:
+        raise ValueError("endpoint confidence is invalid")
+    failures = endpoint.get("consecutive_failures", 0)
+    if not isinstance(failures, int) or isinstance(failures, bool) or failures < 0:
+        raise ValueError("endpoint consecutive failures is invalid")
+    return {
+        "endpoint_id": endpoint.get("endpoint_id") or _id("cse_"),
+        "ticker": ticker,
+        "channel": channel,
+        "endpoint_type": endpoint_type,
+        "url": url,
+        "domain": domain,
+        "status": status,
+        "confidence": confidence,
+        "discovered_at": endpoint.get("discovered_at") or _now_iso(),
+        "last_checked_at": endpoint.get("last_checked_at"),
+        "last_success_at": endpoint.get("last_success_at"),
+        "last_item_at": endpoint.get("last_item_at"),
+        "last_guid": endpoint.get("last_guid"),
+        "consecutive_failures": failures,
+        "last_error_code": endpoint.get("last_error_code"),
+        "updated_at": endpoint.get("updated_at") or _now_iso(),
+    }
+
+
+def upsert_source_endpoint(con, endpoint):
+    row = _endpoint_row(endpoint)
+    with con:
+        con.execute(
+            """insert into catalyst_source_endpoints(
+                endpoint_id,ticker,channel,endpoint_type,url,domain,status,confidence,discovered_at,last_checked_at,
+                last_success_at,last_item_at,last_guid,consecutive_failures,last_error_code,updated_at
+            ) values (:endpoint_id,:ticker,:channel,:endpoint_type,:url,:domain,:status,:confidence,:discovered_at,:last_checked_at,
+                :last_success_at,:last_item_at,:last_guid,:consecutive_failures,:last_error_code,:updated_at)
+            on conflict(ticker, channel, endpoint_type, coalesce(lower(url), lower(domain))) do update set
+                url=excluded.url, domain=excluded.domain, status=excluded.status, confidence=excluded.confidence,
+                last_checked_at=coalesce(excluded.last_checked_at, catalyst_source_endpoints.last_checked_at),
+                last_success_at=coalesce(excluded.last_success_at, catalyst_source_endpoints.last_success_at),
+                last_item_at=coalesce(excluded.last_item_at, catalyst_source_endpoints.last_item_at),
+                last_guid=coalesce(excluded.last_guid, catalyst_source_endpoints.last_guid),
+                consecutive_failures=excluded.consecutive_failures,
+                last_error_code=coalesce(excluded.last_error_code, catalyst_source_endpoints.last_error_code),
+                updated_at=excluded.updated_at""",
+            row,
+        )
+    return dict(
+        con.execute(
+            """select * from catalyst_source_endpoints
+                where ticker = ? and channel = ? and endpoint_type = ? and coalesce(lower(url), lower(domain)) = coalesce(lower(?), lower(?))""",
+            (row["ticker"], row["channel"], row["endpoint_type"], row["url"], row["domain"]),
+        ).fetchone()
+    )
+
+
+def load_source_endpoints(con, ticker, channel=None, statuses=None):
+    normalized = _ticker(ticker)
+    where = ["ticker = ?"]
+    params = [normalized]
+    if channel is not None:
+        if channel not in _ENDPOINT_CHANNELS:
+            raise ValueError("endpoint channel is invalid")
+        where.append("channel = ?")
+        params.append(channel)
+    if statuses is not None:
+        if not isinstance(statuses, (set, frozenset)) or not statuses or not statuses <= _ENDPOINT_STATES:
+            raise ValueError("endpoint statuses are invalid")
+        where.append("status in ({})".format(",".join("?" for _ in statuses)))
+        params.extend(sorted(statuses))
+    rows = con.execute(
+        f"select * from catalyst_source_endpoints where {' and '.join(where)} order by channel, endpoint_type, domain, url",
+        params,
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def record_endpoint_check(con, check):
+    endpoint_id = check.get("endpoint_id")
+    if con.execute("select 1 from catalyst_source_endpoints where endpoint_id = ?", (endpoint_id,)).fetchone() is None:
+        raise ValueError(f"endpoint {endpoint_id} was not found")
+    outcome = str(check.get("outcome") or "").strip()
+    if not outcome:
+        raise ValueError("endpoint check outcome is required")
+    counts = {}
+    for key in ("item_count", "new_item_count"):
+        value = check.get(key, 0)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ValueError(f"endpoint check {key.replace('_', ' ')} is invalid")
+        counts[key] = value
+    http_status = check.get("http_status")
+    if http_status is not None and (not isinstance(http_status, int) or isinstance(http_status, bool)):
+        raise ValueError("endpoint check http status is invalid")
+    job_id = check.get("job_id")
+    if job_id is not None:
+        _job(con, job_id)
+    row = {
+        "check_id": check.get("check_id") or _id("cec_"),
+        "endpoint_id": endpoint_id,
+        "job_id": job_id,
+        "checked_at": check.get("checked_at") or _now_iso(),
+        "outcome": outcome,
+        "http_status": http_status,
+        "item_count": counts["item_count"],
+        "new_item_count": counts["new_item_count"],
+        "newest_item_at": check.get("newest_item_at"),
+        "error_code": check.get("error_code"),
+        "content_hash": check.get("content_hash"),
+    }
+    with con:
+        con.execute(
+            """insert into catalyst_endpoint_checks(
+                check_id,endpoint_id,job_id,checked_at,outcome,http_status,item_count,new_item_count,newest_item_at,error_code,content_hash
+            ) values (:check_id,:endpoint_id,:job_id,:checked_at,:outcome,:http_status,:item_count,:new_item_count,:newest_item_at,:error_code,:content_hash)""",
+            row,
+        )
+    return dict(row)
+
+
+def update_endpoint_health(con, endpoint_id, state):
+    if not isinstance(state, dict):
+        raise ValueError("endpoint health state is required")
+    if con.execute("select 1 from catalyst_source_endpoints where endpoint_id = ?", (endpoint_id,)).fetchone() is None:
+        raise ValueError(f"endpoint {endpoint_id} was not found")
+    invalid = set(state) - _ENDPOINT_HEALTH_COLUMNS - {"updated_at"}
+    if invalid:
+        raise ValueError(f"endpoint health field {sorted(invalid)[0]} is not updatable")
+    updates = {}
+    if "status" in state:
+        if state["status"] not in _ENDPOINT_STATES:
+            raise ValueError("endpoint status is invalid")
+        updates["status"] = state["status"]
+    for key in ("last_checked_at", "last_success_at", "last_item_at", "last_guid", "last_error_code"):
+        if key in state:
+            updates[key] = state[key]
+    if "consecutive_failures" in state:
+        failures = state["consecutive_failures"]
+        if not isinstance(failures, int) or isinstance(failures, bool) or failures < 0:
+            raise ValueError("endpoint consecutive failures is invalid")
+        updates["consecutive_failures"] = failures
+    updates["updated_at"] = state.get("updated_at") or _now_iso()
+    assignments = ",".join(f"{key} = ?" for key in updates)
+    with con:
+        con.execute(f"update catalyst_source_endpoints set {assignments} where endpoint_id = ?", (*updates.values(), endpoint_id))
+    return dict(con.execute("select * from catalyst_source_endpoints where endpoint_id = ?", (endpoint_id,)).fetchone())
+
+
+def event_url_seen(con, ticker, canonical_url):
+    normalized = _ticker(ticker)
+    url = str(canonical_url or "").strip()
+    if not url:
+        raise ValueError("canonical url is required")
+    row = con.execute(
+        """select 1 from catalyst_ir_events e
+            join catalyst_research_jobs j on j.job_id = e.job_id
+            where e.ticker = ? and e.canonical_url = ? and j.status in ('completed','completed_partial')
+            limit 1""",
+        (normalized, url),
+    ).fetchone()
+    return row is not None
+
+
+def load_latest_gap_search_at(con, ticker, channel):
+    normalized = _ticker(ticker)
+    if channel not in _ENDPOINT_CHANNELS:
+        raise ValueError("endpoint channel is invalid")
+    row = con.execute(
+        """select a.completed_at from catalyst_search_attempts a
+            join catalyst_research_jobs j on j.job_id = a.job_id
+            where j.ticker = ? and a.search_purpose = 'incremental_gap_check' and a.completed_at is not null
+            order by a.completed_at desc limit 1""",
+        (normalized,),
+    ).fetchone()
+    return row[0] if row else None

@@ -16,6 +16,9 @@ EXPECTED_TABLES = {
     "catalyst_adapter_validations",
     "catalyst_ir_events",
     "catalyst_ir_classifications",
+    "catalyst_company_registry",
+    "catalyst_source_endpoints",
+    "catalyst_endpoint_checks",
 }
 
 
@@ -45,6 +48,49 @@ def _job(con, ticker="NVDA", status=None):
     if status == "running":
         repository.start_job(con, result["job_id"], "2026-09-04T00:01:00+00:00")
     return result
+
+
+def registry_payload(version=1, ticker="NVDA", **overrides):
+    payload = {
+        "ticker": ticker,
+        "company_name": "NVIDIA Corporation",
+        "cik": "1045810",
+        "official_domains": ["nvidianews.nvidia.com"],
+        "source_confidence": "high",
+        "registry_version": version,
+        "discovered_at": "2026-09-01T00:00:00+00:00",
+        "updated_at": "2026-09-01T00:00:00+00:00",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def endpoint_payload(ticker="NVDA", **overrides):
+    payload = {
+        "ticker": ticker,
+        "channel": "press_releases",
+        "endpoint_type": "rss",
+        "url": "https://nvidianews.nvidia.com/rss",
+        "domain": "nvidianews.nvidia.com",
+        "status": "unverified",
+        "confidence": "high",
+        "discovered_at": "2026-09-01T00:00:00+00:00",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def check_payload(endpoint_id, **overrides):
+    payload = {
+        "endpoint_id": endpoint_id,
+        "checked_at": "2026-09-08T00:00:00+00:00",
+        "outcome": "success",
+        "item_count": 3,
+        "new_item_count": 1,
+        "newest_item_at": "2026-09-07T12:00:00+00:00",
+    }
+    payload.update(overrides)
+    return payload
 
 
 def test_job_transition_and_terminal_immutability(tmp_path):
@@ -593,3 +639,281 @@ def test_source_execution_promotion_updates_existing_source_row_atomically(tmp_p
     assert updated["source_id"] == source["source_id"]
     assert con.execute("select count(*) from catalyst_ir_sources where source_id = ?", (source["source_id"],)).fetchone()[0] == 1
     assert con.execute("select acceptance_status, extraction_status from catalyst_ir_sources where source_id = ?", (source["source_id"],)).fetchone()[0:2] == ("accepted", "complete")
+
+
+def test_connect_adds_v1_1_registry_tables_and_columns(tmp_path):
+    con = repository.connect(tmp_path / "market.sqlite")
+    try:
+        tables = {row[0] for row in con.execute("select name from sqlite_master where type='table'")}
+        assert {
+            "catalyst_company_registry",
+            "catalyst_source_endpoints",
+            "catalyst_endpoint_checks",
+        } <= tables
+        job_columns = {row[1] for row in con.execute("pragma table_info(catalyst_research_jobs)")}
+        attempt_columns = {row[1] for row in con.execute("pragma table_info(catalyst_search_attempts)")}
+        source_columns = {row[1] for row in con.execute("pragma table_info(catalyst_ir_sources)")}
+        event_columns = {row[1] for row in con.execute("pragma table_info(catalyst_ir_events)")}
+        assert "mode" in job_columns
+        assert "search_purpose" in attempt_columns
+        assert {"endpoint_id", "discovery_method", "extraction_provider"} <= source_columns
+        assert {"endpoint_id", "external_guid", "discovery_method", "extraction_provider"} <= event_columns
+    finally:
+        con.close()
+
+
+def test_v1_database_migrates_additively_and_preserves_readable_rows(tmp_path):
+    db_path = tmp_path / "v1.sqlite"
+    con = repository.connect(db_path)
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    repository.save_finalized_observations(
+        con,
+        job["job_id"],
+        [{"id": 1, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": "Results", "url": "https://ir.example.test/results"}],
+        [{"id": 1, "earnings_state": "earnings", "classification_method": "manual"}],
+    )
+    repository.finalize_job(con, job["job_id"], {"status": "completed", "statistics": {"total": 1}})
+    adapter_job = _job(con, status="running")
+    candidate = repository.create_adapter_candidate(con, {"job_id": adapter_job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "source_url": "https://ir.example.test/news", "adapter": {}})
+    repository.record_adapter_validation(con, {"adapter_id": candidate["adapter_id"], "job_id": adapter_job["job_id"], "status": "passed", "report": {}})
+    repository.activate_adapter(con, candidate["adapter_id"], "2026-09-04T01:00:00+00:00")
+    before = repository.load_job_result(con, job["job_id"])
+    con.close()
+
+    raw = sqlite3.connect(db_path)
+    raw.execute("drop table catalyst_company_registry")
+    raw.execute("drop table catalyst_source_endpoints")
+    raw.execute("drop table catalyst_endpoint_checks")
+    raw.execute("alter table catalyst_research_jobs drop column mode")
+    raw.execute("alter table catalyst_search_attempts drop column search_purpose")
+    for column in ("endpoint_id", "discovery_method", "extraction_provider"):
+        raw.execute(f"alter table catalyst_ir_sources drop column {column}")
+    for column in ("endpoint_id", "external_guid", "discovery_method", "extraction_provider"):
+        raw.execute(f"alter table catalyst_ir_events drop column {column}")
+    raw.commit()
+    raw.close()
+
+    migrated = repository.connect(db_path)
+    tables = {row[0] for row in migrated.execute("select name from sqlite_master where type='table'")}
+    assert {
+        "catalyst_company_registry",
+        "catalyst_source_endpoints",
+        "catalyst_endpoint_checks",
+    } <= tables
+    assert "mode" in {row[1] for row in migrated.execute("pragma table_info(catalyst_research_jobs)")}
+    assert migrated.execute("pragma foreign_key_check").fetchall() == []
+    assert repository.load_job_result(migrated, job["job_id"]) == before
+    assert repository.load_active_adapter(migrated, "NVDA", "press_releases")["adapter_id"] == candidate["adapter_id"]
+    migrated.close()
+
+
+def test_registry_version_increments_without_deleting_endpoint_history(tmp_path):
+    con = repository.connect(tmp_path / "market.sqlite")
+    first = repository.save_company_registry(con, registry_payload(version=1))
+    endpoint = repository.upsert_source_endpoint(con, endpoint_payload(first["ticker"]))
+    repository.record_endpoint_check(con, check_payload(endpoint["endpoint_id"]))
+    second = repository.save_company_registry(con, registry_payload(version=2))
+    assert second["registry_version"] == 2
+    assert repository.load_source_endpoints(con, "NVDA")[0]["endpoint_id"] == endpoint["endpoint_id"]
+    assert con.execute("select count(*) from catalyst_endpoint_checks").fetchone()[0] == 1
+
+
+def test_registry_load_returns_none_and_round_trips_domains(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    assert repository.load_company_registry(con, "NVDA") is None
+    saved = repository.save_company_registry(con, registry_payload())
+    loaded = repository.load_company_registry(con, "nvda")
+    assert loaded["registry_version"] == 1
+    assert loaded["official_domains"] == saved["official_domains"]
+    assert "official_domains_json" not in loaded
+
+
+def test_registry_initial_version_must_be_one(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    with pytest.raises(ValueError, match="version"):
+        repository.save_company_registry(con, registry_payload(version=2))
+
+
+def test_registry_version_must_advance_by_one(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    repository.save_company_registry(con, registry_payload(version=1))
+    with pytest.raises(ValueError, match="version"):
+        repository.save_company_registry(con, registry_payload(version=3))
+    with pytest.raises(ValueError, match="version"):
+        repository.save_company_registry(con, registry_payload(version=1, company_name="Changed Name"))
+
+
+def test_registry_idempotent_rewrite_keeps_version_and_single_row(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    repository.save_company_registry(con, registry_payload(version=1))
+    again = repository.save_company_registry(con, registry_payload(version=1))
+    assert again["registry_version"] == 1
+    assert con.execute("select count(*) from catalyst_company_registry where ticker = 'NVDA'").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("overrides,match", [
+    ({"source_confidence": "certain"}, "confidence"),
+    ({"official_domains": []}, "domains"),
+    ({"official_domains": "nvidianews.nvidia.com"}, "domains"),
+    ({"registry_version": 0}, "version"),
+])
+def test_registry_rejects_invalid_payloads(tmp_path, overrides, match):
+    con = repository.connect(tmp_path / "db.sqlite")
+    with pytest.raises(ValueError, match=match):
+        repository.save_company_registry(con, registry_payload(**overrides))
+
+
+@pytest.mark.parametrize("overrides,match", [
+    ({"channel": "news"}, "channel"),
+    ({"endpoint_type": "html"}, "type"),
+    ({"status": "broken"}, "status"),
+    ({"confidence": "certain"}, "confidence"),
+    ({"domain": ""}, "domain"),
+])
+def test_endpoint_upsert_rejects_invalid_enums_and_missing_domain(tmp_path, overrides, match):
+    con = repository.connect(tmp_path / "db.sqlite")
+    with pytest.raises(ValueError, match=match):
+        repository.upsert_source_endpoint(con, endpoint_payload(**overrides))
+
+
+def test_duplicate_endpoint_upsert_reuses_identity_and_updates_fields(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    first = repository.upsert_source_endpoint(con, endpoint_payload())
+    second = repository.upsert_source_endpoint(con, endpoint_payload(status="active", confidence="medium"))
+    assert second["endpoint_id"] == first["endpoint_id"]
+    assert second["status"] == "active"
+    assert second["confidence"] == "medium"
+    assert con.execute("select count(*) from catalyst_source_endpoints").fetchone()[0] == 1
+    loaded = repository.load_source_endpoints(con, "NVDA", channel="press_releases")
+    assert len(loaded) == 1
+    assert loaded[0]["endpoint_id"] == first["endpoint_id"]
+
+
+def test_load_source_endpoints_filters_by_channel_and_statuses(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    repository.upsert_source_endpoint(con, endpoint_payload(url="https://a.test/rss", domain="a.test"))
+    repository.upsert_source_endpoint(con, endpoint_payload(channel="events_presentations", endpoint_type="atom", url="https://b.test/atom", domain="b.test", status="active"))
+    assert len(repository.load_source_endpoints(con, "NVDA")) == 2
+    assert len(repository.load_source_endpoints(con, "NVDA", channel="press_releases")) == 1
+    assert [item["channel"] for item in repository.load_source_endpoints(con, "NVDA", statuses={"active"})] == ["events_presentations"]
+    with pytest.raises(ValueError, match="statuses"):
+        repository.load_source_endpoints(con, "NVDA", statuses={"broken"})
+
+
+def test_endpoint_check_allows_null_job_id_and_rejects_negative_counts(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    endpoint = repository.upsert_source_endpoint(con, endpoint_payload())
+    check = repository.record_endpoint_check(con, check_payload(endpoint["endpoint_id"]))
+    assert check["job_id"] is None
+    assert check["check_id"].startswith("cec_")
+    assert con.execute("select count(*) from catalyst_endpoint_checks").fetchone()[0] == 1
+    with pytest.raises(ValueError, match="check item count"):
+        repository.record_endpoint_check(con, check_payload(endpoint["endpoint_id"], item_count=-1))
+    with pytest.raises(ValueError, match="new item count"):
+        repository.record_endpoint_check(con, check_payload(endpoint["endpoint_id"], new_item_count=-1))
+    with pytest.raises(ValueError, match="not found"):
+        repository.record_endpoint_check(con, check_payload("cse_missing"))
+
+
+def test_update_endpoint_health_touches_only_health_and_watermark_columns(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    endpoint = repository.upsert_source_endpoint(con, endpoint_payload())
+    updated = repository.update_endpoint_health(
+        con,
+        endpoint["endpoint_id"],
+        {"status": "failing", "consecutive_failures": 3, "last_error_code": "timeout", "last_checked_at": "2026-09-08T01:00:00+00:00"},
+    )
+    assert updated["status"] == "failing"
+    assert updated["consecutive_failures"] == 3
+    assert updated["last_error_code"] == "timeout"
+    assert updated["last_checked_at"] == "2026-09-08T01:00:00+00:00"
+    assert updated["domain"] == endpoint["domain"]
+    assert updated["discovered_at"] == endpoint["discovered_at"]
+    with pytest.raises(ValueError, match="not updatable"):
+        repository.update_endpoint_health(con, endpoint["endpoint_id"], {"domain": "evil.test"})
+    with pytest.raises(ValueError, match="failures"):
+        repository.update_endpoint_health(con, endpoint["endpoint_id"], {"consecutive_failures": -1})
+    with pytest.raises(ValueError, match="not found"):
+        repository.update_endpoint_health(con, "cse_missing", {"status": "active"})
+
+
+def test_terminal_job_rejects_source_provenance_writes(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    repository.finalize_job(con, job["job_id"], {"status": "completed"})
+    with pytest.raises(ValueError, match="terminal"):
+        repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news", "endpoint_id": "cse_x", "discovery_method": "search", "extraction_provider": "direct_http"})
+
+
+def test_invalid_discovery_method_and_extraction_provider_are_rejected(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    with pytest.raises(ValueError, match="discovery method"):
+        repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news", "discovery_method": "crawl"})
+    with pytest.raises(ValueError, match="extraction provider"):
+        repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news", "extraction_provider": "browser"})
+
+
+def test_event_provenance_columns_round_trip(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    endpoint = repository.upsert_source_endpoint(con, endpoint_payload())
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://nvidianews.nvidia.com/rss", "endpoint_id": endpoint["endpoint_id"], "discovery_method": "rss", "extraction_provider": "feed_metadata"})
+    assert source["endpoint_id"] == endpoint["endpoint_id"]
+    assert source["discovery_method"] == "rss"
+    repository.save_finalized_observations(
+        con,
+        job["job_id"],
+        [{"id": 1, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-09-01", "title": "Launch", "url": "https://nvidianews.nvidia.com/launch", "endpoint_id": endpoint["endpoint_id"], "external_guid": "guid-1", "discovery_method": "rss", "extraction_provider": "feed_metadata"}],
+        [{"id": 1, "earnings_state": "non_earnings", "classification_method": "manual"}],
+    )
+    page = repository.load_events_page(con, "NVDA", job["job_id"], 10, None)
+    event = page["events"][0]
+    assert event["endpoint_id"] == endpoint["endpoint_id"]
+    assert event["external_guid"] == "guid-1"
+    assert event["discovery_method"] == "rss"
+    assert event["extraction_provider"] == "feed_metadata"
+    result = repository.load_job_result(con, job["job_id"])
+    assert result["sources"][0]["endpoint_id"] == endpoint["endpoint_id"]
+
+
+def test_event_url_seen_only_counts_successful_persisted_events(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    good = _job(con, status="running")
+    good_source = repository.save_source(con, {"job_id": good["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/good"})
+    repository.save_finalized_observations(con, good["job_id"], [{"source_id": good_source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": "Good", "url": "https://ir.example.test/good-item"}], [])
+    repository.finalize_job(con, good["job_id"], {"status": "completed"})
+    bad = _job(con, status="running")
+    bad_source = repository.save_source(con, {"job_id": bad["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/bad"})
+    repository.save_finalized_observations(con, bad["job_id"], [{"source_id": bad_source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-02", "title": "Bad", "url": "https://ir.example.test/bad-item"}], [])
+    repository.finalize_job(con, bad["job_id"], {"status": "failed"})
+    assert repository.event_url_seen(con, "NVDA", "https://ir.example.test/good-item") is True
+    assert repository.event_url_seen(con, "NVDA", "https://ir.example.test/bad-item") is False
+    assert repository.event_url_seen(con, "NVDA", "https://ir.example.test/never") is False
+    assert repository.event_url_seen(con, "AAPL", "https://ir.example.test/good-item") is False
+    with pytest.raises(ValueError, match="url"):
+        repository.event_url_seen(con, "NVDA", "")
+
+
+def test_search_attempt_persists_purpose_and_latest_gap_search_at(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    repository.record_search_attempt(con, {"job_id": job["job_id"], "provider": "ddgs", "query": "nvidia news"})
+    assert con.execute("select search_purpose from catalyst_search_attempts where job_id = ?", (job["job_id"],)).fetchone()[0] == "source_discovery"
+    repository.record_search_attempt(con, {"job_id": job["job_id"], "provider": "ddgs", "query": "nvidia gap", "search_purpose": "incremental_gap_check", "completed_at": "2026-09-01T00:00:00+00:00"})
+    repository.record_search_attempt(con, {"job_id": job["job_id"], "provider": "ddgs", "query": "nvidia gap later", "search_purpose": "incremental_gap_check", "completed_at": "2026-09-05T00:00:00+00:00"})
+    assert repository.load_latest_gap_search_at(con, "NVDA", "press_releases") == "2026-09-05T00:00:00+00:00"
+    assert repository.load_latest_gap_search_at(con, "AAPL", "press_releases") is None
+    with pytest.raises(ValueError, match="purpose"):
+        repository.record_search_attempt(con, {"job_id": job["job_id"], "provider": "ddgs", "query": "x", "search_purpose": "crawl"})
+
+
+def test_create_job_persists_mode_and_validates_value(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = repository.create_job(con, {"ticker": "NVDA", "years": 1, "mode": "update"})
+    assert job["mode"] == "update"
+    assert con.execute("select mode from catalyst_research_jobs where job_id = ?", (job["job_id"],)).fetchone()[0] == "update"
+    assert _job(con)["mode"] == "research"
+    with pytest.raises(ValueError, match="mode"):
+        repository.create_job(con, {"ticker": "NVDA", "years": 1, "mode": "crawl"})

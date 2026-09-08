@@ -24,6 +24,9 @@ CATALYST_TABLES = (
     "catalyst_adapter_validations",
     "catalyst_ir_events",
     "catalyst_ir_classifications",
+    "catalyst_company_registry",
+    "catalyst_source_endpoints",
+    "catalyst_endpoint_checks",
 )
 
 
