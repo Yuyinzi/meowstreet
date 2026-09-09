@@ -1,3 +1,4 @@
+import time
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlsplit
@@ -21,6 +22,7 @@ FIRECRAWL_REASON_CODES = frozenset(
     }
 )
 MAX_ATTEMPTS = 2
+RETRY_DELAY_SECONDS = 2.0
 _METADATA_FINAL_URL_KEYS = ("url", "sourceURL", "source_url")
 _METADATA_TITLE_KEYS = ("title",)
 _METADATA_PUBLISHED_KEYS = ("publishedDate", "published_time", "published")
@@ -142,10 +144,12 @@ class FirecrawlExtractProvider:
         base_url: str | None = None,
         client: Any = None,
         client_factory: Any = None,
+        sleep: Any = None,
     ):
         self._api_key = api_key.strip() if isinstance(api_key, str) and api_key.strip() else None
         self._base_url = base_url
         self._client = client
+        self._sleep = sleep if callable(sleep) else time.sleep
         if self._client is None and self._api_key:
             factory = client_factory or _default_client
             self._client = factory(self._api_key, self._base_url)
@@ -169,6 +173,7 @@ class FirecrawlExtractProvider:
             except Exception as exc:
                 candidate = _classify_exception(exc)
                 if candidate.retryable and attempt < MAX_ATTEMPTS - 1:
+                    self._sleep(RETRY_DELAY_SECONDS)
                     continue
                 safe_error = candidate
                 break

@@ -4,6 +4,7 @@ import pytest
 
 from app.agents.catalyst_research.providers.firecrawl import FirecrawlExtractProvider
 from app.agents.catalyst_research.providers.firecrawl import FirecrawlProviderError
+from app.agents.catalyst_research.providers.firecrawl import RETRY_DELAY_SECONDS
 from app.agents.catalyst_research.providers.firecrawl import build_firecrawl_provider
 
 
@@ -126,7 +127,9 @@ def test_firecrawl_missing_sdk_is_stable_configuration_failure(monkeypatch):
     ],
 )
 def test_firecrawl_errors_are_stable(status, reason, disabled):
-    provider = FirecrawlExtractProvider(api_key="fc-test", client=FakeFirecrawlClient(error=StatusError(status)))
+    provider = FirecrawlExtractProvider(
+        api_key="fc-test", client=FakeFirecrawlClient(error=StatusError(status)), sleep=lambda _: None
+    )
 
     with pytest.raises(FirecrawlProviderError) as excinfo:
         provider.extract(URL)
@@ -140,7 +143,7 @@ def test_firecrawl_errors_are_stable(status, reason, disabled):
 
 def test_firecrawl_timeout_is_stable_retryable_and_redacted():
     client = FakeFirecrawlClient(error=TimeoutError("private upstream payload"))
-    provider = FirecrawlExtractProvider(api_key="fc-test", client=client)
+    provider = FirecrawlExtractProvider(api_key="fc-test", client=client, sleep=lambda _: None)
 
     with pytest.raises(FirecrawlProviderError) as error:
         provider.extract(URL)
@@ -155,7 +158,8 @@ def test_firecrawl_timeout_is_stable_retryable_and_redacted():
 
 def test_firecrawl_retryable_errors_retry_once_then_degrade():
     client = FakeFirecrawlClient(error=StatusError(503))
-    provider = FirecrawlExtractProvider(api_key="fc-test", client=client)
+    delays = []
+    provider = FirecrawlExtractProvider(api_key="fc-test", client=client, sleep=delays.append)
 
     with pytest.raises(FirecrawlProviderError) as error:
         provider.extract(URL)
@@ -163,6 +167,28 @@ def test_firecrawl_retryable_errors_retry_once_then_degrade():
     assert error.value.reason_code == "provider_error"
     assert error.value.retryable is True
     assert len(client.calls) == 2
+    assert delays == [RETRY_DELAY_SECONDS]
+
+
+def test_firecrawl_retry_succeeds_after_delay():
+    client = FakeFirecrawlClient(error=StatusError(429))
+    good = {"markdown": "# NVIDIA update", "metadata": {"sourceURL": URL, "title": "NVIDIA update"}}
+
+    def flaky_scrape(url, **kwargs):
+        client.calls.append((url, kwargs))
+        if len(client.calls) == 1:
+            raise client.error
+        return good
+
+    client.scrape = flaky_scrape
+    delays = []
+    provider = FirecrawlExtractProvider(api_key="fc-test", client=client, sleep=delays.append)
+
+    result = provider.extract(URL)
+
+    assert result["markdown"] == "# NVIDIA update"
+    assert len(client.calls) == 2
+    assert delays == [RETRY_DELAY_SECONDS]
 
 
 def test_firecrawl_authentication_errors_do_not_retry():
