@@ -209,7 +209,7 @@ def _event_dates(row, channel, *, published_at=None):
     return published, event_date, count_date
 
 
-def _event_candidate(row, *, ticker, channel, source, title, published, event_date, count_date, canonical_url, final_url, extraction_provider):
+def _event_candidate(row, *, ticker, channel, source, title, published, event_date, count_date, canonical_url, final_url, extraction_provider, content_hash=None):
     return {
         "ticker": ticker,
         "source_type": channel,
@@ -227,10 +227,11 @@ def _event_candidate(row, *, ticker, channel, source, title, published, event_da
         "discovery_method": _primary_discovery_method(row),
         "discovery_methods": list(row.get("discovery_methods") or []),
         "extraction_provider": extraction_provider,
+        "content_hash": content_hash,
     }
 
 
-def _source_payload(row, *, ticker, channel, job_id, url, final_url, acceptance_status, extraction_status, extraction_provider, verification_reason, checked_at, attempts=None):
+def _source_payload(row, *, ticker, channel, job_id, url, final_url, acceptance_status, extraction_status, extraction_provider, verification_reason, checked_at, attempts=None, content_hash=None):
     return {
         "job_id": job_id,
         "ticker": ticker,
@@ -247,11 +248,33 @@ def _source_payload(row, *, ticker, channel, job_id, url, final_url, acceptance_
         "checked_at": checked_at,
         "item_count": 1,
         "attempts": [dict(attempt) for attempt in attempts or [] if isinstance(attempt, Mapping)],
+        "content_hash": content_hash,
     }
 
 
 def _save_source(repository, connection, payload):
     return _repository_call(repository, connection, "save_source", payload)
+
+
+def _save_extraction_snapshot(repository, connection, result, *, url, final_url):
+    text = _fold(result.get("text"))
+    if not text or not callable(getattr(repository, "save_snapshot", None)):
+        return None
+    snapshot = {
+        "requested_url": url,
+        "final_url": final_url,
+        "content_type": "text/markdown",
+        "normalized": {
+            "text": text,
+            "title": result.get("title"),
+            "published_at": result.get("published_at"),
+        },
+        "snapshot_schema_version": "catalyst_extraction_v1",
+    }
+    html = result.get("html")
+    if isinstance(html, str) and html.strip():
+        snapshot["raw_html"] = html
+    return _repository_call(repository, connection, "save_snapshot", snapshot)
 
 
 def _advance_feed_watermark(rows, *, endpoint, repository, connection):
@@ -380,6 +403,7 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
         if result.get("status") == "extracted":
             published, event_date, count_date = _event_dates(row, channel, published_at=result.get("published_at"))
             final_url = result.get("final_url") or canonical_url
+            content_hash = _save_extraction_snapshot(repository, connection, result, url=canonical_url or "", final_url=final_url)
             source = _save_source(
                 repository,
                 connection,
@@ -396,6 +420,7 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
                     verification_reason=None,
                     checked_at=datetime.now(UTC).isoformat(),
                     attempts=result.get("attempts"),
+                    content_hash=content_hash,
                 ),
             )
             events.append(
@@ -411,6 +436,7 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
                     canonical_url=canonical_url,
                     final_url=final_url,
                     extraction_provider=result.get("extraction_provider") or "direct_http",
+                    content_hash=content_hash,
                 )
             )
             sources.append(source)

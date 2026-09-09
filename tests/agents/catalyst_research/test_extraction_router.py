@@ -47,6 +47,7 @@ def firecrawl_article(**overrides):
         "final_url": URL,
         "title": "NVIDIA Announces New Platform",
         "markdown": "NVIDIA announced a new platform in a press release for investors.",
+        "html": "<html><body>NVIDIA announced a new platform</body></html>",
         "published_at": "2026-09-07T12:00:00+00:00",
         "request_id": "fc-req-1",
         "provider": "firecrawl",
@@ -94,6 +95,7 @@ def test_router_uses_firecrawl_only_after_direct_failure():
     assert result["published_at"] == "2026-09-07T12:00:00+00:00"
     assert result["final_url"] == URL
     assert result["request_id"] == "fc-req-1"
+    assert result["html"] == "<html><body>NVIDIA announced a new platform</body></html>"
     assert result["attempts"] == [
         {"provider": "direct_http", "outcome": "request_failed"},
         {"provider": "firecrawl", "outcome": "extracted"},

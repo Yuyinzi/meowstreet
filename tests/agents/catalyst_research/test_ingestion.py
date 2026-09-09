@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -319,6 +320,25 @@ def test_ingest_search_candidate_uses_extraction_router(tmp_path):
     assert source["extraction_status"] == "complete"
     assert source["acceptance_status"] == "accepted"
     assert source["attempts"] == [{"provider": "direct_http", "outcome": "extracted"}]
+    assert source["content_hash"]
+    assert source["snapshot_hash"] == source["content_hash"]
+    assert event["content_hash"] == source["content_hash"]
+    snapshot = con.execute(
+        "select requested_url, normalized_json from catalyst_source_snapshots where content_hash = ?",
+        (source["content_hash"],),
+    ).fetchone()
+    assert snapshot is not None
+    assert snapshot["requested_url"] == URL
+    assert json.loads(snapshot["normalized_json"])["text"].startswith("NVIDIA announced a new platform")
+
+
+def test_ingest_extracted_event_persists_snapshot_once_for_identical_text(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = running_job(con)
+    router = make_router(result=direct_article())
+    run_ingest([search_candidate()], con, job["job_id"], router)
+    run_ingest([search_candidate(url=SECOND_URL)], con, job["job_id"], router)
+    assert con.execute("select count(*) from catalyst_source_snapshots").fetchone()[0] == 1
 
 
 def test_ingest_manual_review_saves_failed_source_without_event(tmp_path):
@@ -334,6 +354,7 @@ def test_ingest_manual_review_saves_failed_source_without_event(tmp_path):
     assert source["extraction_provider"] == "manual"
     assert source["acceptance_status"] == "ambiguous"
     assert source["attempts"] == [{"provider": "direct_http", "outcome": "metadata_missing"}]
+    assert source["content_hash"] is None
     saved = repository.load_job_result(con, job["job_id"])["sources"][0]
     assert saved["attempts"] == [{"provider": "direct_http", "outcome": "metadata_missing"}]
     assert con.execute("select count(*) from catalyst_ir_events").fetchone()[0] == 0

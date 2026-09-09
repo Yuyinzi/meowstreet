@@ -135,6 +135,7 @@ class ExtractionRouter:
             "title": (_fold(result.get("title")) or _fold(html_metadata.get("title")))[:_MAX_TITLE_CHARS],
             "published_at": _normalize_datetime(result.get("published_at")) or _normalize_datetime(html_metadata.get("published_at")) or _normalize_datetime(candidate.get("published_at")),
             "text": _fold(result.get("markdown"))[:_MAX_PROVIDER_TEXT_CHARS],
+            "html": result.get("html"),
             "extraction_provider": _FIRECRAWL_PROVIDER,
             "request_id": request_id,
             "attempts": attempts + [{"provider": _FIRECRAWL_PROVIDER, "outcome": "extracted"}],
