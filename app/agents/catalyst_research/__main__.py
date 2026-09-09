@@ -115,7 +115,10 @@ def _print_attention_summary(result):
         return
     print(f"manual review required ({len(attention)}):", file=sys.stderr)
     for source in attention:
-        print(f"  {source.get('source_type', 'unknown')}: {source.get('url', '')}", file=sys.stderr)
+        attempts = source.get("attempts") or []
+        last = attempts[-1] if attempts and isinstance(attempts[-1], dict) else {}
+        detail = f"{last.get('provider', '?')}: {last.get('outcome', '?')}" if last else "no attempts recorded"
+        print(f"  {source.get('source_type', 'unknown')}: {source.get('url', '')} [{detail}]", file=sys.stderr)
 
 
 def main(argv=None):

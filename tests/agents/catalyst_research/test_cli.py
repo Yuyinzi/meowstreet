@@ -320,8 +320,17 @@ def test_cli_prints_manual_review_summary_to_stderr(monkeypatch, capsys):
         "status": "completed_partial",
         "job_id": "cr_1",
         "sources": [
-            {"source_type": "earnings_results", "extraction_status": "failed", "url": "https://example.com/report.pdf"},
+            {
+                "source_type": "earnings_results",
+                "extraction_status": "failed",
+                "url": "https://example.com/report.pdf",
+                "attempts": [
+                    {"provider": "direct_http", "outcome": "request_failed"},
+                    {"provider": "firecrawl", "outcome": "metadata_missing"},
+                ],
+            },
             {"source_type": "press_releases", "extraction_status": "complete", "url": "https://example.com/news"},
+            {"source_type": "events_presentations", "extraction_status": "failed", "url": "https://example.com/event"},
         ],
     }
     _install(monkeypatch, result=result)
@@ -330,8 +339,9 @@ def test_cli_prints_manual_review_summary_to_stderr(monkeypatch, capsys):
 
     err = capsys.readouterr().err
     assert exit_code == 0
-    assert "manual review required (1):" in err
-    assert "  earnings_results: https://example.com/report.pdf" in err
+    assert "manual review required (2):" in err
+    assert "  earnings_results: https://example.com/report.pdf [firecrawl: metadata_missing]" in err
+    assert "  events_presentations: https://example.com/event [no attempts recorded]" in err
     assert "https://example.com/news\n" not in err
 
 

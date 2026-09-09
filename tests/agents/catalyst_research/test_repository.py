@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import UTC, datetime
 
@@ -656,7 +657,7 @@ def test_connect_adds_v1_1_registry_tables_and_columns(tmp_path):
         event_columns = {row[1] for row in con.execute("pragma table_info(catalyst_ir_events)")}
         assert "mode" in job_columns
         assert "search_purpose" in attempt_columns
-        assert {"endpoint_id", "discovery_method", "extraction_provider"} <= source_columns
+        assert {"endpoint_id", "discovery_method", "extraction_provider", "attempts_json"} <= source_columns
         assert {"endpoint_id", "external_guid", "discovery_method", "extraction_provider"} <= event_columns
     finally:
         con.close()
@@ -687,7 +688,7 @@ def test_v1_database_migrates_additively_and_preserves_readable_rows(tmp_path):
     raw.execute("drop table catalyst_endpoint_checks")
     raw.execute("alter table catalyst_research_jobs drop column mode")
     raw.execute("alter table catalyst_search_attempts drop column search_purpose")
-    for column in ("endpoint_id", "discovery_method", "extraction_provider"):
+    for column in ("endpoint_id", "discovery_method", "extraction_provider", "attempts_json"):
         raw.execute(f"alter table catalyst_ir_sources drop column {column}")
     for column in ("endpoint_id", "external_guid", "discovery_method", "extraction_provider"):
         raw.execute(f"alter table catalyst_ir_events drop column {column}")
@@ -702,10 +703,44 @@ def test_v1_database_migrates_additively_and_preserves_readable_rows(tmp_path):
         "catalyst_endpoint_checks",
     } <= tables
     assert "mode" in {row[1] for row in migrated.execute("pragma table_info(catalyst_research_jobs)")}
+    assert "attempts_json" in {row[1] for row in migrated.execute("pragma table_info(catalyst_ir_sources)")}
     assert migrated.execute("pragma foreign_key_check").fetchall() == []
     assert repository.load_job_result(migrated, job["job_id"]) == before
     assert repository.load_active_adapter(migrated, "NVDA", "press_releases")["adapter_id"] == candidate["adapter_id"]
     migrated.close()
+
+
+def test_save_source_persists_extraction_attempts(tmp_path):
+    con = repository.connect(tmp_path / "market_data.sqlite")
+    job = _job(con, status="running")
+    attempts = [
+        {"provider": "direct_http", "outcome": "request_failed"},
+        {"provider": "firecrawl", "outcome": "metadata_missing"},
+    ]
+    source = repository.save_source(
+        con,
+        {
+            "job_id": job["job_id"],
+            "ticker": "NVDA",
+            "source_type": "press_releases",
+            "url": "https://ir.example.test/news",
+            "extraction_status": "failed",
+            "attempts": attempts,
+        },
+    )
+    assert source["attempts"] == attempts
+    stored = con.execute("select attempts_json from catalyst_ir_sources where source_id = ?", (source["source_id"],)).fetchone()[0]
+    assert json.loads(stored) == attempts
+
+
+def test_save_source_without_attempts_defaults_to_empty_list(tmp_path):
+    con = repository.connect(tmp_path / "market_data.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(
+        con,
+        {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"},
+    )
+    assert source["attempts"] == []
 
 
 def test_registry_version_increments_without_deleting_endpoint_history(tmp_path):

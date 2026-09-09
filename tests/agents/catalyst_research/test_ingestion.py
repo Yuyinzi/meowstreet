@@ -318,6 +318,7 @@ def test_ingest_search_candidate_uses_extraction_router(tmp_path):
     assert source["extraction_provider"] == "direct_http"
     assert source["extraction_status"] == "complete"
     assert source["acceptance_status"] == "accepted"
+    assert source["attempts"] == [{"provider": "direct_http", "outcome": "extracted"}]
 
 
 def test_ingest_manual_review_saves_failed_source_without_event(tmp_path):
@@ -332,6 +333,9 @@ def test_ingest_manual_review_saves_failed_source_without_event(tmp_path):
     assert source["extraction_status"] == "failed"
     assert source["extraction_provider"] == "manual"
     assert source["acceptance_status"] == "ambiguous"
+    assert source["attempts"] == [{"provider": "direct_http", "outcome": "metadata_missing"}]
+    saved = repository.load_job_result(con, job["job_id"])["sources"][0]
+    assert saved["attempts"] == [{"provider": "direct_http", "outcome": "metadata_missing"}]
     assert con.execute("select count(*) from catalyst_ir_events").fetchone()[0] == 0
 
 

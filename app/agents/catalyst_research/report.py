@@ -27,6 +27,18 @@ def _channel_lines(statistics):
     return lines
 
 
+def _attempts_detail(source):
+    attempts = source.get("attempts")
+    if not isinstance(attempts, list):
+        return None
+    parts = [
+        f"{attempt.get('provider', '?')}: {attempt.get('outcome', '?')}"
+        for attempt in attempts
+        if isinstance(attempt, Mapping)
+    ]
+    return "; ".join(parts) if parts else None
+
+
 def render_report(result):
     if not isinstance(result, Mapping):
         raise ValueError("result is required")
@@ -53,7 +65,10 @@ def render_report(result):
     if attention:
         for source in attention:
             reason = _text(source.get("verification_reason"))
-            suffix = f" ({reason})" if reason and reason != "manual_review_required" else ""
+            detail = _attempts_detail(source) or (
+                reason if reason and reason != "manual_review_required" else None
+            )
+            suffix = f" — {detail}" if detail else ""
             lines.append(f"- [{source.get('source_type', 'unknown')}] {source.get('url', '')}{suffix}")
     else:
         lines.append("- none")

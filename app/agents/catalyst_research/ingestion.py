@@ -230,7 +230,7 @@ def _event_candidate(row, *, ticker, channel, source, title, published, event_da
     }
 
 
-def _source_payload(row, *, ticker, channel, job_id, url, final_url, acceptance_status, extraction_status, extraction_provider, verification_reason, checked_at):
+def _source_payload(row, *, ticker, channel, job_id, url, final_url, acceptance_status, extraction_status, extraction_provider, verification_reason, checked_at, attempts=None):
     return {
         "job_id": job_id,
         "ticker": ticker,
@@ -246,6 +246,7 @@ def _source_payload(row, *, ticker, channel, job_id, url, final_url, acceptance_
         "verification_reason": verification_reason,
         "checked_at": checked_at,
         "item_count": 1,
+        "attempts": [dict(attempt) for attempt in attempts or [] if isinstance(attempt, Mapping)],
     }
 
 
@@ -394,6 +395,7 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
                     extraction_provider=result.get("extraction_provider") or "direct_http",
                     verification_reason=None,
                     checked_at=datetime.now(UTC).isoformat(),
+                    attempts=result.get("attempts"),
                 ),
             )
             events.append(
@@ -429,6 +431,7 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
                 extraction_provider=result.get("extraction_provider") or "manual",
                 verification_reason="manual_review_required",
                 checked_at=datetime.now(UTC).isoformat(),
+                attempts=result.get("attempts"),
             ),
         )
         sources.append(source)

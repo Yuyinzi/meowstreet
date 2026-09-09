@@ -64,7 +64,18 @@ def test_render_report_includes_warnings_and_next_actions():
 def test_render_report_shows_non_default_failure_reason():
     report = render_report(result(sources=[failed_source(reason="parse_failed")]))
 
-    assert "(parse_failed)" in report
+    assert "— parse_failed" in report
+
+
+def test_render_report_shows_attempt_outcomes_for_debugging():
+    source = failed_source()
+    source["attempts"] = [
+        {"provider": "direct_http", "outcome": "request_failed"},
+        {"provider": "firecrawl", "outcome": "metadata_missing"},
+    ]
+    report = render_report(result(sources=[source]))
+
+    assert "— direct_http: request_failed; firecrawl: metadata_missing" in report
 
 
 @pytest.mark.parametrize("bad", [None, [], "result", 42])

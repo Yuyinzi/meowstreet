@@ -195,7 +195,8 @@ def connect(db_path=DEFAULT_DB_PATH):
             checked_at text,
             endpoint_id text,
             discovery_method text,
-            extraction_provider text
+            extraction_provider text,
+            attempts_json text
         );
         create table if not exists catalyst_source_snapshots (
             content_hash text primary key,
@@ -354,6 +355,7 @@ def _migrate_v1_1_schema(con):
     for column in ("endpoint_id", "discovery_method", "extraction_provider"):
         _ensure_column(con, "catalyst_ir_sources", column, "text")
     _ensure_column(con, "catalyst_ir_sources", "external_guid", "text")
+    _ensure_column(con, "catalyst_ir_sources", "attempts_json", "text")
     event_sql = con.execute("select sql from sqlite_master where type = 'table' and name = 'catalyst_ir_events'").fetchone()
     if event_sql is not None and "'earnings_results'" not in event_sql[0]:
         con.execute("pragma legacy_alter_table = on")
@@ -776,6 +778,7 @@ def _source_row(con, source):
         "snapshot_hash": source.get("snapshot_hash") if "snapshot_hash" in source else source.get("content_hash"), "truncation_reason": source.get("truncation_reason"),
         "discovery_provider": source.get("discovery_provider"), "execution_path": source.get("execution_path"), "checked_at": source.get("checked_at"),
         "endpoint_id": source.get("endpoint_id"), "external_guid": source.get("external_guid"), "discovery_method": discovery_method, "extraction_provider": extraction_provider,
+        "attempts_json": _json(source.get("attempts") or []),
     }
     if row["source_type"] not in _SOURCE_TYPES:
         raise ValueError("source type is invalid")
@@ -794,8 +797,9 @@ def save_source(con, source):
         """insert into catalyst_ir_sources(
             source_id,job_id,ticker,source_type,url,final_url,acceptance_status,extraction_status,active_adapter_id,adapter_version,executor_version,
             evidence_result_ids_json,requested_start,requested_end,coverage_start,coverage_end,coverage_continuous,verification_reason,page_count,item_count,
-            content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at,endpoint_id,external_guid,discovery_method,extraction_provider
-        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
+            content_hash,snapshot_hash,truncation_reason,discovery_provider,execution_path,checked_at,endpoint_id,external_guid,discovery_method,extraction_provider,
+            attempts_json
+        ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
             select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
         )""",
             (*tuple(row.values()), row["job_id"]),
@@ -803,6 +807,7 @@ def save_source(con, source):
         if cursor.rowcount != 1:
             raise ValueError(f"research job {row['job_id']} is terminal")
     row["evidence_result_ids"] = _decode(row.pop("evidence_result_ids_json"))
+    row["attempts"] = _decode(row.pop("attempts_json")) or []
     return row
 
 
@@ -919,6 +924,7 @@ def activate_adapter_with_source(con, adapter_id, activated_at, source):
             )
             saved = _dict(atomic.execute("select * from catalyst_ir_sources where source_id = ?", (row["source_id"],)).fetchone())
             saved["evidence_result_ids"] = _decode(saved.pop("evidence_result_ids_json"))
+            saved["attempts"] = _decode(saved.pop("attempts_json")) or []
             if saved.get("coverage_continuous") is not None:
                 saved["coverage_continuous"] = bool(saved["coverage_continuous"])
         activate_adapter(atomic, adapter_id, activated_at)
@@ -976,8 +982,9 @@ def mark_adapter_stale_with_source(con, adapter_id, stale_at, source):
         else:
             assignments = ",".join(f"{key} = ?" for key in row if key != "source_id")
             atomic.execute(f"update catalyst_ir_sources set {assignments} where source_id = ? and job_id = ?", tuple(value for key, value in row.items() if key != "source_id") + (row["source_id"], row["job_id"]))
-            saved = _decode_row(atomic.execute("select * from catalyst_ir_sources where source_id = ?", (row["source_id"],)).fetchone(), ("evidence_result_ids_json",))
+            saved = _decode_row(atomic.execute("select * from catalyst_ir_sources where source_id = ?", (row["source_id"],)).fetchone(), ("evidence_result_ids_json", "attempts_json"))
             saved["evidence_result_ids"] = saved.pop("evidence_result_ids_json")
+            saved["attempts"] = saved.pop("attempts_json") or []
         changed = atomic.execute("update catalyst_source_adapters set state = 'stale', stale_at = ? where adapter_id = ? and state = 'active'", (stale_at, adapter_id)).rowcount
         if changed != 1:
             raise ValueError(f"adapter {adapter_id} could not be marked stale")
@@ -1186,9 +1193,10 @@ def load_job_result_schema_version(con, job_id):
 
 def load_job_result(con, job_id):
     job = _job(con, job_id)
-    sources = [_decode_row(row, ("evidence_result_ids_json",)) for row in con.execute("select * from catalyst_ir_sources where job_id = ? order by source_type, source_id", (job_id,))]
+    sources = [_decode_row(row, ("evidence_result_ids_json", "attempts_json")) for row in con.execute("select * from catalyst_ir_sources where job_id = ? order by source_type, source_id", (job_id,))]
     for source in sources:
         source["evidence_result_ids"] = source.pop("evidence_result_ids_json")
+        source["attempts"] = source.pop("attempts_json") or []
         if source.get("coverage_continuous") is not None:
             source["coverage_continuous"] = bool(source["coverage_continuous"])
     schema_version = load_job_result_schema_version(con, job_id)
