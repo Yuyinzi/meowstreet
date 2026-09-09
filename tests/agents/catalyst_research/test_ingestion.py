@@ -337,8 +337,57 @@ def test_ingest_extracted_event_persists_snapshot_once_for_identical_text(tmp_pa
     job = running_job(con)
     router = make_router(result=direct_article())
     run_ingest([search_candidate()], con, job["job_id"], router)
-    run_ingest([search_candidate(url=SECOND_URL)], con, job["job_id"], router)
+    run_ingest([search_candidate(url=SECOND_URL, title="NVIDIA Different Story")], con, job["job_id"], router)
     assert con.execute("select count(*) from catalyst_source_snapshots").fetchone()[0] == 1
+
+
+def test_ingest_skips_extraction_when_title_matches_existing_event(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = running_job(con)
+    first_router = make_router(result=direct_article())
+    first = run_ingest([search_candidate()], con, job["job_id"], first_router)
+    repository.save_finalized_observations(con, job["job_id"], first["events"], [])
+
+    second_router = make_router(result=direct_article())
+    result = run_ingest([search_candidate(url=SECOND_URL)], con, job["job_id"], second_router)
+
+    assert result["skipped_duplicates"] == 1
+    assert result["events"] == []
+    assert result["sources"] == []
+    assert second_router._direct_extractor.calls == []
+
+
+def test_ingest_skips_within_run_title_duplicates_after_first_extraction(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = running_job(con)
+    router = make_router(result=direct_article())
+    result = run_ingest(
+        [search_candidate(), search_candidate(url=SECOND_URL)],
+        con,
+        job["job_id"],
+        router,
+    )
+    assert result["skipped_duplicates"] == 1
+    assert len(result["events"]) == 1
+    assert len(router._direct_extractor.calls) == 1
+
+
+def test_ingest_title_duplicate_check_ignores_site_prefix_variants(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = running_job(con)
+    router = make_router(result=direct_article(title="NVIDIA Corporation - NVIDIA Announces New Platform"))
+    first = run_ingest([search_candidate()], con, job["job_id"], router)
+    repository.save_finalized_observations(con, job["job_id"], first["events"], [])
+
+    second_router = make_router(result=direct_article())
+    result = run_ingest(
+        [search_candidate(url=SECOND_URL, title="NVIDIA Corporation - NVIDIA Announces New Platform")],
+        con,
+        job["job_id"],
+        second_router,
+    )
+    assert result["skipped_duplicates"] == 1
+    assert second_router._direct_extractor.calls == []
 
 
 def test_ingest_manual_review_saves_failed_source_without_event(tmp_path):
@@ -384,17 +433,23 @@ def test_ingest_persists_endpoint_guid_discovery_and_provider_provenance(tmp_pat
 def test_ingest_url_cap_sets_unseen_url_limit_and_leaves_later_candidates_unprocessed(tmp_path):
     con = repository.connect(tmp_path / "db.sqlite")
     job = running_job(con)
-    router = make_router(result=direct_article())
+    direct_calls = []
+
+    def direct(url, **kwargs):
+        direct_calls.append(url)
+        return direct_article(title=f"NVIDIA Story for {url}")
+
+    router = ExtractionRouter(direct)
     rows = [
-        search_candidate(url=THIRD_URL, result_id=3),
-        search_candidate(url=URL, result_id=1),
-        search_candidate(url=SECOND_URL, result_id=2),
+        search_candidate(url=THIRD_URL, result_id=3, title="NVIDIA Third Story"),
+        search_candidate(url=URL, result_id=1, title="NVIDIA First Story"),
+        search_candidate(url=SECOND_URL, result_id=2, title="NVIDIA Second Story"),
     ]
     result = run_ingest(rows, con, job["job_id"], router, max_urls=2)
     assert result["attempted"] == 2
     assert result["truncated"] is True
     assert "unseen_url_limit" in result["warnings"]
-    assert len(router._direct_extractor.calls) == 2
+    assert len(direct_calls) == 2
     assert con.execute("select count(*) from catalyst_ir_sources where job_id = ?", (job["job_id"],)).fetchone()[0] == 2
 
 
@@ -498,6 +553,7 @@ def test_ingest_empty_candidate_list_returns_zero_counts(tmp_path):
         "sources": [],
         "attempted": 0,
         "skipped_seen": 0,
+        "skipped_duplicates": 0,
         "manual_review": 0,
         "truncated": False,
         "warnings": [],

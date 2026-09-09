@@ -1186,6 +1186,14 @@ def finalize_job(con, job_id, result):
             raise ValueError(f"research job {job_id} cannot finalize from {current['status']}; job must be running")
 
 
+def list_event_normalized_titles(con, ticker):
+    normalized = _ticker(ticker)
+    return [
+        row[0]
+        for row in con.execute("select normalized_title from catalyst_ir_events where ticker = ?", (normalized,))
+    ]
+
+
 def load_job_result_schema_version(con, job_id):
     job = _job(con, job_id)
     return RESULT_SCHEMA_VERSION if job["research_version"] == RESEARCH_VERSION else LEGACY_RESULT_SCHEMA_VERSION

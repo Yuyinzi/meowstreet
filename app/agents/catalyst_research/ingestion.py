@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from datetime import UTC, date, datetime
 
 from app.agents.catalyst_research.domain import canonicalize_public_url
+from app.agents.catalyst_research.extraction.articles import strip_title_site_prefix
 
 
 _CHANNELS = {"press_releases", "events_presentations", "earnings_results"}
@@ -20,6 +21,15 @@ def _normalized_ticker(candidate):
 
 def _normalized_title(title):
     return _fold(title).casefold()
+
+
+def _seen_event_titles(repository, connection, ticker, company):
+    if not callable(getattr(repository, "list_event_normalized_titles", None)):
+        return None
+    titles = _repository_call(repository, connection, "list_event_normalized_titles", ticker)
+    if not isinstance(titles, list):
+        return None
+    return {_normalized_title(strip_title_site_prefix(title, company)) for title in titles}
 
 
 def _date_value(value):
@@ -331,10 +341,12 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
     sources = []
     attempted = 0
     skipped_seen = 0
+    skipped_duplicates = 0
     manual_review = 0
     warnings = []
     truncated = False
     processed = []
+    seen_titles = _seen_event_titles(repository, connection, ticker, company)
     for row in rows:
         if attempted >= max_urls:
             truncated = True
@@ -388,9 +400,16 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
                     extraction_provider="feed_metadata",
                 )
             )
+            if seen_titles is not None:
+                seen_titles.add(_normalized_title(strip_title_site_prefix(row.get("title"), company)))
             sources.append(source)
             attempted += 1
             continue
+        if seen_titles is not None and _fold(row.get("title")):
+            candidate_title = _normalized_title(strip_title_site_prefix(row.get("title"), company))
+            if candidate_title in seen_titles:
+                skipped_duplicates += 1
+                continue
         extraction_input = {
             "url": canonical_url,
             "channel": channel,
@@ -439,6 +458,8 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
                     content_hash=content_hash,
                 )
             )
+            if seen_titles is not None:
+                seen_titles.add(_normalized_title(_fold(result.get("title"))))
             sources.append(source)
             attempted += 1
             continue
@@ -470,6 +491,7 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
         "sources": sources,
         "attempted": attempted,
         "skipped_seen": skipped_seen,
+        "skipped_duplicates": skipped_duplicates,
         "manual_review": manual_review,
         "truncated": truncated,
         "warnings": warnings,

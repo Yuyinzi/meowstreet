@@ -743,6 +743,20 @@ def test_save_source_without_attempts_defaults_to_empty_list(tmp_path):
     assert source["attempts"] == []
 
 
+def test_list_event_normalized_titles_returns_ticker_scoped_titles(tmp_path):
+    con = repository.connect(tmp_path / "market_data.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    repository.save_finalized_observations(
+        con,
+        job["job_id"],
+        [{"id": 1, "source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": "NVIDIA Announces Results", "url": "https://ir.example.test/results"}],
+        [],
+    )
+    assert repository.list_event_normalized_titles(con, "NVDA") == ["nvidia announces results"]
+    assert repository.list_event_normalized_titles(con, "AAPL") == []
+
+
 def test_registry_version_increments_without_deleting_endpoint_history(tmp_path):
     con = repository.connect(tmp_path / "market.sqlite")
     first = repository.save_company_registry(con, registry_payload(version=1))
