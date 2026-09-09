@@ -249,3 +249,50 @@ def test_approved_domains_must_be_non_empty_strings(approved_domains):
 def test_candidate_must_be_a_mapping():
     with pytest.raises(ValueError, match="candidate is invalid"):
         extract(ARTICLE_HTML, candidate="not-a-mapping")
+
+
+def test_date_container_text_fallback_after_time_element():
+    html = """<html><head><meta property="og:title" content="Container Date Story" /></head>
+<body><h1>Visible Heading</h1><div class="article-date">   May 20, 2026   </div>""" + BODY + "</body></html>"
+
+    result = extract(html)
+
+    assert result["published_at"] == "2026-05-20T00:00:00+00:00"
+
+
+def test_itemprop_date_published_content_attribute_is_used():
+    html = """<html><head><meta property="og:title" content="Itemprop Story" /></head>
+<body><h1>Visible Heading</h1><span itemprop="datePublished" content="2026-08-15T08:00:00Z">August 15</span>""" + BODY + "</body></html>"
+
+    result = extract(html)
+
+    assert result["published_at"] == "2026-08-15T08:00:00+00:00"
+
+
+def test_higher_priority_date_sources_beat_date_container():
+    html = """<html><head>
+<meta property="og:title" content="Priority Story" />
+<meta property="article:published_time" content="2026-09-07T12:00:00Z" />
+</head><body><h1>Visible Heading</h1><div class="article-date">May 20, 2026</div>""" + BODY + "</body></html>"
+
+    result = extract(html)
+
+    assert result["published_at"] == "2026-09-07T12:00:00+00:00"
+
+
+def test_unparseable_date_container_falls_through_to_candidate():
+    html = """<html><head><meta property="og:title" content="Fallback Story" /></head>
+<body><h1>Visible Heading</h1><div class="article-date">coming soon</div>""" + BODY + "</body></html>"
+    candidate = {"published_at": "2026-06-01"}
+
+    result = extract(html, candidate=candidate)
+
+    assert result["published_at"] == "2026-06-01T00:00:00+00:00"
+
+
+def test_oversized_date_container_text_is_skipped():
+    html = """<html><head><meta property="og:title" content="Long Story" /></head>
+<body><h1>Visible Heading</h1><div class="article-date">May 20, 2026 """ + "padding " * 20 + "</div>" + BODY + "</body></html>"
+
+    with pytest.raises(ValueError, match="metadata_missing"):
+        extract(html)

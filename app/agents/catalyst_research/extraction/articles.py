@@ -17,6 +17,10 @@ _MAX_JSON_LD_CHARS = 100_000
 _MAX_TITLE_CHARS = 500
 _MAX_TEXT_CHARS = 20_000
 _MIN_TEXT_CHARS = 20
+_MAX_DATE_TEXT_CHARS = 60
+_MAX_DATE_CONTAINERS = 12
+_HUMAN_DATE_FORMATS = ("%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y")
+_DATE_MARKER_TOKENS = ("date", "published", "pubdate")
 
 
 def _fold(value):
@@ -52,9 +56,20 @@ def _normalize_datetime(value):
         try:
             parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
         except ValueError:
+            parsed = None
+        if parsed is None:
             try:
                 parsed = parsedate_to_datetime(cleaned)
             except (TypeError, ValueError):
+                parsed = None
+        if parsed is None:
+            for date_format in _HUMAN_DATE_FORMATS:
+                try:
+                    parsed = datetime.strptime(cleaned, date_format)
+                    break
+                except ValueError:
+                    continue
+            else:
                 return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
@@ -171,6 +186,33 @@ def _time_element_value(soup):
     return _fold(value) or None
 
 
+def _date_container_marker(tag):
+    itemprop = tag.get("itemprop")
+    if itemprop and str(itemprop).casefold() in {"datepublished", "datecreated", "datemodified"}:
+        return True
+    markers = []
+    for attribute in ("class", "id", "rel"):
+        value = tag.get(attribute)
+        if isinstance(value, list):
+            markers.extend(str(part) for part in value)
+        elif value:
+            markers.append(str(value))
+    joined = " ".join(markers).casefold()
+    return any(token in joined for token in _DATE_MARKER_TOKENS)
+
+
+def _date_container_value(soup):
+    containers = soup.find_all(_date_container_marker, limit=_MAX_DATE_CONTAINERS)
+    for tag in containers:
+        value = tag.get("content") or tag.get("datetime") or tag.get_text(" ")
+        folded = _fold(value)
+        if not folded or len(folded) > _MAX_DATE_TEXT_CHARS:
+            continue
+        if _normalize_datetime(folded):
+            return folded
+    return None
+
+
 def _visible_text(soup, max_chars):
     for element in soup(["script", "style", "noscript"]):
         element.decompose()
@@ -223,6 +265,7 @@ def extract_direct_article(url, *, http_client, approved_domains, candidate=None
         json_ld["published_at"]
         or _normalize_datetime(_meta_content(soup, "article:published_time", "og:published_time", "article:modified_time"))
         or _normalize_datetime(_time_element_value(soup))
+        or _normalize_datetime(_date_container_value(soup))
         or _normalize_datetime(candidate.get("published_at"))
     )
     text = _visible_text(soup, max_text_chars)
