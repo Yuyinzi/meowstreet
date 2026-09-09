@@ -2,7 +2,7 @@ import re
 from collections.abc import Mapping
 
 from app.agents.catalyst_research.domain import canonicalize_public_url, url_host
-from app.agents.catalyst_research.extraction.articles import _approved_domains, _has_channel_evidence, _has_company_evidence, _host_in_domains, _normalize_datetime, parse_article_metadata
+from app.agents.catalyst_research.extraction.articles import _approved_domains, _has_channel_evidence, _has_company_evidence, _host_in_domains, _normalize_datetime, parse_article_metadata, strip_title_site_prefix
 from app.agents.catalyst_research.providers.firecrawl import FirecrawlProviderError
 
 
@@ -132,7 +132,7 @@ class ExtractionRouter:
             "status": "extracted",
             "url": url,
             "final_url": final_url,
-            "title": (_fold(result.get("title")) or _fold(html_metadata.get("title")))[:_MAX_TITLE_CHARS],
+            "title": strip_title_site_prefix(_fold(result.get("title")) or _fold(html_metadata.get("title")), company)[:_MAX_TITLE_CHARS],
             "published_at": _normalize_datetime(result.get("published_at")) or _normalize_datetime(html_metadata.get("published_at")) or _normalize_datetime(candidate.get("published_at")),
             "text": _fold(result.get("markdown"))[:_MAX_PROVIDER_TEXT_CHARS],
             "html": result.get("html"),

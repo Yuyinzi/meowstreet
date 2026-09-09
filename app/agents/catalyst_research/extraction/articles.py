@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -22,6 +23,39 @@ _MAX_DATE_TEXT_CHARS = 60
 _MAX_DATE_CONTAINERS = 12
 _HUMAN_DATE_FORMATS = ("%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y")
 _DATE_MARKER_TOKENS = ("date", "published", "pubdate")
+_TITLE_PREFIX_SEPARATORS = (" - ", " | ", " — ", " – ")
+_CORPORATE_TOKENS = frozenset(
+    {"corp", "corporation", "inc", "incorporated", "ltd", "limited", "co", "company", "plc", "group", "holdings", "holding", "llc", "lp", "nv", "sa", "ag"}
+)
+
+
+def _name_anchor(value):
+    tokens = re.sub(r"[^a-z0-9 ]", " ", str(value or "").casefold()).split()
+    return " ".join(token for token in tokens if token not in _CORPORATE_TOKENS)
+
+
+def strip_title_site_prefix(title, company):
+    folded = _fold(title)
+    if not folded or not isinstance(company, Mapping):
+        return folded
+    anchors = {
+        anchor
+        for anchor in (_name_anchor(company.get("company_name") or company.get("name")), _name_anchor(company.get("ticker")))
+        if anchor
+    }
+    if not anchors:
+        return folded
+    split = None
+    for separator in _TITLE_PREFIX_SEPARATORS:
+        index = folded.find(separator)
+        if index > 0 and (split is None or index < split[0]):
+            split = (index, separator)
+    if split is None:
+        return folded
+    index, separator = split
+    if _name_anchor(folded[:index]) in anchors and folded[index + len(separator):].strip():
+        return folded[index + len(separator):].strip()
+    return folded
 
 
 def _fold(value):
@@ -271,6 +305,8 @@ def extract_direct_article(url, *, http_client, approved_domains, candidate=None
         except ValueError:
             raise ValueError("unsafe_metadata_url") from None
     title = metadata["title"] or _fold(candidate.get("title")) or None
+    if title:
+        title = strip_title_site_prefix(title, company)
     published_at = metadata["published_at"] or _normalize_datetime(candidate.get("published_at"))
     text = _visible_text(soup, max_text_chars)
     if len(text) < _MIN_TEXT_CHARS:

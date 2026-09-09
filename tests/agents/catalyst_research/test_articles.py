@@ -2,6 +2,7 @@ import httpx
 import pytest
 
 from app.agents.catalyst_research.extraction.articles import extract_direct_article
+from app.agents.catalyst_research.extraction.articles import strip_title_site_prefix
 from app.http_client import HttpClient
 
 
@@ -36,6 +37,42 @@ def extract(html, *, client=None, candidate=None, company=None, channel=None, ap
         resolver=RESOLVER,
         **kwargs,
     )
+
+
+def test_site_name_prefix_is_stripped_from_title():
+    html = ARTICLE_HTML.replace(
+        'content="NVIDIA Announces New Platform"',
+        'content="NVIDIA Corporation - NVIDIA Announces New Platform"',
+    )
+    result = extract(html, company=COMPANY, channel="press_releases")
+
+    assert result["title"] == "NVIDIA Announces New Platform"
+
+
+def test_unrelated_title_prefix_is_kept():
+    html = ARTICLE_HTML.replace(
+        'content="NVIDIA Announces New Platform"',
+        'content="Tech Blog | NVIDIA Announces New Platform"',
+    )
+    result = extract(html, company=COMPANY, channel="press_releases")
+
+    assert result["title"] == "Tech Blog | NVIDIA Announces New Platform"
+
+
+@pytest.mark.parametrize(
+    ("title", "company", "expected"),
+    [
+        ("NVIDIA Corporation - Earnings", {"company_name": "NVIDIA CORP"}, "Earnings"),
+        ("NVDA | Earnings", {"ticker": "NVDA"}, "Earnings"),
+        ("NVIDIA Corporation — Earnings", {"company_name": "NVIDIA Corporation"}, "Earnings"),
+        ("NVIDIA Announces New Platform", COMPANY, "NVIDIA Announces New Platform"),
+        ("NVIDIA Corporation -", COMPANY, "NVIDIA Corporation -"),
+        ("NVIDIA Corporation - Earnings", None, "NVIDIA Corporation - Earnings"),
+        ("NVIDIA Corporation - Earnings", {"company_name": "Acme Inc"}, "NVIDIA Corporation - Earnings"),
+    ],
+)
+def test_strip_title_site_prefix(title, company, expected):
+    assert strip_title_site_prefix(title, company) == expected
 
 
 def test_extract_direct_article_normalizes_static_html():

@@ -104,6 +104,16 @@ def test_router_uses_firecrawl_only_after_direct_failure():
     assert firecrawl.calls == [URL]
 
 
+def test_router_strips_site_name_prefix_from_firecrawl_title():
+    direct = FakeDirect(error=ValueError("request_failed"))
+    firecrawl = FakeFirecrawl(result=firecrawl_article(title="NVIDIA Corporation - NVIDIA Announces New Platform"))
+
+    result = ExtractionRouter(direct, firecrawl).extract(candidate(), company=company(), approved_domains=DOMAINS)
+
+    assert result["status"] == "extracted"
+    assert result["title"] == "NVIDIA Announces New Platform"
+
+
 def test_router_returns_direct_success_without_calling_firecrawl():
     direct = FakeDirect(result=direct_article())
     firecrawl = FakeFirecrawl(result=firecrawl_article())
