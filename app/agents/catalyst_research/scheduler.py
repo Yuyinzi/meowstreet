@@ -1,3 +1,4 @@
+import inspect
 from datetime import UTC, datetime
 
 from app.agents.catalyst_research.backfill import _router_executor
@@ -181,9 +182,10 @@ async def run_daily_update(company, *, registry, endpoints, as_of, config, depen
 async def _run_feed_check(endpoint, fetcher, ingester, router, dependencies, company, domains, as_of_utc, config):
     checked_at = as_of_utc.isoformat()
     try:
-        parsed = await fetcher(
+        fetched = fetcher(
             endpoint, http_client=dependencies.get("http_client"), approved_domains=domains
         )
+        parsed = await fetched if inspect.isawaitable(fetched) else fetched
     except ValueError as exc:
         message = str(exc).strip().casefold()
         outcome = "parse_failed" if message in _PARSE_FAILURE_MESSAGES else "request_failed"

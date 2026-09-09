@@ -235,6 +235,20 @@ def run_backfill(dependencies, *, company_dict=None, request_dict=None, endpoint
     )
 
 
+def test_backfill_accepts_synchronous_feed_fetcher(env):
+    con, job = env
+
+    def sync_fetch(endpoint, *, http_client, approved_domains):
+        return {"items": [feed_item()], "item_count": 1, "newest_item_at": None}
+
+    dependencies = fakes(con, job["job_id"], fetch_feed=sync_fetch)
+    result = run_backfill(dependencies)
+    channel = result["channels"]["press_releases"]
+    assert channel["events"]
+    assert channel["discovery_methods"] == ["rss"]
+    assert "feed_fetch_failed" not in result["warnings"]
+
+
 def test_backfill_combines_feed_and_search_without_requiring_adapter(env):
     con, job = env
     dependencies = fakes(con, job["job_id"])

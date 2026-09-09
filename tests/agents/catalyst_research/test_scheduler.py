@@ -333,6 +333,22 @@ def test_daily_update_stores_new_feed_items():
     assert ingestion.stored[0]["url"] == "https://nvidianews.nvidia.com/news/first"
 
 
+def test_daily_update_accepts_synchronous_feed_fetcher():
+    ingestion = FakeIngestion()
+
+    def sync_fetch(endpoint, *, http_client=None, approved_domains=None):
+        return parsed_feed([feed_item()])
+
+    dependencies, _ = base_dependencies(
+        fetch_feed=sync_fetch,
+        ingest_candidates=ingestion.ingest,
+        latest_gap_search={"press_releases": "2026-09-07T00:00:00+00:00"},
+    )
+    result = run_update(dependencies, endpoints_value=[endpoint_payload()])
+    assert result["feeds"][0]["outcome"] == "success_new"
+    assert len(ingestion.stored) == 1
+
+
 def test_daily_update_records_check_before_transition_and_health_update():
     fetcher = FakeFeedFetcher(feeds={"cse_feed": parsed_feed([feed_item()])})
     ingestion = FakeIngestion()

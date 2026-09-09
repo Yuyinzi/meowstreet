@@ -1,3 +1,4 @@
+import inspect
 from datetime import date
 
 from app.agents.catalyst_research.extraction.feeds import fetch_feed as _default_fetch_feed
@@ -49,7 +50,8 @@ async def _collect_feed_candidates(feed_endpoints, domains, dependencies):
     warnings = []
     for endpoint in feed_endpoints:
         try:
-            parsed = await fetcher(endpoint, http_client=http_client, approved_domains=domains)
+            fetched = fetcher(endpoint, http_client=http_client, approved_domains=domains)
+            parsed = await fetched if inspect.isawaitable(fetched) else fetched
         except Exception:
             warnings.append("feed_fetch_failed")
             continue
