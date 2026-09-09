@@ -186,3 +186,240 @@
     grid-template-columns: 1fr;
   }
 }
+
+.catalyst-research-activity {
+  margin-top: 14px;
+  border-top: 1px solid #F0EAE4;
+  padding-top: 12px;
+}
+
+.catalyst-research-activity-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #5C534A;
+  margin-bottom: 8px;
+}
+
+.catalyst-research-legend {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 11px;
+  color: #8B7E74;
+  margin-bottom: 8px;
+}
+
+.catalyst-research-legend .catalyst-research-dot {
+  margin-right: 4px;
+}
+
+.catalyst-research-activity-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.catalyst-research-cal {
+  background: #FDFAF7;
+  border: 1px solid #E8E0D6;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.catalyst-research-cal-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.catalyst-research-cal-nav button {
+  border: 1px solid #E8E0D6;
+  background: #FFFFFF;
+  border-radius: 8px;
+  padding: 2px 10px;
+  font-size: 12px;
+  color: #5C534A;
+  cursor: pointer;
+}
+
+.catalyst-research-cal-nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.catalyst-research-cal-month {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3B3530;
+}
+
+.catalyst-research-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.catalyst-research-cal-weekday {
+  font-size: 10px;
+  color: #A89B91;
+  text-align: center;
+  padding: 2px 0;
+}
+
+.catalyst-research-cal-day {
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 3px 4px;
+  font-size: 11px;
+  color: #6B6258;
+  background: transparent;
+  border: 1px solid transparent;
+  text-align: left;
+  font-family: inherit;
+}
+
+.catalyst-research-cal-day-has-events {
+  cursor: pointer;
+  background: #FFFFFF;
+  border-color: #F0EAE4;
+}
+
+.catalyst-research-cal-day-selected {
+  border-color: #5A54A8;
+}
+
+.catalyst-research-cal-day-num {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.catalyst-research-cal-dots {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+
+.catalyst-research-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  flex: none;
+}
+
+.catalyst-research-dot-earnings {
+  background: #5A54A8;
+}
+
+.catalyst-research-dot-news {
+  background: #A89B91;
+}
+
+.catalyst-research-dot-ambiguous {
+  background: transparent;
+  border: 1.5px solid #A89B91;
+}
+
+.catalyst-research-cal-more {
+  font-size: 9px;
+  color: #A89B91;
+}
+
+.catalyst-research-load-more {
+  margin-top: 8px;
+  width: 100%;
+  border: 1px solid #E8E0D6;
+  background: #FFFFFF;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #5C534A;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.catalyst-research-load-more:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.catalyst-research-panel {
+  border: 1px solid #F0EAE4;
+  border-radius: 10px;
+  padding: 10px 12px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.catalyst-research-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3B3530;
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.catalyst-research-event-block + .catalyst-research-event-block {
+  border-top: 1px solid #F0EAE4;
+}
+
+.catalyst-research-event {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 7px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.catalyst-research-event:hover {
+  background: #FDFAF7;
+}
+
+.catalyst-research-event .catalyst-research-dot {
+  position: relative;
+  top: -1px;
+}
+
+.catalyst-research-event-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.catalyst-research-event-title {
+  font-size: 12px;
+  color: #3B3530;
+  overflow-wrap: anywhere;
+}
+
+.catalyst-research-event-meta {
+  font-size: 11px;
+  color: #A89B91;
+}
+
+.catalyst-research-event-detail {
+  padding: 2px 4px 10px 19px;
+  display: grid;
+  gap: 4px;
+}
+
+.catalyst-research-event-detail .catalyst-research-row {
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .catalyst-research-activity-layout {
+    grid-template-columns: 1fr;
+  }
+}

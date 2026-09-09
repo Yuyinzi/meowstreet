@@ -176,6 +176,34 @@ def _load_events(symbol, job_id, limit, cursor):
         connection.close()
 
 
+def _activity_payload(row):
+    return {
+        "count_date": row.get("count_date"),
+        "title": row.get("title"),
+        "source_type": row.get("source_type"),
+        "earnings_state": row.get("earnings_state"),
+        "url": row.get("canonical_url"),
+        "extraction_provider": row.get("extraction_provider"),
+        "has_content": row.get("content_hash") is not None,
+    }
+
+
+def _load_activity(symbol, limit, cursor):
+    ticker = _normalize_symbol(symbol)
+    connection = repository.connect()
+    try:
+        if repository.load_latest_result(connection, ticker) is None:
+            return {**_not_researched(ticker), "events": [], "next_cursor": None}
+        page = repository.load_ticker_activity_page(connection, ticker, limit, cursor)
+        return {
+            "ticker": page["ticker"],
+            "events": [_activity_payload(row) for row in page["events"]],
+            "next_cursor": page["next_cursor"],
+        }
+    finally:
+        connection.close()
+
+
 @router.get("/{symbol}/catalyst-research")
 def catalyst_research_summary(symbol: str):
     try:
@@ -193,5 +221,17 @@ def catalyst_research_events(
 ):
     try:
         return _load_events(symbol, job_id, limit, cursor)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/{symbol}/catalyst-research/activity")
+def catalyst_research_activity(
+    symbol: str,
+    limit: int = Query(default=200, ge=1, le=200),
+    cursor: str | None = Query(default=None),
+):
+    try:
+        return _load_activity(symbol, limit, cursor)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

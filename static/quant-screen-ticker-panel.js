@@ -636,6 +636,7 @@
         catalystResearchPayload = payload;
         body.innerHTML = html;
       },
+      container: body,
     }).catch(function () {
       if (activeSymbol !== symbol) {
         return;

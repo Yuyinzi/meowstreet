@@ -123,7 +123,7 @@ def _v1_1_result(**overrides):
     return result
 
 
-def _client(monkeypatch, *, latest=None, events_page=None, adapter_brief=None, registry=None, endpoints=None, job_schema_version="catalyst_research_result_v1", recorded=None):
+def _client(monkeypatch, *, latest=None, events_page=None, activity_page=None, adapter_brief=None, registry=None, endpoints=None, job_schema_version="catalyst_research_result_v1", recorded=None, activity_recorded=None):
     monkeypatch.setattr(catalyst_router.repository, "connect", lambda *args, **kwargs: FakeConnection())
     monkeypatch.setattr(catalyst_router.repository, "load_latest_result", lambda con, ticker: latest)
     monkeypatch.setattr(catalyst_router.repository, "load_company_registry", lambda con, ticker: registry)
@@ -137,7 +137,15 @@ def _client(monkeypatch, *, latest=None, events_page=None, adapter_brief=None, r
             raise events_page
         return events_page
 
+    def activity(con, ticker, limit, cursor):
+        if activity_recorded is not None:
+            activity_recorded.append({"ticker": ticker, "limit": limit, "cursor": cursor})
+        if isinstance(activity_page, Exception):
+            raise activity_page
+        return activity_page
+
     monkeypatch.setattr(catalyst_router.repository, "load_events_page", events)
+    monkeypatch.setattr(catalyst_router.repository, "load_ticker_activity_page", activity)
     monkeypatch.setattr(catalyst_router.repository, "load_adapter_brief", lambda con, adapter_id: adapter_brief)
     app = FastAPI()
     app.include_router(catalyst_router.router)
@@ -319,6 +327,110 @@ def test_events_cross_job_or_ticker_cursor_is_rejected(monkeypatch):
 
     assert response.status_code == 400
     assert "ticker or job" in response.json()["detail"]
+
+
+def test_activity_default_limit_and_field_projection(monkeypatch):
+    activity_recorded = []
+    page = {
+        "ticker": "NVDA",
+        "events": [
+            {
+                "count_date": "2026-08-27",
+                "title": "NVIDIA Announces Financial Results",
+                "source_type": "press_releases",
+                "earnings_state": "earnings",
+                "canonical_url": "https://nvidianews.example.test/news/1",
+                "extraction_provider": "firecrawl",
+                "content_hash": "abc",
+                "normalized_title": "nvidia announces financial results",
+            },
+            {
+                "count_date": "2026-08-20",
+                "title": "NVIDIA Announces New Platform",
+                "source_type": "events_presentations",
+                "earnings_state": "ambiguous",
+                "canonical_url": "https://nvidianews.example.test/news/2",
+                "extraction_provider": "feed_metadata",
+                "content_hash": None,
+                "normalized_title": "nvidia announces new platform",
+            },
+        ],
+        "next_cursor": "cursor-1",
+    }
+    client = _client(monkeypatch, latest=_latest_result(), activity_page=page, activity_recorded=activity_recorded)
+
+    response = client.get("/api/ticker-quant/nvda/catalyst-research/activity")
+
+    assert response.status_code == 200
+    assert activity_recorded == [{"ticker": "NVDA", "limit": 200, "cursor": None}]
+    payload = response.json()
+    assert payload["ticker"] == "NVDA"
+    assert payload["next_cursor"] == "cursor-1"
+    assert payload["events"] == [
+        {
+            "count_date": "2026-08-27",
+            "title": "NVIDIA Announces Financial Results",
+            "source_type": "press_releases",
+            "earnings_state": "earnings",
+            "url": "https://nvidianews.example.test/news/1",
+            "extraction_provider": "firecrawl",
+            "has_content": True,
+        },
+        {
+            "count_date": "2026-08-20",
+            "title": "NVIDIA Announces New Platform",
+            "source_type": "events_presentations",
+            "earnings_state": "ambiguous",
+            "url": "https://nvidianews.example.test/news/2",
+            "extraction_provider": "feed_metadata",
+            "has_content": False,
+        },
+    ]
+    assert "normalized_title" not in response.text
+    assert "content_hash" not in response.text
+
+
+def test_activity_passes_cursor_through(monkeypatch):
+    activity_recorded = []
+    page = {"ticker": "NVDA", "events": [], "next_cursor": None}
+    client = _client(monkeypatch, latest=_latest_result(), activity_page=page, activity_recorded=activity_recorded)
+
+    response = client.get("/api/ticker-quant/NVDA/catalyst-research/activity?limit=50&cursor=abc")
+
+    assert response.status_code == 200
+    assert activity_recorded == [{"ticker": "NVDA", "limit": 50, "cursor": "abc"}]
+
+
+@pytest.mark.parametrize("limit", [0, 201])
+def test_activity_rejects_out_of_range_limits(monkeypatch, limit):
+    client = _client(monkeypatch, latest=_latest_result(), activity_page={})
+
+    response = client.get(f"/api/ticker-quant/NVDA/catalyst-research/activity?limit={limit}")
+
+    assert response.status_code == 422
+
+
+def test_activity_invalid_cursor_returns_400(monkeypatch):
+    client = _client(monkeypatch, latest=_latest_result(), activity_page=ValueError("activity cursor does not belong to ticker"))
+
+    response = client.get("/api/ticker-quant/NVDA/catalyst-research/activity?cursor=abc")
+
+    assert response.status_code == 400
+    assert "activity cursor" in response.json()["detail"]
+
+
+def test_activity_unknown_ticker_returns_not_researched(monkeypatch):
+    activity_recorded = []
+    client = _client(monkeypatch, latest=None, activity_page={}, activity_recorded=activity_recorded)
+
+    response = client.get("/api/ticker-quant/NVDA/catalyst-research/activity")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "not_researched"
+    assert payload["events"] == []
+    assert payload["next_cursor"] is None
+    assert activity_recorded == []
 
 
 def test_events_unknown_ticker_returns_not_researched(monkeypatch):
@@ -523,11 +635,14 @@ def test_api_calls_never_trigger_network_or_model_work(monkeypatch):
     monkeypatch.setattr(catalyst_workflow, "run_research", lambda *args, **kwargs: calls.append("run_research"))
     monkeypatch.setattr(catalyst_router.config, "load_collection_config", lambda *args, **kwargs: calls.append("collection_config"))
     page = {"ticker": "NVDA", "job_id": "cr_1", "events": [], "next_cursor": None}
-    client = _client(monkeypatch, latest=_v1_1_result(), registry=dict(_REGISTRY_ROW), endpoints=[], events_page=page)
+    activity_page = {"ticker": "NVDA", "events": [], "next_cursor": None}
+    client = _client(monkeypatch, latest=_v1_1_result(), registry=dict(_REGISTRY_ROW), endpoints=[], events_page=page, activity_page=activity_page)
 
     summary = client.get("/api/ticker-quant/NVDA/catalyst-research")
     events = client.get("/api/ticker-quant/NVDA/catalyst-research/events")
+    activity = client.get("/api/ticker-quant/NVDA/catalyst-research/activity")
 
     assert summary.status_code == 200
     assert events.status_code == 200
+    assert activity.status_code == 200
     assert calls == []

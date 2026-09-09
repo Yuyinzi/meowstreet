@@ -1298,6 +1298,35 @@ def load_events_page(con, ticker, job_id, limit, cursor):
     return {"ticker": normalized, "job_id": job_id, "events": events, "next_cursor": next_cursor}
 
 
+def load_ticker_activity_page(con, ticker, limit, cursor):
+    normalized = _ticker(ticker)
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
+        raise ValueError("activity limit must be between 1 and 200")
+    payload = _decode_cursor(cursor) if cursor else None
+    if payload and (payload["ticker"] != normalized or payload.get("job_id") is not None):
+        raise ValueError("activity cursor does not belong to ticker")
+    where = ["ticker = ?"]
+    params = [normalized]
+    if payload:
+        where.append("(count_date < ? or (count_date = ? and event_id < ?))")
+        params.extend([payload["count_date"], payload["count_date"], payload["event_id"]])
+    rows = con.execute(
+        f"""select * from catalyst_ir_events where rowid in (
+                select max(rowid) from catalyst_ir_events where ticker = ?
+                group by source_type, count_date, normalized_title, canonical_url)
+            and {' and '.join(where)} order by count_date desc, event_id desc limit ?""",
+        (normalized, *params, limit + 1),
+    ).fetchall()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    events = [dict(row) for row in rows]
+    next_cursor = None
+    if has_more and rows:
+        last = rows[-1]
+        next_cursor = _encode_cursor({"ticker": normalized, "count_date": last["count_date"], "event_id": last["event_id"]})
+    return {"ticker": normalized, "events": events, "next_cursor": next_cursor}
+
+
 def save_company_registry(con, registry):
     ticker = _ticker(registry.get("ticker"))
     company_name = str(registry.get("company_name") or "").strip()

@@ -955,6 +955,7 @@
         region.innerHTML = html;
         latestQuantPayload.catalyst_research = payload;
       },
+      container: region,
     }).catch(function () {
       if (!latestQuantPayload || latestQuantPayload.symbol !== symbol) {
         return;

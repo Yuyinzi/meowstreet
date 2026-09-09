@@ -1,3 +1,4 @@
+import base64
 import json
 import sqlite3
 from datetime import UTC, datetime
@@ -372,6 +373,78 @@ def test_load_job_result_and_events_page_return_complete_persisted_event_list(tm
     rows_by_input_hash = {row[3]: row for row in rows}
     assert rows_by_input_hash["input-1"][1:] == ("test-model", "classification_v1", "input-1", "output-1")
     assert rows_by_input_hash[None][1:] == (None, None, None, None)
+
+
+def test_activity_page_dedupes_across_jobs_keeping_newest_row(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    first_job = _job(con, status="running")
+    first_source = repository.save_source(con, {"job_id": first_job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    repository.save_finalized_observations(
+        con,
+        first_job["job_id"],
+        [{"id": 1, "source_id": first_source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-05", "title": "Business update", "url": "https://ir.example.test/one", "content_hash": "old-hash"}],
+        [{"id": 1, "earnings_state": "ambiguous", "classification_method": "llm_v1"}],
+    )
+    second_job = _job(con, status="running")
+    second_source = repository.save_source(con, {"job_id": second_job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    repository.save_finalized_observations(
+        con,
+        second_job["job_id"],
+        [
+            {"id": 1, "source_id": second_source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-05", "title": "Business update", "url": "https://ir.example.test/one", "content_hash": "new-hash"},
+            {"id": 2, "source_id": second_source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-03", "title": "Older news", "url": "https://ir.example.test/two"},
+        ],
+        [{"id": 1, "earnings_state": "non_earnings", "classification_method": "llm_v1"}],
+    )
+
+    page = repository.load_ticker_activity_page(con, "NVDA", 200, None)
+
+    assert len(page["events"]) == 2
+    assert [event["title"] for event in page["events"]] == ["Business update", "Older news"]
+    newest = page["events"][0]
+    assert newest["job_id"] == second_job["job_id"]
+    assert newest["content_hash"] == "new-hash"
+    assert newest["earnings_state"] == "non_earnings"
+    assert page["next_cursor"] is None
+
+
+def test_activity_page_cursor_round_trip_and_ticker_isolation(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    for number in range(3):
+        repository.save_finalized_observations(con, job["job_id"], [{"source_id": source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": f"2026-01-0{number + 1}", "title": f"News {number}", "url": f"https://ir.example.test/{number}"}], [])
+    other_job = _job(con, ticker="AAPL", status="running")
+    other_source = repository.save_source(con, {"job_id": other_job["job_id"], "ticker": "AAPL", "source_type": "press_releases", "url": "https://ir.example.test/apple"})
+    repository.save_finalized_observations(con, other_job["job_id"], [{"source_id": other_source["source_id"], "ticker": "AAPL", "source_type": "press_releases", "count_date": "2026-01-02", "title": "Apple news", "url": "https://ir.example.test/apple-1"}], [])
+
+    first = repository.load_ticker_activity_page(con, "NVDA", 2, None)
+    second = repository.load_ticker_activity_page(con, "NVDA", 2, first["next_cursor"])
+
+    assert first["next_cursor"]
+    assert [event["title"] for event in first["events"]] == ["News 2", "News 1"]
+    assert [event["title"] for event in second["events"]] == ["News 0"]
+    assert second["next_cursor"] is None
+    assert {event["ticker"] for event in first["events"] + second["events"]} == {"NVDA"}
+    decoded = json.loads(base64.urlsafe_b64decode(first["next_cursor"] + "=" * (-len(first["next_cursor"]) % 4)).decode())
+    assert "job_id" not in decoded
+
+
+@pytest.mark.parametrize("limit", [0, 201, True, "10"])
+def test_activity_page_rejects_invalid_limits(tmp_path, limit):
+    con = repository.connect(tmp_path / "db.sqlite")
+    with pytest.raises(ValueError, match="activity limit must be between 1 and 200"):
+        repository.load_ticker_activity_page(con, "NVDA", limit, None)
+
+
+def test_activity_cursor_rejects_job_scoped_or_cross_ticker_cursors(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job_cursor = repository._encode_cursor({"ticker": "NVDA", "job_id": "cr_1", "count_date": "2026-01-01", "event_id": "ire_1"})
+    ticker_cursor = repository._encode_cursor({"ticker": "AAPL", "count_date": "2026-01-01", "event_id": "ire_1"})
+    with pytest.raises(ValueError, match="activity cursor does not belong to ticker"):
+        repository.load_ticker_activity_page(con, "NVDA", 10, job_cursor)
+    with pytest.raises(ValueError, match="activity cursor does not belong to ticker"):
+        repository.load_ticker_activity_page(con, "NVDA", 10, ticker_cursor)
 
 
 def test_events_cursor_rejects_ticker_or_job_boundary(tmp_path):
