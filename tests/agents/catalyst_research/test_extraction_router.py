@@ -332,3 +332,50 @@ def test_router_validates_channel_company_and_domains():
         router.extract(candidate(), company=None, approved_domains=DOMAINS)
     with pytest.raises(ValueError, match="approved domains are required"):
         router.extract(candidate(), company=company(), approved_domains=set())
+
+
+def test_firecrawl_html_metadata_supplies_missing_date_and_title():
+    direct = FakeDirect(error=ValueError("request_failed"))
+    html = """<html><head>
+<meta property="og:title" content="NVIDIA Announces Html Story" />
+<meta property="article:published_time" content="2026-08-15T08:00:00Z" />
+</head><body><h1>Ignored</h1></body></html>"""
+    firecrawl = FakeFirecrawl(result=firecrawl_article(title="", published_at=None, html=html))
+
+    result = ExtractionRouter(direct, firecrawl).extract(candidate(published_at=None), company=company(), approved_domains=DOMAINS)
+
+    assert result["status"] == "extracted"
+    assert result["extraction_provider"] == "firecrawl"
+    assert result["title"] == "NVIDIA Announces Html Story"
+    assert result["published_at"] == "2026-08-15T08:00:00+00:00"
+
+
+def test_firecrawl_html_date_container_supplies_missing_date():
+    direct = FakeDirect(error=ValueError("request_failed"))
+    html = "<html><body><div class=\"article-date\">May 20, 2026</div></body></html>"
+    firecrawl = FakeFirecrawl(result=firecrawl_article(published_at=None, html=html))
+
+    result = ExtractionRouter(direct, firecrawl).extract(candidate(published_at=None), company=company(), approved_domains=DOMAINS)
+
+    assert result["status"] == "extracted"
+    assert result["published_at"] == "2026-05-20T00:00:00+00:00"
+
+
+def test_firecrawl_without_html_and_without_any_date_is_manual_review():
+    direct = FakeDirect(error=ValueError("request_failed"))
+    firecrawl = FakeFirecrawl(result=firecrawl_article(published_at=None, html=None))
+
+    result = ExtractionRouter(direct, firecrawl).extract(candidate(published_at=None), company=company(), approved_domains=DOMAINS)
+
+    assert result["status"] == "manual_review_required"
+    assert result["attempts"][-1] == {"provider": "firecrawl", "outcome": "metadata_missing"}
+
+
+def test_firecrawl_provider_metadata_beats_html_metadata():
+    direct = FakeDirect(error=ValueError("request_failed"))
+    html = """<html><head><meta property="article:published_time" content="2026-01-01T00:00:00Z" /></head><body></body></html>"""
+    firecrawl = FakeFirecrawl(result=firecrawl_article(published_at="2026-09-07T12:00:00Z", html=html))
+
+    result = ExtractionRouter(direct, firecrawl).extract(candidate(), company=company(), approved_domains=DOMAINS)
+
+    assert result["published_at"] == "2026-09-07T12:00:00+00:00"

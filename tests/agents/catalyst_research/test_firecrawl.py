@@ -50,12 +50,13 @@ def test_firecrawl_extract_calls_scrape_for_one_url_only():
 
     result = provider.extract(URL)
 
-    assert client.calls == [(URL, {"formats": ["markdown"]})]
+    assert client.calls == [(URL, {"formats": ["markdown", "html"]})]
     assert result == {
         "url": URL,
         "final_url": URL,
         "title": "NVIDIA update",
         "markdown": "# NVIDIA update",
+        "html": None,
         "published_at": None,
         "request_id": None,
         "provider": "firecrawl",
@@ -75,7 +76,7 @@ def test_firecrawl_normalizes_sdk_object_results():
 
     result = provider.extract(URL)
 
-    assert client.calls == [(URL, {"formats": ["markdown"]})]
+    assert client.calls == [(URL, {"formats": ["markdown", "html"]})]
     assert result["final_url"] == URL
     assert result["title"] == "SDK title"
     assert result["markdown"] == "# SDK body"
@@ -250,3 +251,19 @@ def test_build_firecrawl_provider_constructs_configured_provider():
 
     assert isinstance(provider, FirecrawlExtractProvider)
     assert provider.ready is True
+
+
+def test_extract_retains_html_payload_when_present():
+    client = FakeFirecrawlClient(result={"markdown": "Article body text", "html": "<html><body>Article</body></html>", "metadata": {}})
+    provider = FirecrawlExtractProvider(api_key="fc-test", client=client)
+
+    result = provider.extract(URL)
+
+    assert result["html"] == "<html><body>Article</body></html>"
+
+
+def test_extract_drops_non_string_or_blank_html():
+    client = FakeFirecrawlClient(result={"markdown": "Article body text", "html": "   ", "metadata": {}})
+    provider = FirecrawlExtractProvider(api_key="fc-test", client=client)
+
+    assert provider.extract(URL)["html"] is None

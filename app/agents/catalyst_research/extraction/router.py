@@ -2,7 +2,7 @@ import re
 from collections.abc import Mapping
 
 from app.agents.catalyst_research.domain import canonicalize_public_url, url_host
-from app.agents.catalyst_research.extraction.articles import _approved_domains, _has_channel_evidence, _has_company_evidence, _host_in_domains, _normalize_datetime
+from app.agents.catalyst_research.extraction.articles import _approved_domains, _has_channel_evidence, _has_company_evidence, _host_in_domains, _normalize_datetime, parse_article_metadata
 from app.agents.catalyst_research.providers.firecrawl import FirecrawlProviderError
 
 
@@ -23,6 +23,16 @@ def _stable_outcome(error):
     if _OUTCOME_RE.fullmatch(message):
         return message
     return "provider_error"
+
+
+def _firecrawl_html_metadata(result):
+    html = result.get("html")
+    if not isinstance(html, str) or not html.strip():
+        return {}
+    try:
+        return parse_article_metadata(html)
+    except Exception:
+        return {}
 
 
 class ExtractionRouter:
@@ -117,12 +127,13 @@ class ExtractionRouter:
             return None
         final_url = canonicalize_public_url(result.get("final_url"))
         request_id = _fold(result.get("request_id"))[:_REQUEST_ID_CHARS] or None
+        html_metadata = _firecrawl_html_metadata(result)
         return {
             "status": "extracted",
             "url": url,
             "final_url": final_url,
-            "title": _fold(result.get("title"))[:_MAX_TITLE_CHARS],
-            "published_at": _normalize_datetime(result.get("published_at")) or _normalize_datetime(candidate.get("published_at")),
+            "title": (_fold(result.get("title")) or _fold(html_metadata.get("title")))[:_MAX_TITLE_CHARS],
+            "published_at": _normalize_datetime(result.get("published_at")) or _normalize_datetime(html_metadata.get("published_at")) or _normalize_datetime(candidate.get("published_at")),
             "text": _fold(result.get("markdown"))[:_MAX_PROVIDER_TEXT_CHARS],
             "extraction_provider": _FIRECRAWL_PROVIDER,
             "request_id": request_id,
@@ -138,10 +149,16 @@ class ExtractionRouter:
             return "unsafe_final_url"
         if not _host_in_domains(url_host(final_url), domains):
             return "unsafe_final_url"
-        title = _fold(result.get("title"))
+        html_metadata = _firecrawl_html_metadata(result)
+        title = _fold(result.get("title")) or _fold(html_metadata.get("title"))
         if not title:
             return "metadata_missing"
-        if _normalize_datetime(result.get("published_at")) is None and _normalize_datetime(candidate.get("published_at")) is None:
+        published_at = (
+            _normalize_datetime(result.get("published_at"))
+            or _normalize_datetime(html_metadata.get("published_at"))
+            or _normalize_datetime(candidate.get("published_at"))
+        )
+        if published_at is None:
             return "metadata_missing"
         text = _fold(result.get("markdown"))[:_MAX_PROVIDER_TEXT_CHARS]
         if not _has_company_evidence(company, title, text):

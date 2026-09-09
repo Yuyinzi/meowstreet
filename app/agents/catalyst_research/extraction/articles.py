@@ -16,6 +16,7 @@ _MAX_JSON_LD_SCRIPTS = 8
 _MAX_JSON_LD_CHARS = 100_000
 _MAX_TITLE_CHARS = 500
 _MAX_TEXT_CHARS = 20_000
+_MAX_METADATA_HTML_CHARS = 2_000_000
 _MIN_TEXT_CHARS = 20
 _MAX_DATE_TEXT_CHARS = 60
 _MAX_DATE_CONTAINERS = 12
@@ -227,6 +228,21 @@ def _has_channel_evidence(channel, title, text):
     return _has_source_purpose(channel, {"title": title, "text": text})
 
 
+def parse_article_metadata(html):
+    if not isinstance(html, str) or not html.strip():
+        raise ValueError("html is required")
+    soup = BeautifulSoup(html[:_MAX_METADATA_HTML_CHARS], "html.parser")
+    json_ld = _json_ld_metadata(soup)
+    title = json_ld["title"] or _meta_content(soup, "og:title") or _heading_title(soup) or None
+    published_at = (
+        json_ld["published_at"]
+        or _normalize_datetime(_meta_content(soup, "article:published_time", "og:published_time", "article:modified_time"))
+        or _normalize_datetime(_time_element_value(soup))
+        or _normalize_datetime(_date_container_value(soup))
+    )
+    return {"title": title, "published_at": published_at, "json_ld_url": json_ld["url"]}
+
+
 def extract_direct_article(url, *, http_client, approved_domains, candidate=None, company=None, channel=None, resolver=None, max_text_chars=_MAX_TEXT_CHARS) -> dict:
     if isinstance(max_text_chars, bool) or not isinstance(max_text_chars, int) or max_text_chars <= 0:
         raise ValueError("max text chars must be a positive integer")
@@ -248,26 +264,14 @@ def extract_direct_article(url, *, http_client, approved_domains, candidate=None
     if not _host_in_domains(url_host(final_url), domains):
         raise ValueError("redirect_not_allowed")
     soup = BeautifulSoup(page["html"], "html.parser")
-    json_ld = _json_ld_metadata(soup)
-    if json_ld["url"]:
+    metadata = parse_article_metadata(page["html"])
+    if metadata["json_ld_url"]:
         try:
-            canonicalize_public_url(json_ld["url"])
+            canonicalize_public_url(metadata["json_ld_url"])
         except ValueError:
             raise ValueError("unsafe_metadata_url") from None
-    title = (
-        json_ld["title"]
-        or _meta_content(soup, "og:title")
-        or _heading_title(soup)
-        or _fold(candidate.get("title"))
-        or None
-    )
-    published_at = (
-        json_ld["published_at"]
-        or _normalize_datetime(_meta_content(soup, "article:published_time", "og:published_time", "article:modified_time"))
-        or _normalize_datetime(_time_element_value(soup))
-        or _normalize_datetime(_date_container_value(soup))
-        or _normalize_datetime(candidate.get("published_at"))
-    )
+    title = metadata["title"] or _fold(candidate.get("title")) or None
+    published_at = metadata["published_at"] or _normalize_datetime(candidate.get("published_at"))
     text = _visible_text(soup, max_text_chars)
     if len(text) < _MIN_TEXT_CHARS:
         raise ValueError("empty_content")

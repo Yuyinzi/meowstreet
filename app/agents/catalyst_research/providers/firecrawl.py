@@ -165,7 +165,7 @@ class FirecrawlExtractProvider:
         safe_error = None
         for attempt in range(MAX_ATTEMPTS):
             try:
-                response = self._client.scrape(url, formats=["markdown"])
+                response = self._client.scrape(url, formats=["markdown", "html"])
             except Exception as exc:
                 candidate = _classify_exception(exc)
                 if candidate.retryable and attempt < MAX_ATTEMPTS - 1:
@@ -205,11 +205,13 @@ class FirecrawlExtractProvider:
             )
         published_at = _first_metadata_value(metadata, _METADATA_PUBLISHED_KEYS) or None
         request_id = _first_metadata_value(metadata, _METADATA_REQUEST_ID_KEYS) or None
+        html = payload.get("html")
         return {
             "url": requested_url,
             "final_url": final_url,
             "title": _first_metadata_value(metadata, _METADATA_TITLE_KEYS),
             "markdown": markdown,
+            "html": html if isinstance(html, str) and html.strip() else None,
             "published_at": published_at,
             "request_id": request_id,
             "provider": self.name,
