@@ -313,3 +313,51 @@ def test_cli_collection_config_stays_env_authoritative_without_flags(monkeypatch
 
     assert exit_code == 0
     assert "config_args" not in captured["dependencies"]
+
+
+def test_cli_prints_manual_review_summary_to_stderr(monkeypatch, capsys):
+    result = {
+        "status": "completed_partial",
+        "job_id": "cr_1",
+        "sources": [
+            {"source_type": "earnings_results", "extraction_status": "failed", "url": "https://example.com/report.pdf"},
+            {"source_type": "press_releases", "extraction_status": "complete", "url": "https://example.com/news"},
+        ],
+    }
+    _install(monkeypatch, result=result)
+
+    exit_code = cli.main(["NVDA"])
+
+    err = capsys.readouterr().err
+    assert exit_code == 0
+    assert "manual review required (1):" in err
+    assert "  earnings_results: https://example.com/report.pdf" in err
+    assert "https://example.com/news\n" not in err
+
+
+def test_cli_report_flag_writes_markdown_report(monkeypatch, tmp_path, capsys):
+    result = {
+        "status": "completed_partial",
+        "job_id": "cr_1",
+        "ticker": "NVDA",
+        "sources": [{"source_type": "earnings_results", "extraction_status": "failed", "url": "https://example.com/report.pdf"}],
+    }
+    _install(monkeypatch, result=result)
+    report_path = tmp_path / "report.md"
+
+    exit_code = cli.main(["NVDA", "--report", str(report_path)])
+
+    assert exit_code == 0
+    body = report_path.read_text(encoding="utf-8")
+    assert body.startswith("# Catalyst research report")
+    assert "[earnings_results] https://example.com/report.pdf" in body
+    assert f"report written path={report_path}" in capsys.readouterr().err
+
+
+def test_cli_report_write_failure_returns_two(monkeypatch, tmp_path, capsys):
+    _install(monkeypatch)
+
+    exit_code = cli.main(["NVDA", "--report", str(tmp_path / "missing" / "report.md")])
+
+    assert exit_code == 2
+    assert "error: report write failed" in capsys.readouterr().err

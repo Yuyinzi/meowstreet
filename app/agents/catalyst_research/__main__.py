@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from app.agents.catalyst_research import config
+from app.agents.catalyst_research.report import render_report
 from app.agents.catalyst_research.workflow import run_research
 from app.http_client import HttpClient
 
@@ -40,6 +41,7 @@ def _parser():
     parser.add_argument("--years", type=int, default=4)
     parser.add_argument("--db-path", type=Path, default=None)
     parser.add_argument("--mode", choices=sorted(config.RESEARCH_MODES), default=None)
+    parser.add_argument("--report", type=Path, default=None, metavar="PATH")
     parser.add_argument("--source", action="append", default=None, metavar="SOURCE_TYPE=URL")
     parser.add_argument("--force-discovery", action="store_true")
     parser.add_argument("--search-provider", dest="catalyst_search_provider", default=None)
@@ -103,6 +105,19 @@ def _request_from_args(args):
     return request
 
 
+def _print_attention_summary(result):
+    attention = [
+        source
+        for source in result.get("sources", [])
+        if isinstance(source, dict) and source.get("extraction_status") == "failed"
+    ]
+    if not attention:
+        return
+    print(f"manual review required ({len(attention)}):", file=sys.stderr)
+    for source in attention:
+        print(f"  {source.get('source_type', 'unknown')}: {source.get('url', '')}", file=sys.stderr)
+
+
 def main(argv=None):
     args = _parser().parse_args(argv)
     try:
@@ -120,7 +135,15 @@ def main(argv=None):
                 f"source {source.get('source_type')}: {source.get('extraction_status', 'unknown')} via {source.get('execution_path', 'unknown')}",
                 file=sys.stderr,
             )
+    _print_attention_summary(result)
     print(f"catalyst research {result.get('status', 'failed')} job={result.get('job_id')}", file=sys.stderr)
+    if args.report is not None:
+        try:
+            args.report.write_text(render_report(result), encoding="utf-8")
+        except OSError as exc:
+            print(f"error: report write failed: {exc}", file=sys.stderr)
+            return 2
+        print(f"report written path={args.report}", file=sys.stderr)
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, default=str))
     return 0 if result.get("status") in {"completed", "completed_partial"} else 1
 
