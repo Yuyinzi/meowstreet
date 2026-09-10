@@ -573,23 +573,45 @@
       ? window.CatalystResearch.eventsHtml(catalystIrByDate[dateKey] || [])
       : "";
     return (
-      '<div class="cal-detail-title">' + escapeHtml(dateKey) + "</div>" +
       (meta.length ? '<div class="cal-detail-meta">' + escapeHtml(meta.join(" · ")) + "</div>" : "") +
       eventsList
     );
   }
 
-  function renderCatalystDetail() {
-    var detail = panel.querySelector("#catalystCalDetail");
-    if (!detail) {
-      return;
+  function closeCatalystDrawer() {
+    var drawer = document.getElementById("catalystCalDrawer");
+    if (drawer) {
+      drawer.classList.remove("open");
     }
-    var events = catalystIrByDate[catalystCalSelectedDate] || [];
-    if (!catalystCalSelectedDate || !events.length) {
-      detail.innerHTML = '<div class="cal-detail cal-detail-empty">Select a dotted day to view its events.</div>';
-      return;
+    if (catalystCalSelectedDate) {
+      catalystCalSelectedDate = null;
+      renderCatalystRange();
     }
-    detail.innerHTML = '<div class="cal-detail">' + _calDetailHtml(catalystCalSelectedDate) + "</div>";
+  }
+
+  function openCatalystDrawer(dateKey) {
+    var drawer = document.getElementById("catalystCalDrawer");
+    if (!drawer) {
+      drawer = document.createElement("div");
+      drawer.id = "catalystCalDrawer";
+      drawer.className = "cal-drawer";
+      drawer.setAttribute("role", "dialog");
+      drawer.setAttribute("aria-label", "Day detail");
+      document.body.appendChild(drawer);
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+          closeCatalystDrawer();
+        }
+      });
+    }
+    drawer.innerHTML =
+      '<div class="cal-drawer-head"><h2>' + escapeHtml(dateKey) + "</h2>" +
+      '<button type="button" class="cal-drawer-close" aria-label="Close detail panel">×</button></div>' +
+      '<div class="cal-drawer-body">' + _calDetailHtml(dateKey) + "</div>";
+    drawer.querySelector(".cal-drawer-close").addEventListener("click", function () {
+      closeCatalystDrawer();
+    });
+    drawer.classList.add("open");
   }
 
   function renderCatalystRange() {
@@ -606,7 +628,6 @@
       return;
     }
     container.innerHTML = _calRangeHtml(catalystCalendarData, start, end);
-    renderCatalystDetail();
   }
 
   function catalystCalendarHtml(calendar) {
@@ -622,10 +643,7 @@
       '<span class="cal-controls-note">max 1 year</span>' +
       "</div>" +
       '<div class="cal-legend">Red up / green down · darker = ≥1σ / ≥2σ move · bordered day = 8-K filing · dots: indigo earnings, gray IR event, hollow ambiguous</div>' +
-      '<div class="cal-layout">' +
-      '<div class="cal-main" id="catalystCalRange"></div>' +
-      '<div class="cal-side" id="catalystCalDetail"></div>' +
-      "</div>"
+      '<div id="catalystCalRange"></div>'
     );
   }
 
@@ -654,8 +672,13 @@
         return;
       }
       var dateKey = target.getAttribute("data-cal-date");
-      catalystCalSelectedDate = catalystCalSelectedDate === dateKey ? null : dateKey;
-      renderCatalystRange();
+      if (catalystCalSelectedDate === dateKey) {
+        closeCatalystDrawer();
+      } else {
+        catalystCalSelectedDate = dateKey;
+        renderCatalystRange();
+        openCatalystDrawer(dateKey);
+      }
     });
     startInput.addEventListener("change", function () {
       if (startInput.value && endInput.value && _calDayDiff(startInput.value, endInput.value) > 365) {
