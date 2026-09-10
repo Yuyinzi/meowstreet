@@ -104,6 +104,21 @@
   color: #6B6258;
 }
 
+.catalyst-research-sources-details {
+  margin-bottom: 4px;
+}
+
+.catalyst-research-sources-details summary {
+  font-size: 12px;
+  color: #8B7E74;
+  cursor: pointer;
+  user-select: none;
+}
+
+.catalyst-research-sources-details .catalyst-research-sources {
+  margin-top: 8px;
+}
+
 .catalyst-research-sources {
   display: grid;
   gap: 8px;

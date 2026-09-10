@@ -247,11 +247,13 @@
       return "";
     }
     return (
+      '<details class="catalyst-research-sources-details">' +
+      "<summary>View source provenance (" + sources.length + ")</summary>" +
       '<div class="catalyst-research-sources">' +
       sources.map(function (source) {
         return sourceHtml(source, endpoints);
       }).join("") +
-      "</div>"
+      "</div></details>"
     );
   }
 
