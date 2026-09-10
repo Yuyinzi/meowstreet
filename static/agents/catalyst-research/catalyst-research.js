@@ -387,12 +387,16 @@
       ? '<div class="catalyst-research-next">Next: ' +
         escapeHtml(payload.next_actions.join("; ")) + "</div>"
       : "";
+    var earningsCard = statistics.earnings_results
+      ? channelHtml("Earnings Results", statistics.earnings_results)
+      : "";
     return (
       '<div class="catalyst-research">' +
       '<div class="catalyst-research-meta">' + escapeHtml(meta.join(" · ")) + "</div>" +
       '<div class="catalyst-research-grid">' +
       channelHtml("Press Releases", statistics.press_releases) +
       channelHtml("Events &amp; Presentations", statistics.events_presentations) +
+      earningsCard +
       "</div>" +
       sourcesHtml(payload.sources, payload.endpoints) +
       warningsHtml(payload.warnings) +

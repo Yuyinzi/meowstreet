@@ -161,6 +161,7 @@ def test_catalyst_research_renderer_contract():
     assert "not_researched" in source
     assert "Press Releases" in source
     assert "Events &amp; Presentations" in source
+    assert "Earnings Results" in source
     assert "partial" in source
     assert "unsupported" in source
     assert "ambiguous" in source
@@ -188,7 +189,7 @@ def test_catalyst_research_renderer_supports_v1_1_observed_channels():
 def test_ticker_pages_bump_shared_catalyst_research_asset_version():
     for page in ("ticker-context.html", "quant-screen.html"):
         html = (ROOT / "static" / page).read_text(encoding="utf-8")
-        assert _CATALYST_REVIEW_JS + "?v=2" in html
+        assert _CATALYST_REVIEW_JS + "?v=7" in html
 
 
 def test_catalyst_research_styles_are_scoped_to_agent_selectors():
