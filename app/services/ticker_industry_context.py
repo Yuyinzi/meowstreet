@@ -20,6 +20,19 @@ def _resolve_industry_override(con, industry_override):
     return tag_row
 
 
+def _regime_reason(bias, synthesis):
+    if bias != "unknown":
+        return None
+    if synthesis.get("expected_gdp_direction") == "mixed":
+        return "mixed_signals"
+    status = synthesis.get("status")
+    if status == "partial":
+        return "missing_inputs"
+    if status == "mixed_periods":
+        return "stale_periods"
+    return "unavailable"
+
+
 def _load_regime_context(con):
     try:
         synthesis = survey_synthesis_current.load_survey_synthesis_inputs(con)[
@@ -29,9 +42,19 @@ def _load_regime_context(con):
         LOGGER.warning(
             "survey synthesis unavailable for ticker industry context", exc_info=True
         )
-        return "unknown", None
+        return {
+            "bias": "unknown",
+            "source": None,
+            "reason": "unavailable",
+            "synthesis": None,
+        }
     if not synthesis:
-        return "unknown", None
+        return {
+            "bias": "unknown",
+            "source": None,
+            "reason": "unavailable",
+            "synthesis": None,
+        }
     bias = regime_bias_tool.regime_bias_from_gdp_direction(
         synthesis.get("expected_gdp_direction")
     )
@@ -40,7 +63,12 @@ def _load_regime_context(con):
         "source_method": synthesis.get("version"),
         "source_period": synthesis.get("period"),
     }
-    return bias, source
+    return {
+        "bias": bias,
+        "source": source,
+        "reason": _regime_reason(bias, synthesis),
+        "synthesis": synthesis,
+    }
 
 
 def get_ticker_industry_context(
@@ -81,13 +109,15 @@ def get_ticker_industry_context(
             tag_row,
             industry_override=override_tag_row["industry"] if override_tag_row else None,
         )
-        regime_bias, regime_source = _load_regime_context(con)
+        regime = _load_regime_context(con)
         return context_tool.build_industry_context_payload(
             profile,
             tag_row,
             resolution,
-            regime_bias=regime_bias,
-            regime_source=regime_source,
+            regime_bias=regime["bias"],
+            regime_source=regime["source"],
+            regime_reason=regime["reason"],
+            synthesis=regime["synthesis"],
         )
     finally:
         con.close()

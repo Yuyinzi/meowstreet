@@ -103,6 +103,7 @@ def test_build_payload_resolved_includes_tag_and_provenance():
     assert payload["cycle_tag"] == "cyclical"
     assert payload["provider_industry"] == "Semiconductors"
     assert payload["regime_bias"] == "unknown"
+    assert payload["regime_label"] == "unknown"
     assert payload["regime_source"] is None
     assert payload["side_support"] == "unknown"
     assert "GDP growth direction" in payload["regime_note"]
@@ -110,6 +111,86 @@ def test_build_payload_resolved_includes_tag_and_provenance():
         "tag_source": "method_workbook",
         "source_vintage": "2021-gics",
     }
+
+
+def test_build_payload_labels_mixed_signals_with_momentum_detail():
+    synthesis = {
+        "status": "available",
+        "economic_direction": "aligned_expansion",
+        "components": {
+            "manufacturing": {"level": "expanding", "momentum": "falling"},
+            "services": {"level": "expanding", "momentum": "rising"},
+        },
+    }
+
+    payload = context_tool.build_industry_context_payload(
+        profile(),
+        tag_row(),
+        {"status": "resolved", "resolution": "provider"},
+        regime_reason="mixed_signals",
+        synthesis=synthesis,
+    )
+
+    assert payload["regime_bias"] == "unknown"
+    assert payload["regime_label"] == "no call — mixed signals"
+    assert payload["regime_note"] == (
+        "No regime bias is applied: Manufacturing momentum is falling "
+        "while Services momentum is rising."
+    )
+
+
+def test_build_payload_labels_divergent_levels_when_momentum_shared():
+    synthesis = {
+        "status": "available",
+        "economic_direction": "divergent",
+        "components": {
+            "manufacturing": {"level": "contracting", "momentum": "rising"},
+            "services": {"level": "expanding", "momentum": "rising"},
+        },
+    }
+
+    payload = context_tool.build_industry_context_payload(
+        profile(),
+        tag_row(),
+        {"status": "resolved", "resolution": "provider"},
+        regime_reason="mixed_signals",
+        synthesis=synthesis,
+    )
+
+    assert payload["regime_label"] == "no call — mixed signals"
+    assert payload["regime_note"] == (
+        "No regime bias is applied: Manufacturing is contracting "
+        "while Services is expanding."
+    )
+
+
+def test_build_payload_labels_missing_inputs_with_survey_names():
+    payload = context_tool.build_industry_context_payload(
+        profile(),
+        tag_row(),
+        {"status": "resolved", "resolution": "provider"},
+        regime_reason="missing_inputs",
+        synthesis={"status": "partial", "missing_inputs": ["ISM Manufacturing"]},
+    )
+
+    assert payload["regime_label"] == "no call — survey data missing"
+    assert payload["regime_note"] == (
+        "No regime bias is applied: missing ISM Manufacturing."
+    )
+
+
+def test_build_payload_known_reason_overrides_only_unknown_label():
+    payload = context_tool.build_industry_context_payload(
+        profile(),
+        tag_row(),
+        {"status": "resolved", "resolution": "provider"},
+        regime_bias="contraction",
+        regime_reason="mixed_signals",
+    )
+
+    assert payload["regime_bias"] == "contraction"
+    assert payload["regime_label"] == "contraction"
+    assert payload["regime_note"] is None
 
 
 def test_build_payload_activates_side_support_with_regime():
@@ -128,6 +209,7 @@ def test_build_payload_activates_side_support_with_regime():
     )
 
     assert payload["regime_bias"] == "expansion"
+    assert payload["regime_label"] == "expansion"
     assert payload["side_support"] == "supports_long"
     assert payload["regime_note"] is None
     assert payload["regime_source"] == source

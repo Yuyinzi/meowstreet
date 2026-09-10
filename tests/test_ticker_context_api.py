@@ -22,9 +22,10 @@ def resolved_payload():
         "provider_sector": "Technology",
         "provider_industry": "Semiconductors",
         "regime_bias": "unknown",
+        "regime_label": "no call — synthesis unavailable",
         "regime_source": None,
         "side_support": "unknown",
-        "regime_note": "Side support is unavailable: the survey-based GDP growth direction is mixed, missing, or stale.",
+        "regime_note": "No regime bias is applied: the survey synthesis is unavailable.",
         "tag_provenance": {
             "tag_source": "method_workbook",
             "source_vintage": "2021-gics",

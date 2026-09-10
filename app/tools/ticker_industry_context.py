@@ -11,9 +11,59 @@ _SIDE_SUPPORT_BY_TAG_AND_REGIME = {
 }
 
 _REGIME_UNKNOWN_NOTE = (
-    "Side support is unavailable: the survey-based GDP growth direction "
+    "No regime bias is applied: the survey-based GDP growth direction "
     "is mixed, missing, or stale."
 )
+
+_REGIME_UNKNOWN_LABELS = {
+    "mixed_signals": "no call — mixed signals",
+    "missing_inputs": "no call — survey data missing",
+    "stale_periods": "no call — survey periods differ",
+    "unavailable": "no call — synthesis unavailable",
+}
+
+
+def _mixed_signals_note(synthesis):
+    components = (synthesis or {}).get("components") or {}
+    manufacturing = components.get("manufacturing") or {}
+    services = components.get("services") or {}
+    mfg_momentum = manufacturing.get("momentum")
+    svc_momentum = services.get("momentum")
+    if mfg_momentum and svc_momentum and mfg_momentum != svc_momentum:
+        detail = (
+            f"Manufacturing momentum is {mfg_momentum} "
+            f"while Services momentum is {svc_momentum}"
+        )
+    elif (synthesis or {}).get("economic_direction") == "divergent":
+        detail = (
+            f"Manufacturing is {manufacturing.get('level')} "
+            f"while Services is {services.get('level')}"
+        )
+    else:
+        detail = "the survey-based GDP growth direction is mixed"
+    return f"No regime bias is applied: {detail}."
+
+
+def _regime_unknown_note(reason, synthesis):
+    if reason == "mixed_signals":
+        return _mixed_signals_note(synthesis)
+    if reason == "missing_inputs":
+        missing = (synthesis or {}).get("missing_inputs") or ["ISM survey data"]
+        return f"No regime bias is applied: missing {', '.join(missing)}."
+    if reason == "stale_periods":
+        return (
+            "No regime bias is applied: the Manufacturing and Services "
+            "survey periods differ."
+        )
+    if reason == "unavailable":
+        return "No regime bias is applied: the survey synthesis is unavailable."
+    return _REGIME_UNKNOWN_NOTE
+
+
+def _regime_label(regime_bias, reason):
+    if regime_bias != "unknown":
+        return regime_bias
+    return _REGIME_UNKNOWN_LABELS.get(reason, "unknown")
 
 
 def resolve_cycle_tag(profile, alias, tag_row, industry_override=None):
@@ -40,7 +90,13 @@ def side_support(cycle_tag, regime_bias):
 
 
 def build_industry_context_payload(
-    profile, tag_row, resolution, regime_bias="unknown", regime_source=None
+    profile,
+    tag_row,
+    resolution,
+    regime_bias="unknown",
+    regime_source=None,
+    regime_reason=None,
+    synthesis=None,
 ):
     status = resolution["status"]
     cycle_tag = tag_row["cycle_tag"] if status == "resolved" and tag_row else None
@@ -63,9 +119,14 @@ def build_industry_context_payload(
         "provider_sector": profile.get("provider_sector"),
         "provider_industry": profile.get("provider_industry"),
         "regime_bias": regime_bias,
+        "regime_label": _regime_label(regime_bias, regime_reason),
         "regime_source": regime_source,
         "side_support": support,
-        "regime_note": _REGIME_UNKNOWN_NOTE if regime_bias == "unknown" else None,
+        "regime_note": (
+            _regime_unknown_note(regime_reason, synthesis)
+            if regime_bias == "unknown"
+            else None
+        ),
         "tag_provenance": (
             {
                 "tag_source": tag_row["tag_source"],

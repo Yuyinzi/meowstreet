@@ -144,9 +144,12 @@ def test_regime_bias_is_unknown_with_explanation(tmp_path, monkeypatch):
     payload = service.get_ticker_industry_context("NVDA", db_path=db_path)
 
     assert payload["regime_bias"] == "unknown"
+    assert payload["regime_label"] == "no call — synthesis unavailable"
     assert payload["regime_source"] is None
     assert payload["side_support"] == "unknown"
-    assert "GDP growth direction" in payload["regime_note"]
+    assert payload["regime_note"] == (
+        "No regime bias is applied: the survey synthesis is unavailable."
+    )
 
 
 def test_regime_bias_activates_from_survey_synthesis(tmp_path, monkeypatch):
@@ -172,6 +175,7 @@ def test_regime_bias_activates_from_survey_synthesis(tmp_path, monkeypatch):
     payload = service.get_ticker_industry_context("NVDA", db_path=db_path)
 
     assert payload["regime_bias"] == "expansion"
+    assert payload["regime_label"] == "expansion"
     assert payload["side_support"] == "supports_long"
     assert payload["regime_note"] is None
     assert payload["regime_source"] == {
@@ -204,9 +208,110 @@ def test_regime_bias_unknown_when_direction_mixed(tmp_path, monkeypatch):
     payload = service.get_ticker_industry_context("NVDA", db_path=db_path)
 
     assert payload["regime_bias"] == "unknown"
+    assert payload["regime_label"] == "no call — mixed signals"
     assert payload["side_support"] == "unknown"
     assert payload["regime_source"]["source_period"] == "2026-08"
-    assert "GDP growth direction" in payload["regime_note"]
+    assert payload["regime_note"] == (
+        "No regime bias is applied: the survey-based GDP growth direction is mixed."
+    )
+
+
+def test_regime_bias_unknown_mixed_signals_names_momentum(tmp_path, monkeypatch):
+    db_path = tmp_path / "ticker_context.sqlite"
+    seed_reference_data(db_path)
+    monkeypatch.setattr(
+        service.yahoo_asset_profile,
+        "fetch_asset_profile",
+        lambda symbol, http_client=None: yahoo_profile(symbol),
+    )
+    monkeypatch.setattr(
+        service.survey_synthesis_current,
+        "load_survey_synthesis_inputs",
+        lambda con: {
+            "survey_synthesis_result": {
+                "version": "ism_survey_synthesis_v1",
+                "status": "available",
+                "period": "2026-08",
+                "economic_direction": "aligned_expansion",
+                "expected_gdp_direction": "mixed",
+                "components": {
+                    "manufacturing": {"level": "expanding", "momentum": "falling"},
+                    "services": {"level": "expanding", "momentum": "rising"},
+                },
+            }
+        },
+    )
+
+    payload = service.get_ticker_industry_context("NVDA", db_path=db_path)
+
+    assert payload["regime_bias"] == "unknown"
+    assert payload["regime_label"] == "no call — mixed signals"
+    assert payload["regime_note"] == (
+        "No regime bias is applied: Manufacturing momentum is falling "
+        "while Services momentum is rising."
+    )
+
+
+def test_regime_bias_unknown_missing_inputs_names_survey(tmp_path, monkeypatch):
+    db_path = tmp_path / "ticker_context.sqlite"
+    seed_reference_data(db_path)
+    monkeypatch.setattr(
+        service.yahoo_asset_profile,
+        "fetch_asset_profile",
+        lambda symbol, http_client=None: yahoo_profile(symbol),
+    )
+    monkeypatch.setattr(
+        service.survey_synthesis_current,
+        "load_survey_synthesis_inputs",
+        lambda con: {
+            "survey_synthesis_result": {
+                "version": "ism_survey_synthesis_v1",
+                "status": "partial",
+                "period": "2026-08",
+                "expected_gdp_direction": None,
+                "missing_inputs": ["ISM Manufacturing"],
+            }
+        },
+    )
+
+    payload = service.get_ticker_industry_context("NVDA", db_path=db_path)
+
+    assert payload["regime_bias"] == "unknown"
+    assert payload["regime_label"] == "no call — survey data missing"
+    assert payload["regime_note"] == (
+        "No regime bias is applied: missing ISM Manufacturing."
+    )
+
+
+def test_regime_bias_unknown_when_survey_periods_differ(tmp_path, monkeypatch):
+    db_path = tmp_path / "ticker_context.sqlite"
+    seed_reference_data(db_path)
+    monkeypatch.setattr(
+        service.yahoo_asset_profile,
+        "fetch_asset_profile",
+        lambda symbol, http_client=None: yahoo_profile(symbol),
+    )
+    monkeypatch.setattr(
+        service.survey_synthesis_current,
+        "load_survey_synthesis_inputs",
+        lambda con: {
+            "survey_synthesis_result": {
+                "version": "ism_survey_synthesis_v1",
+                "status": "mixed_periods",
+                "period": None,
+                "expected_gdp_direction": None,
+            }
+        },
+    )
+
+    payload = service.get_ticker_industry_context("NVDA", db_path=db_path)
+
+    assert payload["regime_bias"] == "unknown"
+    assert payload["regime_label"] == "no call — survey periods differ"
+    assert payload["regime_note"] == (
+        "No regime bias is applied: the Manufacturing and Services "
+        "survey periods differ."
+    )
 
 
 def test_regime_bias_unknown_when_synthesis_load_fails(tmp_path, monkeypatch):
@@ -230,8 +335,12 @@ def test_regime_bias_unknown_when_synthesis_load_fails(tmp_path, monkeypatch):
     payload = service.get_ticker_industry_context("NVDA", db_path=db_path)
 
     assert payload["regime_bias"] == "unknown"
+    assert payload["regime_label"] == "no call — synthesis unavailable"
     assert payload["regime_source"] is None
     assert payload["side_support"] == "unknown"
+    assert payload["regime_note"] == (
+        "No regime bias is applied: the survey synthesis is unavailable."
+    )
 
 
 def test_list_gics_industries_returns_tag_rows(tmp_path):

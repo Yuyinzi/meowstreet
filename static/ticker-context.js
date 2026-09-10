@@ -77,7 +77,7 @@
     return (
       '<div class="regime-block">' +
       '<span class="regime-label">Regime bias: ' +
-      escapeHtml(payload.regime_bias) +
+      escapeHtml(payload.regime_label || payload.regime_bias) +
       "</span>" +
       source +
       note +
