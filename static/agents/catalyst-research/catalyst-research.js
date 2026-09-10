@@ -15,13 +15,6 @@
     unknown: "Coverage unknown",
   };
 
-  var MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-  ];
-
-  var WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
   var ACTIVITY_STATE_LABELS = {
     earnings: "Earnings",
     non_earnings: "News / Event",
@@ -286,12 +279,12 @@
 
   function activityDotClass(earningsState) {
     if (earningsState === "earnings") {
-      return "catalyst-research-dot catalyst-research-dot-earnings";
+      return "cal-dot cal-dot-earnings";
     }
     if (earningsState === "non_earnings") {
-      return "catalyst-research-dot catalyst-research-dot-news";
+      return "cal-dot cal-dot-news";
     }
-    return "catalyst-research-dot catalyst-research-dot-ambiguous";
+    return "cal-dot cal-dot-ambiguous";
   }
 
   function groupActivityByDate(events) {
@@ -308,268 +301,59 @@
     return byDate;
   }
 
-  function pad2(value) {
-    return value < 10 ? "0" + value : String(value);
-  }
-
-  function monthKey(year, monthIndex) {
-    return year * 12 + monthIndex;
-  }
-
-  function shiftMonth(month, delta) {
-    var key = monthKey(month.year, month.month) + delta;
-    return { year: Math.floor(key / 12), month: ((key % 12) + 12) % 12 };
-  }
-
-  function activityMonthRange(events) {
-    var now = new Date();
-    var minKey = monthKey(now.getFullYear(), now.getMonth());
-    var maxKey = minKey;
-    events.forEach(function (event) {
-      if (!event || typeof event.count_date !== "string") {
-        return;
-      }
-      var parts = event.count_date.split("-");
-      if (parts.length < 2) {
-        return;
-      }
-      var key = monthKey(Number(parts[0]), Number(parts[1]) - 1);
-      if (key < minKey) {
-        minKey = key;
-      }
-      if (key > maxKey) {
-        maxKey = key;
-      }
-    });
-    return { min: minKey, max: maxKey };
-  }
-
-  function activityDotsHtml(events) {
+  function dotsHtml(events) {
     var dots = "";
     var shown = Math.min(events.length, 3);
     for (var index = 0; index < shown; index += 1) {
       dots += '<span class="' + activityDotClass(events[index].earnings_state) + '"></span>';
     }
     if (events.length > shown) {
-      dots += '<span class="catalyst-research-cal-more">+' + (events.length - shown) + "</span>";
+      dots += '<span class="cal-ir-more">+' + (events.length - shown) + "</span>";
     }
     return dots;
   }
 
-  function calendarGridHtml(state, byDate) {
-    var year = state.month.year;
-    var monthIndex = state.month.month;
-    var firstWeekday = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
-    var daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-    var cells = WEEKDAY_LABELS.map(function (label) {
-      return '<div class="catalyst-research-cal-weekday">' + label + "</div>";
-    }).join("");
-    for (var blank = 0; blank < firstWeekday; blank += 1) {
-      cells += '<div class="catalyst-research-cal-day catalyst-research-cal-day-empty"></div>';
-    }
-    for (var day = 1; day <= daysInMonth; day += 1) {
-      var dateKey = year + "-" + pad2(monthIndex + 1) + "-" + pad2(day);
-      var dayEvents = byDate[dateKey] || [];
-      if (!dayEvents.length) {
-        cells += '<div class="catalyst-research-cal-day"><span class="catalyst-research-cal-day-num">' + day + "</span></div>";
-        continue;
-      }
-      var selected = state.selectedDate === dateKey ? " catalyst-research-cal-day-selected" : "";
-      cells +=
-        '<button type="button" class="catalyst-research-cal-day catalyst-research-cal-day-has-events' + selected +
-        '" data-cr-action="select-day" data-cr-date="' + dateKey + '">' +
-        '<span class="catalyst-research-cal-day-num">' + day + "</span>" +
-        '<span class="catalyst-research-cal-dots">' + activityDotsHtml(dayEvents) + "</span>" +
-        "</button>";
-    }
-    return cells;
-  }
-
-  function activityEventDetailHtml(event) {
-    var details = [];
-    details.push(row("Event date", escapeHtml(event.count_date || "—")));
-    details.push(row("Classification", escapeHtml(ACTIVITY_STATE_LABELS[event.earnings_state] || "Ambiguous")));
-    details.push(row(
-      "Extraction",
-      escapeHtml(PROVIDER_LABELS[event.extraction_provider] || event.extraction_provider || "unknown")
-    ));
-    details.push(row(
-      "Content",
-      event.has_content
-        ? "Full text archived"
-        : '<span class="catalyst-research-muted">Metadata only</span>'
-    ));
-    var safeUrl = typeof event.url === "string" && /^https:\/\//i.test(event.url) ? event.url : null;
-    var link = safeUrl
-      ? '<a class="catalyst-research-source-url" href="' + escapeHtml(safeUrl) +
-        '" target="_blank" rel="noopener noreferrer">Open source ↗</a>'
-      : "";
-    return '<div class="catalyst-research-event-detail">' + details.join("") + link + "</div>";
-  }
-
-  function activityPanelHtml(state, byDate) {
-    if (!state.selectedDate || !(byDate[state.selectedDate] || []).length) {
+  function eventsHtml(events) {
+    return (events || []).map(function (event) {
+      var meta = [
+        ACTIVITY_CHANNEL_LABELS[event.source_type] || String(event.source_type || "").replace(/_/g, " "),
+        ACTIVITY_STATE_LABELS[event.earnings_state] || "Ambiguous",
+        PROVIDER_LABELS[event.extraction_provider] || event.extraction_provider || "",
+        event.has_content ? "Full text archived" : "Metadata only",
+      ].filter(function (part) { return part; }).join(" · ");
+      var safeUrl = typeof event.url === "string" && /^https:\/\//i.test(event.url) ? event.url : null;
+      var link = safeUrl
+        ? ' · <a href="' + escapeHtml(safeUrl) + '" target="_blank" rel="noopener noreferrer">Open source ↗</a>'
+        : "";
       return (
-        '<div class="catalyst-research-panel-title">Day detail</div>' +
-        '<div class="catalyst-research-note">Select a marked day to review its events.</div>'
-      );
-    }
-    var dayEvents = byDate[state.selectedDate];
-    var items = dayEvents.map(function (event, index) {
-      var key = state.selectedDate + "#" + index;
-      var expanded = state.expandedKey === key;
-      return (
-        '<div class="catalyst-research-event-block">' +
-        '<button type="button" class="catalyst-research-event" data-cr-action="toggle-event" data-cr-key="' + escapeHtml(key) + '">' +
+        '<div class="cal-ir-event">' +
         '<span class="' + activityDotClass(event.earnings_state) + '"></span>' +
-        '<span class="catalyst-research-event-body">' +
-        '<span class="catalyst-research-event-title">' + escapeHtml(event.title || "Untitled") + "</span>" +
-        '<span class="catalyst-research-event-meta">' +
-        escapeHtml(ACTIVITY_CHANNEL_LABELS[event.source_type] || String(event.source_type || "").replace(/_/g, " ")) +
-        " · " + escapeHtml(ACTIVITY_STATE_LABELS[event.earnings_state] || "Ambiguous") +
-        "</span></span></button>" +
-        (expanded ? activityEventDetailHtml(event) : "") +
-        "</div>"
+        '<span class="cal-ir-event-body">' +
+        '<span class="cal-ir-event-title">' + escapeHtml(event.title || "Untitled") + "</span>" +
+        '<span class="cal-ir-event-meta">' + escapeHtml(meta) + link + "</span>" +
+        "</span></div>"
       );
     }).join("");
-    return (
-      '<div class="catalyst-research-panel-title">' + escapeHtml(state.selectedDate) + "</div>" +
-      items
-    );
   }
 
-  function drawActivity(root, state) {
-    if (state.error) {
-      root.innerHTML =
-        '<div class="catalyst-research-activity">' +
-        '<div class="catalyst-research-activity-title">Catalyst activity calendar</div>' +
-        '<div class="catalyst-research-note">Activity calendar unavailable.</div></div>';
-      return;
-    }
-    if (!state.events.length && state.loading) {
-      root.innerHTML =
-        '<div class="catalyst-research-activity">' +
-        '<div class="catalyst-research-activity-title">Catalyst activity calendar</div>' +
-        '<div class="catalyst-research-note">Loading activity…</div></div>';
-      return;
-    }
-    if (!state.events.length) {
-      root.innerHTML = "";
-      return;
-    }
-    var byDate = groupActivityByDate(state.events);
-    if (!state.month) {
-      var latest = state.events[0].count_date.split("-");
-      state.month = { year: Number(latest[0]), month: Number(latest[1]) - 1 };
-    }
-    var range = activityMonthRange(state.events);
-    var currentKey = monthKey(state.month.year, state.month.month);
-    if (!state.nextCursor && currentKey < range.min) {
-      state.month = shiftMonth(state.month, range.min - currentKey);
-      currentKey = range.min;
-    }
-    var legend =
-      '<div class="catalyst-research-legend">' +
-      '<span><span class="catalyst-research-dot catalyst-research-dot-earnings"></span> Earnings</span>' +
-      '<span><span class="catalyst-research-dot catalyst-research-dot-news"></span> News / Events</span>' +
-      '<span><span class="catalyst-research-dot catalyst-research-dot-ambiguous"></span> Ambiguous</span>' +
-      "</div>";
-    var nav =
-      '<div class="catalyst-research-cal-nav">' +
-      '<button type="button" data-cr-action="prev-month"' + (currentKey <= range.min && !state.nextCursor ? " disabled" : "") + '>‹</button>' +
-      '<span class="catalyst-research-cal-month">' + MONTH_NAMES[state.month.month] + " " + state.month.year + "</span>" +
-      '<button type="button" data-cr-action="next-month"' + (currentKey >= range.max ? " disabled" : "") + '>›</button>' +
-      "</div>";
-    var loadMore = state.nextCursor
-      ? '<button type="button" class="catalyst-research-load-more" data-cr-action="load-more"' +
-        (state.loading ? " disabled" : "") + ">" +
-        (state.loading ? "Loading…" : "Load earlier activity") + "</button>"
-      : "";
-    root.innerHTML =
-      '<div class="catalyst-research-activity">' +
-      '<div class="catalyst-research-activity-title">Catalyst activity calendar</div>' +
-      legend +
-      '<div class="catalyst-research-activity-layout">' +
-      '<div class="catalyst-research-cal">' + nav +
-      '<div class="catalyst-research-cal-grid">' + calendarGridHtml(state, byDate) + "</div>" +
-      loadMore +
-      "</div>" +
-      '<div class="catalyst-research-panel">' + activityPanelHtml(state, byDate) + "</div>" +
-      "</div></div>";
-  }
-
-  function mountActivity(symbol, options) {
-    if (!options.container || typeof options.container.querySelector !== "function") {
-      return;
-    }
-    var root = options.container.querySelector("[data-cr-activity-root]");
-    if (!root || typeof options.isCurrent !== "function") {
-      return;
-    }
-    var state = {
-      events: [],
-      nextCursor: null,
-      month: null,
-      selectedDate: null,
-      expandedKey: null,
-      loading: false,
-      error: false,
-    };
-    root.addEventListener("click", function (event) {
-      var target = event.target && event.target.closest ? event.target.closest("[data-cr-action]") : null;
-      if (!target || !root.contains(target)) {
-        return;
-      }
-      var action = target.getAttribute("data-cr-action");
-      if (action === "prev-month" || action === "next-month") {
-        state.month = shiftMonth(state.month, action === "prev-month" ? -1 : 1);
-      } else if (action === "select-day") {
-        state.selectedDate = target.getAttribute("data-cr-date");
-        state.expandedKey = null;
-      } else if (action === "toggle-event") {
-        var key = target.getAttribute("data-cr-key");
-        state.expandedKey = state.expandedKey === key ? null : key;
-      } else if (action === "load-more") {
-        loadMore();
-        return;
-      } else {
-        return;
-      }
-      drawActivity(root, state);
-    });
-    function loadMore() {
-      if (state.loading) {
-        return;
-      }
-      state.loading = true;
-      drawActivity(root, state);
+  function loadActivity(symbol) {
+    var events = [];
+    function fetchPage(cursor) {
       var url =
         "/api/ticker-quant/" + encodeURIComponent(symbol) + "/catalyst-research/activity?limit=200" +
-        (state.nextCursor ? "&cursor=" + encodeURIComponent(state.nextCursor) : "");
-      fetch(url)
-        .then(requireOkJson)
-        .then(function (page) {
-          state.loading = false;
-          if (!options.isCurrent(symbol)) {
-            return;
-          }
-          if (!page || page.status === "not_researched") {
-            state.nextCursor = null;
-          } else {
-            state.events = state.events.concat(page.events || []);
-            state.nextCursor = page.next_cursor || null;
-          }
-          drawActivity(root, state);
-        })
-        .catch(function () {
-          state.loading = false;
-          state.error = true;
-          if (options.isCurrent(symbol)) {
-            drawActivity(root, state);
-          }
-        });
+        (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
+      return fetch(url).then(requireOkJson).then(function (page) {
+        if (!page || page.status === "not_researched") {
+          return events;
+        }
+        events = events.concat(page.events || []);
+        if (page.next_cursor) {
+          return fetchPage(page.next_cursor);
+        }
+        return events;
+      });
     }
-    loadMore();
+    return fetchPage(null);
   }
 
   function render(payload) {
@@ -607,7 +391,6 @@
       sourcesHtml(payload.sources, payload.endpoints) +
       warningsHtml(payload.warnings) +
       nextActions +
-      '<div data-cr-activity-root></div>' +
       "</div>"
     );
   }
@@ -619,11 +402,17 @@
       .then(function (payload) {
         if (options.isCurrent && options.onResult && options.isCurrent(symbol)) {
           options.onResult(payload, render(payload));
-          mountActivity(symbol, options);
         }
         return payload;
       });
   }
 
-  window.CatalystResearch = { load: load, render: render };
+  window.CatalystResearch = {
+    load: load,
+    render: render,
+    loadActivity: loadActivity,
+    groupActivityByDate: groupActivityByDate,
+    dotsHtml: dotsHtml,
+    eventsHtml: eventsHtml,
+  };
 })();

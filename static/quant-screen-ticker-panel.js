@@ -416,7 +416,20 @@
     return (dow + 6) % 7;
   }
 
-  function _calCellHtml(day, filings, center, sigma) {
+  function _calCellState(dateKey) {
+    var events = catalystIrByDate[dateKey] || [];
+    var hasEvents = events.length > 0;
+    var dots = hasEvents && window.CatalystResearch && window.CatalystResearch.dotsHtml
+      ? '<span class="cal-ir-dots">' + window.CatalystResearch.dotsHtml(events) + "</span>"
+      : "";
+    return {
+      cls: (hasEvents ? " cal-has-events" : "") + (catalystCalSelectedDate === dateKey ? " cal-selected" : ""),
+      attrs: hasEvents ? ' data-cal-date="' + escapeHtml(dateKey) + '"' : "",
+      dots: dots,
+    };
+  }
+
+  function _calTradingCellHtml(day, filings, center, sigma) {
     var ret = day["return"];
     var absSigma = sigma > 0 ? Math.abs(ret - center) / sigma : 0;
     var tone = "";
@@ -427,30 +440,61 @@
     }
     var filing = filings[day.date] ? " cal-filing" : "";
     var retText = (ret >= 0 ? "+" : "") + (ret * 100).toFixed(1) + "%";
+    var state = _calCellState(day.date);
     return (
-      '<div class="cal-cell' + tone + filing + '" title="' + escapeHtml(day.date) + '">' +
+      '<div class="cal-cell' + tone + filing + state.cls + '"' + state.attrs +
+      ' title="' + escapeHtml(day.date) + '">' +
       '<span class="cal-day">' + escapeHtml(day.date.slice(8)) + "</span>" +
-      '<span class="cal-ret">' + retText + "</span></div>"
+      '<span class="cal-ret">' + retText + "</span>" +
+      state.dots +
+      "</div>"
     );
   }
 
-  function _calMonthHtml(monthKey, days, filings, center, sigma) {
+  function _calOffCellHtml(dateKey) {
+    var state = _calCellState(dateKey);
+    return (
+      '<div class="cal-cell cal-off' + state.cls + '"' + state.attrs +
+      ' title="' + escapeHtml(dateKey) + '">' +
+      '<span class="cal-day">' + escapeHtml(dateKey.slice(8)) + "</span>" +
+      state.dots +
+      "</div>"
+    );
+  }
+
+  function _calMonthHtml(monthKey, days, filings, center, sigma, start, end) {
+    var byDate = {};
+    days.forEach(function (day) {
+      byDate[day.date] = day;
+    });
+    var year = Number(monthKey.slice(0, 4));
+    var monthIndex = Number(monthKey.slice(5)) - 1;
+    var daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
     var cells = "";
-    var offset = _calWeekdayIndex(days[0].date);
+    var offset = _calWeekdayIndex(monthKey + "-01");
     for (var i = 0; i < offset; i++) {
       cells += '<div class="cal-cell cal-empty"></div>';
     }
-    days.forEach(function (day) {
-      cells += _calCellHtml(day, filings, center, sigma);
-    });
+    for (var dayNum = 1; dayNum <= daysInMonth; dayNum += 1) {
+      var dateKey = monthKey + "-" + (dayNum < 10 ? "0" : "") + dayNum;
+      if (dateKey < start || dateKey > end) {
+        cells += '<div class="cal-cell cal-empty"></div>';
+      } else if (byDate[dateKey]) {
+        cells += _calTradingCellHtml(byDate[dateKey], filings, center, sigma);
+      } else {
+        cells += _calOffCellHtml(dateKey);
+      }
+    }
     return (
       '<div class="cal-month"><div class="cal-month-title">' + escapeHtml(monthKey) + "</div>" +
-      '<div class="cal-weekdays"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span></div>' +
+      '<div class="cal-weekdays"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>' +
       '<div class="cal-grid">' + cells + "</div></div>"
     );
   }
 
   var catalystCalendarData = null;
+  var catalystIrByDate = {};
+  var catalystCalSelectedDate = null;
 
   function _calIsoShift(iso, deltaDays) {
     var parts = iso.split("-");
@@ -500,9 +544,69 @@
         currentYear = year;
         html += '<div class="cal-year-title">' + escapeHtml(year) + "</div>";
       }
-      html += _calMonthHtml(monthKey, byMonth[monthKey], filings, center, sigma);
+      html += _calMonthHtml(monthKey, byMonth[monthKey], filings, center, sigma, start, end);
     });
     return html;
+  }
+
+  function _calTradingDay(dateKey) {
+    var days = (catalystCalendarData && catalystCalendarData.days) || [];
+    for (var i = 0; i < days.length; i++) {
+      if (days[i].date === dateKey) {
+        return days[i];
+      }
+    }
+    return null;
+  }
+
+  function _calDetailHtml(dateKey) {
+    var meta = [];
+    var day = _calTradingDay(dateKey);
+    if (day) {
+      var ret = day["return"];
+      meta.push((ret >= 0 ? "+" : "") + (ret * 100).toFixed(1) + "%");
+    }
+    if (catalystCalendarData && (catalystCalendarData.filing_dates || []).indexOf(dateKey) !== -1) {
+      meta.push("8-K filing");
+    }
+    var eventsList = window.CatalystResearch && window.CatalystResearch.eventsHtml
+      ? window.CatalystResearch.eventsHtml(catalystIrByDate[dateKey] || [])
+      : "";
+    return (
+      '<div class="cal-detail-title">' + escapeHtml(dateKey) + "</div>" +
+      (meta.length ? '<div class="cal-detail-meta">' + escapeHtml(meta.join(" · ")) + "</div>" : "") +
+      eventsList
+    );
+  }
+
+  function renderCatalystDetail() {
+    var detail = panel.querySelector("#catalystCalDetail");
+    if (!detail) {
+      return;
+    }
+    var events = catalystIrByDate[catalystCalSelectedDate] || [];
+    if (!catalystCalSelectedDate || !events.length) {
+      detail.innerHTML = "";
+      return;
+    }
+    detail.innerHTML = '<div class="cal-detail">' + _calDetailHtml(catalystCalSelectedDate) + "</div>";
+  }
+
+  function renderCatalystRange() {
+    var container = panel.querySelector("#catalystCalRange");
+    var startInput = panel.querySelector("#calRangeStart");
+    var endInput = panel.querySelector("#calRangeEnd");
+    if (!container || !startInput || !endInput || !catalystCalendarData) {
+      return;
+    }
+    var start = startInput.value;
+    var end = endInput.value;
+    if (!start || !end || start > end) {
+      container.innerHTML = "";
+      return;
+    }
+    container.innerHTML = _calRangeHtml(catalystCalendarData, start, end);
+    renderCatalystDetail();
   }
 
   function catalystCalendarHtml(calendar) {
@@ -517,8 +621,9 @@
       '<input type="date" id="calRangeEnd" aria-label="Calendar range end">' +
       '<span class="cal-controls-note">max 1 year</span>' +
       "</div>" +
-      '<div class="cal-legend">Red up / green down · darker = ≥1σ / ≥2σ move · bordered day = 8-K filing</div>' +
-      '<div id="catalystCalRange"></div>'
+      '<div class="cal-legend">Red up / green down · darker = ≥1σ / ≥2σ move · bordered day = 8-K filing · dots: indigo earnings, gray IR event, hollow ambiguous</div>' +
+      '<div id="catalystCalRange"></div>' +
+      '<div id="catalystCalDetail"></div>'
     );
   }
 
@@ -541,15 +646,15 @@
     endInput.value = maxDate;
     var defaultStart = _calIsoShift(maxDate, -30);
     startInput.value = defaultStart < minDate ? minDate : defaultStart;
-    function renderRange() {
-      var start = startInput.value;
-      var end = endInput.value;
-      if (!start || !end || start > end) {
-        container.innerHTML = "";
+    container.addEventListener("click", function (event) {
+      var target = event.target && event.target.closest ? event.target.closest("[data-cal-date]") : null;
+      if (!target || !container.contains(target)) {
         return;
       }
-      container.innerHTML = _calRangeHtml(catalystCalendarData, start, end);
-    }
+      var dateKey = target.getAttribute("data-cal-date");
+      catalystCalSelectedDate = catalystCalSelectedDate === dateKey ? null : dateKey;
+      renderCatalystRange();
+    });
     startInput.addEventListener("change", function () {
       if (startInput.value && endInput.value && _calDayDiff(startInput.value, endInput.value) > 365) {
         endInput.value = _calIsoShift(startInput.value, 365);
@@ -557,7 +662,7 @@
           endInput.value = maxDate;
         }
       }
-      renderRange();
+      renderCatalystRange();
     });
     endInput.addEventListener("change", function () {
       if (startInput.value && endInput.value && _calDayDiff(startInput.value, endInput.value) > 365) {
@@ -566,9 +671,9 @@
           startInput.value = minDate;
         }
       }
-      renderRange();
+      renderCatalystRange();
     });
-    renderRange();
+    renderCatalystRange();
   }
 
   function catalystActivityBodyHtml(activity) {
@@ -636,13 +741,23 @@
         catalystResearchPayload = payload;
         body.innerHTML = html;
       },
-      container: body,
     }).catch(function () {
       if (activeSymbol !== symbol) {
         return;
       }
       body.innerHTML = '<div class="ticker-detail-meta">IR communication history unavailable.</div>';
     });
+    if (window.CatalystResearch.loadActivity) {
+      window.CatalystResearch.loadActivity(symbol)
+        .then(function (events) {
+          if (activeSymbol !== symbol) {
+            return;
+          }
+          catalystIrByDate = window.CatalystResearch.groupActivityByDate(events);
+          renderCatalystRange();
+        })
+        .catch(function () {});
+    }
   }
 
   var INSIDER_PAGE_SIZE = 25;
@@ -774,6 +889,8 @@
     if (!body) {
       return;
     }
+    catalystIrByDate = {};
+    catalystCalSelectedDate = null;
     fetchJson("/api/ticker-quant/" + encodeURIComponent(symbol) + "/catalyst")
       .then(function (activity) {
         if (activeSymbol !== symbol) {
