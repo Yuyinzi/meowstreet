@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.agents.catalyst_research import config
+from app.agents.catalyst_research import statistics
 from app.agents.catalyst_research.persistence import repository
 
 
@@ -114,11 +115,25 @@ def _v1_1_source_summary(connection, source):
     return summary
 
 
+def _accumulated_channels(connection, result):
+    stored = result.get("statistics") or {}
+    window = result.get("requested_window") or {}
+    start, end = window.get("start"), window.get("end")
+    if not start or not end:
+        return stored
+    events = repository.load_accumulated_channel_events(
+        connection, result.get("ticker"), start, end
+    )
+    if not events:
+        return stored
+    return statistics.calculate_accumulated_statistics(events, stored, {"start": start, "end": end})
+
+
 def _v1_1_summary(connection, result):
     summary = {key: result.get(key) for key in _SUMMARY_FIELDS}
     summary["mode"] = result.get("mode")
     summary["registry"] = _registry_summary(repository.load_company_registry(connection, result.get("ticker")))
-    summary["channels"] = result.get("statistics") or {}
+    summary["channels"] = _accumulated_channels(connection, result)
     summary["endpoints"] = [
         _endpoint_summary(endpoint)
         for endpoint in repository.load_source_endpoints(connection, result.get("ticker"))

@@ -1298,6 +1298,22 @@ def load_events_page(con, ticker, job_id, limit, cursor):
     return {"ticker": normalized, "job_id": job_id, "events": events, "next_cursor": next_cursor}
 
 
+def load_accumulated_channel_events(con, ticker, window_start, window_end):
+    normalized = _ticker(ticker)
+    if not window_start or not window_end or str(window_start) > str(window_end):
+        raise ValueError("accumulated events window is invalid")
+    rows = con.execute(
+        """select source_type, count_date, title, normalized_title, canonical_url, earnings_state, discovery_method
+           from catalyst_ir_events where rowid in (
+               select max(rowid) from catalyst_ir_events where ticker = ?
+               group by source_type, count_date, normalized_title, canonical_url)
+           and ticker = ? and count_date >= ? and count_date <= ?
+           order by count_date, event_id""",
+        (normalized, normalized, str(window_start), str(window_end)),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def load_ticker_activity_page(con, ticker, limit, cursor):
     normalized = _ticker(ticker)
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:

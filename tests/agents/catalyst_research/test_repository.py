@@ -1262,3 +1262,37 @@ def test_load_job_result_schema_version_tracks_research_version(tmp_path):
     assert repository.load_job_result_schema_version(con, v1_1_job["job_id"]) == LEGACY_RESULT_SCHEMA_VERSION
     with pytest.raises(ValueError, match="was not found"):
         repository.load_job_result_schema_version(con, "cr_missing")
+
+
+def test_accumulated_channel_events_dedupe_across_jobs_and_clip_to_window(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    first_job = _job(con, status="running")
+    first_source = repository.save_source(con, {"job_id": first_job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/first"})
+    second_job = _job(con, status="running")
+    second_source = repository.save_source(con, {"job_id": second_job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/second"})
+    shared = {"source_type": "press_releases", "count_date": "2026-01-05", "title": "Shared event", "url": "https://ir.example.test/shared"}
+    repository.save_finalized_observations(con, first_job["job_id"], [{**shared, "source_id": first_source["source_id"], "ticker": "NVDA"}], [])
+    repository.save_finalized_observations(
+        con,
+        second_job["job_id"],
+        [
+            {**shared, "source_id": second_source["source_id"], "ticker": "NVDA"},
+            {"source_id": second_source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-02-01", "title": "Second only", "url": "https://ir.example.test/second-only"},
+            {"source_id": second_source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2027-01-05", "title": "Outside window", "url": "https://ir.example.test/outside"},
+        ],
+        [],
+    )
+
+    rows = repository.load_accumulated_channel_events(con, "NVDA", "2026-01-01", "2026-12-31")
+
+    assert [(row["count_date"], row["title"]) for row in rows] == [("2026-01-05", "Shared event"), ("2026-02-01", "Second only")]
+    con.close()
+
+
+@pytest.mark.parametrize("start,end", [(None, "2026-12-31"), ("2026-01-01", None), ("2026-12-31", "2026-01-01")])
+def test_accumulated_channel_events_reject_invalid_window(tmp_path, start, end):
+    con = repository.connect(tmp_path / "db.sqlite")
+
+    with pytest.raises(ValueError, match="accumulated events window is invalid"):
+        repository.load_accumulated_channel_events(con, "NVDA", start, end)
+    con.close()

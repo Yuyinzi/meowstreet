@@ -228,6 +228,72 @@ def _observed_channel_statistics(events, source, requested_start, requested_end)
     return result
 
 
+def _merged_channel_sources(events, stored_channels):
+    grouped = {}
+    for event in events:
+        if not isinstance(event, Mapping):
+            raise ValueError("event is invalid")
+        grouped.setdefault(event.get("source_type"), []).append(event)
+    sources = []
+    for channel, channel_events in grouped.items():
+        if channel not in _EVENT_CHANNELS:
+            raise ValueError("event source type is invalid")
+        stored = stored_channels.get(channel) or {}
+        days = sorted(str(event.get("count_date")) for event in channel_events)
+        methods = list(stored.get("discovery_methods") or [])
+        for event in channel_events:
+            method = event.get("discovery_method")
+            if method and method not in methods:
+                methods.append(method)
+        sources.append(
+            _channel_evidence_source(
+                channel,
+                coverage_status="observed_partial",
+                discovery_methods=methods,
+                observed_start=days[0],
+                observed_end=days[-1],
+            )
+        )
+    for channel, stored in stored_channels.items():
+        if channel in grouped:
+            continue
+        if channel not in _EVENT_CHANNELS:
+            raise ValueError("source type is invalid")
+        if not isinstance(stored, Mapping):
+            raise ValueError("stored channel is invalid")
+        sources.append(
+            _channel_evidence_source(
+                channel,
+                coverage_status=stored.get("coverage_status") or "missing",
+                discovery_methods=stored.get("discovery_methods") or [],
+                observed_start=None,
+                observed_end=None,
+            )
+        )
+    return sources
+
+
+def _channel_evidence_source(
+    channel, *, coverage_status, discovery_methods, observed_start, observed_end
+):
+    return {
+        "source_type": channel,
+        "coverage_status": coverage_status,
+        "discovery_methods": list(discovery_methods),
+        "observed_start": observed_start,
+        "observed_end": observed_end,
+    }
+
+
+def calculate_accumulated_statistics(events, stored_channels, requested_window) -> dict:
+    if not isinstance(events, list):
+        raise ValueError("events are required")
+    if not isinstance(stored_channels, dict):
+        raise ValueError("stored channels are required")
+    sources = _merged_channel_sources(events, stored_channels)
+    return calculate_statistics(events, sources, requested_window)
+
+
 def calculate_statistics(events, sources, requested_window) -> dict:
     if not isinstance(events, list):
         raise ValueError("events are required")

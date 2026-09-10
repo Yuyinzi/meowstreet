@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.agents.catalyst_research.domain import classify_observations
+from app.agents.catalyst_research.statistics import calculate_accumulated_statistics
 from app.agents.catalyst_research.statistics import calculate_statistics
 
 
@@ -689,3 +690,56 @@ def test_v1_1_complete_zero_non_earnings_reports_zero_rates():
     assert channel["observed_non_earnings_per_month"] == 0.0
     assert channel["observed_non_earnings_per_year"] == 0.0
     assert channel["median_days_between_observed_non_earnings"] is None
+
+
+def test_accumulated_statistics_merge_events_across_runs():
+    events = [
+        {**_stat_event("non_earnings", source_type="events_presentations", day="2024-03-03", slug="gtc-keynote"), "discovery_method": "search"},
+        _stat_event("earnings", source_type="events_presentations", day="2024-05-21", slug="quarterly-results-webcast"),
+        _stat_event("non_earnings", day="2024-08-31", slug="partnership"),
+    ]
+    stored = {
+        "press_releases": {"coverage_status": "observed_partial", "discovery_methods": ["rss"]},
+        "events_presentations": {"coverage_status": "missing", "discovery_methods": []},
+    }
+
+    result = calculate_accumulated_statistics(events, stored, _observed_window())
+
+    channel = result["events_presentations"]
+    assert channel["coverage_status"] == "observed_partial"
+    assert channel["observed_total"] == 2
+    assert channel["observed_earnings"] == 1
+    assert channel["observed_non_earnings"] == 1
+    assert channel["observed_start"] == "2024-03-03"
+    assert channel["observed_end"] == "2024-05-21"
+    assert channel["discovery_methods"] == ["search"]
+    assert channel["coverage_warning"] == "search and feed history may omit official records"
+    press = result["press_releases"]
+    assert press["observed_total"] == 1
+    assert press["discovery_methods"] == ["rss"]
+
+
+def test_accumulated_statistics_keep_stored_status_for_channels_without_events():
+    events = [_stat_event("non_earnings", day="2024-06-15", slug="launch")]
+    stored = {
+        "press_releases": {"coverage_status": "observed_partial", "discovery_methods": ["rss"]},
+        "events_presentations": {"coverage_status": "unsupported", "discovery_methods": []},
+    }
+
+    result = calculate_accumulated_statistics(events, stored, _observed_window())
+
+    channel = result["events_presentations"]
+    assert channel["coverage_status"] == "unsupported"
+    assert channel["observed_total"] == 0
+    assert "coverage_warning" not in channel
+
+
+def test_accumulated_statistics_reject_invalid_inputs():
+    with pytest.raises(ValueError, match="events are required"):
+        calculate_accumulated_statistics(None, {}, _observed_window())
+    with pytest.raises(ValueError, match="stored channels are required"):
+        calculate_accumulated_statistics([], None, _observed_window())
+    with pytest.raises(ValueError, match="event source type is invalid"):
+        calculate_accumulated_statistics(
+            [_stat_event("non_earnings", source_type="blog")], {}, _observed_window()
+        )

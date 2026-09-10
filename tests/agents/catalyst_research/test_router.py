@@ -123,11 +123,12 @@ def _v1_1_result(**overrides):
     return result
 
 
-def _client(monkeypatch, *, latest=None, events_page=None, activity_page=None, adapter_brief=None, registry=None, endpoints=None, job_schema_version="catalyst_research_result_v1", recorded=None, activity_recorded=None):
+def _client(monkeypatch, *, latest=None, events_page=None, activity_page=None, adapter_brief=None, registry=None, endpoints=None, job_schema_version="catalyst_research_result_v1", recorded=None, activity_recorded=None, accumulated=None):
     monkeypatch.setattr(catalyst_router.repository, "connect", lambda *args, **kwargs: FakeConnection())
     monkeypatch.setattr(catalyst_router.repository, "load_latest_result", lambda con, ticker: latest)
     monkeypatch.setattr(catalyst_router.repository, "load_company_registry", lambda con, ticker: registry)
     monkeypatch.setattr(catalyst_router.repository, "load_source_endpoints", lambda con, ticker: endpoints or [])
+    monkeypatch.setattr(catalyst_router.repository, "load_accumulated_channel_events", lambda con, ticker, start, end: accumulated or [])
     monkeypatch.setattr(catalyst_router.repository, "load_job_result_schema_version", lambda con, job_id: job_schema_version)
 
     def events(con, ticker, job_id, limit, cursor):
@@ -510,6 +511,53 @@ def test_summary_returns_v1_1_registry_and_observed_channels(monkeypatch):
     source = payload["sources"][0]
     assert source["endpoint_id"] == "cse_1"
     assert source["execution_path"] == "v1_1"
+
+
+def _accumulated_event(source_type, count_date, title, earnings_state, url=None, discovery_method=None):
+    return {
+        "source_type": source_type,
+        "count_date": count_date,
+        "title": title,
+        "normalized_title": title.casefold(),
+        "canonical_url": url,
+        "earnings_state": earnings_state,
+        "discovery_method": discovery_method,
+    }
+
+
+def test_summary_channels_accumulate_events_across_jobs(monkeypatch):
+    accumulated = [
+        _accumulated_event("events_presentations", "2026-03-03", "NVIDIA at GTC 2026", "non_earnings", discovery_method="search"),
+        _accumulated_event("events_presentations", "2026-05-21", "Upcoming events for financial community", "non_earnings", discovery_method="search"),
+        _accumulated_event("events_presentations", "2026-08-26", "NVIDIA 2nd quarter FY27 financial results", "earnings", discovery_method=None),
+        _accumulated_event("press_releases", "2026-08-31", "NVIDIA announces partnership", "non_earnings", url="https://nvidianews.example.test/news/1", discovery_method="rss"),
+    ]
+    client = _client(monkeypatch, latest=_v1_1_result(), accumulated=accumulated)
+
+    payload = client.get("/api/ticker-quant/NVDA/catalyst-research").json()
+
+    channel = payload["channels"]["events_presentations"]
+    assert channel["coverage_status"] == "observed_partial"
+    assert channel["observed_total"] == 3
+    assert channel["observed_earnings"] == 1
+    assert channel["observed_non_earnings"] == 2
+    assert channel["observed_start"] == "2026-03-03"
+    assert channel["observed_end"] == "2026-08-26"
+    assert channel["discovery_methods"] == ["search"]
+    assert channel["median_days_between_observed_non_earnings"] == 79.0
+    assert channel["coverage_warning"] == "search and feed history may omit official records"
+    press = payload["channels"]["press_releases"]
+    assert press["observed_total"] == 1
+    assert press["discovery_methods"] == ["rss", "search"]
+
+
+def test_summary_channels_keep_stored_statistics_without_accumulated_events(monkeypatch):
+    client = _client(monkeypatch, latest=_v1_1_result(), accumulated=[])
+
+    payload = client.get("/api/ticker-quant/NVDA/catalyst-research").json()
+
+    assert payload["channels"]["press_releases"]["observed_total"] == 84
+    assert payload["channels"]["events_presentations"]["coverage_status"] == "missing"
 
 
 def test_summary_v1_1_without_registry_row_exposes_null_registry(monkeypatch):
