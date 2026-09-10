@@ -1502,6 +1502,14 @@ def load_source_endpoints(con, ticker, channel=None, statuses=None):
     return [dict(row) for row in rows]
 
 
+def list_feed_tickers(con):
+    rows = con.execute(
+        "select distinct ticker from catalyst_source_endpoints "
+        "where endpoint_type in ('rss', 'atom') and status != 'retired' order by ticker",
+    ).fetchall()
+    return [row["ticker"] for row in rows]
+
+
 def record_endpoint_check(con, check):
     endpoint_id = check.get("endpoint_id")
     if con.execute("select 1 from catalyst_source_endpoints where endpoint_id = ?", (endpoint_id,)).fetchone() is None:

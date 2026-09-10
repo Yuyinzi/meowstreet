@@ -923,6 +923,21 @@ def test_load_source_endpoints_filters_by_channel_and_statuses(tmp_path):
         repository.load_source_endpoints(con, "NVDA", statuses={"broken"})
 
 
+def test_list_feed_tickers_returns_distinct_non_retired_feed_tickers(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    repository.upsert_source_endpoint(con, endpoint_payload(ticker="NVDA", url="https://a.test/rss", domain="a.test"))
+    repository.upsert_source_endpoint(con, endpoint_payload(ticker="NVDA", channel="events_presentations", endpoint_type="atom", url="https://b.test/atom", domain="b.test", status="active"))
+    repository.upsert_source_endpoint(con, endpoint_payload(ticker="AAPL", url="https://c.test/rss", domain="c.test", status="active"))
+    repository.upsert_source_endpoint(con, endpoint_payload(ticker="MSFT", url="https://d.test/rss", domain="d.test", status="retired"))
+    repository.upsert_source_endpoint(con, endpoint_payload(ticker="TSLA", endpoint_type="archive", url="https://e.test/api", domain="e.test", status="active"))
+    assert repository.list_feed_tickers(con) == ["AAPL", "NVDA"]
+
+
+def test_list_feed_tickers_returns_empty_when_no_feeds(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    assert repository.list_feed_tickers(con) == []
+
+
 def test_endpoint_check_allows_null_job_id_and_rejects_negative_counts(tmp_path):
     con = repository.connect(tmp_path / "db.sqlite")
     endpoint = repository.upsert_source_endpoint(con, endpoint_payload())

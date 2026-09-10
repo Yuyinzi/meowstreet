@@ -322,6 +322,58 @@ Use `--backfill` only to retrieve missing documents from older completed meeting
 .venv/bin/python scripts/fetch_fomc_documents.py --document-type all --backfill
 ```
 
+## Catalyst Feed Refresh
+
+Registered catalyst RSS/Atom source endpoints are refreshed by a separate job,
+not by the macro refresh:
+
+```bash
+cd /Users/littlemay/work/meowstreet/meowstreet
+.venv/bin/python jobs/refresh_catalyst_feeds.py
+```
+
+The job runs the catalyst research agent in `update` mode for every ticker with
+at least one non-retired `rss`/`atom` endpoint in `catalyst_source_endpoints`.
+For each ticker it checks feeds not yet checked today and runs a gap search per
+channel when the last gap search is at least `gap_search_interval_days` old
+(default 7). One shared HTTP client is reused across tickers; tickers run
+serially.
+
+A ticker whose status is `unsupported` has no source registry yet (run a full
+`research` mode job for it first) and does not count as a failure. A failed
+ticker does not stop later tickers but makes the command exit with code `1`.
+The final line reports deterministic aggregate counts, for example:
+
+```text
+catalyst feed refresh completed: ok=3 unsupported=1 failed=0
+```
+
+### Catalyst Feed Cron
+
+Add a separate cron line (not the broad macro cron), for example after the
+morning macro refresh:
+
+```cron
+23 8 * * * cd /Users/littlemay/work/meowstreet/meowstreet && .venv/bin/python jobs/refresh_catalyst_feeds.py >> logs/catalyst-feeds.log 2>&1
+```
+
+The `logs/` directory must exist before cron runs because shell redirection
+opens `logs/catalyst-feeds.log` before starting Python.
+
+### Catalyst Feed Manual Run
+
+```bash
+.venv/bin/python jobs/refresh_catalyst_feeds.py
+```
+
+Refresh only selected tickers, for example to recover one failed ticker:
+
+```bash
+.venv/bin/python jobs/refresh_catalyst_feeds.py --ticker NVDA
+```
+
+Optional configuration: `--db-path`.
+
 ## Logs
 
 Cron appends output to:
@@ -329,6 +381,7 @@ Cron appends output to:
 ```text
 logs/macro_refresh.log
 logs/investing-rendered.log
+logs/catalyst-feeds.log
 ```
 
 The command prints each task with its `ok`, `skipped`, `failed`, or `blocked`
