@@ -317,12 +317,16 @@
 
   function eventsHtml(events) {
     return (events || []).map(function (event) {
-      var meta = [
-        ACTIVITY_CHANNEL_LABELS[event.source_type] || String(event.source_type || "").replace(/_/g, " "),
-        ACTIVITY_STATE_LABELS[event.earnings_state] || "Ambiguous",
-        PROVIDER_LABELS[event.extraction_provider] || event.extraction_provider || "",
-        event.has_content ? "Full text archived" : "Metadata only",
-      ].filter(function (part) { return part; }).join(" · ");
+      var metaParts = [
+        "channel: " + (ACTIVITY_CHANNEL_LABELS[event.source_type] || String(event.source_type || "").replace(/_/g, " ")),
+        "class: " + (ACTIVITY_STATE_LABELS[event.earnings_state] || "Ambiguous"),
+      ];
+      var provider = PROVIDER_LABELS[event.extraction_provider] || event.extraction_provider;
+      if (provider) {
+        metaParts.push("via: " + provider);
+      }
+      metaParts.push("content: " + (event.has_content ? "Full text archived" : "Metadata only"));
+      var meta = metaParts.join(" · ");
       var safeUrl = typeof event.url === "string" && /^https:\/\//i.test(event.url) ? event.url : null;
       var link = safeUrl
         ? ' · <a href="' + escapeHtml(safeUrl) + '" target="_blank" rel="noopener noreferrer">Open source ↗</a>'
