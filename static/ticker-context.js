@@ -896,7 +896,7 @@
     }
     var events = catalystIrByDate[catalystCalSelectedDate] || [];
     if (!catalystCalSelectedDate || !events.length) {
-      detail.innerHTML = "";
+      detail.innerHTML = '<div class="cal-detail cal-detail-empty">Select a dotted day to view its events.</div>';
       return;
     }
     detail.innerHTML = '<div class="cal-detail">' + _calDetailHtml(catalystCalSelectedDate) + "</div>";
@@ -932,8 +932,10 @@
       '<span class="cal-controls-note">max 1 year</span>' +
       "</div>" +
       '<div class="cal-legend">Red up / green down · darker = ≥1σ / ≥2σ move · bordered day = 8-K filing · dots: indigo earnings, gray IR event, hollow ambiguous</div>' +
-      '<div id="catalystCalRange"></div>' +
-      '<div id="catalystCalDetail"></div>'
+      '<div class="cal-layout">' +
+      '<div class="cal-main" id="catalystCalRange"></div>' +
+      '<div class="cal-side" id="catalystCalDetail"></div>' +
+      "</div>"
     );
   }
 
