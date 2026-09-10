@@ -91,6 +91,7 @@ export function buildMarketSetupPresentation(setup) {
       excludedInputs: setup.excluded_inputs || [],
       methodVersions: setup.method_versions || {},
       missingInputs: setup.missing_inputs || [],
+      ambiguousInputs: setup.ambiguous_inputs || [],
       nextTriggers: setup.next_triggers || [],
       watchItems: setup.watch_items || [],
       evidenceLayers: setup.evidence_layers || null,
@@ -145,6 +146,14 @@ export function renderDecisionHero(pr) {
       html += '<div class="ms-hero-missing">';
       html += '<strong>Required Inputs</strong>';
       html += '<p>' + escapeHtml(pr.missingInputs.join(" \u00B7 ")) + '</p>';
+      html += '</div>';
+    }
+    if (pr.ambiguousInputs.length) {
+      html += '<div class="ms-hero-ambiguous">';
+      html += '<strong>Ambiguous Inputs</strong>';
+      html += '<p>' + pr.ambiguousInputs.map(function(item) {
+        return escapeHtml((item.label || "") + ": " + (item.reason || ""));
+      }).join(" · ") + '</p>';
       html += '</div>';
     }
     html += '</div>';
@@ -265,6 +274,14 @@ export function renderDetailedReasoning(pr) {
       html += '<div class="ms-pending-confirmations ms-missing-inputs">';
       html += '<h3>Missing Inputs</h3>';
       html += '<p>' + escapeHtml(pr.missingInputs.join(" \u00B7 ")) + '</p>';
+      html += '</div>';
+    }
+    if (pr.ambiguousInputs.length) {
+      html += '<div class="ms-pending-confirmations ms-ambiguous-inputs">';
+      html += '<h3>Ambiguous Inputs</h3>';
+      html += '<p>' + pr.ambiguousInputs.map(function(item) {
+        return escapeHtml((item.label || "") + ": " + (item.reason || ""));
+      }).join(" · ") + '</p>';
       html += '</div>';
     }
     html += '</div>';

@@ -3387,6 +3387,7 @@ def _v2_setup_payload(regime, confirmation, setup, posture, extra=None):
         "excluded_inputs": [],
         "method_versions": {},
         "missing_inputs": setup.get("missing_inputs", []),
+        "ambiguous_inputs": setup.get("ambiguous_inputs", []),
         "next_triggers": setup.get("next_triggers", []),
         "watch_items": setup.get("watch_items", []),
     }
@@ -3691,6 +3692,58 @@ def test_market_setup_hero_insufficient_state():
     assert payload["hasRequiredInputs"] is True
     assert payload["hasMissingLabel"] is True
     assert payload["hasNoGuidance"] is True
+
+
+def test_market_setup_hero_ambiguous_survey_state():
+    setup = _v2_setup_payload(
+        regime={"code": "insufficient_data", "label": "Insufficient Macro Evidence"},
+        confirmation={
+            "code": "insufficient_data",
+            "label": "Insufficient Market Confirmation Evidence",
+            "confirmation_test_count": None,
+            "evidence": {},
+            "offsets": [],
+        },
+        setup={
+            "code": "insufficient_data",
+            "label": "Insufficient Data",
+            "agreement": "incomplete",
+            "missing_inputs": [],
+            "ambiguous_inputs": [
+                {
+                    "fact_id": "survey_growth_direction",
+                    "label": "ISM survey direction",
+                    "reason": "Manufacturing and Services surveys do not share a momentum direction",
+                }
+            ],
+            "interpretation": "Required evidence is missing or stale, so a complete market setup cannot be determined.",
+        },
+        posture={
+            "code": "insufficient_data",
+            "label": "Insufficient Data",
+            "net_exposure": "neutral",
+            "gross_exposure": "reduced",
+            "positioning": ["maintain_neutral_net_exposure"],
+            "avoid": ["large_broad_beta_directional_exposure"],
+        },
+    )
+    checks = {
+        "hasAmbiguousBlock": 'hero.indexOf("Ambiguous Inputs") !== -1',
+        "hasAmbiguousReason": 'hero.indexOf("ISM survey direction: Manufacturing and Services surveys do not share a momentum direction") !== -1',
+        "hasNoRequiredInputs": 'hero.indexOf("Required Inputs") === -1',
+        "hasNoSurveyMissingLabel": 'hero.indexOf("ISM survey synthesis") === -1',
+        "detailHasAmbiguous": 'detail.indexOf("Ambiguous Inputs") !== -1',
+    }
+    script = _market_setup_v2_hero_script(setup, checks)
+    result = subprocess.run(
+        ["node", "-e", script], cwd=ROOT, capture_output=True, check=True, text=True
+    )
+    payload = json.loads(result.stdout)
+    assert payload["hasAmbiguousBlock"] is True
+    assert payload["hasAmbiguousReason"] is True
+    assert payload["hasNoRequiredInputs"] is True
+    assert payload["hasNoSurveyMissingLabel"] is True
+    assert payload["detailHasAmbiguous"] is True
 
 
 def test_market_setup_hero_error_state():

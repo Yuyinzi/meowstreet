@@ -948,6 +948,105 @@ class TestMarketSetupV2Composite:
         assert result["market_confirmation"]["confirmation_test_count"] is None
         assert result["evidence_through"] is None
 
+
+class TestAmbiguousSurveyDirection:
+    def test_ambiguous_survey_reports_ambiguous_inputs_not_missing(self):
+        result = market_setup_v2.build_market_setup_v2(
+            expected_growth=_expected_growth("mixed", status="available"),
+            market_environment=_market_environment("bull_market"),
+            financial_conditions=_financial_conditions("healthy", vix=15.0),
+            policy_response=_policy_response("support_confirmed"),
+        )
+        expected_record = {
+            "fact_id": "survey_growth_direction",
+            "label": "ISM survey direction",
+            "reason": "Manufacturing and Services surveys do not share a momentum direction",
+        }
+        assert result["macro_regime"]["code"] == "insufficient_data"
+        assert result["macro_regime"]["missing_inputs"] == []
+        assert result["macro_regime"]["ambiguous_inputs"] == [expected_record]
+        assert "ISM survey synthesis" not in result["missing_inputs"]
+        assert result["ambiguous_inputs"] == [expected_record]
+
+    def test_unavailable_survey_states_still_report_missing_input(self):
+        for expected_growth in (
+            None,
+            _expected_growth("sideways", status="available"),
+            _expected_growth(None, status="partial"),
+            _expected_growth(None, status="mixed_periods"),
+            _expected_growth("mixed", status="available", source_period={}),
+        ):
+            result = market_setup_v2.build_market_setup_v2(
+                expected_growth=expected_growth,
+                market_environment=_market_environment("bull_market"),
+                financial_conditions=_financial_conditions("healthy", vix=15.0),
+                policy_response=_policy_response("support_confirmed"),
+            )
+            assert result["macro_regime"]["code"] == "insufficient_data"
+            assert "ISM survey synthesis" in result["missing_inputs"]
+            assert result["ambiguous_inputs"] == []
+            assert result["macro_regime"]["ambiguous_inputs"] == []
+
+    def test_ambiguous_survey_emits_resolution_trigger(self):
+        result = market_setup_v2.build_market_setup_v2(
+            expected_growth=_expected_growth("mixed", status="available"),
+            market_environment=_market_environment("bull_market"),
+            financial_conditions=_financial_conditions("healthy", vix=15.0),
+            policy_response=_policy_response("support_confirmed"),
+        )
+        triggers = result["next_triggers"]
+        assert [trigger["id"] for trigger in triggers] == [
+            "ism_survey_direction_change"
+        ]
+        trigger = triggers[0]
+        assert trigger["label"] == "ISM survey direction resolves from mixed"
+        assert trigger["condition_ref"] == "ism_survey_synthesis_v1"
+        assert set(trigger) == {"id", "label", "condition_ref", "effect"}
+
+    def test_ambiguous_survey_does_not_change_other_layers(self):
+        ambiguous = market_setup_v2.build_market_setup_v2(
+            expected_growth=_expected_growth("mixed", status="available"),
+            market_environment=_market_environment("bull_market"),
+            financial_conditions=_financial_conditions("healthy", vix=15.0),
+            policy_response=_policy_response("support_confirmed"),
+        )
+        missing = market_setup_v2.build_market_setup_v2(
+            expected_growth=None,
+            market_environment=_market_environment("bull_market"),
+            financial_conditions=_financial_conditions("healthy", vix=15.0),
+            policy_response=_policy_response("support_confirmed"),
+        )
+        for key in ("market_confirmation", "market_setup", "portfolio_posture"):
+            assert ambiguous[key] == missing[key]
+        assert ambiguous["interpretation"] == missing["interpretation"]
+
+    def test_ambiguous_survey_contributes_effective_date_to_evidence_through(self):
+        result = market_setup_v2.build_market_setup_v2(
+            expected_growth=_expected_growth(
+                "mixed",
+                status="available",
+                source_period=_monthly_period(effective_date="2026-06-15"),
+            ),
+            market_environment=_market_environment(
+                "bull_market", source_period=_daily_period(effective_date="2026-07-01")
+            ),
+            financial_conditions=_financial_conditions("healthy", vix=15.0),
+            policy_response=_policy_response("support_confirmed"),
+        )
+        assert result["evidence_through"] == "2026-06-15"
+
+    def test_ambiguous_result_is_deterministic(self):
+        inputs = {
+            "expected_growth": _expected_growth("mixed", status="available"),
+            "market_environment": _market_environment("bull_market"),
+            "financial_conditions": _financial_conditions("healthy", vix=15.0),
+            "policy_response": _policy_response("support_confirmed"),
+        }
+        baseline = market_setup_v2.build_market_setup_v2(**inputs)
+        changed = market_setup_v2.build_market_setup_v2(**inputs)
+        for key in ("missing_inputs", "ambiguous_inputs", "next_triggers"):
+            assert changed[key] == baseline[key]
+
     def test_observation_only_input_does_not_change_v2_result(self):
         inputs = _downside_not_confirmed_inputs()
         baseline = market_setup_v2.build_market_setup_v2(**inputs)

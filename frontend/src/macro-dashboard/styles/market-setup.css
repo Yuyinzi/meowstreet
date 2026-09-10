@@ -377,6 +377,25 @@
   color: #3B3530;
 }
 
+/* Ambiguous inputs in hero */
+
+.ms-hero-ambiguous {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  background: #FDFAF7;
+  border: 1px solid #E8E0D6;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #6B6258;
+  line-height: 1.4;
+}
+
+.ms-hero-ambiguous strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #3B3530;
+}
+
 /* Detailed reasoning */
 
 .ms-detailed {

@@ -51,6 +51,13 @@ _DIRECTION_TO_REGIME = {
 
 _SURVEY_MISSING_INPUT_LABEL = "ISM survey synthesis"
 
+_SURVEY_UNAVAILABLE_STATUSES = ("partial", "mixed_periods", "unavailable")
+_AMBIGUOUS_SURVEY_DIRECTION_VALUE = "mixed"
+_AMBIGUOUS_SURVEY_LABEL = "ISM survey direction"
+_AMBIGUOUS_SURVEY_REASON = (
+    "Manufacturing and Services surveys do not share a momentum direction"
+)
+
 _FINDINGS = {
     "supports": "is consistent with the survey growth direction",
     "conflicts": "conflicts with the survey growth direction",
@@ -224,20 +231,28 @@ def build_macro_regime(
         ["regime_selector"],
     )
     direction = None
+    survey_state = _survey_fact_state(survey)
     if survey is not None:
         status = survey.get("status")
-        if status not in ("partial", "mixed_periods", "unavailable"):
+        if status not in _SURVEY_UNAVAILABLE_STATUSES:
             candidate = survey.get("direction")
             if candidate in _DIRECTION_TO_REGIME:
                 direction = candidate
     if direction is None:
+        missing_inputs = (
+            [] if survey_state == "ambiguous" else [_SURVEY_MISSING_INPUT_LABEL]
+        )
+        ambiguous_inputs = (
+            [_ambiguous_survey_record()] if survey_state == "ambiguous" else []
+        )
         return {
             "code": "insufficient_data",
             "label": "Insufficient Macro Evidence",
             "primary_source": "ism_survey_synthesis",
             "supports": [],
             "conflicts": [],
-            "missing_inputs": [_SURVEY_MISSING_INPUT_LABEL],
+            "missing_inputs": missing_inputs,
+            "ambiguous_inputs": ambiguous_inputs,
             "excluded_inputs": [],
             "method_version": MACRO_REGIME_VERSION,
             "source_periods": _source_periods(
@@ -312,6 +327,7 @@ def build_macro_regime(
         "supports": supports,
         "conflicts": conflicts,
         "missing_inputs": [],
+        "ambiguous_inputs": [],
         "excluded_inputs": excluded_inputs,
         "method_version": MACRO_REGIME_VERSION,
         "source_periods": _source_periods(*period_pairs),
@@ -1077,7 +1093,21 @@ def _build_triggers(
         return triggers
 
     if direction is None:
-        return []
+        if _survey_fact_state(survey) == "ambiguous":
+            triggers.append(
+                {
+                    "id": "ism_survey_direction_change",
+                    "label": (
+                        "ISM survey direction resolves from "
+                        f"{survey.get('direction')}"
+                    ),
+                    "condition_ref": _TRIGGER_DEFS["ism_survey_direction_change"][
+                        "condition_ref"
+                    ],
+                    "effect": _TRIGGER_DEFS["ism_survey_direction_change"]["effect"],
+                }
+            )
+        return triggers
 
     facts = {
         "sp500_market_phase_change": phase,
@@ -1258,10 +1288,49 @@ def _missing_inputs(
     missing = []
     for fact_id, fact in required:
         label = _MISSING_LABELS[fact_id]
+        if fact_id == "survey_growth_direction":
+            if _survey_fact_state(fact) == "unavailable":
+                missing.append(label)
+            continue
         if fact is None or not _fact_value_is_valid(fact_id, fact):
             missing.append(label)
     ordered = sorted(set(missing), key=lambda label: _MISSING_ORDER.index(label))
     return ordered
+
+
+def _ambiguous_inputs(registry, expected_growth):
+    survey = _extract(
+        registry,
+        expected_growth,
+        "survey_growth_direction",
+        "macro_regime",
+        ["regime_selector"],
+    )
+    if _survey_fact_state(survey) == "ambiguous":
+        return [_ambiguous_survey_record()]
+    return []
+
+
+def _survey_fact_state(fact):
+    if fact is None:
+        return "unavailable"
+    status = fact.get("status")
+    if status in _SURVEY_UNAVAILABLE_STATUSES:
+        return "unavailable"
+    direction = fact.get("direction")
+    if direction in _DIRECTION_TO_REGIME:
+        return "directional"
+    if status == "available" and direction == _AMBIGUOUS_SURVEY_DIRECTION_VALUE:
+        return "ambiguous"
+    return "unavailable"
+
+
+def _ambiguous_survey_record():
+    return {
+        "fact_id": "survey_growth_direction",
+        "label": _AMBIGUOUS_SURVEY_LABEL,
+        "reason": _AMBIGUOUS_SURVEY_REASON,
+    }
 
 
 def _fact_value_is_valid(fact_id, fact):
@@ -1344,6 +1413,7 @@ def build_market_setup_v2(
         financial_conditions,
         regime_code,
     )
+    ambiguous_inputs = _ambiguous_inputs(registry, expected_growth)
     evidence_through = _evidence_through(
         registry,
         expected_growth,
@@ -1402,6 +1472,7 @@ def build_market_setup_v2(
         "excluded_inputs": excluded_inputs,
         "method_versions": method_versions,
         "missing_inputs": missing_inputs,
+        "ambiguous_inputs": ambiguous_inputs,
         "next_triggers": next_triggers,
         "watch_items": watch_items,
     }

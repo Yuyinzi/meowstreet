@@ -309,6 +309,7 @@ export const ZH_LABELS = {
     "ISM-Implied Direction": "ISM隐含方向",
     "ISM Outlook": "ISM展望",
     "Required Inputs": "所需输入",
+    "Ambiguous Inputs": "待明确的输入",
     "Supporting Context": "辅助背景",
     "Not Ready": "未就绪",
     "Fed Balance Sheet": "美联储资产负债表",

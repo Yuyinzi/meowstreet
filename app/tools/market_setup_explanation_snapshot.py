@@ -91,11 +91,20 @@ class _ResultCodes(BaseModel):
     label: str
 
 
+class _AmbiguousInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    fact_id: str
+    label: str
+    reason: str
+
+
 class _MacroRegimeResult(_ResultCodes):
     primary_source: str
     supports: list[dict]
     conflicts: list[dict]
     missing_inputs: list[str]
+    ambiguous_inputs: list[_AmbiguousInput]
     excluded_inputs: list[str]
     method_version: str
     source_periods: dict
