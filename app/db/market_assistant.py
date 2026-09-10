@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.tools.market_assistant_artifacts import validate_artifact
 from app.tools.market_assistant_conversation import validate_checkpoint
+from app.tools.market_setup_explanation_snapshot import SNAPSHOT_SCHEMA_VERSION
 from app.tools.market_setup_explanation_snapshot import canonical_json
 from app.tools.market_setup_explanation_snapshot import finalize_snapshot
 from app.tools.market_setup_explanation_snapshot import validate_snapshot
@@ -173,6 +174,8 @@ def _load_validated_snapshot(con, where_sql, params):
         params,
     ).fetchone()
     if row is None:
+        return None
+    if row["snapshot_schema_version"] != SNAPSHOT_SCHEMA_VERSION:
         return None
     try:
         payload = json.loads(row["snapshot_json"])

@@ -587,7 +587,7 @@ class TestSnapshotRepository:
         assert snapshot["context_id"] == "ctx_A"
         assert (
             snapshot["snapshot_schema_version"]
-            == "market_setup_explanation_snapshot_v1"
+            == "market_setup_explanation_snapshot_v2"
         )
         assert len(snapshot["snapshot_hash"]) == 64
         assert market_assistant.load_snapshot(con, "ctx_A") == snapshot
@@ -628,6 +628,30 @@ class TestSnapshotRepository:
     def test_load_snapshot_returns_none_for_unknown_context(self, tmp_path):
         con = market_assistant.connect(tmp_path / "assistant.sqlite")
         assert market_assistant.load_snapshot(con, "missing_ctx") is None
+
+    def test_load_snapshot_returns_none_for_legacy_schema_version(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        market_assistant.get_or_create_snapshot(
+            con, snapshot_state(), context_id="ctx_A", created_at="2026-08-10T01:00:00Z"
+        )
+        con.execute(
+            "update explanation_snapshots set snapshot_schema_version = ? where context_id = ?",
+            ("market_setup_explanation_snapshot_v1", "ctx_A"),
+        )
+        con.commit()
+        assert market_assistant.load_snapshot(con, "ctx_A") is None
+
+    def test_load_latest_snapshot_returns_none_for_legacy_schema_version(self, tmp_path):
+        con = market_assistant.connect(tmp_path / "assistant.sqlite")
+        market_assistant.get_or_create_snapshot(
+            con, snapshot_state(), context_id="ctx_A", created_at="2026-08-10T01:00:00Z"
+        )
+        con.execute(
+            "update explanation_snapshots set snapshot_schema_version = ? where context_id = ?",
+            ("market_setup_explanation_snapshot_v1", "ctx_A"),
+        )
+        con.commit()
+        assert market_assistant.load_latest_snapshot(con) is None
 
     def test_load_latest_snapshot_returns_newest(self, tmp_path):
         con = market_assistant.connect(tmp_path / "assistant.sqlite")

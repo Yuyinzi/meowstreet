@@ -369,7 +369,7 @@ class TestSnapshotState:
     def test_snapshot_state_has_the_design_top_level_fields(self):
         state = snapshot_state()
         assert (
-            state["snapshot_schema_version"] == "market_setup_explanation_snapshot_v1"
+            state["snapshot_schema_version"] == "market_setup_explanation_snapshot_v2"
         )
         assert state["market_setup_version"] == "market_setup_v2"
         assert state["input_registry_version"] == "market_setup_input_registry_v1"

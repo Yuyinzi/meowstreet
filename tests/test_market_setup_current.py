@@ -200,7 +200,7 @@ def test_resolve_current_explanation_builds_snapshot_envelope(tmp_path):
     )
     assert (
         payload["snapshot"]["snapshot_schema_version"]
-        == "market_setup_explanation_snapshot_v1"
+        == "market_setup_explanation_snapshot_v2"
     )
 
 
@@ -225,6 +225,35 @@ def test_resolve_current_explanation_reuses_snapshot_by_fingerprint(tmp_path):
         == first["snapshot"]["explanation_fingerprint"]
     )
     assert second["delta"] == {"results_changed": False, "changes": []}
+
+
+def test_resolve_current_explanation_treats_legacy_previous_snapshot_as_absent(tmp_path):
+    db_path = tmp_path / "market.sqlite"
+    first = market_setup_current.resolve_current_explanation(
+        db_path, previous_context_id=None, resolved_at="2026-08-10T01:00:00Z"
+    )
+    legacy_context_id = first["resolution"]["current_context_id"]
+    con = sqlite3.connect(db_path)
+    try:
+        con.execute(
+            "update explanation_snapshots "
+            "set snapshot_schema_version = ?, explanation_fingerprint = explanation_fingerprint || '_legacy' "
+            "where context_id = ?",
+            ("market_setup_explanation_snapshot_v1", legacy_context_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+    second = market_setup_current.resolve_current_explanation(
+        db_path,
+        previous_context_id=legacy_context_id,
+        resolved_at="2026-08-10T02:00:00Z",
+    )
+
+    assert second["resolution"]["current_context_id"]
+    assert second["resolution"]["context_changed"] is True
+    assert second["delta"] == {"results_changed": True, "changes": []}
 
 
 class TestNormalizerExplanations:

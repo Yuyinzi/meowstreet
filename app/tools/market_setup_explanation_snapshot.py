@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from app.tools import market_setup_evidence_facts
 
-SNAPSHOT_SCHEMA_VERSION = "market_setup_explanation_snapshot_v1"
+SNAPSHOT_SCHEMA_VERSION = "market_setup_explanation_snapshot_v2"
 METHOD_CONTRACTS_VERSION = "market_setup_explanation_methods_v1"
 RELATIONSHIP_ADAPTER_VERSION = "market_setup_v2_relationship_v1"
 
