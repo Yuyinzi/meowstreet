@@ -532,16 +532,7 @@ def test_main_runs_market_and_fred_refreshes_through_staged_registry(capsys):
     assert exit_code == 0
     assert (
         "benchmark",
-        [
-            "--benchmark-id",
-            "us_sp500",
-            "--benchmark-id",
-            "us_nasdaq_100",
-            "--benchmark-id",
-            "us_nasdaq_composite",
-            "--benchmark-id",
-            "us_djia",
-        ],
+        ["--all"],
     ) in calls
     assert ("rates", ["--fetch-fred-csv"]) in calls
     assert ("rates", ["--fred-csv-merge"]) in calls
@@ -626,10 +617,7 @@ def test_main_continues_after_provider_failure(capsys):
     )
 
     assert exit_code == 1
-    assert ("benchmark", [
-        "--benchmark-id", "us_sp500", "--benchmark-id", "us_nasdaq_100",
-        "--benchmark-id", "us_nasdaq_composite", "--benchmark-id", "us_djia",
-    ]) in calls
+    assert ("benchmark", ["--all"]) in calls
     assert ("rates", ["--fetch-fred-csv"]) in calls
     assert ("m2", ["--fetch-fred-csv"]) in calls
     assert ("gdp", ["--fetch-fred-csv"]) in calls
@@ -675,16 +663,7 @@ def test_main_can_stop_after_first_failure():
     assert exit_code == 1
     assert (
         "benchmark",
-        [
-            "--benchmark-id",
-            "us_sp500",
-            "--benchmark-id",
-            "us_nasdaq_100",
-            "--benchmark-id",
-            "us_nasdaq_composite",
-            "--benchmark-id",
-            "us_djia",
-        ],
+        ["--all"],
     ) in calls
     assert ("rates", ["--fetch-fred-csv"]) in calls
 

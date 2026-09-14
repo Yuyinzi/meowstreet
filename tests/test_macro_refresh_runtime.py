@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.tools.benchmark_market_data import BENCHMARK_YAHOO_SYMBOLS
 from app.db import market_data
 from app.services import macro_refresh_runtime
 from app.services.macro_refresh_executor import execute_tasks
@@ -140,7 +141,7 @@ def test_runtime_yahoo_fetch_stages_rows_and_defers_saves_to_writer_gated_import
     )
 
     assert [result["status"] for result in results] == ["ok", "ok"]
-    assert requests == ["^GSPC", "^NDX", "^IXIC", "^DJI"]
+    assert requests == [config["symbol"] for config in BENCHMARK_YAHOO_SYMBOLS]
     assert writer_states == [True]
 
 
@@ -156,6 +157,7 @@ def test_runtime_yahoo_reuses_fresh_market_cache_and_stages_only_stale_symbol(
         "^IXIC": "2026-08-25",
         "^DJI": "2026-08-25",
     }
+    cached_dates.update({config["symbol"]: "2026-08-25" for config in BENCHMARK_YAHOO_SYMBOLS if config["symbol"] not in cached_dates})
     market_con = market_data.connect(market_db_path)
     try:
         for symbol, date_value in cached_dates.items():

@@ -20,7 +20,7 @@ The current lanes are `fred_macro`, `credit`, `yahoo`, `ism_manufacturing`,
 
 The scheduled refresh updates implemented official market and macro sources:
 
-- Yahoo benchmark indices: S&P 500 (`us_sp500`), Nasdaq 100 (`us_nasdaq_100`), Nasdaq Composite (`us_nasdaq_composite`), and DJIA (`us_djia`). To refresh all configured benchmarks manually, run `.venv/bin/python scripts/refresh_benchmark_market_data.py --all`.
+- Yahoo benchmark indices: all 14 configured US, European, UK, German, Hong Kong, Japanese, and Australian benchmarks. To refresh all configured benchmarks manually, run `.venv/bin/python scripts/refresh_benchmark_market_data.py --all`.
 - US Rates / Liquidity FRED data
 - Building Permits: U.S. Census Bureau New Residential Construction history
 - Consumer Sentiment: University of Michigan Table 1 (aggregate) and Table 5 (components) from the official website, plus FRED capacity series: BOGZ1FL010000336Q (household debt-to-GDP), TDSP (debt service ratio), PSAVERT (personal saving rate), HHMSDODNS (mortgage liabilities)

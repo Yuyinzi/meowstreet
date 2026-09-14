@@ -17,6 +17,7 @@ from app.db import market_data
 from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from app.tools import market_data as market_data_tool
+from app.tools.benchmark_market_data import BENCHMARK_YAHOO_SYMBOLS
 from scripts import import_economic_confirmation
 from scripts import fetch_fomc_documents
 from scripts import generate_fomc_minutes_structure
@@ -357,12 +358,7 @@ def _fetch_shfe(artifacts):
 
 def _yahoo_providers(artifacts):
     def fetch_benchmarks(argv):
-        ids = [
-            "us_sp500",
-            "us_nasdaq_100",
-            "us_nasdaq_composite",
-            "us_djia",
-        ]
+        ids = [config["benchmark_id"] for config in BENCHMARK_YAHOO_SYMBOLS]
         benchmark_con = benchmark_market_data.connect_read_only(
             benchmark_market_data.DEFAULT_DB_PATH
         )
@@ -780,16 +776,7 @@ def _injected_cli_overrides(
                 )
             )
     if values.get("benchmark_main") is not None:
-        benchmark_args = [
-            "--benchmark-id",
-            "us_sp500",
-            "--benchmark-id",
-            "us_nasdaq_100",
-            "--benchmark-id",
-            "us_nasdaq_composite",
-            "--benchmark-id",
-            "us_djia",
-        ]
+        benchmark_args = ["--all"]
         providers.update(
             _one_shot_pair(
                 values["benchmark_main"],
