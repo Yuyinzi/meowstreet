@@ -220,6 +220,50 @@ def test_parse_report_accepts_reporting_contraction_ranking_wording():
     ]
 
 
+def test_parse_rankings_accepts_august_reporting_a_contraction_wording():
+    text = (
+        "The 1 manufacturing industries reporting growth in August are: Machinery. "
+        "The two industries reporting a contraction in August are: Wood Products; and Chemical Products."
+    )
+
+    assert ism_official_report.parse_rankings(text, "2026-08-01") == [
+        {
+            "date": "2026-08-01",
+            "industry": "Machinery",
+            "direction": "growth",
+            "rank": 1,
+            "source": "ISM official report",
+        },
+        {
+            "date": "2026-08-01",
+            "industry": "Wood Products",
+            "direction": "contraction",
+            "rank": -1,
+            "source": "ISM official report",
+        },
+        {
+            "date": "2026-08-01",
+            "industry": "Chemical Products",
+            "direction": "contraction",
+            "rank": -2,
+            "source": "ISM official report",
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The 1 manufacturing industries reporting growth in August are: Machinery.",
+        "The two industries reporting a contraction in August are: Wood Products; and Chemical Products.",
+        "",
+    ],
+)
+def test_parse_rankings_rejects_missing_growth_or_contraction(text):
+    with pytest.raises(ValueError, match="ism report overall industry rankings are missing"):
+        ism_official_report.parse_rankings(text, "2026-08-01")
+
+
 def test_parse_report_accepts_singular_contraction_ranking_wording():
     html = REPORT_HTML.replace(
         "The 14 manufacturing industries reporting growth in June",
