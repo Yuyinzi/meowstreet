@@ -118,7 +118,6 @@
         serverHistoryReady: state.serverHistoryReady,
         messages: state.messages,
         lastContextId: state.lastContextId,
-        isOpen: state.isOpen,
         windowRect: state.windowRect,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -138,7 +137,6 @@
       }
       if (Array.isArray(payload.messages)) state.messages = payload.messages;
       if (payload.lastContextId) state.lastContextId = payload.lastContextId;
-      if (typeof payload.isOpen === "boolean") state.isOpen = payload.isOpen;
       if (payload.windowRect) state.windowRect = payload.windowRect;
       return true;
     } catch (error) {
@@ -1049,11 +1047,7 @@
 
   bindEvents();
   loadState();
-  if (state.isOpen) {
-    openWindow();
-  } else {
-    renderMessages();
-  }
+  renderMessages();
 
   function openWithContext(options) {
     const seedText = options && options.seedText ? String(options.seedText).trim() : "";
