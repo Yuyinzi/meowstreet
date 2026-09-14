@@ -23,6 +23,11 @@ FRED_CONSUMER_SERIES = (
     "PSAVERT",
     "HHMSDODNS",
 )
+_MICHIGAN_FRONT_PAGE_SERIES = (
+    ("umcsi_aggregate", "sentiment"),
+    ("umcsi_expectations", "expectations"),
+    ("umcsi_current_conditions", "current_conditions"),
+)
 
 
 def _put(artifacts, key, value):
@@ -71,13 +76,36 @@ def fetch_consumer_michigan(artifacts, *, fetcher=None, http_client=None):
                 http_client=http_client
             ).fetch_csvs(directory)
             values = {table_id: path.read_bytes() for table_id, path in paths.items()}
-    result = {"artifact_key": "consumer.michigan", "tables": values}
-    _put(artifacts, result["artifact_key"], values)
+    front_page = michigan_consumer_sentiment.fetch_front_page_results(http_client)
+    result = {
+        "artifact_key": "consumer.michigan",
+        "tables": values,
+        "front_page": front_page,
+    }
+    _put(artifacts, result["artifact_key"], {**values, "front_page": front_page})
     return result
 
 
 def persist_consumer_michigan(db_path, artifacts):
     values = _get(artifacts, "consumer.michigan")
+    if not values or not values.get("front_page"):
+        raise ValueError("michigan front page artifact is missing")
+    front_page = values["front_page"]
+    months = [front_page["previous"], front_page["latest"]]
+    front_page_series = [
+        {
+            "series_id": series_id,
+            "points": [
+                {
+                    "date": month["date"],
+                    "value": month[value_key],
+                    "source": "University of Michigan Surveys of Consumers front page",
+                }
+                for month in months
+            ],
+        }
+        for series_id, value_key in _MICHIGAN_FRONT_PAGE_SERIES
+    ]
     with tempfile.TemporaryDirectory() as directory:
         table_1 = Path(directory) / "table_1.csv"
         table_5 = Path(directory) / "table_5.csv"
@@ -86,7 +114,20 @@ def persist_consumer_michigan(db_path, artifacts):
         from scripts.import_consumer_sentiment import import_michigan_csvs
 
         result = import_michigan_csvs(table_1, table_5, db_path)
-    return {"status": "ok", "artifact_key": "consumer.michigan", "series": result}
+    con = consumer_sentiment.connect(db_path)
+    try:
+        for series in front_page_series:
+            consumer_sentiment.merge_michigan_points(
+                con, series["series_id"], series["points"]
+            )
+    finally:
+        con.close()
+    return {
+        "status": "ok",
+        "artifact_key": "consumer.michigan",
+        "series": result,
+        "front_page": front_page_series,
+    }
 
 
 def fetch_consumer_fred(artifacts, *, fetcher=None, http_client=None):

@@ -38,7 +38,7 @@ ISM enrichment is planned as `skipped` when `OPENAI_API_KEY` is missing. A
 configured key enables enrichment automatically. A configured-but-failing AI
 extraction is `failed`; the deterministic core import remains committed.
 
-Consumer sentiment refreshes download the complete official Michigan monthly history from the UM Time Series Data form and replace all stored rows. The website is the sole UMCSI source. No workbook (UMCSI.xlsx) or FRED UMCSENT series is imported. Capacity series use the FRED CSV client and are fully replaced on each refresh.
+Consumer sentiment refreshes download the complete official Michigan monthly history from the UM Time Series Data form and replace all stored rows. The latest and previous front-page results are fetched alongside Tables 1 and 5 and merged after the history import, so CSV publication lag does not discard the latest published month. A front-page fetch failure fails the task before persistence. The website is the sole UMCSI source. No workbook (UMCSI.xlsx) or FRED UMCSENT series is imported. Capacity series use the FRED CSV client and are fully replaced on each refresh.
 
 ## P12 Lumber (Yahoo LBR)
 

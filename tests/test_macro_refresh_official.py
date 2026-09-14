@@ -1,9 +1,129 @@
 import asyncio
 from pathlib import Path
 
+import httpx
 import pytest
 
+from app.db import consumer_sentiment, macro_indicators
+from app.http_client import HttpClient
 from app.services import macro_refresh_official
+
+
+MICHIGAN_TABLES = {
+    1: b"Month,Year,Index,\n6,2026,60.0,\n7,2026,54.0,\n",
+    5: (
+        b"Month,Year,Personal Finance Current,Personal Finance Expected,"
+        b"Business Condition 12 Months,Business Condition 5 Years,"
+        b"Buying Conditions,Current Index,Expected Index,\n"
+        b"6,2026,100,102,95,75,140,61.0,59.0,\n"
+        b"7,2026,100,102,95,75,140,53.0,55.0,\n"
+    ),
+}
+MICHIGAN_FRONT_PAGE = """
+<h1>Final Results for August 2026</h1>
+<table id="front_table">
+<tr><td></td><td>Aug</td><td>Jul</td></tr>
+<tr><td></td><td>2026</td><td>2026</td></tr>
+<tr><td>Index of Consumer Sentiment</td><td>51.0</td><td>55.2</td></tr>
+<tr><td>Current Economic Conditions</td><td>51.8</td><td>54.8</td></tr>
+<tr><td>Index of Consumer Expectations</td><td>50.6</td><td>55.4</td></tr>
+</table>
+"""
+
+
+def michigan_http_client(front_page_response):
+    def handler(request):
+        if request.method == "POST":
+            assert str(request.url) == "https://data.sca.isr.umich.edu/data-archive/mine.php"
+            table_id = int(request.content.decode().split("&", 1)[0].split("=")[1])
+            return httpx.Response(200, content=MICHIGAN_TABLES[table_id])
+        assert request.method == "GET"
+        assert str(request.url) == "https://www.sca.isr.umich.edu/"
+        return front_page_response
+
+    return HttpClient(transport=httpx.MockTransport(handler), max_attempts=1)
+
+
+@pytest.mark.parametrize("release_kind", ["Final", "Preliminary"])
+def test_michigan_refresh_merges_latest_front_page_and_revised_previous_month(
+    monkeypatch, tmp_path, release_kind
+):
+    artifacts = {}
+    db_path = tmp_path / "market.sqlite"
+    html = MICHIGAN_FRONT_PAGE.replace("Final", release_kind)
+
+    def forbid_database(*args, **kwargs):
+        raise AssertionError("fetch must not open sqlite")
+
+    with monkeypatch.context() as fetch_patch:
+        fetch_patch.setattr(macro_indicators, "connect", forbid_database)
+        macro_refresh_official.fetch_consumer_michigan(
+            artifacts,
+            http_client=michigan_http_client(httpx.Response(200, text=html)),
+        )
+    assert not db_path.exists()
+
+    def forbid_network(*args, **kwargs):
+        raise AssertionError("persistence must not fetch data")
+
+    with monkeypatch.context() as persist_patch:
+        persist_patch.setattr(HttpClient, "request", forbid_network)
+        result = macro_refresh_official.persist_consumer_michigan(db_path, artifacts)
+
+    assert result["status"] == "ok"
+    con = consumer_sentiment.connect(db_path)
+    try:
+        for series_id, expected_values in [
+            ("umcsi_aggregate", [60.0, 55.2, 51.0]),
+            ("umcsi_current_conditions", [61.0, 54.8, 51.8]),
+            ("umcsi_expectations", [59.0, 55.4, 50.6]),
+        ]:
+            points = macro_indicators.load_macro_indicator_points(con, series_id)
+            assert [point["date"] for point in points] == [
+                "2026-06-01", "2026-07-01", "2026-08-01"
+            ]
+            assert [point["value"] for point in points] == expected_values
+            assert points[0]["source"].startswith("University of Michigan Table ")
+            assert {point["source"] for point in points[1:]} == {
+                "University of Michigan Surveys of Consumers front page"
+            }
+    finally:
+        con.close()
+
+
+@pytest.mark.parametrize(
+    ("response", "error"),
+    [
+        (httpx.Response(503), "failed to fetch michigan front page"),
+        (httpx.Response(200, text="<html>unavailable</html>"), "missing the release h1"),
+    ],
+)
+def test_michigan_fetch_does_not_publish_stale_tables_when_front_page_fails(
+    monkeypatch, response, error
+):
+    artifacts = {}
+
+    def forbid_database(*args, **kwargs):
+        raise AssertionError("fetch must not open sqlite")
+
+    monkeypatch.setattr(macro_indicators, "connect", forbid_database)
+    with pytest.raises(ValueError, match=error):
+        macro_refresh_official.fetch_consumer_michigan(
+            artifacts, http_client=michigan_http_client(response)
+        )
+
+    assert artifacts == {}
+
+
+def test_michigan_persist_rejects_missing_front_page_before_changing_database(tmp_path):
+    db_path = tmp_path / "market.sqlite"
+
+    with pytest.raises(ValueError, match="michigan front page artifact is missing"):
+        macro_refresh_official.persist_consumer_michigan(
+            db_path, {"consumer.michigan": dict(MICHIGAN_TABLES)}
+        )
+
+    assert not db_path.exists()
 
 
 def test_building_permits_fetch_stages_bytes_without_opening_sqlite(tmp_path):
