@@ -56,11 +56,11 @@ The active lumber series `lumber_cme_lbr_yahoo_v1` uses Yahoo Finance `LBR=F` da
 
 ## Investing Rendered History (Interactive Chrome Cron)
 
-The markets COMEX Copper (`copper_comex`), LME 3M Copper (`copper_lme`), and Iron Ore 62% CFR China (`iron_ore_62_cfr_china`) are refreshed from the rendered Investing.com historical-data table by a dedicated job that attaches to an already-open, verified interactive Chrome session on CDP port 9222. It runs the rendered-table incremental importer but never starts or closes Chrome. One run handles the three markets in order and reports each under `ranges` or `no_new_data`. It is kept out of the broad macro refresh runner because it depends on an authenticated browser session and needs a distinct failure path.
+The markets COMEX Copper (`copper_comex`), LME 3M Copper (`copper_lme`), and Iron Ore 62% CFR China (`iron_ore_62_cfr_china`) are refreshed from the rendered Investing.com historical-data table by a dedicated job that uses the interactive Chrome session on CDP port 9222. If the local CDP endpoint is unavailable, it starts dedicated Chrome with the existing persistent profile and waits for readiness before importing. It leaves Chrome running after the refresh. One run handles the three markets in order and reports each under `ranges` or `no_new_data`. The broad macro runner also refreshes these markets through its tracked-commodities lane and uses the same automatic Chrome startup. Both paths still require a valid Investing.com login and any interactive verification.
 
 ### Bootstrap and Manual Recovery
 
-The persistent profile must hold a valid Investing.com session, and its Chrome process must remain open while cron runs. Start it after a restart, session expiry, or CAPTCHA/anti-bot verification:
+The persistent profile must hold a valid Investing.com session, and automatic startup reuses that profile when Chrome is closed. Start it after a restart, session expiry, or CAPTCHA/anti-bot verification:
 
 ```bash
 .venv/bin/python scripts/start_investing_chrome.py
@@ -87,7 +87,7 @@ mkdir -p logs
 ```
 
 - A dedicated `fcntl` lock file prevents overlapping runs; a concurrent run fails fast with "refresh already running" and exits non-zero.
-- Chrome must already be open through `scripts/start_investing_chrome.py`; cron attaches to it through CDP port 9222 and leaves it running.
+- Cron reuses CDP port 9222 when available; otherwise it starts interactive Chrome using the same launcher as `scripts/start_investing_chrome.py` and waits for readiness. Remote CDP endpoints are never started locally. Startup does not bypass login or CAPTCHA.
 - An already-up-to-date series is a successful no-op: the job exits zero and reports zero observations with the affected market in `no_new_data`. Each of the three markets appears under `ranges` or `no_new_data` on every run.
 - Session, CAPTCHA, rendered-table, navigation, and CDP failures exit non-zero and print an actionable remediation message to stderr.
 

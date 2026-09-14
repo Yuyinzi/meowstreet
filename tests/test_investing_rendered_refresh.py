@@ -207,3 +207,32 @@ def test_wait_for_cdp_reports_timeout_descriptively():
 
     with pytest.raises(ValueError, match="did not become ready"):
         _wait_for_cdp(FailingClient(), "http://127.0.0.1:9223", 0.01)
+
+
+def test_default_refresh_starts_chrome_before_import_and_releases_lock(monkeypatch, tmp_path):
+    from app.data_sources import investing_chrome
+    from app.http_client import HttpClient
+
+    started = []
+
+    def handler(request):
+        if not started:
+            raise httpx.ConnectError("connection refused", request=request)
+        return httpx.Response(200, json=[])
+
+    monkeypatch.setattr(investing_chrome, "start_investing_chrome", lambda **kwargs: started.append(kwargs))
+
+    def blocked_importer(con, **kwargs):
+        assert started == [{"cdp_port": 9222, "headless": False}]
+        raise ValueError("session_reauth_required: complete CAPTCHA in Chrome")
+
+    lock_path = tmp_path / "refresh.lock"
+    with pytest.raises(ValueError, match="session_reauth_required"):
+        refresh_investing_rendered(
+            None,
+            lock_path=lock_path,
+            http_client=HttpClient(transport=httpx.MockTransport(handler), max_attempts=1),
+            importer=blocked_importer,
+        )
+    lock_file = _acquire_lock(lock_path)
+    lock_file.close()

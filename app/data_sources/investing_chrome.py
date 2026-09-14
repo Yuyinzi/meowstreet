@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 
 from app.http_client import HttpClient
 
@@ -155,13 +156,14 @@ def start_investing_chrome(
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    print(f"Chrome at: {chrome}")
-    print(f"Profile: {profile}")
-    print(f"CDP endpoint: http://127.0.0.1:{cdp_port}")
+    print(f"Chrome at: {chrome}", file=sys.stderr)
+    print(f"Profile: {profile}", file=sys.stderr)
+    print(f"CDP endpoint: http://127.0.0.1:{cdp_port}", file=sys.stderr)
     if not headless:
         print(
             "Complete any Investing.com verification in the Chrome window, "
-            "then run the import command with the same --cdp-endpoint."
+            "then run the import command with the same --cdp-endpoint.",
+            file=sys.stderr,
         )
     return proc
 

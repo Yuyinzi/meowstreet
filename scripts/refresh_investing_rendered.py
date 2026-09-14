@@ -22,8 +22,8 @@ _REMEDIATION = (
 
 def main(argv=None, refresh=refresh_investing_rendered):
     parser = argparse.ArgumentParser(
-        description="Refresh the Iron Ore 62% CFR China rendered "
-        "Investing.com history through an already-open verified Chrome session"
+        description="Refresh copper and iron ore rendered "
+        "Investing.com history through a dedicated interactive Chrome session, starting it if needed"
     )
     parser.add_argument(
         "--db-path", type=Path, default=macro_indicators.DEFAULT_DB_PATH
@@ -32,7 +32,7 @@ def main(argv=None, refresh=refresh_investing_rendered):
         "--cdp-port",
         type=int,
         default=DEFAULT_CDP_PORT,
-        help="CDP port for the already-open interactive Chrome",
+        help="CDP port for the dedicated interactive Chrome",
     )
     parser.add_argument(
         "--lock-file",

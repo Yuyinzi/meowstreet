@@ -10,6 +10,7 @@ from app.data_sources.fred import FredClient
 from app.db import macro_indicators
 from app.services import cyclical_commodities_import
 from app.services import dce_iron_ore_sina_import
+from app.services import investing_chrome_session
 from app.services import shfe_copper_import
 from app.services import tracked_commodities_import
 
@@ -61,6 +62,10 @@ def fetch_tracked_commodities(
     markets=None,
     cdp_endpoint=None,
 ):
+    if fetcher is None:
+        investing_chrome_session.ensure_investing_chrome(
+            None, cdp_endpoint or investing_chrome_session.DEFAULT_CDP_ENDPOINT
+        )
     fetch = fetcher or tracked_commodities_import._browser_fetcher
     payload = fetch(
         start_date=start_date,

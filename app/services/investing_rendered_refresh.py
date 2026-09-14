@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app.data_sources import chrome_cdp
 from app.http_client import HttpClient
-from app.services import tracked_commodities_import
+from app.services import investing_chrome_session, tracked_commodities_import
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -68,14 +68,15 @@ def refresh_investing_rendered(
     lock_path=DEFAULT_LOCK_PATH,
     readiness_timeout=DEFAULT_READY_TIMEOUT_SECONDS,
     http_client=None,
-    wait_for_cdp=_wait_for_cdp,
+    wait_for_cdp=None,
     importer=tracked_commodities_import.import_commodity_browser_rows,
 ):
     lock_file = _acquire_lock(lock_path)
     endpoint = f"http://127.0.0.1:{cdp_port}"
     try:
-        client = http_client or HttpClient()
-        wait_for_cdp(client, endpoint, readiness_timeout)
+        client = http_client or HttpClient(max_attempts=1)
+        prepare = wait_for_cdp or investing_chrome_session.ensure_investing_chrome
+        prepare(client, endpoint, readiness_timeout)
         importer_result = importer(
             con,
             markets=list(_REFRESH_MARKETS),

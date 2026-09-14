@@ -251,3 +251,28 @@ def test_fetch_dce_initial_uses_full_history_window(tmp_path):
     )
 
     assert calls == [("2013-10-18", "2026-08-21")]
+
+
+def test_default_tracked_fetch_prepares_chrome_before_fetch(monkeypatch):
+    events = []
+    monkeypatch.setattr(macro_refresh_commodities.investing_chrome_session, "ensure_investing_chrome", lambda *args: events.append("ready"))
+
+    def fetch(**kwargs):
+        assert events == ["ready"]
+        return {}
+
+    monkeypatch.setattr(macro_refresh_commodities.tracked_commodities_import, "_browser_fetcher", fetch)
+    assert macro_refresh_commodities.fetch_tracked_commodities({})["series"] == 0
+
+
+def test_default_tracked_fetch_preserves_verification_failure(monkeypatch):
+    monkeypatch.setattr(macro_refresh_commodities.investing_chrome_session, "ensure_investing_chrome", lambda *args: None)
+
+    def fetch(**kwargs):
+        raise ValueError("session_reauth_required: complete CAPTCHA")
+
+    monkeypatch.setattr(macro_refresh_commodities.tracked_commodities_import, "_browser_fetcher", fetch)
+    artifacts = {}
+    with pytest.raises(ValueError, match="session_reauth_required"):
+        macro_refresh_commodities.fetch_tracked_commodities(artifacts)
+    assert artifacts == {}

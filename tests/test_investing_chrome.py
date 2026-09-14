@@ -294,3 +294,12 @@ def test_start_chrome_raises_value_error_when_chrome_missing(monkeypatch, tmp_pa
 
     with pytest.raises(ValueError, match="Chrome not found"):
         start_investing_chrome(profile_dir=tmp_path / "chrome")
+
+
+def test_start_chrome_keeps_stdout_clean(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: None)
+    monkeypatch.setattr(investing_chrome, "_find_chrome", lambda: "google-chrome")
+    start_investing_chrome(profile_dir=tmp_path / "chrome")
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "CDP endpoint" in captured.err

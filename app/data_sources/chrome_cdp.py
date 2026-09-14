@@ -41,10 +41,10 @@ def find_page_target(targets, host):
     return None
 
 
-def load_chrome_targets(http_client, cdp_endpoint):
+def load_chrome_targets(http_client, cdp_endpoint, timeout=10):
     json_url = cdp_endpoint.rstrip("/") + "/json"
     try:
-        response = http_client.request("GET", json_url, timeout=10)
+        response = http_client.request("GET", json_url, timeout=timeout)
     except Exception as exc:
         return None, f"Chrome CDP endpoint at {cdp_endpoint} is unreachable: {exc}"
     if response.status_code >= 400:
