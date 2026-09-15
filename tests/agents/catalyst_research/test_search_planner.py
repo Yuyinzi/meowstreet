@@ -284,3 +284,48 @@ def test_filter_rejects_invalid_inputs():
         filter_official_candidates([{"url": URL}, "row"], company=company(), channel="press_releases", approved_domains=DOMAINS)
     with pytest.raises(ValueError, match="channel"):
         filter_official_candidates([], company=company(), channel="ir_home", approved_domains=DOMAINS)
+
+
+def test_historical_queries_time_slice_multi_year_windows():
+    result = historical_queries(
+        company(),
+        "press_releases",
+        ["nvidianews.nvidia.com"],
+        {"start": "2022-09-08", "end": "2026-09-08"},
+        config(),
+    )
+
+    queries = result["queries"]
+    assert len(queries) == 16
+    assert result["truncated"] is False
+    assert queries[0]["window"] == {"start": "2022-09-08", "end": "2022-12-08"}
+    assert queries[-1]["window"]["end"] == "2026-09-08"
+    assert all(query["purpose"] == "historical_backfill" for query in queries)
+    starts = [query["window"]["start"] for query in queries]
+    assert starts == sorted(starts)
+
+
+def test_historical_queries_interleave_domains_within_each_slice_and_cap_total():
+    result = historical_queries(
+        company(),
+        "press_releases",
+        ["a.nvidia.com", "b.nvidia.com"],
+        {"start": "2022-09-08", "end": "2026-09-08"},
+        config(),
+    )
+
+    queries = result["queries"]
+    assert len(queries) == 16
+    assert result["truncated"] is True
+    assert result["truncation_reason"] == "historical_query_limit"
+    assert [query["domain"] for query in queries[:4]] == ["a.nvidia.com", "b.nvidia.com", "a.nvidia.com", "b.nvidia.com"]
+    covered_ends = {query["window"]["end"] for pair in zip(queries[::2], queries[1::2]) for query in pair}
+    assert len(covered_ends) == 8
+
+
+def test_historical_queries_single_slice_window_keeps_one_query_per_domain():
+    result = historical_queries(company(), "press_releases", ["a.nvidia.com", "b.nvidia.com"], window(), config())
+
+    assert len(result["queries"]) == 2
+    assert result["truncated"] is False
+    assert all(query["window"] == {"start": "2025-09-08", "end": "2025-12-08"} for query in result["queries"])

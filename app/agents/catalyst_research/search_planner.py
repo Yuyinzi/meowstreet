@@ -237,11 +237,22 @@ def historical_queries(company: dict, channel: str, domains: list, window: dict,
         raise ValueError("date window is invalid")
     max_queries = _config_int(config, "max_historical_queries_per_channel", _DEFAULT_MAX_QUERIES)
     result_limit = _config_int(config, "search_result_limit", _DEFAULT_RESULT_LIMIT)
+    slice_days = _config_int(config, "historical_slice_days", _DEFAULT_SLICE_DAYS)
+    slices = historical_slices(window_start, window_end, slice_days=slice_days, max_queries=max_queries)
     queries = [
-        _build_query(company, channel, domain, window_start, window_end, "historical_backfill", result_limit)
+        _build_query(
+            company,
+            channel,
+            domain,
+            date.fromisoformat(time_slice["start"]),
+            date.fromisoformat(time_slice["end"]),
+            "historical_backfill",
+            result_limit,
+        )
+        for time_slice in slices["slices"]
         for domain in domain_list
     ]
-    truncated = len(queries) > max_queries
+    truncated = slices["truncated"] or len(queries) > max_queries
     return {
         "channel": channel,
         "window": {"start": window_start.isoformat(), "end": window_end.isoformat()},

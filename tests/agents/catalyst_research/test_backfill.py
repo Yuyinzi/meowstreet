@@ -299,8 +299,8 @@ def test_backfill_provider_fallback_uses_next_provider(env):
     channel = result["channels"]["press_releases"]
     assert channel["coverage_status"] == "observed_partial"
     assert channel["events"]
-    assert len(failing.calls) == 3
-    assert len(working.calls) == 3
+    assert len(failing.calls) == 12
+    assert len(working.calls) == 12
 
 
 def test_backfill_empty_channel_with_attempted_coverage_is_missing(env):
