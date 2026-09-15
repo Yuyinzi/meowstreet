@@ -225,7 +225,16 @@ def test_akshare_daily_fetch_requests_only_trading_days():
     assert len(records) == 2
 
 
-def test_trading_days_clamps_end_to_today():
+def test_trading_days_clamps_end_to_today(monkeypatch):
+    real_date = __import__("datetime").date
+
+    class FrozenDate(real_date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 8, 18)
+
+    monkeypatch.setattr(shfe_copper, "date", FrozenDate)
+
     calendar = _calendar_frame(
         [
             __import__("datetime").date(2026, 8, 17),
