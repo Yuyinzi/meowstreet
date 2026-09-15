@@ -29,6 +29,22 @@ def config():
     }
 
 
+def test_filter_official_candidates_rejects_archive_label_pages():
+    detail = "https://nvidianews.nvidia.com/news-events/press-releases/detail/1781/nvidia-announces-new-platform"
+    rows = [
+        {"url": "https://nvidianews.nvidia.com/news-events/press-releases", "title": "NVIDIA Press Releases", "snippet": "NVIDIA news"},
+        {"url": "https://nvidianews.nvidia.com/news-events/press-releases?page=4", "title": "NVIDIA Press Releases", "snippet": "NVIDIA news"},
+        {"url": "https://nvidianews.nvidia.com/news-events/ir-calendar/past", "title": "NVIDIA Past Events", "snippet": "NVIDIA events"},
+        {"url": "https://nvidianews.nvidia.com/filings-reports", "title": "NVIDIA Filings & Reports", "snippet": "NVIDIA filings"},
+        {"url": "https://nvidianews.nvidia.com/news-events", "title": "NVIDIA News & Events", "snippet": "NVIDIA news"},
+        {"url": detail, "title": "NVIDIA Announces New Platform", "snippet": "NVIDIA announcement"},
+    ]
+
+    accepted = filter_official_candidates(rows, company=company(), channel="press_releases", approved_domains=DOMAINS)
+
+    assert [row["url"] for row in accepted] == [detail]
+
+
 def window():
     return {"start": "2025-09-08", "end": "2025-12-08"}
 

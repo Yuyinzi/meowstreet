@@ -82,6 +82,41 @@ def _empty_channel(status):
         "non_earnings_per_year": None,
         "non_earnings_per_quarter": None,
         "non_earnings_per_month": None,
+        "catalyst_type_counts": {},
+        "meaningful_counts": {},
+    }
+
+
+_CATALYST_TYPE_ORDER = (
+    "earnings_results",
+    "guidance_outlook",
+    "product_launch",
+    "partnership_contract",
+    "corporate_restructuring",
+    "management_change",
+    "capital_markets",
+    "regulatory_government",
+    "investor_event",
+    "operational_milestone",
+    "pr_other",
+    "ambiguous",
+)
+_MEANINGFUL_ORDER = ("meaningful", "non_meaningful", "ambiguous")
+
+
+def _assessment_counts(events):
+    type_counts = {}
+    meaningful_counts = {}
+    for event in events:
+        catalyst_type = event.get("catalyst_type")
+        if catalyst_type in _CATALYST_TYPE_ORDER:
+            type_counts[catalyst_type] = type_counts.get(catalyst_type, 0) + 1
+        meaningful_state = event.get("meaningful_state")
+        if meaningful_state in _MEANINGFUL_ORDER:
+            meaningful_counts[meaningful_state] = meaningful_counts.get(meaningful_state, 0) + 1
+    return {
+        "catalyst_type_counts": {key: type_counts[key] for key in _CATALYST_TYPE_ORDER if key in type_counts},
+        "meaningful_counts": {key: meaningful_counts[key] for key in _MEANINGFUL_ORDER if key in meaningful_counts},
     }
 
 
@@ -126,6 +161,7 @@ def _channel_statistics(events, source, requested_start, requested_end):
         "non_earnings_per_year": None,
         "non_earnings_per_quarter": None,
         "non_earnings_per_month": None,
+        **_assessment_counts(events),
     }
     if denominator_days is None or denominator_days <= 0 or not continuity_known:
         return result
@@ -203,6 +239,7 @@ def _observed_channel_statistics(events, source, requested_start, requested_end)
         "observed_non_earnings_per_quarter": None,
         "observed_non_earnings_per_month": None,
         "median_days_between_observed_non_earnings": None,
+        **_assessment_counts(events),
     }
     if coverage_status in {"observed_partial", "missing"}:
         result["coverage_warning"] = _COVERAGE_WARNING

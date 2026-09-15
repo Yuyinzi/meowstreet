@@ -6,7 +6,7 @@ import json
 import re
 import secrets
 import sqlite3
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from app.agents.catalyst_research.config import (
@@ -21,7 +21,23 @@ from app.agents.catalyst_research.config import (
 ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_DB_PATH = ROOT / "data" / "local_system" / "market_data.sqlite"
 _TERMINAL_JOB_STATES = {"completed", "completed_partial", "unsupported", "failed"}
+_CATALYST_TYPES = {
+    "earnings_results",
+    "guidance_outlook",
+    "product_launch",
+    "partnership_contract",
+    "corporate_restructuring",
+    "management_change",
+    "capital_markets",
+    "regulatory_government",
+    "investor_event",
+    "operational_milestone",
+    "pr_other",
+    "ambiguous",
+}
+_MEANINGFUL_STATES = {"meaningful", "non_meaningful", "ambiguous"}
 _JOB_STATES = {"queued", "running", *_TERMINAL_JOB_STATES}
+_ACTIVE_JOB_MAX_AGE_MINUTES = 45
 _ADAPTER_STATES = {"candidate", "active", "failed_validation", "stale", "superseded"}
 _SOURCE_TYPES = {"ir_home", "press_releases", "events_presentations", "earnings_results"}
 _REGISTRY_CONFIDENCE = {"high", "medium", "low"}
@@ -269,6 +285,10 @@ def connect(db_path=DEFAULT_DB_PATH):
             external_guid text,
             discovery_method text,
             extraction_provider text,
+            catalyst_type text check (catalyst_type in ('earnings_results','guidance_outlook','product_launch','partnership_contract','corporate_restructuring','management_change','capital_markets','regulatory_government','investor_event','operational_milestone','pr_other','ambiguous')),
+            catalyst_type_method text,
+            meaningful_state text check (meaningful_state in ('meaningful','non_meaningful','ambiguous')),
+            meaningful_method text,
             unique(job_id, ticker, source_type, count_date, normalized_title, canonical_url)
         );
         create table if not exists catalyst_ir_classifications (
@@ -280,6 +300,18 @@ def connect(db_path=DEFAULT_DB_PATH):
             input_hash text,
             output_hash text,
             classified_at text not null
+        );
+        create table if not exists catalyst_ir_catalyst_assessments (
+            event_id text primary key references catalyst_ir_events(event_id),
+            catalyst_type text not null check (catalyst_type in ('earnings_results','guidance_outlook','product_launch','partnership_contract','corporate_restructuring','management_change','capital_markets','regulatory_government','investor_event','operational_milestone','pr_other','ambiguous')),
+            meaningful_state text not null check (meaningful_state in ('meaningful','non_meaningful','ambiguous')),
+            assessment_method text not null,
+            model text,
+            prompt_schema_version text,
+            input_hash text,
+            output_hash text,
+            job_id text,
+            assessed_at text not null
         );
         create unique index if not exists idx_catalyst_active_adapter
         on catalyst_source_adapters(ticker, source_type)
@@ -394,7 +426,7 @@ def _migrate_v1_1_schema(con):
         con.execute("create unique index if not exists idx_catalyst_event_job_key on catalyst_ir_events(job_id, ticker, source_type, count_date, normalized_title, canonical_url)")
         con.execute("pragma foreign_keys = on")
         con.execute("pragma legacy_alter_table = off")
-    for column in ("endpoint_id", "external_guid", "discovery_method", "extraction_provider"):
+    for column in ("endpoint_id", "external_guid", "discovery_method", "extraction_provider", "catalyst_type", "catalyst_type_method", "meaningful_state", "meaningful_method"):
         _ensure_column(con, "catalyst_ir_events", column, "text")
     con.commit()
 
@@ -1080,6 +1112,14 @@ def save_finalized_observations(con, job_id, events, classifications):
                 state = "ambiguous"
             if state not in {"earnings", "non_earnings", "ambiguous"}:
                 raise ValueError("event earnings state is invalid")
+            catalyst_type = event.get("catalyst_type")
+            meaningful_state = event.get("meaningful_state")
+            if catalyst_type is not None and catalyst_type not in _CATALYST_TYPES:
+                raise ValueError("event catalyst type is invalid")
+            if meaningful_state is not None and meaningful_state not in _MEANINGFUL_STATES:
+                raise ValueError("event meaningful state is invalid")
+            if (catalyst_type is None) != (meaningful_state is None):
+                raise ValueError("event catalyst assessment is incomplete")
             count_date = event.get("count_date") or event.get("event_date") or event.get("published_date")
             title = str(event.get("title") or "").strip()
             canonical_url = event.get("canonical_url") or event.get("url")
@@ -1110,16 +1150,22 @@ def save_finalized_observations(con, job_id, events, classifications):
                 """insert into catalyst_ir_events(
                     event_id,job_id,source_id,ticker,published_date,event_date,count_date,title,normalized_title,canonical_url,
                     source_type,earnings_state,classification_method,adapter_id,adapter_version,executor_version,first_seen_at,content_hash,
-                    endpoint_id,external_guid,discovery_method,extraction_provider
-                ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
+                    endpoint_id,external_guid,discovery_method,extraction_provider,catalyst_type,catalyst_type_method,meaningful_state,meaningful_method
+                ) select ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? where exists (
                     select 1 from catalyst_research_jobs where job_id = ? and status not in ('completed','completed_partial','unsupported','failed')
                 )
-                on conflict(job_id,ticker,source_type,count_date,normalized_title,canonical_url) do update set earnings_state=excluded.earnings_state""",
+                on conflict(job_id,ticker,source_type,count_date,normalized_title,canonical_url) do update set
+                    earnings_state=excluded.earnings_state,
+                    catalyst_type=coalesce(excluded.catalyst_type, catalyst_ir_events.catalyst_type),
+                    catalyst_type_method=coalesce(excluded.catalyst_type_method, catalyst_ir_events.catalyst_type_method),
+                    meaningful_state=coalesce(excluded.meaningful_state, catalyst_ir_events.meaningful_state),
+                    meaningful_method=coalesce(excluded.meaningful_method, catalyst_ir_events.meaningful_method)""",
                 (event_id, job_id, event["source_id"], _ticker(event.get("ticker")), event.get("published_date"), event.get("event_date"),
                  count_date, title, normalized_title, canonical_url,
                  event["source_type"], state, (classification or event).get("classification_method"), event.get("adapter_id"), event.get("adapter_version"),
                  event.get("executor_version"), event.get("first_seen_at") or _now_iso(), event.get("content_hash"),
-                 event.get("endpoint_id"), event.get("external_guid"), discovery_method, extraction_provider, job_id),
+                 event.get("endpoint_id"), event.get("external_guid"), discovery_method, extraction_provider,
+                 catalyst_type, event.get("catalyst_type_method"), meaningful_state, event.get("meaningful_method"), job_id),
             )
             if cursor.rowcount != 1:
                 raise ValueError(f"research job {job_id} is terminal")
@@ -1131,6 +1177,16 @@ def save_finalized_observations(con, job_id, events, classifications):
                  (classification or event).get("prompt_schema_version"), (classification or event).get("input_hash"),
                  (classification or event).get("output_hash"), (classification or event).get("classified_at") or _now_iso()),
             )
+            if catalyst_type is not None:
+                con.execute(
+                    """insert or replace into catalyst_ir_catalyst_assessments(
+                        event_id,catalyst_type,meaningful_state,assessment_method,model,prompt_schema_version,input_hash,output_hash,job_id,assessed_at
+                    ) values (?,?,?,?,?,?,?,?,?,?)""",
+                    (event_id, catalyst_type, meaningful_state, event.get("catalyst_type_method") or "manual",
+                     event.get("assessment_model"), event.get("assessment_prompt_schema_version"),
+                     event.get("assessment_input_hash"), event.get("assessment_output_hash"),
+                     job_id, event.get("assessed_at") or _now_iso()),
+                )
 
 
 class _AtomicConnection:
@@ -1194,6 +1250,55 @@ def list_event_normalized_titles(con, ticker):
     ]
 
 
+def load_unassessed_events(con, ticker=None, limit=500):
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 5000:
+        raise ValueError("limit must be between 1 and 5000")
+    where = "catalyst_type is null"
+    params = []
+    if ticker is not None:
+        where += " and ticker = ?"
+        params.append(_ticker(ticker))
+    params.append(limit)
+    return [
+        _dict(row)
+        for row in con.execute(
+            f"select event_id, ticker, source_type, title, earnings_state, count_date from catalyst_ir_events where {where} order by ticker, count_date desc, event_id limit ?",
+            params,
+        )
+    ]
+
+
+def save_catalyst_assessments(con, assessments, job_id=None):
+    if not isinstance(assessments, list):
+        raise ValueError("assessments are required")
+    with con:
+        for item in assessments:
+            if not isinstance(item, dict):
+                raise ValueError("assessment is invalid")
+            event_id = _validated_event_id(item.get("event_id"))
+            catalyst_type = item.get("catalyst_type")
+            meaningful_state = item.get("meaningful_state")
+            if catalyst_type not in _CATALYST_TYPES:
+                raise ValueError("assessment catalyst type is invalid")
+            if meaningful_state not in _MEANINGFUL_STATES:
+                raise ValueError("assessment meaningful state is invalid")
+            method = item.get("assessment_method") or "manual"
+            cursor = con.execute(
+                "update catalyst_ir_events set catalyst_type=?, catalyst_type_method=?, meaningful_state=?, meaningful_method=? where event_id=?",
+                (catalyst_type, method, meaningful_state, method, event_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"event {event_id} is unknown")
+            con.execute(
+                """insert or replace into catalyst_ir_catalyst_assessments(
+                    event_id,catalyst_type,meaningful_state,assessment_method,model,prompt_schema_version,input_hash,output_hash,job_id,assessed_at
+                ) values (?,?,?,?,?,?,?,?,?,?)""",
+                (event_id, catalyst_type, meaningful_state, method, item.get("model"),
+                 item.get("prompt_schema_version"), item.get("input_hash"), item.get("output_hash"),
+                 job_id, item.get("assessed_at") or _now_iso()),
+            )
+
+
 def load_job_result_schema_version(con, job_id):
     job = _job(con, job_id)
     return RESULT_SCHEMA_VERSION if job["research_version"] == RESEARCH_VERSION else LEGACY_RESULT_SCHEMA_VERSION
@@ -1241,6 +1346,37 @@ def load_latest_result(con, ticker):
     result["latest_job_status"] = latest["status"]
     result["latest_job_completed_at"] = latest["completed_at"]
     return result
+
+
+def load_active_job(con, ticker, *, now=None, max_age_minutes=_ACTIVE_JOB_MAX_AGE_MINUTES):
+    normalized = _ticker(ticker)
+    if isinstance(max_age_minutes, bool) or not isinstance(max_age_minutes, int) or max_age_minutes < 1:
+        raise ValueError("max age minutes must be a positive integer")
+    row = con.execute(
+        """select job_id, status, created_at, started_at from catalyst_research_jobs
+           where ticker = ? and status in ('queued','running')
+           order by created_at desc, rowid desc limit 1""",
+        (normalized,),
+    ).fetchone()
+    if row is None:
+        return None
+    reference = now or datetime.now(UTC)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=UTC)
+    try:
+        created = datetime.fromisoformat(row["created_at"])
+    except (TypeError, ValueError):
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=UTC)
+    if reference.astimezone(UTC) - created.astimezone(UTC) > timedelta(minutes=max_age_minutes):
+        return None
+    return {
+        "job_id": row["job_id"],
+        "status": row["status"],
+        "created_at": row["created_at"],
+        "started_at": row["started_at"],
+    }
 
 
 def _encode_cursor(payload):

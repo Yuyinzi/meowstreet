@@ -1024,9 +1024,24 @@ button {
   background: #A89B91;
 }
 
+.cal-dot-meaningful {
+  background: #5A54A8;
+}
+
+.cal-dot-non-meaningful {
+  background: #A89B91;
+}
+
 .cal-dot-ambiguous {
   background: transparent;
   border: 1px solid #A89B91;
+}
+
+.cal-legend .cal-dot {
+  width: 7px;
+  height: 7px;
+  margin: 0 3px 0 8px;
+  vertical-align: middle;
 }
 
 .cal-ir-more {

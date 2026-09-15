@@ -2,6 +2,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.agents.catalyst_research.schemas import (
+    EventCatalystAssessment,
+    EventCatalystAssessmentResponse,
     EventClassification,
     EventClassificationResponse,
     RegistryEndpointSelection,
@@ -182,3 +184,54 @@ def test_classification_response_rejects_missing_and_duplicate_ids():
         )
     with pytest.raises(ValidationError):
         EventClassificationResponse(classifications=records + [records[0]])
+
+
+def test_event_catalyst_assessment_accepts_each_label_and_rejects_unknown():
+    for catalyst_type in (
+        "earnings_results",
+        "guidance_outlook",
+        "product_launch",
+        "partnership_contract",
+        "corporate_restructuring",
+        "management_change",
+        "capital_markets",
+        "regulatory_government",
+        "investor_event",
+        "operational_milestone",
+        "pr_other",
+        "ambiguous",
+    ):
+        result = EventCatalystAssessment(id=1, catalyst_type=catalyst_type, meaningful_state="meaningful", reason="valid")
+        assert result.catalyst_type == catalyst_type
+    for meaningful_state in ("meaningful", "non_meaningful", "ambiguous"):
+        result = EventCatalystAssessment(id=1, catalyst_type="pr_other", meaningful_state=meaningful_state, reason="valid")
+        assert result.meaningful_state == meaningful_state
+    with pytest.raises(ValidationError):
+        EventCatalystAssessment(id=1, catalyst_type="big_news", meaningful_state="meaningful", reason="valid")
+    with pytest.raises(ValidationError):
+        EventCatalystAssessment(id=1, catalyst_type="pr_other", meaningful_state="important", reason="valid")
+    with pytest.raises(ValidationError):
+        EventCatalystAssessment(id=1, catalyst_type="pr_other", meaningful_state="meaningful", reason="valid", score=1)
+    with pytest.raises(ValidationError):
+        EventCatalystAssessment(id=0, catalyst_type="pr_other", meaningful_state="meaningful", reason="valid")
+    with pytest.raises(ValidationError):
+        EventCatalystAssessment(id=1, catalyst_type="pr_other", meaningful_state="meaningful", reason="  ")
+
+
+def test_catalyst_assessment_response_rejects_missing_and_duplicate_ids():
+    records = [
+        {"id": 1, "catalyst_type": "product_launch", "meaningful_state": "meaningful", "reason": "launch"},
+        {"id": 2, "catalyst_type": "pr_other", "meaningful_state": "non_meaningful", "reason": "ceremonial"},
+    ]
+
+    result = EventCatalystAssessmentResponse(assessments=records)
+
+    assert [item.id for item in result.assessments] == [1, 2]
+    with pytest.raises(ValidationError):
+        EventCatalystAssessmentResponse(
+            assessments=[{"catalyst_type": "pr_other", "meaningful_state": "ambiguous", "reason": "missing id"}]
+        )
+    with pytest.raises(ValidationError):
+        EventCatalystAssessmentResponse(assessments=records + [records[0]])
+    with pytest.raises(ValidationError):
+        EventCatalystAssessmentResponse.model_validate({**{"assessments": records}, "classifications": []})

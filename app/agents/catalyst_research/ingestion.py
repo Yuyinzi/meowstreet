@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 from datetime import UTC, date, datetime
+from urllib.parse import urlsplit
 
 from app.agents.catalyst_research.domain import canonicalize_public_url
 from app.agents.catalyst_research.extraction.articles import strip_title_site_prefix
@@ -209,6 +210,29 @@ def _repository_call(repository, connection, name, *args):
     return method(connection, *args)
 
 
+def _url_path_key(canonical):
+    parsed = urlsplit(canonical)
+    return (parsed.netloc.casefold(), (parsed.path.rstrip("/") or "/").casefold())
+
+
+def _endpoint_url_keys(repository, connection, ticker):
+    if not callable(getattr(repository, "load_source_endpoints", None)):
+        return set()
+    endpoints = _repository_call(repository, connection, "load_source_endpoints", ticker)
+    keys = set()
+    for endpoint in endpoints or []:
+        if not isinstance(endpoint, Mapping):
+            continue
+        url = endpoint.get("url")
+        if not url:
+            continue
+        try:
+            keys.add(_url_path_key(canonicalize_public_url(str(url))))
+        except ValueError:
+            continue
+    return keys
+
+
 def _event_dates(row, channel, *, published_at=None):
     published = _date_value(published_at if published_at is not None else (row.get("published_at") or row.get("published_date")))
     event_date = _date_value(row.get("event_date")) if channel == "events_presentations" else None
@@ -342,11 +366,13 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
     attempted = 0
     skipped_seen = 0
     skipped_duplicates = 0
+    skipped_archive = 0
     manual_review = 0
     warnings = []
     truncated = False
     processed = []
     seen_titles = _seen_event_titles(repository, connection, ticker, company)
+    endpoint_keys = _endpoint_url_keys(repository, connection, ticker)
     for row in rows:
         if attempted >= max_urls:
             truncated = True
@@ -358,6 +384,10 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
             or _repository_call(repository, connection, "source_url_seen", ticker, canonical_url)
         ):
             skipped_seen += 1
+            processed.append(row)
+            continue
+        if canonical_url is not None and _url_path_key(canonical_url) in endpoint_keys:
+            skipped_archive += 1
             processed.append(row)
             continue
         processed.append(row)
@@ -492,6 +522,7 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
         "attempted": attempted,
         "skipped_seen": skipped_seen,
         "skipped_duplicates": skipped_duplicates,
+        "skipped_archive": skipped_archive,
         "manual_review": manual_review,
         "truncated": truncated,
         "warnings": warnings,

@@ -34,6 +34,32 @@
     manual: "Manual",
   };
 
+  var CATALYST_TYPE_LABELS = {
+    earnings_results: "Earnings results",
+    guidance_outlook: "Guidance / outlook",
+    product_launch: "Product launch",
+    partnership_contract: "Partnership / contract",
+    corporate_restructuring: "Restructuring / M&A",
+    management_change: "Management change",
+    capital_markets: "Capital markets",
+    regulatory_government: "Regulatory / government",
+    investor_event: "Investor event",
+    operational_milestone: "Operational milestone",
+    pr_other: "Other PR",
+    ambiguous: "Ambiguous",
+  };
+
+  var MEANINGFUL_LABELS = {
+    meaningful: "Meaningful",
+    non_meaningful: "Non-meaningful",
+    ambiguous: "Ambiguous",
+  };
+
+  var POLL_INTERVAL_MS = 10000;
+  var POLL_TIMEOUT_MS = 30 * 60 * 1000;
+  var START_WINDOW_MS = 60000;
+  var triggered = {};
+
   function escapeHtml(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -66,15 +92,43 @@
     );
   }
 
-  function notResearchedHtml(payload) {
+  function cliActionHtml(payload) {
     var actions = (payload && payload.next_actions) || [];
-    var actionHtml = actions.length
+    return actions.length
       ? '<div class="catalyst-research-next">Next step: <code>' +
         escapeHtml(actions[0]) + "</code></div>"
       : "";
+  }
+
+  function notResearchedHtml(payload) {
     return (
       '<div class="catalyst-research-note">No IR communication research has been run for this ticker yet.</div>' +
-      actionHtml
+      cliActionHtml(payload)
+    );
+  }
+
+  function researchingHtml(payload) {
+    var ticker = payload && payload.ticker ? String(payload.ticker) : "this ticker";
+    return (
+      '<div class="catalyst-research-progress">' +
+      '<span class="catalyst-research-spinner" aria-hidden="true"></span>' +
+      "<span>Researching IR communication history for " + escapeHtml(ticker) +
+      ". This usually takes a few minutes; this section will refresh on its own.</span>" +
+      "</div>"
+    );
+  }
+
+  function failedHtml(payload) {
+    return (
+      '<div class="catalyst-research-note">IR communication research did not complete.</div>' +
+      cliActionHtml(payload)
+    );
+  }
+
+  function timeoutHtml(payload) {
+    return (
+      '<div class="catalyst-research-note">Research is taking longer than expected; reload this page later to see the result.</div>' +
+      cliActionHtml(payload)
     );
   }
 
@@ -150,6 +204,30 @@
         "Median gap between non-earnings",
         escapeHtml(channel.median_days_between_observed_non_earnings) + " days"
       );
+    }
+    var typeCounts = channel.catalyst_type_counts;
+    if (typeCounts && typeof typeCounts === "object") {
+      var typeParts = [];
+      for (var typeKey in typeCounts) {
+        if (Object.prototype.hasOwnProperty.call(typeCounts, typeKey)) {
+          typeParts.push((CATALYST_TYPE_LABELS[typeKey] || String(typeKey).replace(/_/g, " ")) + " " + typeCounts[typeKey]);
+        }
+      }
+      if (typeParts.length) {
+        rows += row("Catalyst types", escapeHtml(typeParts.join(" · ")));
+      }
+    }
+    var meaningfulCounts = channel.meaningful_counts;
+    if (meaningfulCounts && typeof meaningfulCounts === "object") {
+      var meaningfulParts = [];
+      for (var meaningfulKey in meaningfulCounts) {
+        if (Object.prototype.hasOwnProperty.call(meaningfulCounts, meaningfulKey)) {
+          meaningfulParts.push((MEANINGFUL_LABELS[meaningfulKey] || meaningfulKey) + " " + meaningfulCounts[meaningfulKey]);
+        }
+      }
+      if (meaningfulParts.length) {
+        rows += row("Meaningfulness", escapeHtml(meaningfulParts.join(" · ")));
+      }
     }
     var notes = "";
     if (observedPartial) {
@@ -279,7 +357,18 @@
     );
   }
 
-  function activityDotClass(earningsState) {
+  function activityDotClass(event) {
+    var meaningfulState = event && event.meaningful_state;
+    if (meaningfulState === "meaningful") {
+      return "cal-dot cal-dot-meaningful";
+    }
+    if (meaningfulState === "non_meaningful") {
+      return "cal-dot cal-dot-non-meaningful";
+    }
+    if (meaningfulState === "ambiguous") {
+      return "cal-dot cal-dot-ambiguous";
+    }
+    var earningsState = event && event.earnings_state;
     if (earningsState === "earnings") {
       return "cal-dot cal-dot-earnings";
     }
@@ -307,7 +396,7 @@
     var dots = "";
     var shown = Math.min(events.length, 3);
     for (var index = 0; index < shown; index += 1) {
-      dots += '<span class="' + activityDotClass(events[index].earnings_state) + '"></span>';
+      dots += '<span class="' + activityDotClass(events[index]) + '"></span>';
     }
     if (events.length > shown) {
       dots += '<span class="cal-ir-more">+' + (events.length - shown) + "</span>";
@@ -327,16 +416,30 @@
       }
       metaParts.push("content: " + (event.has_content ? "Full text archived" : "Metadata only"));
       var meta = metaParts.join(" · ");
+      var chips = "";
+      if (event.catalyst_type) {
+        chips +=
+          ' <span class="catalyst-research-chip catalyst-research-chip-type">' +
+          escapeHtml(CATALYST_TYPE_LABELS[event.catalyst_type] || String(event.catalyst_type).replace(/_/g, " ")) +
+          "</span>";
+      }
+      if (event.meaningful_state) {
+        chips +=
+          ' <span class="catalyst-research-chip catalyst-research-chip-' +
+          escapeHtml(String(event.meaningful_state).replace(/_/g, "-")) + '">' +
+          escapeHtml(MEANINGFUL_LABELS[event.meaningful_state] || event.meaningful_state) +
+          "</span>";
+      }
       var safeUrl = typeof event.url === "string" && /^https:\/\//i.test(event.url) ? event.url : null;
       var link = safeUrl
         ? ' · <a href="' + escapeHtml(safeUrl) + '" target="_blank" rel="noopener noreferrer">Open source ↗</a>'
         : "";
       return (
         '<div class="cal-ir-event">' +
-        '<span class="' + activityDotClass(event.earnings_state) + '"></span>' +
+        '<span class="' + activityDotClass(event) + '"></span>' +
         '<span class="cal-ir-event-body">' +
         '<span class="cal-ir-event-title">' + escapeHtml(event.title || "Untitled") + "</span>" +
-        '<span class="cal-ir-event-meta">' + escapeHtml(meta) + link + "</span>" +
+        '<span class="cal-ir-event-meta">' + escapeHtml(meta) + chips + link + "</span>" +
         "</span></div>"
       );
     }).join("");
@@ -365,6 +468,9 @@
   function render(payload) {
     if (!payload || payload.status === "not_researched") {
       return notResearchedHtml(payload);
+    }
+    if (payload.status === "researching") {
+      return researchingHtml(payload);
     }
     var statistics = payload.channels || payload.statistics || {};
     var meta = [];
@@ -405,16 +511,119 @@
     );
   }
 
+  function fetchSummary(symbol) {
+    return fetch("/api/ticker-quant/" + encodeURIComponent(symbol) + "/catalyst-research").then(requireOkJson);
+  }
+
+  function runResearch(symbol) {
+    return fetch(
+      "/api/ticker-quant/" + encodeURIComponent(symbol) + "/catalyst-research/run",
+      { method: "POST" }
+    ).then(requireOkJson);
+  }
+
+  function notifySettled(symbol, options, payload) {
+    if (options.onSettled) {
+      options.onSettled(payload);
+    }
+  }
+
+  function settleTimeout(symbol, options) {
+    fetchSummary(symbol)
+      .then(function (payload) {
+        if (!options.isCurrent || !options.isCurrent(symbol)) {
+          return;
+        }
+        if (payload && payload.status !== "researching" && payload.status !== "not_researched") {
+          options.onResult(payload, render(payload));
+        } else {
+          options.onResult(payload, timeoutHtml(payload));
+        }
+        notifySettled(symbol, options, payload);
+      })
+      .catch(function () {});
+  }
+
+  function pollUntilDone(symbol, options, startedAt) {
+    if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+      settleTimeout(symbol, options);
+      return;
+    }
+    setTimeout(function () {
+      if (!options.isCurrent || !options.isCurrent(symbol)) {
+        return;
+      }
+      fetchSummary(symbol)
+        .then(function (payload) {
+          if (!options.isCurrent(symbol)) {
+            return;
+          }
+          if (payload && payload.status === "researching") {
+            pollUntilDone(symbol, options, startedAt);
+            return;
+          }
+          if (payload && payload.status === "not_researched" && Date.now() - startedAt < START_WINDOW_MS) {
+            pollUntilDone(symbol, options, startedAt);
+            return;
+          }
+          if (payload && payload.status !== "not_researched") {
+            options.onResult(payload, render(payload));
+          } else {
+            options.onResult(payload, failedHtml(payload));
+          }
+          notifySettled(symbol, options, payload);
+        })
+        .catch(function () {
+          pollUntilDone(symbol, options, startedAt);
+        });
+    }, POLL_INTERVAL_MS);
+  }
+
   function load(symbol, options) {
     options = options || {};
-    return fetch("/api/ticker-quant/" + encodeURIComponent(symbol) + "/catalyst-research")
-      .then(requireOkJson)
-      .then(function (payload) {
-        if (options.isCurrent && options.onResult && options.isCurrent(symbol)) {
-          options.onResult(payload, render(payload));
-        }
+    return fetchSummary(symbol).then(function (payload) {
+      if (!options.isCurrent || !options.onResult || !options.isCurrent(symbol)) {
         return payload;
-      });
+      }
+      if (payload && payload.status === "researching") {
+        options.onResult(payload, render(payload));
+        pollUntilDone(symbol, options, Date.now());
+        return payload;
+      }
+      if (payload && payload.status === "not_researched" && options.autoRun && !triggered[symbol]) {
+        triggered[symbol] = true;
+        options.onResult(payload, researchingHtml(payload));
+        runResearch(symbol)
+          .then(function (runResult) {
+            if (!options.isCurrent(symbol)) {
+              return;
+            }
+            if (runResult && runResult.run_status === "already_researched") {
+              fetchSummary(symbol)
+                .then(function (fresh) {
+                  if (options.isCurrent(symbol)) {
+                    options.onResult(fresh, render(fresh));
+                  }
+                })
+                .catch(function () {});
+              return;
+            }
+            if (runResult && (runResult.run_status === "started" || runResult.run_status === "already_running")) {
+              pollUntilDone(symbol, options, Date.now());
+              return;
+            }
+            options.onResult(payload, notResearchedHtml(payload));
+          })
+          .catch(function () {
+            if (options.isCurrent(symbol)) {
+              options.onResult(payload, notResearchedHtml(payload));
+            }
+          });
+        return payload;
+      }
+      options.onResult(payload, render(payload));
+      return payload;
+    });
   }
 
   window.CatalystResearch = {

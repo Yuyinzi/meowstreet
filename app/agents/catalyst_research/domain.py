@@ -13,13 +13,30 @@ from app.agents.catalyst_research.providers.base import SearchProviderError
 from app.agents.catalyst_research.providers.base import VALID_REASON_CODES
 from app.agents.catalyst_research.config import PROMPT_VERSIONS
 from app.agents.catalyst_research.config import RESEARCH_MODES
+from app.agents.catalyst_research.prompts import catalyst_assessment_prompt
 from app.agents.catalyst_research.prompts import classification_prompt
 from app.agents.catalyst_research.prompts import source_selection_prompt
+from app.agents.catalyst_research.schemas import EventCatalystAssessmentResponse
 from app.agents.catalyst_research.schemas import EventClassificationResponse
 from app.agents.catalyst_research.schemas import SourceSelectionResponse
 
 
 _SOURCE_TYPES = {"press_releases", "events_presentations", "earnings_results"}
+_CATALYST_TYPES = {
+    "earnings_results",
+    "guidance_outlook",
+    "product_launch",
+    "partnership_contract",
+    "corporate_restructuring",
+    "management_change",
+    "capital_markets",
+    "regulatory_government",
+    "investor_event",
+    "operational_milestone",
+    "pr_other",
+    "ambiguous",
+}
+_MEANINGFUL_STATES = {"meaningful", "non_meaningful", "ambiguous"}
 _URL_SCHEMES = {"http", "https"}
 _TRACKING_NAMES = {
     "_hsenc",
@@ -564,6 +581,130 @@ async def classify_observations(events, *, llm_client=None, model=None, batch_si
         classified.extend(merged)
     classified.sort(key=_classification_output_key)
     return {"events": classified, "llm_call_count": llm_call_count, "provenance": provenance}
+
+
+def _assessment_response_payload(response):
+    parsed = getattr(response, "output_parsed", None)
+    if parsed is None:
+        payload = None
+    else:
+        candidate = parsed.model_dump(mode="json") if hasattr(parsed, "model_dump") else parsed
+        payload = EventCatalystAssessmentResponse.model_validate(candidate).model_dump(mode="json")
+    return payload
+
+
+def merge_catalyst_assessments(events, payload) -> list[dict]:
+    if not isinstance(events, list):
+        raise ValueError("events are required")
+    if payload is not None and not isinstance(payload, Mapping):
+        raise ValueError("assessment payload is invalid")
+    items = payload.get("assessments") if payload else []
+    by_id = {}
+    for item in items:
+        if not isinstance(item, Mapping):
+            raise ValueError("assessment item is invalid")
+        identifier = item.get("id")
+        if not isinstance(identifier, int) or isinstance(identifier, bool) or identifier < 1:
+            raise ValueError("assessment id is invalid")
+        by_id.setdefault(identifier, []).append(item)
+    output = []
+    for event in events:
+        item = dict(event)
+        matched = by_id.get(item.get("id")) or []
+        catalyst_type = matched[0].get("catalyst_type") if matched else None
+        meaningful_state = matched[0].get("meaningful_state") if matched else None
+        if catalyst_type not in _CATALYST_TYPES or meaningful_state not in _MEANINGFUL_STATES:
+            catalyst_type = "ambiguous"
+            meaningful_state = "ambiguous"
+        else:
+            reason = matched[0].get("reason")
+            if reason:
+                item["catalyst_assessment_reason"] = _fold_whitespace(reason)
+        item["catalyst_type"] = catalyst_type
+        item["meaningful_state"] = meaningful_state
+        output.append(item)
+    return output
+
+
+async def assess_catalyst_events(events, *, llm_client=None, model=None, batch_size=50) -> dict:
+    if not isinstance(events, list):
+        raise ValueError("events are required")
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or not 1 <= batch_size <= 50:
+        raise ValueError("batch size must be between 1 and 50")
+    prepared = []
+    for event in events:
+        if not isinstance(event, Mapping):
+            raise ValueError("event is invalid")
+        item = dict(event)
+        if not _fold_whitespace(item.get("title")):
+            raise ValueError("event title is required")
+        identifier = item.get("id")
+        if not isinstance(identifier, int) or isinstance(identifier, bool) or identifier < 1:
+            raise ValueError("event id is invalid")
+        prepared.append(item)
+    assessed = []
+    unresolved = []
+    for item in prepared:
+        if item.get("earnings_state") == "earnings":
+            item["catalyst_type"] = "earnings_results"
+            item["meaningful_state"] = "meaningful"
+            item["catalyst_type_method"] = "rule_v1"
+            item["meaningful_method"] = "rule_v1"
+            item.update({"assessment_model": None, "assessment_prompt_schema_version": None, "assessment_input_hash": None, "assessment_output_hash": None})
+            assessed.append(item)
+        else:
+            unresolved.append(item)
+    llm_call_count = 0
+    provenance = []
+    for start in range(0, len(unresolved), batch_size):
+        batch = unresolved[start : start + batch_size]
+        batch_index = start // batch_size
+        bounded = _classification_input(batch)
+        prompt = catalyst_assessment_prompt(bounded)
+        input_hash = _hash_payload(prompt)
+        payload = None
+        output_hash = None
+        attempted = llm_client is not None and bool(model)
+        if attempted:
+            llm_call_count += 1
+            try:
+                response = await llm_client.responses.parse(
+                    model=model,
+                    input=prompt,
+                    text_format=EventCatalystAssessmentResponse,
+                )
+                payload = _assessment_response_payload(response)
+                output_hash = _hash_payload(payload) if payload is not None else None
+            except Exception:
+                payload = None
+            provenance.append(
+                {
+                    "batch_index": batch_index,
+                    "event_ids": [item["id"] for item in batch],
+                    "method": "catalyst_assessment_v1",
+                    "model": model,
+                    "prompt_schema_version": PROMPT_VERSIONS["catalyst_assessment"],
+                    "input_hash": input_hash,
+                    "output_hash": output_hash,
+                }
+            )
+        merge_payload = payload if payload is not None else {"assessments": []} if attempted else None
+        merged = merge_catalyst_assessments(batch, merge_payload)
+        batch_provenance = provenance[-1] if attempted else None
+        for item in merged:
+            method = "catalyst_assessment_v1" if attempted and item["catalyst_type"] != "ambiguous" else "catalyst_assessment_v1_fallback" if attempted else "manual"
+            item["catalyst_type_method"] = method
+            item["meaningful_method"] = method
+            item.update(
+                {
+                    "assessment_model": batch_provenance["model"] if batch_provenance else None,
+                    "assessment_prompt_schema_version": batch_provenance["prompt_schema_version"] if batch_provenance else None,
+                    "assessment_input_hash": batch_provenance["input_hash"] if batch_provenance else None,
+                    "assessment_output_hash": batch_provenance["output_hash"] if batch_provenance else None,
+                }
+            )
+        assessed.extend(merged)
+    return {"events": assessed, "llm_call_count": llm_call_count, "provenance": provenance}
 
 
 _DISCOVERY_SOURCE_TYPES = ("ir_home", "press_releases", "events_presentations", "earnings_results")

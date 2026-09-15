@@ -391,3 +391,26 @@ def test_firecrawl_provider_metadata_beats_html_metadata():
     result = ExtractionRouter(direct, firecrawl).extract(candidate(), company=company(), approved_domains=DOMAINS)
 
     assert result["published_at"] == "2026-09-07T12:00:00+00:00"
+
+
+def test_direct_list_page_outcome_skips_firecrawl():
+    direct = FakeDirect(error=ValueError("list_page"))
+    firecrawl = FakeFirecrawl(result=firecrawl_article())
+
+    result = ExtractionRouter(direct, firecrawl).extract(candidate(), company=company(), approved_domains=DOMAINS)
+
+    assert result["status"] == "manual_review_required"
+    assert firecrawl.calls == []
+    assert result["attempts"] == [{"provider": "direct_http", "outcome": "list_page"}]
+
+
+def test_firecrawl_list_page_html_is_rejected():
+    direct = FakeDirect(error=ValueError("request_failed"))
+    markers = "".join(f'<time datetime="2026-09-0{day}">September {day}, 2026</time>' for day in range(1, 8))
+    html = f"<html><body><h1>Press Releases</h1>{markers}<p>NVIDIA press release archive</p></body></html>"
+    firecrawl = FakeFirecrawl(result=firecrawl_article(html=html))
+
+    result = ExtractionRouter(direct, firecrawl).extract(candidate(), company=company(), approved_domains=DOMAINS)
+
+    assert result["status"] == "manual_review_required"
+    assert result["attempts"][-1] == {"provider": "firecrawl", "outcome": "list_page"}

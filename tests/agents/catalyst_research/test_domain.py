@@ -1,13 +1,17 @@
 import socket
+import asyncio
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
 from app.agents.catalyst_research.domain import (
     _discovery_queries,
+    assess_catalyst_events,
     canonicalize_public_url,
     classify_title_by_rule,
     classify_observations,
+    merge_catalyst_assessments,
     merge_classifications,
     normalize_observations,
     normalize_request,
@@ -412,3 +416,117 @@ def test_domain_public_functions_advertise_return_types():
 )
 def test_canonicalize_public_url_preserves_explicit_non_default_port(url, expected):
     assert canonicalize_public_url(url) == expected
+
+
+class _FakeAssessmentResponses:
+    def __init__(self, payload=None, error=None):
+        self.payload = payload
+        self.error = error
+        self.calls = []
+
+    async def parse(self, *, model, input, text_format):
+        self.calls.append({"model": model, "input": input, "text_format": text_format})
+        if self.error is not None:
+            raise self.error
+        return SimpleNamespace(output_parsed=self.payload)
+
+
+class _FakeAssessmentClient:
+    def __init__(self, payload=None, error=None):
+        self.responses = _FakeAssessmentResponses(payload=payload, error=error)
+
+
+def _assessment_events():
+    return [
+        {"id": 1, "title": "Intel Reports Fourth-Quarter Financial Results", "source_type": "press_releases", "earnings_state": "earnings"},
+        {"id": 2, "title": "Intel Launches New Data Center GPU", "source_type": "press_releases", "earnings_state": "non_earnings"},
+    ]
+
+
+def test_assess_catalyst_events_assigns_earnings_by_rule_without_llm():
+    client = _FakeAssessmentClient(payload={"assessments": []})
+
+    result = asyncio.run(assess_catalyst_events(_assessment_events(), llm_client=client, model="test-model"))
+
+    assert result["llm_call_count"] == 1
+    sent_ids = result["provenance"][0]["event_ids"]
+    assert sent_ids == [2]
+    by_id = {item["id"]: item for item in result["events"]}
+    assert by_id[1]["catalyst_type"] == "earnings_results"
+    assert by_id[1]["meaningful_state"] == "meaningful"
+    assert by_id[1]["catalyst_type_method"] == "rule_v1"
+    assert by_id[2]["catalyst_type"] == "ambiguous"
+    assert by_id[2]["catalyst_type_method"] == "catalyst_assessment_v1_fallback"
+
+
+def test_assess_catalyst_events_applies_model_labels_with_provenance():
+    payload = {
+        "assessments": [
+            {"id": 2, "catalyst_type": "product_launch", "meaningful_state": "meaningful", "reason": "new data center product"}
+        ]
+    }
+    client = _FakeAssessmentClient(payload=payload)
+
+    result = asyncio.run(assess_catalyst_events(_assessment_events(), llm_client=client, model="test-model"))
+
+    assert result["llm_call_count"] == 1
+    assert client.responses.calls[0]["model"] == "test-model"
+    by_id = {item["id"]: item for item in result["events"]}
+    assert by_id[2]["catalyst_type"] == "product_launch"
+    assert by_id[2]["meaningful_state"] == "meaningful"
+    assert by_id[2]["catalyst_type_method"] == "catalyst_assessment_v1"
+    assert by_id[2]["assessment_model"] == "test-model"
+    assert by_id[2]["assessment_prompt_schema_version"] == "catalyst_assessment_v1"
+    assert by_id[2]["assessment_input_hash"]
+    assert by_id[2]["assessment_output_hash"]
+    assert result["provenance"][0]["event_ids"] == [2]
+
+
+def test_assess_catalyst_events_marks_missing_ids_ambiguous_fallback():
+    payload = {"assessments": [{"id": 99, "catalyst_type": "pr_other", "meaningful_state": "non_meaningful", "reason": "unknown id"}]}
+    client = _FakeAssessmentClient(payload=payload)
+
+    result = asyncio.run(assess_catalyst_events(_assessment_events(), llm_client=client, model="test-model"))
+
+    by_id = {item["id"]: item for item in result["events"]}
+    assert by_id[2]["catalyst_type"] == "ambiguous"
+    assert by_id[2]["meaningful_state"] == "ambiguous"
+    assert by_id[2]["catalyst_type_method"] == "catalyst_assessment_v1_fallback"
+
+
+def test_assess_catalyst_events_provider_failure_does_not_abort():
+    client = _FakeAssessmentClient(error=RuntimeError("provider down"))
+
+    result = asyncio.run(assess_catalyst_events(_assessment_events(), llm_client=client, model="test-model"))
+
+    assert result["llm_call_count"] == 1
+    by_id = {item["id"]: item for item in result["events"]}
+    assert by_id[1]["catalyst_type"] == "earnings_results"
+    assert by_id[2]["catalyst_type"] == "ambiguous"
+    assert by_id[2]["catalyst_type_method"] == "catalyst_assessment_v1_fallback"
+
+
+def test_assess_catalyst_events_without_llm_marks_non_earnings_ambiguous():
+    result = asyncio.run(assess_catalyst_events(_assessment_events()))
+
+    assert result["llm_call_count"] == 0
+    by_id = {item["id"]: item for item in result["events"]}
+    assert by_id[2]["catalyst_type"] == "ambiguous"
+    assert by_id[2]["catalyst_type_method"] == "manual"
+
+
+def test_merge_catalyst_assessments_falls_back_for_missing_and_invalid_rows():
+    events = [
+        {"id": 1, "title": "Charity donation announced", "source_type": "press_releases"},
+        {"id": 2, "title": "New partnership", "source_type": "press_releases"},
+    ]
+
+    result = merge_catalyst_assessments(
+        events,
+        {"assessments": [{"id": 2, "catalyst_type": "partnership_contract", "meaningful_state": "meaningful", "reason": "contract"}]},
+    )
+
+    assert result[0]["catalyst_type"] == "ambiguous"
+    assert result[0]["meaningful_state"] == "ambiguous"
+    assert result[1]["catalyst_type"] == "partnership_contract"
+    assert result[1]["catalyst_assessment_reason"] == "contract"

@@ -189,7 +189,61 @@ def test_catalyst_research_renderer_supports_v1_1_observed_channels():
 def test_ticker_pages_bump_shared_catalyst_research_asset_version():
     for page in ("ticker-context.html", "quant-screen.html"):
         html = (ROOT / "static" / page).read_text(encoding="utf-8")
-        assert _CATALYST_REVIEW_JS + "?v=7" in html
+        assert _CATALYST_REVIEW_JS + "?v=10" in html
+
+
+def test_catalyst_research_auto_run_contract():
+    source = _catalyst_research_js()
+
+    assert "/catalyst-research/run" in source
+    assert '"researching"' in source
+    assert "autoRun" in source
+    assert "onSettled" in source
+    assert "pollUntilDone" in source
+    for name in ("ticker-context.js", "quant-screen-ticker-panel.js"):
+        view_source = (ROOT / "static" / name).read_text(encoding="utf-8")
+        assert "autoRun: true" in view_source
+        assert "onSettled" in view_source
+
+
+def test_catalyst_research_renders_type_and_meaningful_chips():
+    source = _catalyst_research_js()
+
+    assert "CATALYST_TYPE_LABELS" in source
+    assert "MEANINGFUL_LABELS" in source
+    assert "event.catalyst_type" in source
+    assert "event.meaningful_state" in source
+    assert "catalyst_type_counts" in source
+    assert "meaningful_counts" in source
+    assert "catalyst-research-chip-type" in source
+    assert "Catalyst types" in source
+    assert "Meaningfulness" in source
+    css = (
+        ROOT / "static" / "agents" / "catalyst-research" / "catalyst-research.css"
+    ).read_text(encoding="utf-8")
+    assert ".catalyst-research-chip-meaningful" in css
+    assert ".catalyst-research-chip-non-meaningful" in css
+
+
+def test_calendar_dots_encode_meaningfulness_with_graphical_legend():
+    source = _catalyst_research_js()
+
+    assert 'meaningfulState === "meaningful"' in source
+    assert 'meaningfulState === "non_meaningful"' in source
+    assert "cal-dot-meaningful" in source
+    assert "cal-dot-non-meaningful" in source
+    assert "activityDotClass(events[index])" in source
+    for name in ("ticker-context.js", "quant-screen-ticker-panel.js"):
+        view_source = (ROOT / "static" / name).read_text(encoding="utf-8")
+        assert '<span class="cal-dot cal-dot-meaningful"></span> meaningful' in view_source
+        assert '<span class="cal-dot cal-dot-non-meaningful"></span> non-meaningful' in view_source
+        assert '<span class="cal-dot cal-dot-ambiguous"></span> ambiguous' in view_source
+        assert "indigo earnings" not in view_source
+    for name in ("ticker-context.css", "quant-screen.css"):
+        css = (ROOT / "static" / name).read_text(encoding="utf-8")
+        assert ".cal-dot-meaningful" in css
+        assert ".cal-dot-non-meaningful" in css
+        assert ".cal-legend .cal-dot" in css
 
 
 def test_catalyst_research_styles_are_scoped_to_agent_selectors():

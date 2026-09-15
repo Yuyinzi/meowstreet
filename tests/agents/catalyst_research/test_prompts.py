@@ -41,4 +41,5 @@ def test_registry_selection_bumps_only_its_own_prompt_version():
         "source_selection": "source_selection_v2",
         "adapter_generation": "adapter_generation_v1",
         "classification": "classification_v1",
+        "catalyst_assessment": "catalyst_assessment_v1",
     }

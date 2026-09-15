@@ -106,3 +106,47 @@ def classification_prompt(events: list[dict]) -> list[dict]:
         },
         {"role": "user", "content": f"Events to classify:\n{_json(events)}"},
     ]
+
+
+_CATALYST_TYPE_DEFINITIONS = (
+    "Allowed catalyst_type values: "
+    "earnings_results (quarterly or annual results, earnings call, results presentation, directly associated results release); "
+    "guidance_outlook (financial guidance or outlook issuance or update); "
+    "product_launch (new product or service launch, major first delivery); "
+    "partnership_contract (partnership, joint venture, major customer contract); "
+    "corporate_restructuring (merger, acquisition, spin-off, restructuring, divestiture); "
+    "management_change (CEO, CFO, board, or key executive change); "
+    "capital_markets (buyback, offering, convertible, dividend change); "
+    "regulatory_government (regulatory approval or penalty, government contract or policy action); "
+    "investor_event (investor day, shareholder meeting, IR calendar notice); "
+    "operational_milestone (plant start-up, capacity, technology node, or production milestone); "
+    "pr_other (any press communication not matching the categories above, including low-information titles); "
+    "ambiguous (the type cannot be determined from the title). "
+)
+
+_MEANINGFUL_DEFINITION = (
+    "Allowed meaningful_state values are meaningful, non_meaningful, and ambiguous. "
+    "Meaningful means the title describes incremental new information that could change the KPI, revenue, "
+    "earnings, or forward-valuation view of the company. Non_meaningful means ceremonial or philanthropic "
+    "communications, or terminal confirmations of already-announced matters such as routine completion "
+    "notices and previously disclosed deal progress that add no new estimate-relevant information. "
+    "When the title does not contain enough information to decide, use ambiguous. "
+)
+
+
+def catalyst_assessment_prompt(events: list[dict]) -> list[dict]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                f"Assess each supplied Investor Relations event by title. Use prompt version "
+                f"{PROMPT_VERSIONS['catalyst_assessment']}. Return strict JSON with key assessments. "
+                "Each item must contain id, catalyst_type, meaningful_state, and reason. "
+                f"{_CATALYST_TYPE_DEFINITIONS}"
+                f"{_MEANINGFUL_DEFINITION}"
+                "Do not classify price sensitivity, tumbleweed status, or trading impact. "
+                f"{_UNTRUSTED_EVIDENCE}"
+            ),
+        },
+        {"role": "user", "content": f"Events to assess:\n{_json(events)}"},
+    ]

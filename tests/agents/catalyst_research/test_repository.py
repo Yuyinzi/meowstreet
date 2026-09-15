@@ -18,6 +18,7 @@ EXPECTED_TABLES = {
     "catalyst_adapter_validations",
     "catalyst_ir_events",
     "catalyst_ir_classifications",
+    "catalyst_ir_catalyst_assessments",
     "catalyst_company_registry",
     "catalyst_source_endpoints",
     "catalyst_endpoint_checks",
@@ -1311,3 +1312,124 @@ def test_accumulated_channel_events_reject_invalid_window(tmp_path, start, end):
     with pytest.raises(ValueError, match="accumulated events window is invalid"):
         repository.load_accumulated_channel_events(con, "NVDA", start, end)
     con.close()
+
+
+def _assessed_event(source, **overrides):
+    event = {
+        "source_id": source["source_id"],
+        "ticker": "NVDA",
+        "source_type": "press_releases",
+        "count_date": "2026-01-01",
+        "title": "Intel Launches New GPU",
+        "url": "https://ir.example.test/gpu",
+    }
+    event.update(overrides)
+    return event
+
+
+def test_save_finalized_observations_persists_catalyst_assessment(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    event = _assessed_event(
+        source,
+        catalyst_type="product_launch",
+        catalyst_type_method="catalyst_assessment_v1",
+        meaningful_state="meaningful",
+        meaningful_method="catalyst_assessment_v1",
+        assessment_model="test-model",
+        assessment_prompt_schema_version="catalyst_assessment_v1",
+        assessment_input_hash="in-hash",
+        assessment_output_hash="out-hash",
+    )
+
+    repository.save_finalized_observations(con, job["job_id"], [event], [])
+
+    row = con.execute("select catalyst_type, catalyst_type_method, meaningful_state, meaningful_method from catalyst_ir_events").fetchone()
+    assert (row["catalyst_type"], row["catalyst_type_method"], row["meaningful_state"], row["meaningful_method"]) == (
+        "product_launch", "catalyst_assessment_v1", "meaningful", "catalyst_assessment_v1",
+    )
+    provenance = con.execute("select catalyst_type, meaningful_state, assessment_method, model, prompt_schema_version, input_hash, output_hash, job_id from catalyst_ir_catalyst_assessments").fetchone()
+    assert provenance["catalyst_type"] == "product_launch"
+    assert provenance["meaningful_state"] == "meaningful"
+    assert provenance["assessment_method"] == "catalyst_assessment_v1"
+    assert provenance["model"] == "test-model"
+    assert provenance["prompt_schema_version"] == "catalyst_assessment_v1"
+    assert provenance["input_hash"] == "in-hash"
+    assert provenance["output_hash"] == "out-hash"
+    assert provenance["job_id"] == job["job_id"]
+    assert repository.load_unassessed_events(con, ticker="NVDA") == []
+    con.close()
+
+
+@pytest.mark.parametrize(
+    "overrides,message",
+    [
+        ({"catalyst_type": "big_news", "meaningful_state": "meaningful"}, "catalyst type is invalid"),
+        ({"catalyst_type": "pr_other", "meaningful_state": "important"}, "meaningful state is invalid"),
+        ({"catalyst_type": "pr_other"}, "catalyst assessment is incomplete"),
+        ({"meaningful_state": "ambiguous"}, "catalyst assessment is incomplete"),
+    ],
+)
+def test_save_finalized_observations_rejects_invalid_catalyst_assessment(tmp_path, overrides, message):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+
+    with pytest.raises(ValueError, match=message):
+        repository.save_finalized_observations(con, job["job_id"], [_assessed_event(source, **overrides)], [])
+    con.close()
+
+
+def test_unassessed_events_and_save_catalyst_assessments_round_trip(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/news"})
+    repository.save_finalized_observations(
+        con,
+        job["job_id"],
+        [
+            _assessed_event(source),
+            _assessed_event(source, count_date="2026-01-02", title="Intel Reports Results", url="https://ir.example.test/results", catalyst_type="earnings_results", catalyst_type_method="rule_v1", meaningful_state="meaningful", meaningful_method="rule_v1"),
+        ],
+        [],
+    )
+
+    pending = repository.load_unassessed_events(con, ticker="NVDA")
+
+    assert [row["title"] for row in pending] == ["Intel Launches New GPU"]
+    event_id = pending[0]["event_id"]
+    repository.save_catalyst_assessments(
+        con,
+        [{
+            "event_id": event_id,
+            "catalyst_type": "pr_other",
+            "meaningful_state": "non_meaningful",
+            "assessment_method": "catalyst_assessment_v1",
+            "model": "test-model",
+            "prompt_schema_version": "catalyst_assessment_v1",
+            "input_hash": "in",
+            "output_hash": "out",
+        }],
+    )
+
+    row = con.execute("select catalyst_type, meaningful_state, catalyst_type_method from catalyst_ir_events where event_id = ?", (event_id,)).fetchone()
+    assert (row["catalyst_type"], row["meaningful_state"], row["catalyst_type_method"]) == ("pr_other", "non_meaningful", "catalyst_assessment_v1")
+    provenance = con.execute("select catalyst_type, meaningful_state from catalyst_ir_catalyst_assessments where event_id = ?", (event_id,)).fetchone()
+    assert (provenance["catalyst_type"], provenance["meaningful_state"]) == ("pr_other", "non_meaningful")
+    assert repository.load_unassessed_events(con, ticker="NVDA") == []
+    with pytest.raises(ValueError, match="unknown"):
+        repository.save_catalyst_assessments(con, [{"event_id": "ire_missing", "catalyst_type": "pr_other", "meaningful_state": "ambiguous"}])
+    con.close()
+
+
+def test_connect_migration_adds_catalyst_columns_to_existing_db(tmp_path):
+    db_path = tmp_path / "db.sqlite"
+    con = repository.connect(db_path)
+    con.close()
+
+    con = repository.connect(db_path)
+    columns = {row[1] for row in con.execute("pragma table_info(catalyst_ir_events)")}
+    con.close()
+
+    assert {"catalyst_type", "catalyst_type_method", "meaningful_state", "meaningful_method"} <= columns

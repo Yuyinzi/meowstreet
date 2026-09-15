@@ -16,6 +16,7 @@ PROMPT_VERSIONS = {
     "registry_selection": "registry_selection_v1",
     "adapter_generation": "adapter_generation_v1",
     "classification": "classification_v1",
+    "catalyst_assessment": "catalyst_assessment_v1",
 }
 
 _SEARCH_PROVIDERS = {"auto", "tavily", "native_search", "ddgs"}
@@ -256,6 +257,12 @@ def load_inference_bundle(args=None, root=ROOT):
                 "arg_name": "catalyst_classification_model",
                 "env_names": ["CATALYST_CLASSIFICATION_MODEL", "OPENAI_MODEL"],
                 "label": "catalyst classification model",
+            },
+            {
+                "name": "catalyst_assessment_model",
+                "arg_name": "catalyst_assessment_model",
+                "env_names": ["CATALYST_ASSESSMENT_MODEL", "CATALYST_CLASSIFICATION_MODEL", "OPENAI_MODEL"],
+                "label": "catalyst assessment model",
             },
         ],
         max_retries=0,

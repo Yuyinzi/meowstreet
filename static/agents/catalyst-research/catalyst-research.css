@@ -104,6 +104,26 @@
   color: #6B6258;
 }
 
+.catalyst-research-chip-type {
+  background: #E9EEF5;
+  color: #33506E;
+}
+
+.catalyst-research-chip-meaningful {
+  background: #E7EFE9;
+  color: #2D7A4A;
+}
+
+.catalyst-research-chip-non-meaningful {
+  background: #F0EAE4;
+  color: #8B8378;
+}
+
+.catalyst-research-chip-ambiguous {
+  background: #F5EEDC;
+  color: #8B7030;
+}
+
 .catalyst-research-sources-details {
   margin-bottom: 4px;
 }
@@ -201,3 +221,25 @@
     grid-template-columns: 1fr;
   }
 }
+
+.catalyst-research-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #8B7E74;
+  padding: 4px 0;
+  line-height: 1.5;
+}
+
+.catalyst-research-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #E8E0D6;
+  border-top-color: #8B7E74;
+  animation: catalyst-research-spin 0.9s linear infinite;
+}
+
+@keyframes catalyst-research-spin { to { transform: rotate(360deg); } }

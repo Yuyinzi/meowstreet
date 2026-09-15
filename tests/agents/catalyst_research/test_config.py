@@ -175,12 +175,14 @@ def test_inference_bundle_delegates_named_models_to_llm(monkeypatch, tmp_path):
         "registry_selection_model",
         "adapter_generation_model",
         "classification_model",
+        "catalyst_assessment_model",
     ]
     assert [spec["env_names"] for spec in specs] == [
         ["CATALYST_SOURCE_SELECTION_MODEL", "OPENAI_MODEL"],
         ["CATALYST_REGISTRY_SELECTION_MODEL", "CATALYST_SOURCE_SELECTION_MODEL", "OPENAI_MODEL"],
         ["CATALYST_ADAPTER_GENERATION_MODEL", "OPENAI_MODEL"],
         ["CATALYST_CLASSIFICATION_MODEL", "OPENAI_MODEL"],
+        ["CATALYST_ASSESSMENT_MODEL", "CATALYST_CLASSIFICATION_MODEL", "OPENAI_MODEL"],
     ]
 
 
@@ -199,5 +201,5 @@ def test_inference_bundle_covers_workflow_model_roles(monkeypatch, tmp_path):
     load_inference_bundle(root=tmp_path)
 
     spec_names = {spec["name"] for spec in calls["kwargs"]["model_specs"]}
-    for role in ("source_selection", "registry_selection", "adapter_generation", "classification"):
+    for role in ("source_selection", "registry_selection", "adapter_generation", "classification", "catalyst_assessment"):
         assert f"{role}_model" in spec_names

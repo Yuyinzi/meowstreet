@@ -21,6 +21,7 @@ _MAX_METADATA_HTML_CHARS = 2_000_000
 _MIN_TEXT_CHARS = 20
 _MAX_DATE_TEXT_CHARS = 60
 _MAX_DATE_CONTAINERS = 12
+_LIST_PAGE_DATE_MARKERS = 5
 _HUMAN_DATE_FORMATS = ("%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y")
 _DATE_MARKER_TOKENS = ("date", "published", "pubdate")
 _TITLE_PREFIX_SEPARATORS = (" - ", " | ", " — ", " – ")
@@ -254,6 +255,22 @@ def _visible_text(soup, max_chars):
     return " ".join(soup.get_text(" ").split())[:max_chars]
 
 
+def count_date_markers(soup):
+    markers = len(soup.find_all("time"))
+    markers += len(soup.find_all(_date_container_marker, limit=100))
+    return markers
+
+
+def is_list_page(soup):
+    return count_date_markers(soup) >= _LIST_PAGE_DATE_MARKERS
+
+
+def is_list_page_html(html):
+    if not isinstance(html, str) or not html.strip():
+        return False
+    return is_list_page(BeautifulSoup(html[:_MAX_METADATA_HTML_CHARS], "html.parser"))
+
+
 def _has_company_evidence(company, title, text):
     return _has_identity_evidence(company, {"title": title, "text": text})
 
@@ -298,6 +315,8 @@ def extract_direct_article(url, *, http_client, approved_domains, candidate=None
     if not _host_in_domains(url_host(final_url), domains):
         raise ValueError("redirect_not_allowed")
     soup = BeautifulSoup(page["html"], "html.parser")
+    if is_list_page(soup):
+        raise ValueError("list_page")
     metadata = parse_article_metadata(page["html"])
     if metadata["json_ld_url"]:
         try:

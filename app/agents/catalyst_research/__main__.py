@@ -16,6 +16,7 @@ _LLM_FLAGS = (
     "catalyst_registry_selection_model",
     "catalyst_adapter_generation_model",
     "catalyst_classification_model",
+    "catalyst_assessment_model",
     "openai_api_key",
     "openai_base_url",
 )
@@ -55,6 +56,7 @@ def _parser():
     parser.add_argument("--registry-selection-model", dest="catalyst_registry_selection_model", default=None)
     parser.add_argument("--adapter-generation-model", dest="catalyst_adapter_generation_model", default=None)
     parser.add_argument("--classification-model", dest="catalyst_classification_model", default=None)
+    parser.add_argument("--catalyst-assessment-model", dest="catalyst_assessment_model", default=None)
     parser.add_argument("--openai-api-key", dest="openai_api_key", default=None)
     parser.add_argument("--openai-base-url", dest="openai_base_url", default=None)
     return parser

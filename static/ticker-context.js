@@ -952,7 +952,7 @@
       '<input type="date" id="calRangeEnd" aria-label="Calendar range end">' +
       '<span class="cal-controls-note">max 1 year</span>' +
       "</div>" +
-      '<div class="cal-legend">Red up / green down · darker = ≥1σ / ≥2σ move · bordered day = 8-K filing · dots: indigo earnings, gray IR event, hollow ambiguous</div>' +
+      '<div class="cal-legend">Red up / green down · darker = ≥1σ / ≥2σ move · bordered day = 8-K filing · dots: <span class="cal-dot cal-dot-meaningful"></span> meaningful <span class="cal-dot cal-dot-non-meaningful"></span> non-meaningful <span class="cal-dot cal-dot-ambiguous"></span> ambiguous</div>' +
       '<div id="catalystCalRange"></div>'
     );
   }
@@ -1086,6 +1086,21 @@
       onResult: function (payload, html) {
         region.innerHTML = html;
         latestQuantPayload.catalyst_research = payload;
+      },
+      autoRun: true,
+      onSettled: function (payload) {
+        if (!payload || (payload.status !== "completed" && payload.status !== "completed_partial")) {
+          return;
+        }
+        window.CatalystResearch.loadActivity(symbol)
+          .then(function (events) {
+            if (!latestQuantPayload || latestQuantPayload.symbol !== symbol) {
+              return;
+            }
+            catalystIrByDate = window.CatalystResearch.groupActivityByDate(events);
+            renderCatalystRange();
+          })
+          .catch(function () {});
       },
     }).catch(function () {
       if (!latestQuantPayload || latestQuantPayload.symbol !== symbol) {

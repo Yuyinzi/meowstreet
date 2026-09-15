@@ -10,6 +10,21 @@ SourceType = Literal[
     "earnings_results",
 ]
 EarningsState = Literal["earnings", "non_earnings", "ambiguous"]
+CatalystType = Literal[
+    "earnings_results",
+    "guidance_outlook",
+    "product_launch",
+    "partnership_contract",
+    "corporate_restructuring",
+    "management_change",
+    "capital_markets",
+    "regulatory_government",
+    "investor_event",
+    "operational_milestone",
+    "pr_other",
+    "ambiguous",
+]
+MeaningfulState = Literal["meaningful", "non_meaningful", "ambiguous"]
 RegistryChannel = Literal["press_releases", "events_presentations", "earnings_results"]
 RegistryEndpointType = Literal["rss", "atom", "search_domain", "archive"]
 RegistryConfidence = Literal["high", "medium", "low"]
@@ -137,4 +152,34 @@ class EventClassificationResponse(BaseModel):
         ids = [item.id for item in self.classifications]
         if len(ids) != len(set(ids)):
             raise ValueError("classification ids must be unique")
+        return self
+
+
+class EventCatalystAssessment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int = Field(ge=1)
+    catalyst_type: CatalystType
+    meaningful_state: MeaningfulState
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_is_nonempty(cls, value):
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("reason is required")
+        return cleaned
+
+
+class EventCatalystAssessmentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    assessments: list[EventCatalystAssessment] = Field(max_length=50)
+
+    @model_validator(mode="after")
+    def _ids_are_unique(self):
+        ids = [item.id for item in self.assessments]
+        if len(ids) != len(set(ids)):
+            raise ValueError("assessment ids must be unique")
         return self

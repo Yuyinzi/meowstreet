@@ -554,7 +554,43 @@ def test_ingest_empty_candidate_list_returns_zero_counts(tmp_path):
         "attempted": 0,
         "skipped_seen": 0,
         "skipped_duplicates": 0,
+        "skipped_archive": 0,
         "manual_review": 0,
         "truncated": False,
         "warnings": [],
     }
+
+
+def test_ingest_skips_candidates_matching_registered_endpoint_urls(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    try:
+        job = running_job(con)
+        repository.upsert_source_endpoint(
+            con,
+            {
+                "ticker": "NVDA",
+                "channel": "press_releases",
+                "endpoint_type": "archive",
+                "url": "https://nvidianews.nvidia.com/news",
+                "domain": "nvidianews.nvidia.com",
+                "status": "active",
+                "confidence": "high",
+                "discovered_at": "2026-09-01T00:00:00+00:00",
+            },
+        )
+        direct = FakeDirect(result=direct_article())
+        router = ExtractionRouter(direct)
+        result = run_ingest(
+            [
+                search_candidate(url="https://nvidianews.nvidia.com/news?page=4", title="NVIDIA News", result_id=9),
+                search_candidate(),
+            ],
+            con,
+            job["job_id"],
+            router,
+        )
+        assert result["skipped_archive"] == 1
+        assert len(result["events"]) == 1
+        assert direct.calls == [URL]
+    finally:
+        con.close()

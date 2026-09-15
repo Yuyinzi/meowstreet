@@ -333,3 +333,39 @@ def test_oversized_date_container_text_is_skipped():
 
     with pytest.raises(ValueError, match="metadata_missing"):
         extract(html)
+
+
+def test_archive_list_page_with_many_date_markers_is_rejected():
+    items = "".join(
+        f'<div class="views-row"><span class="date">September {day}, 2026</span>'
+        f'<a href="/news/nvidia-story-{day}">NVIDIA story {day}</a></div>'
+        for day in range(1, 8)
+    )
+    html = (
+        "<html><head><title>Press Releases</title></head>"
+        "<body><h1>Press Releases</h1>" + items + BODY + "</body></html>"
+    )
+
+    with pytest.raises(ValueError, match="list_page"):
+        extract(html)
+
+
+def test_article_page_with_few_date_markers_is_not_a_list_page():
+    html = """<html><head><meta property="og:title" content="NVIDIA Announces New Platform" /></head>
+<body><h1>NVIDIA Announces New Platform</h1><time datetime="2026-09-07">September 7, 2026</time>""" + BODY + "</body></html>"
+
+    result = extract(html)
+
+    assert result["status"] == "extracted"
+    assert result["title"] == "NVIDIA Announces New Platform"
+
+
+def test_is_list_page_html_requires_five_date_markers():
+    from app.agents.catalyst_research.extraction.articles import is_list_page_html
+
+    four = "<html><body>" + "<time>September 1, 2026</time>" * 4 + "</body></html>"
+    five = "<html><body>" + "<time>September 1, 2026</time>" * 5 + "</body></html>"
+    assert is_list_page_html(four) is False
+    assert is_list_page_html(five) is True
+    assert is_list_page_html("") is False
+    assert is_list_page_html(None) is False

@@ -2,7 +2,7 @@ import re
 from collections.abc import Mapping
 
 from app.agents.catalyst_research.domain import canonicalize_public_url, url_host
-from app.agents.catalyst_research.extraction.articles import _approved_domains, _has_channel_evidence, _has_company_evidence, _host_in_domains, _normalize_datetime, parse_article_metadata, strip_title_site_prefix
+from app.agents.catalyst_research.extraction.articles import _approved_domains, _has_channel_evidence, _has_company_evidence, _host_in_domains, _normalize_datetime, is_list_page_html, parse_article_metadata, strip_title_site_prefix
 from app.agents.catalyst_research.providers.firecrawl import FirecrawlProviderError
 
 
@@ -51,6 +51,13 @@ class ExtractionRouter:
         direct = self._extract_direct(url, candidate, company, domains, attempts)
         if direct is not None:
             return direct
+        if any(attempt.get("outcome") == "list_page" for attempt in attempts):
+            return {
+                "status": "manual_review_required",
+                "url": url,
+                "extraction_provider": "manual",
+                "attempts": attempts,
+            }
         firecrawl = self._extract_firecrawl(url, candidate, company, domains, attempts)
         if firecrawl is not None:
             return firecrawl
@@ -151,6 +158,9 @@ class ExtractionRouter:
         if not _host_in_domains(url_host(final_url), domains):
             return "unsafe_final_url"
         html_metadata = _firecrawl_html_metadata(result)
+        html = result.get("html")
+        if isinstance(html, str) and html.strip() and is_list_page_html(html):
+            return "list_page"
         title = _fold(result.get("title")) or _fold(html_metadata.get("title"))
         if not title:
             return "metadata_missing"

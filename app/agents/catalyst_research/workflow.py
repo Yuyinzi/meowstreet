@@ -309,6 +309,7 @@ def _default_dependencies(db_path, http_client, args=None):
         "validate_active_adapter": adapter_validator.validate_active_adapter,
         "execute_adapter": adapter_executor.execute_adapter,
         "classify_observations": domain.classify_observations,
+        "assess_catalyst_events": domain.assess_catalyst_events,
         "normalize_observations": domain.normalize_observations,
         "calculate_statistics": statistics.calculate_statistics,
         "discover_registry": registry_discovery.discover_registry,
@@ -1207,6 +1208,17 @@ async def _classify_events(context, job, events):
     classification = dict(classification or {})
     context["call_counts"]["classification"] = classification.get("llm_call_count", 0)
     classified_events = classification.get("events", normalized_events)
+    assess_events = context.get("assess_catalyst_events")
+    if assess_events is not None:
+        assessment = await _invoke(
+            assess_events,
+            classified_events,
+            llm_client=context["llm_client"],
+            model=_source_model(context, "catalyst_assessment"),
+        )
+        assessment = dict(assessment or {})
+        context["call_counts"]["catalyst_assessment"] = assessment.get("llm_call_count", 0)
+        classified_events = assessment.get("events", classified_events)
     _progress(context, "classification", events=len(classified_events))
     ambiguous = any(event.get("earnings_state") == "ambiguous" for event in classified_events)
     return classified_events, ambiguous

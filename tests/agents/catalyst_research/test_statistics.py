@@ -743,3 +743,29 @@ def test_accumulated_statistics_reject_invalid_inputs():
         calculate_accumulated_statistics(
             [_stat_event("non_earnings", source_type="blog")], {}, _observed_window()
         )
+
+
+def test_statistics_include_catalyst_type_and_meaningful_counts():
+    events = [
+        {**_stat_event("earnings", slug="earnings"), "catalyst_type": "earnings_results", "meaningful_state": "meaningful"},
+        {**_stat_event("non_earnings", slug="launch"), "catalyst_type": "product_launch", "meaningful_state": "meaningful"},
+        {**_stat_event("non_earnings", slug="charity", day="2024-02-01"), "catalyst_type": "pr_other", "meaningful_state": "non_meaningful"},
+        _stat_event("non_earnings", slug="pending", day="2024-03-01"),
+    ]
+    sources = [{"source_type": "press_releases", "extraction_status": "complete"}]
+
+    result = calculate_statistics(events, sources, {"start": "2024-01-01", "end": "2024-12-31"})
+
+    channel = result["press_releases"]
+    assert channel["catalyst_type_counts"] == {"earnings_results": 1, "product_launch": 1, "pr_other": 1}
+    assert channel["meaningful_counts"] == {"meaningful": 2, "non_meaningful": 1}
+
+
+def test_statistics_report_empty_assessment_counts_for_unassessed_events():
+    events = [_stat_event("non_earnings", slug="plain")]
+    sources = [{"source_type": "press_releases", "extraction_status": "complete"}]
+
+    result = calculate_statistics(events, sources, {"start": "2024-01-01", "end": "2024-12-31"})
+
+    assert result["press_releases"]["catalyst_type_counts"] == {}
+    assert result["press_releases"]["meaningful_counts"] == {}

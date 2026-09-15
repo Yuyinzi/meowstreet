@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.agents.catalyst_research import config
+from app.agents.catalyst_research import run_trigger
 from app.agents.catalyst_research import statistics
 from app.agents.catalyst_research.persistence import repository
 
@@ -33,6 +34,8 @@ _EVENT_FIELDS = (
     "source_type",
     "earnings_state",
     "classification_method",
+    "catalyst_type",
+    "meaningful_state",
     "first_seen_at",
 )
 _EVENT_PROVENANCE_FIELDS = (
@@ -70,6 +73,16 @@ def _not_researched(ticker):
         "observation_count": 0,
         "warnings": [],
         "next_actions": [f"run .venv/bin/python -m app.agents.catalyst_research {ticker} --years 4 --mode research"],
+    }
+
+
+def _researching(ticker, job):
+    return {
+        **_not_researched(ticker),
+        "status": "researching",
+        "job_id": job["job_id"],
+        "started_at": job.get("started_at") or job.get("created_at"),
+        "next_actions": [],
     }
 
 
@@ -148,6 +161,9 @@ def _load_summary(symbol):
     try:
         result = repository.load_latest_result(connection, ticker)
         if result is None:
+            active = repository.load_active_job(connection, ticker)
+            if active is not None:
+                return _researching(ticker, active)
             return _not_researched(ticker)
         if result.get("schema_version") == config.RESULT_SCHEMA_VERSION:
             return _v1_1_summary(connection, result)
@@ -197,6 +213,8 @@ def _activity_payload(row):
         "title": row.get("title"),
         "source_type": row.get("source_type"),
         "earnings_state": row.get("earnings_state"),
+        "catalyst_type": row.get("catalyst_type"),
+        "meaningful_state": row.get("meaningful_state"),
         "url": row.get("canonical_url"),
         "extraction_provider": row.get("extraction_provider"),
         "has_content": row.get("content_hash") is not None,
@@ -223,6 +241,14 @@ def _load_activity(symbol, limit, cursor):
 def catalyst_research_summary(symbol: str):
     try:
         return _load_summary(symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/{symbol}/catalyst-research/run")
+async def catalyst_research_run(symbol: str):
+    try:
+        return await run_trigger.launch_research(symbol)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

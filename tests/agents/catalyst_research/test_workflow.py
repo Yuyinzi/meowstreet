@@ -9,7 +9,7 @@ import pytest
 from app.agents.catalyst_research import scheduler as catalyst_scheduler
 from app.agents.catalyst_research import statistics as catalyst_statistics
 from app.agents.catalyst_research.config import RESULT_SCHEMA_VERSION
-from app.agents.catalyst_research.workflow import _UnavailableSearchRouter, _javascript_archive_shell, run_research
+from app.agents.catalyst_research.workflow import _UnavailableSearchRouter, _classify_events, _javascript_archive_shell, run_research
 from app.agents.catalyst_research.extraction.pages import fetch_html_page
 from app.http_client import HttpClient
 
@@ -2125,3 +2125,73 @@ def test_v1_1_explicit_mode_requires_registry_persistence():
                 dependencies=mode_dependencies(calls, LegacyRepository()),
             )
         )
+
+
+def test_classify_events_runs_catalyst_assessment_after_classification():
+    client = object()
+
+    async def classify(events, **kwargs):
+        return {
+            "events": [{**event, "earnings_state": "non_earnings", "classification_method": "llm_v1"} for event in events],
+            "llm_call_count": 1,
+            "provenance": [],
+        }
+
+    async def assess(events, **kwargs):
+        assert kwargs["llm_client"] is client
+        assert kwargs["model"] == "assess-model"
+        return {
+            "events": [
+                {**event, "catalyst_type": "pr_other", "catalyst_type_method": "catalyst_assessment_v1", "meaningful_state": "non_meaningful", "meaningful_method": "catalyst_assessment_v1"}
+                for event in events
+            ],
+            "llm_call_count": 2,
+            "provenance": [],
+        }
+
+    context = {
+        "request": {"ticker": "ACME"},
+        "normalize_observations": lambda ticker, source_type, rows, start, end: {"events": rows},
+        "classify_observations": classify,
+        "assess_catalyst_events": assess,
+        "llm_client": client,
+        "models": {"catalyst_assessment_model": "assess-model"},
+        "call_counts": {},
+    }
+    job = {"requested_start": "2025-01-01", "requested_end": "2026-01-01"}
+
+    classified, ambiguous = asyncio.run(
+        _classify_events(context, job, [{"source_type": "press_releases", "title": "Acme news", "count_date": "2025-06-01"}])
+    )
+
+    assert ambiguous is False
+    assert classified[0]["catalyst_type"] == "pr_other"
+    assert classified[0]["meaningful_state"] == "non_meaningful"
+    assert context["call_counts"] == {"classification": 1, "catalyst_assessment": 2}
+
+
+def test_classify_events_without_assessment_dependency_keeps_events_unassessed():
+    async def classify(events, **kwargs):
+        return {
+            "events": [{**event, "earnings_state": "non_earnings"} for event in events],
+            "llm_call_count": 0,
+            "provenance": [],
+        }
+
+    context = {
+        "request": {"ticker": "ACME"},
+        "normalize_observations": lambda ticker, source_type, rows, start, end: {"events": rows},
+        "classify_observations": classify,
+        "llm_client": None,
+        "models": {},
+        "call_counts": {},
+    }
+    job = {"requested_start": "2025-01-01", "requested_end": "2026-01-01"}
+
+    classified, ambiguous = asyncio.run(
+        _classify_events(context, job, [{"source_type": "press_releases", "title": "Acme news", "count_date": "2025-06-01"}])
+    )
+
+    assert classified[0]["earnings_state"] == "non_earnings"
+    assert "catalyst_type" not in classified[0]
+    assert context["call_counts"] == {"classification": 0}

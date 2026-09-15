@@ -73,6 +73,27 @@ _LIST_ROOT_SEGMENTS = frozenset(
     }
 )
 _REJECTED_PATH_SEGMENTS = frozenset({"search", "searchresults", "tag", "tags", "category", "topics"})
+_ARCHIVE_LABEL_SEGMENTS = frozenset(
+    {
+        "press-releases",
+        "press-release",
+        "news-releases",
+        "news-events",
+        "presentations",
+        "events-presentations",
+        "ir-calendar",
+        "events-calendar",
+        "calendar",
+        "past-events",
+        "past",
+        "filings-reports",
+        "sec-filings",
+        "filings",
+        "financial-results",
+        "quarterly-reports",
+        "annual-reports",
+    }
+)
 _SEARCH_QUERY_KEYS = frozenset({"q", "query", "s", "search", "keyword"})
 _COMMON_IDENTITY_WORDS = {
     "and",
@@ -259,6 +280,8 @@ def _is_list_root(canonical):
     if not segments:
         return True
     if len(segments) == 1 and segments[0].casefold() in _LIST_ROOT_SEGMENTS:
+        return True
+    if len(segments) <= 3 and segments[-1].casefold() in _ARCHIVE_LABEL_SEGMENTS:
         return True
     if any(segment.casefold() in _REJECTED_PATH_SEGMENTS for segment in segments):
         return True

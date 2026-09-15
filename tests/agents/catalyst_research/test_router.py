@@ -123,9 +123,10 @@ def _v1_1_result(**overrides):
     return result
 
 
-def _client(monkeypatch, *, latest=None, events_page=None, activity_page=None, adapter_brief=None, registry=None, endpoints=None, job_schema_version="catalyst_research_result_v1", recorded=None, activity_recorded=None, accumulated=None):
+def _client(monkeypatch, *, latest=None, events_page=None, activity_page=None, adapter_brief=None, registry=None, endpoints=None, job_schema_version="catalyst_research_result_v1", recorded=None, activity_recorded=None, accumulated=None, active=None):
     monkeypatch.setattr(catalyst_router.repository, "connect", lambda *args, **kwargs: FakeConnection())
     monkeypatch.setattr(catalyst_router.repository, "load_latest_result", lambda con, ticker: latest)
+    monkeypatch.setattr(catalyst_router.repository, "load_active_job", lambda con, ticker: active)
     monkeypatch.setattr(catalyst_router.repository, "load_company_registry", lambda con, ticker: registry)
     monkeypatch.setattr(catalyst_router.repository, "load_source_endpoints", lambda con, ticker: endpoints or [])
     monkeypatch.setattr(catalyst_router.repository, "load_accumulated_channel_events", lambda con, ticker, start, end: accumulated or [])
@@ -167,6 +168,72 @@ def test_summary_unknown_ticker_returns_not_researched_with_cli_next_action(monk
     assert payload["next_actions"]
     assert "python -m app.agents.catalyst_research NVDA" in payload["next_actions"][0]
     assert "--mode research" in payload["next_actions"][0]
+
+
+def test_summary_returns_researching_when_job_is_active(monkeypatch):
+    client = _client(
+        monkeypatch,
+        latest=None,
+        active={
+            "job_id": "cr_9",
+            "status": "running",
+            "created_at": "2026-09-15T00:00:00+00:00",
+            "started_at": "2026-09-15T00:00:05+00:00",
+        },
+    )
+
+    payload = client.get("/api/ticker-quant/nvda/catalyst-research").json()
+
+    assert payload["status"] == "researching"
+    assert payload["job_id"] == "cr_9"
+    assert payload["started_at"] == "2026-09-15T00:00:05+00:00"
+    assert payload["next_actions"] == []
+    assert payload["statistics"] == {}
+
+
+def test_run_endpoint_starts_research_for_unknown_ticker(monkeypatch):
+    client = _client(monkeypatch, latest=None)
+    calls = []
+
+    async def fake_launch(symbol):
+        calls.append(symbol)
+        return {"ticker": symbol.strip().upper(), "run_status": "started"}
+
+    monkeypatch.setattr(catalyst_router.run_trigger, "launch_research", fake_launch)
+
+    response = client.post("/api/ticker-quant/intc/catalyst-research/run")
+
+    assert response.status_code == 200
+    assert response.json() == {"ticker": "INTC", "run_status": "started"}
+    assert calls == ["intc"]
+
+
+@pytest.mark.parametrize("run_status", ["already_running", "already_researched"])
+def test_run_endpoint_reports_existing_state(monkeypatch, run_status):
+    client = _client(monkeypatch, latest=None)
+
+    async def fake_launch(symbol):
+        return {"ticker": symbol, "run_status": run_status}
+
+    monkeypatch.setattr(catalyst_router.run_trigger, "launch_research", fake_launch)
+
+    payload = client.post("/api/ticker-quant/NVDA/catalyst-research/run").json()
+
+    assert payload == {"ticker": "NVDA", "run_status": run_status}
+
+
+def test_run_endpoint_rejects_invalid_ticker(monkeypatch):
+    client = _client(monkeypatch, latest=None)
+
+    async def fake_launch(symbol):
+        raise ValueError("ticker is required")
+
+    monkeypatch.setattr(catalyst_router.run_trigger, "launch_research", fake_launch)
+
+    response = client.post("/api/ticker-quant/%20/catalyst-research/run")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "ticker is required"
 
 
 def test_summary_completed_exposes_compact_sources_and_hides_internal_evidence(monkeypatch):
@@ -284,6 +351,8 @@ def test_events_default_job_limit_and_field_whitelist(monkeypatch):
             "source_type": "press_releases",
             "earnings_state": "earnings",
             "classification_method": "rule_v1",
+            "catalyst_type": None,
+            "meaningful_state": None,
             "first_seen_at": "2026-09-04T01:00:00+00:00",
         }
     ]
@@ -373,6 +442,8 @@ def test_activity_default_limit_and_field_projection(monkeypatch):
             "title": "NVIDIA Announces Financial Results",
             "source_type": "press_releases",
             "earnings_state": "earnings",
+            "catalyst_type": None,
+            "meaningful_state": None,
             "url": "https://nvidianews.example.test/news/1",
             "extraction_provider": "firecrawl",
             "has_content": True,
@@ -382,6 +453,8 @@ def test_activity_default_limit_and_field_projection(monkeypatch):
             "title": "NVIDIA Announces New Platform",
             "source_type": "events_presentations",
             "earnings_state": "ambiguous",
+            "catalyst_type": None,
+            "meaningful_state": None,
             "url": "https://nvidianews.example.test/news/2",
             "extraction_provider": "feed_metadata",
             "has_content": False,
