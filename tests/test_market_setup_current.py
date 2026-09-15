@@ -10,6 +10,7 @@ from app.api import app
 from app.db import growth_cycle
 from app.db import macro_indicators as macro_indicators_db
 from app.db import market_assistant as market_assistant_db
+from app.routers import macro_dashboard as macro_dashboard_router
 from app.services import market_setup_current
 
 
@@ -39,6 +40,7 @@ def test_dashboard_route_matches_extracted_service(client, monkeypatch):
     monkeypatch.setattr(
         market_setup_current, "read_current_setup_state", lambda *a, **k: expected
     )
+    macro_dashboard_router._DASHBOARD_CACHE.clear()
 
     assert client.get("/api/macro-dashboard/market-setup").json() == expected
 
