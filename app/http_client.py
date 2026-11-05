@@ -16,7 +16,7 @@ BROWSER_HEADERS = {
     "User-Agent": BROWSER_USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Encoding": "gzip, deflate",
     "Dnt": "1",
     "Sec-Gpc": "1",
     "Upgrade-Insecure-Requests": "1",

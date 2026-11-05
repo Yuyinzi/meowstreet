@@ -573,9 +573,9 @@ def test_runtime_provider_registry_exposes_callable_adapters_for_every_node():
         (
             "dol_fetch",
             "dol_import",
-            "fetch_dol",
-            "persist_dol",
-            "economic_confirmation.dol",
+            "fetch_history",
+            "persist_history",
+            "economic_confirmation.dol_history",
         ),
         (
             "bls_fetch",
@@ -610,12 +610,9 @@ def test_runtime_economic_import_consumes_the_fetchers_artifact_key(
     def persist(_db_path, store):
         persisted.append(store.get(artifact_key))
 
-    monkeypatch.setattr(
-        macro_refresh_runtime.import_economic_confirmation, fetch_name, fetch
-    )
-    monkeypatch.setattr(
-        macro_refresh_runtime.import_economic_confirmation, import_name, persist
-    )
+    owner = macro_refresh_runtime.dol_claims_refresh if provider_fetch == "dol_fetch" else macro_refresh_runtime.import_economic_confirmation
+    monkeypatch.setattr(owner, fetch_name, fetch)
+    monkeypatch.setattr(owner, import_name, persist)
 
     providers = macro_refresh_runtime.build_runtime_providers(artifacts)
 

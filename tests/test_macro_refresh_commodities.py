@@ -261,7 +261,7 @@ def test_default_tracked_fetch_prepares_chrome_before_fetch(monkeypatch):
         assert events == ["ready"]
         return {}
 
-    monkeypatch.setattr(macro_refresh_commodities.tracked_commodities_import, "_browser_fetcher", fetch)
+    monkeypatch.setattr(macro_refresh_commodities.tracked_commodities_import, "fetch_commodity_browser_rows", fetch)
     assert macro_refresh_commodities.fetch_tracked_commodities({})["series"] == 0
 
 
@@ -271,8 +271,82 @@ def test_default_tracked_fetch_preserves_verification_failure(monkeypatch):
     def fetch(**kwargs):
         raise ValueError("session_reauth_required: complete CAPTCHA")
 
-    monkeypatch.setattr(macro_refresh_commodities.tracked_commodities_import, "_browser_fetcher", fetch)
+    monkeypatch.setattr(macro_refresh_commodities.tracked_commodities_import, "fetch_commodity_browser_rows", fetch)
     artifacts = {}
     with pytest.raises(ValueError, match="session_reauth_required"):
         macro_refresh_commodities.fetch_tracked_commodities(artifacts)
     assert artifacts == {}
+
+
+def test_tracked_default_fetch_uses_rendered_rows_and_preserves_baseline(monkeypatch, tmp_path):
+    from app.db import macro_indicators
+    from app.services import tracked_commodities_import
+
+    monkeypatch.setattr(macro_refresh_commodities.investing_chrome_session, "ensure_investing_chrome", lambda *args: None)
+
+    def obsolete_fetch(**kwargs):
+        raise AssertionError("obsolete Investing API must not run")
+
+    monkeypatch.setattr(tracked_commodities_import, "_browser_fetcher", obsolete_fetch)
+    monkeypatch.setattr(
+        tracked_commodities_import,
+        "fetch_rendered_investing_history",
+        lambda market, **kwargs: {
+            "status": "ok",
+            "payload": {"data": [
+                {"rowDate": "Nov 03, 2026", "last_close": "102.00"},
+                {"rowDate": "Nov 02, 2026", "last_close": "999.00"},
+            ]},
+            "retrieved_at": "2026-11-03T15:00:00+00:00",
+        },
+    )
+    db_path = tmp_path / "market.sqlite"
+    con = macro_indicators.connect(db_path)
+    macro_indicators.merge_macro_indicator_points(
+        con, {"series_id": "copper_comex", "title": "COMEX Copper", "units": "USD/lb", "source": "investing.com"},
+        [{"date": "2026-11-02", "value": 100.0, "source": "investing.com"}],
+    )
+    con.close()
+    artifacts = {}
+    macro_refresh_commodities.fetch_tracked_commodities(artifacts, markets=["copper_comex"])
+    result = macro_refresh_commodities.persist_tracked_commodities(db_path, artifacts)
+    assert result["observations"] == 1
+    con = macro_indicators.connect(db_path)
+    rows = macro_indicators.load_macro_indicator_points(con, "copper_comex")
+    assert [(r["date"], r["value"]) for r in rows] == [("2026-11-02", 100.0), ("2026-11-03", 102.0)]
+    con.close()
+    result = macro_refresh_commodities.persist_tracked_commodities(db_path, artifacts)
+    assert result["observations"] == 0
+    assert result["no_new_data"] == ["copper_comex"]
+
+
+def test_tracked_persistence_requires_all_baselines_before_writing(tmp_path):
+    from app.db import macro_indicators
+    from app.data_sources.tracked_commodities import build_commodity_series_payload
+
+    db_path = tmp_path / "market.sqlite"
+    con = macro_indicators.connect(db_path)
+    macro_indicators.merge_macro_indicator_points(
+        con, {"series_id": "copper_comex", "title": "COMEX Copper", "units": "USD/lb", "source": "investing.com"},
+        [{"date": "2026-11-02", "value": 100.0, "source": "investing.com"}],
+    )
+    con.close()
+    artifacts = {"commodities.tracked": {
+        sid: build_commodity_series_payload(sid, [{"date": "2026-11-03", "value": 102.0, "source": "investing.com"}])
+        for sid in ("copper_comex", "copper_lme")
+    }}
+    with pytest.raises(ValueError, match="existing baseline"):
+        macro_refresh_commodities.persist_tracked_commodities(db_path, artifacts)
+    con = macro_indicators.connect(db_path)
+    assert [r["date"] for r in macro_indicators.load_macro_indicator_points(con, "copper_comex")] == ["2026-11-02"]
+    con.close()
+
+
+def test_dol_weekly_release_has_no_history_dependency():
+    providers = _providers()
+    providers.update({"dol_release_fetch": lambda argv: 0, "dol_release_import": lambda argv: 0})
+    tasks = {task["name"]: task for task in build_refresh_tasks(_args(), providers, openai_config={}, artifact_store=ArtifactStore())}
+    assert "dol_release_fetch" in tasks
+    assert tasks["dol_release_fetch"]["dependencies"] == []
+    assert tasks["dol_release_import"]["dependencies"] == ["dol_release_fetch"]
+    assert tasks["dol_release_import"]["resources"] == ["sqlite_writer"]

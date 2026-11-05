@@ -540,7 +540,7 @@ def test_main_runs_market_and_fred_refreshes_through_staged_registry(capsys):
     out = capsys.readouterr().out
     assert "macro data refresh started" in out
     assert "yahoo.benchmarks_import: ok" not in out
-    assert "macro data refresh completed: ok=46 skipped=0 failed=0 blocked=0" in out
+    assert "macro data refresh completed: ok=48 skipped=0 failed=0 blocked=0" in out
     assert "macro data refresh completed: ok=" in out
 
 

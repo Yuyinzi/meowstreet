@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from app import llm
 from app.services import macro_refresh_commodities
 from app.services import macro_refresh_official
+from app.services import dol_claims_refresh
 from app.services import macro_refresh_yahoo
 from app.services import lumber_import
 from app.services import ism_report_ingestion
@@ -214,13 +215,20 @@ def _official_providers(artifacts):
         ),
         "dol_fetch": _official_fetch(
             artifacts,
-            import_economic_confirmation.fetch_dol,
-            import_economic_confirmation.DOL_ARTIFACT,
+            dol_claims_refresh.fetch_history,
+            dol_claims_refresh.HISTORY_ARTIFACT,
         ),
         "dol_import": _official_import(
             artifacts,
-            import_economic_confirmation.persist_dol,
-            import_economic_confirmation.DOL_ARTIFACT,
+            dol_claims_refresh.persist_history,
+            dol_claims_refresh.HISTORY_ARTIFACT,
+            import_economic_confirmation.DEFAULT_DB_PATH,
+        ),
+        "dol_release_fetch": _official_fetch(
+            artifacts, dol_claims_refresh.fetch_release, dol_claims_refresh.RELEASE_ARTIFACT
+        ),
+        "dol_release_import": _official_import(
+            artifacts, dol_claims_refresh.persist_release, dol_claims_refresh.RELEASE_ARTIFACT,
             import_economic_confirmation.DEFAULT_DB_PATH,
         ),
         "bls_fetch": _official_fetch(
@@ -911,6 +919,7 @@ def _injected_cli_overrides(
         )
         for fetch_key, import_key in (
             ("dol_fetch", "dol_import"),
+            ("dol_release_fetch", "dol_release_import"),
             ("bls_fetch", "bls_import"),
             ("federal_reserve_fetch", "federal_reserve_import"),
         ):

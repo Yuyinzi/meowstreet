@@ -521,3 +521,17 @@ def test_no_direct_urllib_in_app_and_scripts():
             assert "urlopen" not in text, f"{relative} uses urlopen"
             assert "urlretrieve" not in text, f"{relative} uses urlretrieve"
             assert '"curl"' not in text, f"{relative} shells out to curl"
+
+
+def test_browser_request_does_not_advertise_optional_compression_decoders():
+    import gzip
+
+    def handler(request):
+        accepted = {value.strip() for value in request.headers["Accept-Encoding"].split(",")}
+        assert accepted <= {"gzip", "deflate", "identity"}
+        return httpx.Response(200, content=gzip.compress(b"Manufacturing PMI"), headers={"Content-Encoding": "gzip"})
+
+    response = HttpClient(transport=httpx.MockTransport(handler)).request(
+        "GET", "https://example.test/report", browser=True
+    )
+    assert response.text == "Manufacturing PMI"

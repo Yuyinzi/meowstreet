@@ -660,3 +660,14 @@ def test_default_cli_uses_rendered_history_importer(monkeypatch, tmp_path, capsy
         "iron_ore_62_cfr_china",
     ]
     assert "observations: 2" in capsys.readouterr().out
+
+
+def test_rendered_fetch_defaults_to_local_chrome_endpoint():
+    def fetch(market, *, cdp_endpoint):
+        assert cdp_endpoint == "http://127.0.0.1:9222"
+        return rendered_result([("Nov 03, 2026", "102.00")])
+
+    result = tracked_commodities_import.fetch_commodity_browser_rows(
+        markets=["iron_ore_62_cfr_china"], fetcher=fetch
+    )
+    assert result["iron_ore_62_cfr_china"]["observations"][0]["date"] == "2026-11-03"

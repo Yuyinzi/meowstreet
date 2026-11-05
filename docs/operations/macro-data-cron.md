@@ -30,6 +30,13 @@ The scheduled refresh updates implemented official market and macro sources:
 - FOMC calendar, statement and minutes documents, statement policy-tone extraction, and minutes structure extraction
 - Lumber: Yahoo Finance `LBR=F` daily closes (active series `lumber_cme_lbr_yahoo_v1`)
 
+ISM latest-month selection uses the published survey-specific release calendar and
+10:00 America/New_York release time, including daylight saving time and published
+holiday exceptions. The verified calendar currently covers 2026 in
+`app/services/ism_report_ingestion.py` (`ISM_RELEASE_DAYS`); add the next published
+year before year-end. An unverified year fails explicitly instead of assuming a
+report has been published. Core imports and enrichment use the same survey month.
+
 ISM official report imports have a deterministic core phase and an optional AI
 enrichment phase. Raw source snapshots and per-section AI extraction
 checkpoints survive failures without replacing previously promoted data.
@@ -56,7 +63,12 @@ The active lumber series `lumber_cme_lbr_yahoo_v1` uses Yahoo Finance `LBR=F` da
 
 ## Investing Rendered History (Interactive Chrome Cron)
 
-The markets COMEX Copper (`copper_comex`), LME 3M Copper (`copper_lme`), and Iron Ore 62% CFR China (`iron_ore_62_cfr_china`) are refreshed from the rendered Investing.com historical-data table by a dedicated job that uses the interactive Chrome session on CDP port 9222. If the local CDP endpoint is unavailable, it starts dedicated Chrome with the existing persistent profile and waits for readiness before importing. It leaves Chrome running after the refresh. One run handles the three markets in order and reports each under `ranges` or `no_new_data`. The broad macro runner also refreshes these markets through its tracked-commodities lane and uses the same automatic Chrome startup. Both paths still require a valid Investing.com login and any interactive verification.
+The markets COMEX Copper (`copper_comex`), LME 3M Copper (`copper_lme`), and Iron Ore 62% CFR China (`iron_ore_62_cfr_china`) are refreshed from the rendered Investing.com historical-data table by a dedicated job that uses the interactive Chrome session on CDP port 9222. If the local CDP endpoint is unavailable, it starts dedicated Chrome with the existing persistent profile and waits for readiness before importing. It leaves Chrome running after the refresh. One run handles the three markets in order and reports each under `ranges` or `no_new_data`. The broad macro runner also refreshes these markets through its tracked-commodities lane and uses the same automatic Chrome startup. Both paths now use the rendered-table adapter and the same browser lock. The broad
+runner stages fetched rows before its SQLite writer stage, requires a stored
+baseline for every requested market, and inserts only dates newer than that
+baseline. Neither scheduled path calls the historical browser API or backfills
+from 1900. Both paths still require a valid Investing.com login and any
+interactive verification.
 
 ### Bootstrap and Manual Recovery
 
@@ -387,3 +399,33 @@ logs/catalyst-feeds.log
 The command prints each task with its `ok`, `skipped`, `failed`, or `blocked`
 status. It continues after provider failures by default but exits with code `1`
 if any task failed or is blocked.
+
+## DOL history and weekly release isolation
+
+The DOL lane has two independent fetch/import pairs:
+
+- `dol_fetch` / `dol_import`: national seasonally adjusted history.
+- `dol_release_fetch` / `dol_release_import`: weekly official release PDF.
+
+A history fetch failure blocks only its own import. With the default execution
+mode, the PDF still refreshes and persists its current and revised observations;
+the failed history task remains reported as failed. `--stop-on-error` retains its
+explicit lane-stop behavior. `--skip-economic-confirmation` skips both pairs.
+
+On 2026-11-03, a direct history request parsed successfully but ended at October 3,
+while the PDF contained initial claims through October 24 and continuing claims
+through October 17. Cron's intermittent missing-form/missing-rows failures could
+not be reproduced on that successful response. Do not replace the parser or
+claim the upstream problem is resolved without capturing a failing response.
+
+### Source-response fixes (2026-11-05)
+
+Browser-mode HTTP requests advertise gzip/deflate only. Advertising Brotli without
+its decoder caused compressed PR Newswire pages to look like empty discovery
+results or reports missing the PMI marker. Correct compression negotiation restored
+both October ISM imports through the existing PR Newswire source.
+
+National DOL history vintage IDs include the response hash as well as the retrieval
+date, so two changed snapshots on the same day no longer collide. Existing records
+remain intact and exact repeats remain idempotent. This fixes the duplicate-vintage
+failure seen on November 4; it does not suppress upstream fetch/parse failures.

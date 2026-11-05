@@ -253,7 +253,7 @@ def parse_national_claims_history_html(content, source_url):
                 "value_at_release": value,
                 "latest_revised_value": None,
                 "revision_number": 0,
-                "vintage_id": f"history:{series_id}:{reference_period}:{retrieval_date}",
+                "vintage_id": f"history:{series_id}:{reference_period}:{retrieval_date}:{source_hash}",
                 "seasonal_adjustment": "seasonally_adjusted",
                 "source_url": source_url,
                 "source_hash": source_hash,

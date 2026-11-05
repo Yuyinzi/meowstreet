@@ -593,7 +593,7 @@ def test_backfill_targets_use_prnewswire_for_history_and_latest(
     monkeypatch.setattr(
         ingestion,
         "latest_released_report_month",
-        lambda: "2026-06-01",
+        lambda **kwargs: "2026-06-01",
     )
 
     targets = ingestion.build_targets(
@@ -719,7 +719,7 @@ def test_backfill_uses_import_targets_with_report_concurrency(tmp_path, monkeypa
     monkeypatch.setattr(
         ingestion,
         "latest_released_report_month",
-        lambda: "2025-02-01",
+        lambda **kwargs: "2025-02-01",
     )
 
     def fake_import_targets(
@@ -797,7 +797,7 @@ def test_main_current_year_uses_report_concurrency_for_target_imports(
     monkeypatch.setattr(
         ingestion,
         "latest_released_report_month",
-        lambda: "2026-07-01",
+        lambda **kwargs: "2026-07-01",
     )
 
     def fake_import_targets(

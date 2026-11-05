@@ -12,6 +12,7 @@ from app.data_sources import dol_ui_claims
 from app.data_sources import federal_reserve_g17
 from app.db import economic_confirmation
 from app.http_client import HttpClient
+from app.services.dol_claims_refresh import CLAIMS_SOURCE_CONTRACTS
 
 DEFAULT_DB_PATH = economic_confirmation.DEFAULT_DB_PATH
 
@@ -30,25 +31,6 @@ G17_DATA_URL = (
 DOL_ARTIFACT = "economic_confirmation.dol"
 BLS_ARTIFACT = "economic_confirmation.bls"
 FEDERAL_RESERVE_ARTIFACT = "economic_confirmation.federal_reserve"
-
-CLAIMS_SOURCE_CONTRACTS = {
-    "initial_claims_sa": {
-        "metric_id": "initial_claims_trend",
-        "source": "DOL",
-        "seasonal_adjustment": "seasonally_adjusted",
-        "raw_frequency": "weekly",
-        "aggregation": "four_week_moving_average",
-        "method_version": "claims_trend_v1",
-    },
-    "continuing_claims_sa": {
-        "metric_id": "continuing_claims_trend",
-        "source": "DOL",
-        "seasonal_adjustment": "seasonally_adjusted",
-        "raw_frequency": "weekly",
-        "aggregation": "four_week_moving_average",
-        "method_version": "claims_trend_v1",
-    },
-}
 
 BLS_SOURCE_CONTRACTS = {
     "nonfarm_payrolls_change": {

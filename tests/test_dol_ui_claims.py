@@ -653,7 +653,7 @@ def test_parse_national_claims_history_html_builds_history_observation_schema():
             == hashlib.sha256(national_claims_history_html()).hexdigest()
         )
         assert row["vintage_id"] == (
-            f"history:{row['series_id']}:{row['reference_period']}:{retrieval_date}"
+            f"history:{row['series_id']}:{row['reference_period']}:{retrieval_date}:{row['source_hash']}"
         )
 
 
@@ -770,3 +770,20 @@ def test_parse_national_claims_history_html_rejects_value_without_paired_report_
     """
     with pytest.raises(ValueError, match="missing report date"):
         dol_ui_claims.parse_national_claims_history_html(html, REPORT_URL)
+
+
+def test_history_snapshots_changed_within_one_day_persist_without_vintage_collision(tmp_path):
+    from app.db import economic_confirmation
+
+    first = dol_ui_claims.parse_national_claims_history_html(national_claims_history_html(), REPORT_URL)
+    second = dol_ui_claims.parse_national_claims_history_html(
+        national_claims_history_html().replace(b"206,000", b"207,000"), REPORT_URL
+    )
+    con = economic_confirmation.connect(tmp_path / "claims.sqlite")
+    assert economic_confirmation.replace_national_claims_history_batch(con, first) == 4
+    assert economic_confirmation.replace_national_claims_history_batch(con, second) == 4
+    assert economic_confirmation.replace_national_claims_history_batch(con, second) == 0
+    rows = economic_confirmation.load_current_series(con, ["initial_claims_sa"])
+    assert rows["initial_claims_sa"][0]["value_at_release"] == 207000
+    assert con.execute("select count(*) from economic_confirmation_vintages").fetchone()[0] == 8
+    con.close()

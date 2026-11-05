@@ -9,7 +9,8 @@ import argparse
 import asyncio
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from hashlib import sha256
 
 from app.tools import ism_report_archive
@@ -32,20 +33,29 @@ MONTHS = [
 ]
 
 
-def latest_released_report_month(today=None):
-    """Return the latest released report month as ``YYYY-MM-01``.
+ISM_RELEASE_CALENDAR_SOURCE = "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/"
+ISM_RELEASE_DAYS = {
+    2026: {
+        "manufacturing": (5, 2, 2, 1, 1, 1, 1, 3, 1, 1, 2, 1),
+        "services": (7, 4, 4, 6, 5, 3, 6, 5, 3, 5, 4, 3),
+    },
+}
 
-    Assumes the report for *today*'s month is released next month, so
-    the latest available report is the previous calendar month.
-    """
-    if today is None:
-        today = datetime.now()
-    year = today.year
-    month = today.month - 1
-    if month == 0:
-        year -= 1
-        month = 12
-    return f"{year}-{month:02d}-01"
+
+def latest_released_report_month(today=None, survey_type="manufacturing"):
+    if survey_type not in {"manufacturing", "services"}:
+        raise ValueError(f"unknown ism survey type: {survey_type}")
+    eastern = ZoneInfo("America/New_York")
+    current = today or datetime.now(eastern)
+    current = current.replace(tzinfo=eastern) if current.tzinfo is None else current.astimezone(eastern)
+    calendar = ISM_RELEASE_DAYS.get(current.year)
+    if calendar is None:
+        raise ValueError(f"ism release calendar is missing for {current.year}; update from {ISM_RELEASE_CALENDAR_SOURCE}")
+    release = current.replace(day=calendar[survey_type][current.month - 1], hour=10, minute=0, second=0, microsecond=0)
+    report_month = (current.replace(day=1) - timedelta(days=1)).replace(day=1)
+    if current < release:
+        report_month = (report_month - timedelta(days=1)).replace(day=1)
+    return report_month.strftime("%Y-%m-01")
 
 
 def month_name(report_month):
@@ -154,7 +164,7 @@ def build_targets(
     PR Newswire and combined with the latest ISM World report.
     """
     cfg = ism_report_config.load_survey_config(survey_type)
-    latest_month = latest_released_report_month()
+    latest_month = latest_released_report_month(survey_type=survey_type)
     targets = []
     seen_months = set()
 

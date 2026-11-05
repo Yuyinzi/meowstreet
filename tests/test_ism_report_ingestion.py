@@ -25,12 +25,12 @@ class TestLatestReleasedReportMonth:
 
     def test_year_rollover(self):
         assert (
-            ingestion.latest_released_report_month(datetime(2025, 1, 1)) == "2024-12-01"
+            ingestion.latest_released_report_month(datetime(2026, 1, 1)) == "2025-11-01"
         )
 
     def test_march_returns_february(self):
         assert (
-            ingestion.latest_released_report_month(datetime(2026, 3, 1)) == "2026-02-01"
+            ingestion.latest_released_report_month(datetime(2026, 3, 1)) == "2026-01-01"
         )
 
 
@@ -122,7 +122,7 @@ class TestBuildTargetsLatestOnly:
             lambda *args, **kwargs: [
                 {
                     "url": "https://www.prnewswire.com/services.html",
-                    "report_month": ingestion.latest_released_report_month(),
+                    "report_month": ingestion.latest_released_report_month(survey_type="services"),
                     "report_id": "ism_services_2026_07",
                 }
             ],
@@ -1217,3 +1217,37 @@ class TestImportTargets:
             argparse.ArgumentTypeError, match="concurrency must be at least 1"
         ):
             ingestion.positive_int("-1")
+
+
+@pytest.mark.parametrize("instant,survey,expected", [
+    ("2026-11-03T20:00:00+08:00", "manufacturing", "2026-10-01"),
+    ("2026-11-03T20:00:00+08:00", "services", "2026-09-01"),
+    ("2026-11-04T22:59:59+08:00", "services", "2026-09-01"),
+    ("2026-11-04T23:00:00+08:00", "services", "2026-10-01"),
+    ("2026-07-03T12:00:00-04:00", "services", "2026-05-01"),
+    ("2026-07-06T10:00:00-04:00", "services", "2026-06-01"),
+    ("2026-01-01T12:00:00-05:00", "manufacturing", "2025-11-01"),
+    ("2026-01-05T10:00:00-05:00", "manufacturing", "2025-12-01"),
+])
+def test_latest_month_respects_survey_release_time(instant, survey, expected):
+    assert ingestion.latest_released_report_month(
+        datetime.fromisoformat(instant), survey_type=survey
+    ) == expected
+
+
+def test_latest_month_rejects_unverified_calendar_year():
+    with pytest.raises(ValueError, match="release calendar is missing for 2027"):
+        ingestion.latest_released_report_month(datetime(2027, 1, 4))
+
+
+def test_latest_services_target_does_not_request_unreleased_month(monkeypatch):
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 3, 12, tzinfo=tz)
+
+    monkeypatch.setattr(ingestion, "datetime", FixedDatetime)
+    monkeypatch.setattr(ingestion, "discover_prnewswire_reports", lambda *args, **kwargs: [])
+    targets = ingestion.build_targets("services", latest_only=True)
+    assert [t["report_month"] for t in targets] == ["2026-09-01"]
+    assert targets[0]["url"].endswith("/september/")

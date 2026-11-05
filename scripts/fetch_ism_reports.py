@@ -88,7 +88,7 @@ def _select_enrichment_snapshots(args, survey_type):
         and not args.backfill_since
         and not args.url
     ):
-        latest_month = ingestion.latest_released_report_month()
+        latest_month = ingestion.latest_released_report_month(survey_type=survey_type)
     current_year = datetime.now().year if args.current_year else None
     return ism_ai_enrichment.select_snapshots(
         snapshots,

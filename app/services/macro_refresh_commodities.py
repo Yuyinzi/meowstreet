@@ -11,6 +11,7 @@ from app.db import macro_indicators
 from app.services import cyclical_commodities_import
 from app.services import dce_iron_ore_sina_import
 from app.services import investing_chrome_session
+from app.services import investing_rendered_refresh
 from app.services import shfe_copper_import
 from app.services import tracked_commodities_import
 
@@ -62,17 +63,25 @@ def fetch_tracked_commodities(
     markets=None,
     cdp_endpoint=None,
 ):
-    if fetcher is None:
-        investing_chrome_session.ensure_investing_chrome(
-            None, cdp_endpoint or investing_chrome_session.DEFAULT_CDP_ENDPOINT
+    lock_file = None
+    try:
+        if fetcher is None:
+            lock_file = investing_rendered_refresh._acquire_lock(
+                investing_rendered_refresh.DEFAULT_LOCK_PATH
+            )
+            investing_chrome_session.ensure_investing_chrome(
+                None, cdp_endpoint or investing_chrome_session.DEFAULT_CDP_ENDPOINT
+            )
+        fetch = fetcher or tracked_commodities_import.fetch_commodity_browser_rows
+        payload = fetch(
+            start_date=start_date,
+            end_date=end_date,
+            markets=markets,
+            cdp_endpoint=cdp_endpoint,
         )
-    fetch = fetcher or tracked_commodities_import._browser_fetcher
-    payload = fetch(
-        start_date=start_date,
-        end_date=end_date,
-        markets=markets,
-        cdp_endpoint=cdp_endpoint,
-    )
+    finally:
+        if lock_file is not None:
+            investing_rendered_refresh._release_lock(lock_file)
     _put(artifacts, TRACKED_ARTIFACT, payload)
     return {"artifact_key": TRACKED_ARTIFACT, "series": len(payload), "payload": payload}
 
@@ -81,26 +90,10 @@ def persist_tracked_commodities(db_path, artifacts):
     payload = _get(artifacts, TRACKED_ARTIFACT)
     con = macro_indicators.connect(db_path)
     try:
-        series_count = 0
-        observation_count = 0
-        for series_id, item in payload.items():
-            macro_indicators.merge_macro_indicator_observations(
-                con, item["series"], item["observations"], commit=False
-            )
-            series_count += 1
-            observation_count += len(item["observations"])
-        con.commit()
-    except BaseException:
-        con.rollback()
-        raise
+        result = tracked_commodities_import.persist_commodity_browser_rows(con, payload)
     finally:
         con.close()
-    return {
-        "status": "ok",
-        "artifact_key": TRACKED_ARTIFACT,
-        "series": series_count,
-        "observations": observation_count,
-    }
+    return {"status": "ok", "artifact_key": TRACKED_ARTIFACT, **result}
 
 
 def fetch_cyclical_cot(artifacts, years, *, fetcher=None, http_client=None):

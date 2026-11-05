@@ -480,6 +480,14 @@ def build_refresh_tasks(args, providers, *, openai_config=None, artifact_store):
         skip=getattr(args, "skip_economic_confirmation", False),
     )
     add_commodity_pair(
+        "dol",
+        "dol_release_fetch",
+        "dol_release_import",
+        provider("dol_release_fetch"),
+        provider("dol_release_import"),
+        skip=getattr(args, "skip_economic_confirmation", False),
+    )
+    add_commodity_pair(
         "bls",
         "bls_fetch",
         "bls_import",

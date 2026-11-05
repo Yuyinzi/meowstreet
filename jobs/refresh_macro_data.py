@@ -545,6 +545,8 @@ def _build_task_providers(
         "economic_confirmation_main": {
             "dol_fetch",
             "dol_import",
+            "dol_release_fetch",
+            "dol_release_import",
             "bls_fetch",
             "bls_import",
             "federal_reserve_fetch",

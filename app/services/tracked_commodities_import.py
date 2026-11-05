@@ -106,20 +106,19 @@ def _newer_observations(con, series_id, observations):
     return [row for row in observations if row["date"] > latest_date]
 
 
-def import_commodity_browser_rows(
-    con,
+def fetch_commodity_browser_rows(
     markets=None,
-    fetcher=fetch_rendered_investing_history,
+    fetcher=None,
     cdp_endpoint=None,
-    dry_run=False,
+    start_date=None,
+    end_date=None,
 ):
     series_ids = _active_series_ids(markets)
-    all_payloads = []
-    ranges = {}
-    no_new_data = []
+    fetch = fetcher or fetch_rendered_investing_history
+    payloads = {}
     for sid in series_ids:
         meta = ACTIVE_MARKET_SERIES[sid]
-        result = fetcher(meta, cdp_endpoint=cdp_endpoint)
+        result = fetch(meta, cdp_endpoint=cdp_endpoint or "http://127.0.0.1:9222")
         if result["status"] != "ok":
             raise ValueError(
                 f"{sid}: rendered history fetch failed — {result.get('message', result['status'])}"
@@ -133,7 +132,21 @@ def import_commodity_browser_rows(
             raise ValueError(
                 f"{sid}: rendered history payload contained no parseable rows"
             )
-        newer = _newer_observations(con, sid, observations)
+        payloads[sid] = build_commodity_series_payload(sid, [
+            row for row in observations
+            if (start_date is None or row["date"] >= start_date)
+            and (end_date is None or row["date"] <= end_date)
+        ])
+    return payloads
+
+
+def persist_commodity_browser_rows(con, payloads, dry_run=False):
+    series_ids = _active_series_ids(list(payloads))
+    all_payloads = []
+    ranges = {}
+    no_new_data = []
+    for sid in series_ids:
+        newer = _newer_observations(con, sid, payloads[sid]["observations"])
         if not newer:
             no_new_data.append(sid)
             continue
@@ -162,6 +175,19 @@ def import_commodity_browser_rows(
     except Exception:
         con.rollback()
         raise
+
+
+def import_commodity_browser_rows(
+    con,
+    markets=None,
+    fetcher=None,
+    cdp_endpoint=None,
+    dry_run=False,
+):
+    payloads = fetch_commodity_browser_rows(
+        markets=markets, fetcher=fetcher, cdp_endpoint=cdp_endpoint
+    )
+    return persist_commodity_browser_rows(con, payloads, dry_run=dry_run)
 
 
 def import_commodity_csv_files(con, csv_paths_by_market):
