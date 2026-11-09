@@ -657,7 +657,8 @@ export function renderMarketPricing(layer) {
         html += '</li>';
       });
       html += '</ul>';
-    } else if (layer.status_label) {
+    }
+    if (layer.status_label) {
       html += '<p class="ms-el-test-verdict">' + escapeHtml(layer.status_label) + '</p>';
     }
     if (layer.missing_inputs && layer.missing_inputs.length) {

@@ -55,7 +55,7 @@ _SURVEY_UNAVAILABLE_STATUSES = ("partial", "mixed_periods", "unavailable")
 _AMBIGUOUS_SURVEY_DIRECTION_VALUE = "mixed"
 _AMBIGUOUS_SURVEY_LABEL = "ISM survey direction"
 _AMBIGUOUS_SURVEY_REASON = (
-    "Manufacturing and Services surveys do not share a momentum direction"
+    "Survey synthesis does not establish a directional macro regime"
 )
 
 _FINDINGS = {
@@ -247,7 +247,7 @@ def build_macro_regime(
         )
         return {
             "code": "insufficient_data",
-            "label": "Insufficient Macro Evidence",
+            "label": ("Mixed Survey Signals" if survey_state == "ambiguous" else "Insufficient Macro Evidence"),
             "primary_source": "ism_survey_synthesis",
             "supports": [],
             "conflicts": [],
@@ -480,6 +480,24 @@ def _liquidity_evidence(m2_fact):
     }
 
 
+def _market_observations(phase_fact, credit_fact, vix_fact, m2_fact):
+    observations = {}
+    for key, fact_id, fact, field in (
+        ("equity_trend", "sp500_market_phase", phase_fact, "phase"),
+        ("credit", "credit_conditions", credit_fact, "status"),
+        ("volatility", "vix_level", vix_fact, "level"),
+        ("liquidity", "m2_liquidity", m2_fact, "status"),
+    ):
+        valid = fact is not None and _fact_value_is_valid(fact_id, fact)
+        value = fact.get(field) if valid else None
+        observations[key] = {
+            "state": _vix_zone(value) if key == "volatility" else value,
+            "value": value,
+            "source_period": fact.get("source_period", {}) if valid else {},
+        }
+    return observations
+
+
 def build_market_confirmation(
     macro_regime,
     market_environment,
@@ -488,18 +506,6 @@ def build_market_confirmation(
 ):
     registry = load_input_registry(REGISTRY_PATH)
     direction = _direction_of_regime(macro_regime)
-    if direction is None or direction == "stable":
-        return {
-            "code": "not_applicable",
-            "label": "Confirmation Pending a Directional Regime",
-            "confirmation_test_count": None,
-            "evidence": {},
-            "offsets": [],
-            "missing_inputs": [],
-            "method_version": MARKET_CONFIRMATION_VERSION,
-            "source_periods": {},
-        }
-
     phase_fact = _extract(
         registry,
         market_environment,
@@ -528,6 +534,19 @@ def build_market_confirmation(
         "market_confirmation",
         ["offset"],
     )
+
+    if direction is None or direction == "stable":
+        return {
+            "code": "not_applicable",
+            "label": "Confirmation Pending a Directional Regime",
+            "confirmation_test_count": None,
+            "evidence": {},
+            "observations": _market_observations(phase_fact, credit_fact, vix_fact, m2_fact),
+            "offsets": [],
+            "missing_inputs": [],
+            "method_version": MARKET_CONFIRMATION_VERSION,
+            "source_periods": {},
+        }
 
     missing = []
     if phase_fact is None:
@@ -886,7 +905,7 @@ def build_market_setup(macro_regime, market_confirmation):
     if regime_code == "insufficient_data" or confirmation_code == "insufficient_data":
         return {
             "code": "insufficient_data",
-            "label": "Insufficient Data",
+            "label": ("Awaiting Macro Direction" if macro_regime.get("ambiguous_inputs") else "Insufficient Data"),
             "agreement": "incomplete",
         }
     matrix_key = (regime_code, confirmation_code)
@@ -1405,6 +1424,9 @@ def build_market_setup_v2(
     market_setup = build_market_setup(macro_regime, market_confirmation)
     portfolio_posture = build_portfolio_posture(market_setup)
 
+    if macro_regime.get("ambiguous_inputs"):
+        portfolio_posture["label"] = "Neutral / Reduced Exposure"
+
     regime_code = macro_regime.get("code")
     missing_inputs = _missing_inputs(
         registry,
@@ -1463,8 +1485,11 @@ def build_market_setup_v2(
         "market_confirmation": market_confirmation,
         "market_setup": market_setup,
         "portfolio_posture": portfolio_posture,
-        "interpretation": _INTERPRETATIONS.get(
-            market_setup.get("code"), _INTERPRETATIONS["insufficient_data"]
+        "interpretation": (
+            "Survey signals do not establish a directional macro regime; market confirmation is pending."
+            if ambiguous_inputs else _INTERPRETATIONS.get(
+                market_setup.get("code"), _INTERPRETATIONS["insufficient_data"]
+            )
         ),
         "supports": supports,
         "conflicts": conflicts,

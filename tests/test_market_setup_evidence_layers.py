@@ -962,3 +962,27 @@ def test_insufficient_data_result_uses_actual_labels():
     assert conclusion["net_exposure"] == "Neutral"
     assert conclusion["implementation"] == "No new directional exposure"
     assert conclusion["broad_beta"] == "Avoid large directional exposure"
+
+
+def test_pending_market_observations_are_visible_without_votes():
+    result = _market_setup_result()
+    result["market_confirmation"] = {
+        "label": "Confirmation Pending a Directional Regime",
+        "confirmation_test_count": None,
+        "observations": {
+            "equity_trend": {"state": "bull_market", "source_period": {"effective_date": "2026-11-04"}},
+            "credit": {"state": None, "source_period": {}},
+            "volatility": {"state": "normal", "value": 15.0, "source_period": {}},
+            "liquidity": {"state": "expanding", "source_period": {}},
+        },
+    }
+    layer = market_setup_evidence_layers._market_pricing_layer(result)
+    assert len(layer["tests"]) == 3
+    assert layer["tests"][0]["state_label"] == "Bull Market"
+    assert "2026-11-04" in layer["tests"][0]["finding"]
+    assert layer["tests"][1]["state_label"] == "Unavailable"
+    assert all(test["passed"] is None for test in layer["tests"])
+    assert all(test["test_contribution"] is None for test in layer["tests"])
+    assert layer["tests_summary"] is None
+    assert layer["liquidity_offset"]["label"] == "M2 Liquidity"
+    assert layer["offsets"] == []

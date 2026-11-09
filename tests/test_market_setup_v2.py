@@ -960,7 +960,7 @@ class TestAmbiguousSurveyDirection:
         expected_record = {
             "fact_id": "survey_growth_direction",
             "label": "ISM survey direction",
-            "reason": "Manufacturing and Services surveys do not share a momentum direction",
+            "reason": "Survey synthesis does not establish a directional macro regime",
         }
         assert result["macro_regime"]["code"] == "insufficient_data"
         assert result["macro_regime"]["missing_inputs"] == []
@@ -1017,8 +1017,8 @@ class TestAmbiguousSurveyDirection:
             policy_response=_policy_response("support_confirmed"),
         )
         for key in ("market_confirmation", "market_setup", "portfolio_posture"):
-            assert ambiguous[key] == missing[key]
-        assert ambiguous["interpretation"] == missing["interpretation"]
+            assert {k: v for k, v in ambiguous[key].items() if k != "label"} == {k: v for k, v in missing[key].items() if k != "label"}
+        assert ambiguous["interpretation"] != missing["interpretation"]
 
     def test_ambiguous_survey_contributes_effective_date_to_evidence_through(self):
         result = market_setup_v2.build_market_setup_v2(
@@ -1382,3 +1382,38 @@ class TestExplanationMethodContracts:
         first = market_setup_v2.build_explanation_method_contracts()
         second = market_setup_v2.build_explanation_method_contracts()
         assert first == second
+
+
+def test_mixed_surveys_explain_pending_direction_and_preserve_observations():
+    result = market_setup_v2.build_market_setup_v2(
+        expected_growth=_expected_growth("mixed", status="available"),
+        market_environment=_market_environment("bull_market"),
+        financial_conditions=_financial_conditions(vix=15.0),
+        policy_response=_policy_response(),
+    )
+    assert result["macro_regime"]["label"] == "Mixed Survey Signals"
+    assert result["market_setup"]["label"] == "Awaiting Macro Direction"
+    assert result["portfolio_posture"]["label"] == "Neutral / Reduced Exposure"
+    assert "do not establish a directional macro regime" in result["interpretation"]
+    confirmation = result["market_confirmation"]
+    assert confirmation["confirmation_test_count"] is None
+    assert confirmation["evidence"] == {}
+    assert confirmation["offsets"] == []
+    observations = confirmation["observations"]
+    assert observations["equity_trend"]["state"] == "bull_market"
+    assert observations["credit"]["state"] == "healthy"
+    assert observations["volatility"]["value"] == 15.0
+    assert observations["liquidity"]["state"] == "expanding"
+    assert all("confirms" not in record for record in observations.values())
+
+
+def test_pending_observations_do_not_present_stale_or_invalid_evidence():
+    environment = _market_environment("bull_market")
+    environment["facts"]["sp500_market_phase"]["source_period"]["effective_date"] = None
+    result = market_setup_v2.build_market_setup_v2(
+        expected_growth=_expected_growth("mixed", status="available"),
+        market_environment=environment,
+        financial_conditions=_financial_conditions(credit_status="invented", vix=None),
+    )
+    observations = result["market_confirmation"]["observations"]
+    assert all(record["state"] is None for record in observations.values())

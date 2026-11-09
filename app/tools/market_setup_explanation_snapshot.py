@@ -387,7 +387,9 @@ def _snapshot_hash(state):
 
 
 def _project_results(setup_result):
-    return {layer: setup_result[layer] for layer in _RESULT_LAYERS}
+    results = {layer: dict(setup_result[layer]) for layer in _RESULT_LAYERS}
+    results["market_confirmation"].pop("observations", None)
+    return results
 
 
 def _method_manifest(setup_result, method_contracts):

@@ -61,6 +61,7 @@ _STATE_LABELS = {
 }
 
 _DIRECTION_LABELS = {
+    "mixed": "Mixed",
     "rising": "Rising",
     "slowing": "Slowing",
     "falling": "Falling",
@@ -326,11 +327,35 @@ def _thesis_direction(confirmation):
     return None
 
 
+def _pending_observation(record, label):
+    state = record.get("state")
+    period = _dict(record.get("source_period")).get("effective_date")
+    finding = f"Evidence through {period}. " if period else ""
+    finding += "Confirmation has not been evaluated." if state is not None else "Current evidence is unavailable."
+    return {
+        "label": label,
+        "state_label": _display(state, _STATE_LABELS) if state is not None else "Unavailable",
+        "sentiment": None,
+        "passed": None,
+        "verdict_label": "Not evaluated",
+        "test_contribution": None,
+        "finding": finding,
+    }
+
+
+def _pending_observations(confirmation):
+    observations = _dict(confirmation.get("observations"))
+    return [
+        dict(_pending_observation(_dict(observations[test_id]), _MARKET_PRICING_TEST_LABELS[test_id]), id=test_id)
+        for test_id in _TEST_ORDER if test_id in observations
+    ]
+
+
 def _confirmation_tests(confirmation):
     test_count = confirmation.get("confirmation_test_count")
     has_count = isinstance(test_count, int) and not isinstance(test_count, bool)
     if not has_count:
-        return []
+        return _pending_observations(confirmation)
     direction = _thesis_direction(confirmation)
     evidence = _dict(confirmation.get("evidence"))
     tests = []
@@ -625,6 +650,11 @@ def _market_pricing_layer(market_setup_result):
             "finding": liquidity.get("finding"),
             "note": _LIQUIDITY_OFFSET_NOTE,
         }
+
+    observations = _dict(confirmation.get("observations"))
+    if not has_count and "liquidity" in observations:
+        liquidity_offset = _pending_observation(_dict(observations["liquidity"]), "M2 Liquidity")
+        liquidity_offset["note"] = "Observation only; no liquidity offset has been applied."
 
     offsets = [
         {"id": _dict(offset).get("id"), "finding": _dict(offset).get("finding")}

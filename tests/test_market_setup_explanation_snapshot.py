@@ -515,3 +515,14 @@ class TestCounterfactuals:
             assert cf["from_code"] == "macro_weakening_price_not_confirming"
             assert cf["to_code"]
             assert cf["posture_change"]["from"] == "neutral_selective"
+
+
+def test_display_observations_do_not_enter_snapshot_decision_results():
+    inputs = _inputs()
+    inputs["expected_growth"] = _expected_growth("mixed", status="available")
+    result = market_setup_v2.build_market_setup_v2(**inputs)
+    projected = market_setup_explanation_snapshot._project_results(result)
+    assert "observations" not in projected["market_confirmation"]
+    assert result["market_confirmation"]["observations"]["equity_trend"]["state"] == "bull_market"
+    assert projected["market_confirmation"]["confirmation_test_count"] is None
+    assert projected["market_confirmation"]["evidence"] == {}

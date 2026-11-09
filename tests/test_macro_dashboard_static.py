@@ -8552,7 +8552,10 @@ def test_agreement_display_comes_from_backend_label():
     assert "macro_weakening_partially_confirmed" not in html
 
 
-def _render_market_setup_v2_non_directional_fixture():
+def _render_market_setup_v2_non_directional_fixture(observations=None):
+    result = _market_setup_v2_non_directional_result()
+    if observations is not None:
+        result["market_confirmation"]["observations"] = observations
     setup = _v2_setup_payload(
         regime={"code": "growth_decelerating", "label": "Growth Decelerating"},
         confirmation={
@@ -8570,7 +8573,7 @@ def _render_market_setup_v2_non_directional_fixture():
         posture={"code": "insufficient_data", "label": "Insufficient Data"},
         extra={
             "evidence_layers": market_setup_evidence_layers.build_evidence_layers(
-                market_setup_result=_market_setup_v2_non_directional_result(),
+                market_setup_result=result,
                 survey_synthesis={
                     "period": "2026-06",
                     "economic_direction": "aligned_expansion",
@@ -10278,3 +10281,22 @@ def test_market_assistant_stream_unavailable_validation_renders_badge():
         "label": "验证不可用，回答未验证",
         "answerText": "现在的市场偏积极。",
     }
+
+
+def test_market_setup_pending_observations_render_without_confirmation_votes():
+    html = _render_market_setup_v2_non_directional_fixture({
+        "equity_trend": {"state": "bull_market", "source_period": {"effective_date": "2026-11-04"}},
+        "credit": {"state": "healthy", "source_period": {}},
+        "volatility": {"state": "normal", "source_period": {}},
+        "liquidity": {"state": "expanding", "source_period": {}},
+    })
+    assert "Bull Market" in html
+    assert "Evidence through 2026-11-04" in html
+    assert "Not evaluated" in html
+    assert "M2 Liquidity" in html
+    assert "no liquidity offset has been applied" in html
+    assert "Insufficient Market Confirmation Evidence" in html
+    assert "Approved confirmation tests:" not in html
+    assert "1 of 3" not in html
+    assert "0 of 3" not in html
+    assert "ms-dp-test-mark" not in html
