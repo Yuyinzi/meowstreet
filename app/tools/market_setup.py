@@ -5,6 +5,8 @@ _MARKET_STATE_MAP = {
     "bear_market": {"state": "bear_market", "starting_posture": "short_or_neutral"},
 }
 
+_MARKET_PRICE_FIELDS = ("close", "rolling_high", "bear_market_level", "drawdown_pct")
+
 _ISM_EXPECTED_GDP_MAP = {
     "expansion_rising": ("rising", "long", "ISM is above 50 and rising"),
     "expansion_slowing": ("slowing", "neutral", "ISM is above 50 but slowing"),
@@ -98,6 +100,11 @@ def build_market_environment(market_phase_payload):
         "source_module": "market_phase",
         "observation_period": market.get("data_through"),
         "data_status": "available",
+        "price_observation": {
+            key: market["latest"][key]
+            for key in _MARKET_PRICE_FIELDS
+            if (market.get("latest") or {}).get(key) is not None
+        },
     }
 
 

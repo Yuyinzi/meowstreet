@@ -380,7 +380,11 @@ class TestNormalizerExplanations:
                     "title": "S&P 500",
                     "region": "US",
                     "data_through": "2026-06-01",
-                    "latest": {"market_phase_status": "bull_market"},
+                    "latest": {
+                        "market_phase_status": "bull_market", "drawdown_pct": -4.91,
+                        "close": 7459.68, "rolling_high": 7844.52,
+                        "bear_market_level": 6275.616,
+                    },
                 }
             ]
         }
@@ -390,6 +394,10 @@ class TestNormalizerExplanations:
         assert fact["explanation"]["state"] == "bull_market"
         assert fact["explanation"]["starting_posture"] == "long"
         assert fact["explanation"]["reason"]
+        assert fact["explanation"]["price_observation"] == {
+            "drawdown_pct": -4.91, "close": 7459.68,
+            "rolling_high": 7844.52, "bear_market_level": 6275.616,
+        }
 
     def test_credit_vix_m2_normalizers_preserve_current_context(self):
         rates = {

@@ -133,6 +133,15 @@ def _fed_balance_sheet():
 
 
 class TestBuildMarketEnvironment:
+    def test_preserves_price_observations_without_changing_phase(self):
+        result = market_setup.build_market_environment(_market_phase_payload())
+
+        assert result["state"] == "bull_market"
+        assert result["price_observation"] == {
+            "close": 5500, "rolling_high": 5600,
+            "bear_market_level": 4480, "drawdown_pct": -1.79,
+        }
+
     def test_bull_market(self):
         result = market_setup.build_market_environment(
             _market_phase_payload("bull_market")

@@ -48,7 +48,7 @@ _CONSUMER_CURRENT_KEYS = (
     "confirmation_state",
 )
 
-_PHASE_CURRENT_KEYS = ("state", "starting_posture", "reason")
+_PHASE_CURRENT_KEYS = ("state", "starting_posture", "reason", "price_observation")
 
 _SOURCE_KEYS = ("source_module", "source_id", "source_period", "method_references")
 

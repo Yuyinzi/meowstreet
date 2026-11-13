@@ -11,7 +11,99 @@ from app.services.market_assistant_tool_runtime import TOOL_RUNTIME_POLICIES
 from app.services.market_assistant_tool_runtime import acquire_operation_artifact
 from app.services.market_assistant_tool_runtime import execute_tool_batch
 from app.services.market_assistant_tool_runtime import execute_tool_call
+from app.services.market_assistant_tool_runtime import _confirmation_tests_artifact
+from app.services.market_assistant_tool_runtime import _confirmation_test_artifact
+from app.services.market_assistant_tool_runtime import _setup_overview_artifact
+from app.tools.market_setup_v2 import build_explanation_method_contracts
+
+
+def test_focused_artifact_identity_changes_with_projected_content_at_the_same_context():
+    snapshot = fake_snapshot()
+    first = _setup_overview_artifact(snapshot)
+    snapshot["next_triggers"] = [{
+        "id": "ism_survey_direction_change",
+        "label": "ISM survey direction resolves from mixed",
+        "effect": "recompute Macro Regime",
+    }]
+    updated = _setup_overview_artifact(snapshot)
+
+    assert first["payload"]["context_id"] == updated["payload"]["context_id"]
+    assert first["artifact_id"] != updated["artifact_id"]
+    assert _setup_overview_artifact(snapshot) == updated
 from app.tools.market_assistant_tools import ALL_TOOL_IDS
+
+
+@pytest.mark.parametrize("indicator_id", ["sp500_close", "sp500_market_phase"])
+def test_confirmation_batch_keeps_equity_with_current_and_legacy_indicator_ids(indicator_id):
+    snapshot = fake_snapshot()
+    equity = next(fact for fact in snapshot["evidence"] if fact["fact_id"] == "sp500_market_phase")
+    equity["indicator_id"] = indicator_id
+    equity["accepted_values"] = {"phase": "bull_market", "status": "available"}
+    artifact = _confirmation_tests_artifact({"test_ids": ["equity", "credit", "vix"]}, snapshot)
+    facts = {
+        item["object_id"]: item["payload"]
+        for item in artifact["object_index"]
+        if item["object_type"] == "evidence_fact"
+    }
+
+    assert facts["sp500_market_phase"]["accepted_values"]["phase"] == "bull_market"
+    assert set(facts) == {"sp500_market_phase", "credit_conditions", "vix_level"}
+
+
+@pytest.mark.parametrize("aggregate", [False, True])
+def test_vix_tool_includes_approved_method_when_confirmation_is_not_applicable(aggregate):
+    snapshot = fake_snapshot()
+    snapshot["results"]["market_confirmation"]["code"] = "not_applicable"
+    snapshot["method_contracts"] = build_explanation_method_contracts()
+    artifact = (
+        _confirmation_tests_artifact({"test_ids": ["vix"]}, snapshot)
+        if aggregate
+        else _confirmation_test_artifact({"test_id": "vix"}, snapshot)
+    )
+    method = next(
+        obj["payload"] for obj in artifact["object_index"]
+        if obj["object_type"] == "method_contract"
+        and obj["object_id"] == "vix_confirmation_v2"
+    )
+
+    assert method["decision_contract"]["predicates"]["upside"]["predicate"]["operator"] == "lt"
+    assert method["decision_contract"]["predicates"]["upside"]["predicate"]["operand"] == 20.0
+    assert method["decision_contract"]["predicates"]["downside"]["predicate"]["operator"] == "gte"
+
+
+@pytest.mark.asyncio
+async def test_empty_approved_counterfactuals_are_a_successful_not_applicable_result():
+    resolution = resolved_context()
+    resolution["snapshot"]["counterfactuals"] = []
+    record = await execute_tool_call(
+        {"call_id": "empty_scenarios", "tool_name": "get_approved_counterfactuals", "arguments": {}},
+        request={}, resolution=resolution, dependencies=fake_dependencies(),
+        created_at="2026-11-09T00:00:00Z",
+    )
+
+    assert record["artifact"] is not None
+    status = next(
+        obj["payload"] for obj in record["artifact"]["object_index"]
+        if obj["object_type"] == "counterfactual_status"
+    )
+    assert status["state"] == "not_applicable"
+
+
+@pytest.mark.asyncio
+async def test_missing_counterfactual_collection_is_distinct_from_an_empty_collection():
+    resolution = resolved_context()
+    resolution["snapshot"].pop("counterfactuals")
+    record = await execute_tool_call(
+        {"call_id": "missing_scenarios", "tool_name": "get_approved_counterfactuals", "arguments": {}},
+        request={}, resolution=resolution, dependencies=fake_dependencies(),
+        created_at="2026-11-09T00:00:00Z",
+    )
+    status = next(
+        obj["payload"] for obj in record["artifact"]["object_index"]
+        if obj["object_type"] == "counterfactual_status"
+    )
+
+    assert status["state"] == "unavailable"
 
 
 def _confirmation_evidence(fact_id, indicator_id, label):
@@ -457,8 +549,10 @@ async def test_approved_counterfactuals_keep_setup_level_objects():
         created_at="2026-08-13T00:00:00Z",
     )
     objects = record["artifact"]["object_index"]
-    assert {obj["object_type"] for obj in objects} == {"market_setup"}
-    assert all(obj["object_id"].startswith("setup_") for obj in objects)
+    assert {obj["object_type"] for obj in objects} == {"market_setup", "counterfactual_status"}
+    assert all(obj["object_id"].startswith("setup_") for obj in objects if obj["object_type"] == "market_setup")
+    status = next(obj["payload"] for obj in objects if obj["object_type"] == "counterfactual_status")
+    assert status["state"] == "available"
 
 
 @pytest.mark.asyncio
@@ -726,8 +820,8 @@ async def test_evidence_detail_returns_focused_policy_projection():
     )
     artifact = record["artifact"]
     assert artifact["artifact_kind"] == "explanation_snapshot"
-    assert artifact["artifact_id"] == (
-        "ctx_current_evidence_detail_macro_policy_response_current_drivers_source"
+    assert artifact["artifact_id"].startswith(
+        "ctx_current_evidence_detail_macro_policy_response_current_drivers_source_"
     )
     payload = artifact["payload"]
     assert payload["context_id"] == "ctx_current"
@@ -965,8 +1059,8 @@ async def test_evidence_detail_artifact_id_is_order_independent():
     assert (
         results[0]["artifact"]["artifact_id"] == (results[1]["artifact"]["artifact_id"])
     )
-    assert results[0]["artifact"]["artifact_id"] == (
-        "ctx_current_evidence_detail_macro_policy_response_current_source"
+    assert results[0]["artifact"]["artifact_id"].startswith(
+        "ctx_current_evidence_detail_macro_policy_response_current_source_"
     )
 
 

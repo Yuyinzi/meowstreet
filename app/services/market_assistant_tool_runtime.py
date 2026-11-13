@@ -43,9 +43,9 @@ _RESULT_LAYERS = (
 )
 
 _CONFIRMATION_TEST_INDICATORS = {
-    "equity": "sp500_close",
-    "credit": "credit_conditions",
-    "vix": "vix",
+    "equity": {"sp500_close", "sp500_market_phase"},
+    "credit": {"credit_conditions"},
+    "vix": {"vix"},
 }
 
 _KNOWLEDGE_OBJECT_TYPE = {
@@ -507,6 +507,8 @@ def _snapshot_objects(snapshot):
                 counterfactual,
             )
         )
+    objects.extend(_next_trigger_objects(snapshot))
+    objects.append(_counterfactual_status_object(snapshot))
     return objects
 
 
@@ -898,6 +900,8 @@ def _focused_snapshot_envelope(snapshot, artifact_id, objects, extra=None):
         "payload": payload,
         "object_index": build_object_index(objects),
     }
+    content_hash = _hash_excluding(envelope, "artifact_id")
+    envelope["artifact_id"] = f"{artifact_id}_{content_hash}"
     return _finalize_envelope(envelope)
 
 
@@ -918,6 +922,7 @@ def _setup_overview_artifact(snapshot):
                 "decision_path_step", step["step_id"], "decision_fact", step
             )
         )
+    objects.extend(_next_trigger_objects(snapshot))
     return _focused_snapshot_envelope(
         snapshot, f"{snapshot['context_id']}_overview", objects
     )
@@ -949,14 +954,14 @@ def _macro_regime_artifact(snapshot):
 
 
 def _confirmation_test_fact(snapshot, test_id):
-    indicator_id = _CONFIRMATION_TEST_INDICATORS.get(test_id)
-    if indicator_id is None:
+    indicator_ids = _CONFIRMATION_TEST_INDICATORS.get(test_id)
+    if indicator_ids is None:
         return None
     for fact in snapshot.get("evidence") or []:
         role = fact.get("role") or {}
         if (
             role.get("function") == "confirmation_test"
-            and fact.get("indicator_id") == indicator_id
+            and fact.get("indicator_id") in indicator_ids
         ):
             return fact
     return None
@@ -970,6 +975,7 @@ def _confirmation_test_artifact(parameters, snapshot):
     objects = [
         _artifact_object("evidence_fact", fact["fact_id"], "decision_fact", fact)
     ]
+    objects.extend(_confirmation_method_objects(snapshot, {fact["fact_id"]}))
     confirmation_result = (snapshot.get("results") or {}).get("market_confirmation")
     if confirmation_result is not None:
         objects.append(
@@ -1001,6 +1007,9 @@ def _confirmation_tests_artifact(parameters, snapshot):
             )
     if not objects:
         return None
+    objects.extend(_confirmation_method_objects(
+        snapshot, {obj["object_id"] for obj in objects}
+    ))
     confirmation_result = (snapshot.get("results") or {}).get("market_confirmation")
     if confirmation_result is not None:
         objects.append(
@@ -1044,6 +1053,40 @@ def _posture_artifact(snapshot):
     )
 
 
+def _confirmation_method_objects(snapshot, fact_ids):
+    methods = (snapshot.get("method_contracts") or {}).get("methods") or {}
+    return [
+        _artifact_object("method_contract", method_id, "method_knowledge", method)
+        for method_id, method in methods.items()
+        if method.get("kind") == "predicate_method"
+        and ((method.get("decision_contract") or {}).get("input_contract") or {}).get("fact_id") in fact_ids
+    ]
+
+
+def _next_trigger_objects(snapshot):
+    return [
+        _artifact_object("next_trigger", trigger["id"], "decision_fact", trigger)
+        for trigger in snapshot.get("next_triggers") or []
+    ]
+
+
+def _counterfactual_status_object(snapshot):
+    scenarios = snapshot.get("counterfactuals")
+    if not isinstance(scenarios, list):
+        state = "unavailable"
+        reason = "the snapshot does not contain the counterfactual collection"
+    elif any(item.get("object_type") == "market_setup" for item in scenarios):
+        state = "available"
+        reason = "approved setup-transition scenarios are available"
+    else:
+        state = "not_applicable"
+        reason = "no approved setup-transition scenario applies in this snapshot; next triggers are separate"
+    return _artifact_object(
+        "counterfactual_status", "approved_counterfactuals", "decision_fact",
+        {"state": state, "reason": reason},
+    )
+
+
 def _approved_counterfactuals_artifact(snapshot):
     objects = []
     for counterfactual in snapshot.get("counterfactuals") or []:
@@ -1056,8 +1099,8 @@ def _approved_counterfactuals_artifact(snapshot):
                     counterfactual,
                 )
             )
-    if not objects:
-        return None
+    objects.append(_counterfactual_status_object(snapshot))
+    objects.extend(_next_trigger_objects(snapshot))
     return _focused_snapshot_envelope(
         snapshot, f"{snapshot['context_id']}_approved_counterfactuals", objects
     )

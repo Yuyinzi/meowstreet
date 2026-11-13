@@ -807,6 +807,7 @@ def _normalize_market_environment(market_phase_payload):
                     "state": market_env.get("state"),
                     "starting_posture": market_env.get("starting_posture"),
                     "reason": market_env.get("reason"),
+                    "price_observation": market_env.get("price_observation", {}),
                 },
             }
         },

@@ -333,26 +333,9 @@ def _valid_audit_payload(answer_text, artifact_projection=None, **kwargs):
 
 
 def _invalid_audit_payload(answer_text, artifact_projection=None, **kwargs):
-    return {
-        "claims": [
-            {
-                "claim_id": "claim_bad",
-                "start": 0,
-                "end": len(answer_text),
-                "exact_text": answer_text + " unapproved claim",
-                "purpose": "decision_explanation",
-                "authority": "decision_fact",
-                "refs": [
-                    {
-                        "artifact_id": "ctx_123_overview",
-                        "object_type": "market_setup_result",
-                        "object_id": "macro_regime",
-                    }
-                ],
-                "values": [],
-            }
-        ]
-    }
+    payload = _valid_audit_payload(answer_text, artifact_projection)
+    payload["claims"][0]["exact_text"] = answer_text + " unapproved claim"
+    return payload
 
 
 class HybridDependencies:
@@ -967,8 +950,50 @@ async def test_hybrid_persists_narration_artifacts_not_the_full_snapshot():
 
     persisted_ids = [artifact["artifact_id"] for artifact in deps.saved_artifacts]
     assert "ctx_123" not in persisted_ids
-    assert "ctx_123_overview" in persisted_ids
-    assert "ctx_123_macro_regime" in persisted_ids
+    assert any(artifact_id.startswith("ctx_123_overview_") for artifact_id in persisted_ids)
+    assert any(artifact_id.startswith("ctx_123_macro_regime_") for artifact_id in persisted_ids)
+
+
+@pytest.mark.asyncio
+async def test_stream_persists_projection_changes_for_the_same_context(tmp_path):
+    deps = hybrid_dependencies(
+        config=_config(claim_validation_enabled=False),
+        stream=_ScriptedStream([narration_step(), narration_step(), narration_step()]),
+    )
+    deps.db_path = tmp_path / "stream.sqlite"
+    deps.connect = market_assistant_db.connect
+    deps.save_bundle = market_assistant_db.save_answer_bundle
+    overview_ids = []
+    for sequence in range(3):
+        if sequence == 1:
+            deps._resolve["snapshot"]["next_triggers"] = [{
+                "id": "ism_survey_direction_change",
+                "label": "ISM survey direction resolves from mixed",
+                "effect": "recompute Macro Regime",
+            }]
+        events = [
+            event async for event in market_assistant.stream_answer_question(
+                current_question("现在市场怎么样？"), dependencies=deps
+            )
+        ]
+        assert events[-1]["type"] == "complete"
+        assert not any(event["type"] == "error" for event in events)
+        con = market_assistant_db.connect(deps.db_path)
+        try:
+            trace = market_assistant_db.load_answer_trace(con, events[-1]["answer_trace_id"])
+            overview_id = next(
+                artifact_id for artifact_id in trace["snapshot_artifact_ids"]
+                if artifact_id.startswith("ctx_123_overview_")
+            )
+            overview_ids.append(overview_id)
+            assert con.execute(
+                "select artifact_json from snapshot_artifacts where artifact_id = ?", (overview_id,)
+            ).fetchone() is not None
+        finally:
+            con.close()
+
+    assert overview_ids[0] != overview_ids[1]
+    assert overview_ids[1] == overview_ids[2]
 
 
 @pytest.mark.asyncio

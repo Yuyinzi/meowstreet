@@ -17,6 +17,7 @@ from app.services import market_assistant as market_assistant_service
 from app.services.market_assistant_exploration import execute_exploration
 from app.services.market_assistant_llm import complete_structured
 from app.services.market_assistant_llm import stream_response_turn
+from app.services.market_assistant_react import MARKET_EVIDENCE_INSTRUCTIONS
 from app.services.market_assistant_research import build_research_provider
 from app.services.market_setup_current import resolve_current_explanation
 from app.runtime_logging import get_runtime_logger
@@ -152,8 +153,8 @@ def _tone_instructions(tone: str) -> str:
     return (
         "Tone: beginner_human. "
         "Adopt a plain, beginner-friendly human tone. Write for a financial beginner. "
-        "Explain what the market state means before using technical terms, and define "
-        "every financial term on first use. Never change Market Setup conclusions or "
+        "Use everyday language and explain an unfamiliar term briefly only when "
+        "needed to answer the question. Never change Market Setup conclusions or "
         "invent facts."
     )
 
@@ -232,6 +233,8 @@ def _narration_instructions(tone="beginner_human"):
             "instead of opening with a standalone explanation of setup labels; "
             "explain a term inline only when the answer actually uses it."
         )
+        + " "
+        + MARKET_EVIDENCE_INSTRUCTIONS
     )
 
 

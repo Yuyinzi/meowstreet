@@ -4,6 +4,11 @@ import pytest
 from app.resources import resource_path
 from app.tools import market_setup_evidence_facts
 from app.tools import market_setup_v2
+from app.tools.market_assistant_evidence_detail_registry import (
+    evidence_detail_record,
+    load_evidence_detail_registry,
+)
+from app.tools.market_assistant_evidence_details import project_evidence_detail
 
 SURFACE_PATH = resource_path("assistant_surface")
 
@@ -237,6 +242,59 @@ class TestExplanationSurface:
 
 
 class TestEvidenceFactsSemantics:
+    @pytest.mark.parametrize(
+        ("status", "source_period", "expected_state"),
+        [
+            ("partial", _monthly_period(), "invalid"),
+            ("mixed_periods", _monthly_period(), "invalid"),
+            ("unavailable", _monthly_period(), "invalid"),
+            (None, _monthly_period(), "invalid"),
+            ("available", {}, "stale"),
+        ],
+    )
+    def test_mixed_direction_does_not_make_unusable_surveys_available(
+        self, status, source_period, expected_state
+    ):
+        inputs = _inputs(direction="mixed")
+        inputs["expected_growth"] = _expected_growth("mixed", status, source_period)
+        fact = fact_by_id(_build_facts_from(inputs), "survey_growth_direction")
+
+        assert fact["data_status"] == {"state": expected_state}
+        assert fact["participation"]["state"] == "not_applied"
+
+    def test_available_mixed_surveys_keep_details_without_selecting_a_regime(self):
+        inputs = _inputs(direction="mixed")
+        record = inputs["expected_growth"]["facts"]["survey_growth_direction"]
+        record["status"] = "available"
+        record["explanation"] = {
+            "economic_direction": "aligned_expansion",
+            "growth_momentum": "mixed",
+            "reasons": ["Demand momentum differs between surveys"],
+            "missing_inputs": [],
+        }
+        setup = market_setup_v2.build_market_setup_v2(**inputs)
+        fact = fact_by_id(_build_facts_from(inputs), "survey_growth_direction")
+
+        assert setup["macro_regime"]["code"] == "insufficient_data"
+        assert setup["macro_regime"]["missing_inputs"] == []
+        assert setup["macro_regime"]["ambiguous_inputs"][0]["fact_id"] == "survey_growth_direction"
+        assert setup["market_confirmation"]["code"] == "not_applicable"
+        assert fact["data_status"] == {"state": "available"}
+        assert fact["participation"] == {
+            "state": "not_applied",
+            "reason_code": "method_scope_excludes",
+        }
+        detail = project_evidence_detail(
+            fact,
+            evidence_detail_record(load_evidence_detail_registry(), "survey_growth_direction"),
+            ["current", "drivers"],
+            {},
+        )
+        assert detail["status"] == "available"
+        assert detail["current"]["direction"] == "mixed"
+        assert detail["current"]["economic_direction"] == "aligned_expansion"
+        assert detail["drivers"]["reasons"] == ["Demand momentum differs between surveys"]
+
     def test_survey_direction_is_the_only_macro_selector(self):
         facts = build_facts()
         survey = fact_by_id(facts, "survey_growth_direction")

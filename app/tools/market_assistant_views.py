@@ -1,5 +1,7 @@
 import re
 
+from app.tools.market_setup_predicates import evaluate_predicate
+
 _VIEW_VERSION_BY_TYPE = {
     "setup_explanation": "setup_explanation_v1",
     "indicator_explanation": "indicator_explanation_v1",
@@ -25,6 +27,19 @@ _TEST_ID_BY_INDICATOR = {
     "vix": "vix",
 }
 
+_CURRENT_FIELD_BY_TEST = {"equity": "phase", "credit": "status", "vix": "level"}
+
+_CONTEXT_DETAIL_FIELDS = {
+    "macro_financial_conditions": ("curve_status", "credit_conditions_status", "ten_year_real_rate"),
+    "macro_policy_response": ("fomc_tone", "fomc_action", "inflation_above_target"),
+    "consumer_demand_outlook": ("percentile_label", "momentum", "confirmation_state"),
+}
+
+_CURVE_LABELS = {
+    "zh": {"flat": "平坦", "inverted": "倒挂", "steep": "正向陡峭"},
+    "en": {"flat": "flat", "inverted": "inverted", "steep": "steep positive curve"},
+}
+
 _INDICATOR_FAMILIES = {
     "vix": frozenset({"vix", "vix_level"}),
     "sp500_close": frozenset({"sp500_close", "sp500_market_phase"}),
@@ -39,6 +54,45 @@ _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
 _DISPLAY_LABELS = {
     "zh": {
+        "upside": "上行",
+        "downside": "下行",
+        "lt": "低于",
+        "gte": "大于或等于",
+        "confirms_contraction_risk": "金融条件指向收缩风险",
+        "confirms_expansion": "支持扩张",
+        "confirms_downside_risk": "支持下行风险判断",
+        "restrictive_confirmed": "限制性政策立场",
+        "support_confirmed": "政策支持已确认",
+        "support_possible": "可能提供政策支持",
+        "support_constrained": "政策支持受约束",
+        "transition": "需求方向尚不明确",
+        "transition_warning": "过渡期警示",
+        "no_clear_response": "政策反应尚不明确",
+        "policy_liquidity_conflict": "政策与流动性信号不一致",
+        "hawkish": "偏鹰派",
+        "dovish": "偏鸽派",
+        "hold": "维持利率不变",
+        "hike": "加息",
+        "cut": "降息",
+        "broadly_confirmed": "大体得到印证",
+        "Mixed Survey Signals": "调查综合方向混杂",
+        "Awaiting Macro Direction": "等待宏观方向",
+        "Neutral / Reduced Exposure": "中性净敞口、降低总敞口",
+        "no_new_directional_exposure": "推迟新增方向性敞口",
+        "mixed": "混杂",
+        "normal": "正常",
+        "aligned_expansion": "制造业与服务业均扩张",
+        "aligned_contraction": "制造业与服务业均收缩",
+        "aligned_neutral": "制造业与服务业均处于中性区间",
+        "divergent": "制造业与服务业方向分化",
+        "flat": "持平",
+        "data_missing": "数据缺失",
+        "data_stale": "数据已过期",
+        "data_invalid": "数据无效",
+        "not_evaluated": "尚未执行",
+        "evaluated": "已执行",
+        "target_layer_not_applicable": "当前宏观方向不适用方向性确认",
+        "method_scope_excludes": "当前状态未产生方向性结论",
         "rising": "上升",
         "slowing": "放缓",
         "falling": "下降",
@@ -82,8 +136,8 @@ _DISPLAY_LABELS = {
         "avoid_large_directional_exposure": "避免大规模方向性敞口",
         "avoid_long_broad_beta": "避免做多宽基",
         "reduce_large_directional_exposure": "降低大规模方向性敞口",
-        "bull_market": "股票仍处于上涨趋势",
-        "bear_market": "股票处于下跌趋势",
+        "bull_market": "未达到熊市回撤阈值",
+        "bear_market": "已达到熊市回撤阈值",
         "risk_rising": "信贷风险正在上升",
         "healthy": "信贷状况健康",
         "mixed_credit": "信贷状况分化",
@@ -135,6 +189,45 @@ _DISPLAY_LABELS = {
         "unsupported": "暂不支持",
     },
     "en": {
+        "upside": "upside",
+        "downside": "downside",
+        "lt": "below",
+        "gte": "greater than or equal to",
+        "confirms_contraction_risk": "financial conditions indicate contraction risk",
+        "confirms_expansion": "supports expansion",
+        "confirms_downside_risk": "supports downside risk",
+        "restrictive_confirmed": "restrictive policy stance",
+        "support_confirmed": "policy support confirmed",
+        "support_possible": "policy support possible",
+        "support_constrained": "policy support constrained",
+        "transition": "consumer demand direction remains unclear",
+        "transition_warning": "transition warning",
+        "no_clear_response": "policy response unclear",
+        "policy_liquidity_conflict": "policy and liquidity signals conflict",
+        "hawkish": "hawkish",
+        "dovish": "dovish",
+        "hold": "hold rates",
+        "hike": "raise rates",
+        "cut": "cut rates",
+        "broadly_confirmed": "broadly confirmed",
+        "Mixed Survey Signals": "mixed survey direction",
+        "Awaiting Macro Direction": "awaiting macro direction",
+        "Neutral / Reduced Exposure": "neutral net exposure and reduced gross exposure",
+        "no_new_directional_exposure": "defer new directional exposure",
+        "mixed": "mixed",
+        "normal": "normal",
+        "aligned_expansion": "manufacturing and services are both expanding",
+        "aligned_contraction": "manufacturing and services are both contracting",
+        "aligned_neutral": "manufacturing and services are both neutral",
+        "divergent": "manufacturing and services diverge",
+        "flat": "flat",
+        "data_missing": "data missing",
+        "data_stale": "data stale",
+        "data_invalid": "data invalid",
+        "not_evaluated": "not evaluated",
+        "evaluated": "evaluated",
+        "target_layer_not_applicable": "directional confirmation is not applicable to the current macro regime",
+        "method_scope_excludes": "the current state does not establish a directional conclusion",
         "rising": "rising",
         "slowing": "slowing",
         "falling": "falling",
@@ -178,8 +271,8 @@ _DISPLAY_LABELS = {
         "avoid_large_directional_exposure": "avoid large directional exposure",
         "avoid_long_broad_beta": "avoid long broad beta",
         "reduce_large_directional_exposure": "reduce large directional exposure",
-        "bull_market": "stocks remain in an uptrend",
-        "bear_market": "stocks are in a downtrend",
+        "bull_market": "below the bear-market drawdown threshold",
+        "bear_market": "at or beyond the bear-market drawdown threshold",
         "risk_rising": "credit risk is rising",
         "healthy": "credit is healthy",
         "mixed_credit": "credit is mixed",
@@ -376,8 +469,17 @@ def _build_setup_view(object_map, language, as_of, evidence_through):
         payload = entry["object"]["payload"]
         results[layer] = {
             "label": payload.get("label"),
-            "meaning": _display(payload.get("code"), language),
+            "meaning": _result_meaning(payload, language),
         }
+        if layer == "market_confirmation" and payload.get("code") == "not_applicable":
+            results[layer]["meaning"] = (
+                "未选定上行或下行宏观方向，方向性市场确认尚未执行"
+                if language == "zh"
+                else "no upside or downside macro direction was selected; directional market confirmation has not been evaluated"
+            )
+        for key in ("missing_inputs", "ambiguous_inputs"):
+            if key in payload:
+                results[layer][key] = payload[key]
         result_entries.append(entry)
 
     selector = {}
@@ -392,6 +494,15 @@ def _build_setup_view(object_map, language, as_of, evidence_through):
             "label": payload.get("label"),
             "input_state": _display(decision_result.get("input_state"), language),
             "selected": _display(decision_result.get("selected"), language),
+            "data_status": _display((payload.get("data_status") or {}).get("state"), language),
+            "participation": _display((payload.get("participation") or {}).get("state"), language),
+            "survey_evidence": {
+                key: (
+                    value if isinstance(value, list) else _display(value, language)
+                )
+                for key, value in (payload.get("explanation") or {}).items()
+                if key in {"economic_direction", "growth_momentum", "reasons", "missing_inputs"}
+            },
         }
         selector_entries.append(entry)
         break
@@ -404,7 +515,7 @@ def _build_setup_view(object_map, language, as_of, evidence_through):
             continue
         confirmation_entries.append(entry)
     confirmation_tests = [
-        _confirmation_test_projection(entry, language) for entry in confirmation_entries
+        _confirmation_test_projection(entry, language, object_map) for entry in confirmation_entries
     ]
 
     relationship_entries = []
@@ -434,7 +545,7 @@ def _build_setup_view(object_map, language, as_of, evidence_through):
             action_labels = explanation.get("action_labels") or {}
         posture_meaning = {
             "label": payload.get("label"),
-            "meaning": _display(payload.get("code"), language),
+            "meaning": _result_meaning(payload, language),
             "net_exposure": _display(payload.get("net_exposure"), language),
             "implementation": _display(payload.get("implementation"), language),
             "broad_beta": _display(payload.get("broad_beta"), language),
@@ -459,6 +570,16 @@ def _build_setup_view(object_map, language, as_of, evidence_through):
     counterfactuals = [
         _counterfactual_projection(entry, language) for entry in counterfactual_entries
     ]
+    trigger_entries = [
+        entry for (object_type, object_id), entry in sorted(object_map.items())
+        if object_type == "next_trigger"
+    ]
+    status_entry = object_map.get(("counterfactual_status", "approved_counterfactuals"))
+    method_entries = [
+        entry for (object_type, object_id), entry in sorted(object_map.items())
+        if object_type == "method_contract"
+        and entry["object"]["payload"].get("kind") == "predicate_method"
+    ]
 
     audit_entries = []
     for entry in (
@@ -468,6 +589,9 @@ def _build_setup_view(object_map, language, as_of, evidence_through):
         + relationship_entries
         + posture_entries
         + counterfactual_entries
+        + trigger_entries
+        + method_entries
+        + ([status_entry] if status_entry else [])
     ):
         if entry not in audit_entries:
             audit_entries.append(entry)
@@ -483,17 +607,28 @@ def _build_setup_view(object_map, language, as_of, evidence_through):
         "relevant_relationships": relevant_relationships,
         "posture_meaning": posture_meaning,
         "counterfactuals": counterfactuals,
+        "counterfactual_status": _counterfactual_status_projection(status_entry, language),
+        "next_triggers": [
+            {key: entry["object"]["payload"].get(key) for key in ("label", "effect")}
+            for entry in trigger_entries
+        ],
         "audit_objects": _audit_refs(audit_entries),
     }
 
 
-def _confirmation_test_projection(entry, language):
+def _result_meaning(payload, language):
+    return _DISPLAY_LABELS[language].get(
+        payload.get("label"), _display(payload.get("code"), language)
+    )
+
+
+def _confirmation_test_projection(entry, language, object_map):
     payload = entry["object"]["payload"]
     test_id = _TEST_ID_BY_INDICATOR[payload["indicator_id"]]
     decision_result = payload.get("decision_result") or {}
     evaluation = decision_result.get("evaluation") or {}
     accepted = payload.get("accepted_values") or {}
-    single_value = next(iter(accepted.values())) if len(accepted) == 1 else None
+    single_value = accepted.get(_CURRENT_FIELD_BY_TEST[test_id])
     if isinstance(single_value, (int, float)) and not isinstance(single_value, bool):
         value = single_value
     else:
@@ -503,9 +638,57 @@ def _confirmation_test_projection(entry, language):
         "label": payload.get("label"),
         "value": value,
         "confirms": evaluation.get("result"),
+        "method_conditions": _numeric_confirmation_conditions(payload, object_map, language),
+        "data_status": _display((payload.get("data_status") or {}).get("state"), language),
+        "evaluation_state": _display(evaluation.get("state"), language),
+        "current_state": _display((payload.get("explanation") or {}).get("state"), language),
+        "price_observation": (payload.get("explanation") or {}).get("price_observation") or {},
+        "not_applied_reason": _display((payload.get("participation") or {}).get("reason_code"), language),
         "participation": _display(
             (payload.get("participation") or {}).get("state"), language
         ),
+    }
+
+
+def _numeric_confirmation_conditions(fact, object_map, language):
+    for (object_type, object_id), entry in sorted(object_map.items()):
+        if object_type != "method_contract":
+            continue
+        method = entry["object"]["payload"]
+        contract = method.get("decision_contract") or {}
+        input_contract = contract.get("input_contract") or {}
+        if method.get("kind") != "predicate_method" or input_contract.get("fact_id") != fact.get("fact_id"):
+            continue
+        if input_contract.get("type") != "number":
+            continue
+        predicates = contract.get("predicates") or {}
+        conditions = []
+        for direction in ("upside", "downside"):
+            predicate = (predicates.get(direction) or {}).get("predicate") or {}
+            if predicate.get("operator") not in {"lt", "gte"}:
+                continue
+            matches = None
+            if (fact.get("data_status") or {}).get("state") == "available":
+                matches = evaluate_predicate(fact.get("accepted_values") or {}, predicate).get("result")
+            conditions.append({
+                "direction": _display(direction, language),
+                "comparison": _display(predicate["operator"], language),
+                "boundary": predicate.get("operand"),
+                "current_reading_matches": matches,
+            })
+        return conditions
+    return []
+
+
+def _counterfactual_status_projection(entry, language):
+    if entry is None:
+        return {"state": "未读取" if language == "zh" else "not read"}
+    payload = entry["object"]["payload"]
+    state = payload.get("state")
+    return {
+        "state": ("暂无适用情景" if language == "zh" else "no applicable scenarios")
+        if state == "not_applicable" else _display(state, language),
+        "reason": payload.get("reason"),
     }
 
 
@@ -513,11 +696,47 @@ def _relationship_projection(entry, language):
     payload = entry["object"]["payload"]
     decision_result = payload.get("decision_result") or {}
     relationship = decision_result.get("relationship")
+    status = (payload.get("data_status") or {}).get("state")
+    participation = payload.get("participation") or {}
+    explanation = payload.get("explanation") or {}
+    meaning = _display(relationship, language)
+    if (
+        relationship == "unavailable"
+        and status == "available"
+        and participation.get("reason_code") == "method_scope_excludes"
+    ):
+        meaning = (
+            "尚未建立与宏观方向的关系"
+            if language == "zh"
+            else "relationship to the macro direction has not been established"
+        )
     return {
         "fact_id": payload.get("fact_id"),
         "label": payload.get("label"),
-        "relationship": _display(relationship, language),
+        "relationship": meaning,
+        "data_status": _display(status, language),
+        "participation": _display(participation.get("state"), language),
+        "not_applied_reason": _display(participation.get("reason_code"), language),
+        "current_state": _display(explanation.get("state"), language) if status == "available" else None,
+        "reasons": (explanation.get("reasons") or ([explanation["reason"]] if explanation.get("reason") else [])) if status == "available" else [],
+        "details": _context_details(payload.get("fact_id"), explanation, language) if status == "available" else {},
     }
+
+
+def _context_details(fact_id, explanation, language):
+    source = explanation if fact_id == "consumer_demand_outlook" else explanation.get("details") or {}
+    details = {}
+    for key in _CONTEXT_DETAIL_FIELDS.get(fact_id, ()):
+        value = source.get(key)
+        if value is None:
+            continue
+        if key == "curve_status":
+            details[key] = _CURVE_LABELS[language].get(value, _display(value, language))
+        elif isinstance(value, (int, float, bool)) or key == "percentile_label":
+            details[key] = value
+        else:
+            details[key] = _display(value, language)
+    return details
 
 
 def _posture_action(item, action_labels, language):
@@ -571,7 +790,7 @@ def _build_indicator_view(
         payload = entry["object"]["payload"]
         if payload.get("indicator_id") not in family:
             continue
-        confirmation_tests.append(_confirmation_test_projection(entry, language))
+        confirmation_tests.append(_confirmation_test_projection(entry, language, object_map))
         audit_entries.append(entry)
     for (object_type, object_id), entry in sorted(object_map.items()):
         if object_type not in _KNOWLEDGE_TYPES:
@@ -670,6 +889,7 @@ def _build_react_anchor_view(
             continue
         results[layer] = (entry["object"]["payload"] or {}).get("label")
         audit_entries.append(entry)
+    setup_view = _build_setup_view(object_map, language, as_of, evidence_through)
     return {
         "view_version": "react_anchor_v1",
         "question_language": language,
@@ -677,8 +897,15 @@ def _build_react_anchor_view(
         "evidence_through": evidence_through,
         "context_id": _context_id(artifacts),
         "results": results,
+        "decision_evidence": {
+            key: setup_view[key]
+            for key in (
+                "results", "macro_selector", "confirmation_tests", "relevant_relationships",
+                "counterfactuals", "counterfactual_status", "next_triggers",
+            )
+        },
         "budget": route.get("budget") or {},
-        "audit_objects": _audit_refs(audit_entries),
+        "audit_objects": setup_view["audit_objects"],
     }
 
 

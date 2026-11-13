@@ -29,7 +29,7 @@ from app.tools.market_assistant_research import RESEARCH_SCHEMA_VERSION
 from app.tools.market_assistant_routes import route_question
 from app.tools.market_setup_explanation_snapshot import canonical_json
 
-PROMPT_VERSION = "market_assistant_prompt_v2"
+PROMPT_VERSION = "market_assistant_prompt_v6"
 ASSISTANT_POLICY_VERSION = "market_assistant_policy_v1"
 ARTIFACT_SCHEMA_VERSION = "market_assistant_artifact_v1"
 LLM_ATTEMPT_TIMEOUT_SECONDS = 900.0

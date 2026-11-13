@@ -478,6 +478,8 @@ def _is_valid_iso_date(value):
 
 
 def _value_field_valid(fact_id, fact):
+    if fact_id == "survey_growth_direction" and fact.get("direction") == "mixed":
+        return fact.get("status") == "available"
     if fact_id in _VALUE_FIELDS:
         return _is_valid_value(fact_id, fact.get(_VALUE_FIELDS[fact_id]))
     return any(

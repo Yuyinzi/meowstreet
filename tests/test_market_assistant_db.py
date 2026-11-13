@@ -1,9 +1,14 @@
 import json
 import threading
+from copy import deepcopy
+from hashlib import sha256
 
 import pytest
 
 from app.db import market_assistant
+from app.services.market_assistant_tool_runtime import _approved_counterfactuals_artifact
+from app.services.market_assistant_tool_runtime import _confirmation_tests_artifact
+from app.services.market_assistant_tool_runtime import _setup_overview_artifact
 from app.tools import market_setup_evidence_facts
 from app.tools import market_setup_explanation_snapshot
 from app.tools import market_setup_v2
@@ -799,6 +804,55 @@ class TestConcurrentGetOrCreate:
 
 
 class TestAnswerBundle:
+    @pytest.mark.parametrize(
+        ("suffix", "build_artifact"),
+        [
+            ("overview", _setup_overview_artifact),
+            ("confirmation_tests", lambda snapshot: _confirmation_tests_artifact({"test_ids": ["vix"]}, snapshot)),
+            ("approved_counterfactuals", _approved_counterfactuals_artifact),
+        ],
+    )
+    def test_upgraded_tool_projection_coexists_with_legacy_artifacts(
+        self, tmp_path, suffix, build_artifact
+    ):
+        snapshot = market_setup_explanation_snapshot.finalize_snapshot(
+            snapshot_state(), context_id="ctx_upgrade", created_at="2026-11-09T00:00:00Z"
+        )
+        current = build_artifact(snapshot)
+        legacy = deepcopy(current)
+        legacy["artifact_id"] = f"ctx_upgrade_{suffix}"
+        legacy["object_index"] = [
+            obj for obj in legacy["object_index"]
+            if obj["object_type"] not in {"next_trigger", "method_contract", "counterfactual_status"}
+        ]
+        legacy["integrity_hash"] = sha256(market_setup_explanation_snapshot.canonical_json({
+            key: value for key, value in legacy.items() if key != "integrity_hash"
+        })).hexdigest()
+        con = market_assistant.connect(tmp_path / "upgrade.sqlite")
+        try:
+            first_trace = answer_trace()
+            market_assistant.save_answer_bundle(con, artifacts=[legacy], answer_trace=first_trace)
+            legacy_before = con.execute(
+                "select artifact_json from snapshot_artifacts where artifact_id = ?", (legacy["artifact_id"],)
+            ).fetchone()[0]
+            for sequence in (2, 3):
+                trace = answer_trace()
+                trace["answer_trace_id"] = f"trace_upgrade_{sequence}"
+                trace["message_id"] = f"message_upgrade_{sequence}"
+                trace["snapshot_artifact_ids"] = [current["artifact_id"]]
+                market_assistant.save_answer_bundle(con, artifacts=[current], answer_trace=trace)
+                assert market_assistant.load_answer_trace(con, trace["answer_trace_id"]) == trace
+
+            assert current["artifact_id"] != legacy["artifact_id"]
+            assert build_artifact(snapshot) == current
+            assert con.execute("select count(*) from snapshot_artifacts").fetchone()[0] == 2
+            stored = con.execute(
+                "select artifact_json from snapshot_artifacts where artifact_id = ?", (legacy["artifact_id"],)
+            ).fetchone()
+            assert stored[0] == legacy_before
+        finally:
+            con.close()
+
     def test_save_answer_bundle_round_trip(self, tmp_path):
         con = market_assistant.connect(tmp_path / "assistant.sqlite")
         artifacts = [

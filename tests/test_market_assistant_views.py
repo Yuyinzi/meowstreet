@@ -166,6 +166,65 @@ def _representative_snapshot():
     )
 
 
+@pytest.mark.parametrize("view_type", ["setup_explanation", "react_anchor"])
+def test_mixed_macro_preserves_available_surveys_and_unevaluated_equity_trend(view_type):
+    inputs = {
+        "expected_growth": _expected_growth("mixed"),
+        "market_environment": _market_environment("bull_market"),
+        "financial_conditions": _financial_conditions(),
+        "policy_response": _policy_response(),
+    }
+    survey = inputs["expected_growth"]["facts"]["survey_growth_direction"]
+    survey["status"] = "available"
+    survey["explanation"] = {
+        "economic_direction": "aligned_expansion",
+        "growth_momentum": "mixed",
+        "reasons": ["Demand momentum differs between surveys"],
+    }
+    inputs["market_environment"]["facts"]["sp500_market_phase"]["explanation"] = {
+        "state": "bull_market"
+    }
+    inputs["financial_conditions"]["facts"]["vix_level"]["explanation"] = {
+        "state": "normal"
+    }
+    setup = market_setup_v2.build_market_setup_v2(**inputs)
+    evidence = market_setup_evidence_facts.build_evidence_facts(
+        setup_result=setup, inputs=inputs, evidence_layers=None,
+        surface=market_setup_evidence_facts.load_explanation_surface(),
+    )
+    snapshot = _representative_snapshot()
+    snapshot["results"] = {key: setup[key] for key in snapshot["results"]}
+    snapshot["evidence"] = evidence
+    artifacts = {
+        item["artifact_id"]: item
+        for item in [snapshot_artifact(snapshot)]
+    }
+    route = {**current_setup_route(), "view_type": view_type}
+    view = build_explanation_view(route, artifacts, question="当前市场如何？")
+    if view_type == "react_anchor":
+        view = view["decision_evidence"]
+
+    assert view["macro_selector"]["data_status"] == "可用"
+    assert view["macro_selector"]["survey_evidence"]["economic_direction"] == "制造业与服务业均扩张"
+    assert view["macro_selector"]["survey_evidence"]["reasons"] == ["Demand momentum differs between surveys"]
+    assert view["results"]["market_confirmation"]["meaning"] == "未选定上行或下行宏观方向，方向性市场确认尚未执行"
+    tests = {item["test_id"]: item for item in view["confirmation_tests"]}
+    assert tests["equity"]["value"] == "未达到熊市回撤阈值"
+    assert tests["equity"]["data_status"] == "可用"
+    assert tests["equity"]["evaluation_state"] == "尚未执行"
+    assert tests["equity"]["confirms"] is None
+    assert tests["vix"]["value"] == 15.0
+    assert tests["vix"]["current_state"] == "正常"
+    for relationship in view["relevant_relationships"]:
+        if relationship["fact_id"] == "consumer_demand_outlook":
+            assert relationship["data_status"] == "数据缺失"
+            continue
+        assert relationship["data_status"] == "可用"
+        assert relationship["participation"] == "未参与"
+        assert relationship["relationship"] == "尚未建立与宏观方向的关系"
+    assert setup["market_setup"]["code"] == "insufficient_data"
+
+
 def full_setup_artifacts():
     snapshot = _representative_snapshot()
     envelopes = [
@@ -179,6 +238,162 @@ def full_setup_artifacts():
         _approved_counterfactuals_artifact(snapshot),
     ]
     return {envelope["artifact_id"]: envelope for envelope in envelopes}
+
+
+@pytest.mark.parametrize(
+    ("phase", "label", "drawdown"),
+    [("bull_market", "未达到熊市回撤阈值", -4.91), ("bear_market", "已达到熊市回撤阈值", -20.0)],
+)
+def test_equity_phase_is_presented_as_drawdown_classification(phase, label, drawdown):
+    snapshot = _representative_snapshot()
+    equity = next(fact for fact in snapshot["evidence"] if fact["fact_id"] == "sp500_market_phase")
+    equity["accepted_values"]["phase"] = phase
+    equity["explanation"] = {"state": phase, "price_observation": {"drawdown_pct": drawdown}}
+    artifact = _confirmation_tests_artifact({"test_ids": ["equity"]}, snapshot)
+    view = build_explanation_view(
+        current_setup_route(), {artifact["artifact_id"]: artifact}, question="当前市场如何？"
+    )
+    observation = view["confirmation_tests"][0]
+
+    assert observation["value"] == label
+    assert observation["current_state"] == label
+    assert observation["price_observation"] == {"drawdown_pct": drawdown}
+
+
+def mixed_overview_snapshot(vix=19.42):
+    inputs = {
+        "expected_growth": _expected_growth("mixed"),
+        "market_environment": _market_environment(),
+        "financial_conditions": _financial_conditions(),
+        "policy_response": _policy_response(),
+        "consumer_demand": {
+            "facts": {"consumer_demand_outlook": {
+                "relationship_to_growth_direction": "neutral",
+                "source_period": _monthly_period(),
+                "explanation": {
+                    "state": "transition", "momentum": "improving",
+                    "percentile_label": "6th percentile",
+                    "reason": "Consumer expectations do not show a clear directional signal",
+                },
+            }},
+        },
+    }
+    inputs["expected_growth"]["facts"]["survey_growth_direction"]["status"] = "available"
+    financial = inputs["financial_conditions"]["facts"]
+    financial["vix_level"]["level"] = vix
+    financial["macro_financial_conditions"]["explanation"] = {
+        "state": "confirms_contraction_risk",
+        "reasons": ["Flat curve and widening credit signal contraction risk"],
+        "details": {"curve_status": "flat", "ten_year_real_rate": 2.6},
+    }
+    inputs["policy_response"]["facts"]["macro_policy_response"]["explanation"] = {
+        "state": "restrictive_confirmed", "reasons": ["Inflation constrains policy flexibility"],
+    }
+    setup = market_setup_v2.build_market_setup_v2(**inputs)
+    evidence = market_setup_evidence_facts.build_evidence_facts(
+        setup_result=setup, inputs=inputs, evidence_layers=None,
+        surface=market_setup_evidence_facts.load_explanation_surface(),
+    )
+    state = market_setup_explanation_snapshot.build_snapshot_state(
+        setup_result=setup, evidence=evidence,
+        method_contracts=market_setup_v2.build_explanation_method_contracts(),
+        as_of="2026-11-09", evidence_through=setup.get("evidence_through"),
+        input_registry_version="market_setup_input_registry_v1",
+        explanation_surface_version="market_assistant_surface_v1",
+    )
+    return market_setup_explanation_snapshot.finalize_snapshot(
+        state, context_id="ctx_mixed_overview", created_at="2026-11-09T00:00:00Z"
+    )
+
+
+@pytest.mark.parametrize("view_type", ["setup_explanation", "react_anchor"])
+@pytest.mark.parametrize("focused", [False, True])
+def test_mixed_overview_carries_methods_context_and_triggers(view_type, focused):
+    snapshot = mixed_overview_snapshot()
+    if focused:
+        envelopes = [
+            _setup_overview_artifact(snapshot), _macro_regime_artifact(snapshot),
+            _confirmation_tests_artifact({"test_ids": ["equity", "credit", "vix"]}, snapshot),
+            _approved_counterfactuals_artifact(snapshot),
+        ]
+    else:
+        envelopes = [snapshot_artifact(snapshot)]
+    artifacts = {item["artifact_id"]: item for item in envelopes}
+    original = deepcopy(snapshot)
+    view = build_explanation_view(
+        {**current_setup_route(), "view_type": view_type}, artifacts, question="当前市场如何？"
+    )
+    if view_type == "react_anchor":
+        view = view["decision_evidence"]
+    vix = next(item for item in view["confirmation_tests"] if item["test_id"] == "vix")
+
+    assert vix["method_conditions"] == [
+        {"direction": "上行", "comparison": "低于", "boundary": 20.0, "current_reading_matches": True},
+        {"direction": "下行", "comparison": "大于或等于", "boundary": 20.0, "current_reading_matches": False},
+    ]
+    assert vix["confirms"] is None
+    assert vix["evaluation_state"] == "尚未执行"
+    contexts = {item["fact_id"]: item for item in view["relevant_relationships"]}
+    assert contexts["macro_financial_conditions"]["current_state"] == "金融条件指向收缩风险"
+    assert contexts["macro_financial_conditions"]["details"]["curve_status"] == "平坦"
+    assert contexts["macro_financial_conditions"]["details"]["ten_year_real_rate"] == 2.6
+    assert contexts["macro_policy_response"]["current_state"] == "限制性政策立场"
+    assert contexts["consumer_demand_outlook"]["current_state"] == "需求方向尚不明确"
+    assert contexts["consumer_demand_outlook"]["details"]["momentum"] == "改善"
+    assert contexts["consumer_demand_outlook"]["details"]["percentile_label"] == "6th percentile"
+    assert view["counterfactual_status"]["state"] == "暂无适用情景"
+    assert view["counterfactuals"] == []
+    assert view["next_triggers"] == [{
+        "label": "ISM survey direction resolves from mixed", "effect": "recompute Macro Regime"
+    }]
+    assert snapshot == original
+
+
+@pytest.mark.parametrize("level", [19.42, 20.0, 20.01, None])
+def test_vix_method_is_visible_without_executing_a_directional_confirmation(level):
+    snapshot = mixed_overview_snapshot(level)
+    artifact = _confirmation_tests_artifact({"test_ids": ["vix"]}, snapshot)
+    view = build_explanation_view(current_setup_route(), {artifact["artifact_id"]: artifact}, question="当前市场如何？")
+    vix = view["confirmation_tests"][0]
+
+    assert vix["value"] == level
+    assert vix["method_conditions"][0]["boundary"] == 20.0
+    assert vix["confirms"] is None
+    expected_state = "数据无效" if level is None else "可用"
+    assert vix["data_status"] == expected_state
+    expected_matches = {
+        19.42: [True, False], 20.0: [False, True],
+        20.01: [False, True], None: [None, None],
+    }
+    assert [item["current_reading_matches"] for item in vix["method_conditions"]] == expected_matches[level]
+
+
+def test_vix_method_uses_the_snapshot_boundary_without_a_default_threshold():
+    snapshot = mixed_overview_snapshot()
+    predicates = snapshot["method_contracts"]["methods"]["vix_confirmation_v2"]["decision_contract"]["predicates"]
+    for predicate in predicates.values():
+        predicate["predicate"]["operand"] = 27.0
+    artifact = _confirmation_tests_artifact({"test_ids": ["vix"]}, snapshot)
+    view = build_explanation_view(current_setup_route(), {artifact["artifact_id"]: artifact}, question="当前市场如何？")
+
+    assert [item["boundary"] for item in view["confirmation_tests"][0]["method_conditions"]] == [27.0, 27.0]
+    snapshot["method_contracts"]["methods"].pop("vix_confirmation_v2")
+    artifact = _confirmation_tests_artifact({"test_ids": ["vix"]}, snapshot)
+    view = build_explanation_view(current_setup_route(), {artifact["artifact_id"]: artifact}, question="当前市场如何？")
+    assert view["confirmation_tests"][0]["method_conditions"] == []
+
+
+def test_evaluated_nonconfirming_credit_remains_available_evidence():
+    view = build_explanation_view(
+        current_setup_route(), full_setup_artifacts(), question="现在市场怎么样？"
+    )
+    credit = next(item for item in view["confirmation_tests"] if item["test_id"] == "credit")
+
+    assert credit["value"] == "信贷风险正在上升"
+    assert credit["data_status"] == "可用"
+    assert credit["evaluation_state"] == "已执行"
+    assert credit["confirms"] is False
+    assert credit["participation"] == "已参与"
 
 
 def setup_artifacts():
@@ -568,7 +783,6 @@ def test_default_setup_view_isolates_detail_only_explanation_values():
         b"detail_only_policy_reason_7f21",
         b"policy_action",
         b"overall_bias",
-        b"curve_status",
         b"percentile_zone",
     ):
         assert forbidden not in serialized

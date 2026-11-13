@@ -54,6 +54,20 @@ def test_chinese_setup_question_uses_deterministic_fast_path():
     ]
 
 
+@pytest.mark.parametrize("question", ["当前市场如何？", "目前市场如何？", "现在市场如何？"])
+def test_current_market_question_prefetches_the_complete_decision_chain(question):
+    route = route_question(question, deep_analysis=False)
+
+    assert route["route_id"] == "current_setup_overview"
+    assert [item["operation_id"] for item in route["initial_operations"]] == [
+        "get_setup_overview",
+        "get_macro_regime_explanation",
+        "get_confirmation_tests",
+        "get_posture_explanation",
+        "get_approved_counterfactuals",
+    ]
+
+
 def test_ambiguous_composite_question_falls_through_to_react():
     route = route_question(
         "VIX、信贷和ISM最近的变化彼此有什么关系？",

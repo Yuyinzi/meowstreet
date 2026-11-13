@@ -1514,10 +1514,15 @@ async def test_overview_initial_prompt_omits_detail_only_explanation_values(reso
         "detail_only_policy_reason_7f21",
         "policy_action",
         "overall_bias",
-        "curve_status",
         "percentile_zone",
     ):
         assert forbidden not in serialized
+    view = _first_turn_explanation_view(stream)
+    financial = next(
+        item for item in view["relevant_relationships"]
+        if item["fact_id"] == "macro_financial_conditions"
+    )
+    assert financial["details"]["curve_status"] == "倒挂"
 
 
 @pytest.mark.asyncio
