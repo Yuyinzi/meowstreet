@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app import llm
 from app.db import us_rates_liquidity
 from app.tools import fomc_policy_tone
@@ -427,6 +428,7 @@ async def async_main(argv=None):
     return 1 if failed else 0
 
 
+@record_cli_task("cli_generate_fomc_policy_tone")
 def main(argv=None):
     return asyncio.run(async_main(argv))
 

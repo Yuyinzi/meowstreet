@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.data_sources.fred import FredClient
 from app.data_sources.fred import parse_fred_csv
 from app.data_sources.fred import quarter_end_for_date
@@ -212,6 +213,7 @@ def import_us_csv_merge(
     )
 
 
+@record_cli_task("cli_import_gdp_market_relationships")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Refresh the US S&P 500 vs GDP relationship from FRED CSVs"

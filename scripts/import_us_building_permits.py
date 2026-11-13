@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import macro_indicators
 from app.services import housing_permits_import
 
@@ -35,6 +36,7 @@ fetch_us_building_permits = fetch_building_permits
 persist_us_building_permits = persist_building_permits
 
 
+@record_cli_task("cli_import_us_building_permits")
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--db-path", type=Path, default=DEFAULT_DB_PATH)

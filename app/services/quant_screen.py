@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.services.task_notifications import task
+from app.services.task_notifications import track_task
 from app.data_sources import stockanalysis_screener
 from app.db import macro_indicators as macro_indicators_db
 from app.db import quant_screen as quant_screen_db
@@ -11,6 +13,7 @@ from app.tools import quant_screen as quant_screen_tool
 _MAX_INDUSTRY_STOCKS = 250
 
 
+@track_task("quant_screen")
 def run_quant_screen(table_text, db_path=None, http_client=None):
     if not isinstance(table_text, str):
         raise ValueError("table_text must be a string")
@@ -64,8 +67,9 @@ def _ensure_universe(con, http_client=None):
     ).fetchone()
     if rows and quant_screen_db.universe_fresh(dict(max_fetched)):
         return rows
-    rows = stockanalysis_screener.fetch_universe(http_client=http_client)
-    quant_screen_db.save_universe(con, rows)
+    with task("stock_universe"):
+        rows = stockanalysis_screener.fetch_universe(http_client=http_client)
+        quant_screen_db.save_universe(con, rows)
     return rows
 
 
@@ -78,6 +82,7 @@ def list_industries(db_path=None, http_client=None):
         con.close()
 
 
+@track_task("industry_screen")
 def run_industry_screen(industry, db_path=None, http_client=None):
     industry_input = str(industry or "").strip()
     if not industry_input:
@@ -121,10 +126,11 @@ def _run_industry_screen(con, industry_input, db_path, http_client):
             }
         else:
             try:
-                estimate = stockanalysis_screener.fetch_forecast_eps(
-                    symbol, http_client=http_client
-                )
-                quant_screen_db.save_estimate(con, estimate)
+                with task("stock_estimate", target=symbol):
+                    estimate = stockanalysis_screener.fetch_forecast_eps(
+                        symbol, http_client=http_client
+                    )
+                    quant_screen_db.save_estimate(con, estimate)
             except ValueError as exc:
                 quant_screen_db.save_estimate_error(con, symbol, str(exc))
                 row_errors.append({"symbol": symbol, "reason": str(exc)})

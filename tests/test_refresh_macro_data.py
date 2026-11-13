@@ -6,6 +6,24 @@ from io import StringIO
 from jobs import refresh_macro_data
 
 
+def test_main_persists_partial_child_outcome(monkeypatch):
+    from app.db import job_notifications
+    from app.services.job_notifications import record_event
+
+    def execute(*args, **kwargs):
+        for name, status in [("prices", "ok"), ("credit", "failed")]:
+            record_event({"type": "task_finished", "task": {"name": name}, "result": {"name": name, "status": status}})
+        return 1
+
+    monkeypatch.setattr(refresh_macro_data, "run", execute)
+    assert refresh_macro_data.main([]) == 1
+    con = job_notifications.connect()
+    run = job_notifications.list_runs(con)["runs"][0]
+    assert run["status"] == "partially_failed"
+    assert len(job_notifications.load_run(con, run["run_id"])["children"]) == 2
+    con.close()
+
+
 class FakeProgress:
     def __init__(self, *, total, disable, file):
         self.total = total

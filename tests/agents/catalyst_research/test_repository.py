@@ -1016,6 +1016,20 @@ def test_event_provenance_columns_round_trip(tmp_path):
     assert result["sources"][0]["endpoint_id"] == endpoint["endpoint_id"]
 
 
+def test_load_event_titles_by_source_groups_titles_per_source(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = _job(con, status="running")
+    first_source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/one"})
+    second_source = repository.save_source(con, {"job_id": job["job_id"], "ticker": "NVDA", "source_type": "press_releases", "url": "https://ir.example.test/two"})
+    repository.save_finalized_observations(con, job["job_id"], [
+        {"source_id": first_source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-01", "title": "First", "url": "https://ir.example.test/one-item"},
+        {"source_id": second_source["source_id"], "ticker": "NVDA", "source_type": "press_releases", "count_date": "2026-01-02", "title": "Second", "url": "https://ir.example.test/two-item"},
+    ], [])
+    titles = repository.load_event_titles_by_source(con, job["job_id"])
+    assert titles[first_source["source_id"]] == ["First"]
+    assert titles[second_source["source_id"]] == ["Second"]
+
+
 def test_event_url_seen_only_counts_successful_persisted_events(tmp_path):
     con = repository.connect(tmp_path / "db.sqlite")
     good = _job(con, status="running")

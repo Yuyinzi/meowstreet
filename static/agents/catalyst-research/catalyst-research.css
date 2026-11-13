@@ -164,6 +164,18 @@
   color: #5C534A;
 }
 
+.catalyst-research-source-channel {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #E9EEF5;
+  color: #33506E;
+}
+
 .catalyst-research-source-url {
   display: block;
   font-size: 12px;

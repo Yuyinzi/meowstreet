@@ -1,3 +1,4 @@
+from app.services.task_notifications import track_task
 from app.services import ticker_industry_context as ticker_context_service
 from app.tools import market_data, pair_analysis
 
@@ -24,6 +25,7 @@ def _price_rows(payload):
     ]
 
 
+@track_task("pair_analysis")
 def get_pair_analysis(
     long_symbol, short_symbol, sessions=DEFAULT_SESSIONS, db_path=None, http_client=None
 ):

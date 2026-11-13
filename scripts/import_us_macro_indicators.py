@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.data_sources.fred import FredClient
 from app.data_sources.fred import compute_yoy
 from app.data_sources.fred import date_iso
@@ -143,6 +144,7 @@ def import_fred_macro_csvs(
     return inserted
 
 
+@record_cli_task("cli_import_us_macro_indicators")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Import US macro indicators from FRED"

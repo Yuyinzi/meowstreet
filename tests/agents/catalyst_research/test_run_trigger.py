@@ -132,6 +132,30 @@ def test_launch_research_starts_background_run(tmp_path, monkeypatch):
         con.close()
 
 
+def test_launch_research_default_runner_receives_progress_callback(tmp_path, monkeypatch):
+    con = _patched_connect(tmp_path, monkeypatch)
+    captured = []
+
+    async def fake_default(request, *, dependencies=None):
+        captured.append((request, dependencies))
+
+    monkeypatch.setattr(run_trigger, "run_research", fake_default)
+
+    async def scenario():
+        result = await run_trigger.launch_research("intc")
+        assert result == {"ticker": "INTC", "run_status": "started"}
+        await asyncio.sleep(0.05)
+        assert captured[0][0] == {"ticker": "INTC", "years": 4, "mode": "research"}
+        progress = captured[0][1]["progress"]
+        assert callable(progress)
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        con.close()
+
+
+
 def test_launch_research_dedupes_in_flight_ticker(tmp_path, monkeypatch):
     con = _patched_connect(tmp_path, monkeypatch)
     calls = []

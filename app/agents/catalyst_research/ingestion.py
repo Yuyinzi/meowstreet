@@ -24,6 +24,15 @@ def _normalized_title(title):
     return _fold(title).casefold()
 
 
+def _emit_progress(progress, stage, **details):
+    if not callable(progress):
+        return
+    try:
+        progress(stage, **details)
+    except Exception:
+        pass
+
+
 def _seen_event_titles(repository, connection, ticker, company):
     if not callable(getattr(repository, "list_event_normalized_titles", None)):
         return None
@@ -332,7 +341,7 @@ def _advance_feed_watermark(rows, *, endpoint, repository, connection):
     _repository_call(repository, connection, "update_endpoint_health", endpoint_id, state)
 
 
-async def ingest_candidates(candidates, *, company, channel, endpoint, job, extraction_router, repository, connection, max_urls=_DEFAULT_MAX_URLS):
+async def ingest_candidates(candidates, *, company, channel, endpoint, job, extraction_router, repository, connection, max_urls=_DEFAULT_MAX_URLS, progress=None):
     if not isinstance(candidates, list):
         raise ValueError("candidates are required")
     if not isinstance(company, Mapping) or not _fold(company.get("ticker")):
@@ -373,12 +382,13 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
     processed = []
     seen_titles = _seen_event_titles(repository, connection, ticker, company)
     endpoint_keys = _endpoint_url_keys(repository, connection, ticker)
-    for row in rows:
+    for index, row in enumerate(rows):
         if attempted >= max_urls:
             truncated = True
             warnings.append("unseen_url_limit")
             break
         canonical_url = row.get("canonical_url")
+        _emit_progress(progress, "ingest_candidate", channel=channel, index=index + 1, total=len(rows), url=canonical_url)
         if canonical_url is not None and (
             _repository_call(repository, connection, "event_url_seen", ticker, canonical_url)
             or _repository_call(repository, connection, "source_url_seen", ticker, canonical_url)
@@ -516,6 +526,18 @@ async def ingest_candidates(candidates, *, company, channel, endpoint, job, extr
         attempted += 1
     if not truncated:
         _advance_feed_watermark(processed, endpoint=endpoint, repository=repository, connection=connection)
+    _emit_progress(
+        progress,
+        "ingest_complete",
+        channel=channel,
+        attempted=attempted,
+        events=len(events),
+        sources=len(sources),
+        skipped_seen=skipped_seen,
+        skipped_duplicates=skipped_duplicates,
+        skipped_archive=skipped_archive,
+        manual_review=manual_review,
+    )
     return {
         "events": events,
         "sources": sources,

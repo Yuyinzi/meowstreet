@@ -11,6 +11,7 @@ from sqlite3 import IntegrityError
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.http_client import HttpClient
 
 from app.db import growth_cycle
@@ -511,6 +512,7 @@ def requested_urls(args, fetch=None):
     return result
 
 
+@record_cli_task("cli_fetch_ism_official_reports")
 def main(argv=None, fetch=None, ai_client_factory=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(

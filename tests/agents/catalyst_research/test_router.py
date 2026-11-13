@@ -123,12 +123,13 @@ def _v1_1_result(**overrides):
     return result
 
 
-def _client(monkeypatch, *, latest=None, events_page=None, activity_page=None, adapter_brief=None, registry=None, endpoints=None, job_schema_version="catalyst_research_result_v1", recorded=None, activity_recorded=None, accumulated=None, active=None):
+def _client(monkeypatch, *, latest=None, events_page=None, activity_page=None, adapter_brief=None, registry=None, endpoints=None, job_schema_version="catalyst_research_result_v1", recorded=None, activity_recorded=None, accumulated=None, active=None, titles=None):
     monkeypatch.setattr(catalyst_router.repository, "connect", lambda *args, **kwargs: FakeConnection())
     monkeypatch.setattr(catalyst_router.repository, "load_latest_result", lambda con, ticker: latest)
     monkeypatch.setattr(catalyst_router.repository, "load_active_job", lambda con, ticker: active)
     monkeypatch.setattr(catalyst_router.repository, "load_company_registry", lambda con, ticker: registry)
     monkeypatch.setattr(catalyst_router.repository, "load_source_endpoints", lambda con, ticker: endpoints or [])
+    monkeypatch.setattr(catalyst_router.repository, "load_event_titles_by_source", lambda con, job_id: titles or {})
     monkeypatch.setattr(catalyst_router.repository, "load_accumulated_channel_events", lambda con, ticker, start, end: accumulated or [])
     monkeypatch.setattr(catalyst_router.repository, "load_job_result_schema_version", lambda con, job_id: job_schema_version)
 
@@ -641,6 +642,61 @@ def test_summary_v1_1_without_registry_row_exposes_null_registry(monkeypatch):
     assert payload["schema_version"] == "catalyst_research_result_v1_1"
     assert payload["registry"] is None
     assert payload["endpoints"] == []
+
+
+def test_summary_v1_1_source_provenance_exposes_title_and_result_reason(monkeypatch):
+    latest = _v1_1_result()
+    latest["sources"] = [
+        {
+            "source_id": "irs_9",
+            "source_type": "press_releases",
+            "url": "https://nvidianews.example.test/news/9",
+            "final_url": "https://nvidianews.example.test/news/9",
+            "acceptance_status": "accepted",
+            "extraction_status": "complete",
+            "endpoint_id": "cse_1",
+            "item_count": 1,
+            "execution_path": "v1_1",
+            "coverage_start": None,
+            "coverage_end": None,
+            "truncation_reason": None,
+            "discovery_provider": None,
+            "verification_reason": None,
+            "active_adapter_id": None,
+        },
+        {
+            "source_id": "irs_10",
+            "source_type": "press_releases",
+            "url": "https://nvidianews.example.test/news/10",
+            "final_url": "https://nvidianews.example.test/news/10",
+            "acceptance_status": "ambiguous",
+            "extraction_status": "failed",
+            "endpoint_id": None,
+            "item_count": 0,
+            "execution_path": "v1_1",
+            "coverage_start": None,
+            "coverage_end": None,
+            "truncation_reason": None,
+            "discovery_provider": None,
+            "verification_reason": "manual_review_required",
+            "active_adapter_id": None,
+        },
+    ]
+    client = _client(
+        monkeypatch,
+        latest=latest,
+        registry=dict(_REGISTRY_ROW),
+        endpoints=[],
+        titles={"irs_9": ["NVIDIA Announces New Platform"]},
+    )
+
+    payload = client.get("/api/ticker-quant/NVDA/catalyst-research").json()
+
+    extracted, failed = payload["sources"]
+    assert extracted["title"] == "NVIDIA Announces New Platform"
+    assert "verification_reason" not in extracted
+    assert "title" not in failed
+    assert failed["verification_reason"] == "manual_review_required"
 
 
 def test_summary_v1_keeps_legacy_fields_without_v1_1_projection(monkeypatch):

@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import growth_cycle
 from app.tools.ism_ai_extraction import declared_industry_count
 
@@ -93,6 +94,7 @@ def backfill_single_report(con, report_id, verbose=False):
     }
 
 
+@record_cli_task("cli_backfill_ism_industry_signal_coverage")
 def main():
     parser = argparse.ArgumentParser(
         description="Backfill ISM industry signal coverage from stored signal rows"

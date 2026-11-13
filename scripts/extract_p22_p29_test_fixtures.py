@@ -8,6 +8,8 @@ import openpyxl
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
+
 SECTOR_WORKBOOK = ROOT / "data" / "source_material" / "Video 23" / "US_Sector_Data.xlsm"
 LONGS_WORKBOOK = ROOT / "data" / "source_material" / "Video 25" / "EG_Profiles_Longs.xlsx"
 SHORTS_WORKBOOK = ROOT / "data" / "source_material" / "Video 26" / "EG_Profiles_Shorts.xlsx"
@@ -98,6 +100,7 @@ def _extract_eg_profiles(path):
     return profiles
 
 
+@record_cli_task("cli_extract_p22_p29_test_fixtures")
 def main():
     sector_rows = _extract_sector_rows()
     longs = _extract_eg_profiles(LONGS_WORKBOOK)

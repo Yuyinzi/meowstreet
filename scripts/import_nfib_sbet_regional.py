@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import macro_indicators
 from app.services import nfib_sbet_regional_import
 
@@ -28,6 +29,7 @@ fetch_nfib_sbet_regional = fetch_nfib_regional
 persist_nfib_sbet_regional = persist_nfib_regional
 
 
+@record_cli_task("cli_import_nfib_sbet_regional")
 def main(argv=None):
     current_year = date.today().year
     parser = argparse.ArgumentParser(

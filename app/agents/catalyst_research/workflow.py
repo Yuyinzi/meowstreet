@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 
 from app.agents.catalyst_research import backfill as historical_backfill
 from app.agents.catalyst_research import domain, statistics
+from app.agents.catalyst_research import notifications
 from app.agents.catalyst_research import ingestion as candidate_ingestion
 from app.agents.catalyst_research import registry as registry_state
 from app.agents.catalyst_research import registry_discovery
@@ -894,6 +895,7 @@ def _backfill_dependencies(context, company):
         "connection": context["connection"],
         "job": context["job"],
         "run_adapter": _archive_enrichment_runner(context, company),
+        "progress": context.get("progress"),
     }
     for key in ("fetch_feed", "adapter", "execute_query"):
         if context.get(key) is not None:
@@ -1048,6 +1050,7 @@ async def _run_update_mode(context, company, registry, endpoints):
         "repository": context["repository"],
         "connection": context["connection"],
         "job": context["job"],
+        "progress": context.get("progress"),
     }
     for key in ("fetch_feed", "execute_query", "record_endpoint_check", "update_endpoint_health"):
         if context.get(key) is not None:
@@ -1335,6 +1338,10 @@ async def _run_legacy_workflow(context, company, normalized, repository, job):
 
 
 async def run_research(request, *, db_path=None, http_client=None, dependencies=None):
+    return await notifications.run_with_notifications(_run_research, request, db_path=db_path, http_client=http_client, dependencies=dependencies)
+
+
+async def _run_research(request, *, db_path=None, http_client=None, dependencies=None):
     if not isinstance(request, Mapping):
         raise ValueError("research request is required")
     v1_1_requested = "mode" in request

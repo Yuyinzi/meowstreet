@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.services import cot_historical_extremes_catalog as allowlist_service
 from app.resources import resource_path
 
@@ -88,6 +89,7 @@ def build_arg_parser():
     return parser
 
 
+@record_cli_task("cli_build_cot_historical_extreme_allowlist")
 def main(argv=None):
     args = build_arg_parser().parse_args(argv)
     years = [int(year.strip()) for year in args.years.split(",")]

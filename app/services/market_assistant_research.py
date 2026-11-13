@@ -3,6 +3,7 @@ from typing import Protocol
 from app.data_sources.openai_web_search import OpenAIWebSearchError
 from app.data_sources.openai_web_search import OpenAIWebSearchProvider
 from app.llm import build_async_client
+from app.services.task_notifications import task as notification_task
 from app.tools.market_assistant_research import build_research_result
 from app.tools.market_assistant_research import validate_research_task
 
@@ -18,21 +19,25 @@ async def acquire_research(
         validated_task = validate_research_task(task, explicit_deep=explicit_deep)
     except ValueError:
         return _research_unavailable(result_id, searched_at, "invalid_task")
-    try:
-        provider_payload = await provider.search(validated_task)
-    except OpenAIWebSearchError as exc:
-        return _research_unavailable(result_id, searched_at, exc.reason_code)
-    except Exception:
-        return _research_unavailable(result_id, searched_at, "provider_error")
-    try:
-        return build_research_result(
-            task=validated_task,
-            provider_payload=provider_payload,
-            result_id=result_id,
-            searched_at=searched_at,
-        )
-    except ValueError:
-        return _research_unavailable(result_id, searched_at, "provider_error")
+    with notification_task("market_research") as scope:
+        try:
+            provider_payload = await provider.search(validated_task)
+        except OpenAIWebSearchError as exc:
+            scope.finish("failed")
+            return _research_unavailable(result_id, searched_at, exc.reason_code)
+        except Exception:
+            scope.finish("failed")
+            return _research_unavailable(result_id, searched_at, "provider_error")
+        try:
+            return build_research_result(
+                task=validated_task,
+                provider_payload=provider_payload,
+                result_id=result_id,
+                searched_at=searched_at,
+            )
+        except ValueError:
+            scope.finish("failed")
+            return _research_unavailable(result_id, searched_at, "provider_error")
 
 
 async def acquire_research_from_config(

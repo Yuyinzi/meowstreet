@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.data_sources.fred import FredClient
 from app.data_sources.fred import parse_fred_csv
 from app.data_sources.fred import resample_to_weekly_sundays
@@ -200,6 +201,7 @@ def import_fred_csvs(con, fred_dir=DEFAULT_FRED_DIR, fred_series_ids=None):
     return inserted
 
 
+@record_cli_task("cli_import_us_rates_liquidity")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Import US rates and liquidity series from FRED"

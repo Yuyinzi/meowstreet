@@ -1,5 +1,6 @@
 import sqlite3
 
+from app.services.task_notifications import task
 from app.data_sources import yahoo_asset_profile
 from app.db import ticker_context as ticker_context_db
 from app.services import survey_synthesis_current
@@ -89,10 +90,11 @@ def get_ticker_industry_context(
                     "provider_industry": None,
                 }
             else:
-                profile = yahoo_asset_profile.fetch_asset_profile(
-                    normalized, http_client=http_client
-                )
-                ticker_context_db.save_ticker_profile(con, profile)
+                with task("ticker_profile", target=normalized):
+                    profile = yahoo_asset_profile.fetch_asset_profile(
+                        normalized, http_client=http_client
+                    )
+                    ticker_context_db.save_ticker_profile(con, profile)
         alias = None
         tag_row = override_tag_row
         if tag_row is None and profile.get("provider_industry"):

@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.data_sources.fred import FredClient
 from app.data_sources.fred import parse_fred_csv
 from app.db import macro_indicators
@@ -65,6 +66,7 @@ def _generate_interpretation(db_path):
     return generate_m2_ai_interpretation.main(["--db-path", str(db_path)])
 
 
+@record_cli_task("cli_import_m2_money_supply")
 def main(argv=None, generate_interpretation=_generate_interpretation):
     parser = argparse.ArgumentParser(
         description="Refresh M2 money supply from FRED"

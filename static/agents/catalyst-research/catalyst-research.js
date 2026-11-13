@@ -2,6 +2,7 @@
   var CHANNELS = [
     { key: "press_releases", label: "Press Releases" },
     { key: "events_presentations", label: "Events &amp; Presentations" },
+    { key: "earnings_results", label: "Earnings Results" },
   ];
 
   var STATUS_LABELS = {
@@ -269,33 +270,20 @@
     return escapeHtml(String(sourceType || "source").replace(/_/g, " "));
   }
 
-  function sourceHtml(source, endpoints) {
-    var details = [];
+  function sourceHtml(source) {
+    var meta = [
+      '<span class="catalyst-research-source-channel">' + channelLabel(source.source_type) + "</span>",
+    ];
+    if (source.observation_count != null && source.observation_count > 1) {
+      meta.push(escapeHtml(source.observation_count + " observations"));
+    }
     if (source.coverage_start && source.coverage_end) {
-      details.push("coverage " + source.coverage_start + " → " + source.coverage_end);
+      meta.push(escapeHtml("coverage " + source.coverage_start + " → " + source.coverage_end));
     }
-    if (source.observation_count != null) {
-      details.push(source.observation_count + " observations");
+    if (source.extraction_status === "failed" && source.verification_reason) {
+      meta.push(escapeHtml(String(source.verification_reason).replace(/_/g, " ")));
     }
-    if (source.execution_path) {
-      details.push("path: " + source.execution_path);
-    }
-    if (source.discovery_provider) {
-      details.push("discovered via " + source.discovery_provider);
-    }
-    var endpoint = null;
-    if (source.endpoint_id && endpoints && endpoints.length) {
-      for (var index = 0; index < endpoints.length; index += 1) {
-        if (endpoints[index].endpoint_id === source.endpoint_id) {
-          endpoint = endpoints[index];
-          break;
-        }
-      }
-    }
-    if (endpoint) {
-      details.push("endpoint status: " + endpoint.status);
-      details.push("confidence: " + endpoint.confidence);
-    }
+    var name = source.title ? escapeHtml(source.title) : channelLabel(source.source_type);
     var safeUrl = typeof source.url === "string" && /^https:\/\//i.test(source.url) ? source.url : null;
     var url = source.url
       ? safeUrl
@@ -310,17 +298,17 @@
     return (
       '<div class="catalyst-research-source">' +
       '<div class="catalyst-research-source-head">' +
-      '<span class="catalyst-research-source-name">' + channelLabel(source.source_type) + "</span>" +
+      '<span class="catalyst-research-source-name">' + name + "</span>" +
       statusChip(source.extraction_status) +
       "</div>" +
       url +
-      '<div class="catalyst-research-source-meta">' + escapeHtml(details.join(" · ")) + "</div>" +
+      '<div class="catalyst-research-source-meta">' + meta.join(" · ") + "</div>" +
       truncation +
       "</div>"
     );
   }
 
-  function sourcesHtml(sources, endpoints) {
+  function sourcesHtml(sources) {
     if (!sources || !sources.length) {
       return "";
     }
@@ -329,7 +317,7 @@
       "<summary>View source provenance (" + sources.length + ")</summary>" +
       '<div class="catalyst-research-sources">' +
       sources.map(function (source) {
-        return sourceHtml(source, endpoints);
+        return sourceHtml(source);
       }).join("") +
       "</div></details>"
     );
@@ -504,7 +492,7 @@
       channelHtml("Events &amp; Presentations", statistics.events_presentations) +
       earningsCard +
       "</div>" +
-      sourcesHtml(payload.sources, payload.endpoints) +
+      sourcesHtml(payload.sources) +
       warningsHtml(payload.warnings) +
       nextActions +
       "</div>"

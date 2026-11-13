@@ -1,3 +1,4 @@
+from app.services.task_notifications import track_task
 from app.tools import beta as beta_tool
 from app.tools import correlation as correlation_tool
 from app.tools import market_data
@@ -14,6 +15,7 @@ _VALID_INSTRUMENTS = ("options", "cfd", "us_stock")
 _VALID_BIASES = ("long", "short", "neutral")
 
 
+@track_task("ticker_risk", target_parameter="symbol")
 def get_ticker_risk_profile(symbol, db_path=None, http_client=None):
     normalized = _normalize_symbol(symbol)
     stock_weekly = _fetch_market_payload(normalized, "1wk", db_path, http_client)
@@ -45,6 +47,7 @@ def get_ticker_risk_profile(symbol, db_path=None, http_client=None):
     }
 
 
+@track_task("portfolio_analysis")
 def get_portfolio_analysis(payload, db_path=None, http_client=None):
     if not isinstance(payload, dict):
         raise ValueError("payload must be a dict")

@@ -17,6 +17,21 @@ from app.http_client import HttpClient
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
+def test_real_workflow_records_one_notification_without_changing_result():
+    from app.db import job_notifications
+
+    repository = FakeRepository()
+    result = asyncio.run(run_research({"ticker": "ACME", "years": 1, "as_of": "2026-01-01"}, dependencies=_deps(repository, [])))
+    con = job_notifications.connect()
+    runs = job_notifications.list_runs(con)["runs"]
+    assert len(runs) == 1
+    assert runs[0]["target"] == "ACME"
+    assert result["status"] == "completed"
+    assert runs[0]["status"] == "succeeded"
+    assert len(job_notifications.events_after(con, 0)["events"]) == 2
+    con.close()
+
+
 class FakeRepository:
     def __init__(self):
         self.calls = []

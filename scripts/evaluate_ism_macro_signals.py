@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import growth_cycle
 from app.tools.ism_macro_signal import ISM_MACRO_SIGNAL_VERSION, build_ism_macro_signal
 
@@ -200,6 +201,7 @@ def evaluate(db_path, since=None):
         con.close()
 
 
+@record_cli_task("cli_evaluate_ism_macro_signals")
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluate ISM macro signals across historical reports"

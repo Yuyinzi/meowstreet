@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import benchmark_market_data
 from app.db import market_data as market_data_db
 from app.tools import benchmark_market_data as benchmark_market_data_tool
@@ -21,6 +22,7 @@ def _benchmark_ids_from_args(args):
     raise ValueError("use --benchmark-id or --all")
 
 
+@record_cli_task("cli_refresh_benchmark_market_data")
 def main(argv=None, refresh_benchmarks=benchmark_market_data_tool.refresh_benchmarks):
     parser = argparse.ArgumentParser(description="Refresh benchmark market data")
     parser.add_argument("--benchmark-id", action="append")

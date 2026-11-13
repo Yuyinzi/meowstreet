@@ -2,6 +2,7 @@ import sqlite3
 import time
 from datetime import date, timedelta
 
+from app.services.task_notifications import report_failure, track_task
 from app.data_sources import sec_edgar
 from app.db import edgar_filings as edgar_db
 from app.runtime_logging import get_runtime_logger
@@ -37,6 +38,7 @@ def _refresh_form4_filings(con, symbol, cik, since_iso, http_client):
                 http_client=http_client,
             )
         except ValueError as exc:
+            report_failure("sec_insider")
             LOGGER.warning(
                 "form 4 document fetch skipped symbol=%s accession=%s reason=%s",
                 symbol, filing["accession"], exc,
@@ -45,6 +47,7 @@ def _refresh_form4_filings(con, symbol, cik, since_iso, http_client):
         try:
             transactions = sec_edgar.parse_form4_document(document, symbol)
         except ValueError as exc:
+            report_failure("sec_insider")
             LOGGER.warning(
                 "form 4 document parse failed symbol=%s accession=%s reason=%s",
                 symbol, filing["accession"], exc,
@@ -71,6 +74,7 @@ def _enrich_transaction(transaction):
     return result
 
 
+@track_task("sec_insider", origin="background", target_parameter="symbol")
 def get_insider_activity(symbol, db_path=None, http_client=None, today=None):
     normalized = edgar_db.normalize_symbol(symbol)
     effective_db_path = db_path or edgar_db.DEFAULT_DB_PATH
@@ -82,6 +86,7 @@ def get_insider_activity(symbol, db_path=None, http_client=None, today=None):
         try:
             _refresh_form4_filings(con, normalized, cik, since_iso, http_client)
         except ValueError as exc:
+            report_failure("sec_insider")
             LOGGER.warning(
                 "insider filings refresh skipped symbol=%s reason=%s", normalized, exc
             )
@@ -94,6 +99,7 @@ def get_insider_activity(symbol, db_path=None, http_client=None, today=None):
             "transactions": [_enrich_transaction(row) for row in transactions],
         }
     except (ValueError, sqlite3.Error) as exc:
+        report_failure("sec_insider")
         LOGGER.warning("insider activity unavailable symbol=%s reason=%s", normalized, exc)
         return {"status": "insufficient_data"}
     finally:

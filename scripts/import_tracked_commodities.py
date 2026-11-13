@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.data_sources.tracked_commodities import (
     ACTIVE_MARKET_SERIES,
     MARKET_SERIES,
@@ -34,6 +35,7 @@ def _parse_csv_arg(csv_arg):
     return result
 
 
+@record_cli_task("cli_import_tracked_commodities")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Incrementally refresh method-specified commodity prices "
