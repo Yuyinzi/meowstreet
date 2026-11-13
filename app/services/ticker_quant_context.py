@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
+from app.services.task_notifications import report_failure, task, track_task
 from app.data_sources import sec_companyfacts
 from app.data_sources import stockanalysis_screener
 from app.data_sources import yahoo_asset_profile
@@ -28,12 +29,13 @@ def _load_fundamentals(con, symbol, http_client, force_refresh=False):
         )
     ):
         return dict(row), "hit"
-    fetched = yahoo_asset_profile.fetch_quote_fundamentals(
-        symbol, http_client=http_client
-    )
-    fetched["symbol"] = symbol
-    fetched["fetched_at"] = datetime.now(UTC).isoformat()
-    ticker_context_db.save_ticker_fundamentals(con, fetched)
+    with task("ticker_fundamentals", target=symbol):
+        fetched = yahoo_asset_profile.fetch_quote_fundamentals(
+            symbol, http_client=http_client
+        )
+        fetched["symbol"] = symbol
+        fetched["fetched_at"] = datetime.now(UTC).isoformat()
+        ticker_context_db.save_ticker_fundamentals(con, fetched)
     return fetched, "refreshed"
 
 
@@ -56,9 +58,15 @@ def _load_forecast_data(con, symbol, http_client):
     )
     if consensus_fresh and ratings_fresh:
         return dict(consensus_latest), ratings_latest
+    return _refresh_forecast_data(con, symbol, http_client, consensus_latest, ratings_latest, consensus_fresh, ratings_fresh)
+
+
+@track_task("ticker_forecast", origin="background", target_parameter="symbol")
+def _refresh_forecast_data(con, symbol, http_client, consensus_latest, ratings_latest, consensus_fresh, ratings_fresh):
     try:
         document = stockanalysis_screener.fetch_forecast_document(symbol, http_client=http_client)
     except ValueError:
+        report_failure("ticker_forecast")
         return (dict(consensus_latest) if consensus_latest is not None else None), ratings_latest
     consensus_row = dict(consensus_latest) if consensus_latest is not None else None
     ratings_row = ratings_latest
@@ -67,7 +75,7 @@ def _load_forecast_data(con, symbol, http_client):
         try:
             parsed_consensus = stockanalysis_screener.parse_forecast_data(document, symbol)
         except ValueError:
-            pass
+            report_failure("ticker_forecast")
         else:
             parsed_consensus["captured_at"] = captured_at
             ticker_context_db.save_estimate_consensus_snapshot(con, symbol, parsed_consensus)
@@ -76,6 +84,7 @@ def _load_forecast_data(con, symbol, http_client):
         try:
             parsed_ratings = stockanalysis_screener.parse_analyst_ratings(document, symbol)
         except ValueError:
+            report_failure("ticker_forecast")
             if ratings_latest is None:
                 ticker_context_db.save_analyst_ratings_snapshot(
                     con, symbol, {"provider": "stockanalysis", "captured_at": captured_at}
@@ -96,14 +105,15 @@ def _load_statement_facts(symbol, db_path, http_client):
         ):
             return row["facts"]
         try:
-            cik = catalyst_activity._resolve_cik(con, symbol, http_client)
-            raw = sec_companyfacts.fetch_company_facts(cik, http_client=http_client)
-            parsed = sec_companyfacts.parse_company_facts(raw, symbol)
+            with task("ticker_statements", target=symbol):
+                cik = catalyst_activity._resolve_cik(con, symbol, http_client)
+                raw = sec_companyfacts.fetch_company_facts(cik, http_client=http_client)
+                parsed = sec_companyfacts.parse_company_facts(raw, symbol)
+                edgar_db.save_statement_facts(con, symbol, cik, parsed["facts"])
         except ValueError as exc:
             LOGGER.warning("statement facts unavailable symbol=%s reason=%s", symbol, exc)
             edgar_db.save_statement_facts(con, symbol, None, None)
             return None
-        edgar_db.save_statement_facts(con, symbol, cik, parsed["facts"])
         return parsed["facts"]
     except sqlite3.Error as exc:
         LOGGER.warning("statement facts storage failed symbol=%s reason=%s", symbol, exc)

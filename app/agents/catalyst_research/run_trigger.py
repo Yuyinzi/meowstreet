@@ -1,6 +1,7 @@
 import asyncio
 
 from app.agents.catalyst_research.persistence import repository
+from app.agents.catalyst_research.notifications import background_origin
 from app.agents.catalyst_research.workflow import run_research
 from app.runtime_logging import get_runtime_logger
 
@@ -35,10 +36,11 @@ def research_trigger_state(connection, ticker):
 async def _run_and_release(ticker, years, runner, dependencies):
     try:
         request = {"ticker": ticker, "years": years, "mode": "research"}
-        if dependencies is None:
-            await runner(request)
-        else:
-            await runner(request, dependencies=dependencies)
+        with background_origin():
+            if dependencies is None:
+                await runner(request)
+            else:
+                await runner(request, dependencies=dependencies)
     except Exception:
         LOGGER.error("catalyst auto research failed ticker=%s", ticker, exc_info=True)
     finally:

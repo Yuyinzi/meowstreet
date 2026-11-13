@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.data_sources.fred import FredClient, parse_fred_csv
 from app.data_sources.michigan_consumer_sentiment import (
     MichiganConsumerSentimentClient,
@@ -217,6 +218,7 @@ def import_fred_csvs(csv_dir, db_path):
     return series_points_list
 
 
+@record_cli_task("cli_import_consumer_sentiment")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Import consumer sentiment data from Michigan website and FRED"

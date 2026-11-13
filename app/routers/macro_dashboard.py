@@ -16,6 +16,7 @@ from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.services import consumer_sentiment_dashboard, ism_services_dashboard
 from app.services import economic_confirmation as economic_confirmation_dashboard
 from app.services import market_setup_current
+from app.services import manual_refresh_notifications
 from app.runtime_logging import get_runtime_logger
 from app.tools import (
     housing_permits,
@@ -196,7 +197,7 @@ def macro_dashboard_market_phase_detail(benchmark_id):
 @router.post("/market-phase/{benchmark_id}/refresh")
 def macro_dashboard_market_phase_refresh(benchmark_id):
     try:
-        results = benchmark_market_data_tool.refresh_benchmarks([benchmark_id])
+        results = manual_refresh_notifications.refresh_benchmark(benchmark_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _invalidate_dashboard_cache("market-phase", "market-phase-detail", "market-setup")

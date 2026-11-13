@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, HTTPException
 
+from app.services.task_notifications import track_task
 from app import api, workflow_engine
 
 router = APIRouter(prefix="/api/ticker-workflow", tags=["ticker-workflow"])
@@ -11,6 +12,7 @@ def ticker_workflow_method():
 
 
 @router.post("/evaluate")
+@track_task("ticker_evaluation")
 def ticker_workflow_evaluate(body: dict = Body(default={})):
     try:
         return workflow_engine.evaluate_workflow_method(

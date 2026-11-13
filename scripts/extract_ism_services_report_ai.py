@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import us_rates_liquidity
 from app.services.ism_services_ai_ingestion import import_report_url
 
@@ -22,6 +23,7 @@ def _normalize_report_month(raw):
     return raw
 
 
+@record_cli_task("cli_extract_ism_services_report_ai")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Extract ISM Services report sections using AI."

@@ -36,6 +36,7 @@ from scripts import refresh_benchmark_market_data
 from scripts import refresh_us_rates_liquidity
 
 from app import llm
+from app.services import job_notifications
 from app.services.macro_refresh_registry import build_refresh_tasks
 from app.services.macro_refresh_executor import execute_tasks
 from app.services.macro_refresh_output import install_output_routers
@@ -369,6 +370,7 @@ class _ProgressReporter:
         return list(self._results.values())
 
     def handle_event(self, event):
+        job_notifications.record_event(event)
         event_type = event["type"]
         task = event["task"]
         name = task["name"]
@@ -394,6 +396,7 @@ class _ProgressReporter:
 
     def report_final(self, results):
         for result in sorted(results, key=self._plan_key):
+            job_notifications.record_event({"type": "task_finished", "task": {"name": result["name"]}, "result": result})
             if result["name"] not in self._results:
                 self._progress.update(1)
                 self._results[result["name"]] = result
@@ -750,6 +753,7 @@ def run(
     return 1 if counts["failed"] or counts["blocked"] else 0
 
 
+@job_notifications.record_job("macro_refresh")
 def main(argv=None):
     return run(
         argv,

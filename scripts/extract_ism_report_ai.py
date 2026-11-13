@@ -12,6 +12,7 @@ import httpx
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app import llm
 from app.db import growth_cycle
 from app.db import us_rates_liquidity
@@ -687,6 +688,7 @@ def build_client(config):
     )
 
 
+@record_cli_task("cli_extract_ism_report_ai")
 def main(argv=None, client_factory=build_client):
     parser = argparse.ArgumentParser()
     parser.add_argument("--db-path", type=Path, default=growth_cycle.DEFAULT_DB_PATH)

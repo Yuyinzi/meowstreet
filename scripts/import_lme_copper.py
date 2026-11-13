@@ -5,10 +5,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import macro_indicators
 from app.services import lme_copper_import
 
 
+@record_cli_task("cli_import_lme_copper")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Import Sina LME Copper 3-month CAD daily close via AKShare"

@@ -5,9 +5,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.data_sources.investing_chrome import start_investing_chrome
 
 
+@record_cli_task("cli_start_investing_chrome")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Launch dedicated Chrome for interactive Investing.com verification"

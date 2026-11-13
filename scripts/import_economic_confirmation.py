@@ -7,6 +7,7 @@ import httpx
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.data_sources import bls_employment_situation
 from app.data_sources import dol_ui_claims
 from app.data_sources import federal_reserve_g17
@@ -195,6 +196,7 @@ def persist_federal_reserve(db_path, artifacts):
     }
 
 
+@record_cli_task("cli_import_economic_confirmation")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Import economic confirmation source data"

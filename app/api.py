@@ -12,6 +12,7 @@ from app.db import growth_cycle
 from app.db import macro_indicators as macro_indicators_db
 from app.db import us_rates_liquidity as us_rates_liquidity_db
 from app.routers import (
+    job_notifications as job_notifications_router,
     macro_dashboard as macro_dashboard_router,
     market_assistant as market_assistant_router,
     pair_analysis as pair_analysis_router,
@@ -230,6 +231,7 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 app.include_router(static_files_router.router)
+app.include_router(job_notifications_router.router)
 app.include_router(ticker_workflow_router.router)
 app.include_router(macro_dashboard_router.router)
 app.include_router(market_assistant_router.router)

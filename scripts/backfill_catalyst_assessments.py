@@ -7,11 +7,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.agents.catalyst_research import config
 from app.agents.catalyst_research.assessment_backfill import backfill_catalyst_assessments
 from app.agents.catalyst_research.persistence import repository
 
 
+@record_cli_task("cli_backfill_catalyst_assessments")
 def main():
     parser = argparse.ArgumentParser(description="Backfill catalyst type and meaningfulness assessments for stored IR events")
     parser.add_argument("--ticker", default=None)

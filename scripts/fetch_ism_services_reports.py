@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import us_rates_liquidity
 from app.services import ism_report_ingestion as ingestion
 from app.services.ism_services_ai_ingestion import import_targets as ai_import_targets
@@ -59,6 +60,7 @@ def _build_ai_client():
     return client, config["model"]
 
 
+@record_cli_task("cli_fetch_ism_services_reports")
 def main(argv=None, fetch=None, ai_client_factory=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(

@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.agents.catalyst_research.persistence import repository
+from app.agents.catalyst_research import notifications
 from app.agents.catalyst_research.workflow import run_research
 from app.http_client import HttpClient
 
@@ -35,6 +36,7 @@ def _refresh_ticker(ticker, db_path, http_client):
     return asyncio.run(run_research(request, db_path=db_path, http_client=http_client))
 
 
+@notifications.record_feed_batch
 def main(argv=None):
     args = _parser().parse_args(argv)
     connection = repository.connect(args.db_path)
@@ -48,9 +50,11 @@ def main(argv=None):
             try:
                 result = _refresh_ticker(ticker, args.db_path, http_client)
             except Exception as exc:
+                notifications.record_feed_result(ticker, {"status": "failed"})
                 counts["failed"] += 1
                 print(f"ticker {ticker}: failed - {exc}", file=sys.stderr)
                 continue
+            notifications.record_feed_result(ticker, result)
             status = result.get("status", "failed")
             if status in _OK_STATUSES:
                 counts["ok"] += 1

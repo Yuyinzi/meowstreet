@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app import llm
 from app.db import macro_indicators
 from app.db import us_rates_liquidity
@@ -141,6 +142,7 @@ async def async_main(argv=None):
         con.close()
 
 
+@record_cli_task("cli_generate_credit_ai_interpretation")
 def main(argv=None):
     return asyncio.run(async_main(argv))
 

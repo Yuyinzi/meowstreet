@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app import llm
 from app.db import growth_cycle
 from app.db import us_rates_liquidity
@@ -222,6 +223,7 @@ def _run_enrichment(args, survey_type, ai_client_factory, client_state):
     return failed
 
 
+@record_cli_task("cli_fetch_ism_reports")
 def main(argv=None, fetch=None, ai_client_factory=None):
     parser = argparse.ArgumentParser(
         description="Ingest ISM survey reports with optional AI enrichment."

@@ -6,10 +6,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import market_data
 from app.services import local_data_bootstrap
 
 
+@record_cli_task("cli_bootstrap_local_data")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Initialize local schemas and import stable GICS reference data"

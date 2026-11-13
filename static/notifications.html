@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notifications · Meowstreet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/portfolio.css" />
+  <link rel="stylesheet" href="/static/notifications.css?v=1" />
+  <script type="module" src="/static/notifications.js?v=1"></script>
+</head>
+<body>
+  <nav class="topnav" aria-label="Main navigation">
+    <a href="/" class="nav-brand">Meowstreet</a>
+    <a href="/ticker-context.html" class="nav-link">Ticker Context</a>
+    <a href="/macro-dashboard.html" class="nav-link">Macro Dashboard</a>
+    <a href="/portfolio.html" class="nav-link">Portfolio</a>
+    <a href="/quant-screen.html" class="nav-link">Quant Screen</a>
+  </nav>
+  <main class="notification-shell">
+    <header class="notification-page-head">
+      <span class="notification-eyebrow">Execution history</span>
+      <h1>Notifications</h1>
+    </header>
+    <section id="notificationHistory" aria-label="Execution history">
+      <p class="notification-muted" role="status">Loading execution history…</p>
+    </section>
+  </main>
+</body>
+</html>

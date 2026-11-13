@@ -10,6 +10,7 @@ from urllib.parse import urljoin
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import us_rates_liquidity
 from app.http_client import HttpClient
 
@@ -354,6 +355,7 @@ def import_statement_documents(con, fetch=fetch_text, skip_empty=True):
     return {"statement_documents": result["fetched"]}
 
 
+@record_cli_task("cli_fetch_fomc_documents")
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Fetch FOMC documents")
     parser.add_argument(

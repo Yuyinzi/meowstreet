@@ -1,4 +1,5 @@
 from contextlib import ExitStack, contextmanager, nullcontext
+from contextvars import copy_context
 from datetime import datetime
 import io
 from queue import Empty, Queue
@@ -59,6 +60,7 @@ def execute_tasks(
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
                 futures = [
                     pool.submit(
+                        copy_context().run,
                         worker_func,
                         rows,
                         state=state,

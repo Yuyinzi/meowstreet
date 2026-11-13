@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import macro_indicators
+from app.services import job_notifications
 from app.services.investing_rendered_refresh import (
     DEFAULT_CDP_PORT,
     DEFAULT_LOCK_PATH,
@@ -20,6 +21,7 @@ _REMEDIATION = (
 )
 
 
+@job_notifications.record_job("investing_refresh")
 def main(argv=None, refresh=refresh_investing_rendered):
     parser = argparse.ArgumentParser(
         description="Refresh copper and iron ore rendered "

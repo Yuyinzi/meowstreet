@@ -5,10 +5,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import macro_indicators
 from app.services import dce_iron_ore_sina_import
 
 
+@record_cli_task("cli_import_dce_iron_ore_sina")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Import Sina DCE iron ore I0 continuous daily close via AKShare"

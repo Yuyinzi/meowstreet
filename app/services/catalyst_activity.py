@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import date, timedelta
 
+from app.services.task_notifications import report_failure, track_task
 from app.data_sources import sec_edgar
 from app.db import edgar_filings as edgar_db
 from app.runtime_logging import get_runtime_logger
@@ -56,6 +57,7 @@ def _backfill_items(con, symbol, cik, filings, http_client):
                 cik, filing["accession"], filing["primary_document"], http_client=http_client
             )
         except ValueError as exc:
+            report_failure("sec_catalyst")
             LOGGER.warning(
                 "edgar filing items backfill skipped symbol=%s accession=%s reason=%s",
                 symbol, filing["accession"], exc,
@@ -82,6 +84,7 @@ def _load_price_window(symbol, since_iso, db_path, http_client):
     return [close for _, close in pairs], [day for day, _ in pairs]
 
 
+@track_task("sec_catalyst", origin="background", target_parameter="symbol")
 def get_catalyst_activity(symbol, db_path=None, http_client=None, today=None):
     normalized = edgar_db.normalize_symbol(symbol)
     effective_db_path = db_path or edgar_db.DEFAULT_DB_PATH
@@ -93,6 +96,7 @@ def get_catalyst_activity(symbol, db_path=None, http_client=None, today=None):
         try:
             _refresh_filings(con, normalized, cik, since_iso, http_client)
         except ValueError as exc:
+            report_failure("sec_catalyst")
             LOGGER.warning("catalyst filings refresh skipped symbol=%s reason=%s", normalized, exc)
         filings = edgar_db.load_filings(con, normalized, since=since_iso)
         _backfill_items(con, normalized, cik, filings, http_client)
@@ -105,6 +109,7 @@ def get_catalyst_activity(symbol, db_path=None, http_client=None, today=None):
             closes, dates = _load_price_window(normalized, since_iso, effective_db_path, http_client)
             moves = catalyst_stats.large_move_days(closes, dates)
         except ValueError as exc:
+            report_failure("sec_catalyst")
             LOGGER.warning("catalyst price window unavailable symbol=%s reason=%s", normalized, exc)
         if moves.get("status") == "ok":
             calendar_start = (today_date - timedelta(days=_CALENDAR_WINDOW_DAYS)).isoformat()
@@ -137,6 +142,7 @@ def get_catalyst_activity(symbol, db_path=None, http_client=None, today=None):
             "caveat": "8-K filings only; IR press releases are a superset of these events",
         }
     except (ValueError, sqlite3.Error) as exc:
+        report_failure("sec_catalyst")
         LOGGER.warning("catalyst activity unavailable symbol=%s reason=%s", normalized, exc)
         return {"status": "insufficient_data"}
     finally:

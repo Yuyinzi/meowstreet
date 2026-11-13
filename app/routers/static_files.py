@@ -11,6 +11,11 @@ def index():
     return FileResponse(api.STATIC_DIR / "macro-dashboard.html")
 
 
+@router.get("/notifications.html")
+def notifications_html():
+    return FileResponse(api.STATIC_DIR / "notifications.html")
+
+
 @router.get("/macro-dashboard.html")
 def macro_dashboard_html():
     return FileResponse(api.STATIC_DIR / "macro-dashboard.html")

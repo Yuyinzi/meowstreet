@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.services import non_oil_attribution_source_audit as audit_service
 from app.resources import resource_path
 
@@ -23,6 +24,7 @@ def build_arg_parser():
     return parser
 
 
+@record_cli_task("cli_build_non_oil_attribution_source_audit")
 def main(argv=None):
     args = build_arg_parser().parse_args(argv)
     try:

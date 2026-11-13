@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.services import catalyst_activity as catalyst_activity_service
 from app.services import insider_activity as insider_activity_service
 from app.services import ticker_quant_context as ticker_quant_context_service
+from app.services import manual_refresh_notifications
 
 router = APIRouter(prefix="/api/ticker-quant", tags=["ticker-quant"])
 
@@ -30,6 +31,8 @@ def ticker_quant_lookup(
     refresh: bool = Query(default=False),
 ):
     try:
+        if refresh:
+            return manual_refresh_notifications.refresh_ticker(symbol, peer=peer)
         return ticker_quant_context_service.get_ticker_quant_context(
             symbol, peer=peer, force_refresh=refresh, include_catalyst=False
         )

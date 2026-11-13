@@ -7,6 +7,7 @@ sys.path.insert(0, str(ROOT))
 
 from openpyxl import load_workbook
 
+from app.services.task_notifications import record_cli_task
 from app.data_sources import gics_reference
 from app.db import ticker_context as ticker_context_db
 from app.resources import resource_path
@@ -54,6 +55,7 @@ def verify_against_workbook(industries, workbook_path):
         )
 
 
+@record_cli_task("cli_import_gics_industry_tags")
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Import GICS industry cycle tags into SQLite")
     parser.add_argument("--reference", default=str(DEFAULT_REFERENCE_PATH))

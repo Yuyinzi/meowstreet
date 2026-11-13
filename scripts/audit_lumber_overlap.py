@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.data_sources.lumber import (
     LUMBER_START_DATE,
     fetch_lumber_series,
@@ -19,6 +20,7 @@ DEFAULT_AUDIT_PATH = (
 )
 
 
+@record_cli_task("cli_audit_lumber_overlap")
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Audit Investing lumber archive vs Yahoo LBR overlap"

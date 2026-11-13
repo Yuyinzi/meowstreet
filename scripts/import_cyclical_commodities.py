@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import macro_indicators
 from app.services import cyclical_commodities_import
 
@@ -12,6 +13,7 @@ DEFAULT_DB_PATH = ROOT / "data" / "local_system" / "market_data.sqlite"
 DEFAULT_CACHE_DIR = ROOT / "data" / "commodities"
 
 
+@record_cli_task("cli_import_cyclical_commodities")
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--db-path", type=Path, default=DEFAULT_DB_PATH)

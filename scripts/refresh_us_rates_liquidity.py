@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import us_rates_liquidity
 from scripts import generate_credit_ai_interpretation
 from scripts import import_us_corporate_credit
@@ -107,6 +108,7 @@ def refresh(
         con.close()
 
 
+@record_cli_task("cli_refresh_us_rates_liquidity")
 def main(
     argv=None,
     connect=us_rates_liquidity.connect,

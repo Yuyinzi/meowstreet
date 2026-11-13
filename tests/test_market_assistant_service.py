@@ -593,6 +593,14 @@ async def test_narration_failure_before_text_returns_answer_unavailable(caplog):
     assert any(event["type"] == "answer_failed" for event in sink.events)
     assert not any(event["type"] == "answer_replace" for event in sink.events)
     assert not any(event["type"] == "validation" for event in sink.events)
+    from app.db import job_notifications
+
+    con = job_notifications.connect()
+    runs = job_notifications.list_runs(con)["runs"]
+    assert len(runs) == 1
+    assert runs[0]["status"] == "failed"
+    assert "现在市场怎么样" not in str(job_notifications.notification_snapshot(con))
+    con.close()
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,7 @@ from app.db.market_assistant import load_conversation_history
 from app.db.market_assistant import save_conversation_checkpoint
 from app.db.market_assistant import save_answer_bundle
 from app.services import market_assistant_tool_runtime
+from app.services.task_notifications import track_task
 from app.services.market_assistant_exploration import EXPLORATION_SCHEMA_VERSION
 from app.services.market_assistant_react import run_hybrid_narration
 from app.services.market_assistant_tool_runtime import ARTIFACT_SCHEMA_VERSION
@@ -376,6 +377,7 @@ class _StageRecorder:
         )
 
 
+@track_task("market_assistant", failed_when=lambda result: result.get("generation_status") == "answer_unavailable")
 async def answer_question(request, *, dependencies, event_sink=None):
     deps = dependencies
     db_path = _dependency(deps, "db_path")

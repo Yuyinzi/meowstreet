@@ -9,6 +9,7 @@ import httpx
 
 from app.db import market_data as market_data_db
 from app.http_client import HttpClient
+from app.services.task_notifications import record_cli_task, task
 
 
 _YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -227,28 +228,29 @@ def fetch_market_data(
             effective_today,
             refresh_days=refresh_days,
         ):
-            if fetch_json:
-                try:
-                    payload = fetch_json(normalized_symbol, period, interval)
-                except HTTPError as exc:
-                    raise ValueError(
-                        f"market data fetch failed for {normalized_symbol}: HTTP {exc.code} {exc.reason}"
-                    ) from exc
-            else:
-                start_date = market_data_db.fetch_start_date(
-                    latest_date,
-                    effective_today,
-                    overlap_days=overlap_days,
-                )
-                payload = fetch_yahoo_chart_json_for_dates(
-                    normalized_symbol,
-                    start_date=start_date,
-                    end_date=_tomorrow_iso(effective_today),
-                    interval=interval,
-                    http_client=http_client,
-                )
-            rows = chart_payload_to_price_rows(payload, normalized_symbol)
-            market_data_db.save_price_rows(con, normalized_symbol, interval, rows)
+            with task("market_prices", target=normalized_symbol):
+                if fetch_json:
+                    try:
+                        payload = fetch_json(normalized_symbol, period, interval)
+                    except HTTPError as exc:
+                        raise ValueError(
+                            f"market data fetch failed for {normalized_symbol}: HTTP {exc.code} {exc.reason}"
+                        ) from exc
+                else:
+                    start_date = market_data_db.fetch_start_date(
+                        latest_date,
+                        effective_today,
+                        overlap_days=overlap_days,
+                    )
+                    payload = fetch_yahoo_chart_json_for_dates(
+                        normalized_symbol,
+                        start_date=start_date,
+                        end_date=_tomorrow_iso(effective_today),
+                        interval=interval,
+                        http_client=http_client,
+                    )
+                rows = chart_payload_to_price_rows(payload, normalized_symbol)
+                market_data_db.save_price_rows(con, normalized_symbol, interval, rows)
         rows = market_data_db.load_price_rows(con, normalized_symbol, interval)
     finally:
         con.close()
@@ -318,6 +320,7 @@ def fetch_yahoo_chart_json_for_dates(
     )
 
 
+@record_cli_task("cli_market_data")
 def main(argv=None, fetch_json=None):
     parser = argparse.ArgumentParser(description="Fetch market data for a ticker")
     parser.add_argument("symbol")

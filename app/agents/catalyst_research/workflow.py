@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 
 from app.agents.catalyst_research import backfill as historical_backfill
 from app.agents.catalyst_research import domain, statistics
+from app.agents.catalyst_research import notifications
 from app.agents.catalyst_research import ingestion as candidate_ingestion
 from app.agents.catalyst_research import registry as registry_state
 from app.agents.catalyst_research import registry_discovery
@@ -1337,6 +1338,10 @@ async def _run_legacy_workflow(context, company, normalized, repository, job):
 
 
 async def run_research(request, *, db_path=None, http_client=None, dependencies=None):
+    return await notifications.run_with_notifications(_run_research, request, db_path=db_path, http_client=http_client, dependencies=dependencies)
+
+
+async def _run_research(request, *, db_path=None, http_client=None, dependencies=None):
     if not isinstance(request, Mapping):
         raise ValueError("research request is required")
     v1_1_requested = "mode" in request

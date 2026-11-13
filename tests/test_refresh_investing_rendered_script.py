@@ -40,6 +40,18 @@ def _mock_refresh(result):
     return refresh
 
 
+def test_main_persists_manual_cli_outcome(tmp_path):
+    from app.db import job_notifications
+
+    assert main(["--db-path", str(tmp_path / "macro.db")], refresh=_mock_refresh(_result())) == 0
+    con = job_notifications.connect()
+    run = job_notifications.list_runs(con)["runs"][0]
+    assert run["job_id"] == "investing_refresh"
+    assert run["status"] == "succeeded"
+    assert len(job_notifications.events_after(con, 0)["events"]) == 2
+    con.close()
+
+
 def test_main_success_exits_zero_with_json_output(tmp_path, capsys):
     exit_code = main(
         ["--db-path", str(tmp_path / "macro.db")],

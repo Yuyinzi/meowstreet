@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.services.task_notifications import record_cli_task
 from app.db import us_rates_liquidity
 
 DEFAULT_CALENDAR_PATH = ROOT / "data" / "downloads" / "fomc_calendar.csv"
@@ -60,6 +61,7 @@ def import_calendar(con, calendar_path=DEFAULT_CALENDAR_PATH):
     return {FOMC_EVENT_TYPE: saved["events"]}
 
 
+@record_cli_task("cli_import_fomc_calendar")
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(

@@ -3,6 +3,54 @@ import pytest
 from jobs import refresh_catalyst_feeds
 
 
+def test_batch_records_partial_coverage_without_reporting_a_failure(monkeypatch):
+    from app.db import job_notifications
+
+    install_fakes(monkeypatch, ["NVDA", "AMD"], {"NVDA": {"status": "completed_partial"}, "AMD": {"status": "unsupported"}})
+    assert refresh_catalyst_feeds.main([]) == 0
+    con = job_notifications.connect()
+    runs = job_notifications.list_runs(con)["runs"]
+    assert len(runs) == 1
+    assert runs[0]["status"] == "completed_partial"
+    assert [child["status"] for child in job_notifications.load_run(con, runs[0]["run_id"])["children"]] == ["unsupported", "completed_partial"]
+    con.close()
+
+
+def test_batch_setup_failure_is_recorded_and_preserved(monkeypatch):
+    from app.db import job_notifications
+
+    def unavailable(*args, **kwargs):
+        raise ValueError("private repository failure")
+
+    monkeypatch.setattr(refresh_catalyst_feeds.repository, "connect", unavailable)
+    with pytest.raises(ValueError, match="private repository failure"):
+        refresh_catalyst_feeds.main([])
+    con = job_notifications.connect()
+    assert job_notifications.list_runs(con)["runs"][0]["status"] == "failed"
+    con.close()
+
+
+def test_actual_shared_workflow_is_suppressed_under_feed_batch(monkeypatch):
+    from app.agents.catalyst_research import workflow
+    from app.db import job_notifications
+
+    install_fakes(monkeypatch, ["NVDA", "AMD"], {})
+
+    async def operation(request, **kwargs):
+        kwargs["dependencies"]["progress"]("ingest_candidate", url="private")
+        return {"status": "completed", "job_id": "cr_feed"}
+
+    monkeypatch.setattr(workflow, "_run_research", operation)
+    monkeypatch.setattr(refresh_catalyst_feeds, "run_research", workflow.run_research)
+    assert refresh_catalyst_feeds.main([]) == 0
+    con = job_notifications.connect()
+    runs = job_notifications.list_runs(con)["runs"]
+    assert len(runs) == 1
+    assert runs[0]["job_id"] == "catalyst_feed_refresh"
+    assert [child["status"] for child in job_notifications.load_run(con, runs[0]["run_id"])["children"]] == ["ok", "ok"]
+    con.close()
+
+
 class FakeConnection:
     def __init__(self, tickers):
         self.tickers = tickers
