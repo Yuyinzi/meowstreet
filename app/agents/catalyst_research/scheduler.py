@@ -300,17 +300,19 @@ def _record_gap_attempts(dependencies, queries, outcomes, as_of_utc):
 
 
 async def _ingest(ingester, candidates, company, channel, router, dependencies, *, endpoint=None, config=None):
-    result = await ingester(
-        candidates,
-        company=company,
-        channel=channel,
-        endpoint=endpoint,
-        job=dependencies.get("job") or {},
-        extraction_router=router,
-        repository=dependencies.get("repository"),
-        connection=dependencies.get("connection"),
-        max_urls=(config or {}).get("max_unseen_urls_per_channel", _DEFAULT_MAX_URLS),
-    )
+    ingest_kwargs = {
+        "company": company,
+        "channel": channel,
+        "endpoint": endpoint,
+        "job": dependencies.get("job") or {},
+        "extraction_router": router,
+        "repository": dependencies.get("repository"),
+        "connection": dependencies.get("connection"),
+        "max_urls": (config or {}).get("max_unseen_urls_per_channel", _DEFAULT_MAX_URLS),
+    }
+    if dependencies.get("progress") is not None:
+        ingest_kwargs["progress"] = dependencies["progress"]
+    result = await ingester(candidates, **ingest_kwargs)
     if isinstance(result, dict):
         return list(result.get("events") or [])
     return list(result or [])

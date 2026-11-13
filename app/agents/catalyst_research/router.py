@@ -121,8 +121,13 @@ def _endpoint_summary(endpoint):
     return {key: endpoint.get(key) for key in _ENDPOINT_FIELDS}
 
 
-def _v1_1_source_summary(connection, source):
+def _v1_1_source_summary(connection, source, titles_by_source):
     summary = _source_summary(connection, source)
+    titles = titles_by_source.get(source.get("source_id"), [])
+    if len(titles) == 1:
+        summary["title"] = titles[0]
+    if source.get("verification_reason"):
+        summary["verification_reason"] = source["verification_reason"]
     if source.get("endpoint_id"):
         summary["endpoint_id"] = source["endpoint_id"]
     return summary
@@ -151,7 +156,10 @@ def _v1_1_summary(connection, result):
         _endpoint_summary(endpoint)
         for endpoint in repository.load_source_endpoints(connection, result.get("ticker"))
     ]
-    summary["sources"] = [_v1_1_source_summary(connection, source) for source in result.get("sources", [])]
+    titles_by_source = repository.load_event_titles_by_source(connection, result.get("job_id"))
+    summary["sources"] = [
+        _v1_1_source_summary(connection, source, titles_by_source) for source in result.get("sources", [])
+    ]
     return summary
 
 

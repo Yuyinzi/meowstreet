@@ -17,6 +17,11 @@ def _normalize_ticker(value):
     return normalized
 
 
+def _log_progress(stage, **details):
+    suffix = "".join(f" {key}={value}" for key, value in details.items() if value is not None)
+    LOGGER.info("catalyst research stage=%s%s", stage, suffix)
+
+
 def research_trigger_state(connection, ticker):
     normalized = _normalize_ticker(ticker)
     if repository.load_latest_result(connection, normalized) is not None:
@@ -27,9 +32,13 @@ def research_trigger_state(connection, ticker):
     return {"ticker": normalized, "run_status": "ready"}
 
 
-async def _run_and_release(ticker, years, runner):
+async def _run_and_release(ticker, years, runner, dependencies):
     try:
-        await runner({"ticker": ticker, "years": years, "mode": "research"})
+        request = {"ticker": ticker, "years": years, "mode": "research"}
+        if dependencies is None:
+            await runner(request)
+        else:
+            await runner(request, dependencies=dependencies)
     except Exception:
         LOGGER.error("catalyst auto research failed ticker=%s", ticker, exc_info=True)
     finally:
@@ -50,7 +59,8 @@ async def launch_research(ticker, *, years=4, runner=None):
     if state["run_status"] != "ready":
         return state
     effective_runner = runner or run_research
+    dependencies = None if runner is not None else {"progress": _log_progress}
     _IN_FLIGHT.add(normalized)
-    asyncio.create_task(_run_and_release(normalized, years, effective_runner))
+    asyncio.create_task(_run_and_release(normalized, years, effective_runner, dependencies))
     LOGGER.info("catalyst auto research launched ticker=%s years=%s", normalized, years)
     return {"ticker": normalized, "run_status": "started"}

@@ -894,6 +894,7 @@ def _backfill_dependencies(context, company):
         "connection": context["connection"],
         "job": context["job"],
         "run_adapter": _archive_enrichment_runner(context, company),
+        "progress": context.get("progress"),
     }
     for key in ("fetch_feed", "adapter", "execute_query"):
         if context.get(key) is not None:
@@ -1048,6 +1049,7 @@ async def _run_update_mode(context, company, registry, endpoints):
         "repository": context["repository"],
         "connection": context["connection"],
         "job": context["job"],
+        "progress": context.get("progress"),
     }
     for key in ("fetch_feed", "execute_query", "record_endpoint_check", "update_endpoint_health"):
         if context.get(key) is not None:

@@ -377,8 +377,53 @@ def connect(db_path=DEFAULT_DB_PATH):
 
 def _ensure_column(con, table, name, definition):
     columns = {row[1] for row in con.execute(f"pragma table_info({table})")}
-    if name not in columns:
+    if name in columns:
+        return
+    try:
         con.execute(f"alter table {table} add column {name} {definition}")
+    except sqlite3.OperationalError as exc:
+        if "duplicate column name" not in str(exc):
+            raise
+        columns = {row[1] for row in con.execute(f"pragma table_info({table})")}
+        if name not in columns:
+            raise
+
+
+def _rebuild_events_table(con):
+    con.execute("pragma legacy_alter_table = on")
+    con.execute("pragma foreign_keys = off")
+    con.execute("alter table catalyst_ir_events rename to catalyst_ir_events_legacy")
+    con.execute("""create table catalyst_ir_events (
+        event_id text primary key,
+        job_id text not null references catalyst_research_jobs(job_id),
+        source_id text not null references catalyst_ir_sources(source_id),
+        ticker text not null,
+        published_date text,
+        event_date text,
+        count_date text not null,
+        title text not null,
+        normalized_title text not null,
+        canonical_url text,
+        source_type text not null check (source_type in ('press_releases','events_presentations','earnings_results')),
+        earnings_state text not null default 'ambiguous' check (earnings_state in ('earnings','non_earnings','ambiguous')),
+        classification_method text,
+        adapter_id text,
+        adapter_version integer,
+        executor_version text,
+        first_seen_at text not null,
+        content_hash text,
+        endpoint_id text,
+        external_guid text,
+        discovery_method text,
+        extraction_provider text,
+        unique(job_id, ticker, source_type, count_date, normalized_title, canonical_url)
+    )""")
+    columns = [row[1] for row in con.execute("pragma table_info(catalyst_ir_events_legacy)")]
+    con.execute(
+        f"insert into catalyst_ir_events ({','.join(columns)}) select {','.join(columns)} from catalyst_ir_events_legacy"
+    )
+    con.execute("drop table catalyst_ir_events_legacy")
+    con.execute("create unique index if not exists idx_catalyst_event_job_key on catalyst_ir_events(job_id, ticker, source_type, count_date, normalized_title, canonical_url)")
 
 
 def _migrate_v1_1_schema(con):
@@ -390,42 +435,18 @@ def _migrate_v1_1_schema(con):
     _ensure_column(con, "catalyst_ir_sources", "attempts_json", "text")
     event_sql = con.execute("select sql from sqlite_master where type = 'table' and name = 'catalyst_ir_events'").fetchone()
     if event_sql is not None and "'earnings_results'" not in event_sql[0]:
-        con.execute("pragma legacy_alter_table = on")
-        con.execute("pragma foreign_keys = off")
-        con.execute("alter table catalyst_ir_events rename to catalyst_ir_events_legacy")
-        con.execute("""create table catalyst_ir_events (
-            event_id text primary key,
-            job_id text not null references catalyst_research_jobs(job_id),
-            source_id text not null references catalyst_ir_sources(source_id),
-            ticker text not null,
-            published_date text,
-            event_date text,
-            count_date text not null,
-            title text not null,
-            normalized_title text not null,
-            canonical_url text,
-            source_type text not null check (source_type in ('press_releases','events_presentations','earnings_results')),
-            earnings_state text not null default 'ambiguous' check (earnings_state in ('earnings','non_earnings','ambiguous')),
-            classification_method text,
-            adapter_id text,
-            adapter_version integer,
-            executor_version text,
-            first_seen_at text not null,
-            content_hash text,
-            endpoint_id text,
-            external_guid text,
-            discovery_method text,
-            extraction_provider text,
-            unique(job_id, ticker, source_type, count_date, normalized_title, canonical_url)
-        )""")
-        columns = [row[1] for row in con.execute("pragma table_info(catalyst_ir_events_legacy)")]
-        con.execute(
-            f"insert into catalyst_ir_events ({','.join(columns)}) select {','.join(columns)} from catalyst_ir_events_legacy"
-        )
-        con.execute("drop table catalyst_ir_events_legacy")
-        con.execute("create unique index if not exists idx_catalyst_event_job_key on catalyst_ir_events(job_id, ticker, source_type, count_date, normalized_title, canonical_url)")
-        con.execute("pragma foreign_keys = on")
-        con.execute("pragma legacy_alter_table = off")
+        try:
+            _rebuild_events_table(con)
+        except sqlite3.OperationalError as exc:
+            con.rollback()
+            if "no such table" not in str(exc) and "already exists" not in str(exc):
+                raise
+            rebuilt_sql = con.execute("select sql from sqlite_master where type = 'table' and name = 'catalyst_ir_events'").fetchone()
+            if rebuilt_sql is None or "'earnings_results'" not in rebuilt_sql[0]:
+                raise
+        finally:
+            con.execute("pragma foreign_keys = on")
+            con.execute("pragma legacy_alter_table = off")
     for column in ("endpoint_id", "external_guid", "discovery_method", "extraction_provider", "catalyst_type", "catalyst_type_method", "meaningful_state", "meaningful_method"):
         _ensure_column(con, "catalyst_ir_events", column, "text")
     con.commit()
@@ -1432,6 +1453,17 @@ def load_events_page(con, ticker, job_id, limit, cursor):
         last = rows[-1]
         next_cursor = _encode_cursor({"ticker": normalized, "job_id": job_id, "count_date": last["count_date"], "event_id": last["event_id"]})
     return {"ticker": normalized, "job_id": job_id, "events": events, "next_cursor": next_cursor}
+
+
+def load_event_titles_by_source(con, job_id):
+    _job(con, job_id)
+    titles = {}
+    for row in con.execute(
+        "select source_id, title from catalyst_ir_events where job_id = ? order by count_date, title",
+        (job_id,),
+    ):
+        titles.setdefault(row["source_id"], []).append(row["title"])
+    return titles
 
 
 def load_accumulated_channel_events(con, ticker, window_start, window_end):

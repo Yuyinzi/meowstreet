@@ -332,6 +332,47 @@ def test_ingest_search_candidate_uses_extraction_router(tmp_path):
     assert json.loads(snapshot["normalized_json"])["text"].startswith("NVIDIA announced a new platform")
 
 
+def test_ingest_emits_progress_events_for_each_candidate_and_summary(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = running_job(con)
+    router = make_router(result=direct_article())
+    stages = []
+
+    def progress(stage, **details):
+        stages.append((stage, details))
+
+    result = asyncio.run(
+        ingestion.ingest_candidates(
+            [search_candidate(), rss_candidate(url=SECOND_URL, external_guid="guid-2", title="NVIDIA Announces Second Platform")],
+            company=company(),
+            channel="press_releases",
+            endpoint=None,
+            job={"job_id": job["job_id"]},
+            extraction_router=router,
+            repository=repository,
+            connection=con,
+            max_urls=200,
+            progress=progress,
+        )
+    )
+    candidate_stages = [item for item in stages if item[0] == "ingest_candidate"]
+    assert [item[1]["index"] for item in candidate_stages] == [1, 2]
+    assert all(item[1]["total"] == 2 for item in candidate_stages)
+    assert all(item[1]["channel"] == "press_releases" for item in candidate_stages)
+    summary = [item for item in stages if item[0] == "ingest_complete"]
+    assert len(summary) == 1
+    assert summary[0][1]["events"] == len(result["events"])
+    assert summary[0][1]["attempted"] == result["attempted"]
+
+
+def test_ingest_without_progress_callback_keeps_silent(tmp_path):
+    con = repository.connect(tmp_path / "db.sqlite")
+    job = running_job(con)
+    router = make_router(result=direct_article())
+    result = run_ingest([search_candidate()], con, job["job_id"], router)
+    assert len(result["events"]) == 1
+
+
 def test_ingest_extracted_event_persists_snapshot_once_for_identical_text(tmp_path):
     con = repository.connect(tmp_path / "db.sqlite")
     job = running_job(con)

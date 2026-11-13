@@ -236,17 +236,19 @@ async def _backfill_channel(company, request, channel, *, endpoints, domains, wi
         warnings.append("outside_requested_window")
     ingester = dependencies.get("ingest_candidates") or _default_ingest_candidates
     max_urls = config.get("max_unseen_urls_per_channel", _DEFAULT_MAX_URLS)
-    ingested = await ingester(
-        candidates,
-        company=company,
-        channel=channel,
-        endpoint=feed_endpoints[0] if feed_endpoints else None,
-        job=dependencies.get("job") or {},
-        extraction_router=dependencies.get("extraction_router"),
-        repository=dependencies.get("repository"),
-        connection=dependencies.get("connection"),
-        max_urls=max_urls,
-    )
+    ingest_kwargs = {
+        "company": company,
+        "channel": channel,
+        "endpoint": feed_endpoints[0] if feed_endpoints else None,
+        "job": dependencies.get("job") or {},
+        "extraction_router": dependencies.get("extraction_router"),
+        "repository": dependencies.get("repository"),
+        "connection": dependencies.get("connection"),
+        "max_urls": max_urls,
+    }
+    if dependencies.get("progress") is not None:
+        ingest_kwargs["progress"] = dependencies["progress"]
+    ingested = await ingester(candidates, **ingest_kwargs)
     if not isinstance(ingested, dict):
         raise ValueError("ingest result is invalid")
     adapter_result, adapter_warning = await _run_adapter(dependencies, config, company, request, channel)
