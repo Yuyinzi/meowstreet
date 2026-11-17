@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Data Freshness · Meowstreet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/portfolio.css" />
+  <link rel="stylesheet" href="/static/notifications.css?v=1" />
+  <link rel="stylesheet" href="/static/data-freshness.css?v=1" />
+  <script type="module" src="/static/notifications.js?v=1"></script>
+  <script type="module" src="/static/data-freshness.js?v=2"></script>
+</head>
+<body>
+  <nav class="topnav" aria-label="Main navigation">
+    <a href="/" class="nav-brand">Meowstreet</a>
+    <a href="/ticker-context.html" class="nav-link">Ticker Context</a>
+    <a href="/macro-dashboard.html" class="nav-link">Macro Dashboard</a>
+    <a href="/portfolio.html" class="nav-link">Portfolio</a>
+    <a href="/quant-screen.html" class="nav-link">Quant Screen</a>
+    <a href="/data-freshness.html" class="nav-link active" aria-current="page">Data Freshness</a>
+  </nav>
+  <main class="freshness-shell" id="freshnessApp" aria-busy="true">
+    <header class="freshness-head">
+      <h1>Data Freshness</h1>
+      <div class="freshness-snapshot"><span id="freshnessAsOf"></span><button id="freshnessReload" class="notification-button" type="button">Reload status</button></div>
+    </header>
+    <div id="freshnessMessage" role="status" aria-live="polite">Loading data freshness…</div>
+    <section class="freshness-stats" id="freshnessStats" aria-label="Filter by freshness status"></section>
+    <div class="freshness-toolbar">
+      <label class="freshness-search"><span class="freshness-sr-only">Search datasets or sources</span><input id="freshnessSearch" type="search" placeholder="Search datasets or sources…" autocomplete="off"></label>
+      <label><span class="freshness-sr-only">Category</span><select id="freshnessCategory"><option value="">All categories</option></select></label>
+      <button type="button" class="notification-button" id="freshnessReset">Reset filters</button>
+      <span id="freshnessCount" class="freshness-count" role="status" aria-live="polite"></span>
+    </div>
+    <section class="freshness-panel" aria-label="Macro datasets">
+      <div class="freshness-table-wrap" tabindex="0" role="region" aria-label="Dataset freshness table, scroll horizontally for more columns">
+        <table class="freshness-table">
+          <thead><tr><th scope="col">Dataset / source</th><th scope="col">Current period</th><th scope="col">Release frequency</th><th scope="col">Next release / window</th><th scope="col">Status</th><th scope="col">Last successful check</th><th scope="col"><span class="freshness-sr-only">Details</span></th></tr></thead>
+          <tbody id="freshnessRows"></tbody>
+        </table>
+      </div>
+    </section>
+    <details class="freshness-schedules"><summary>Collection schedules</summary><div id="freshnessSchedules"></div></details>
+  </main>
+</body>
+</html>

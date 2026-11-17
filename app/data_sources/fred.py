@@ -5,6 +5,7 @@ from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
+from io import StringIO
 
 from app.http_client import HttpClient
 
@@ -106,8 +107,12 @@ def parse_fred_csv(csv_path, series_id):
     path = Path(csv_path)
     if not path.exists():
         raise ValueError(f"fred csv does not exist: {path}")
+    return parse_fred_csv_text(path.read_text(encoding="utf-8"), series_id)
+
+
+def parse_fred_csv_text(text, series_id):
     rows = {}
-    with path.open(newline="", encoding="utf-8") as handle:
+    with StringIO(text, newline="") as handle:
         for row in csv.DictReader(handle):
             value = float_or_none(row.get(series_id))
             observation_date = row.get("observation_date")
@@ -116,7 +121,7 @@ def parse_fred_csv(csv_path, series_id):
     return dict(sorted(rows.items()))
 
 
-def resample_to_weekly_sundays(rows, start_date=None, end_date=None):
+def resample_to_weekly_sundays(rows, start_date=None, end_date=None, include_source_date=False):
     filtered_rows = {
         date_key: value for date_key, value in rows.items() if value is not None
     }
@@ -134,7 +139,10 @@ def resample_to_weekly_sundays(rows, start_date=None, end_date=None):
         index = bisect_right(dates, sunday) - 1
         if index >= 0:
             source_date = dates[index]
-            points.append({"date": date_iso(sunday), "value": values[source_date]})
+            point = {"date": date_iso(sunday), "value": values[source_date]}
+            if include_source_date:
+                point["source_date"] = date_iso(source_date)
+            points.append(point)
         sunday = sunday + timedelta(days=7)
     return points
 

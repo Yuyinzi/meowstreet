@@ -273,9 +273,10 @@ def _replace_single(con, series, points):
         )
 
 
-def replace_macro_indicator_points(con, series, points):
+def replace_macro_indicator_points(con, series, points, commit=True):
     _replace_single(con, series, points)
-    con.commit()
+    if commit:
+        con.commit()
     return {"series": 1, "points": len(points)}
 
 

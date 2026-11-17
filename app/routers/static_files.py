@@ -16,6 +16,11 @@ def notifications_html():
     return FileResponse(api.STATIC_DIR / "notifications.html")
 
 
+@router.get("/data-freshness.html")
+def data_freshness_html():
+    return FileResponse(api.STATIC_DIR / "data-freshness.html")
+
+
 @router.get("/macro-dashboard.html")
 def macro_dashboard_html():
     return FileResponse(api.STATIC_DIR / "macro-dashboard.html")

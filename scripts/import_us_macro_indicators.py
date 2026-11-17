@@ -8,10 +8,10 @@ sys.path.insert(0, str(ROOT))
 
 from app.services.task_notifications import record_cli_task
 from app.data_sources.fred import FredClient
-from app.data_sources.fred import compute_yoy
 from app.data_sources.fred import date_iso
 from app.data_sources.fred import parse_fred_csv
-from app.data_sources.fred import resample_to_weekly_sundays
+from app.data_sources.freshness_lineage import lineage_from_snapshot, read_fred_snapshot
+from app.db.macro_source_lineage import replace_lineage
 from app.db import macro_indicators
 from app.db import us_rates_liquidity
 
@@ -106,28 +106,19 @@ def import_fred_macro_csvs(
     start_date=None,
     end_date=None,
 ):
-    cpi_rows = parse_fred_csv(Path(fred_dir) / "CPIAUCSL.csv", "CPIAUCSL")
-    cpi_yoy = compute_yoy(cpi_rows)
-    vix_rows = parse_fred_csv(Path(fred_dir) / "VIXCLS.csv", "VIXCLS")
+    cpi = read_fred_snapshot(Path(fred_dir) / "CPIAUCSL.csv", "CPIAUCSL")
+    vix = read_fred_snapshot(Path(fred_dir) / "VIXCLS.csv", "VIXCLS")
+    lineages = {
+        "cpi_yoy": lineage_from_snapshot(cpi, transform="yoy", start_date=start_date, end_date=end_date or date_iso(date.today())),
+        "vix": lineage_from_snapshot(vix, start_date=start_date, end_date=end_date),
+    }
     core_pce_rows = parse_fred_csv(Path(fred_dir) / "PCEPILFE.csv", "PCEPILFE")
     fed_total_assets_rows = parse_fred_csv(Path(fred_dir) / "WALCL.csv", "WALCL")
     fed_treasury_rows = parse_fred_csv(Path(fred_dir) / "TREAST.csv", "TREAST")
     fed_mbs_rows = parse_fred_csv(Path(fred_dir) / "WSHOMCB.csv", "WSHOMCB")
     payloads = {
-        "cpi_yoy": _fred_points_payload(
-            resample_to_weekly_sundays(
-                cpi_yoy,
-                start_date=start_date,
-                end_date=end_date or date_iso(date.today()),
-            )
-        ),
-        "vix": _fred_points_payload(
-            resample_to_weekly_sundays(
-                vix_rows,
-                start_date=start_date,
-                end_date=end_date,
-            )
-        ),
+        "cpi_yoy": _fred_points_payload(lineages["cpi_yoy"]),
+        "vix": _fred_points_payload(lineages["vix"]),
         "core_pce_price_index": _fred_monthly_points_payload(core_pce_rows),
         "fed_total_assets": _fred_weekly_points_payload(fed_total_assets_rows),
         "fed_treasury_holdings": _fred_weekly_points_payload(fed_treasury_rows),
@@ -139,8 +130,11 @@ def import_fred_macro_csvs(
             con,
             _fred_series_payload(series_id),
             points,
+            commit=series_id not in lineages,
         )
         inserted[series_id] = saved["points"]
+        if series_id in lineages:
+            replace_lineage(con, f"macro:{series_id}", lineages[series_id], "captured_at_import")
     return inserted
 
 

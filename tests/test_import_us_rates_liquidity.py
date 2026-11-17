@@ -1,5 +1,58 @@
+from pathlib import Path
+
+import pytest
+
 from app.db import us_rates_liquidity
 from scripts import import_us_rates_liquidity
+
+
+def test_rate_import_captures_original_daily_date_without_changing_counts(tmp_path):
+    path = tmp_path / "DGS10.csv"
+    path.write_text("observation_date,DGS10\n2026-11-06,4.1\n2026-11-09,4.2\n")
+    con = us_rates_liquidity.connect(tmp_path / "market.sqlite")
+    result = import_us_rates_liquidity.import_fred_csvs(con, tmp_path, ["DGS10"])
+    assert result == {"treasury_10y": 1}
+    row = con.execute("select source_date,basis from macro_source_lineage where dataset_id='rate:treasury_10y'").fetchone()
+    assert dict(row) == {"source_date": "2026-11-06", "basis": "captured_at_import"}
+    con.close()
+
+
+def test_rate_import_values_and_lineage_share_the_same_csv_snapshot(tmp_path, monkeypatch):
+    path = tmp_path / "DGS10.csv"
+    path.write_text("observation_date,DGS10\n2026-10-30,4.1\n2026-11-09,4.2\n")
+    original = Path.read_bytes
+    reads = []
+    def swap_after_read(file):
+        content = original(file)
+        if file == path:
+            reads.append(file)
+            file.write_text("observation_date,DGS10\n2026-10-30,4.1\n2026-11-06,4.1\n2026-11-09,4.2\n")
+        return content
+    monkeypatch.setattr(Path, "read_bytes", swap_after_read)
+    con = us_rates_liquidity.connect(tmp_path / "data.sqlite")
+    import_us_rates_liquidity.import_fred_csvs(con, tmp_path, ["DGS10"])
+    row = con.execute("select value,source_date from macro_source_lineage where observation_date='2026-11-08'").fetchone()
+    assert tuple(row) == (4.1, "2026-10-30")
+    assert len(reads) == 1
+    con.close()
+
+
+def test_failed_lineage_capture_does_not_commit_new_rate_values(tmp_path, monkeypatch):
+    path = tmp_path / "DGS10.csv"
+    path.write_text("observation_date,DGS10\n2026-11-06,4.1\n2026-11-09,4.2\n")
+    db_path = tmp_path / "data.sqlite"
+    con = us_rates_liquidity.connect(db_path)
+    import_us_rates_liquidity.import_fred_csvs(con, tmp_path, ["DGS10"])
+    path.write_text("observation_date,DGS10\n2026-11-06,4.9\n2026-11-09,5\n")
+    def fail(*args):
+        raise ValueError("lineage capture failed")
+    monkeypatch.setattr(import_us_rates_liquidity, "replace_lineage", fail)
+    with pytest.raises(ValueError, match="lineage capture failed"):
+        import_us_rates_liquidity.import_fred_csvs(con, tmp_path, ["DGS10"])
+    con.close()
+    con = us_rates_liquidity.connect(db_path)
+    assert con.execute("select value from us_rate_points").fetchone()[0] == 4.1
+    con.close()
 
 
 def test_build_fred_rate_payload_uses_shared_weekly_resample(tmp_path):
