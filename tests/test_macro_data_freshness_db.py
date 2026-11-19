@@ -243,3 +243,19 @@ def test_investing_warning_run_remains_a_successful_check_without_claiming_fresh
     history = load_task_history(rows('macro:copper_comex'), path)['macro:copper_comex']
     assert history['last_attempt']['status_label'] == 'Completed with warnings'
     assert history['last_successful_check']['run_id'] == handle.run_id
+
+
+@pytest.mark.parametrize('retrieved,expected', [('2026-11-19T10:00:00Z', 'current'), ('2026-11-20T10:00:00Z', 'unknown')])
+def test_nfib_quarter_end_label_is_read_with_actual_retrieval_timestamp(tmp_path, retrieved, expected):
+    from datetime import datetime
+    path = tmp_path / 'market.sqlite'
+    con = database(path)
+    con.execute('insert into macro_indicator_regional_observations values(?,?,?,?,?)', ('national', 'nfib_sbo_capital_outlay_plans', '2026-12-31', 20, 'available'))
+    con.execute('insert into macro_indicator_regional_observation_metadata(region_id,indicator_id,date,procedure_name,retrieval_time) values(?,?,?,?,?)', ('national', 'nfib_sbo_capital_outlay_plans', '2026-12-31', 'getTotalsFullQuarter2', retrieved))
+    con.commit()
+    con.close()
+    evidence = load_observations(rows('regional:national:nfib_sbo_capital_outlay_plans'), path)
+    assert evidence['regional:national:nfib_sbo_capital_outlay_plans']['retrieved_at'] == retrieved
+    overview = get_overview(db_path=path, notification_db_path=tmp_path / 'none.sqlite', as_of=datetime.fromisoformat('2026-11-19T12:00:00Z'))
+    row = next(row for row in overview['datasets'] if row['id'] == 'regional:national:nfib_sbo_capital_outlay_plans')
+    assert row['status'] == expected

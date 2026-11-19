@@ -28,7 +28,7 @@ def build_audit_records(rows, before, after, observations, returned, catalog, at
             issue = 'source_behind' if warning else None
         result.append({
             'dataset_id': row['id'], 'name': row['name'], 'checked_at': at.isoformat(),
-            'expected_period': freshness.get('expected_period') or (freshness.get('expected_release') or {}).get('period'),
+            'expected_period': freshness.get('expected_period') or freshness.get('expected_quarter') or (freshness.get('expected_release') or {}).get('period'),
             'source_period': evidence.get('source_observation_date'),
             'returned_period': returned_period, 'returned_rows': len(source) if source is not None else None,
             'before_period': max(previous) if previous else None, 'stored_period': stored_period,

@@ -175,3 +175,33 @@ def test_overview_is_deterministic_and_task_success_does_not_change_freshness():
 def test_naive_evaluation_time_is_rejected():
     with pytest.raises(ValueError, match="timezone"):
         evaluate_dataset(dataset(), available("2026-09-01"), {}, datetime(2026, 11, 13))
+
+
+@pytest.mark.parametrize('period,at,status', [
+    ('2026-12-31', '2026-11-19T12:00:00Z', 'current'),
+    ('2026-09-30', '2026-11-19T12:00:00Z', 'unknown'),
+    ('2027-03-31', '2026-11-19T12:00:00Z', 'unknown'),
+    ('2026-12-31', '2027-01-01T04:59:59Z', 'current'),
+    ('2026-12-31', '2027-01-01T05:00:00Z', 'unknown'),
+    ('2027-03-31', '2027-01-01T05:00:00Z', 'current'),
+])
+def test_nfib_quarter_labels_use_explicit_current_quarter_coverage(period, at, status):
+    row = dataset('regional:national:nfib_sbo_capital_outlay_plans')
+    result = evaluate(available(period), at, row=row)
+    assert result['status'] == status
+    if status == 'current':
+        assert result['period_note'] == 'Quarter in progress'
+        assert result['comparison_basis'] == 'Current-quarter coverage'
+        assert 'complete' in result['reason'].lower()
+        assert result['expected_quarter'] == period
+
+
+@pytest.mark.parametrize('observation', [
+    available('2026-12-31', retrieved_at='2027-01-01T00:00:00Z'),
+    available('2026-12-31', generated_at='2027-01-01T00:00:00Z'),
+    available('not-a-date'),
+    {'availability': 'invalid', 'current_period': '2026-12-31'},
+])
+def test_quarter_policy_does_not_accept_invalid_or_future_collection_evidence(observation):
+    row = dataset('regional:pacific:nfib_sbo_optimism')
+    assert evaluate(observation, '2026-11-19T12:00:00Z', row=row)['status'] == 'unknown'

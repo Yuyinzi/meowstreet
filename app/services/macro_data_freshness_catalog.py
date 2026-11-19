@@ -26,7 +26,7 @@ class Task(BaseModel):
 
 class FreshnessPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    kind: Literal["session", "max_age"]
+    kind: Literal["session", "max_age", "current_quarter"]
     timezone: str
     calendar_id: str | None = None
     max_age_days: int | None = Field(default=None, ge=1, le=31)
@@ -117,5 +117,7 @@ def load_catalog(path=None):
             raise ValueError(f"dataset schedule is unknown: {row['schedule_id']}")
         policy = row.get("freshness_policy")
         if policy and ((policy["kind"] == "session" and policy["calendar_id"] not in catalog["market_calendars"]) or (policy["kind"] == "max_age" and policy["max_age_days"] is None)):
+            raise ValueError(f"dataset freshness policy is invalid: {row['id']}")
+        if policy and policy["kind"] == "current_quarter" and row["period_basis"] != "quarter":
             raise ValueError(f"dataset freshness policy is invalid: {row['id']}")
     return catalog

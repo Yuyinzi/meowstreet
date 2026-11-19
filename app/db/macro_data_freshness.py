@@ -88,6 +88,11 @@ def _series_evidence(con, kind, datasets):
             metadata = {(r["series_id"], r["date"]): dict(r) for r in con.execute("select series_id,date,release_date,revision_status,retrieved_at,source_hash from macro_indicator_observation_metadata m where date=(select max(date) from macro_indicator_points p where p.series_id=m.series_id)")}
         except SQLiteError:
             pass
+    if kind == "regional":
+        try:
+            metadata = {(r["region_id"], r["indicator_id"], r["date"]): dict(r) for r in con.execute("select region_id,indicator_id,date,retrieval_time as retrieved_at,response_hash as source_hash from macro_indicator_regional_observation_metadata m where date=(select max(date) from macro_indicator_regional_observations p where p.region_id=m.region_id and p.indicator_id=m.indicator_id)")}
+        except SQLiteError:
+            pass
     result = {}
     for dataset in datasets:
         storage = dataset["storage"]
@@ -95,6 +100,8 @@ def _series_evidence(con, kind, datasets):
         row = by_key.get(key)
         if row and kind == "macro":
             row = {**row, **metadata.get((storage["key"], row[period]), {})}
+        if row and kind == "regional":
+            row = {**row, **metadata.get((storage["region"], storage["key"], row[period]), {})}
         evidence = _evidence(row, period, value)
         if kind in {"macro", "rate"}:
             evidence.update(_lineage_evidence(con, dataset, row))

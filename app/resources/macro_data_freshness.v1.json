@@ -1,5 +1,5 @@
 {
-  "version": "macro_data_freshness_v1.1",
+  "version": "macro_data_freshness_v1.2",
   "datasets": [
     {
       "id": "benchmark:us_sp500",
@@ -2333,7 +2333,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:pacific:nfib_sbo_employment_plans",
@@ -2358,7 +2362,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:pacific:nfib_sbo_expansion_outlook",
@@ -2383,7 +2391,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:pacific:nfib_sbo_inventory_plans",
@@ -2408,7 +2420,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:pacific:nfib_sbo_economic_expectations",
@@ -2433,7 +2449,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:pacific:nfib_sbo_real_sales_expectations",
@@ -2458,7 +2478,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:pacific:nfib_sbo_capital_outlay_plans",
@@ -2483,7 +2507,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:pacific:nfib_sbo_current_inventory_low",
@@ -2508,7 +2536,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:pacific:nfib_sbo_job_openings",
@@ -2533,7 +2565,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:pacific:nfib_sbo_credit_conditions_expectations",
@@ -2558,7 +2594,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:pacific:nfib_sbo_earnings_trends",
@@ -2583,7 +2623,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_optimism",
@@ -2608,7 +2652,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_employment_plans",
@@ -2633,7 +2681,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_expansion_outlook",
@@ -2658,7 +2710,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_inventory_plans",
@@ -2683,7 +2739,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_economic_expectations",
@@ -2708,7 +2768,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_real_sales_expectations",
@@ -2733,7 +2797,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_capital_outlay_plans",
@@ -2758,7 +2826,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_current_inventory_low",
@@ -2783,7 +2855,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_job_openings",
@@ -2808,7 +2884,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_credit_conditions_expectations",
@@ -2833,7 +2913,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:west_gulf:nfib_sbo_earnings_trends",
@@ -2858,7 +2942,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_optimism",
@@ -2883,7 +2971,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_employment_plans",
@@ -2908,7 +3000,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_expansion_outlook",
@@ -2933,7 +3029,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_inventory_plans",
@@ -2958,7 +3058,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_economic_expectations",
@@ -2983,7 +3087,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_real_sales_expectations",
@@ -3008,7 +3116,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_capital_outlay_plans",
@@ -3033,7 +3145,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_current_inventory_low",
@@ -3058,7 +3174,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_job_openings",
@@ -3083,7 +3203,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_credit_conditions_expectations",
@@ -3108,7 +3232,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:north_atlantic:nfib_sbo_earnings_trends",
@@ -3133,7 +3261,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "macro:umcsi_aggregate",
@@ -4603,7 +4735,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:national:nfib_sbo_employment_plans",
@@ -4628,7 +4764,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:national:nfib_sbo_expansion_outlook",
@@ -4653,7 +4793,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:national:nfib_sbo_inventory_plans",
@@ -4678,7 +4822,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:national:nfib_sbo_economic_expectations",
@@ -4703,7 +4851,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:national:nfib_sbo_real_sales_expectations",
@@ -4728,7 +4880,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:national:nfib_sbo_capital_outlay_plans",
@@ -4753,7 +4909,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:national:nfib_sbo_current_inventory_low",
@@ -4778,7 +4938,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:national:nfib_sbo_job_openings",
@@ -4803,7 +4967,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:national:nfib_sbo_credit_conditions_expectations",
@@ -4828,7 +4996,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     },
     {
       "id": "regional:national:nfib_sbo_earnings_trends",
@@ -4853,7 +5025,11 @@
       "frequency": "Quarterly (3-month aggregate)",
       "storage_frequency": "Quarterly (3-month aggregate)",
       "period_basis": "quarter",
-      "schedule_id": "unverified"
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
     }
   ],
   "schedules": {

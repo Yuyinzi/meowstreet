@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from app.tools.macro_data_freshness_daily import evaluate_daily_policy
+from app.tools.macro_data_freshness_quarterly import evaluate_quarterly_policy
 
 
 STATUS_LABELS = {"due": "Update due", "missing": "Missing", "processing": "Processing needed", "unknown": "Unknown", "current": "Fresh"}
@@ -82,7 +83,9 @@ def _invalid_observation(observation, as_of, calendar=False, basis="date", obser
     period = observation.get("current_period")
     if period:
         try:
-            if _period_date(period, basis) > as_of.astimezone(ZoneInfo(observation_timezone)).date() and not calendar:
+            today = as_of.astimezone(ZoneInfo(observation_timezone)).date()
+            future = _period_key(period, basis) > _period_key(today.isoformat(), basis) if basis == "quarter" else _period_date(period, basis) > today
+            if future and not calendar:
                 return True
         except (KeyError, TypeError, ValueError):
             return True
@@ -153,6 +156,9 @@ def _evaluate_dataset(dataset, observation, schedule, as_of, calendars):
     if observation.get("lineage_basis") == "conflicting":
         return _result("unknown", "Conflicting source-date evidence requires a verified import before freshness can be established", state)
     if dataset.get("freshness_policy"):
+        if dataset["freshness_policy"]["kind"] == "current_quarter":
+            quarterly = evaluate_quarterly_policy(dataset, observation, as_of)
+            return {**_result(quarterly["status"], quarterly["reason"], state), **quarterly}
         if dataset["period_basis"] == "weekly_resample":
             return _result("unknown", "The original source date for this resampled observation has not been verified", state)
         daily = evaluate_daily_policy(dataset, observation, as_of, calendars)

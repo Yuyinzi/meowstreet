@@ -106,6 +106,7 @@ _REPORT_URL_TEMPLATES = (
     "NFIB-{month_name}-{year}-SBET-Report.pdf",
     "NFIB-SBET-Report-{month_name}-{year}.pdf",
     "Monthly-Economic-Report-{month_name}-{year}.pdf",
+    "SBET-Report-{month_name}-{year}.pdf",
 )
 
 _MONTH_NAME = {number: name for name, number in _MONTH_NUM.items()}

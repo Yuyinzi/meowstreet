@@ -85,6 +85,8 @@ export function createFreshnessPage({ document, request }) {
     if (Number.isFinite(row.source_age_days)) definition(dates, 'Source age', `${row.source_age_days} calendar days`);
     if (row.max_age_days) definition(dates, 'Allowed age', `${row.max_age_days} calendar days`);
     if (row.expected_period) definition(dates, 'Expected completed session', row.expected_period);
+    if (row.expected_quarter) definition(dates, 'Current quarter', period(row.expected_quarter, 'quarter'));
+    if (row.period_note) definition(dates, 'Period coverage', row.period_note);
     if (row.policy_timezone) definition(dates, 'Monitoring timezone', row.policy_timezone);
     if (row.freshness_deadline) definition(dates, 'Monitoring deadline', row.freshness_deadline.length === 10 ? period(row.freshness_deadline, 'date') : when(row.freshness_deadline));
     definition(dates, 'Publication date', row.release_date);
@@ -155,7 +157,7 @@ export function createFreshnessPage({ document, request }) {
         toggle.textContent = detailRow.hidden ? 'Details +' : 'Less −';
       });
       const actions = e('td'); actions.append(toggle);
-      tr.append(name, cell(period(row.current_period, row.period_basis), row.stored_period ? `Stored label: ${period(row.stored_period, 'date')}` : row.period_basis === 'weekly_resample' ? 'Weekly label' : ''), cell(row.frequency, row.storage_frequency !== row.frequency ? `Stored: ${row.storage_frequency}` : ''), cell(releaseLabel(row.next_release), row.next_release?.precision === 'exact' ? 'Asia/Shanghai' : row.next_release?.timezone || ''), badgeCell, cell(check ? when(check.at) : 'No recorded check'), actions);
+      tr.append(name, cell(period(row.current_period, row.period_basis), row.period_note || (row.stored_period ? `Stored label: ${period(row.stored_period, 'date')}` : row.period_basis === 'weekly_resample' ? 'Weekly label' : '')), cell(row.frequency, row.storage_frequency !== row.frequency ? `Stored: ${row.storage_frequency}` : ''), cell(releaseLabel(row.next_release), row.next_release?.precision === 'exact' ? 'Asia/Shanghai' : row.next_release?.timezone || ''), badgeCell, cell(check ? when(check.at) : 'No recorded check'), actions);
       body.append(tr, detailRow);
     }
     table.append(head, body);

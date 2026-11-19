@@ -58,3 +58,11 @@ def test_catalog_rejects_invalid_contract(tmp_path, mutate, message):
     path.write_text(dumps(payload))
     with pytest.raises(ValueError, match=message):
         load_catalog(path)
+
+
+def test_current_quarter_policy_only_covers_configured_nfib_api_datasets():
+    rows = load_catalog()['datasets']
+    selected = [row for row in rows if (row.get('freshness_policy') or {}).get('kind') == 'current_quarter']
+    assert len(selected) == 44
+    assert all(row['storage']['kind'] == 'regional' and row['period_basis'] == 'quarter' for row in selected)
+    assert all(row['freshness_policy']['timezone'] == 'America/New_York' for row in selected)
