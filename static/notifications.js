@@ -126,7 +126,7 @@ function applyNotificationState(payload) {
   for (const [id, event] of recent) {
     if (id <= clearedThrough || id <= readThrough || event.read) recent.delete(id);
   }
-  for (const node of [...toasts.children]) if (Number(node.dataset.eventId) <= clearedThrough) node.remove();
+  for (const node of [...toasts.children]) if (Number(node.dataset.eventId) <= Math.max(clearedThrough, readThrough)) node.remove();
 }
 
 async function bulkAction(action) {
@@ -166,6 +166,7 @@ async function markRead(ids) {
       if (version !== mutationVersion) return;
       feed.invalidate();
       for (const id of batch) recent.delete(id);
+      for (const node of [...toasts.children]) if (batch.includes(Number(node.dataset.eventId))) node.remove();
       setUnread(result.unread_count);
     }
     lastReadError = false;
@@ -202,7 +203,6 @@ function renderDrawer() {
       const restoreFocus = document.activeElement === dismiss;
       await markRead([event.event_id]);
       if (recent.has(event.event_id)) return;
-      for (const node of [...toasts.children]) if (Number(node.dataset.eventId) === event.event_id) node.remove();
       if (restoreFocus && drawer.open && !drawer.contains(document.activeElement)) {
         const nextLink = drawerList.firstElementChild?.children[0];
         (nextLink || historyLink).focus();
@@ -221,6 +221,7 @@ function renderDrawer() {
 }
 
 async function openDrawer() {
+  toasts.replaceChildren();
   renderDrawer();
   drawer.showModal();
   close.focus();
@@ -228,6 +229,7 @@ async function openDrawer() {
 }
 
 function toast(event) {
+  if (drawer.open || historyRoot) return;
   const node = el('div', 'notification-toast');
   node.dataset.eventId = String(event.event_id);
   const link = el('a', 'notification-toast-link');
