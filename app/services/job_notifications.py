@@ -11,7 +11,7 @@ from app.services.task_notification_catalog import TASKS
 
 LOGGER = get_runtime_logger(__name__)
 JOBS = TASKS
-STATUS_LABELS = {"running": "Last reported: running", "succeeded": "Succeeded", "partially_failed": "Partially failed", "failed": "Failed", "interrupted": "Interrupted", "completed_partial": "Completed with limitations", "unsupported": "Unsupported"}
+STATUS_LABELS = {"running": "Last reported: running", "succeeded": "Succeeded", "completed_with_warnings": "Completed with warnings", "partially_failed": "Partially failed", "failed": "Failed", "interrupted": "Interrupted", "completed_partial": "Completed with limitations", "unsupported": "Unsupported"}
 _CHILD_LABELS = {"running": "Last reported: running", "ok": "Succeeded", "skipped": "Skipped", "blocked": "Blocked", "failed": "Failed", "completed_partial": "Completed with limitations", "unsupported": "Unsupported", "interrupted": "Interrupted"}
 _CURRENT_RUN = ContextVar("notification_run", default=None)
 
@@ -51,6 +51,12 @@ class RunRecorder:
             "summary": "See job log for details" if status in {"failed", "blocked"} else _CHILD_LABELS[status],
         }
         if event["type"] == "task_finished":
+            if source.get("data_audit"):
+                child["data_audit"] = source["data_audit"]
+                warnings = sum(bool(row.get("warning")) for row in child["data_audit"])
+                child["summary"] += f" · {warnings} data warnings" if warnings else " · Data check details recorded"
+                if warnings and status == "ok":
+                    child["status_label"] = "Succeeded with data warnings"
             self.results[child["name"]] = child
         self._write(repository.update_child, self.run_id, child)
 
@@ -76,15 +82,20 @@ class RunRecorder:
             for result in results:
                 self.record_event({"type": "task_finished", "task": {"name": result["name"]}, "result": result})
         counts = {status: sum(child["status"] == status for child in self.results.values()) for status in ("ok", "skipped", "failed", "blocked")}
+        counts["warnings"] = len({row.get("dataset_id") or child["name"] for child in self.results.values() for row in child.get("data_audit", []) if row.get("warning")})
         if exit_code == 130:
             status = "interrupted"
         elif counts["failed"] or counts["blocked"]:
             status = "partially_failed" if counts["ok"] else "failed"
         else:
             status = "succeeded" if not exit_code else "failed"
+            if status == "succeeded" and counts["warnings"]:
+                status = "completed_with_warnings"
         summary = "Refresh completed" if status == "succeeded" else "See job log for details"
         if counts and self.results:
             summary = f"{counts['ok']} succeeded · {counts['skipped']} skipped · {counts['failed']} failed · {counts['blocked']} blocked"
+        if counts["warnings"]:
+            summary += f" · {counts['warnings']} data warnings"
         stamp = _timestamp()
         self._write(repository.finish_run, self.run_id, {
             "status": status, "status_label": STATUS_LABELS[status], "summary": summary,

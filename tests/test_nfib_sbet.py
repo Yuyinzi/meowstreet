@@ -319,3 +319,15 @@ def test_report_month_from_url_extracts_month_and_year(url, expected):
 def test_report_month_from_url_rejects_unrecognized_name():
     with pytest.raises(ValueError, match="cannot determine report month"):
         nfib_sbet.report_month_from_url("https://www.nfib.com/wp-content/uploads/report.pdf")
+
+
+def test_discovery_finds_current_report_after_filename_pattern_change():
+    current = 'https://www.nfib.com/wp-content/uploads/2026/11/SBET-Report-October-2026.pdf'
+    previous = 'https://www.nfib.com/wp-content/uploads/2026/10/NFIB-September-2026-SBET-Report.pdf'
+    requested = []
+    def handler(request):
+        requested.append(str(request.url))
+        return httpx.Response(200 if str(request.url) in {current, previous} else 404)
+    client = HttpClient(transport=httpx.MockTransport(handler))
+    assert nfib_sbet.discover_latest_sbet_url(reference_date=date(2026, 11, 19), http_client=client) == current
+    assert previous not in requested

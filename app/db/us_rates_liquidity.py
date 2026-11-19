@@ -156,7 +156,7 @@ def normalize_series_id(series_id):
     return normalized
 
 
-def replace_rate_series_points(con, series, points):
+def replace_rate_series_points(con, series, points, commit=True):
     sid = normalize_series_id(series["series_id"])
     con.execute("delete from us_rate_points where series_id = ?", (sid,))
     con.execute("delete from us_rate_series where series_id = ?", (sid,))
@@ -192,7 +192,8 @@ def replace_rate_series_points(con, series, points):
                 point["source_sheet"],
             ),
         )
-    con.commit()
+    if commit:
+        con.commit()
     return {"series": 1, "points": len(points)}
 
 

@@ -367,6 +367,7 @@ def _execute_task(
         "started_at": started_at,
         "finished_at": finished_at,
         "elapsed_seconds": time.monotonic() - started_monotonic,
+        "data_audit": list(task.get("data_audit", [])),
     }
 
 

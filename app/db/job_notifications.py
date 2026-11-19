@@ -5,7 +5,7 @@ from sqlite3 import Row, connect as sqlite_connect
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = ROOT / "data" / "local_system" / "job_notifications.sqlite"
-TERMINAL_STATUSES = {"succeeded", "partially_failed", "failed", "interrupted", "completed_partial", "unsupported"}
+TERMINAL_STATUSES = {"succeeded", "completed_with_warnings", "partially_failed", "failed", "interrupted", "completed_partial", "unsupported"}
 
 _SCHEMA = """
 create table if not exists job_notification_runs (

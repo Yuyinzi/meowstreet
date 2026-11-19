@@ -38,7 +38,7 @@ const source = (await readFile(new URL('../static/notifications.js', import.meta
 const notificationLink = row => row.tagName === 'a' ? row : row.children[0];
 const flush = async () => { for(let i=0;i<50;i++) await Promise.resolve(); };
 
-async function environment(withHistory = false, initialCount = 1) {
+async function environment(withHistory = false, initialCount = 1, runDetail = null) {
   const nav = new Element('nav');
   const body = new Element('body');
   const history = withHistory ? new Element('section') : null;
@@ -77,6 +77,8 @@ async function environment(withHistory = false, initialCount = 1) {
         delayRead=false;
         return new Promise((resolve,reject)=>{releaseRead=(failed=false)=>failed ? reject(Error('old read failed')) : resolve({ok:true,json:async()=>payload});});
       }
+    } else if (url.startsWith('/api/notifications/runs/')) {
+      payload = runDetail;
     } else if (url.startsWith('/api/notifications/runs?')) {
       payload = {runs:[],displayed_event_ids:[],has_more:false,next_cursor:null};
     } else if (url.startsWith('/api/notifications/events?')) {
@@ -87,7 +89,7 @@ async function environment(withHistory = false, initialCount = 1) {
     }
     return {ok:true,json:async()=>payload};
   }
-  runInNewContext(source, {document,window,location:{search:''},URLSearchParams,fetch,createNotificationFeed,Map,Set,Date,Number,encodeURIComponent});
+  runInNewContext(source, {document,window,location:{search:runDetail ? '?run=audit' : ''},URLSearchParams,fetch,createNotificationFeed,Map,Set,Date,Number,encodeURIComponent});
   await flush();
   return {nav,body,history,events,reads,listeners,document,navigations,poll:()=>{interval();},setOffline:value=>{offline=value;},delayNextRead:()=>{delayRead=true;},releaseRead:failed=>releaseRead(failed),get calls(){return calls;}};
 }
@@ -105,6 +107,7 @@ assert.equal(toasts.children[0].children[0].children[0].textContent,'<img onerro
 assert.deepEqual(ui.reads,[]);
 ui.nav.children[0].listeners.click(); await flush();
 assert.equal(drawer.open,true);
+assert.equal(toasts.children.length,0,'opening the notification center must dismiss page overlays');
 assert.deepEqual(ui.reads,[],"opening the drawer must not mark its notifications read");
 assert.equal(ui.nav.children[0].attributes['aria-label'],'Open notifications, 3 unread');
 const focusedEvent = notificationLink(drawer.children.find(e=>e.className==='notification-recent').children[0]);
@@ -121,8 +124,10 @@ ui.nav.children[0].listeners.click();await flush();
 assert.equal(drawer.children.find(e=>e.className==='notification-recent').children.length,2);
 drawer.close();
 assert.equal(ui.nav.children[0].focused,true);
-toasts.children[0].children[1].listeners.click();
+ui.events.push({...ui.events[0],event_id:4,run_id:'toast-dismiss-test',read:false});ui.poll();await flush();
 assert.equal(toasts.children.length,1);
+toasts.children[0].children[1].listeners.click();
+assert.equal(toasts.children.length,0);
 ui.document.hidden = true;
 const prior = ui.calls;
 ui.poll(); await flush();
@@ -143,15 +148,17 @@ assert.ok(actions,'notification actions must be available');
 const readAll=actions.children.find(e=>e.textContent==='Mark all read');
 const clearAll=actions.children.find(e=>e.textContent==='Clear all');
 assert.equal(readAll.disabled,false,'older unread notifications must remain actionable');
+bulk.events.push({...bulk.events[0],event_id:31,run_id:'while-center-open',read:false});bulk.poll();await flush();
+assert.equal(bulk.body.children.find(e=>e.className==='notification-toasts').children.length,0,'new reminders must not cover the open notification center');
 readAll.listeners.click();await flush();
 assert.equal(bulk.nav.children[0].attributes['aria-label'],'Open notifications, 0 unread');
 assert.equal(bulkDrawer.children.find(e=>e.className==='notification-recent').children[0].className,'notification-empty');
-bulk.events.push({...bulk.events[0],event_id:31,run_id:'to-clear',read:false});bulk.poll();await flush();
+bulk.events.push({...bulk.events[0],event_id:32,run_id:'to-clear',read:false});bulk.poll();await flush();
 clearAll.listeners.click();await flush();
 assert.equal(bulkDrawer.children.find(e=>e.className==='notification-recent').children[0].className,'notification-empty');
 bulk.poll();await flush();
 assert.equal(bulkDrawer.children.find(e=>e.className==='notification-recent').children[0].className,'notification-empty');
-bulk.events.push({...bulk.events[0],event_id:32,run_id:'new-after-clear',read:false});
+bulk.events.push({...bulk.events[0],event_id:33,run_id:'new-after-clear',read:false});
 bulk.poll();await flush();
 assert.equal(notificationLink(bulkDrawer.children.find(e=>e.className==='notification-recent').children[0]).href,'/notifications.html?run=new-after-clear');
 bulk.setOffline(true);clearAll.listeners.click();await flush();
@@ -200,4 +207,23 @@ focusDismiss.focus();focusRace.delayNextRead();focusDismiss.listeners.click();aw
 const keepFocus=focusDrawer.children.find(e=>e.className==='notification-history-link');
 keepFocus.focus();focusRace.releaseRead();await flush();
 assert.equal(focusRace.document.activeElement,keepFocus,'completing a dismiss must not steal focus after the user moves it');
+const acknowledged=await environment();
+acknowledged.events.push({...acknowledged.events[0],event_id:2,run_id:'acknowledged-toast',read:false});acknowledged.poll();await flush();
+const acknowledgedToasts=acknowledged.body.children.find(e=>e.className==='notification-toasts');
+assert.equal(acknowledgedToasts.children.length,1);
+acknowledged.body.children.find(e=>e.tagName==='dialog').children.find(e=>e.className==='notification-actions').children.find(e=>e.textContent==='Mark all read').listeners.click();await flush();
+assert.equal(acknowledgedToasts.children.length,0,'Mark all read must dismiss the corresponding floating notifications');
+const historyPage=await environment(true);
+historyPage.events.push({...historyPage.events[0],event_id:2,run_id:'history-page-update',read:false});historyPage.poll();await flush();
+assert.equal(historyPage.body.children.find(e=>e.className==='notification-toasts').children.length,0,'execution history should update without page overlays');
 console.log('notification DOM behavior passed');
+
+const auditUI = await environment(true, 1, {run_id:'audit',name:'Macro refresh',status:'completed_with_warnings',status_label:'Completed with warnings',summary:'1 data warning',children:[{name:'oil_import',status:'ok',status_label:'Succeeded with data warnings',summary:'1 data warning',data_audit:[{name:'<img onerror=bad()>',expected_period:'2026-11-13',returned_period:'2026-11-06',stored_period:'2026-11-06',before_period:'2026-11-06',inserted:0,updated:0,returned_rows:1878,warning:true,issue:'source_behind',reason:'Returned data is behind the expected release'}]}]});
+function descendants(node) { return [node,...node.children.flatMap(descendants)]; }
+const auditNodes = descendants(auditUI.history);
+assert.ok(auditNodes.some(n=>n.textContent==='<img onerror=bad()>'),'dataset names must render as safe text');
+assert.ok(auditNodes.some(n=>n.textContent==='Expected: 2026-11-13'));
+assert.ok(auditNodes.some(n=>n.textContent==='Returned: 2026-11-06'));
+assert.ok(auditNodes.some(n=>n.textContent==='Stored after: 2026-11-06'));
+assert.ok(auditNodes.some(n=>n.textContent==='Inserted: 0 · Updated: 0'));
+assert.ok(!auditNodes.some(n=>n.tagName==='img'));

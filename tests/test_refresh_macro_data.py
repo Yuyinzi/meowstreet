@@ -1933,3 +1933,13 @@ def test_task9_legacy_ism_seam_adapts_all_registry_stages():
             f"ism_{survey}_{stage}"
             for stage in ("fetch", "import", "enrichment", "enrichment_import")
         } <= providers.keys()
+
+
+def test_successful_task_audit_is_written_to_cron_log_without_raw_payload():
+    result = {'name': 'oil_import', 'lane': 'eia', 'status': 'ok', 'error': '', 'stdout': '', 'stderr': '', 'data_audit': [{'dataset_id': 'macro:oil_petroleum_products_supplied', 'expected_period': '2026-11-13', 'returned_period': '2026-11-06', 'stored_period': '2026-11-06', 'inserted': 0, 'updated': 0, 'warning': True, 'issue': 'source_behind'}]}
+    output = StringIO()
+    errors = StringIO()
+    reporter = refresh_macro_data._ProgressReporter([], progress=FakeProgress(total=1, disable=True, file=errors), verbose=False, stdout=output, stderr=errors)
+    reporter.report_final([result])
+    assert 'expected=2026-11-13 returned=2026-11-06 stored=2026-11-06' in errors.getvalue()
+    assert 'inserted=0 updated=0 issue=source_behind' in errors.getvalue()

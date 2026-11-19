@@ -3,6 +3,7 @@ from pathlib import Path
 
 RESOURCE_DIR = Path(__file__).resolve().parent
 RESOURCE_FILES = {
+    "macro_data_freshness": "macro_data_freshness.v1.json",
     "workflow_method": "workflow_method.v1.json",
     "market_setup_confirmation": "market_setup_confirmation.v1.json",
     "market_setup_inputs": "market_setup_inputs.v1.json",

@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.db import macro_indicators
 from app.services import job_notifications
+from app.services.macro_refresh_audit import audit_job_operation
 from app.services.investing_rendered_refresh import (
     DEFAULT_CDP_PORT,
     DEFAULT_LOCK_PATH,
@@ -51,11 +52,15 @@ def main(argv=None, refresh=refresh_investing_rendered):
     args = parser.parse_args(argv)
     con = macro_indicators.connect(args.db_path)
     try:
-        result = refresh(
-            con,
-            cdp_port=args.cdp_port,
-            lock_path=args.lock_file,
-            readiness_timeout=args.readiness_timeout,
+        result = audit_job_operation(
+            "investing_refresh",
+            lambda: refresh(
+                con,
+                cdp_port=args.cdp_port,
+                lock_path=args.lock_file,
+                readiness_timeout=args.readiness_timeout,
+            ),
+            db_path=args.db_path,
         )
     except ValueError as exc:
         print(

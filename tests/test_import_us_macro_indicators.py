@@ -1,6 +1,30 @@
+from pathlib import Path
+
 from app.db import macro_indicators
 from app.db import us_rates_liquidity
 from scripts import import_us_macro_indicators
+
+
+def test_cpi_import_cannot_take_lineage_from_a_later_equal_valued_snapshot(tmp_path, monkeypatch):
+    path = tmp_path / "CPIAUCSL.csv"
+    path.write_text("observation_date,CPIAUCSL\n2025-09-01,100\n2026-09-01,103\n")
+    for series_id in ("VIXCLS", "PCEPILFE", "WALCL", "TREAST", "WSHOMCB"):
+        (tmp_path / f"{series_id}.csv").write_text(f"observation_date,{series_id}\n2026-10-30,20\n2026-11-09,21\n")
+    original = Path.read_bytes
+    reads = []
+    def swap_after_read(file):
+        content = original(file)
+        if file == path:
+            reads.append(file)
+            file.write_text("observation_date,CPIAUCSL\n2025-09-01,100\n2025-10-01,200\n2026-09-01,103\n2026-10-01,206\n")
+        return content
+    monkeypatch.setattr(Path, "read_bytes", swap_after_read)
+    con = us_rates_liquidity.connect(tmp_path / "data.sqlite")
+    import_us_macro_indicators.import_fred_macro_csvs(con, tmp_path, end_date="2026-11-08")
+    row = con.execute("select value,source_date from macro_source_lineage where dataset_id='macro:cpi_yoy' and observation_date='2026-11-08'").fetchone()
+    assert tuple(row) == (3, "2026-09-01")
+    assert len(reads) == 1
+    con.close()
 
 
 def test_replace_macro_indicator_points_saves_and_loads_rows(tmp_path):
@@ -105,6 +129,8 @@ def test_import_fred_macro_csvs_saves_cpi_yoy_and_vix(tmp_path):
         "value": 22.75,
         "source": "FRED weekly Sunday resample",
     }
+    row = con.execute("select source_date,basis from macro_source_lineage where dataset_id=? and observation_date=?", ("macro:cpi_yoy", "2021-01-03")).fetchone()
+    assert dict(row) == {"source_date": "2020-12-01", "basis": "captured_at_import"}
 
 
 def test_fetch_fred_macro_csvs_uses_shared_fred_client(tmp_path, monkeypatch):

@@ -7,8 +7,8 @@ sys.path.insert(0, str(ROOT))
 
 from app.services.task_notifications import record_cli_task
 from app.data_sources.fred import FredClient
-from app.data_sources.fred import parse_fred_csv
-from app.data_sources.fred import resample_to_weekly_sundays
+from app.data_sources.freshness_lineage import build_lineage
+from app.db.macro_source_lineage import replace_lineage
 from app.db import us_rates_liquidity
 
 
@@ -166,10 +166,13 @@ def _fred_point_payload(point, csv_path):
 def build_fred_rate_payload(csv_path, fred_series_id):
     if fred_series_id not in FRED_RATE_SERIES_CONFIG:
         raise ValueError(f"fred rate series is unsupported: {fred_series_id}")
-    rows = parse_fred_csv(csv_path, fred_series_id)
+    return _fred_rate_payload(csv_path, fred_series_id, build_lineage(csv_path, fred_series_id))
+
+
+def _fred_rate_payload(csv_path, fred_series_id, lineage):
     points = [
         _fred_point_payload(point, csv_path)
-        for point in resample_to_weekly_sundays(rows)
+        for point in lineage
     ]
     return {
         "series": _fred_series_payload(fred_series_id, csv_path),
@@ -191,13 +194,18 @@ def import_fred_csvs(con, fred_dir=DEFAULT_FRED_DIR, fred_series_ids=None):
     inserted = {}
     for fred_series_id in series_ids:
         csv_path = Path(fred_dir) / f"{fred_series_id}.csv"
-        payload = build_fred_rate_payload(csv_path, fred_series_id)
+        if fred_series_id not in FRED_RATE_SERIES_CONFIG:
+            raise ValueError(f"fred rate series is unsupported: {fred_series_id}")
+        lineage = build_lineage(csv_path, fred_series_id)
+        payload = _fred_rate_payload(csv_path, fred_series_id, lineage)
         saved = us_rates_liquidity.replace_rate_series_points(
             con,
             payload["series"],
             payload["points"],
+            commit=False,
         )
         inserted[payload["series"]["series_id"]] = saved["points"]
+        replace_lineage(con, f"rate:{payload['series']['series_id']}", lineage, "captured_at_import")
     return inserted
 
 

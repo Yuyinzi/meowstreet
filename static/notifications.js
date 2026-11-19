@@ -126,7 +126,7 @@ function applyNotificationState(payload) {
   for (const [id, event] of recent) {
     if (id <= clearedThrough || id <= readThrough || event.read) recent.delete(id);
   }
-  for (const node of [...toasts.children]) if (Number(node.dataset.eventId) <= clearedThrough) node.remove();
+  for (const node of [...toasts.children]) if (Number(node.dataset.eventId) <= Math.max(clearedThrough, readThrough)) node.remove();
 }
 
 async function bulkAction(action) {
@@ -166,6 +166,7 @@ async function markRead(ids) {
       if (version !== mutationVersion) return;
       feed.invalidate();
       for (const id of batch) recent.delete(id);
+      for (const node of [...toasts.children]) if (batch.includes(Number(node.dataset.eventId))) node.remove();
       setUnread(result.unread_count);
     }
     lastReadError = false;
@@ -202,7 +203,6 @@ function renderDrawer() {
       const restoreFocus = document.activeElement === dismiss;
       await markRead([event.event_id]);
       if (recent.has(event.event_id)) return;
-      for (const node of [...toasts.children]) if (Number(node.dataset.eventId) === event.event_id) node.remove();
       if (restoreFocus && drawer.open && !drawer.contains(document.activeElement)) {
         const nextLink = drawerList.firstElementChild?.children[0];
         (nextLink || historyLink).focus();
@@ -221,6 +221,7 @@ function renderDrawer() {
 }
 
 async function openDrawer() {
+  toasts.replaceChildren();
   renderDrawer();
   drawer.showModal();
   close.focus();
@@ -228,6 +229,7 @@ async function openDrawer() {
 }
 
 function toast(event) {
+  if (drawer.open || historyRoot) return;
   const node = el('div', 'notification-toast');
   node.dataset.eventId = String(event.event_id);
   const link = el('a', 'notification-toast-link');
@@ -351,7 +353,26 @@ async function loadDetail(runId, focus = false) {
     if (!run.children.length) detailPanel.append(el('p', 'notification-muted', 'No child-task details were reported.'));
     for (const child of run.children) {
       const row = el('div', 'notification-child');
-      row.append(el('strong', '', child.label || child.name), badge(child), el('span', 'notification-muted', child.summary));
+      row.append(el('strong', '', child.label || child.name), badge(child.data_audit?.some(item => item.warning) && child.status === 'ok' ? { ...child, status: 'data_warning' } : child), el('span', 'notification-muted', child.summary));
+      if (child.data_audit?.length) {
+        const details = el('details', 'notification-data-audit');
+        details.append(el('summary', '', `Data checks (${child.data_audit.length})`));
+        for (const item of child.data_audit) {
+          const evidence = el('div', 'notification-audit-item');
+          evidence.append(el('strong', '', item.name));
+          for (const [label, value] of [['Expected', item.expected_period], ['Returned', item.returned_period], ['Stored before', item.before_period], ['Stored after', item.stored_period]]) {
+            evidence.append(el('span', 'notification-muted', `${label}: ${value ?? 'Not established'}`));
+          }
+          if (item.source_period) evidence.append(el('span', 'notification-muted', `Source observation: ${item.source_period}`));
+          evidence.append(el('span', 'notification-muted', `Inserted: ${item.inserted ?? 'Not recorded'} · Updated: ${item.updated ?? 'Not recorded'}`));
+          if (item.returned_rows !== null && item.returned_rows !== undefined) evidence.append(el('span', 'notification-muted', `Returned rows: ${item.returned_rows}`));
+          if (item.checked_at) evidence.append(el('span', 'notification-muted', `Checked: ${when(item.checked_at)}`));
+          const issues = { source_behind: 'Source data behind', stored_data_behind: 'Stored data behind', persistence_mismatch: 'Returned data does not match stored data', audit_unavailable: 'Data check unavailable' };
+          evidence.append(el('span', item.warning ? 'notification-error' : 'notification-muted', `${issues[item.issue] || item.freshness || 'Unknown'}: ${item.reason || ''}`));
+          details.append(evidence);
+        }
+        row.append(details);
+      }
       detailPanel.append(row);
     }
     if (focus) { heading.focus(); heading.scrollIntoView({ block: 'nearest' }); }

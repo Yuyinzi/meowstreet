@@ -1,0 +1,6417 @@
+{
+  "version": "macro_data_freshness_v1.2",
+  "datasets": [
+    {
+      "id": "benchmark:us_sp500",
+      "name": "S&P 500",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EGSPC/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "us_sp500"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "session",
+        "calendar_id": "us_equities",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "benchmark:us_nasdaq_100",
+      "name": "Nasdaq 100",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5ENDX/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "us_nasdaq_100"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "session",
+        "calendar_id": "us_equities",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "benchmark:us_nasdaq_composite",
+      "name": "Nasdaq Composite",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EIXIC/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "us_nasdaq_composite"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "session",
+        "calendar_id": "us_equities",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "benchmark:us_djia",
+      "name": "Dow Jones Industrial Average",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EDJI/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "us_djia"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "session",
+        "calendar_id": "us_equities",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "benchmark:europe_stoxx_50",
+      "name": "Eurostoxx 50",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5ESTOXX50E/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "europe_stoxx_50"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "Europe/Berlin"
+      }
+    },
+    {
+      "id": "benchmark:europe_stoxx_600",
+      "name": "Eurostoxx 600",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5ESTOXX/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "europe_stoxx_600"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "Europe/Berlin"
+      }
+    },
+    {
+      "id": "benchmark:uk_ftse_100",
+      "name": "FTSE 100",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EFTSE/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "uk_ftse_100"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "Europe/London"
+      }
+    },
+    {
+      "id": "benchmark:uk_ftse_250",
+      "name": "FTSE 250",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EFTMC/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "uk_ftse_250"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "Europe/London"
+      }
+    },
+    {
+      "id": "benchmark:uk_ftse_350",
+      "name": "FTSE 350",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EFTLC/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "uk_ftse_350"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "Europe/London"
+      }
+    },
+    {
+      "id": "benchmark:germany_dax_40",
+      "name": "DAX 40",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EGDAXI/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "germany_dax_40"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "session",
+        "calendar_id": "xetra",
+        "timezone": "Europe/Berlin"
+      }
+    },
+    {
+      "id": "benchmark:hong_kong_hsi",
+      "name": "Hang Seng Index",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EHSI/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "hong_kong_hsi"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "session",
+        "calendar_id": "hk_equities",
+        "timezone": "Asia/Hong_Kong"
+      }
+    },
+    {
+      "id": "benchmark:hong_kong_hscei",
+      "name": "Hang Seng China Enterprises",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EHSCE/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "hong_kong_hscei"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "session",
+        "calendar_id": "hk_equities",
+        "timezone": "Asia/Hong_Kong"
+      }
+    },
+    {
+      "id": "benchmark:japan_nikkei_225",
+      "name": "Nikkei 225",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EN225/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "japan_nikkei_225"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "session",
+        "calendar_id": "jpx",
+        "timezone": "Asia/Tokyo"
+      }
+    },
+    {
+      "id": "benchmark:australia_asx_200",
+      "name": "ASX 200",
+      "category": "Market prices",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/%5EAXJO/history/",
+      "storage": {
+        "kind": "benchmark",
+        "key": "australia_asx_200"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.benchmarks_fetch",
+          "persist": "yahoo.benchmarks_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "session",
+        "calendar_id": "asx",
+        "timezone": "Australia/Sydney"
+      }
+    },
+    {
+      "id": "rate:fed_funds",
+      "name": "Fed Funds",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DFF",
+      "storage": {
+        "kind": "rate",
+        "key": "fed_funds"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DFF",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_1m",
+      "name": "1-Month Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS1MO",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_1m"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS1MO",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_3m",
+      "name": "3-Month Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS3MO",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_3m"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS3MO",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_6m",
+      "name": "6-Month Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS6MO",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_6m"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS6MO",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_1y",
+      "name": "1-Year Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS1",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_1y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS1",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_2y",
+      "name": "2-Year Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS2",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_2y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS2",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_3y",
+      "name": "3-Year Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS3",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_3y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS3",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_5y",
+      "name": "5-Year Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS5",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_5y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS5",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_7y",
+      "name": "7-Year Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS7",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_7y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS7",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_10y",
+      "name": "10-Year Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS10",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_10y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS10",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_20y",
+      "name": "20-Year Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS20",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_20y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS20",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:treasury_30y",
+      "name": "30-Year Treasury",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DGS30",
+      "storage": {
+        "kind": "rate",
+        "key": "treasury_30y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DGS30",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:tips_5y",
+      "name": "5-Year TIPS",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DFII5",
+      "storage": {
+        "kind": "rate",
+        "key": "tips_5y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DFII5",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:tips_7y",
+      "name": "7-Year TIPS",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DFII7",
+      "storage": {
+        "kind": "rate",
+        "key": "tips_7y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DFII7",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:tips_10y",
+      "name": "10-Year TIPS",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DFII10",
+      "storage": {
+        "kind": "rate",
+        "key": "tips_10y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DFII10",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:tips_20y",
+      "name": "20-Year TIPS",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DFII20",
+      "storage": {
+        "kind": "rate",
+        "key": "tips_20y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DFII20",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "rate:tips_30y",
+      "name": "30-Year TIPS",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DFII30",
+      "storage": {
+        "kind": "rate",
+        "key": "tips_30y"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "rates_fred_fetch",
+          "persist": "rates_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "DFII30",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:cpi_yoy",
+      "name": "CPI YoY",
+      "category": "Inflation & growth",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/",
+      "storage": {
+        "kind": "macro",
+        "key": "cpi_yoy"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "macro_indicators_fred_fetch",
+          "persist": "macro_indicators_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "cpi",
+      "lineage_source": "CPIAUCSL",
+      "lineage_transform": "yoy"
+    },
+    {
+      "id": "macro:vix",
+      "name": "VIX",
+      "category": "Inflation & growth",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/",
+      "storage": {
+        "kind": "macro",
+        "key": "vix"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "macro_indicators_fred_fetch",
+          "persist": "macro_indicators_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Weekly (Sunday labels)",
+      "period_basis": "weekly_resample",
+      "schedule_id": "unverified",
+      "lineage_source": "VIXCLS",
+      "lineage_transform": "identity",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 10,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:core_pce_price_index",
+      "name": "Core PCE Price Index",
+      "category": "Inflation & growth",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/",
+      "storage": {
+        "kind": "macro",
+        "key": "core_pce_price_index"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "macro_indicators_fred_fetch",
+          "persist": "macro_indicators_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "pce"
+    },
+    {
+      "id": "macro:fed_total_assets",
+      "name": "Federal Reserve Total Assets",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/",
+      "storage": {
+        "kind": "macro",
+        "key": "fed_total_assets"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "macro_indicators_fred_fetch",
+          "persist": "macro_indicators_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly",
+      "storage_frequency": "Weekly",
+      "period_basis": "date",
+      "schedule_id": "unverified"
+    },
+    {
+      "id": "macro:fed_treasury_holdings",
+      "name": "Federal Reserve Treasury Holdings",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/",
+      "storage": {
+        "kind": "macro",
+        "key": "fed_treasury_holdings"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "macro_indicators_fred_fetch",
+          "persist": "macro_indicators_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly",
+      "storage_frequency": "Weekly",
+      "period_basis": "date",
+      "schedule_id": "unverified"
+    },
+    {
+      "id": "macro:fed_mbs_holdings",
+      "name": "Federal Reserve MBS Holdings",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/",
+      "storage": {
+        "kind": "macro",
+        "key": "fed_mbs_holdings"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "macro_indicators_fred_fetch",
+          "persist": "macro_indicators_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly",
+      "storage_frequency": "Weekly",
+      "period_basis": "date",
+      "schedule_id": "unverified"
+    },
+    {
+      "id": "macro:aaa_corporate_yield",
+      "name": "AAA Corporate Yield",
+      "category": "Credit",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/BAMLC0A1CAAAEY",
+      "storage": {
+        "kind": "macro",
+        "key": "aaa_corporate_yield"
+      },
+      "lane": "credit",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "credit_fred_fetch",
+          "persist": "credit_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Daily",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:bbb_corporate_yield",
+      "name": "BBB Corporate Yield",
+      "category": "Credit",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/BAMLC0A4CBBBEY",
+      "storage": {
+        "kind": "macro",
+        "key": "bbb_corporate_yield"
+      },
+      "lane": "credit",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "credit_fred_fetch",
+          "persist": "credit_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Daily",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:ccc_corporate_yield",
+      "name": "CCC Corporate Yield",
+      "category": "Credit",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/BAMLH0A3HYCEY",
+      "storage": {
+        "kind": "macro",
+        "key": "ccc_corporate_yield"
+      },
+      "lane": "credit",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "credit_fred_fetch",
+          "persist": "credit_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Daily",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:m2_money_stock",
+      "name": "M2 money stock",
+      "category": "Rates & liquidity",
+      "source": "FRED / Federal Reserve",
+      "source_url": "https://fred.stlouisfed.org/series/M2SL",
+      "storage": {
+        "kind": "macro",
+        "key": "m2_money_stock"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "m2_fred_fetch",
+          "persist": "m2_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "m2"
+    },
+    {
+      "id": "macro:ism_manufacturing_customer_inventories",
+      "name": "ISM Manufacturing Customer Inventories",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_customer_inventories",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_manufacturing_employment",
+      "name": "ISM Manufacturing Employment",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_employment",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_manufacturing_exports",
+      "name": "ISM Manufacturing Exports",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_exports",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_manufacturing_imports",
+      "name": "ISM Manufacturing Imports",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_imports",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_manufacturing_inventories",
+      "name": "ISM Manufacturing Inventories",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_inventories",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_manufacturing_new_orders",
+      "name": "ISM Manufacturing New Orders",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_new_orders",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_manufacturing_order_backlog",
+      "name": "ISM Manufacturing Order Backlog",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_order_backlog",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_manufacturing_pmi",
+      "name": "ISM Manufacturing PMI",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_pmi",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_manufacturing_prices",
+      "name": "ISM Manufacturing Prices",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_prices",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_manufacturing_production",
+      "name": "ISM Manufacturing Production",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_production",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_manufacturing_supplier_deliveries",
+      "name": "ISM Manufacturing Supplier Deliveries",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_manufacturing_supplier_deliveries",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "ism:manufacturing:core",
+      "name": "ISM Manufacturing report",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_report",
+        "key": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "ism:manufacturing:industry_rankings",
+      "name": "ISM Manufacturing · Industry Rankings",
+      "category": "Business surveys",
+      "source": "ISM processed report",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_output",
+        "key": "industry_rankings",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "With each report",
+      "storage_frequency": "With each report",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "ism:manufacturing:industry_signals",
+      "name": "ISM Manufacturing · Industry Signals",
+      "category": "Business surveys",
+      "source": "ISM processed report",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_output",
+        "key": "industry_signals",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "With each report",
+      "storage_frequency": "With each report",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "ism:manufacturing:comments",
+      "name": "ISM Manufacturing · Comments",
+      "category": "Business surveys",
+      "source": "ISM processed report",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_output",
+        "key": "comments",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "With each report",
+      "storage_frequency": "With each report",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "ism:manufacturing:commodities",
+      "name": "ISM Manufacturing · Commodities",
+      "category": "Business surveys",
+      "source": "ISM processed report",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_output",
+        "key": "commodities",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "With each report",
+      "storage_frequency": "With each report",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "ism:manufacturing:narrative",
+      "name": "ISM Manufacturing · Narrative",
+      "category": "Business surveys",
+      "source": "ISM processed report",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_output",
+        "key": "narrative",
+        "survey": "manufacturing"
+      },
+      "lane": "ism_manufacturing",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.manufacturing_fetch",
+          "persist": "ism.manufacturing_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "With each report",
+      "storage_frequency": "With each report",
+      "period_basis": "month",
+      "schedule_id": "ism_manufacturing"
+    },
+    {
+      "id": "macro:ism_services_business_activity",
+      "name": "ISM Services Business Activity",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_business_activity",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:ism_services_employment",
+      "name": "ISM Services Employment",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_employment",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:ism_services_imports",
+      "name": "ISM Services Imports",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_imports",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:ism_services_inventories",
+      "name": "ISM Services Inventories",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_inventories",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:ism_services_inventory_sentiment",
+      "name": "ISM Services Inventory Sentiment",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_inventory_sentiment",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:ism_services_new_export_orders",
+      "name": "ISM Services New Export Orders",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_new_export_orders",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:ism_services_new_orders",
+      "name": "ISM Services New Orders",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_new_orders",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:ism_services_order_backlog",
+      "name": "ISM Services Order Backlog",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_order_backlog",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:ism_services_pmi",
+      "name": "ISM Services PMI",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_pmi",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:ism_services_prices",
+      "name": "ISM Services Prices",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_prices",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:ism_services_supplier_deliveries",
+      "name": "ISM Services Supplier Deliveries",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "macro",
+        "key": "ism_services_supplier_deliveries",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "ism:services:core",
+      "name": "ISM Services report",
+      "category": "Business surveys",
+      "source": "ISM",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_report",
+        "key": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "ism:services:industry_rankings",
+      "name": "ISM Services · Industry Rankings",
+      "category": "Business surveys",
+      "source": "ISM processed report",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_output",
+        "key": "industry_rankings",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "With each report",
+      "storage_frequency": "With each report",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "ism:services:industry_signals",
+      "name": "ISM Services · Industry Signals",
+      "category": "Business surveys",
+      "source": "ISM processed report",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_output",
+        "key": "industry_signals",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "With each report",
+      "storage_frequency": "With each report",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "ism:services:comments",
+      "name": "ISM Services · Comments",
+      "category": "Business surveys",
+      "source": "ISM processed report",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_output",
+        "key": "comments",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "With each report",
+      "storage_frequency": "With each report",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "ism:services:commodities",
+      "name": "ISM Services · Commodities",
+      "category": "Business surveys",
+      "source": "ISM processed report",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_output",
+        "key": "commodities",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "With each report",
+      "storage_frequency": "With each report",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "ism:services:narrative",
+      "name": "ISM Services · Narrative",
+      "category": "Business surveys",
+      "source": "ISM processed report",
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "storage": {
+        "kind": "ism_output",
+        "key": "narrative",
+        "survey": "services"
+      },
+      "lane": "ism_services",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "ism.services_fetch",
+          "persist": "ism.services_enrichment_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "With each report",
+      "storage_frequency": "With each report",
+      "period_basis": "month",
+      "schedule_id": "ism_services"
+    },
+    {
+      "id": "macro:nfib_sbo_capital_outlay_plans",
+      "name": "NFIB · Capital Outlay Plans",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_capital_outlay_plans"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "macro:nfib_sbo_credit_conditions_expectations",
+      "name": "NFIB · Credit Conditions Expectations",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_credit_conditions_expectations"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "macro:nfib_sbo_current_inventory_low",
+      "name": "NFIB · Current Inventory Low",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_current_inventory_low"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "macro:nfib_sbo_earnings_trends",
+      "name": "NFIB · Earnings Trends",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_earnings_trends"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "macro:nfib_sbo_economic_expectations",
+      "name": "NFIB · Economic Expectations",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_economic_expectations"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "macro:nfib_sbo_employment_plans",
+      "name": "NFIB · Employment Plans",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_employment_plans"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "macro:nfib_sbo_expansion_outlook",
+      "name": "NFIB · Expansion Outlook",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_expansion_outlook"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "macro:nfib_sbo_inventory_plans",
+      "name": "NFIB · Inventory Plans",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_inventory_plans"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "macro:nfib_sbo_job_openings",
+      "name": "NFIB · Job Openings",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_job_openings"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "macro:nfib_sbo_optimism",
+      "name": "NFIB · Optimism",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_optimism"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "macro:nfib_sbo_real_sales_expectations",
+      "name": "NFIB · Real Sales Expectations",
+      "category": "Business surveys",
+      "source": "NFIB",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "macro",
+        "key": "nfib_sbo_real_sales_expectations"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.national_fetch",
+          "persist": "nfib.national_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "nfib"
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_optimism",
+      "name": "NFIB Pacific · Optimism",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_optimism",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_employment_plans",
+      "name": "NFIB Pacific · Employment Plans",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_employment_plans",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_expansion_outlook",
+      "name": "NFIB Pacific · Expansion Outlook",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_expansion_outlook",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_inventory_plans",
+      "name": "NFIB Pacific · Inventory Plans",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_inventory_plans",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_economic_expectations",
+      "name": "NFIB Pacific · Economic Expectations",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_economic_expectations",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_real_sales_expectations",
+      "name": "NFIB Pacific · Real Sales Expectations",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_real_sales_expectations",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_capital_outlay_plans",
+      "name": "NFIB Pacific · Capital Outlay Plans",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_capital_outlay_plans",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_current_inventory_low",
+      "name": "NFIB Pacific · Current Inventory Low",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_current_inventory_low",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_job_openings",
+      "name": "NFIB Pacific · Job Openings",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_job_openings",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_credit_conditions_expectations",
+      "name": "NFIB Pacific · Credit Conditions Expectations",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_credit_conditions_expectations",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:pacific:nfib_sbo_earnings_trends",
+      "name": "NFIB Pacific · Earnings Trends",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_earnings_trends",
+        "region": "pacific"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_optimism",
+      "name": "NFIB West Gulf (West South Central) · Optimism",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_optimism",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_employment_plans",
+      "name": "NFIB West Gulf (West South Central) · Employment Plans",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_employment_plans",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_expansion_outlook",
+      "name": "NFIB West Gulf (West South Central) · Expansion Outlook",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_expansion_outlook",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_inventory_plans",
+      "name": "NFIB West Gulf (West South Central) · Inventory Plans",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_inventory_plans",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_economic_expectations",
+      "name": "NFIB West Gulf (West South Central) · Economic Expectations",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_economic_expectations",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_real_sales_expectations",
+      "name": "NFIB West Gulf (West South Central) · Real Sales Expectations",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_real_sales_expectations",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_capital_outlay_plans",
+      "name": "NFIB West Gulf (West South Central) · Capital Outlay Plans",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_capital_outlay_plans",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_current_inventory_low",
+      "name": "NFIB West Gulf (West South Central) · Current Inventory Low",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_current_inventory_low",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_job_openings",
+      "name": "NFIB West Gulf (West South Central) · Job Openings",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_job_openings",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_credit_conditions_expectations",
+      "name": "NFIB West Gulf (West South Central) · Credit Conditions Expectations",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_credit_conditions_expectations",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:west_gulf:nfib_sbo_earnings_trends",
+      "name": "NFIB West Gulf (West South Central) · Earnings Trends",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_earnings_trends",
+        "region": "west_gulf"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_optimism",
+      "name": "NFIB North Atlantic (Northeast) · Optimism",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_optimism",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_employment_plans",
+      "name": "NFIB North Atlantic (Northeast) · Employment Plans",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_employment_plans",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_expansion_outlook",
+      "name": "NFIB North Atlantic (Northeast) · Expansion Outlook",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_expansion_outlook",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_inventory_plans",
+      "name": "NFIB North Atlantic (Northeast) · Inventory Plans",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_inventory_plans",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_economic_expectations",
+      "name": "NFIB North Atlantic (Northeast) · Economic Expectations",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_economic_expectations",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_real_sales_expectations",
+      "name": "NFIB North Atlantic (Northeast) · Real Sales Expectations",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_real_sales_expectations",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_capital_outlay_plans",
+      "name": "NFIB North Atlantic (Northeast) · Capital Outlay Plans",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_capital_outlay_plans",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_current_inventory_low",
+      "name": "NFIB North Atlantic (Northeast) · Current Inventory Low",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_current_inventory_low",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_job_openings",
+      "name": "NFIB North Atlantic (Northeast) · Job Openings",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_job_openings",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_credit_conditions_expectations",
+      "name": "NFIB North Atlantic (Northeast) · Credit Conditions Expectations",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_credit_conditions_expectations",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:north_atlantic:nfib_sbo_earnings_trends",
+      "name": "NFIB North Atlantic (Northeast) · Earnings Trends",
+      "category": "Business surveys",
+      "source": "NFIB regional API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_earnings_trends",
+        "region": "north_atlantic"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:umcsi_aggregate",
+      "name": "Michigan · Aggregate",
+      "category": "Consumer",
+      "source": "University of Michigan",
+      "source_url": "https://www.sca.isr.umich.edu/",
+      "storage": {
+        "kind": "macro",
+        "key": "umcsi_aggregate"
+      },
+      "lane": "consumer",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "consumer.michigan_fetch",
+          "persist": "consumer.michigan_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly (preliminary and final)",
+      "storage_frequency": "Monthly (preliminary and final)",
+      "period_basis": "month",
+      "schedule_id": "michigan"
+    },
+    {
+      "id": "macro:umcsi_expectations",
+      "name": "Michigan · Expectations",
+      "category": "Consumer",
+      "source": "University of Michigan",
+      "source_url": "https://www.sca.isr.umich.edu/",
+      "storage": {
+        "kind": "macro",
+        "key": "umcsi_expectations"
+      },
+      "lane": "consumer",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "consumer.michigan_fetch",
+          "persist": "consumer.michigan_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly (preliminary and final)",
+      "storage_frequency": "Monthly (preliminary and final)",
+      "period_basis": "month",
+      "schedule_id": "michigan"
+    },
+    {
+      "id": "macro:umcsi_current_conditions",
+      "name": "Michigan · Current Conditions",
+      "category": "Consumer",
+      "source": "University of Michigan",
+      "source_url": "https://www.sca.isr.umich.edu/",
+      "storage": {
+        "kind": "macro",
+        "key": "umcsi_current_conditions"
+      },
+      "lane": "consumer",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "consumer.michigan_fetch",
+          "persist": "consumer.michigan_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly (preliminary and final)",
+      "storage_frequency": "Monthly (preliminary and final)",
+      "period_basis": "month",
+      "schedule_id": "michigan"
+    },
+    {
+      "id": "macro:household_debt_to_gdp",
+      "name": "Household Debt To Gdp",
+      "category": "Consumer",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/BOGZ1FL010000336Q",
+      "storage": {
+        "kind": "macro",
+        "key": "household_debt_to_gdp"
+      },
+      "lane": "consumer",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "consumer.fred_fetch",
+          "persist": "consumer.fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly",
+      "storage_frequency": "Quarterly",
+      "period_basis": "quarter",
+      "schedule_id": "unverified"
+    },
+    {
+      "id": "macro:household_debt_service_ratio",
+      "name": "Household Debt Service Ratio",
+      "category": "Consumer",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/TDSP",
+      "storage": {
+        "kind": "macro",
+        "key": "household_debt_service_ratio"
+      },
+      "lane": "consumer",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "consumer.fred_fetch",
+          "persist": "consumer.fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly",
+      "storage_frequency": "Quarterly",
+      "period_basis": "quarter",
+      "schedule_id": "unverified"
+    },
+    {
+      "id": "macro:personal_saving_rate",
+      "name": "Personal Saving Rate",
+      "category": "Consumer",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/PSAVERT",
+      "storage": {
+        "kind": "macro",
+        "key": "personal_saving_rate"
+      },
+      "lane": "consumer",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "consumer.fred_fetch",
+          "persist": "consumer.fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "pce"
+    },
+    {
+      "id": "macro:one_to_four_family_mortgage_liabilities",
+      "name": "One To Four Family Mortgage Liabilities",
+      "category": "Consumer",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/HHMSDODNS",
+      "storage": {
+        "kind": "macro",
+        "key": "one_to_four_family_mortgage_liabilities"
+      },
+      "lane": "consumer",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "consumer.fred_fetch",
+          "persist": "consumer.fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly",
+      "storage_frequency": "Quarterly",
+      "period_basis": "quarter",
+      "schedule_id": "unverified"
+    },
+    {
+      "id": "macro:building_permits_saar",
+      "name": "Building permits · SAAR",
+      "category": "Inflation & growth",
+      "source": "U.S. Census Bureau",
+      "source_url": "https://www.census.gov/construction/nrc/",
+      "storage": {
+        "kind": "macro",
+        "key": "building_permits_saar"
+      },
+      "lane": "census",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "census.building_permits_fetch",
+          "persist": "census.building_permits_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "permits"
+    },
+    {
+      "id": "gdp:lag",
+      "name": "US GDP / S&P 500 · Lag relationships",
+      "category": "Inflation & growth",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/GDP",
+      "storage": {
+        "kind": "gdp",
+        "key": "lag"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "gdp_fred_fetch",
+          "persist": "gdp_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly GDP / monthly market inputs",
+      "storage_frequency": "Quarterly GDP / monthly market inputs",
+      "period_basis": "date",
+      "schedule_id": "unverified"
+    },
+    {
+      "id": "gdp:quad",
+      "name": "US GDP / S&P 500 · Quadrant relationships",
+      "category": "Inflation & growth",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/GDP",
+      "storage": {
+        "kind": "gdp",
+        "key": "quad"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "gdp_fred_fetch",
+          "persist": "gdp_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly GDP / monthly market inputs",
+      "storage_frequency": "Quarterly GDP / monthly market inputs",
+      "period_basis": "date",
+      "schedule_id": "unverified"
+    },
+    {
+      "id": "fomc:calendar",
+      "name": "FOMC calendar",
+      "category": "Policy",
+      "source": "Federal Reserve",
+      "source_url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+      "storage": {
+        "kind": "fomc_calendar",
+        "key": "calendar"
+      },
+      "lane": "fomc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": null,
+          "persist": "fomc.calendar_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "By published FOMC schedule",
+      "storage_frequency": "By published FOMC schedule",
+      "period_basis": "date",
+      "schedule_id": "fomc_statement"
+    },
+    {
+      "id": "fomc:statement",
+      "name": "FOMC statements",
+      "category": "Policy",
+      "source": "Federal Reserve",
+      "source_url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+      "storage": {
+        "kind": "fomc_document",
+        "key": "statement"
+      },
+      "lane": "fomc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "fomc.documents_fetch",
+          "persist": "fomc.documents_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "By published FOMC schedule",
+      "storage_frequency": "By published FOMC schedule",
+      "period_basis": "date",
+      "schedule_id": "fomc_statement"
+    },
+    {
+      "id": "fomc:minutes",
+      "name": "FOMC minutes",
+      "category": "Policy",
+      "source": "Federal Reserve",
+      "source_url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+      "storage": {
+        "kind": "fomc_document",
+        "key": "minutes"
+      },
+      "lane": "fomc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "fomc.documents_fetch",
+          "persist": "fomc.documents_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "By published FOMC schedule",
+      "storage_frequency": "By published FOMC schedule",
+      "period_basis": "date",
+      "schedule_id": "fomc_minutes"
+    },
+    {
+      "id": "fomc:policy_tone",
+      "name": "FOMC policy tone",
+      "category": "Policy",
+      "source": "Federal Reserve",
+      "source_url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+      "storage": {
+        "kind": "fomc_extraction",
+        "key": "policy_tone"
+      },
+      "lane": "fomc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "fomc.documents_fetch",
+          "persist": "fomc.policy_tone_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "By published FOMC schedule",
+      "storage_frequency": "By published FOMC schedule",
+      "period_basis": "date",
+      "schedule_id": "fomc_statement"
+    },
+    {
+      "id": "fomc:minutes_structure",
+      "name": "FOMC minutes structure",
+      "category": "Policy",
+      "source": "Federal Reserve",
+      "source_url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+      "storage": {
+        "kind": "fomc_extraction",
+        "key": "minutes_structure"
+      },
+      "lane": "fomc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "fomc.documents_fetch",
+          "persist": "fomc.minutes_import",
+          "successful_check_supported": false
+        }
+      ],
+      "frequency": "By published FOMC schedule",
+      "storage_frequency": "By published FOMC schedule",
+      "period_basis": "date",
+      "schedule_id": "fomc_minutes"
+    },
+    {
+      "id": "macro:lumber_cme_lbr_yahoo_v1",
+      "name": "Lumber · CME LBR",
+      "category": "Commodities",
+      "source": "Yahoo Finance",
+      "source_url": "https://finance.yahoo.com/quote/LBR%3DF/history/",
+      "storage": {
+        "kind": "macro",
+        "key": "lumber_cme_lbr_yahoo_v1"
+      },
+      "lane": "yahoo",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "yahoo.lumber_fetch",
+          "persist": "yahoo.lumber_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "America/Chicago"
+      }
+    },
+    {
+      "id": "macro:copper_comex",
+      "name": "Copper · COMEX",
+      "category": "Commodities",
+      "source": "Investing.com",
+      "source_url": "https://www.investing.com/commodities/",
+      "storage": {
+        "kind": "macro",
+        "key": "copper_comex"
+      },
+      "lane": "tracked_commodities",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "tracked_commodities_fetch",
+          "persist": "tracked_commodities_import",
+          "successful_check_supported": true
+        },
+        {
+          "job_id": "investing_refresh",
+          "fetch": null,
+          "persist": null,
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:copper_lme",
+      "name": "Copper · LME",
+      "category": "Commodities",
+      "source": "Investing.com",
+      "source_url": "https://www.investing.com/commodities/",
+      "storage": {
+        "kind": "macro",
+        "key": "copper_lme"
+      },
+      "lane": "tracked_commodities",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "tracked_commodities_fetch",
+          "persist": "tracked_commodities_import",
+          "successful_check_supported": true
+        },
+        {
+          "job_id": "investing_refresh",
+          "fetch": null,
+          "persist": null,
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "Europe/London"
+      }
+    },
+    {
+      "id": "macro:iron_ore_62_cfr_china",
+      "name": "Iron ore · 62% CFR China",
+      "category": "Commodities",
+      "source": "Investing.com",
+      "source_url": "https://www.investing.com/commodities/",
+      "storage": {
+        "kind": "macro",
+        "key": "iron_ore_62_cfr_china"
+      },
+      "lane": "tracked_commodities",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "tracked_commodities_fetch",
+          "persist": "tracked_commodities_import",
+          "successful_check_supported": true
+        },
+        {
+          "job_id": "investing_refresh",
+          "fetch": null,
+          "persist": null,
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:iron_ore_dce",
+      "name": "Iron ore · DCE",
+      "category": "Commodities",
+      "source": "Sina / DCE",
+      "source_url": "https://www.dce.com.cn/",
+      "storage": {
+        "kind": "macro",
+        "key": "iron_ore_dce"
+      },
+      "lane": "dce_sina",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "dce_iron_ore_sina_fetch",
+          "persist": "dce_iron_ore_sina_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    {
+      "id": "shfe:main",
+      "name": "SHFE copper · Main series",
+      "category": "Commodities",
+      "source": "SHFE",
+      "source_url": "https://www.shfe.com.cn/",
+      "storage": {
+        "kind": "shfe",
+        "key": "main"
+      },
+      "lane": "shfe",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "shfe_copper_fetch",
+          "persist": "shfe_copper_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    {
+      "id": "shfe:contracts",
+      "name": "SHFE copper · Contract prices",
+      "category": "Commodities",
+      "source": "SHFE",
+      "source_url": "https://www.shfe.com.cn/",
+      "storage": {
+        "kind": "shfe",
+        "key": "contracts"
+      },
+      "lane": "shfe",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "shfe_copper_fetch",
+          "persist": "shfe_copper_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Every trading day",
+      "storage_frequency": "Every trading day",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    {
+      "id": "cot:aluminium:191691",
+      "name": "Aluminium · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "aluminium",
+        "contract": "191691"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "cot:copper:085692",
+      "name": "Copper · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "copper",
+        "contract": "085692"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "cot:crude_oil_brent:06765T",
+      "name": "Crude Oil Brent · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "crude_oil_brent",
+        "contract": "06765T"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "cot:crude_oil_wti:067411",
+      "name": "Crude Oil Wti · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "crude_oil_wti",
+        "contract": "067411"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "cot:gold:088691",
+      "name": "Gold · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "gold",
+        "contract": "088691"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "cot:heating_oil:022651",
+      "name": "Heating Oil · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "heating_oil",
+        "contract": "022651"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "cot:palladium:075651",
+      "name": "Palladium · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "palladium",
+        "contract": "075651"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "cot:platinum:076651",
+      "name": "Platinum · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "platinum",
+        "contract": "076651"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "cot:silver:084691",
+      "name": "Silver · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "silver",
+        "contract": "084691"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "cot:steel:192651",
+      "name": "Steel · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "steel",
+        "contract": "192651"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "cot:us_natural_gas:023651",
+      "name": "Us Natural Gas · COT",
+      "category": "Commodity positioning",
+      "source": "CFTC",
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+      "storage": {
+        "kind": "cot",
+        "key": "us_natural_gas",
+        "contract": "023651"
+      },
+      "lane": "cftc",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_cot_fetch",
+          "persist": "cyclical_cot_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "cot"
+    },
+    {
+      "id": "macro:usd_broad",
+      "name": "Trade-Weighted USD Broad",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DTWEXBGS",
+      "storage": {
+        "kind": "macro",
+        "key": "usd_broad"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_fred_fetch",
+          "persist": "cyclical_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Daily",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 7,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:usd_afe",
+      "name": "Trade-Weighted USD AFE",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DTWEXAFEGS",
+      "storage": {
+        "kind": "macro",
+        "key": "usd_afe"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_fred_fetch",
+          "persist": "cyclical_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Daily",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 7,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:usd_eme",
+      "name": "Trade-Weighted USD EME",
+      "category": "Rates & liquidity",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/DTWEXEMEGS",
+      "storage": {
+        "kind": "macro",
+        "key": "usd_eme"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_fred_fetch",
+          "persist": "cyclical_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Daily",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 7,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:cpi_all_items",
+      "name": "CPI All Items",
+      "category": "Inflation & growth",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/CPIAUCSL",
+      "storage": {
+        "kind": "macro",
+        "key": "cpi_all_items"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_fred_fetch",
+          "persist": "cyclical_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "cpi"
+    },
+    {
+      "id": "macro:core_cpi",
+      "name": "CPI All Items Less Food and Energy",
+      "category": "Inflation & growth",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/CPILFESL",
+      "storage": {
+        "kind": "macro",
+        "key": "core_cpi"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_fred_fetch",
+          "persist": "cyclical_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "cpi"
+    },
+    {
+      "id": "macro:ppi_all_commodities",
+      "name": "PPI All Commodities",
+      "category": "Inflation & growth",
+      "source": "FRED",
+      "source_url": "https://fred.stlouisfed.org/series/PPIACO",
+      "storage": {
+        "kind": "macro",
+        "key": "ppi_all_commodities"
+      },
+      "lane": "fred_macro",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "cyclical_fred_fetch",
+          "persist": "cyclical_fred_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "ppi"
+    },
+    {
+      "id": "macro:oil_wti_spot",
+      "name": "WTI spot",
+      "category": "Commodities",
+      "source": "EIA",
+      "source_url": "https://www.eia.gov/petroleum/supply/weekly/",
+      "storage": {
+        "kind": "macro",
+        "key": "oil_wti_spot"
+      },
+      "lane": "eia",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "oil_fetch",
+          "persist": "oil_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Daily",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:oil_brent_spot",
+      "name": "Brent spot",
+      "category": "Commodities",
+      "source": "EIA",
+      "source_url": "https://www.eia.gov/petroleum/supply/weekly/",
+      "storage": {
+        "kind": "macro",
+        "key": "oil_brent_spot"
+      },
+      "lane": "eia",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "oil_fetch",
+          "persist": "oil_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Daily",
+      "storage_frequency": "Daily",
+      "period_basis": "date",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "max_age",
+        "max_age_days": 5,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "macro:oil_commercial_crude_stocks",
+      "name": "Commercial crude stocks",
+      "category": "Commodities",
+      "source": "EIA",
+      "source_url": "https://www.eia.gov/petroleum/supply/weekly/",
+      "storage": {
+        "kind": "macro",
+        "key": "oil_commercial_crude_stocks"
+      },
+      "lane": "eia",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "oil_fetch",
+          "persist": "oil_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "eia_weekly"
+    },
+    {
+      "id": "macro:oil_commercial_crude_imports",
+      "name": "Crude imports",
+      "category": "Commodities",
+      "source": "EIA",
+      "source_url": "https://www.eia.gov/petroleum/supply/weekly/",
+      "storage": {
+        "kind": "macro",
+        "key": "oil_commercial_crude_imports"
+      },
+      "lane": "eia",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "oil_fetch",
+          "persist": "oil_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "eia_weekly"
+    },
+    {
+      "id": "macro:oil_crude_production",
+      "name": "Crude production",
+      "category": "Commodities",
+      "source": "EIA",
+      "source_url": "https://www.eia.gov/petroleum/supply/weekly/",
+      "storage": {
+        "kind": "macro",
+        "key": "oil_crude_production"
+      },
+      "lane": "eia",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "oil_fetch",
+          "persist": "oil_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "eia_weekly"
+    },
+    {
+      "id": "macro:oil_refinery_crude_input",
+      "name": "Refinery crude input",
+      "category": "Commodities",
+      "source": "EIA",
+      "source_url": "https://www.eia.gov/petroleum/supply/weekly/",
+      "storage": {
+        "kind": "macro",
+        "key": "oil_refinery_crude_input"
+      },
+      "lane": "eia",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "oil_fetch",
+          "persist": "oil_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "eia_weekly"
+    },
+    {
+      "id": "macro:oil_petroleum_products_supplied",
+      "name": "Petroleum products supplied",
+      "category": "Commodities",
+      "source": "EIA",
+      "source_url": "https://www.eia.gov/petroleum/supply/weekly/",
+      "storage": {
+        "kind": "macro",
+        "key": "oil_petroleum_products_supplied"
+      },
+      "lane": "eia",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "oil_fetch",
+          "persist": "oil_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly (holiday exceptions)",
+      "storage_frequency": "Weekly (holiday exceptions)",
+      "period_basis": "date",
+      "schedule_id": "eia_weekly"
+    },
+    {
+      "id": "economic:initial_claims_sa",
+      "name": "Initial Claims · SA",
+      "category": "Employment & activity",
+      "source": "DOL",
+      "source_url": "https://www.dol.gov/ui/data.pdf",
+      "storage": {
+        "kind": "economic",
+        "key": "initial_claims_sa"
+      },
+      "lane": "dol",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "dol_fetch",
+          "persist": "dol_import",
+          "successful_check_supported": true
+        },
+        {
+          "job_id": "macro_refresh",
+          "fetch": "dol_release_fetch",
+          "persist": "dol_release_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly",
+      "storage_frequency": "Weekly",
+      "period_basis": "date",
+      "schedule_id": "claims_initial"
+    },
+    {
+      "id": "economic:continuing_claims_sa",
+      "name": "Continuing Claims · SA",
+      "category": "Employment & activity",
+      "source": "DOL",
+      "source_url": "https://www.dol.gov/ui/data.pdf",
+      "storage": {
+        "kind": "economic",
+        "key": "continuing_claims_sa"
+      },
+      "lane": "dol",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "dol_fetch",
+          "persist": "dol_import",
+          "successful_check_supported": true
+        },
+        {
+          "job_id": "macro_refresh",
+          "fetch": "dol_release_fetch",
+          "persist": "dol_release_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Weekly",
+      "storage_frequency": "Weekly",
+      "period_basis": "date",
+      "schedule_id": "claims_continuing"
+    },
+    {
+      "id": "economic:nonfarm_payrolls_change",
+      "name": "Nonfarm Payrolls Change",
+      "category": "Employment & activity",
+      "source": "BLS",
+      "source_url": "https://www.bls.gov/news.release/empsit.toc.htm",
+      "storage": {
+        "kind": "economic",
+        "key": "nonfarm_payrolls_change"
+      },
+      "lane": "bls",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "bls_fetch",
+          "persist": "bls_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "employment"
+    },
+    {
+      "id": "economic:payrolls_3m_average_change",
+      "name": "Payrolls 3M Average Change",
+      "category": "Employment & activity",
+      "source": "BLS",
+      "source_url": "https://www.bls.gov/news.release/empsit.toc.htm",
+      "storage": {
+        "kind": "economic",
+        "key": "payrolls_3m_average_change"
+      },
+      "lane": "bls",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "bls_fetch",
+          "persist": "bls_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "employment"
+    },
+    {
+      "id": "economic:unemployment_rate",
+      "name": "Unemployment Rate",
+      "category": "Employment & activity",
+      "source": "BLS",
+      "source_url": "https://www.bls.gov/news.release/empsit.toc.htm",
+      "storage": {
+        "kind": "economic",
+        "key": "unemployment_rate"
+      },
+      "lane": "bls",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "bls_fetch",
+          "persist": "bls_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "employment"
+    },
+    {
+      "id": "economic:average_weekly_hours",
+      "name": "Average Weekly Hours",
+      "category": "Employment & activity",
+      "source": "BLS",
+      "source_url": "https://www.bls.gov/news.release/empsit.toc.htm",
+      "storage": {
+        "kind": "economic",
+        "key": "average_weekly_hours"
+      },
+      "lane": "bls",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "bls_fetch",
+          "persist": "bls_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "employment"
+    },
+    {
+      "id": "economic:average_hourly_earnings",
+      "name": "Average Hourly Earnings",
+      "category": "Employment & activity",
+      "source": "BLS",
+      "source_url": "https://www.bls.gov/news.release/empsit.toc.htm",
+      "storage": {
+        "kind": "economic",
+        "key": "average_hourly_earnings"
+      },
+      "lane": "bls",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "bls_fetch",
+          "persist": "bls_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "employment"
+    },
+    {
+      "id": "economic:manufacturing_production",
+      "name": "Manufacturing Production",
+      "category": "Employment & activity",
+      "source": "Federal Reserve",
+      "source_url": "https://www.federalreserve.gov/releases/g17/",
+      "storage": {
+        "kind": "economic",
+        "key": "manufacturing_production"
+      },
+      "lane": "federal_reserve",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "federal_reserve_fetch",
+          "persist": "federal_reserve_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "g17"
+    },
+    {
+      "id": "economic:total_industrial_production",
+      "name": "Total Industrial Production",
+      "category": "Employment & activity",
+      "source": "Federal Reserve",
+      "source_url": "https://www.federalreserve.gov/releases/g17/",
+      "storage": {
+        "kind": "economic",
+        "key": "total_industrial_production"
+      },
+      "lane": "federal_reserve",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "federal_reserve_fetch",
+          "persist": "federal_reserve_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "g17"
+    },
+    {
+      "id": "economic:capacity_utilization",
+      "name": "Capacity Utilization",
+      "category": "Employment & activity",
+      "source": "Federal Reserve",
+      "source_url": "https://www.federalreserve.gov/releases/g17/",
+      "storage": {
+        "kind": "economic",
+        "key": "capacity_utilization"
+      },
+      "lane": "federal_reserve",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "federal_reserve_fetch",
+          "persist": "federal_reserve_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Monthly",
+      "storage_frequency": "Monthly",
+      "period_basis": "month",
+      "schedule_id": "g17"
+    },
+    {
+      "id": "regional:national:nfib_sbo_optimism",
+      "name": "NFIB National (quarterly) · Optimism",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_optimism",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:national:nfib_sbo_employment_plans",
+      "name": "NFIB National (quarterly) · Employment Plans",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_employment_plans",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:national:nfib_sbo_expansion_outlook",
+      "name": "NFIB National (quarterly) · Expansion Outlook",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_expansion_outlook",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:national:nfib_sbo_inventory_plans",
+      "name": "NFIB National (quarterly) · Inventory Plans",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_inventory_plans",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:national:nfib_sbo_economic_expectations",
+      "name": "NFIB National (quarterly) · Economic Expectations",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_economic_expectations",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:national:nfib_sbo_real_sales_expectations",
+      "name": "NFIB National (quarterly) · Real Sales Expectations",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_real_sales_expectations",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:national:nfib_sbo_capital_outlay_plans",
+      "name": "NFIB National (quarterly) · Capital Outlay Plans",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_capital_outlay_plans",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:national:nfib_sbo_current_inventory_low",
+      "name": "NFIB National (quarterly) · Current Inventory Low",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_current_inventory_low",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:national:nfib_sbo_job_openings",
+      "name": "NFIB National (quarterly) · Job Openings",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_job_openings",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:national:nfib_sbo_credit_conditions_expectations",
+      "name": "NFIB National (quarterly) · Credit Conditions Expectations",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_credit_conditions_expectations",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "id": "regional:national:nfib_sbo_earnings_trends",
+      "name": "NFIB National (quarterly) · Earnings Trends",
+      "category": "Business surveys",
+      "source": "NFIB national API",
+      "source_url": "https://www.nfib.com/small-business-trends-research/",
+      "storage": {
+        "kind": "regional",
+        "key": "nfib_sbo_earnings_trends",
+        "region": "national"
+      },
+      "lane": "nfib",
+      "tasks": [
+        {
+          "job_id": "macro_refresh",
+          "fetch": "nfib.regional_fetch",
+          "persist": "nfib.regional_import",
+          "successful_check_supported": true
+        }
+      ],
+      "frequency": "Quarterly (3-month aggregate)",
+      "storage_frequency": "Quarterly (3-month aggregate)",
+      "period_basis": "quarter",
+      "schedule_id": "unverified",
+      "freshness_policy": {
+        "kind": "current_quarter",
+        "timezone": "America/New_York"
+      }
+    }
+  ],
+  "schedules": {
+    "unverified": {
+      "source_url": null,
+      "verified_at": "2026-11-13",
+      "coverage_start": null,
+      "coverage_end": null,
+      "timezone": null,
+      "note": "The publication calendar or provider delivery window has not been verified",
+      "releases": []
+    },
+    "cpi": {
+      "source_url": "https://www.bls.gov/schedule/2026/home.htm",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-10-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-10-14T08:30:00",
+          "period": "2026-09-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-10T08:30:00",
+          "period": "2026-10-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-10T08:30:00",
+          "period": "2026-11-01",
+          "precision": "exact"
+        }
+      ]
+    },
+    "ppi": {
+      "source_url": "https://www.bls.gov/schedule/2026/home.htm",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-10-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-10-15T08:30:00",
+          "period": "2026-09-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-13T08:30:00",
+          "period": "2026-10-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-15T08:30:00",
+          "period": "2026-11-01",
+          "precision": "exact"
+        }
+      ]
+    },
+    "employment": {
+      "source_url": "https://www.bls.gov/schedule/2026/home.htm",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-10-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-10-02T08:30:00",
+          "period": "2026-09-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-06T08:30:00",
+          "period": "2026-10-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-04T08:30:00",
+          "period": "2026-11-01",
+          "precision": "exact"
+        }
+      ]
+    },
+    "g17": {
+      "source_url": "https://www.federalreserve.gov/newsevents/2026-november.htm",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-10-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-10-16T09:15:00",
+          "period": "2026-09-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-17T09:15:00",
+          "period": "2026-10-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-16T09:15:00",
+          "period": "2026-11-01",
+          "precision": "exact"
+        }
+      ],
+      "source_urls": [
+        "https://www.federalreserve.gov/newsevents/2026-october.htm",
+        "https://www.federalreserve.gov/newsevents/2026-november.htm",
+        "https://www.federalreserve.gov/newsevents/2026-december.htm"
+      ]
+    },
+    "m2": {
+      "source_url": "https://www.federalreserve.gov/newsevents/2026-november.htm",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-10-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-10-27T13:00:00",
+          "period": "2026-09-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-24T13:00:00",
+          "period": "2026-10-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-22T13:00:00",
+          "period": "2026-11-01",
+          "precision": "exact"
+        }
+      ],
+      "source_urls": [
+        "https://www.federalreserve.gov/newsevents/2026-october.htm",
+        "https://www.federalreserve.gov/newsevents/2026-november.htm",
+        "https://www.federalreserve.gov/newsevents/2026-december.htm"
+      ]
+    },
+    "permits": {
+      "source_url": "https://www.census.gov/construction/soc/schedule.html",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-10-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-10-20T08:30:00",
+          "period": "2026-09-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-18T08:30:00",
+          "period": "2026-10-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-17T08:30:00",
+          "period": "2026-11-01",
+          "precision": "exact"
+        }
+      ]
+    },
+    "pce": {
+      "source_url": "https://www.bea.gov/news/schedule/",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-10-29",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-10-29T08:30:00",
+          "period": "2026-09-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-25T08:30:00",
+          "period": "2026-10-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-23T08:30:00",
+          "period": "2026-11-01",
+          "precision": "exact"
+        }
+      ],
+      "source_urls": [
+        "https://www.bea.gov/news/schedule/",
+        "https://www.bea.gov/news/2026/personal-income-and-outlays-september-2026"
+      ]
+    },
+    "nfib": {
+      "source_url": "https://www.nfib.com/news/press-release/new-nfib-survey-main-street-optimism-remains-steady-uncertainty-declines-in-october/",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-11-10",
+      "coverage_end": "2026-11-13",
+      "timezone": "America/New_York",
+      "note": "Verified October report publication; next exact release is not verified",
+      "releases": [
+        {
+          "at": "2026-11-10",
+          "period": "2026-10-01",
+          "precision": "date"
+        }
+      ]
+    },
+    "ism_manufacturing": {
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-01-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-01-05T10:00:00",
+          "period": "2025-12-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-02-02T10:00:00",
+          "period": "2026-01-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-03-02T10:00:00",
+          "period": "2026-02-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-01T10:00:00",
+          "period": "2026-03-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-01T10:00:00",
+          "period": "2026-04-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-06-01T10:00:00",
+          "period": "2026-05-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-01T10:00:00",
+          "period": "2026-06-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-08-03T10:00:00",
+          "period": "2026-07-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-01T10:00:00",
+          "period": "2026-08-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-01T10:00:00",
+          "period": "2026-09-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-02T10:00:00",
+          "period": "2026-10-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-01T10:00:00",
+          "period": "2026-11-01",
+          "precision": "exact"
+        }
+      ]
+    },
+    "ism_services": {
+      "source_url": "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar/",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-01-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-01-07T10:00:00",
+          "period": "2025-12-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-02-04T10:00:00",
+          "period": "2026-01-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-03-04T10:00:00",
+          "period": "2026-02-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-06T10:00:00",
+          "period": "2026-03-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-05T10:00:00",
+          "period": "2026-04-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-06-03T10:00:00",
+          "period": "2026-05-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-06T10:00:00",
+          "period": "2026-06-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-08-05T10:00:00",
+          "period": "2026-07-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-03T10:00:00",
+          "period": "2026-08-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-05T10:00:00",
+          "period": "2026-09-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-04T10:00:00",
+          "period": "2026-10-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-03T10:00:00",
+          "period": "2026-11-01",
+          "precision": "exact"
+        }
+      ]
+    },
+    "fomc_statement": {
+      "source_url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-09-16",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-09-16T14:00:00",
+          "period": "2026-09-15",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-28T14:00:00",
+          "period": "2026-10-27",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-09T14:00:00",
+          "period": "2026-12-08",
+          "precision": "exact"
+        }
+      ]
+    },
+    "fomc_minutes": {
+      "source_url": "https://www.federalreserve.gov/newsevents/2026-november.htm",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-10-01",
+      "coverage_end": "2026-11-30",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-10-07T14:00:00",
+          "period": "2026-09-15",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-18T14:00:00",
+          "period": "2026-10-27",
+          "precision": "exact"
+        }
+      ],
+      "source_urls": [
+        "https://www.federalreserve.gov/newsevents/2026-october.htm",
+        "https://www.federalreserve.gov/newsevents/2026-november.htm",
+        "https://www.federalreserve.gov/newsevents/2026-december.htm"
+      ]
+    },
+    "eia_weekly": {
+      "source_url": "https://www.eia.gov/petroleum/supply/weekly/schedule.php",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-01-07",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-01-07T10:30:00",
+          "period": "2026-01-02",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-01-14T10:30:00",
+          "period": "2026-01-09",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-01-22T12:00:00",
+          "period": "2026-01-16",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-01-28T10:30:00",
+          "period": "2026-01-23",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-02-04T10:30:00",
+          "period": "2026-01-30",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-02-11T10:30:00",
+          "period": "2026-02-06",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-02-19T12:00:00",
+          "period": "2026-02-13",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-02-25T10:30:00",
+          "period": "2026-02-20",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-03-04T10:30:00",
+          "period": "2026-02-27",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-03-11T10:30:00",
+          "period": "2026-03-06",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-03-18T10:30:00",
+          "period": "2026-03-13",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-03-25T10:30:00",
+          "period": "2026-03-20",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-01T10:30:00",
+          "period": "2026-03-27",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-08T10:30:00",
+          "period": "2026-04-03",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-15T10:30:00",
+          "period": "2026-04-10",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-22T10:30:00",
+          "period": "2026-04-17",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-29T10:30:00",
+          "period": "2026-04-24",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-06T10:30:00",
+          "period": "2026-05-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-13T10:30:00",
+          "period": "2026-05-08",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-20T10:30:00",
+          "period": "2026-05-15",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-28T12:00:00",
+          "period": "2026-05-22",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-06-03T10:30:00",
+          "period": "2026-05-29",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-06-10T10:30:00",
+          "period": "2026-06-05",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-06-17T10:30:00",
+          "period": "2026-06-12",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-06-24T10:30:00",
+          "period": "2026-06-19",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-01T10:30:00",
+          "period": "2026-06-26",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-08T10:30:00",
+          "period": "2026-07-03",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-15T10:30:00",
+          "period": "2026-07-10",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-22T10:30:00",
+          "period": "2026-07-17",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-29T10:30:00",
+          "period": "2026-07-24",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-08-05T10:30:00",
+          "period": "2026-07-31",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-08-12T10:30:00",
+          "period": "2026-08-07",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-08-19T10:30:00",
+          "period": "2026-08-14",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-08-26T10:30:00",
+          "period": "2026-08-21",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-02T10:30:00",
+          "period": "2026-08-28",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-10T12:00:00",
+          "period": "2026-09-04",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-16T10:30:00",
+          "period": "2026-09-11",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-23T10:30:00",
+          "period": "2026-09-18",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-30T10:30:00",
+          "period": "2026-09-25",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-07T10:30:00",
+          "period": "2026-10-02",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-15T12:00:00",
+          "period": "2026-10-09",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-21T10:30:00",
+          "period": "2026-10-16",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-28T10:30:00",
+          "period": "2026-10-23",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-04T10:30:00",
+          "period": "2026-10-30",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-12T12:00:00",
+          "period": "2026-11-06",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-18T10:30:00",
+          "period": "2026-11-13",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-25T10:30:00",
+          "period": "2026-11-20",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-02T10:30:00",
+          "period": "2026-11-27",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-09T10:30:00",
+          "period": "2026-12-04",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-16T10:30:00",
+          "period": "2026-12-11",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-23T10:30:00",
+          "period": "2026-12-18",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-30T10:30:00",
+          "period": "2026-12-25",
+          "precision": "exact"
+        }
+      ]
+    },
+    "cot": {
+      "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/ReleaseSchedule/index.htm",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-01-05",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Tentative official release dates; individual contracts may be absent from a report",
+      "releases": [
+        {
+          "at": "2026-01-05T15:30:00",
+          "period": "2025-12-30",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-01-09T15:30:00",
+          "period": "2026-01-06",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-01-16T15:30:00",
+          "period": "2026-01-13",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-01-23T15:30:00",
+          "period": "2026-01-20",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-01-30T15:30:00",
+          "period": "2026-01-27",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-02-06T15:30:00",
+          "period": "2026-02-03",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-02-13T15:30:00",
+          "period": "2026-02-10",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-02-20T15:30:00",
+          "period": "2026-02-17",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-02-27T15:30:00",
+          "period": "2026-02-24",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-03-06T15:30:00",
+          "period": "2026-03-03",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-03-13T15:30:00",
+          "period": "2026-03-10",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-03-20T15:30:00",
+          "period": "2026-03-17",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-03-27T15:30:00",
+          "period": "2026-03-24",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-03T15:30:00",
+          "period": "2026-03-31",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-10T15:30:00",
+          "period": "2026-04-07",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-17T15:30:00",
+          "period": "2026-04-14",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-04-24T15:30:00",
+          "period": "2026-04-21",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-01T15:30:00",
+          "period": "2026-04-28",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-08T15:30:00",
+          "period": "2026-05-05",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-15T15:30:00",
+          "period": "2026-05-12",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-22T15:30:00",
+          "period": "2026-05-19",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-05-29T15:30:00",
+          "period": "2026-05-26",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-06-05T15:30:00",
+          "period": "2026-06-02",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-06-12T15:30:00",
+          "period": "2026-06-09",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-06-22T15:30:00",
+          "period": "2026-06-16",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-06-26T15:30:00",
+          "period": "2026-06-23",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-06T15:30:00",
+          "period": "2026-06-30",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-10T15:30:00",
+          "period": "2026-07-07",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-17T15:30:00",
+          "period": "2026-07-14",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-24T15:30:00",
+          "period": "2026-07-21",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-07-31T15:30:00",
+          "period": "2026-07-28",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-08-07T15:30:00",
+          "period": "2026-08-04",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-08-14T15:30:00",
+          "period": "2026-08-11",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-08-21T15:30:00",
+          "period": "2026-08-18",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-08-28T15:30:00",
+          "period": "2026-08-25",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-04T15:30:00",
+          "period": "2026-09-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-11T15:30:00",
+          "period": "2026-09-08",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-18T15:30:00",
+          "period": "2026-09-15",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-09-25T15:30:00",
+          "period": "2026-09-22",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-02T15:30:00",
+          "period": "2026-09-29",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-09T15:30:00",
+          "period": "2026-10-06",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-16T15:30:00",
+          "period": "2026-10-13",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-23T15:30:00",
+          "period": "2026-10-20",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-30T15:30:00",
+          "period": "2026-10-27",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-06T15:30:00",
+          "period": "2026-11-03",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-16T15:30:00",
+          "period": "2026-11-10",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-20T15:30:00",
+          "period": "2026-11-17",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-30T15:30:00",
+          "period": "2026-11-24",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-04T15:30:00",
+          "period": "2026-12-01",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-11T15:30:00",
+          "period": "2026-12-08",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-18T15:30:00",
+          "period": "2026-12-15",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-28T15:30:00",
+          "period": "2026-12-22",
+          "precision": "exact"
+        }
+      ]
+    },
+    "claims_initial": {
+      "source_url": "https://oui.doleta.gov/unemploy/claims_arch.asp",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-10-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-10-01T08:30:00",
+          "period": "2026-09-26",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-08T08:30:00",
+          "period": "2026-10-03",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-15T08:30:00",
+          "period": "2026-10-10",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-22T08:30:00",
+          "period": "2026-10-17",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-29T08:30:00",
+          "period": "2026-10-24",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-05T08:30:00",
+          "period": "2026-10-31",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-12T08:30:00",
+          "period": "2026-11-07",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-19T08:30:00",
+          "period": "2026-11-14",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-25T08:30:00",
+          "period": "2026-11-21",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-03T08:30:00",
+          "period": "2026-11-28",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-10T08:30:00",
+          "period": "2026-12-05",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-17T08:30:00",
+          "period": "2026-12-12",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-24T08:30:00",
+          "period": "2026-12-19",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-31T08:30:00",
+          "period": "2026-12-26",
+          "precision": "exact"
+        }
+      ]
+    },
+    "claims_continuing": {
+      "source_url": "https://oui.doleta.gov/unemploy/claims_arch.asp",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-10-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official publication schedule; provider delivery may lag",
+      "releases": [
+        {
+          "at": "2026-10-01T08:30:00",
+          "period": "2026-09-19",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-08T08:30:00",
+          "period": "2026-09-26",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-15T08:30:00",
+          "period": "2026-10-03",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-22T08:30:00",
+          "period": "2026-10-10",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-10-29T08:30:00",
+          "period": "2026-10-17",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-05T08:30:00",
+          "period": "2026-10-24",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-12T08:30:00",
+          "period": "2026-10-31",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-19T08:30:00",
+          "period": "2026-11-07",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-11-25T08:30:00",
+          "period": "2026-11-14",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-03T08:30:00",
+          "period": "2026-11-21",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-10T08:30:00",
+          "period": "2026-11-28",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-17T08:30:00",
+          "period": "2026-12-05",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-24T08:30:00",
+          "period": "2026-12-12",
+          "precision": "exact"
+        },
+        {
+          "at": "2026-12-31T08:30:00",
+          "period": "2026-12-19",
+          "precision": "exact"
+        }
+      ]
+    },
+    "michigan": {
+      "source_url": "https://data.sca.isr.umich.edu/fetchdoc.php?docid=79628",
+      "verified_at": "2026-11-13",
+      "coverage_start": "2026-01-01",
+      "coverage_end": "2026-12-31",
+      "timezone": "America/New_York",
+      "note": "Official preliminary and final release dates; exact release times and locally stored release versions are not retained",
+      "releases": [
+        {
+          "at": "2026-01-09",
+          "period": "2026-01-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-01-23",
+          "period": "2026-01-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-02-06",
+          "period": "2026-02-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-02-20",
+          "period": "2026-02-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-03-13",
+          "period": "2026-03-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-03-27",
+          "period": "2026-03-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-04-10",
+          "period": "2026-04-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-04-24",
+          "period": "2026-04-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-05-08",
+          "period": "2026-05-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-05-22",
+          "period": "2026-05-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-06-12",
+          "period": "2026-06-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-06-26",
+          "period": "2026-06-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-07-17",
+          "period": "2026-07-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-07-31",
+          "period": "2026-07-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-08-14",
+          "period": "2026-08-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-08-28",
+          "period": "2026-08-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-09-11",
+          "period": "2026-09-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-09-25",
+          "period": "2026-09-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-10-09",
+          "period": "2026-10-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-10-23",
+          "period": "2026-10-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-11-06",
+          "period": "2026-11-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-11-20",
+          "period": "2026-11-01",
+          "precision": "date",
+          "version": "final"
+        },
+        {
+          "at": "2026-12-04",
+          "period": "2026-12-01",
+          "precision": "date",
+          "version": "preliminary"
+        },
+        {
+          "at": "2026-12-18",
+          "period": "2026-12-01",
+          "precision": "date",
+          "version": "final"
+        }
+      ]
+    }
+  },
+  "collection_schedules": [
+    {
+      "job_id": "macro_refresh",
+      "label": "Macro data refresh",
+      "cadence": "Daily at 12:00 and 20:00",
+      "timezone": "Asia/Shanghai",
+      "verified_at": "2026-11-13"
+    },
+    {
+      "job_id": "investing_refresh",
+      "label": "Investing commodity refresh",
+      "cadence": "Monday–Friday at 19:00",
+      "timezone": "Asia/Shanghai",
+      "verified_at": "2026-11-13"
+    }
+  ],
+  "market_calendars": {
+    "us_equities": {
+      "timezone": "America/New_York",
+      "coverage_start": "2026-01-01",
+      "coverage_end": "2026-12-31",
+      "holidays": [
+        "2026-01-01",
+        "2026-01-19",
+        "2026-02-16",
+        "2026-04-03",
+        "2026-05-25",
+        "2026-06-19",
+        "2026-07-03",
+        "2026-09-07",
+        "2026-11-26",
+        "2026-12-25"
+      ],
+      "source_url": "https://www.nyse.com/markets/hours-calendars",
+      "verified_at": "2026-11-17"
+    },
+    "hk_equities": {
+      "timezone": "Asia/Hong_Kong",
+      "coverage_start": "2026-01-01",
+      "coverage_end": "2026-12-31",
+      "holidays": [
+        "2026-01-01",
+        "2026-02-17",
+        "2026-02-18",
+        "2026-02-19",
+        "2026-04-03",
+        "2026-04-06",
+        "2026-04-07",
+        "2026-05-01",
+        "2026-05-25",
+        "2026-06-19",
+        "2026-07-01",
+        "2026-10-01",
+        "2026-10-19",
+        "2026-12-25"
+      ],
+      "source_url": "https://www.hkex.com.hk/-/media/HKEX-Market/Services/Circulars-and-Notices/Participant-and-Members-Circulars/SEHK/2025/ce_SEHK_CT_075_2025.pdf",
+      "verified_at": "2026-11-17"
+    },
+    "jpx": {
+      "timezone": "Asia/Tokyo",
+      "coverage_start": "2026-01-01",
+      "coverage_end": "2026-12-31",
+      "holidays": [
+        "2026-01-01",
+        "2026-01-02",
+        "2026-01-03",
+        "2026-01-12",
+        "2026-02-11",
+        "2026-02-23",
+        "2026-03-20",
+        "2026-04-29",
+        "2026-05-03",
+        "2026-05-04",
+        "2026-05-05",
+        "2026-05-06",
+        "2026-07-20",
+        "2026-08-11",
+        "2026-09-21",
+        "2026-09-22",
+        "2026-09-23",
+        "2026-10-12",
+        "2026-11-03",
+        "2026-11-23",
+        "2026-12-31"
+      ],
+      "source_url": "https://www.jpx.co.jp/english/corporate/about-jpx/calendar/",
+      "verified_at": "2026-11-17"
+    },
+    "asx": {
+      "timezone": "Australia/Sydney",
+      "coverage_start": "2026-01-01",
+      "coverage_end": "2026-12-31",
+      "holidays": [
+        "2026-01-01",
+        "2026-01-26",
+        "2026-04-03",
+        "2026-04-06",
+        "2026-04-25",
+        "2026-06-08",
+        "2026-12-25",
+        "2026-12-28"
+      ],
+      "source_url": "https://asxonline.com/content/dam/asxonline/public/notices/2025/august/asxtrade2026.pdf",
+      "verified_at": "2026-11-17"
+    },
+    "xetra": {
+      "timezone": "Europe/Berlin",
+      "coverage_start": "2026-01-01",
+      "coverage_end": "2026-12-31",
+      "holidays": [
+        "2026-01-01",
+        "2026-04-03",
+        "2026-04-06",
+        "2026-05-01",
+        "2026-12-24",
+        "2026-12-25",
+        "2026-12-31"
+      ],
+      "source_url": "https://www.cashmarket.deutsche-boerse.com/resource/blob/4580828/2e493c7db2f5da3c0506456173d96dea/data/Xetra-Handelskalender-2026.pdf",
+      "verified_at": "2026-11-17"
+    }
+  }
+}

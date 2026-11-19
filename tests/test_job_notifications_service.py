@@ -80,3 +80,20 @@ def test_unfinished_run_does_not_claim_process_is_alive(tmp_path):
     assert run["summary"] == "Completion has not been reported"
     assert run["ended_at"] is None
     con.close()
+
+
+@pytest.mark.parametrize('execution_status,code,expected', [('ok', 0, 'completed_with_warnings'), ('failed', 1, 'failed'), ('ok', 130, 'interrupted')])
+def test_data_audit_round_trip_and_execution_failure_precedence(tmp_path, execution_status, code, expected):
+    path = tmp_path / 'n.sqlite'
+    handle = service.start_run('macro_refresh', db_path=path)
+    evidence = [{'dataset_id': 'macro:oil_petroleum_products_supplied', 'name': 'Petroleum products supplied', 'expected_period': '2026-11-13', 'returned_period': '2026-11-06', 'stored_period': '2026-11-06', 'inserted': 0, 'updated': 0, 'warning': True, 'issue': 'source_behind', 'reason': 'A newer period is expected'}]
+    handle.record_event({'type': 'task_finished', 'task': {'name': 'oil_import'}, 'result': {'status': execution_status, 'data_audit': evidence, 'stdout': 'secret-token'}})
+    handle.finish(code)
+    con = db.connect(path)
+    run = db.load_run(con, handle.run_id)
+    assert run['status'] == expected
+    assert run['children'][0]['data_audit'] == evidence
+    assert 'secret-token' not in json.dumps(run)
+    assert run['counts']['warnings'] == 1
+    assert 'warning' in run['summary'].lower()
+    con.close()
