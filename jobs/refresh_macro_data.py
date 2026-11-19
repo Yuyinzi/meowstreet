@@ -37,6 +37,7 @@ from scripts import refresh_us_rates_liquidity
 
 from app import llm
 from app.services import job_notifications
+from app.services.macro_refresh_audit import attach_audits
 from app.services.macro_refresh_registry import build_refresh_tasks
 from app.services.macro_refresh_executor import execute_tasks
 from app.services.macro_refresh_output import install_output_routers
@@ -428,6 +429,9 @@ class _ProgressReporter:
 
     def _write_summary(self, result):
         prefix = _task_label(result)
+        for row in result.get("data_audit", []):
+            message = f"{prefix}: data_check dataset={row.get('dataset_id', 'unavailable')} expected={row.get('expected_period')} returned={row.get('returned_period')} stored={row.get('stored_period')} inserted={row.get('inserted')} updated={row.get('updated')} issue={row.get('issue') or 'none'}"
+            _write_report_line(message, file=self._stderr if row.get("warning") else self._stdout, progress=self._progress)
         status = result["status"]
         if status not in {"failed", "blocked"}:
             return
@@ -702,6 +706,8 @@ def run(
         openai_config=openai_config,
         artifact_store=store,
     )
+    if use_runtime_defaults:
+        attach_audits(tasks, store)
     cancel_event = Event()
     coordinator = RequestCoordinator(FredRateLimiter(cancel_event=cancel_event))
     writer_gate = SQLiteWriterGate()

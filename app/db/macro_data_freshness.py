@@ -16,7 +16,7 @@ _SERIES_READERS = {
 }
 _GDP_TABLES = {"lag": "gdp_lag_rows", "quad": "gdp_quad_rows"}
 _ISM_TABLES = {"industry_rankings": "ism_industry_rankings", "industry_signals": "ism_report_industry_signals", "comments": "ism_report_comments", "commodities": "ism_report_commodities", "narrative": "ism_report_narrative_facts"}
-_TASK_LABELS = {"ok": "Succeeded", "succeeded": "Succeeded", "running": "Last reported: running", "failed": "Failed", "blocked": "Blocked", "skipped": "Skipped", "interrupted": "Interrupted", "partially_failed": "Partially failed", "completed_partial": "Completed with limitations", "unsupported": "Unsupported"}
+_TASK_LABELS = {"ok": "Succeeded", "succeeded": "Succeeded", "completed_with_warnings": "Completed with warnings", "running": "Last reported: running", "failed": "Failed", "blocked": "Blocked", "skipped": "Skipped", "interrupted": "Interrupted", "partially_failed": "Partially failed", "completed_partial": "Completed with limitations", "unsupported": "Unsupported"}
 
 
 def _connect_read_only(path):
@@ -280,7 +280,7 @@ def _dataset_history(dataset, records):
         selected = [r for r in records if r["job_id"] == mapping["job_id"] and (r["stage"] in {mapping.get("fetch"), mapping.get("persist")} if mapping["job_id"] == "macro_refresh" else r["stage"] is None)]
         matching.extend(selected)
         if mapping["successful_check_supported"]:
-            checks.extend(r for r in selected if r["status"] in {"ok", "succeeded"} and (r["stage"] == mapping.get("fetch") or mapping["job_id"] == "investing_refresh"))
+            checks.extend(r for r in selected if r["status"] in {"ok", "succeeded", "completed_with_warnings"} and (r["stage"] == mapping.get("fetch") or mapping["job_id"] == "investing_refresh"))
         processing.extend(r for r in selected if r["stage"] == mapping.get("persist") or mapping["job_id"] == "investing_refresh")
     return {"availability": "available", "last_attempt": _latest_task(matching), "last_successful_check": _latest_task(checks), "last_processing": _latest_task(processing)}
 

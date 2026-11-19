@@ -496,3 +496,14 @@ def test_cancelled_fred_limiter_rejects_request_before_it_starts():
 
     with pytest.raises(RefreshInterruptedError, match="refresh interrupted"):
         limiter.wait()
+
+
+def test_executor_keeps_structured_audit_on_failed_provider():
+    from app.services.macro_refresh_executor import execute_tasks
+    evidence = [{'name': 'Petroleum products supplied', 'returned_period': '2026-11-13', 'stored_period': '2026-11-06', 'warning': True}]
+    def operation(argv):
+        raise ValueError('write failed')
+    task = {**_task('audit', 'eia', operation), 'data_audit': evidence}
+    results = execute_tasks([task], serial=True)
+    assert results[0]['status'] == 'failed'
+    assert results[0]['data_audit'] == evidence

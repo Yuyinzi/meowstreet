@@ -46,6 +46,9 @@ export function createFreshnessPage({ document, request }) {
   let payload = null;
   let selected = '';
   const opened = new Set();
+  const openCategories = new Set();
+  const collapsedMatches = new Set();
+  let activeFilter = null;
   let generation = 0;
   const e = (tag, className, text) => el(document, tag, className, text);
 
@@ -111,12 +114,22 @@ export function createFreshnessPage({ document, request }) {
     return panel;
   }
 
-  function renderRows() {
-    if (!payload) return;
-    const query = nodes.Search.value.trim().toLowerCase();
-    const rows = payload.datasets.filter(row => (!selected || row.status === selected) && (!nodes.Category.value || row.category === nodes.Category.value) && (!query || `${row.name} ${row.source}`.toLowerCase().includes(query)));
-    nodes.Count.textContent = `Showing ${rows.length} of ${payload.datasets.length} datasets`;
-    nodes.Rows.replaceChildren();
+  function renderTable(rows, category) {
+    const wrap = e('div', 'freshness-table-wrap');
+    wrap.tabIndex = 0;
+    wrap.setAttribute('role', 'region');
+    wrap.setAttribute('aria-label', `${category} dataset freshness table, scroll horizontally for more columns`);
+    const table = e('table', 'freshness-table');
+    const head = e('thead');
+    const headings = e('tr');
+    for (const label of ['Dataset / source', 'Current period', 'Release frequency', 'Next release / window', 'Status', 'Last successful check', 'Details']) {
+      const heading = e('th');
+      heading.append(e('span', label === 'Details' ? 'freshness-sr-only' : '', label));
+      heading.setAttribute('scope', 'col');
+      headings.append(heading);
+    }
+    head.append(headings);
+    const body = e('tbody');
     for (const row of rows) {
       const tr = e('tr');
       const name = cell(row.name, row.source, 'th');
@@ -143,12 +156,52 @@ export function createFreshnessPage({ document, request }) {
       });
       const actions = e('td'); actions.append(toggle);
       tr.append(name, cell(period(row.current_period, row.period_basis), row.stored_period ? `Stored label: ${period(row.stored_period, 'date')}` : row.period_basis === 'weekly_resample' ? 'Weekly label' : ''), cell(row.frequency, row.storage_frequency !== row.frequency ? `Stored: ${row.storage_frequency}` : ''), cell(releaseLabel(row.next_release), row.next_release?.precision === 'exact' ? 'Asia/Shanghai' : row.next_release?.timezone || ''), badgeCell, cell(check ? when(check.at) : 'No recorded check'), actions);
-      nodes.Rows.append(tr, detailRow);
+      body.append(tr, detailRow);
     }
-    if (!rows.length) {
-      const tr = e('tr'); const td = e('td', 'freshness-empty', 'No matching datasets. Try another search or reset filters.');
-      td.colSpan = 7; tr.append(td); nodes.Rows.append(tr);
+    table.append(head, body);
+    wrap.append(table);
+    return wrap;
+  }
+
+  function renderRows() {
+    if (!payload) return;
+    const query = nodes.Search.value.trim().toLowerCase();
+    const rows = payload.datasets.filter(row => (!selected || row.status === selected) && (!nodes.Category.value || row.category === nodes.Category.value) && (!query || `${row.name} ${row.source}`.toLowerCase().includes(query)));
+    const filter = JSON.stringify([selected, nodes.Category.value, query]);
+    const filtering = Boolean(selected || nodes.Category.value || query);
+    if (filter !== activeFilter) { collapsedMatches.clear(); activeFilter = filter; }
+    const categories = [...new Set(rows.map(row => row.category))].sort((a, b) => a.localeCompare(b));
+    nodes.Count.textContent = `Showing ${rows.length} of ${payload.datasets.length} datasets · ${categories.length} categories`;
+    nodes.Rows.replaceChildren();
+    for (const category of categories) {
+      const matching = rows.filter(row => row.category === category);
+      const total = payload.datasets.filter(row => row.category === category).length;
+      const group = e('details', 'freshness-group');
+      group.dataset.category = category;
+      group.open = filtering ? !collapsedMatches.has(category) : openCategories.has(category);
+      const summary = e('summary', 'freshness-group-summary');
+      const heading = e('span', 'freshness-group-heading');
+      const count = matching.length === total ? `${total} dataset${total === 1 ? '' : 's'}` : `${matching.length} of ${total} datasets`;
+      heading.append(e('span', 'freshness-group-title', category), e('span', 'freshness-muted', count));
+      const badges = e('span', 'freshness-group-badges');
+      for (const status of payload.statuses) {
+        const count = matching.filter(row => row.status === status.code).length;
+        if (!count) continue;
+        const badge = e('span', 'freshness-badge', `${status.label} ${count}`);
+        badge.dataset.status = status.code;
+        badges.append(badge);
+      }
+      summary.append(heading, badges);
+      group.append(summary, renderTable(matching, category));
+      group.addEventListener('toggle', () => {
+        if (activeFilter !== filter) return;
+        if (filtering) {
+          if (group.open) collapsedMatches.delete(category); else collapsedMatches.add(category);
+        } else if (group.open) openCategories.add(category); else openCategories.delete(category);
+      });
+      nodes.Rows.append(group);
     }
+    if (!rows.length) nodes.Rows.append(e('p', 'freshness-empty', 'No matching datasets. Try another search or reset filters.'));
     for (const card of nodes.Stats.children) card.setAttribute('aria-pressed', String(selected === card.dataset.status));
   }
 
@@ -189,7 +242,7 @@ export function createFreshnessPage({ document, request }) {
     } catch {
       if (current !== generation) return;
       nodes.Message.className = 'freshness-error'; nodes.Message.hidden = false;
-      nodes.Message.textContent = `Data freshness is unavailable; retry with Reload status.${payload ? ' The table retains the previous snapshot.' : ''}`;
+      nodes.Message.textContent = `Data freshness is unavailable; retry with Reload status.${payload ? ' The previous snapshot remains visible.' : ''}`;
     } finally {
       if (current === generation) { nodes.App.setAttribute('aria-busy', 'false'); nodes.Reload.disabled = false; }
     }

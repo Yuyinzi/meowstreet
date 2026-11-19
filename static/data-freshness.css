@@ -17,7 +17,17 @@
 .freshness-toolbar input, .freshness-toolbar select { border: 1px solid #E8E0D6; background: #fff; border-radius: 8px; min-height: 40px; padding: 9px 12px; font: inherit; font-size: 13px; max-width: 100%; }
 .freshness-search input { width: 280px; }
 .freshness-count { margin-left: auto; font-size: 12px; color: #8B7E74; }
-.freshness-panel { border: 1px solid #E8E0D6; border-radius: 12px; background: #fff; overflow: hidden; }
+.freshness-groups { display: grid; gap: 12px; }
+.freshness-group { border: 1px solid #E8E0D6; border-radius: 12px; background: #fff; overflow: hidden; }
+.freshness-group-summary { display: flex; align-items: center; gap: 16px; padding: 18px 20px; cursor: pointer; list-style: none; }
+.freshness-group-summary::-webkit-details-marker { display: none; }
+.freshness-group-summary::before { content: '›'; color: #8B7E74; font-size: 22px; line-height: 1; }
+.freshness-group[open] > .freshness-group-summary::before { transform: rotate(90deg); }
+.freshness-group[open] > .freshness-group-summary { border-bottom: 1px solid #E8E0D6; }
+.freshness-group-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
+.freshness-group-heading .freshness-muted { margin: 0; }
+.freshness-group-title { font-size: 15px; font-weight: 600; color: #3B3530; }
+.freshness-group-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
 .freshness-table-wrap { overflow-x: auto; }
 .freshness-table { width: 100%; border-collapse: collapse; min-width: 1100px; text-align: left; }
 .freshness-table thead th { padding: 14px 16px; background: #FCFAF8; color: #8B7E74; font-size: 11px; font-weight: 500; white-space: nowrap; }
@@ -63,5 +73,7 @@
   .freshness-search { width: 100%; }
   .freshness-search input { width: 100%; }
   .freshness-count { margin-left: 0; }
+  .freshness-group-summary { flex-wrap: wrap; gap: 10px; padding: 16px; }
+  .freshness-group-badges { flex-basis: 100%; justify-content: flex-start; margin-left: 20px; }
   .freshness-detail { grid-template-columns: 1fr; gap: 16px; }
 }

@@ -38,7 +38,7 @@ const source = (await readFile(new URL('../static/notifications.js', import.meta
 const notificationLink = row => row.tagName === 'a' ? row : row.children[0];
 const flush = async () => { for(let i=0;i<50;i++) await Promise.resolve(); };
 
-async function environment(withHistory = false, initialCount = 1) {
+async function environment(withHistory = false, initialCount = 1, runDetail = null) {
   const nav = new Element('nav');
   const body = new Element('body');
   const history = withHistory ? new Element('section') : null;
@@ -77,6 +77,8 @@ async function environment(withHistory = false, initialCount = 1) {
         delayRead=false;
         return new Promise((resolve,reject)=>{releaseRead=(failed=false)=>failed ? reject(Error('old read failed')) : resolve({ok:true,json:async()=>payload});});
       }
+    } else if (url.startsWith('/api/notifications/runs/')) {
+      payload = runDetail;
     } else if (url.startsWith('/api/notifications/runs?')) {
       payload = {runs:[],displayed_event_ids:[],has_more:false,next_cursor:null};
     } else if (url.startsWith('/api/notifications/events?')) {
@@ -87,7 +89,7 @@ async function environment(withHistory = false, initialCount = 1) {
     }
     return {ok:true,json:async()=>payload};
   }
-  runInNewContext(source, {document,window,location:{search:''},URLSearchParams,fetch,createNotificationFeed,Map,Set,Date,Number,encodeURIComponent});
+  runInNewContext(source, {document,window,location:{search:runDetail ? '?run=audit' : ''},URLSearchParams,fetch,createNotificationFeed,Map,Set,Date,Number,encodeURIComponent});
   await flush();
   return {nav,body,history,events,reads,listeners,document,navigations,poll:()=>{interval();},setOffline:value=>{offline=value;},delayNextRead:()=>{delayRead=true;},releaseRead:failed=>releaseRead(failed),get calls(){return calls;}};
 }
@@ -215,3 +217,13 @@ const historyPage=await environment(true);
 historyPage.events.push({...historyPage.events[0],event_id:2,run_id:'history-page-update',read:false});historyPage.poll();await flush();
 assert.equal(historyPage.body.children.find(e=>e.className==='notification-toasts').children.length,0,'execution history should update without page overlays');
 console.log('notification DOM behavior passed');
+
+const auditUI = await environment(true, 1, {run_id:'audit',name:'Macro refresh',status:'completed_with_warnings',status_label:'Completed with warnings',summary:'1 data warning',children:[{name:'oil_import',status:'ok',status_label:'Succeeded with data warnings',summary:'1 data warning',data_audit:[{name:'<img onerror=bad()>',expected_period:'2026-11-13',returned_period:'2026-11-06',stored_period:'2026-11-06',before_period:'2026-11-06',inserted:0,updated:0,returned_rows:1878,warning:true,issue:'source_behind',reason:'Returned data is behind the expected release'}]}]});
+function descendants(node) { return [node,...node.children.flatMap(descendants)]; }
+const auditNodes = descendants(auditUI.history);
+assert.ok(auditNodes.some(n=>n.textContent==='<img onerror=bad()>'),'dataset names must render as safe text');
+assert.ok(auditNodes.some(n=>n.textContent==='Expected: 2026-11-13'));
+assert.ok(auditNodes.some(n=>n.textContent==='Returned: 2026-11-06'));
+assert.ok(auditNodes.some(n=>n.textContent==='Stored after: 2026-11-06'));
+assert.ok(auditNodes.some(n=>n.textContent==='Inserted: 0 · Updated: 0'));
+assert.ok(!auditNodes.some(n=>n.tagName==='img'));

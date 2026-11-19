@@ -47,7 +47,10 @@ def test_main_persists_manual_cli_outcome(tmp_path):
     con = job_notifications.connect()
     run = job_notifications.list_runs(con)["runs"][0]
     assert run["job_id"] == "investing_refresh"
-    assert run["status"] == "succeeded"
+    assert run["status"] == "completed_with_warnings"
+    details = job_notifications.load_run(con, run["run_id"])
+    assert len(details["children"][0]["data_audit"]) == 3
+    assert all(row["warning"] for row in details["children"][0]["data_audit"])
     assert len(job_notifications.events_after(con, 0)["events"]) == 2
     con.close()
 

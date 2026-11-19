@@ -8,9 +8,9 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/portfolio.css" />
   <link rel="stylesheet" href="/static/notifications.css?v=1" />
-  <link rel="stylesheet" href="/static/data-freshness.css?v=1" />
+  <link rel="stylesheet" href="/static/data-freshness.css?v=2" />
   <script type="module" src="/static/notifications.js?v=1"></script>
-  <script type="module" src="/static/data-freshness.js?v=2"></script>
+  <script type="module" src="/static/data-freshness.js?v=3"></script>
 </head>
 <body>
   <nav class="topnav" aria-label="Main navigation">
@@ -34,14 +34,7 @@
       <button type="button" class="notification-button" id="freshnessReset">Reset filters</button>
       <span id="freshnessCount" class="freshness-count" role="status" aria-live="polite"></span>
     </div>
-    <section class="freshness-panel" aria-label="Macro datasets">
-      <div class="freshness-table-wrap" tabindex="0" role="region" aria-label="Dataset freshness table, scroll horizontally for more columns">
-        <table class="freshness-table">
-          <thead><tr><th scope="col">Dataset / source</th><th scope="col">Current period</th><th scope="col">Release frequency</th><th scope="col">Next release / window</th><th scope="col">Status</th><th scope="col">Last successful check</th><th scope="col"><span class="freshness-sr-only">Details</span></th></tr></thead>
-          <tbody id="freshnessRows"></tbody>
-        </table>
-      </div>
-    </section>
+    <section class="freshness-groups" id="freshnessRows" aria-label="Macro datasets by category"></section>
     <details class="freshness-schedules"><summary>Collection schedules</summary><div id="freshnessSchedules"></div></details>
   </main>
 </body>

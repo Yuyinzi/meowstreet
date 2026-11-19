@@ -353,7 +353,26 @@ async function loadDetail(runId, focus = false) {
     if (!run.children.length) detailPanel.append(el('p', 'notification-muted', 'No child-task details were reported.'));
     for (const child of run.children) {
       const row = el('div', 'notification-child');
-      row.append(el('strong', '', child.label || child.name), badge(child), el('span', 'notification-muted', child.summary));
+      row.append(el('strong', '', child.label || child.name), badge(child.data_audit?.some(item => item.warning) && child.status === 'ok' ? { ...child, status: 'data_warning' } : child), el('span', 'notification-muted', child.summary));
+      if (child.data_audit?.length) {
+        const details = el('details', 'notification-data-audit');
+        details.append(el('summary', '', `Data checks (${child.data_audit.length})`));
+        for (const item of child.data_audit) {
+          const evidence = el('div', 'notification-audit-item');
+          evidence.append(el('strong', '', item.name));
+          for (const [label, value] of [['Expected', item.expected_period], ['Returned', item.returned_period], ['Stored before', item.before_period], ['Stored after', item.stored_period]]) {
+            evidence.append(el('span', 'notification-muted', `${label}: ${value ?? 'Not established'}`));
+          }
+          if (item.source_period) evidence.append(el('span', 'notification-muted', `Source observation: ${item.source_period}`));
+          evidence.append(el('span', 'notification-muted', `Inserted: ${item.inserted ?? 'Not recorded'} · Updated: ${item.updated ?? 'Not recorded'}`));
+          if (item.returned_rows !== null && item.returned_rows !== undefined) evidence.append(el('span', 'notification-muted', `Returned rows: ${item.returned_rows}`));
+          if (item.checked_at) evidence.append(el('span', 'notification-muted', `Checked: ${when(item.checked_at)}`));
+          const issues = { source_behind: 'Source data behind', stored_data_behind: 'Stored data behind', persistence_mismatch: 'Returned data does not match stored data', audit_unavailable: 'Data check unavailable' };
+          evidence.append(el('span', item.warning ? 'notification-error' : 'notification-muted', `${issues[item.issue] || item.freshness || 'Unknown'}: ${item.reason || ''}`));
+          details.append(evidence);
+        }
+        row.append(details);
+      }
       detailPanel.append(row);
     }
     if (focus) { heading.focus(); heading.scrollIntoView({ block: 'nearest' }); }

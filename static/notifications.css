@@ -39,6 +39,10 @@
 .notification-badge[data-status="failed"], .notification-badge[data-status="blocked"] { color: #A34D42; background: #F7E9E5; }
 .notification-badge[data-status="partially_failed"], .notification-badge[data-status="interrupted"] { color: #96733A; background: #F8F0DD; }
 .notification-badge[data-status="completed_partial"] { color: #96733A; background: #F8F0DD; }
+.notification-badge[data-status="completed_with_warnings"], .notification-badge[data-status="data_warning"] { color: #96733A; background: #F8F0DD; }
+.notification-data-audit { flex-basis: 100%; width: 100%; }
+.notification-data-audit summary { cursor: pointer; }
+.notification-audit-item { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--line, #E4E1DA); }
 .notification-history-link { display: inline-block; padding: 12px 0; color: #A65D43; text-decoration: none; font-size: 13px; font-weight: 600; }
 .notification-toasts { position: fixed; top: 76px; right: 20px; width: min(370px, calc(100vw - 32px)); display: grid; gap: 10px; z-index: 400; pointer-events: none; }
 .notification-toast { display: flex; gap: 8px; align-items: flex-start; padding: 16px; border: 1px solid #E8E0D6; background: #fff; color: #3B3530; border-radius: 12px; box-shadow: 0 6px 24px rgba(59,53,48,.09); pointer-events: auto; font-family: Inter, system-ui, sans-serif; }

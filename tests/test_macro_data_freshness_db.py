@@ -232,3 +232,14 @@ def test_history_missing_file_is_not_created(tmp_path):
     result = load_task_history(rows("macro:m2_money_stock"), path)
     assert result["macro:m2_money_stock"]["availability"] == "unavailable"
     assert not path.exists()
+
+
+def test_investing_warning_run_remains_a_successful_check_without_claiming_fresh_data(tmp_path):
+    from app.services import job_notifications as service
+    path = tmp_path / 'notifications.sqlite'
+    handle = service.start_run('investing_refresh', db_path=path)
+    handle.record_event({'type': 'task_finished', 'task': {'name': 'data_refresh'}, 'result': {'status': 'ok', 'data_audit': [{'dataset_id': 'macro:copper_comex', 'warning': True}]}})
+    handle.finish(0)
+    history = load_task_history(rows('macro:copper_comex'), path)['macro:copper_comex']
+    assert history['last_attempt']['status_label'] == 'Completed with warnings'
+    assert history['last_successful_check']['run_id'] == handle.run_id
