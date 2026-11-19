@@ -1,6 +1,41 @@
+from os import environ
+from pathlib import Path
+from subprocess import run
+from sys import executable
+
 import pytest
 
 from app.db import job_notifications as db
+
+
+def subprocess_notification_path(environment=None):
+    result = run(
+        [executable, "-c", "from app.db.job_notifications import DEFAULT_DB_PATH; print(DEFAULT_DB_PATH)"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return Path(result.stdout.strip())
+
+
+def test_child_process_inherits_the_test_notification_database():
+    assert subprocess_notification_path() == db.DEFAULT_DB_PATH
+
+
+def test_notification_database_environment_override_is_process_local(tmp_path):
+    selected = tmp_path / "child.sqlite"
+    environment = {**environ, "MEOWSTREET_NOTIFICATION_DB_PATH": str(selected)}
+    actual = subprocess_notification_path(environment)
+    assert actual == selected
+    assert not selected.exists()
+
+
+def test_normal_process_without_override_retains_production_default():
+    environment = {key: value for key, value in environ.items() if key != "MEOWSTREET_NOTIFICATION_DB_PATH"}
+    actual = subprocess_notification_path(environment)
+    assert actual == Path(__file__).resolve().parents[1] / "data" / "local_system" / "job_notifications.sqlite"
 
 
 def run_payload(run_id="run-one", job_id="macro_refresh"):

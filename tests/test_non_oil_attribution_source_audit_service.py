@@ -239,3 +239,13 @@ def test_build_script_writes_audit_and_exits_zero(tmp_path):
     payload = json.loads(destination.read_text())
     assert payload["version"] == "non_oil_attribution_source_audit_v1"
     assert len(payload["audits"]) == 20
+    from app.db import job_notifications
+
+    con = job_notifications.connect()
+    try:
+        runs = job_notifications.list_runs(con)["runs"]
+        assert len(runs) == 1
+        assert runs[0]["job_id"] == "cli_build_non_oil_attribution_source_audit"
+        assert runs[0]["status"] == "succeeded"
+    finally:
+        con.close()
